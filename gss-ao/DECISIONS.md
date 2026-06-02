@@ -119,10 +119,20 @@ racine applique la règle suivante :
 - [ ] Budget LLM mensuel cible.
 - [ ] Embedding provider final + dimension définitive.
 
+## D5 — Compte de PDF de référence : 118 (et non 119)  ✅
+
+Le **brief §4.2 indique 119 PDF**, mais le **compte réel est 118**. Vérification
+exhaustive (catégorie par catégorie) : les 21 catégories correspondent
+**exactement** à la table du brief, et **la table elle-même somme à 118**. Le
+brief comporte donc une **erreur d'en-tête** (titre « 119 fichiers ») ; le
+contenu de la table est correct. Aucun fichier manquant ni dupliqué (vérifié :
+pas de PDF hors catégorie, pas de doublon de nom).
+
+**Référence pour la suite : 118 PDF.**
+
 ## Points factuels relevés à l'exploration
 
-- **118 PDF** dans `SLIDE REP AO/` (le brief §4.2 annonce 119) — écart d'1
-  fichier à clarifier côté source.
+- **118 PDF** dans `SLIDE REP AO/` — voir D5 ci-dessus (brief §4.2 erroné à 119).
 - PDF = **texte natif** (fontes sous-ensemblées, générés iLovePDF), pas des
   scans → OCR non nécessaire en cas général, fallback OCR optionnel par page.
 - Mémoires techniques **historiques GSS** (brief §13.1) non fournis → le RAG
