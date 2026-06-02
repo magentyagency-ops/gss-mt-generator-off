@@ -1,0 +1,54 @@
+# ============================================================================
+# .gitignore — racine du workspace (= dépôt git réel)
+# ============================================================================
+# La logique RGPD / confidentialité est documentée dans gss-ao/DECISIONS.md.
+#
+# Principe : les pièces de marché public (RC, CCAP, CCTP, BPU/DPGF, mémoire
+# technique) ne sont pas confidentielles en soi et peuvent rester versionnées.
+# En revanche, tout ce qui contient des DONNÉES PERSONNELLES (annexes agents)
+# ou du CONTENU INTERNE GSS (base de connaissances, audit métier) est exclu.
+# ============================================================================
+
+# --- RGPD : données personnelles (annexes agents) -----------------------------
+# Annexe 2 = profils agents en place, Annexe 4 = agents logés,
+# Annexe 5 = correspondants sûreté locaux -> données nominatives.
+# On exclut TOUT le dossier Annexes/ par précaution (cf. DECISIONS.md).
+Cas-Univ-Rouen-MP2026-08/Annexes/
+
+# --- Confidentiel : base de connaissances interne GSS -------------------------
+# Dossier réel + lien symbolique présent à la racine du workspace.
+SLIDE REP AO/
+SLIDE REP AO
+/SLIDE REP AO
+
+# --- Confidentiel : transcription de l'audit métier ---------------------------
+audit/
+
+# ============================================================================
+# Artefacts techniques
+# ============================================================================
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+npm-debug.log*
+
+# Sorties générées par l'outil (parsing, ingestion RAG)
+gss-ao/data/output/
+gss-ao/data/*.jsonl
+*.local.json
