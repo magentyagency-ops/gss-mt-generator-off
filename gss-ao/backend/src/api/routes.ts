@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { MemoireGenerator } from '../generation/memoire_generator';
 
 const router = Router();
 
@@ -23,8 +24,15 @@ router.get('/dce/:dossier_id/checklist', (req: Request, res: Response) => {
 });
 
 // Module C — génération mémoire technique.
-router.post('/dce/:dossier_id/memoire', (req: Request, res: Response) => {
-  res.status(501).json({ error: 'Endpoint génération mémoire — itération ultérieure' });
+router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
+  try {
+    const generator = new MemoireGenerator();
+    const result = await generator.generate(req.params.dossier_id);
+    res.json({ message: 'Mémoire technique traité', file_path: result.filePath, data_generee_par_ia: result.generatedData });
+  } catch (error: any) {
+    console.error('Erreur lors de la génération du mémoire:', error);
+    res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
+  }
 });
 
 export default router;

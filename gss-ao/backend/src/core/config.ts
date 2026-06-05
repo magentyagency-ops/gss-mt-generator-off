@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
@@ -39,7 +40,27 @@ export interface Settings {
 
 export function getSettings(): Settings {
   const baseDir = path.resolve(__dirname, '../../../');
-  const dceDir = process.env.CORPUS_DCE_DIR || '../Cas-Univ-Rouen-MP2026-08';
+  
+  let dceDir = process.env.CORPUS_DCE_DIR;
+  if (!dceDir) {
+    try {
+      const parentDir = path.resolve(baseDir, '../');
+      const dirs = fs.readdirSync(parentDir, { withFileTypes: true });
+      const found = dirs.find(d => 
+        d.isDirectory() && 
+        d.name.toUpperCase().includes('DCE') && 
+        !d.name.toLowerCase().includes('cas-univ')
+      );
+      if (found) {
+        dceDir = `../${found.name}`;
+      } else {
+        dceDir = '../Cas-Univ-Rouen-MP2026-08';
+      }
+    } catch (e) {
+      dceDir = '../Cas-Univ-Rouen-MP2026-08';
+    }
+  }
+
   const slideDir = process.env.CORPUS_SLIDE_REP_AO_DIR || '../SLIDE REP AO';
   const jsonlPath = process.env.VECTOR_STORE_JSONL_PATH || 'data/output/slide_rep_ao_chunks.jsonl';
 
