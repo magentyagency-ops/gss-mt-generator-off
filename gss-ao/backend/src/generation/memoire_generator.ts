@@ -36,21 +36,20 @@ export class MemoireGenerator {
     return memoireFile ? path.join(dceDir, memoireFile) : null;
   }
 
-  /**
-   * Read the context from RC and CCTP outputs.
-   */
   private getDceContext(dossierId: string): string {
     const baseDir = path.resolve(__dirname, '../../../../');
     const rcPath = path.join(baseDir, `gss-ao/data/output/rc_${dossierId}.json`);
     const cctpPath = path.join(baseDir, `gss-ao/data/output/cctp_${dossierId}.json`);
     
+    if (!fs.existsSync(cctpPath)) {
+      throw new Error("Le CCTP est requis pour générer le mémoire (analyse DCE manquante).");
+    }
+
     let context = '';
     if (fs.existsSync(rcPath)) {
       context += `\n\n--- REGLEMENT DE CONSULTATION (RC) ---\n${fs.readFileSync(rcPath, 'utf8')}`;
     }
-    if (fs.existsSync(cctpPath)) {
-      context += `\n\n--- CAHIER DES CLAUSES TECHNIQUES PARTICULIERES (CCTP) ---\n${fs.readFileSync(cctpPath, 'utf8')}`;
-    }
+    context += `\n\n--- CAHIER DES CLAUSES TECHNIQUES PARTICULIERES (CCTP) ---\n${fs.readFileSync(cctpPath, 'utf8')}`;
     return context;
   }
 

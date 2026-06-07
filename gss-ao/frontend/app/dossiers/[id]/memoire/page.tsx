@@ -57,6 +57,14 @@ export default function MemoirePage() {
   const [hasKey, setHasKey] = useState(true);
   const [slidesByChapter, setSlidesByChapter] = useState<Record<string, RagChunk[]>>({});
 
+  // States for full DOCX generation (Backend API)
+  const [isGeneratingDocx, setIsGeneratingDocx] = useState(false);
+  const [docxResult, setDocxResult] = useState<any>(null);
+
+  // States for Prerequisite System (Required System)
+  const [crFourni, setCrFourni] = useState(false);
+  const isPrerequisOk = true; // CR requirement temporarily disabled
+
   const storageKey = mode === "B" ? memoireBKey(ROUEN.id) : `gss_memoire_${ROUEN.id}`;
 
   // Sections selon le mode
@@ -107,6 +115,11 @@ export default function MemoirePage() {
     try {
       const raw = localStorage.getItem(key);
       if (raw) setGen(JSON.parse(raw));
+
+      // Vérifier si le CR a été fourni via l'upload d'un dossier DCE
+      if (localStorage.getItem("gss_cr_fourni") === "true") {
+        setCrFourni(true);
+      }
     } catch {
       /* ignore */
     }
@@ -158,6 +171,21 @@ export default function MemoirePage() {
     persist({ ...gen, [active.id]: { text, model: prev?.model || "édité", tokens: prev?.tokens || 0 } });
   }
 
+  async function handleGenerateFullDocx() {
+    setIsGeneratingDocx(true);
+    setDocxResult(null);
+    try {
+      const res = await fetch(`http://localhost:8000/api/dce/${ROUEN.id}/memoire`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur lors de la génération");
+      setDocxResult({ type: "success", data });
+    } catch (e: any) {
+      setDocxResult({ type: "error", message: e.message });
+    } finally {
+      setIsGeneratingDocx(false);
+    }
+  }
+
   if (!active) return null;
 
   return (
@@ -178,6 +206,28 @@ export default function MemoirePage() {
             </h1>
           </div>
           <div className="flex items-center gap-4">
+            {mode === "A" && (
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={handleGenerateFullDocx} 
+                disabled={isGeneratingDocx || !isPrerequisOk}
+                className={cn(
+                  "text-white transition-all",
+                  isPrerequisOk ? "bg-indigo-600 hover:bg-indigo-700" : "bg-indigo-300 cursor-not-allowed"
+                )}
+                title={
+                  !isPrerequisOk 
+                    ? "Bloqué : Le Compte Rendu de Visite de Sacha est obligatoire pour ce dossier." 
+                    : isGeneratingDocx 
+                    ? "Génération en cours..." 
+                    : "Générer le document Word complet"
+                }
+              >
+                {isGeneratingDocx ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileStack className="mr-2 h-4 w-4" />}
+                Générer Document Complet (Template)
+              </Button>
+            )}
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Cpu className="h-3.5 w-3.5" /> {totalTokens.toLocaleString("fr-FR")} tokens
             </div>
@@ -193,6 +243,49 @@ export default function MemoirePage() {
           </div>
         </div>
       </header>
+
+      {mode === "A" && !isPrerequisOk && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-amber-800">Prérequis manquants pour générer le document</h3>
+              <p className="text-sm text-amber-700 mt-1">L'IA ne peut pas générer un mémoire pertinent si les informations terrain sont manquantes. Ce dossier exige une visite obligatoire.</p>
+              <ul className="mt-3 space-y-2 text-sm text-amber-800">
+                <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" /> Analyse du DCE (CCTP & RC)</li>
+                <li className="flex items-center gap-2">
+                  {crFourni ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Circle className="h-4 w-4 text-amber-500" />} 
+                  Compte Rendu de Visite de Sacha
+                  {!crFourni && (
+                    <Button variant="outline" size="sm" className="ml-3 h-7 bg-white text-xs" onClick={() => setCrFourni(true)}>
+                      Simuler l'ajout du CR
+                    </Button>
+                  )}
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {docxResult && (
+        <div className={cn("px-6 py-3 text-sm", docxResult.type === "success" ? "bg-emerald-50 text-emerald-800 border-b border-emerald-200" : "bg-red-50 text-red-800 border-b border-red-200")}>
+          {docxResult.type === "success" ? (
+            <div className="flex flex-col gap-1">
+              <strong className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4"/> Document généré avec succès !</strong>
+              <span>Enregistré sous : <code>{docxResult.data.file_path}</code></span>
+              <details className="mt-2 text-xs">
+                <summary className="cursor-pointer underline">Voir les modifications d'IA</summary>
+                <pre className="mt-2 bg-emerald-900 text-emerald-50 p-3 rounded-md overflow-x-auto">
+                  {JSON.stringify(JSON.parse(docxResult.data.data_generee_par_ia.details), null, 2)}
+                </pre>
+              </details>
+            </div>
+          ) : (
+            <strong>Erreur: {docxResult.message}</strong>
+          )}
+        </div>
+      )}
 
       <DossierNav id={ROUEN.id} />
 

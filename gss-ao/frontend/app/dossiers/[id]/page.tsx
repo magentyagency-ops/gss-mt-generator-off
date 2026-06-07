@@ -110,14 +110,13 @@ export default function SynthesePage() {
             </Button>
           </Link>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <StatPill
             icon={CalendarClock}
             label="Date limite de remise"
             value={`${formatDate(ROUEN.dateLimite)} · J−${jours}`}
             accent={jours <= 30}
           />
-          <StatPill icon={MapPin} label="Visite obligatoire" value={formatDate(ROUEN.dateVisite)} />
           <StatPill icon={FileText} label="Procédure" value={ROUEN.procedure} />
         </div>
       </header>
@@ -127,38 +126,6 @@ export default function SynthesePage() {
       {/* Corps */}
       <div className="grid flex-1 grid-cols-[1fr_300px] gap-6 overflow-y-auto p-6">
         <div className="space-y-6">
-          {/* Visite */}
-          <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <MapPin className="h-4 w-4 text-primary" /> Visite de site
-              </CardTitle>
-              {ROUEN.visiteObligatoire && <Badge variant="warning">Obligatoire</Badge>}
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-start gap-2 rounded-md bg-warning/10 p-3 text-sm">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                <span>
-                  Un certificat de visite est exigé et doit être joint à l'offre — l'absence de
-                  visite rend la candidature irrecevable.
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <div className="text-xs text-muted-foreground">Date & heure</div>
-                  <div className="font-medium">{formatDateHeure(ROUEN.dateVisite)}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Lieu</div>
-                  <div className="font-medium">{ROUEN.lieuVisite}</div>
-                </div>
-              </div>
-              <Button variant="outline" size="sm">
-                <CalendarClock className="h-4 w-4" /> Planifier la visite
-              </Button>
-            </CardContent>
-          </Card>
-
           {/* Lots */}
           <div>
             <h2 className="mb-2 text-sm font-semibold">Allotissement</h2>
