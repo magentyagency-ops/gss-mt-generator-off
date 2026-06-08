@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { FileType2, FileDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui";
-import { ROUEN, IDENTITE_CANDIDAT, formatDate } from "@/lib/mock-data";
+import { useParams } from "next/navigation";
+import { IDENTITE_CANDIDAT, formatDate } from "@/lib/gss-config";
 import { exportDocx } from "@/lib/ai/client";
 import { getMode, memoireBKey, getAnalyzedSlides, getSelectedIndexes } from "@/lib/ai/mode";
 
@@ -15,6 +16,7 @@ import { getMode, memoireBKey, getAnalyzedSlides, getSelectedIndexes } from "@/l
  * PDF : désactivé (passer par Word/LibreOffice depuis le DOCX).
  */
 export function ExportButtons() {
+  const { id } = useParams<{ id: string }>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,8 +38,8 @@ export function ExportButtons() {
   async function handleDocx() {
     if (busy) return;
     setError(null);
-    const mode = getMode(ROUEN.id);
-    const key = mode === "B" ? memoireBKey(ROUEN.id) : `gss_memoire_${ROUEN.id}`;
+    const mode = getMode(id);
+    const key = mode === "B" ? memoireBKey(id) : `gss_memoire_${id}`;
     const sections = readSections(key);
     if (Object.keys(sections).length === 0) {
       setError("Aucune section générée — rendez-vous sur l'écran Mémoire technique d'abord.");
@@ -46,8 +48,8 @@ export function ExportButtons() {
     setBusy(true);
     try {
       if (mode === "B") {
-        const sel = new Set(getSelectedIndexes(ROUEN.id));
-        const selectedSlides = getAnalyzedSlides(ROUEN.id)
+        const sel = new Set(getSelectedIndexes(id));
+        const selectedSlides = getAnalyzedSlides(id)
           .filter((s) => sel.has(s.index))
           .map((s) => ({
             index: s.index,
@@ -59,10 +61,10 @@ export function ExportButtons() {
           sections,
           mode: "B",
           selectedSlides,
-          projet: ROUEN.objet,
-          acheteur: ROUEN.acheteur,
+          projet: "Dossier " + id,
+          acheteur: "Acheteur " + id,
           signataire: "Mme Vaché, Responsable réponse AO",
-          dateSignature: formatDate(ROUEN.dateLimite),
+          dateSignature: formatDate(new Date().toISOString()),
           filename: "Memoire_Technique_GSS_reponse_libre.docx",
         });
       } else {
@@ -75,7 +77,7 @@ export function ExportButtons() {
             date_autorisation: IDENTITE_CANDIDAT.date_autorisation,
           },
           signataire: "Mme Vaché, Responsable réponse AO",
-          dateSignature: formatDate(ROUEN.dateLimite),
+          dateSignature: formatDate(new Date().toISOString()),
           filename: "Memoire_Technique_GSS_Univ_Rouen_MP2026-08.docx",
         });
       }

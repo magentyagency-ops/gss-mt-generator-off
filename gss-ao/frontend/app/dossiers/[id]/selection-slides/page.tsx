@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { DossierNav } from "@/components/dossier-nav";
-import { ROUEN } from "@/lib/mock-data";
+
 import { analyzeSlides, getApiKey, type SlideRec } from "@/lib/ai/client";
 import {
   getAnalyzedSlides,
@@ -35,7 +35,8 @@ const RECO_BADGE: Record<SlideRec["recommendation"], { label: string; variant: "
   discard: { label: "Exclue", variant: "secondary" },
 };
 
-export default function SelectionSlidesPage() {
+export default function SelectionSlidesPage({ params }: { params: { id: string } }) {
+  const id = params.id;
   const [slides, setSlides] = useState<SlideRec[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
@@ -44,11 +45,20 @@ export default function SelectionSlidesPage() {
   const [query, setQuery] = useState("");
   const [hasKey, setHasKey] = useState(true);
 
+  const [dossierInfo, setDossierInfo] = useState<any>({ acheteur: "Chargement...", reference: "..." });
+
   useEffect(() => {
+    fetch(`http://localhost:8000/api/dossiers/${id}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data.error) setDossierInfo(data);
+      })
+      .catch(e => console.error(e));
+
     setHasKey(!!getApiKey());
-    setSlides(getAnalyzedSlides(ROUEN.id));
-    setSelected(getSelectedIndexes(ROUEN.id));
-  }, []);
+    setSlides(getAnalyzedSlides(id));
+    setSelected(getSelectedIndexes(id));
+  }, [id]);
 
   async function runAnalysis() {
     if (busy) return;
@@ -66,12 +76,12 @@ export default function SelectionSlidesPage() {
         siteContext: "Université de Rouen Normandie — 6 campus, ZRR, rondes et télésurveillance.",
       });
       setSlides(r.slides);
-      setAnalyzedSlides(ROUEN.id, r.slides);
+      setAnalyzedSlides(id, r.slides);
       const pre = r.slides
         .filter((s) => s.recommendation === "keep" || s.recommendation === "modify")
         .map((s) => s.index);
       setSelected(pre);
-      setSelectedIndexes(ROUEN.id, pre);
+      setSelectedIndexes(id, pre);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analyse échouée");
     } finally {
@@ -84,7 +94,7 @@ export default function SelectionSlidesPage() {
       ? selected.filter((i) => i !== index)
       : [...selected, index];
     setSelected(next);
-    setSelectedIndexes(ROUEN.id, next);
+    setSelectedIndexes(id, next);
   }
 
   const counts = useMemo(() => {
@@ -111,18 +121,18 @@ export default function SelectionSlidesPage() {
       <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
         <div>
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {ROUEN.acheteur} · {ROUEN.reference} · Mode réponse libre
+            {dossierInfo.acheteur} · {dossierInfo.reference} · Mode réponse libre
           </div>
           <h1 className="text-xl font-semibold">Sélection des slides GSS</h1>
         </div>
-        <Link href={`/dossiers/${ROUEN.id}/memoire`}>
+        <Link href={`/dossiers/${id}/memoire`}>
           <Button disabled={selected.length === 0}>
             Valider la sélection ({selected.length}) <ArrowRight className="h-4 w-4" />
           </Button>
         </Link>
       </header>
 
-      <DossierNav id={ROUEN.id} />
+      <DossierNav id={id} />
 
       {slides.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">

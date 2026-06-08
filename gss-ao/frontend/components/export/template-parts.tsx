@@ -5,7 +5,7 @@
  * de réponse fourni par l'acheteur.
  */
 import { Square, SquareCheck } from "lucide-react";
-import type { Contact, OptionCochee } from "@/lib/mock-data";
+import type { Contact, OptionCochee } from "@/lib/gss-config";
 
 /** Titre de section : text-lg, semibold, trait slate-200 dessous. */
 export function SectionTitre({ children }: { children: React.ReactNode }) {

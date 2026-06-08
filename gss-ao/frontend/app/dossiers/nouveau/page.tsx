@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   UploadCloud,
   FileText,
@@ -15,18 +15,23 @@ import {
   Building2,
   Table,
   Layers,
+  X,
 } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
-import { DCE_FILES, ROUEN, type DceFile } from "@/lib/mock-data";
+import { type DceFile, type DossierRow } from "@/lib/gss-config";
 import { cn } from "@/lib/utils";
 
 const TYPES = ["RC", "CCAP", "CCTP", "BPU / DPGF", "Mémoire (cadre)", "Acte d'Engagement", "Compte Rendu", "Annexe", "Inconnu"];
 
 export default function NouveauDossierPage() {
-  const [files, setFiles] = useState<DceFile[]>([]);
+  const router = useRouter();
+  const [files, setFiles] = useState<(DceFile & { file?: File })[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const isAppendingRef = useRef(false);
+  const [showQuitModal, setShowQuitModal] = useState(false);
+  const [isLaunching, setIsLaunching] = useState(false);
 
   useEffect(() => {
     // Clean up local storage flag when arriving to guarantee a fresh session
@@ -52,15 +57,17 @@ export default function NouveauDossierPage() {
         let detectType = "Inconnu";
         
         // Match exact RC words to avoid false positives like 'commercial'
+        const isAnnexe = /\b(annexe|annexes)\b/.test(nomLow);
         const isRC = /\b(rc|règlement|reglement)\b/.test(nomLow);
         const isCCTP = /\b(cctp)\b/.test(nomLow);
         const isCCAP = /\b(ccap)\b/.test(nomLow);
         const isCR = nomLow.includes("compte rendu") || nomLow.includes("visite") || /\bcr\b/.test(nomLow);
-        const isBPU = nomLow.includes("bpu") || nomLow.includes("dpgf");
+        const isBPU = nomLow.includes("bpu") || nomLow.includes("dpgf") || nomLow.includes("dqe");
         const isActe = nomLow.includes("acte") || nomLow.includes("engagement");
         const isMemoire = (nomLow.includes("mémoire") || nomLow.includes("memoire")) && (nomLow.endsWith(".doc") || nomLow.endsWith(".docx"));
 
-        if (isRC) detectType = "RC";
+        if (isAnnexe) detectType = "Annexe";
+        else if (isRC) detectType = "RC";
         else if (isCCTP) detectType = "CCTP";
         else if (isCR) detectType = "Compte Rendu";
         else if (isCCAP) detectType = "CCAP";
@@ -69,14 +76,16 @@ export default function NouveauDossierPage() {
         else if (isMemoire) detectType = "Mémoire (cadre)";
 
         // file.webkitRelativePath might look like "DCE/mon_fichier.pdf"
-        if (file.webkitRelativePath && file.webkitRelativePath.startsWith("DCE/")) {
+        const relativePath = (file as any).customPath || file.webkitRelativePath || file.name;
+        if (relativePath.includes("/")) {
           isDceFolder = true;
         }
         return {
-          nom: file.webkitRelativePath || file.name,
+          nom: relativePath,
           type: detectType,
           taille: (file.size / 1024).toFixed(0) + " Ko",
-          statut: "parsing" as const
+          statut: "parsing" as const,
+          file: file
         };
       });
 
@@ -84,7 +93,81 @@ export default function NouveauDossierPage() {
         localStorage.setItem("gss_cr_fourni", "true");
       }
 
-      setFiles(prev => [...prev, ...newFiles]);
+      if (isAppendingRef.current) {
+        setFiles(prev => [...prev, ...newFiles]);
+      } else {
+        setFiles(newFiles);
+      }
+      isAppendingRef.current = false; // Reset after use
+    }
+  }
+
+  async function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragOver(false);
+
+    if (!e.dataTransfer.items) {
+      // Fallback for old browsers
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        isAppendingRef.current = false;
+        handleFileChange({ target: { files: e.dataTransfer.files } } as any);
+      }
+      return;
+    }
+
+    const filesToProcess: File[] = [];
+
+    const getFilesFromEntry = async (entry: any): Promise<void> => {
+      if (entry.isFile) {
+        const file = await new Promise<File>((resolve) => entry.file(resolve));
+        // Force the relative path so the rest of the code knows it's a folder structure
+        try {
+          Object.defineProperty(file, 'webkitRelativePath', {
+            value: entry.fullPath.substring(1), // remove leading '/'
+            writable: false
+          });
+        } catch (e) {
+          // Si le navigateur bloque la redéfinition, on utilise une propriété custom
+          (file as any).customPath = entry.fullPath.substring(1);
+        }
+        filesToProcess.push(file);
+      } else if (entry.isDirectory) {
+        const dirReader = entry.createReader();
+        const readAllEntries = async (): Promise<any[]> => {
+          let allEntries: any[] = [];
+          const readBatch = async () => {
+            const entries = await new Promise<any[]>((resolve) => dirReader.readEntries(resolve));
+            if (entries.length > 0) {
+              allEntries = allEntries.concat(entries);
+              await readBatch();
+            }
+          };
+          await readBatch();
+          return allEntries;
+        };
+        const entries = await readAllEntries();
+        for (const child of entries) {
+          await getFilesFromEntry(child);
+        }
+      }
+    };
+
+    const promises = [];
+    for (let i = 0; i < e.dataTransfer.items.length; i++) {
+      const item = e.dataTransfer.items[i];
+      if (item.webkitGetAsEntry) {
+        const entry = item.webkitGetAsEntry();
+        if (entry) {
+          promises.push(getFilesFromEntry(entry));
+        }
+      }
+    }
+
+    await Promise.all(promises);
+
+    if (filesToProcess.length > 0) {
+      isAppendingRef.current = false; // Drag and drop replaces everything
+      handleFileChange({ target: { files: filesToProcess } } as any);
     }
   }
 
@@ -119,14 +202,106 @@ export default function NouveauDossierPage() {
     setFiles((prev) => prev.filter((f) => f.nom !== nom));
   }
 
+  async function saveDossier(isBrouillon: boolean): Promise<string> {
+    const dossierId = `dossier-${Date.now()}`;
+
+    // Extraire le nom du dossier DCE depuis les chemins des fichiers uploadés
+    let dossierName = "";
+    for (const f of files) {
+      if (f.nom.includes("/")) {
+        // Le premier segment du chemin est le nom du dossier DCE
+        dossierName = f.nom.split("/")[0];
+        break;
+      }
+    }
+    // Nettoyer le nom (enlever "DCE" redondant au début, etc.)
+    if (dossierName) {
+      dossierName = dossierName.replace(/^DCE\s*/i, "").trim();
+    }
+
+    const newDossier = {
+      id: dossierId,
+      objet: dossierName || "Dossier " + new Date().toLocaleDateString("fr-FR"),
+      lots: [],
+      dateLimite: new Date(Date.now() + 15 * 24 * 3600 * 1000).toISOString(),
+      statut: isBrouillon ? "Brouillon" : "En cours",
+      responsable: "Sacha",
+      dce_files: files.map(f => ({ ...f, file: undefined })),
+    };
+
+    try {
+      await fetch("http://localhost:8000/api/dossiers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newDossier),
+      });
+    } catch (e) {
+      console.error("Impossible de sauvegarder le dossier sur le serveur", e);
+    }
+
+    return dossierId;
+  }
+
+  function handleQuit() {
+    if (files.length > 0) {
+      setShowQuitModal(true);
+    } else {
+      router.push("/");
+    }
+  }
+
+  const isQuittingRef = useRef(false);
+
+  async function handleConfirmQuit(save: boolean) {
+    if (isQuittingRef.current) return;
+    isQuittingRef.current = true;
+    if (save) {
+      await saveDossier(true);
+    }
+    router.push("/");
+  }
+
+  async function handleLaunch() {
+    if (isLaunching) return;
+    setIsLaunching(true);
+    const dossierId = await saveDossier(false);
+    
+    // Uploader les fichiers vers le backend
+    try {
+      const formData = new FormData();
+      formData.append("id", dossierId);
+      files.forEach((f) => {
+        if (f.file) {
+          formData.append("files", f.file);
+        }
+      });
+      const res = await fetch("http://localhost:8000/api/dce/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        console.warn("Erreur lors de l'envoi des fichiers au serveur.");
+      }
+    } catch (e) {
+      console.error("Impossible de joindre le serveur pour l'upload", e);
+    }
+
+    router.push(`/dossiers/${dossierId}`);
+  }
+
   return (
     <div className="flex h-full flex-col">
-      <header className="border-b border-border bg-card px-6 py-4">
-        <h1 className="text-xl font-semibold">Nouveau dossier — dépôt du DCE</h1>
-        <p className="text-sm text-muted-foreground">
-          Déposez l'ensemble des pièces du Dossier de Consultation (PDF, DOCX, DOC). Le type de
-          chaque pièce est détecté automatiquement.
-        </p>
+      <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
+        <div>
+          <h1 className="text-xl font-semibold">Nouveau dossier — dépôt du DCE</h1>
+          <p className="text-sm text-muted-foreground">
+            Déposez l'ensemble des pièces du Dossier de Consultation (PDF, DOCX, DOC). Le type de
+            chaque pièce est détecté automatiquement.
+          </p>
+        </div>
+        <Button variant="outline" onClick={handleQuit}>
+          <X className="mr-2 h-4 w-4" /> Quitter
+        </Button>
       </header>
 
       <div className="flex-1 overflow-y-auto p-6">
@@ -138,14 +313,7 @@ export default function NouveauDossierPage() {
               setDragOver(true);
             }}
             onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                // Pour supporter le drag & drop simple
-                handleFileChange({ target: { files: e.dataTransfer.files } } as any);
-              }
-            }}
+            onDrop={handleDrop}
             className={cn(
               "flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-12 text-center transition-colors",
               dragOver ? "border-primary bg-accent" : "border-border bg-card",
@@ -178,11 +346,11 @@ export default function NouveauDossierPage() {
             />
             <div className="flex gap-3 mt-4">
               {files.length > 0 && (
-                <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                <Button variant="outline" size="sm" onClick={() => { isAppendingRef.current = true; fileInputRef.current?.click(); }}>
                   Ajouter des fichiers
                 </Button>
               )}
-              <Button variant="default" size="sm" onClick={() => folderInputRef.current?.click()}>
+              <Button variant="default" size="sm" onClick={() => { isAppendingRef.current = false; folderInputRef.current?.click(); }}>
                 Déposer un dossier "DCE"
               </Button>
             </div>
@@ -326,11 +494,14 @@ export default function NouveauDossierPage() {
                 : "Les prérequis obligatoires (RC, CCTP, CR) doivent être renseignés et parsés."}
             </p>
             {isPrerequisOk && tousParses ? (
-              <Link href={`/dossiers/${ROUEN.id}`}>
-                <Button>
-                  <Sparkles className="h-4 w-4 mr-2" /> Lancer l'analyse
-                </Button>
-              </Link>
+              <Button onClick={handleLaunch} disabled={isLaunching}>
+                {isLaunching ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4 mr-2" />
+                )}
+                {isLaunching ? "Lancement en cours..." : "Lancer l'analyse"}
+              </Button>
             ) : (
               <div title={`Bloqué — ${missingReason}`} className="cursor-help">
                 <Button disabled className="pointer-events-none">
@@ -341,6 +512,32 @@ export default function NouveauDossierPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal de confirmation pour quitter */}
+      {showQuitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowQuitModal(false)} />
+          <div className="relative z-10 w-full max-w-md animate-in fade-in zoom-in-95 rounded-xl border border-border bg-card p-6 shadow-2xl">
+            <h2 className="mb-2 text-center text-lg font-semibold">
+              Sauvegarder en brouillon ?
+            </h2>
+            <p className="mb-6 text-center text-sm text-muted-foreground">
+              Vous êtes sur le point de quitter la création. Voulez-vous conserver les fichiers actuels en tant que brouillon pour y revenir plus tard ?
+            </p>
+            <div className="flex flex-col gap-3">
+              <Button variant="default" onClick={() => handleConfirmQuit(true)}>
+                Oui, sauvegarder en brouillon
+              </Button>
+              <Button variant="outline" onClick={() => handleConfirmQuit(false)} className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20">
+                Non, quitter sans sauvegarder
+              </Button>
+              <Button variant="ghost" onClick={() => setShowQuitModal(false)}>
+                Annuler
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

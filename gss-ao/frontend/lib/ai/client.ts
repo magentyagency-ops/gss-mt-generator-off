@@ -10,8 +10,8 @@ export const API_BASE =
 export const OPENAI_KEY_STORAGE = "openai_api_key";
 
 export function getApiKey(): string {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem(OPENAI_KEY_STORAGE) || "";
+  if (typeof window === "undefined") return process.env.NEXT_PUBLIC_OPENAI_API_KEY || "";
+  return localStorage.getItem(OPENAI_KEY_STORAGE) || process.env.NEXT_PUBLIC_OPENAI_API_KEY || "";
 }
 
 export function setApiKey(key: string): void {
