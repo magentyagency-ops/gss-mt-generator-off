@@ -64,7 +64,8 @@ export default function NouveauDossierPage() {
         const isCR = nomLow.includes("compte rendu") || nomLow.includes("visite") || /\bcr\b/.test(nomLow);
         const isBPU = nomLow.includes("bpu") || nomLow.includes("dpgf") || nomLow.includes("dqe");
         const isActe = nomLow.includes("acte") || nomLow.includes("engagement");
-        const isMemoire = (nomLow.includes("mémoire") || nomLow.includes("memoire")) && (nomLow.endsWith(".doc") || nomLow.endsWith(".docx"));
+        const normalizedNom = nomLow.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const isMemoire = normalizedNom.includes("memoire") && (nomLow.endsWith(".doc") || nomLow.endsWith(".docx"));
 
         if (isAnnexe) detectType = "Annexe";
         else if (isRC) detectType = "RC";
