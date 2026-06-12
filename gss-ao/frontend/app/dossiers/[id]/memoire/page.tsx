@@ -237,7 +237,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
             </h1>
           </div>
           <div className="flex items-center gap-4">
-            {mode === "A" && !hasTemplate && (
+            {mode === "A" && (
               <Button 
                 variant="secondary" 
                 size="sm" 
