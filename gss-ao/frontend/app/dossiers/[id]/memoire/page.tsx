@@ -63,6 +63,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
 
   // States for full DOCX generation (Backend API)
   const [isGeneratingDocx, setIsGeneratingDocx] = useState(false);
+  const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [docxResult, setDocxResult] = useState<any>(null);
 
   // States for Prerequisite System (Required System)
@@ -178,24 +179,70 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     [gen],
   );
 
+  // Génère une section unique (mêmes paramètres que la boucle groupée).
+  async function genOne(section: UISection): Promise<GenEntry> {
+    const r = await generateSection({
+      sectionId: section.id,
+      cctpExtract: section.cctpExtract || "",
+      ragChunks: mode === "A" ? section.ragChunks : [],
+      templateQuestion: mode === "B" ? section.title : undefined,
+      mode,
+      selectedSlides: mode === "B" ? section.ragChunks : [],
+    });
+    return { text: r.generated_text, model: r.model, tokens: r.tokens_used };
+  }
+
+  // Réessaie un appel avec un petit backoff (utile pour le rate limit OpenAI).
+  async function withRetry<T>(fn: () => Promise<T>, retries = 2, delayMs = 1500): Promise<T> {
+    let lastErr: unknown;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        return await fn();
+      } catch (e) {
+        lastErr = e;
+        if (attempt < retries) await new Promise((r) => setTimeout(r, delayMs * (attempt + 1)));
+      }
+    }
+    throw lastErr;
+  }
+
   async function handleGenerate(section: UISection) {
     if (busyId) return;
     setBusyId(section.id);
     setError(null);
     try {
-      const r = await generateSection({
-        sectionId: section.id,
-        cctpExtract: section.cctpExtract || "",
-        ragChunks: mode === "A" ? section.ragChunks : [],
-        templateQuestion: mode === "B" ? section.title : undefined,
-        mode,
-        selectedSlides: mode === "B" ? section.ragChunks : [],
-      });
-      persist({ ...gen, [section.id]: { text: r.generated_text, model: r.model, tokens: r.tokens_used } });
+      persist({ ...gen, [section.id]: await genOne(section) });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Génération échouée");
     } finally {
       setBusyId(null);
+    }
+  }
+
+  // Génère toutes les sections SÉQUENTIELLEMENT (une après l'autre) pour rester
+  // sous la limite OpenAI ~30k tokens/min : un Promise.all parallèle déclenche des
+  // 429 silencieux et des sections vides.
+  async function handleGenerateAllSections() {
+    if (busyId || isGeneratingAll) return;
+    setIsGeneratingAll(true);
+    setError(null);
+    let currentGen = { ...gen };
+    const failed: string[] = [];
+
+    for (const section of sections) {
+      setBusyId(section.id);
+      try {
+        currentGen = { ...currentGen, [section.id]: await withRetry(() => genOne(section)) };
+        persist(currentGen); // sauvegarde incrémentale après chaque section
+      } catch {
+        failed.push(section.title);
+      }
+    }
+
+    setBusyId(null);
+    setIsGeneratingAll(false);
+    if (failed.length > 0) {
+      setError(`Sections en échec : ${failed.join(", ")}`);
     }
   }
 
@@ -237,26 +284,20 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
             </h1>
           </div>
           <div className="flex items-center gap-4">
-            {mode === "A" && !hasTemplate && (
-              <Button 
-                variant="secondary" 
-                size="sm" 
-                onClick={handleGenerateFullDocx} 
-                disabled={isGeneratingDocx || !isPrerequisOk}
-                className={cn(
-                  "text-white transition-all",
-                  isPrerequisOk ? "bg-indigo-600 hover:bg-indigo-700" : "bg-indigo-300 cursor-not-allowed"
-                )}
-                title={
-                  !isPrerequisOk 
-                    ? "Bloqué : Le Compte Rendu de Visite de Sacha est obligatoire pour ce dossier." 
-                    : isGeneratingDocx 
-                    ? "Génération en cours..." 
-                    : "Générer le document Word complet"
-                }
+
+            {!hasTemplate && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleGenerateAllSections}
+                disabled={isGeneratingAll || busyId !== null}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white transition-all"
+                title="Générer toutes les sections, une par une"
               >
-                {isGeneratingDocx ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileStack className="mr-2 h-4 w-4" />}
-                Générer Document Complet (Template)
+                {isGeneratingAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                {isGeneratingAll
+                  ? `Génération… ${generatedCount}/${sections.length}`
+                  : "Générer mémoire technique"}
               </Button>
             )}
             {!hasTemplate && (
