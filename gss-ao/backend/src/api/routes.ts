@@ -157,6 +157,27 @@ router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
   }
 });
 
+// Assemble un .docx à partir des sections déjà générées (cas sans cadre imposé) :
+// remplace le contenu de chaque chapitre du mémoire de référence GSS par le texte IA.
+router.post('/dossiers/:id/memoire-from-sections', async (req: Request, res: Response) => {
+  try {
+    const { chapters } = req.body;
+    if (!Array.isArray(chapters) || chapters.length === 0) {
+      return res.status(400).json({ error: 'Aucune section fournie.' });
+    }
+    const generator = new MemoireGenerator();
+    const result = await generator.assembleFromSections(req.params.id, chapters);
+    res.json({
+      message: 'Mémoire technique assemblé',
+      file_path: result.filePath,
+      data_generee_par_ia: result.generatedData,
+    });
+  } catch (error: any) {
+    console.error('Erreur assemblage mémoire:', error);
+    res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
+  }
+});
+
 router.post('/generate-section', async (req: Request, res: Response) => {
   try {
     const { api_key, cctp_extract, rag_chunks, template_question, mode, selected_slides } = req.body;

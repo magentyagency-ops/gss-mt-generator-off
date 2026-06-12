@@ -149,6 +149,41 @@ function replaceTextInElement(xmlDoc: any, tEl: any, placeholder: string, value:
   parentRun.removeChild(tEl);
 }
 
+const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function getParagraphStyle(p: any): string {
+  const pPr = findLocalNameChild(p, 'pPr');
+  if (!pPr) return '';
+  const pStyle = findLocalNameChild(pPr, 'pStyle');
+  return pStyle ? (pStyle.getAttribute('w:val') || '') : '';
+}
+
+/** Crée un paragraphe Word (<w:p>) avec un style optionnel et un texte simple. */
+function makeParagraph(xmlDoc: any, text: string, styleName?: string): any {
+  const p = xmlDoc.createElementNS(W_NS, 'w:p');
+  if (styleName) {
+    const pPr = xmlDoc.createElementNS(W_NS, 'w:pPr');
+    const pStyle = xmlDoc.createElementNS(W_NS, 'w:pStyle');
+    pStyle.setAttribute('w:val', styleName);
+    pPr.appendChild(pStyle);
+    p.appendChild(pPr);
+  }
+  const r = xmlDoc.createElementNS(W_NS, 'w:r');
+  const t = xmlDoc.createElementNS(W_NS, 'w:t');
+  t.setAttribute('xml:space', 'preserve');
+  t.textContent = text;
+  r.appendChild(t);
+  p.appendChild(r);
+  return p;
+}
+
+export interface AssembleChapter {
+  /** Chapitre I..IV (ordre = ordre des Heading1 dans le template). */
+  key: string;
+  title: string;
+  sections: Array<{ title: string; text: string }>;
+}
+
 // ─── Main Class ───
 
 export class MemoireGenerator {
@@ -520,6 +555,107 @@ Renvoie uniquement un objet JSON valide contenant les ${prompts.length} valeurs 
           remplacement: r.value
         })))
       }
+    };
+  }
+
+  /**
+   * Cas "sans cadre imposé" (mode B / réponse libre) : les sections ont déjà été
+   * rédigées par l'IA côté front. On part du mémoire de référence GSS
+   * (Template/Mémoire technique/AO RNE.docx) et on REMPLACE le contenu de chaque
+   * chapitre par le texte généré, en conservant la page de garde, le sommaire,
+   * les styles et la section finale (sectPr). Aucun appel OpenAI ici.
+   *
+   * Le mapping chapitre → emplacement se fait par POSITION : le i-ème paragraphe
+   * de style Heading1 du corps correspond au i-ème chapitre fourni (I..IV).
+   */
+  public async assembleFromSections(
+    _dossierId: string,
+    chapters: AssembleChapter[],
+  ): Promise<{ filePath: string; generatedData: Record<string, string> }> {
+    const templatePath = path.join(this.templateDir, 'Mémoire technique', 'AO RNE.docx');
+    if (!fs.existsSync(templatePath)) {
+      throw new Error(`Template de référence introuvable : ${templatePath}`);
+    }
+    console.log(`[MemoireGenerator] Assemblage depuis sections IA, template: ${templatePath}`);
+
+    const content = fs.readFileSync(templatePath);
+    const zip = new PizZip(content);
+    const documentXml = zip.file('word/document.xml');
+    if (!documentXml) throw new Error('word/document.xml introuvable dans le template');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(documentXml.asText(), 'text/xml');
+
+    const body = getElementsWithLocalName(xmlDoc.documentElement, 'body')[0];
+    if (!body) throw new Error('Corps du document (w:body) introuvable');
+
+    // Ancres de chapitre = paragraphes Heading1 non vides, dans l'ordre du document.
+    const headings = Array.from(body.childNodes).filter(
+      (n: any) =>
+        n.nodeType === 1 &&
+        n.localName === 'p' &&
+        getParagraphStyle(n) === 'Heading1' &&
+        getElementText(n).trim().length > 0,
+    );
+    console.log(`[MemoireGenerator] ${headings.length} chapitres détectés dans le template.`);
+
+    let chaptersReplaced = 0;
+    let sectionsInserted = 0;
+
+    headings.forEach((heading: any, idx: number) => {
+      const chapter = chapters[idx];
+      if (!chapter || !chapter.sections || chapter.sections.length === 0) return; // chapitre non généré → on garde l'original
+
+      const nextHeading = headings[idx + 1] || null;
+
+      // 1. Supprimer tous les nœuds entre ce Heading1 et le suivant (ou avant le sectPr final).
+      const toRemove: any[] = [];
+      let cur = heading.nextSibling;
+      while (cur && cur !== nextHeading) {
+        if (!nextHeading && cur.nodeType === 1 && cur.localName === 'sectPr') break;
+        toRemove.push(cur);
+        cur = cur.nextSibling;
+      }
+      toRemove.forEach((n) => body.removeChild(n));
+
+      // 2. Insérer le texte IA après le titre de chapitre (avant l'ancre suivante / sectPr).
+      const anchor = heading.nextSibling; // nextHeading, sectPr ou null après suppression
+      for (const sec of chapter.sections) {
+        if (sec.title && sec.title.trim()) {
+          body.insertBefore(makeParagraph(xmlDoc, sec.title.trim(), 'Heading2'), anchor);
+        }
+        const lines = String(sec.text || '').split(/\r?\n/);
+        for (const line of lines) {
+          if (line.trim() === '') continue;
+          body.insertBefore(makeParagraph(xmlDoc, line, 'BodyText'), anchor);
+        }
+        sectionsInserted++;
+      }
+      chaptersReplaced++;
+    });
+
+    if (chaptersReplaced === 0) {
+      throw new Error('Aucun chapitre généré à insérer (sections vides).');
+    }
+
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+
+    const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
+    const outputFileName = `Mémoire technique GSS_${Date.now()}.docx`;
+    const outputPath = path.join(this.responseDir, outputFileName);
+    fs.writeFileSync(outputPath, buf);
+
+    console.log(
+      `[MemoireGenerator] Assemblé : ${chaptersReplaced} chapitre(s), ${sectionsInserted} section(s) → ${outputPath}`,
+    );
+
+    return {
+      filePath: outputPath,
+      generatedData: {
+        chapitres_remplaces: String(chaptersReplaced),
+        sections_inserees: String(sectionsInserted),
+      },
     };
   }
 }

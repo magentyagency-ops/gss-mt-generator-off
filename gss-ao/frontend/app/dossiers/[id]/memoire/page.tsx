@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Sparkles,
   RefreshCw,
@@ -54,6 +55,7 @@ const CHAPTERS: UISection["chapter"][] = ["I", "II", "III", "IV"];
 
 export default function MemoirePage({ params }: { params: { id: string } }) {
   const id = params.id;
+  const router = useRouter();
   const [mode, setMode] = useState<ResponseMode>("A");
   const [gen, setGen] = useState<GenMap>({});
   const [activeId, setActiveId] = useState("");
@@ -64,6 +66,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   // States for full DOCX generation (Backend API)
   const [isGeneratingDocx, setIsGeneratingDocx] = useState(false);
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
+  const [isAssembling, setIsAssembling] = useState(false);
   const [docxResult, setDocxResult] = useState<any>(null);
 
   // States for Prerequisite System (Required System)
@@ -246,6 +249,43 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     }
   }
 
+  // Assemble les sections générées dans le mémoire de référence GSS (AO RNE.docx),
+  // en remplaçant le contenu de chaque chapitre, puis redirige vers l'export.
+  async function handleAssembleAndExport() {
+    if (isAssembling) return;
+    // Construire la charge utile : 4 chapitres dans l'ordre I..IV, avec leurs
+    // sections générées (texte non vide) ; un chapitre sans contenu est laissé tel quel.
+    const chapters = CHAPTERS.map((ch) => ({
+      key: ch,
+      title: chapterTitles[ch],
+      sections: sections
+        .filter((s) => s.chapter === ch && gen[s.id]?.text?.trim())
+        .map((s) => ({ title: s.title, text: gen[s.id].text })),
+    }));
+
+    if (chapters.every((c) => c.sections.length === 0)) {
+      setError("Aucune section générée — générez d'abord le mémoire technique.");
+      return;
+    }
+
+    setIsAssembling(true);
+    setError(null);
+    try {
+      const res = await fetch(`http://localhost:8000/api/dossiers/${id}/memoire-from-sections`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chapters }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Assemblage échoué");
+      localStorage.setItem(`generated_docx_${id}`, data.file_path);
+      router.push(`/dossiers/${id}/export`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Assemblage du document échoué");
+      setIsAssembling(false);
+    }
+  }
+
 
 
   async function handleGenerateFullDocx() {
@@ -298,6 +338,19 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 {isGeneratingAll
                   ? `Génération… ${generatedCount}/${sections.length}`
                   : "Générer mémoire technique"}
+              </Button>
+            )}
+            {!hasTemplate && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleAssembleAndExport}
+                disabled={isAssembling || isGeneratingAll || busyId !== null || generatedCount === 0}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white transition-all"
+                title="Assembler les sections dans le document et passer à l'export"
+              >
+                {isAssembling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
+                {isAssembling ? "Assemblage…" : "Aller à l'export"}
               </Button>
             )}
             {!hasTemplate && (
