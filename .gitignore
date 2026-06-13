@@ -9,38 +9,31 @@
 # ou du CONTENU INTERNE GSS (base de connaissances, audit métier) est exclu.
 # ============================================================================
 
-# --- RGPD : données personnelles (annexes agents) -----------------------------
+# --- RGPD & Données Confidentielles -----------------------------------------
+
 # Annexe 2 = profils agents en place, Annexe 4 = agents logés,
 # Annexe 5 = correspondants sûreté locaux -> données nominatives.
-# On exclut TOUT le dossier Annexes/ par précaution (cf. DECISIONS.md).
 Cas-Univ-Rouen-MP2026-08/Annexes/
 
-# --- Confidentiel : base de connaissances interne GSS -------------------------
-# Dossier réel + lien symbolique présent à la racine du workspace.
-SLIDE REP AO/
+# Base de connaissances interne GSS (Dossier + lien symbolique)
 SLIDE REP AO
-/SLIDE REP AO
+SLIDE REP AO/
 
-# --- Confidentiel : transcription de l'audit métier ---------------------------
+# Transcription de l'audit métier
 audit/
 
 # ============================================================================
-# Artefacts techniques
+# Artefacts techniques & Environnement
 # ============================================================================
 
-# macOS
+# Système
 .DS_Store
 
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
+# Variables d'environnement
 .env
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+.env.local
+.env.*.local
+
 
 # Node / Next.js
 node_modules/
@@ -48,7 +41,15 @@ node_modules/
 out/
 npm-debug.log*
 
+# ============================================================================
+# Fichiers générés et Dossiers de travail
+# ============================================================================
+
 # Sorties générées par l'outil (parsing, ingestion RAG)
 gss-ao/data/output/
 gss-ao/data/*.jsonl
 *.local.json
+
+# Dossiers de travail (Réponses et dossiers projets)
+réponse/
+dossiers/

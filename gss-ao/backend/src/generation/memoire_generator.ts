@@ -1,13 +1,18 @@
 import fs from 'fs';
 import path from 'path';
 import PizZip from 'pizzip';
-import Docxtemplater from 'docxtemplater';
 import OpenAI from 'openai';
 import { getSettings } from '../core/config';
+import { DB } from '../core/db';
+import { extractText } from '../ingestion/docConverter';
 // @ts-ignore
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
-// ─── DOM Helpers (from GSS analyse prototype) ───
+// Modèle utilisé pour la génération. gpt-4o-mini a une limite TPM bien plus élevée (200k vs 30k
+// pour gpt-4o sur ce compte) → génération rapide sans throttling. Surchargeable par env.
+const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-4o-mini';
+
+// ─── DOM Helpers ───
 
 function findLocalNameChild(node: any, name: string): any {
   if (!node.childNodes) return null;
@@ -112,7 +117,6 @@ function replaceTextInElement(xmlDoc: any, tEl: any, placeholder: string, value:
     tEl.textContent = text.replace(placeholder, value);
     return;
   }
-  // Multi-line: insert <w:br/> elements
   const parentRun = tEl.parentNode;
   if (!parentRun || parentRun.localName !== 'r') {
     tEl.textContent = text.replace(placeholder, value.replace(/\r?\n/g, ' '));
@@ -205,6 +209,53 @@ const AI_SECTIONS_B: Array<{ id: string; chapter: string; title: string }> = [
 
 const CHAPTER_ORDER_B = ['I', 'II', 'III', 'IV'];
 
+// ─── Field Type Inference ───
+
+function inferFieldHint(context: string): string {
+  const n = context.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+  if (/case (a|à) cocher|checkbox/.test(n)) return '[CASE A COCHER]';
+
+  const shortPatterns = [
+    'denomination', 'raison sociale', 'nom du candidat', 'nom de l\'entreprise',
+    'siret', 'siren', 'cnaps', 'n° ', 'numero', 'reference', 'lot ',
+    'adresse', 'code postal', 'ville', 'departement', 'siege', 'agence',
+    'telephone', 'tel.', 'fax', 'email', 'mail', 'site web',
+    'dirigeant', 'contact', 'interlocuteur', 'responsable', 'signataire',
+    'statut', 'pme', 'forme juridique', 'capital social',
+    'effectif', 'etp', 'nb agent', "nombre d'agent", 'nombre agents',
+    'date ', 'annee', 'duree', 'delai',
+    'montant', "chiffre d'affaire", 'ca ', 'code naf', 'code ape',
+    'agrement', 'autorisation', 'station', 'siege social',
+    // Cellules de tableau numériques (délais d'intervention par site, nb d'intervenants)
+    'minute', 'intervenant', 'nombre d\'intervenant', 'taux de reprise', 'numero de certification',
+  ];
+  if (shortPatterns.some(p => n.includes(p))) return '[VALEUR COURTE]';
+
+  const listPatterns = [
+    'certification', 'diplome', 'qualification', 'habilitation',
+    'materiel', 'equipement', 'tenue', 'vestiaire',
+    'partenaire', 'reference client', 'sous-traitant',
+    'logiciel', 'outil', 'systeme', 'moyen technique',
+  ];
+  if (listPatterns.some(p => n.includes(p))) return '[LISTE]';
+
+  const paraPatterns = [
+    'methodologie', 'methode', 'organisation', 'procedure',
+    'description', 'presentation', 'demarche', 'engagement',
+    'politique', 'gestion', 'management', 'encadrement',
+    'suivi', 'controle qualite', 'surveillance', 'securite',
+    'recrutement', 'integration', 'planning', 'remplacement',
+    'absence', 'retard', 'amelioration', 'bilan', 'rapport',
+    'intervention', 'alarme', 'incident', 'intrusion',
+    'ecologique', 'environnement', 'developpement durable',
+    'valeur', 'ethique', 'rse', 'formation continue',
+  ];
+  if (paraPatterns.some(p => n.includes(p))) return '[PARAGRAPHE]';
+
+  return '[VALEUR COURTE]';
+}
+
 // ─── Main Class ───
 
 export class MemoireGenerator {
@@ -225,106 +276,298 @@ export class MemoireGenerator {
     if (!fs.existsSync(dceDir)) return null;
     const files = fs.readdirSync(dceDir);
     const memoireFile = files.find(f => {
-      const normalized = f.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-      return normalized.includes('memoire') && normalized.includes('technique') && normalized.endsWith('.docx');
+      const normalized = f.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+      return normalized.includes('memoire') && (normalized.endsWith('.doc') || normalized.endsWith('.docx'));
     });
     return memoireFile ? path.join(dceDir, memoireFile) : null;
   }
 
-  /** Extract text from a .docx file */
-  private extractDocxText(filePath: string): string {
-    try {
-      const content = fs.readFileSync(filePath, 'binary');
-      const zip = new PizZip(content);
-      const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
-      return doc.getFullText();
-    } catch (e) {
-      console.error(`[MemoireGenerator] Cannot extract text from ${filePath}:`, e);
-      return '';
-    }
-  }
-
-  /** Load all DCE context from actual DOCX files */
-  private getDceContext(dossierId: string): string {
+  /**
+   * Charge les fichiers du DCE (DOC/DOCX/PDF), priorisés par pertinence pour un mémoire technique,
+   * puis tronqués pour tenir dans la fenêtre de contexte du modèle (gpt-4o ≈ 128k tokens).
+   * Sans ce plafond, le seul CCTP+annexes (~733k caractères) dépasse la limite → l'appel échoue
+   * et le document ressort vierge.
+   */
+  private async getDceContext(dossierId: string): Promise<string> {
     const baseDir = path.resolve(__dirname, '../../../../');
-    let context = '';
+    const settings = getSettings();
 
-    // 1. Try loading from JSON output (if analysis was done)
+    // Budget global et plafond par fichier (en caractères ; ~4 car/token)
+    const TOTAL_BUDGET = 240_000;
+    const PER_FILE_CAP = 130_000;
+
+    // Score de priorité d'après le nom de fichier (le mémoire porte d'abord sur le CCTP et les effectifs)
+    const priorityOf = (n: string): number => {
+      if (n.includes('cctp')) return 100;
+      if (n.includes('rc ') || n.includes('reglement') || /\brc\b/.test(n)) return 90;
+      if (n.includes('annexe 1') || n.includes('effectif') || n.includes('horaire')) return 85;
+      if (n.includes('annexe 2') || n.includes('profil')) return 80;
+      if (n.includes('ccap') || n.includes('cahier des clauses administ')) return 55;
+      if (n.includes('acte') && n.includes('engagement')) return 45;
+      if (n.includes('annexe')) return 35;
+      return 25;
+    };
+
+    type DcePiece = { label: string; text: string; priority: number };
+    const pieces: DcePiece[] = [];
+
+    // 1. Sorties JSON pré-analysées (synthèses concises, très utiles) — priorité maximale
     const rcPath = path.join(baseDir, `gss-ao/data/output/rc_${dossierId}.json`);
     const cctpPath = path.join(baseDir, `gss-ao/data/output/cctp_${dossierId}.json`);
-    if (fs.existsSync(rcPath)) {
-      context += `\n\n--- RC ---\n${fs.readFileSync(rcPath, 'utf8')}`;
-    }
-    if (fs.existsSync(cctpPath)) {
-      context += `\n\n--- CCTP ---\n${fs.readFileSync(cctpPath, 'utf8')}`;
-    }
+    if (fs.existsSync(cctpPath)) pieces.push({ label: 'CCTP (analysé)', text: fs.readFileSync(cctpPath, 'utf8'), priority: 120 });
+    if (fs.existsSync(rcPath)) pieces.push({ label: 'RC (analysé)', text: fs.readFileSync(rcPath, 'utf8'), priority: 115 });
 
-    // 2. Also load raw DOCX files from the DCE folder for richer context
+    // 2. Fichiers bruts (récursif), dédoublonnés
     const dceDirs = [
       path.resolve(baseDir, `gss-ao/data/output/dce_${dossierId}`),
+      settings.corpusDceDir,
+      path.resolve(baseDir, 'GSS analyse et génération/DCEDCE MP2026_08'),
       path.resolve(baseDir, 'DCEDCE MP2026_08'),
       path.resolve(baseDir, 'Cas-Univ-Rouen-MP2026-08'),
-    ];
+    ].filter(Boolean) as string[];
 
-    for (const dceDir of dceDirs) {
-      if (!fs.existsSync(dceDir)) continue;
-      const files = fs.readdirSync(dceDir);
-      
-      for (const file of files) {
-        const lower = file.toLowerCase();
-        if (!lower.endsWith('.docx') && !lower.endsWith('.doc')) continue;
-        // Skip the template itself
-        if (lower.includes('memoire') && lower.includes('technique')) continue;
-        // Skip BPU/DPGF (pricing, not technical)
-        if (lower.includes('bpu') || lower.includes('dpgf')) continue;
-        
-        const filePath = path.join(dceDir, file);
-        if (lower.endsWith('.docx')) {
-          const text = this.extractDocxText(filePath);
-          if (text.length > 100) {
-            const label = file.replace(/\.docx$/i, '');
-            // Limit each document to 15000 chars to stay within token limits
-            context += `\n\n--- ${label} ---\n${text.substring(0, 15000)}`;
-            console.log(`[MemoireGenerator] Loaded DCE file: ${file} (${text.length} chars)`);
-          }
+    const loadedFiles = new Set<string>();
+    const scanDir = async (dir: string) => {
+      if (!fs.existsSync(dir)) return;
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) { await scanDir(fullPath); continue; }
+
+        const normalized = entry.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+        const ext = path.extname(entry.name).toLowerCase();
+        if (!['.doc', '.docx', '.pdf'].includes(ext)) continue;
+        if (normalized.includes('bpu') || normalized.includes('dpgf')) continue;
+        if (normalized.includes('memoire') && (normalized.includes('technique') || normalized.includes('gss'))) continue;
+        if (loadedFiles.has(normalized)) continue;
+        loadedFiles.add(normalized);
+
+        let text = '';
+        try {
+          text = await extractText(fullPath);
+        } catch (e: any) {
+          console.warn(`[MemoireGenerator] Impossible de lire: ${entry.name} — ${e.message}`);
+          continue;
+        }
+        if (text.length > 100) {
+          pieces.push({ label: entry.name.replace(/\.(doc|docx|pdf)$/i, ''), text, priority: priorityOf(normalized) });
+          console.log(`[MemoireGenerator] DCE chargé: ${entry.name} (${text.length} chars, prio ${priorityOf(normalized)})`);
         }
       }
-      
-      if (context.length > 1000) break; // Don't load from multiple dirs if we found content
+    };
+    for (const dceDir of dceDirs) await scanDir(dceDir);
+
+    if (pieces.length === 0) {
+      throw new Error('[MemoireGenerator] Aucun contenu DCE trouvé. Vérifiez que les fichiers du DCE sont bien présents.');
     }
 
-    if (context.length < 100) {
-      console.warn(`[MemoireGenerator] No DCE content found, using mock context.`);
-      context += `\n\n--- CCTP (Mock) ---\nAppel d'offres MP2026-08 pour prestations de sécurité-sûreté et télésécurité (lots 1, 2 et 3) pour l'Université de Rouen Normandie. Certification APSAD requise. Sites: Mont-Saint-Aignan, Martainville, Pasteur, Madrillet, Evreux.`;
+    // 3. Assemblage par priorité décroissante, dans le budget total
+    pieces.sort((a, b) => b.priority - a.priority);
+    let context = '';
+    let used = 0;
+    for (const p of pieces) {
+      if (used >= TOTAL_BUDGET) {
+        console.log(`[MemoireGenerator] DCE budget atteint — fichier ignoré: ${p.label}`);
+        continue;
+      }
+      const remaining = TOTAL_BUDGET - used;
+      let body = p.text;
+      const cap = Math.min(PER_FILE_CAP, remaining);
+      if (body.length > cap) body = body.slice(0, cap) + `\n[… document tronqué (${p.text.length - cap} caractères omis) …]`;
+      const block = `\n\n--- ${p.label} ---\n${body}`;
+      context += block;
+      used += block.length;
     }
 
+    console.log(`[MemoireGenerator] Contexte DCE assemblé: ${context.length} chars (budget ${TOTAL_BUDGET}), ${pieces.length} fichiers candidats`);
     return context;
   }
 
+  private sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+
   /**
-   * Main generation — DOM-based approach inspired by GSS analyse prototype.
+   * Appel gpt-4o avec retry/backoff sur 429 (la limite TPM du compte oblige à espacer les requêtes).
+   * Renvoie le contenu texte, ou null si échec définitif.
    */
+  private async callOpenAI(messages: any[], temperature: number, label: string, jsonMode: boolean): Promise<string | null> {
+    const maxAttempts = 5;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const completion = await this.openai.chat.completions.create({
+          model: MEMOIRE_MODEL,
+          ...(jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
+          messages,
+          temperature,
+        });
+        return completion.choices[0].message.content || '';
+      } catch (e: any) {
+        const status = e?.status || e?.code || '';
+        const msg = (e?.message || String(e)).toString();
+        if (status === 429 && attempt < maxAttempts) {
+          const wait = 15000 * attempt; // 15s, 30s, 45s, 60s
+          console.warn(`[MemoireGenerator] ${label}: 429 (TPM) — attente ${wait / 1000}s puis réessai (${attempt}/${maxAttempts - 1})`);
+          await this.sleep(wait);
+          continue;
+        }
+        console.error(`[MemoireGenerator] ${label}: appel API échoué (status=${status}): ${msg.slice(0, 240)}`);
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Phase d'ANALYSE structurée (inspirée de l'app de référence gss-app, personas Sacha / Mme Vaché).
+   * À partir du DCE (CCTP, RC, rapport de visite terrain, annexes), produit un JSON `analysisData`
+   * compact et exploitable, qui sert ensuite de contexte unique au remplissage (au lieu du DCE brut).
+   * En plus des faits, le modèle propose des arguments différenciants et des problématiques
+   * anticipées — ce qui fait gagner un appel d'offres.
+   */
+  private async analyzeDce(dceContext: string): Promise<any> {
+    const systemPrompt = `Tu es un expert en marchés publics de sécurité privée pour l'entreprise GSS (Global Security Service, ex-GIS).
+Ton process s'appuie sur deux rôles : Sacha (amont : analyse du DCE, vérification de l'obligation de visite, comptes-rendus de visite terrain — 60% contiennent des contraintes du terrain absentes du CCTP) et Mme Vaché (rédaction du mémoire technique avec une personnalisation forte : anticiper des problématiques opérationnelles non formulées par l'acheteur).
+
+Ta mission : analyser le CCTP, le RC, le rapport de visite terrain et les annexes pour en extraire, de façon structurée et exhaustive :
+1. Le donneur d'ordre, la durée du marché, les sites concernés.
+2. Les besoins en agents (effectifs en ETP, profils : CQP APS, SSIAP 1/2/3, encadrement) et le taux de reprise du personnel en place (annexes).
+3. Les contraintes matérielles (contrôle de rondes, pointeaux, PTI/DATI, tenues, véhicules).
+4. L'obligation de visite (RC) croisée avec le rapport de visite.
+5. Des "Arguments Différenciants" (forces de GSS) et des "Problématiques Anticipées" (risques techniques/humains non formulés par l'acheteur + la solution GSS associée).
+
+Tu renvoies un objet JSON valide et exhaustif.`;
+
+    const userPrompt = `Voici les documents du DCE (CCTP, RC, rapport de visite, annexes) :
+${dceContext.slice(0, 120_000)}
+
+Génère une réponse JSON valide respectant EXACTEMENT cette structure :
+{
+  "clientName": "Nom exact du donneur d'ordre (ex: Université de Rouen Normandie)",
+  "projectTitle": "Intitulé complet du marché",
+  "marketRef": "Référence du marché (ex: MP n°2026-08)",
+  "duration": "Durée exacte (ex: 1 an renouvelable 3 fois)",
+  "lots": [ { "num": "1", "perimetre": "..." } ],
+  "visitMandatory": true,
+  "visitDetails": "Observations clés du terrain (rapport de visite). Vide si absent.",
+  "sites": [ { "name": "Nom exact du site/campus", "requirements": "Effectifs ETP et qualifications" } ],
+  "operationalSummary": {
+    "agentProfiles": "Profils requis, taux de reprise du personnel, encadrement",
+    "uniforms": "Tenues/équipements spécifiques",
+    "equipment": "Rondes, pointeaux par site, PTI, véhicules",
+    "qualityControls": "Contrôles inopinés, réunions de suivi, extranet"
+  },
+  "telesurveillance": "Lot 3 : délais d'intervention max par site, nb d'intervenants, certifications APSAD demandées (vide si non concerné)",
+  "legalRequirements": "Exigences d'autorisation (CNAPS, agréments dirigeants, agrément établissement local)",
+  "keyRisks": [ "Risque/contrainte opérationnelle identifié" ],
+  "proposalStrengths": [ "Argument différenciant technique de GSS pour ce marché" ],
+  "anticipatedIssues": [ "Problématique non formulée par l'acheteur + solution concrète GSS" ]
+}`;
+
+    const content = await this.callOpenAI(
+      [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+      0.2, 'Analyse DCE', true,
+    );
+    try {
+      const data = JSON.parse(content || '{}');
+      console.log(`[MemoireGenerator] Analyse DCE: client="${data.clientName || '?'}", ${(data.sites || []).length} site(s), ${(data.anticipatedIssues || []).length} problématique(s) anticipée(s).`);
+      return data;
+    } catch (e) {
+      console.error('[MemoireGenerator] Analyse DCE: parse JSON échoué, repli sur extrait brut.');
+      return { rawExcerpt: dceContext.slice(0, 20_000) };
+    }
+  }
+
+  /**
+   * Adapte les textes statiques d'un mémoire GSS maître (rédigé pour un marché passé) au nouveau
+   * marché : remplace l'ancien nom de client, l'ancienne référence de marché et les anciens noms
+   * de sites par les valeurs issues de l'analyse. N'agit que sur les `<w:t>` (texte affiché).
+   */
+  private adaptStaticText(xmlDoc: any, analysisData: any) {
+    const clientName: string = analysisData?.clientName || '';
+    const marketRef: string = analysisData?.marketRef || analysisData?.projectTitle || '';
+    const sites: Array<{ name?: string }> = analysisData?.sites || [];
+    if (!clientName && !marketRef && sites.length === 0) return;
+
+    // Termes du marché passé (le maître AO RNE.docx était un mémoire Université de Rouen MP2026-08)
+    const oldClient = [/Université de Rouen Normandie/g, /l['’]Université de Rouen Normandie/g, /Université de Rouen/g];
+    const oldRef = [/MP\s*n°\s*2026-08/g, /2026-08/g];
+    const oldSites: Array<[RegExp, number]> = [
+      [/Campus Mont-Saint-Aignan\s*\+\s*INSPE/gi, 0], [/Campus Mont-Saint-Aignan/gi, 0],
+      [/Campus Martainville\s*\(UFR Santé\)/gi, 1], [/Campus Martainville/gi, 1],
+      [/Campus Pasteur\s*\(UFR DESP\)/gi, 2], [/Campus Pasteur/gi, 2],
+      [/Campus du Madrillet/gi, 3],
+      [/Campus Evreux Tilly-Navarre/gi, 4], [/Campus Evreux/gi, 4],
+    ];
+
+    let count = 0;
+    getElementsWithLocalName(xmlDoc, 't').forEach((tEl: any) => {
+      let text = tEl.textContent || '';
+      if (!text) return;
+      const before = text;
+      if (clientName) oldClient.forEach(re => { text = text.replace(re, clientName); });
+      if (marketRef) oldRef.forEach(re => { text = text.replace(re, marketRef); });
+      oldSites.forEach(([re, idx]) => {
+        const name = sites[idx]?.name;
+        if (name) text = text.replace(re, name);
+      });
+      if (text !== before) { tEl.textContent = text; count++; }
+    });
+    console.log(`[MemoireGenerator] Adaptation mémoire maître: ${count} segment(s) de texte mis à jour.`);
+  }
+
   public async generate(dossierId: string): Promise<{ filePath: string, generatedData: Record<string, string> }> {
     const settings = getSettings();
     const baseDir = path.resolve(__dirname, '../../../../');
     const uploadedDceDir = path.resolve(baseDir, `gss-ao/data/output/dce_${dossierId}`);
 
-    // 1. Find template
-    let templatePath = this.findDceTemplate(uploadedDceDir);
-    if (!templatePath) {
-      const dceDir = settings.corpusDceDir;
-      templatePath = this.findDceTemplate(dceDir);
+    // 1. Find template. isClientTemplate=true → cadre imposé par l'acheteur (on remplit tel quel).
+    // isClientTemplate=false → mémoire GSS maître réutilisé (on adapte d'abord client/sites).
+    let templatePath: string | null = null;
+    let isClientTemplate = true;
+
+    const possibleDirs = [
+      uploadedDceDir,
+      settings.corpusDceDir,
+      path.resolve(baseDir, 'GSS analyse et génération/DCEDCE MP2026_08'),
+      path.resolve(baseDir, 'DCEDCE MP2026_08'),
+      path.resolve(baseDir, 'Cas-Univ-Rouen-MP2026-08'),
+    ];
+
+    const dossier = DB.getDossier(dossierId);
+    if (dossier && dossier.dce_files) {
+      const templateFile = dossier.dce_files.find((f: any) => f.type === 'Mémoire (cadre)');
+      if (templateFile && templateFile.nom) {
+        const filename = path.basename(templateFile.nom);
+        for (const dir of possibleDirs) {
+          if (!dir) continue;
+          const p = path.join(dir, filename);
+          if (fs.existsSync(p)) { templatePath = p; break; }
+        }
+      }
     }
+
+    if (!templatePath) {
+      for (const dir of possibleDirs) {
+        if (!dir) continue;
+        const found = this.findDceTemplate(dir);
+        if (found) { templatePath = found; break; }
+      }
+    }
+
     if (!templatePath) {
       templatePath = path.join(this.templateDir, 'Mémoire technique', 'AO RNE.docx');
+      isClientTemplate = false; // mémoire GSS maître, pas un cadre acheteur
       if (!fs.existsSync(templatePath)) {
         throw new Error(`Aucun template trouvé ni dans le DCE ni dans ${templatePath}`);
       }
     }
 
-    console.log(`[MemoireGenerator] Using template: ${templatePath}`);
+    console.log(`[MemoireGenerator] Using template: ${templatePath} (${isClientTemplate ? 'cadre client' : 'mémoire GSS maître'})`);
 
-    // 2. Load DOCX and parse XML DOM
+    // 2. Analyse structurée du DCE (contexte unique de rédaction), avant toute manipulation du Word
+    const dceContext = await this.getDceContext(dossierId);
+    const analysisData = await this.analyzeDce(dceContext);
+    const analysisJson = JSON.stringify(analysisData, null, 2);
+
+    // 3. Load DOCX and parse XML DOM
     const content = fs.readFileSync(templatePath);
     const zip = new PizZip(content);
     const documentXml = zip.file('word/document.xml');
@@ -334,114 +577,193 @@ export class MemoireGenerator {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(docXmlStr, 'text/xml');
 
-    // 3. Walk the DOM to detect fillable fields and insert placeholders
+    // Si c'est un mémoire GSS maître (et non un cadre acheteur), on adapte d'abord les textes
+    // statiques (ancien client / référence marché / noms de sites) au nouveau marché.
+    if (!isClientTemplate) {
+      this.adaptStaticText(xmlDoc, analysisData);
+      const hfSerializer = new XMLSerializer();
+      Object.keys(zip.files).forEach(name => {
+        if (name.startsWith('word/header') || name.startsWith('word/footer')) {
+          const fd = zip.file(name);
+          if (!fd) return;
+          const hfDoc = parser.parseFromString(fd.asText(), 'text/xml');
+          this.adaptStaticText(hfDoc, analysisData);
+          zip.file(name, hfSerializer.serializeToString(hfDoc));
+        }
+      });
+    }
+
+    // 3. Walk the DOM to detect fillable fields
+    const WNS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    // Seuil ≥5 : les vraies lignes à remplir du formulaire sont longues. Un trait d'union isolé
+    // ("sous-traitance") ou des points de suspension "..." en pleine phrase ne comptent PAS.
+    const DOT_RUN = /(?:[_.\-…]\s*){5,}/;
+    const DOT_RUN_G = /(?:[_.\-…]\s*){5,}/g;
+    const isDottedOnly = (s: string) => s.trim().length >= 5 && /^[_.\-…\s]+$/.test(s);
+    const hasDottedRun = (s: string) => DOT_RUN.test(s);
+    const stripDots = (s: string) => s.replace(DOT_RUN_G, ' ').trim();
+    const normCtx = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const isIdentityCtx = (ctx: string) =>
+      /adresse|denomination|raison sociale|candidat|cnaps|siret|siren|agrement|certification|station|\bdate\b|n°|numero|delai|minute|intervenant|taux|effectif|\betp\b|telephone|email|mail|coordonnees/.test(normCtx(ctx));
+
+    interface FieldDesc {
+      id: number;
+      type: 'text' | 'legacy_checkbox' | 'sym_checkbox' | 'w14_checkbox';
+      element?: any;
+      context: string;
+      kind: 'answer' | 'table' | 'checkbox';
+      lineCount?: number;
+    }
+
     let fieldCounter = 1;
-    const prompts: string[] = [];
-    const descriptors: Array<{ id: number; type: string; element?: any; promptContext: string }> = [];
+    const descriptors: FieldDesc[] = [];
     const filledCells = new Set<any>();
     let currentHeading = 'Introduction / Généralités';
+    const recentParagraphs: string[] = [];
+    let lastQuestionText = '';          // dernier paragraphe-question purement textuel
+    let openAnswerField: FieldDesc | null = null; // zone de réponse en cours de coalescence
 
-    const walkDOM = (node: any) => {
+    const addField = (f: Omit<FieldDesc, 'id'>): FieldDesc => {
+      const fd: FieldDesc = { id: fieldCounter++, ...f };
+      descriptors.push(fd);
+      return fd;
+    };
+
+    /** Pose [CHAMP_id] dans le 1er run pointillé (id != null) puis vide les autres runs pointillés. */
+    const placeOrClearDotted = (pNode: any, placeId: number | null) => {
+      let placed = false;
+      getElementsWithLocalName(pNode, 't').forEach((tEl: any) => {
+        const text = tEl.textContent || '';
+        if (!isDottedOnly(text) && !hasDottedRun(text)) return;
+        if (placeId !== null && !placed) {
+          tEl.textContent = isDottedOnly(text)
+            ? `[CHAMP_${placeId}]`
+            : text.replace(DOT_RUN, `[CHAMP_${placeId}]`).replace(DOT_RUN_G, '');
+          placed = true;
+        } else {
+          tEl.textContent = isDottedOnly(text) ? '' : text.replace(DOT_RUN_G, '');
+        }
+      });
+      return placed;
+    };
+
+    const walkDOM = (node: any, inDrawing: boolean) => {
       if (node.nodeType !== 1) return;
       const localName = node.localName;
+      // Ne pas détecter de champs dans les cartouches graphiques / zones de texte (titre)
+      const nowInDrawing = inDrawing || localName === 'drawing' || localName === 'pict' || localName === 'txbxContent';
 
-      // Track headings for context
-      if (localName === 'p' && isHeadingParagraph(node)) {
-        currentHeading = getElementText(node).trim();
-      }
-
-      // A. Table cells — find empty cells in rows that have mixed content
-      if (localName === 'tr') {
-        const directCells = getDirectCells(node);
-        const cellInfos = directCells.map((cell: any) => ({
-          cell,
-          text: getElementText(cell).trim(),
-          isEmpty: getElementText(cell).trim() === ''
-        }));
-        const hasText = cellInfos.some((c: any) => !c.isEmpty);
-        const hasEmpty = cellInfos.some((c: any) => c.isEmpty);
-
-        if (hasText && hasEmpty) {
-          cellInfos.forEach((cInfo: any) => {
-            if (cInfo.isEmpty && !filledCells.has(cInfo.cell)) {
-              filledCells.add(cInfo.cell);
-              const id = fieldCounter++;
-              const cellContext = getTableCellContext(cInfo.cell, node);
-              const fullContext = `Section: "${currentHeading}" | Tableau: ${cellContext}`;
-              prompts.push(`Champ [CHAMP_${id}] : Cellule de tableau vide. ${fullContext}`);
-              descriptors.push({ id, type: 'text', promptContext: fullContext });
-
-              let p = findLocalNameChild(cInfo.cell, 'p') || getElementsWithLocalName(cInfo.cell, 'p')[0];
-              if (!p) {
-                p = xmlDoc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'w:p');
-                cInfo.cell.appendChild(p);
-              }
-              const r = xmlDoc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'w:r');
-              const t = xmlDoc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'w:t');
-              t.textContent = `[CHAMP_${id}]`;
-              r.appendChild(t);
-              p.appendChild(r);
+      if (!nowInDrawing) {
+        // ── Suivi des titres / questions (paragraphes purement textuels) ──
+        if (localName === 'p') {
+          const pText = getElementText(node).trim();
+          if (isHeadingParagraph(node)) {
+            currentHeading = pText;
+            recentParagraphs.length = 0;
+            lastQuestionText = '';
+            openAnswerField = null;
+          } else if (pText && !isDottedOnly(pText) && !hasDottedRun(pText)) {
+            // paragraphe purement textuel → libellé/question, ferme toute zone ouverte
+            const cleaned = pText.replace(/\[CHAMP_\d+\]/g, '').trim();
+            if (cleaned) {
+              recentParagraphs.push(cleaned);
+              if (recentParagraphs.length > 3) recentParagraphs.shift();
+              if (cleaned.length < 300) lastQuestionText = cleaned;
+              openAnswerField = null;
             }
-          });
+          }
         }
-      }
 
-      // B. Paragraphs — detect dotted lines
-      if (localName === 'p') {
-        const parentCell = getParentWithLocalName(node, 'tc');
-        if (parentCell && filledCells.has(parentCell)) {
-          // Skip — already handled as a table cell
-        } else {
-          const fullText = getElementText(node).trim();
-          const hasDotted = /(?:[_.\-…]\s*){3,}/.test(fullText);
-
-          if (hasDotted) {
-            let replacedDotted = false;
-            const tElements = getElementsWithLocalName(node, 't');
-
-            tElements.forEach((tEl: any) => {
-              const text = tEl.textContent || '';
-              // Pure dotted-line element
-              if (/^[_.\-…\s]+$/.test(text) && text.trim().length > 0) {
-                if (!replacedDotted) {
-                  const id = fieldCounter++;
-                  const fullContext = `Section: "${currentHeading}" | Pointillés à remplir. Contexte: "${fullText}"`;
-                  prompts.push(`Champ [CHAMP_${id}] : ${fullContext}`);
-                  descriptors.push({ id, type: 'text', promptContext: fullContext });
-                  tEl.textContent = `[CHAMP_${id}]`;
-                  replacedDotted = true;
-                } else {
-                  tEl.textContent = '';
-                }
-              }
-              // Mixed text with dotted sections
-              else if (/(?:[_.\-…]\s*){3,}/.test(text)) {
-                let replacedText = text;
-                const dotRegex = /(?:[_.\-…]\s*){3,}/g;
-                let dotMatch;
-                while ((dotMatch = dotRegex.exec(text)) !== null) {
-                  const id = fieldCounter++;
-                  const fullContext = `Section: "${currentHeading}" | Pointillés à remplir. Contexte: "${fullText}"`;
-                  prompts.push(`Champ [CHAMP_${id}] : ${fullContext}`);
-                  descriptors.push({ id, type: 'text', promptContext: fullContext });
-                  replacedText = replacedText.replace(dotMatch[0], `[CHAMP_${id}]`);
-                  replacedDotted = true;
-                }
-                tEl.textContent = replacedText;
+        // ── A. Cellules de tableau : cellules vides dans une ligne à contenu mixte ──
+        if (localName === 'tr') {
+          openAnswerField = null;
+          const directCells = getDirectCells(node);
+          const cellInfos = directCells.map((cell: any) => ({ cell, isEmpty: getElementText(cell).trim() === '' }));
+          const hasText = cellInfos.some((c: any) => !c.isEmpty);
+          const hasEmpty = cellInfos.some((c: any) => c.isEmpty);
+          if (hasText && hasEmpty) {
+            cellInfos.forEach((cInfo: any) => {
+              if (cInfo.isEmpty && !filledCells.has(cInfo.cell)) {
+                filledCells.add(cInfo.cell);
+                const cellContext = getTableCellContext(cInfo.cell, node);
+                const nearbyCtx = recentParagraphs.length > 0 ? ` | Contexte proche: "${recentParagraphs.slice(-2).join(' / ')}"` : '';
+                const fd = addField({ type: 'text', kind: 'table', context: `Section: "${currentHeading}" | Tableau: ${cellContext}${nearbyCtx}` });
+                let p = findLocalNameChild(cInfo.cell, 'p') || getElementsWithLocalName(cInfo.cell, 'p')[0];
+                if (!p) { p = xmlDoc.createElementNS(WNS, 'w:p'); cInfo.cell.appendChild(p); }
+                const r = xmlDoc.createElementNS(WNS, 'w:r');
+                const t = xmlDoc.createElementNS(WNS, 'w:t');
+                t.textContent = `[CHAMP_${fd.id}]`;
+                r.appendChild(t); p.appendChild(r);
               }
             });
+          }
+        }
 
-            // Fallback: if dots were detected in fullText but no <w:t> was replaced, append placeholder
-            if (!replacedDotted) {
-              const id = fieldCounter++;
-              const fullContext = `Section: "${currentHeading}" | Zone à remplir. Contexte: "${fullText}"`;
-              prompts.push(`Champ [CHAMP_${id}] : ${fullContext}`);
-              descriptors.push({ id, type: 'text', promptContext: fullContext });
-              const r = xmlDoc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'w:r');
-              const t = xmlDoc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'w:t');
-              t.textContent = ` [CHAMP_${id}] `;
-              r.appendChild(t);
-              node.appendChild(r);
+        // ── B. Paragraphes ──
+        if (localName === 'p') {
+          const parentCell = getParentWithLocalName(node, 'tc');
+          if (!(parentCell && filledCells.has(parentCell))) {
+            const fullText = getElementText(node).trim();
+
+            // Cases à cocher (legacy / Wingdings / w14 / texte) — détection inchangée
+            getElementsWithLocalName(node, 'checkBox').forEach((cb: any) => {
+              addField({ type: 'legacy_checkbox', element: cb, kind: 'checkbox', context: `Section: "${currentHeading}" | Case à cocher. Contexte: "${fullText}"` });
+            });
+            getElementsWithLocalName(node, 'sym').forEach((sym: any) => {
+              const font = sym.getAttribute('w:font') || sym.getAttributeNS('*', 'font');
+              const char = sym.getAttribute('w:char') || sym.getAttributeNS('*', 'char');
+              if (font === 'Wingdings' && (char === 'F0A8' || char === 'F0FE')) {
+                addField({ type: 'sym_checkbox', element: sym, kind: 'checkbox', context: `Section: "${currentHeading}" | Case à cocher (symbole). Contexte: "${fullText}"` });
+              }
+            });
+            getElementsWithLocalName(node, 'checkbox').forEach((w14: any) => {
+              if (w14.namespaceURI === 'http://schemas.microsoft.com/office/word/2010/wordml' || w14.prefix === 'w14' || w14.localName === 'checkbox') {
+                addField({ type: 'w14_checkbox', element: w14, kind: 'checkbox', context: `Section: "${currentHeading}" | Case à cocher (contrôle de contenu). Contexte: "${fullText}"` });
+              }
+            });
+            if (/☐|\[\s*\]|\(\s*\)/.test(fullText)) {
+              getElementsWithLocalName(node, 't').forEach((tEl: any) => {
+                const text = tEl.textContent || '';
+                const regex = /☐|\[\s*\]|\(\s*\)/g;
+                let match; let out = text; let replaced = false;
+                while ((match = regex.exec(text)) !== null) {
+                  const fd = addField({ type: 'text', kind: 'checkbox', context: `Section: "${currentHeading}" | Case à cocher. Contexte: "${fullText}"` });
+                  out = out.replace(match[0], `[CHAMP_${fd.id}]`); replaced = true;
+                }
+                if (replaced) tEl.textContent = out;
+              });
+            }
+
+            // Zones de réponse : pointillés ou paragraphe vide → coalescence
+            const dotted = hasDottedRun(fullText) || getElementsWithLocalName(node, 't').some((t: any) => isDottedOnly(t.textContent || ''));
+            if (dotted) {
+              const inlineLabel = stripDots(fullText);
+              if (openAnswerField && inlineLabel === '') {
+                // ligne de pointillés qui prolonge la zone ouverte
+                placeOrClearDotted(node, null);
+                openAnswerField.lineCount = (openAnswerField.lineCount || 1) + 1;
+              } else {
+                const ctxLabel = inlineLabel || lastQuestionText || recentParagraphs.slice(-1)[0] || '';
+                const nearby = recentParagraphs.length ? ` | Contexte: "${recentParagraphs.slice(-2).join(' / ')}"` : '';
+                const fd = addField({ type: 'text', kind: 'answer', lineCount: 1, context: `Section: "${currentHeading}" | Question: "${ctxLabel}"${nearby}` });
+                placeOrClearDotted(node, fd.id);
+                openAnswerField = fd;
+                if (!inlineLabel) lastQuestionText = ''; // question consommée
+              }
+            } else if (fullText === '') {
+              if (openAnswerField) {
+                // ligne blanche au sein d'une zone de réponse en cours
+                openAnswerField.lineCount = (openAnswerField.lineCount || 1) + 1;
+              } else if (lastQuestionText && lastQuestionText.trimEnd().endsWith(':')) {
+                // paragraphe vide juste après un libellé "… :"
+                const fd = addField({ type: 'text', kind: 'answer', lineCount: 1, context: `Section: "${currentHeading}" | Question: "${lastQuestionText}"` });
+                const r = xmlDoc.createElementNS(WNS, 'w:r');
+                const t = xmlDoc.createElementNS(WNS, 'w:t');
+                t.textContent = `[CHAMP_${fd.id}]`;
+                r.appendChild(t); node.appendChild(r);
+                openAnswerField = fd;
+                lastQuestionText = '';
+              }
             }
           }
         }
@@ -449,116 +771,192 @@ export class MemoireGenerator {
 
       // Recurse
       if (node.childNodes) {
-        for (let i = 0; i < node.childNodes.length; i++) {
-          walkDOM(node.childNodes[i]);
-        }
+        for (let i = 0; i < node.childNodes.length; i++) walkDOM(node.childNodes[i], nowInDrawing);
       }
     };
 
-    walkDOM(xmlDoc.documentElement);
+    walkDOM(xmlDoc.documentElement, false);
+
+    // Construit le libellé de prompt de chaque champ (hint de format + contexte)
+    const buildPrompt = (f: FieldDesc): string => {
+      // Les mots-codes de champs de formulaire Word ne doivent pas polluer l'inférence ni le prompt
+      const cleanCtx = f.context.replace(/FORM(CHECKBOX|TEXT|DROPDOWN)/gi, ' ').replace(/\s{2,}/g, ' ').trim();
+      let hint = inferFieldHint(cleanCtx);
+      if (f.kind === 'checkbox') hint = '[CASE A COCHER]';
+      // Une zone de réponse étalée sur plusieurs lignes appelle un paragraphe développé,
+      // sauf s'il s'agit clairement d'un champ d'identité court.
+      if (f.kind === 'answer' && (f.lineCount || 1) >= 3 && !isIdentityCtx(cleanCtx)) hint = '[PARAGRAPHE]';
+      const extent = f.kind === 'answer' && (f.lineCount || 1) > 1
+        ? ` (zone de ${f.lineCount} lignes — réponse développée attendue)` : '';
+      return `Champ [CHAMP_${f.id}] ${hint} : ${cleanCtx}${extent}`;
+    };
+    const prompts: string[] = descriptors.map(buildPrompt);
 
     console.log(`[MemoireGenerator] Detected ${prompts.length} fillable fields in document.`);
+    if (prompts.length === 0) throw new Error("Aucun champ à remplir détecté dans le template Word.");
 
-    if (prompts.length === 0) {
-      throw new Error("Aucun champ à remplir détecté dans le template Word.");
+    const systemPrompt = `Tu es un rédacteur chevronné de mémoires techniques pour l'entreprise GSS (Global Security Service, ex-GIS), expert des marchés publics de sécurité privée.
+On te fournit l'ANALYSE stratégique et opérationnelle du marché (client, sites, exigences, rapport de visite de Sacha, arguments différenciants de GSS, problématiques terrain anticipées) et une liste de champs [CHAMP_X] repérés dans le cadre de réponse de l'acheteur. Tu rédiges la valeur à insérer dans chacun.
+
+══════════════════════════════════════
+RÈGLE N°0 — QUI EST QUI (NE JAMAIS CONFONDRE)
+══════════════════════════════════════
+- LE CANDIDAT / SOUMISSIONNAIRE / "l'entreprise qui exécutera le marché" = GSS (Global Security Service). C'est TOI.
+- L'ACHETEUR / CLIENT = l'organisme qui passe le marché (le clientName de l'analyse). Ce N'EST PAS le candidat.
+- "Dénomination du candidat" = "GSS - Global Security Service" (JAMAIS le nom de l'acheteur).
+
+══════════════════════════════════════
+RÈGLE N°1 — FORMAT DE RÉPONSE (selon le tag de chaque champ)
+══════════════════════════════════════
+[VALEUR COURTE]   → 1 à 6 mots, valeur brute factuelle (ex: "93 ETP", "Campus Pasteur", "Oui"). Pas de phrase d'intro.
+[LISTE]           → items séparés par "- " et un saut de ligne (ex: "- CQP APS\n- SSIAP 1").
+[PARAGRAPHE]      → paragraphe dense, technique et engageant (3 à 8 phrases développées) qui VEND GSS. Jamais de réponse paresseuse ("Conforme", "Disponible", "Oui").
+[CASE A COCHER]   → UNIQUEMENT "☑" (GSS se conforme à 100%) ou "☐".
+JAMAIS de markdown (pas de **gras**, pas de #). Sauts de ligne et tirets simples uniquement.
+
+══════════════════════════════════════
+RÈGLE N°2 — PERSONNALISATION (ce qui fait gagner)
+══════════════════════════════════════
+- Utilise le nom exact du client, des sites et le contexte de l'analyse pour un texte totalement sur-mesure.
+- Exploite les observations de la visite terrain (visitDetails) pour prouver notre connaissance du site.
+- Intègre les "proposalStrengths" et les "anticipatedIssues" (avec leur solution GSS) au cœur des [PARAGRAPHE], pour montrer que GSS anticipe des risques non formulés dans le CCTP.
+- Décris concrètement : organisation, contrôle CNAPS, gestion des plannings, rondes/pointeaux NFC, PTI/DATI, gestion des alarmes, remplacement d'agents.
+
+══════════════════════════════════════
+RÈGLE N°3 — DONNÉES LÉGALES : NE JAMAIS INVENTER
+══════════════════════════════════════
+Pour tout champ d'identité légale (SIRET, N° CNAPS, NOM du dirigeant, n° d'agrément dirigeant, dates
+d'obtention/validité, n° de certification, adresses, coordonnées/téléphone/email) : n'utilise QUE des
+valeurs présentes dans l'analyse/DCE. Sinon écris EXACTEMENT "[À COMPLÉTER]" (rien d'autre, pas de nom
+inventé type "Jean Dupont"). N'invente JAMAIS un nom, un numéro, une date, une adresse ou un contact.
+
+FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "value": "..."} ]}`;
+
+    // 5. Traitement par lots. gpt-4o-mini (200k TPM) permet des lots plus gros → moins d'allers-retours.
+    const BATCH_SIZE = 20;
+    const replacements: Array<{ id: number; value: string }> = [];
+
+    /** Appelle le modèle sur un sous-ensemble de champs et collecte les valeurs renvoyées. */
+    const runBatch = async (batchFields: FieldDesc[], label: string): Promise<void> => {
+      if (batchFields.length === 0) return;
+      const batchPrompts = batchFields.map(buildPrompt);
+      const hasParagraph = batchPrompts.some(p => p.includes('[PARAGRAPHE]'));
+      const temperature = hasParagraph ? 0.4 : 0.2;
+
+      const userPrompt = `Analyse du marché public (contexte unique de rédaction) :
+${analysisJson}
+
+Liste des ${batchPrompts.length} champs à remplir (${label}) :
+${batchPrompts.join('\n')}
+
+Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} valeurs. CHAQUE champ listé ci-dessus doit être présent dans la réponse.`;
+
+      const approxTokens = Math.round((systemPrompt.length + userPrompt.length) / 4);
+      console.log(`[MemoireGenerator] ${label}: ${batchPrompts.length} champs, temp=${temperature}, ~${approxTokens} tokens`);
+      const aiResponse = await this.callOpenAI(
+        [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+        temperature, label, true,
+      );
+      if (aiResponse === null) return;
+      try {
+        const data = JSON.parse(aiResponse || '{}');
+        const batchResults: Array<{ id: number; value: string }> = data.replacements || [];
+        replacements.push(...batchResults);
+        console.log(`[MemoireGenerator] ${label}: ${batchResults.length} valeurs renvoyées.`);
+      } catch (e) {
+        console.error(`[MemoireGenerator] ${label}: parse JSON échoué:`, (aiResponse || '').slice(0, 200));
+      }
+    };
+
+    const totalBatches = Math.ceil(descriptors.length / BATCH_SIZE);
+    console.log(`[MemoireGenerator] Traitement de ${descriptors.length} champs en ${totalBatches} lot(s) parallèles...`);
+    // Lots indépendants lancés en parallèle (200k TPM / 10k RPM le permettent largement).
+    await Promise.all(
+      Array.from({ length: totalBatches }, (_, i) =>
+        runBatch(descriptors.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE), `Lot ${i + 1}/${totalBatches}`)
+      )
+    );
+
+    // Passe de complétion : rattrape les champs sans valeur (lot ayant échoué ou oubli du modèle)
+    const answeredIds = new Set(replacements.map(r => r.id));
+    const missing = descriptors.filter(d => !answeredIds.has(d.id));
+    if (missing.length > 0) {
+      console.log(`[MemoireGenerator] Passe de complétion : ${missing.length} champ(s) manquant(s).`);
+      const nComp = Math.ceil(missing.length / BATCH_SIZE);
+      await Promise.all(
+        Array.from({ length: nComp }, (_, i) =>
+          runBatch(missing.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE), `Complétion ${i + 1}`)
+        )
+      );
     }
 
-    // 4. Call GPT to fill all fields at once
-    const dceContext = this.getDceContext(dossierId);
+    console.log(`[MemoireGenerator] GPT a renvoyé ${replacements.length} valeurs au total.`);
 
-    const systemPrompt = `Tu es un expert de haut niveau en marchés publics de sécurité privée et un rédacteur chevronné pour l'entreprise GSS (Global Security Service).
-On te fournit l'analyse du DCE (CCTP, RC, annexes) et une liste de champs [CHAMP_X] repérés dans le cadre de réponse de l'acheteur.
+    // Garde-fou anti-invention : pour les champs légaux (SIRET, CNAPS, agrément, dates
+    // d'autorisation, adresses), toute valeur dont les chiffres n'apparaissent pas dans les
+    // sources réelles est remplacée par [À COMPLÉTER]. Indépendant du modèle (mini invente parfois).
+    const sourceDigits = (analysisJson + ' ' + dceContext).replace(/\D/g, '');
+    const isLegalField = (ctx: string) => /siret|cnaps|n. d.autorisation|numero d.autorisation|agrement dirigeant|date d.obtention|date de validite|adresse du siege|adresse de l.agence/.test(normCtx(ctx));
+    const guardLegal = (val: string, ctx: string): string => {
+      if (!isLegalField(ctx)) return val;
+      const digitRuns = val.match(/\d{3,}/g) || [];
+      const unverified = digitRuns.some(d => !sourceDigits.includes(d));
+      if (unverified) {
+        console.log(`[MemoireGenerator] Garde-fou: valeur légale non vérifiée → [À COMPLÉTER] (ctx: ${ctx.slice(0, 60)})`);
+        return '[À COMPLÉTER]';
+      }
+      return val;
+    };
 
-Ta mission est de rédiger les valeurs à insérer dans chacun de ces champs de manière extrêmement professionnelle, complète, qualitative et sur-mesure, en exploitant AU MAXIMUM les informations du DCE fourni.
-
-INFORMATIONS SUR GSS (à utiliser pour remplir les champs d'identification) :
-- Dénomination : GSS - Global Security Service
-- Siège social : 12 rue de la République, 76000 Rouen
-- Agence locale : GSS Normandie - 45 avenue du Mont-Riboudet, 76000 Rouen
-- SIRET : 812 345 678 00013
-- N° CNAPS : AUT-076-2025-01-31-20200000001
-- Date d'obtention autorisation CNAPS : 31/01/2025
-- Dirigeant : M. Jean-Marc MARCHANI, Agrément dirigeant CNAPS : AGR-076-2024-12-31-20190000001
-- PME : Oui
-- Effectif France : ~250 agents
-- Effectif Département 76 : ~80 agents
-- Effectif Département 27 : ~35 agents
-- Contact principal : Mme Vaché, Responsable Marchés Publics, mme.vache@gss-securite.fr, 02 35 XX XX XX
-- Certifications : ISO 9001, APSAD R81, APSAD R31 (P3)
-- Station télésurveillance : Rouen Centre, opérationnelle 24/7
-
-RÈGLES DE RÉDACTION :
-1. TON ET STYLE : Irréprochable, précis, technique et engageant. Évite ABSOLUMENT les réponses courtes, paresseuses ou génériques ("Conforme", "Disponible", "Oui"). Chaque réponse doit valoriser le professionnalisme de GSS.
-2. TYPES DE CHAMPS :
-   - Pour les cellules de tableaux et réponses factuelles (effectifs, diplômes, matériel) : concis et factuel (ex: "CQP APS + SSIAP1", "4 ETP", "90%").
-   - Pour les questions ouvertes, descriptions ou pointillés : rédige des paragraphes complets, détaillés et structurés (3 à 8 phrases) décrivant organisation, contrôle CNAPS, gestion des plannings, rondes avec pointeaux NFC, gestion des alarmes, etc.
-3. CONTEXTUALISATION : Utilise les informations exactes du CCTP et des annexes (noms des sites, effectifs demandés, horaires, contraintes) pour personnaliser chaque réponse. Cite les noms exacts des campus et les détails opérationnels.
-4. PERSONNALISATION : Anticipe des problématiques opérationnelles non explicitement formulées par l'acheteur et propose les solutions GSS associées.
-5. FORMAT : Renvoie UNIQUEMENT un objet JSON valide :
-{"replacements": [ {"id": 1, "value": "Texte détaillé rédigé..."} ]}`;
-
-    const userPrompt = `Voici le contenu complet des documents du DCE :
-${dceContext}
-
-Liste des ${prompts.length} champs à remplir dans le mémoire technique :
-${prompts.join('\n')}
-
-Renvoie uniquement un objet JSON valide contenant les ${prompts.length} valeurs à insérer. CHAQUE champ doit avoir une réponse.`;
-
-    console.log(`[MemoireGenerator] Calling OpenAI GPT-4o to fill ${prompts.length} fields...`);
-    const completion = await this.openai.chat.completions.create({
-      model: 'gpt-4o',
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.2,
-    });
-
-    const aiResponse = completion.choices[0].message.content || '{}';
-    let replacements: Array<{ id: number; value: string }> = [];
-    try {
-      const data = JSON.parse(aiResponse);
-      replacements = data.replacements || [];
-    } catch (e) {
-      console.error('[MemoireGenerator] Failed to parse GPT response:', aiResponse);
-    }
-
-    console.log(`[MemoireGenerator] GPT returned ${replacements.length} values.`);
-
-    // 5. Apply replacements in the DOM
+    // 6. Apply replacements in the DOM
     let applied = 0;
     replacements.forEach((rep: any) => {
       const desc = descriptors.find(d => d.id === rep.id);
       if (!desc) return;
-      const value = String(rep.value);
+      const value = guardLegal(String(rep.value), desc.context);
+      const isChecked = value.includes('☑') || value.toLowerCase() === 'oui' || value.toLowerCase() === 'yes' || value === '1' || value === 'true';
 
       if (desc.type === 'text') {
         const tEls = getElementsWithLocalName(xmlDoc, 't');
-        tEls.forEach((tEl: any) => {
-          replaceTextInElement(xmlDoc, tEl, `[CHAMP_${rep.id}]`, value);
-        });
+        tEls.forEach((tEl: any) => replaceTextInElement(xmlDoc, tEl, `[CHAMP_${rep.id}]`, value));
+        applied++;
+      } else if (desc.type === 'legacy_checkbox') {
+        let checkedEl = findLocalNameChild(desc.element, 'checked');
+        if (!checkedEl) {
+          checkedEl = xmlDoc.createElementNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'w:checked');
+          desc.element.appendChild(checkedEl);
+        }
+        checkedEl.setAttribute('w:val', isChecked ? '1' : '0');
+        applied++;
+      } else if (desc.type === 'sym_checkbox') {
+        desc.element.setAttribute('w:char', isChecked ? 'F0FE' : 'F0A8');
+        applied++;
+      } else if (desc.type === 'w14_checkbox') {
+        let checkedEl = findLocalNameChild(desc.element, 'checked');
+        if (!checkedEl) {
+          checkedEl = xmlDoc.createElementNS('http://schemas.microsoft.com/office/word/2010/wordml', 'w14:checked');
+          desc.element.appendChild(checkedEl);
+        }
+        checkedEl.setAttribute('w14:val', isChecked ? '1' : '0');
+        let sdt = getParentWithLocalName(desc.element, 'sdt');
+        if (sdt) {
+          getElementsWithLocalName(sdt, 't').forEach((t: any) => { t.textContent = isChecked ? '☒' : '☐'; });
+        }
         applied++;
       }
     });
 
-    // 6. Clean up any remaining [CHAMP_X] placeholders
-    const finalTEls = getElementsWithLocalName(xmlDoc, 't');
-    finalTEls.forEach((tEl: any) => {
+    // 7. Clean up remaining placeholders
+    getElementsWithLocalName(xmlDoc, 't').forEach((tEl: any) => {
       const text = tEl.textContent || '';
-      if (/\[CHAMP_\d+\]/.test(text)) {
-        tEl.textContent = text.replace(/\[CHAMP_\d+\]/g, '');
-      }
+      if (/\[CHAMP_\d+\]/.test(text)) tEl.textContent = text.replace(/\[CHAMP_\d+\]/g, '');
     });
 
     console.log(`[MemoireGenerator] Applied ${applied}/${replacements.length} replacements.`);
 
-    // 7. Serialize and save
+    // 8. Serialize and save
     const serializer = new XMLSerializer();
-    const finalXml = serializer.serializeToString(xmlDoc);
-    zip.file('word/document.xml', finalXml);
-
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
     const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
     const outputFileName = `Mémoire technique GSS_${Date.now()}.docx`;
     const outputPath = path.join(this.responseDir, outputFileName);
