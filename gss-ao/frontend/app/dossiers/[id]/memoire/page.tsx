@@ -324,7 +324,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
             </h1>
           </div>
           <div className="flex items-center gap-4">
-            {mode === "A" && (
+            {mode === "A" && !hasTemplate && (
               <Button
                 variant="secondary"
                 size="sm"
@@ -342,23 +342,8 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                       : "Générer le document Word complet"
                 }
               >
-                {isGeneratingAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                {isGeneratingAll
-                  ? `Génération… ${generatedCount}/${sections.length}`
-                  : "Générer mémoire technique"}
-              </Button>
-            )}
-            {!hasTemplate && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleAssembleAndExport}
-                disabled={isAssembling || isGeneratingAll || busyId !== null || generatedCount === 0}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white transition-all"
-                title="Assembler les sections dans le document et passer à l'export"
-              >
-                {isAssembling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
-                {isAssembling ? "Assemblage…" : "Aller à l'export"}
+                {isGeneratingDocx ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileStack className="mr-2 h-4 w-4" />}
+                Générer Document Complet (Template)
               </Button>
             )}
             {!hasTemplate && (
