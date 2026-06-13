@@ -230,4 +230,22 @@ router.post('/generate-section', async (req: Request, res: Response) => {
   }
 });
 
+// Export DOCX (cas sans cadre imposé / Mode B) — comme GSS-MT-Generator :
+// reçoit la map des sections générées, assemble le mémoire de référence GSS
+// et renvoie le .docx en téléchargement direct (blob).
+router.post('/export-docx', async (req: Request, res: Response) => {
+  try {
+    const { sections } = req.body;
+    if (!sections || typeof sections !== 'object' || Object.keys(sections).length === 0) {
+      return res.status(400).json({ error: 'Aucune section à exporter.' });
+    }
+    const generator = new MemoireGenerator();
+    const result = await generator.exportFromSectionsMap(sections as Record<string, string>);
+    return res.download(result.filePath, 'Memoire_Technique_GSS.docx');
+  } catch (error: any) {
+    console.error('Erreur export-docx:', error);
+    res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
+  }
+});
+
 export default router;

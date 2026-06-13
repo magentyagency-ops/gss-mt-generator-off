@@ -184,6 +184,27 @@ export interface AssembleChapter {
   sections: Array<{ title: string; text: string }>;
 }
 
+// ─── Mode B (réponse libre / sans cadre imposé) ───
+// Mapping miroir de frontend/lib/ai/sections-b.ts : permet de regrouper la map
+// plate {id_section: texte} renvoyée par l'export front en chapitres I..IV.
+const CHAPTER_TITLES_B: Record<string, string> = {
+  I: 'Présentation de notre structure',
+  II: 'Les moyens humains',
+  III: 'Les moyens opérationnels',
+  IV: 'Les moyens organisationnels',
+};
+
+const AI_SECTIONS_B: Array<{ id: string; chapter: string; title: string }> = [
+  { id: 'b_presentation', chapter: 'I', title: 'Présentation de la société GSS' },
+  { id: 'b_engagement_rse', chapter: 'I', title: 'Engagement RSE et écologique' },
+  { id: 'b_moyens_humains', chapter: 'II', title: 'Moyens humains' },
+  { id: 'b_moyens_materiels', chapter: 'III', title: 'Moyens matériels et opérationnels' },
+  { id: 'b_organisation', chapter: 'IV', title: 'Organisation et suivi qualité' },
+  { id: 'b_procedures', chapter: 'IV', title: 'Procédures opérationnelles' },
+];
+
+const CHAPTER_ORDER_B = ['I', 'II', 'III', 'IV'];
+
 // ─── Main Class ───
 
 export class MemoireGenerator {
@@ -657,5 +678,30 @@ Renvoie uniquement un objet JSON valide contenant les ${prompts.length} valeurs 
         sections_inserees: String(sectionsInserted),
       },
     };
+  }
+
+  /**
+   * Export DOCX du cas "sans cadre imposé" (Mode B) tel que GSS-MT-Generator :
+   * on reçoit la map plate des sections générées côté front ({id: texte}),
+   * on la regroupe par chapitre via le mapping AI_SECTIONS_B, puis on assemble
+   * le mémoire de référence GSS via assembleFromSections. Renvoie le chemin du
+   * .docx produit (à streamer en téléchargement par la route /export-docx).
+   */
+  public async exportFromSectionsMap(
+    sectionsMap: Record<string, string>,
+  ): Promise<{ filePath: string; generatedData: Record<string, string> }> {
+    const chapters: AssembleChapter[] = CHAPTER_ORDER_B.map((ch) => ({
+      key: ch,
+      title: CHAPTER_TITLES_B[ch],
+      sections: AI_SECTIONS_B
+        .filter((s) => s.chapter === ch && sectionsMap[s.id]?.trim())
+        .map((s) => ({ title: s.title, text: sectionsMap[s.id] })),
+    }));
+
+    if (chapters.every((c) => c.sections.length === 0)) {
+      throw new Error('Aucune section générée à exporter (map vide ou ids inconnus).');
+    }
+
+    return this.assembleFromSections('export', chapters);
   }
 }
