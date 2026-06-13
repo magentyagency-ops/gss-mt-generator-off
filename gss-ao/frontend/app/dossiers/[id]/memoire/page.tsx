@@ -323,36 +323,12 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
               )}
             </h1>
           </div>
-          <div className="flex items-center gap-4">
-            {mode === "A" && !hasTemplate && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleGenerateFullDocx}
-                disabled={isGeneratingDocx || !isPrerequisOk}
-                className={cn(
-                  "text-white transition-all",
-                  isPrerequisOk ? "bg-indigo-600 hover:bg-indigo-700" : "bg-indigo-300 cursor-not-allowed"
-                )}
-                title={
-                  !isPrerequisOk
-                    ? "Bloqué : Le Compte Rendu de Visite de Sacha est obligatoire pour ce dossier."
-                    : isGeneratingDocx
-                      ? "Génération en cours..."
-                      : "Générer le document Word complet"
-                }
-              >
-                {isGeneratingDocx ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileStack className="mr-2 h-4 w-4" />}
-                Générer Document Complet (Template)
-              </Button>
-            )}
-            {!hasTemplate && (
-              <>
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Cpu className="h-3.5 w-3.5" /> {totalTokens.toLocaleString("fr-FR")} tokens
-                </div>
-                <div className="w-48">
-                  <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+          {!hasTemplate && (
+            <div className="flex items-center gap-5">
+              {/* Métriques compactes */}
+              <div className="hidden items-center gap-4 lg:flex">
+                <div className="w-40">
+                  <div className="mb-1 flex items-center justify-between text-[11px] text-muted-foreground">
                     <span>Sections générées</span>
                     <span className="font-medium text-foreground">
                       {generatedCount}/{sections.length}
@@ -360,9 +336,46 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   </div>
                   <Progress value={progressPct} />
                 </div>
-              </>
-            )}
-          </div>
+                <div className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+                  <Cpu className="h-3.5 w-3.5" /> {totalTokens.toLocaleString("fr-FR")} tokens
+                </div>
+              </div>
+
+              <div className="hidden h-9 w-px bg-border lg:block" />
+
+              {/* Actions */}
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={handleGenerateAllSections}
+                  disabled={isGeneratingAll || busyId !== null}
+                  title="Générer automatiquement toutes les sections, l'une après l'autre"
+                >
+                  {isGeneratingAll ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-4 w-4" />
+                  )}
+                  {isGeneratingAll ? "Génération…" : "Générer tout"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAssembleAndExport}
+                  disabled={isAssembling || generatedCount === 0}
+                  title="Assembler le mémoire dans le modèle GSS puis passer à l'export du .docx final"
+                >
+                  {isAssembling ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileText className="mr-2 h-4 w-4" />
+                  )}
+                  Exporter
+                  <ArrowRight className="ml-1.5 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </header>
 

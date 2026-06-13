@@ -162,23 +162,142 @@ function getParagraphStyle(p: any): string {
   return pStyle ? (pStyle.getAttribute('w:val') || '') : '';
 }
 
-/** Crée un paragraphe Word (<w:p>) avec un style optionnel et un texte simple. */
-function makeParagraph(xmlDoc: any, text: string, styleName?: string): any {
-  const p = xmlDoc.createElementNS(W_NS, 'w:p');
-  if (styleName) {
-    const pPr = xmlDoc.createElementNS(W_NS, 'w:pPr');
-    const pStyle = xmlDoc.createElementNS(W_NS, 'w:pStyle');
-    pStyle.setAttribute('w:val', styleName);
-    pPr.appendChild(pStyle);
-    p.appendChild(pPr);
+// ─── Construction d'un mémoire PROPRE (XML en chaîne, zéro DOM) ───
+// On ne touche plus jamais au DOM d'AO RNE (le re-sérialiser dégrade sa maquette).
+// À la place, on génère un document.xml NEUF, dont le rendu reprend l'identité
+// visuelle d'AO RNE : fond anthracite, texte crème, titres clairs, accent vert GSS.
+
+// Palette extraite d'AO RNE.docx (couleurs dominantes du design).
+const COL_BG = '494545';       // fond de page anthracite
+const COL_TITLE = 'FFFFFF';    // titres (blanc)
+const COL_BODY = 'EFE7D3';     // corps de texte (crème, lisible sur fond sombre)
+const COL_ACCENT = 'C81E1E';   // rouge GSS (filets / labels)
+const COL_MUTED = 'D9D9D9';    // gris clair (sous-texte)
+
+// Tailles en demi-points (22 = 11 pt) ; espacements en twips (240 = 12 pt).
+const SZ_BODY = 22;
+const SZ_SECTION = 30;     // titre de section 15 pt
+const SZ_SUBHEAD = 26;
+const SZ_SUBHEAD2 = 24;
+const SZ_CHAPTER = 40;     // titre de chapitre 20 pt
+const LINE_AUTO = 276;     // interligne 1,15
+const FONT = 'Trebuchet MS';
+
+function escXml(s: string): string {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+interface RunOpts { bold?: boolean; italic?: boolean; size?: number; color?: string; }
+interface ParaOpts {
+  align?: 'left' | 'center' | 'right' | 'both';
+  before?: number; after?: number; line?: number;
+  indent?: number; bullet?: boolean;
+  accentRule?: boolean;   // filet vert sous le paragraphe (titres de chapitre)
+  pageBreak?: boolean;    // saut de page avant
+}
+
+/** Run <w:r> en chaîne, police Trebuchet par défaut. */
+function runX(text: string, o: RunOpts = {}): string {
+  let rpr = `<w:rFonts w:ascii="${FONT}" w:hAnsi="${FONT}" w:cs="${FONT}"/>`;
+  if (o.bold) rpr += '<w:b/>';
+  if (o.italic) rpr += '<w:i/>';
+  if (o.color) rpr += `<w:color w:val="${o.color}"/>`;
+  if (o.size) rpr += `<w:sz w:val="${o.size}"/><w:szCs w:val="${o.size}"/>`;
+  return `<w:r><w:rPr>${rpr}</w:rPr><w:t xml:space="preserve">${escXml(text)}</w:t></w:r>`;
+}
+
+/** Paragraphe <w:p> en chaîne à partir de runs déjà sérialisés. */
+function paraX(innerRuns: string, o: ParaOpts = {}): string {
+  const { align, before = 0, after = 120, line = LINE_AUTO, indent = 0, bullet = false } = o;
+  let ppr = '';
+  if (o.pageBreak) ppr += '<w:pageBreakBefore/>';
+  const left = bullet ? Math.max(indent, 360) : indent;
+  if (left) ppr += `<w:ind w:left="${left}"${bullet ? ' w:hanging="240"' : ''}/>`;
+  if (o.accentRule) ppr += `<w:pBdr><w:bottom w:val="single" w:sz="14" w:space="6" w:color="${COL_ACCENT}"/></w:pBdr>`;
+  ppr += `<w:spacing w:before="${before}" w:after="${after}" w:line="${line}" w:lineRule="auto"/>`;
+  if (align) ppr += `<w:jc w:val="${align}"/>`;
+  return `<w:p><w:pPr>${ppr}</w:pPr>${innerRuns}</w:p>`;
+}
+
+/** Découpe un texte selon le markdown inline (**gras**, __gras__, *italique*). */
+function parseInlineMarkdown(text: string): Array<{ text: string; bold?: boolean; italic?: boolean }> {
+  const segs: Array<{ text: string; bold?: boolean; italic?: boolean }> = [];
+  const re = /\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) segs.push({ text: text.slice(last, m.index) });
+    if (m[1] !== undefined) segs.push({ text: m[1], bold: true });
+    else if (m[2] !== undefined) segs.push({ text: m[2], bold: true });
+    else if (m[3] !== undefined) segs.push({ text: m[3], italic: true });
+    last = re.lastIndex;
   }
-  const r = xmlDoc.createElementNS(W_NS, 'w:r');
-  const t = xmlDoc.createElementNS(W_NS, 'w:t');
-  t.setAttribute('xml:space', 'preserve');
-  t.textContent = text;
-  r.appendChild(t);
-  p.appendChild(r);
-  return p;
+  if (last < text.length) segs.push({ text: text.slice(last) });
+  return segs.filter((s) => s.text && s.text.length > 0);
+}
+
+/** Runs d'une ligne, markdown inline rendu, sur une base de style (couleur/taille). */
+function inlineX(text: string, base: RunOpts): string {
+  const segs = parseInlineMarkdown(text);
+  if (segs.length === 0) return runX(text, base);
+  return segs.map((s) => runX(s.text, { ...base, bold: base.bold || s.bold, italic: s.italic })).join('');
+}
+
+/** Normalise un titre pour comparer (minuscules, sans accents ni ponctuation). */
+function normTitle(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Convertit un bloc markdown en paragraphes <w:p> (chaîne), couleur crème par défaut.
+ * `skipTitle` : omet la 1re ligne si c'est un titre quasi identique au titre de section
+ * (l'IA répète souvent le titre en tête de réponse).
+ */
+function markdownToParagraphsX(raw: string, skipTitle?: string): string {
+  const out: string[] = [];
+  const skipNorm = skipTitle ? normTitle(skipTitle) : '';
+  let firstContent = true;
+  const isDup = (t: string) => {
+    if (!skipNorm) return false;
+    const n = normTitle(t);
+    return n === skipNorm || (n.length > 6 && (skipNorm.includes(n) || n.includes(skipNorm)));
+  };
+
+  for (const rawLine of String(raw || '').replace(/\r\n/g, '\n').split('\n')) {
+    const line = rawLine.replace(/\t/g, ' ').replace(/`+/g, '').trimEnd();
+    const t = line.trim();
+    if (t === '' || /^[-*_]{3,}$/.test(t)) continue;
+
+    const h = t.match(/^(#{1,6})\s+(.*)$/);
+    if (h) {
+      if (firstContent && isDup(h[2])) { firstContent = false; continue; }
+      firstContent = false;
+      const sz = h[1].length <= 1 ? SZ_SUBHEAD : SZ_SUBHEAD2;
+      out.push(paraX(inlineX(h[2], { bold: true, size: sz, color: COL_TITLE }), { before: 200, after: 100 }));
+      continue;
+    }
+    const bo = t.match(/^\*\*(.+?)\*\*:?\.?$/);
+    if (bo) {
+      if (firstContent && isDup(bo[1])) { firstContent = false; continue; }
+      firstContent = false;
+      out.push(paraX(inlineX(bo[1], { bold: true, size: SZ_SUBHEAD2, color: COL_TITLE }), { before: 160, after: 80 }));
+      continue;
+    }
+    firstContent = false;
+
+    const bullet = t.match(/^[-*+•]\s+(.*)$/);
+    if (bullet) {
+      out.push(paraX(runX('•\t', { size: SZ_BODY, color: COL_ACCENT, bold: true }) + inlineX(bullet[1], { size: SZ_BODY, color: COL_BODY }), { bullet: true, after: 80 }));
+      continue;
+    }
+    const num = t.match(/^(\d+)[.)]\s+(.*)$/);
+    if (num) {
+      out.push(paraX(runX(`${num[1]}.\t`, { size: SZ_BODY, color: COL_ACCENT, bold: true }) + inlineX(num[2], { size: SZ_BODY, color: COL_BODY }), { indent: 360, after: 80 }));
+      continue;
+    }
+    out.push(paraX(inlineX(t, { size: SZ_BODY, color: COL_BODY }), { align: 'both', after: 140 }));
+  }
+  return out.join('');
 }
 
 export interface AssembleChapter {
@@ -199,12 +318,30 @@ const CHAPTER_TITLES_B: Record<string, string> = {
 };
 
 const AI_SECTIONS_B: Array<{ id: string; chapter: string; title: string }> = [
+  // I — Présentation de notre structure
   { id: 'b_presentation', chapter: 'I', title: 'Présentation de la société GSS' },
+  { id: 'b_implantation', chapter: 'I', title: 'Implantation régionale et agences de proximité' },
+  { id: 'b_agrements', chapter: 'I', title: 'Autorisations, agréments CNAPS et conformité légale' },
   { id: 'b_engagement_rse', chapter: 'I', title: 'Engagement RSE et écologique' },
-  { id: 'b_moyens_humains', chapter: 'II', title: 'Moyens humains' },
-  { id: 'b_moyens_materiels', chapter: 'III', title: 'Moyens matériels et opérationnels' },
-  { id: 'b_organisation', chapter: 'IV', title: 'Organisation et suivi qualité' },
-  { id: 'b_procedures', chapter: 'IV', title: 'Procédures opérationnelles' },
+  // II — Les moyens humains
+  { id: 'b_moyens_humains', chapter: 'II', title: 'Qualifications et profils des agents (CQP APS, SSIAP)' },
+  { id: 'b_encadrement', chapter: 'II', title: 'Encadrement et organigramme opérationnel' },
+  { id: 'b_reprise_personnel', chapter: 'II', title: 'Reprise du personnel en place (article L1224-1)' },
+  { id: 'b_recrutement_formation', chapter: 'II', title: 'Recrutement, formation et montée en compétences' },
+  { id: 'b_dispositif_absence', chapter: 'II', title: "Dispositif palliatif d'absence et remplacement" },
+  { id: 'b_tenues_epi', chapter: 'II', title: 'Tenues et équipements de protection des agents' },
+  // III — Les moyens opérationnels
+  { id: 'b_moyens_materiels', chapter: 'III', title: 'Moyens matériels et équipements' },
+  { id: 'b_rondes', chapter: 'III', title: 'Rondes, pointeaux et main courante électronique' },
+  { id: 'b_controle_acces', chapter: 'III', title: 'Gestion des accès et contrôle des flux' },
+  { id: 'b_telesurveillance', chapter: 'III', title: 'Télésurveillance et levée de doute (lot 3)' },
+  { id: 'b_gestion_alarmes', chapter: 'III', title: "Gestion des alarmes et procédures d'intervention" },
+  // IV — Les moyens organisationnels
+  { id: 'b_organisation', chapter: 'IV', title: 'Organisation et démarrage de la prestation' },
+  { id: 'b_planning', chapter: 'IV', title: 'Plannings et continuité de service' },
+  { id: 'b_suivi_qualite', chapter: 'IV', title: 'Suivi qualité, contrôles inopinés et reporting' },
+  { id: 'b_procedures', chapter: 'IV', title: 'Procédures opérationnelles et gestion des incidents' },
+  { id: 'b_amelioration', chapter: 'IV', title: 'Amélioration continue et bilan de prestation' },
 ];
 
 const CHAPTER_ORDER_B = ['I', 'II', 'III', 'IV'];
@@ -978,104 +1115,142 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
   }
 
   /**
-   * Cas "sans cadre imposé" (mode B / réponse libre) : les sections ont déjà été
-   * rédigées par l'IA côté front. On part du mémoire de référence GSS
-   * (Template/Mémoire technique/AO RNE.docx) et on REMPLACE le contenu de chaque
-   * chapitre par le texte généré, en conservant la page de garde, le sommaire,
-   * les styles et la section finale (sectPr). Aucun appel OpenAI ici.
-   *
-   * Le mapping chapitre → emplacement se fait par POSITION : le i-ème paragraphe
-   * de style Heading1 du corps correspond au i-ème chapitre fourni (I..IV).
+   * Cas "sans cadre imposé" (mode B / réponse libre). On NE touche PAS au DOM d'AO RNE
+   * (le re-sérialiser dégrade sa maquette, et son identité est gravée dans des images
+   * donc non personnalisable en texte). À la place on CONSTRUIT un document NEUF et
+   * propre, dont le rendu reprend l'identité visuelle d'AO RNE (fond anthracite, texte
+   * crème, titres clairs, accent vert GSS), rempli avec le contenu généré (DCE + doc GSS)
+   * et personnalisé via la page de garde (client / référence issus du dossier).
    */
   public async assembleFromSections(
-    _dossierId: string,
+    dossierId: string,
     chapters: AssembleChapter[],
   ): Promise<{ filePath: string; generatedData: Record<string, string> }> {
-    const templatePath = path.join(this.templateDir, 'Mémoire technique', 'AO RNE.docx');
-    if (!fs.existsSync(templatePath)) {
-      throw new Error(`Template de référence introuvable : ${templatePath}`);
-    }
-    console.log(`[MemoireGenerator] Assemblage depuis sections IA, template: ${templatePath}`);
+    // 1. Infos d'en-tête (page de garde) : base si renseignée, sinon analyse du DCE.
+    const cover = await this.getCoverInfo(dossierId);
 
-    const content = fs.readFileSync(templatePath);
-    const zip = new PizZip(content);
-    const documentXml = zip.file('word/document.xml');
-    if (!documentXml) throw new Error('word/document.xml introuvable dans le template');
+    // 2. Construire le corps : page de garde + chapitres/sections.
+    const bodyParts: string[] = [];
+    bodyParts.push(this.buildCoverXml(cover));
 
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(documentXml.asText(), 'text/xml');
-
-    const body = getElementsWithLocalName(xmlDoc.documentElement, 'body')[0];
-    if (!body) throw new Error('Corps du document (w:body) introuvable');
-
-    // Ancres de chapitre = paragraphes Heading1 non vides, dans l'ordre du document.
-    const headings = Array.from(body.childNodes).filter(
-      (n: any) =>
-        n.nodeType === 1 &&
-        n.localName === 'p' &&
-        getParagraphStyle(n) === 'Heading1' &&
-        getElementText(n).trim().length > 0,
-    );
-    console.log(`[MemoireGenerator] ${headings.length} chapitres détectés dans le template.`);
-
-    let chaptersReplaced = 0;
-    let sectionsInserted = 0;
-
-    headings.forEach((heading: any, idx: number) => {
-      const chapter = chapters[idx];
-      if (!chapter || !chapter.sections || chapter.sections.length === 0) return; // chapitre non généré → on garde l'original
-
-      const nextHeading = headings[idx + 1] || null;
-
-      // 1. Supprimer tous les nœuds entre ce Heading1 et le suivant (ou avant le sectPr final).
-      const toRemove: any[] = [];
-      let cur = heading.nextSibling;
-      while (cur && cur !== nextHeading) {
-        if (!nextHeading && cur.nodeType === 1 && cur.localName === 'sectPr') break;
-        toRemove.push(cur);
-        cur = cur.nextSibling;
-      }
-      toRemove.forEach((n) => body.removeChild(n));
-
-      // 2. Insérer le texte IA après le titre de chapitre (avant l'ancre suivante / sectPr).
-      const anchor = heading.nextSibling; // nextHeading, sectPr ou null après suppression
+    let chaptersOut = 0;
+    let sectionsOut = 0;
+    chapters.forEach((chapter, idx) => {
+      if (!chapter || !chapter.sections || chapter.sections.length === 0) return;
+      // Titre de chapitre (page neuve + filet vert).
+      const roman = chapter.key || ['I', 'II', 'III', 'IV', 'V', 'VI'][idx] || String(idx + 1);
+      bodyParts.push(
+        paraX(runX(`${roman}.  ${chapter.title || ''}`.trim().toUpperCase(), { bold: true, size: SZ_CHAPTER, color: COL_TITLE }),
+          { pageBreak: chaptersOut > 0, before: 240, after: 200, accentRule: true }),
+      );
       for (const sec of chapter.sections) {
-        if (sec.title && sec.title.trim()) {
-          body.insertBefore(makeParagraph(xmlDoc, sec.title.trim(), 'Heading2'), anchor);
+        const title = sec.title?.trim();
+        if (title) {
+          bodyParts.push(paraX(runX(title, { bold: true, size: SZ_SECTION, color: COL_ACCENT }), { before: 280, after: 140 }));
         }
-        const lines = String(sec.text || '').split(/\r?\n/);
-        for (const line of lines) {
-          if (line.trim() === '') continue;
-          body.insertBefore(makeParagraph(xmlDoc, line, 'BodyText'), anchor);
-        }
-        sectionsInserted++;
+        bodyParts.push(markdownToParagraphsX(sec.text, title));
+        sectionsOut++;
       }
-      chaptersReplaced++;
+      chaptersOut++;
     });
 
-    if (chaptersReplaced === 0) {
-      throw new Error('Aucun chapitre généré à insérer (sections vides).');
+    if (chaptersOut === 0) {
+      throw new Error('Aucun chapitre généré à exporter (sections vides).');
     }
 
-    const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+    // 3. Section finale : format A4 d'AO RNE, marges propres.
+    const sectPr =
+      '<w:sectPr><w:pgSz w:w="11910" w:h="16850"/>' +
+      '<w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="0" w:footer="0" w:gutter="0"/>' +
+      '</w:sectPr>';
+
+    const documentXml =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      `<w:background w:color="${COL_BG}"/>` +
+      `<w:body>${bodyParts.join('')}${sectPr}</w:body></w:document>`;
+
+    // 4. Repartir du zip AO RNE (styles/polices/thème valides) mais réécrire document.xml,
+    //    activer l'affichage du fond, et retirer les médias devenus inutiles (doc léger).
+    const templatePath = path.join(this.templateDir, 'Mémoire technique', 'AO RNE.docx');
+    if (!fs.existsSync(templatePath)) throw new Error(`Template de référence introuvable : ${templatePath}`);
+    const zip = new PizZip(fs.readFileSync(templatePath));
+    zip.file('word/document.xml', documentXml);
+
+    // Affichage du fond de page (sinon <w:background> est ignoré par Word).
+    const settings = zip.file('word/settings.xml');
+    if (settings) {
+      let s = settings.asText();
+      if (!/displayBackgroundShape/.test(s)) {
+        s = s.replace(/(<w:settings[^>]*>)/, '$1<w:displayBackgroundShape/>');
+        zip.file('word/settings.xml', s);
+      }
+    }
+
+    // Retirer les médias/dessins (plus référencés) pour alléger et purifier le fichier.
+    Object.keys(zip.files)
+      .filter((n) => n.startsWith('word/media/'))
+      .forEach((n) => { delete (zip as any).files[n]; });
+    const relsFile = zip.file('word/_rels/document.xml.rels');
+    if (relsFile) {
+      const rels = relsFile.asText().replace(/<Relationship\b[^>]*Target="media\/[^"]*"[^>]*\/>/g, '');
+      zip.file('word/_rels/document.xml.rels', rels);
+    }
 
     const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
     const outputFileName = `Mémoire technique GSS_${Date.now()}.docx`;
     const outputPath = path.join(this.responseDir, outputFileName);
     fs.writeFileSync(outputPath, buf);
 
-    console.log(
-      `[MemoireGenerator] Assemblé : ${chaptersReplaced} chapitre(s), ${sectionsInserted} section(s) → ${outputPath}`,
-    );
+    console.log(`[MemoireGenerator] Mémoire propre généré : ${chaptersOut} chapitre(s), ${sectionsOut} section(s) → ${outputPath}`);
 
     return {
       filePath: outputPath,
       generatedData: {
-        chapitres_remplaces: String(chaptersReplaced),
-        sections_inserees: String(sectionsInserted),
+        mode: 'Document propre (identité AO RNE, fond anthracite)',
+        chapitres: String(chaptersOut),
+        sections: String(sectionsOut),
       },
     };
+  }
+
+  /** Récupère client / titre / référence pour la page de garde (base puis analyse DCE). */
+  private async getCoverInfo(dossierId: string): Promise<{ client: string; title: string; ref: string }> {
+    const fallback = { client: 'GSS — Global Security Service', title: 'Mémoire technique', ref: '' };
+    if (!dossierId || dossierId === 'export') return fallback;
+    try {
+      const dossier = DB.getDossier(dossierId);
+      if (dossier && (dossier.acheteur || dossier.reference || dossier.objet)) {
+        return {
+          client: dossier.acheteur || fallback.client,
+          title: dossier.objet || fallback.title,
+          ref: dossier.reference || '',
+        };
+      }
+      const analysis = await this.analyzeDce(await this.getDceContext(dossierId));
+      return {
+        client: analysis?.clientName || fallback.client,
+        title: analysis?.projectTitle || fallback.title,
+        ref: analysis?.marketRef || '',
+      };
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Infos page de garde indisponibles: ${e.message}`);
+      return fallback;
+    }
+  }
+
+  /** Page de garde : label vert, gros titre blanc, client crème, référence. */
+  private buildCoverXml(cover: { client: string; title: string; ref: string }): string {
+    const spacer = () => paraX('', { after: 0 });
+    const parts: string[] = [];
+    for (let i = 0; i < 6; i++) parts.push(spacer());
+    parts.push(paraX(runX('MÉMOIRE TECHNIQUE', { bold: true, size: 28, color: COL_ACCENT }), { align: 'center', after: 200 }));
+    parts.push(paraX(runX((cover.title || '').toUpperCase(), { bold: true, size: 52, color: COL_TITLE }), { align: 'center', after: 240 }));
+    parts.push(paraX(runX(cover.client || '', { bold: true, size: 32, color: COL_BODY }), { align: 'center', after: 120 }));
+    if (cover.ref) parts.push(paraX(runX(cover.ref, { size: 24, color: COL_MUTED }), { align: 'center', after: 120 }));
+    for (let i = 0; i < 4; i++) parts.push(spacer());
+    parts.push(paraX(runX('GSS — Global Security Service', { bold: true, size: 24, color: COL_ACCENT }), { align: 'center', after: 0 }));
+    return parts.join('');
   }
 
   /**
