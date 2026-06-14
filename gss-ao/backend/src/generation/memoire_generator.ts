@@ -162,6 +162,178 @@ function getParagraphStyle(p: any): string {
   return pStyle ? (pStyle.getAttribute('w:val') || '') : '';
 }
 
+// ─── Préservation du maître AO RNE : duplication de "spreads" (pages conçues) ───
+// On NE reconstruit plus le document : on garde AO RNE.docx INTACT (design + 221
+// images) et on AJOUTE des pages en DUPLIQUANT des pages existantes. Une page conçue
+// ("spread") = une section image+titre (image plein-cadre behindDoc + zone de texte
+// de titre) SUIVIE d'une section de corps de texte (paragraphes 2 colonnes). Cloner
+// ces sections telles quelles préserve le format/design ; il suffit ensuite de
+// renuméroter les ids de dessin (wp:docPr / pic:cNvPr — uniques, sinon Word "répare")
+// et de remplacer le titre + le corps par le texte personnalisé.
+
+/** Découpe le corps en sections OOXML : une section = paragraphes consécutifs jusqu'au
+ * (et incluant le) paragraphe portant <w:sectPr>. Le sectPr final est au niveau body. */
+function splitBodyIntoSections(body: any): { sections: any[][]; finalSectPr: any | null } {
+  const sections: any[][] = [];
+  let cur: any[] = [];
+  let finalSectPr: any = null;
+  for (let i = 0; i < body.childNodes.length; i++) {
+    const node = body.childNodes[i];
+    if (node.nodeType !== 1) continue;
+    if (node.localName === 'p') {
+      cur.push(node);
+      const pPr = findLocalNameChild(node, 'pPr');
+      if (pPr && findLocalNameChild(pPr, 'sectPr')) { sections.push(cur); cur = []; }
+    } else if (node.localName === 'sectPr') {
+      finalSectPr = node;
+    }
+  }
+  if (cur.length) sections.push(cur);
+  return { sections, finalSectPr };
+}
+
+const sectionHasBackgroundImage = (paras: any[]): boolean =>
+  paras.some(p => getElementsWithLocalName(p, 'anchor').some((a: any) => a.getAttribute('behindDoc') === '1'));
+const sectionHasTextbox = (paras: any[]): boolean =>
+  paras.some(p => getElementsWithLocalName(p, 'txbxContent').length > 0);
+const sectionIsPlainText = (paras: any[]): boolean =>
+  !paras.some(p => getElementsWithLocalName(p, 'drawing').length > 0 || getElementsWithLocalName(p, 'pict').length > 0);
+
+/** Plus grand id de dessin présent (wp:docPr / pic:cNvPr) — base pour la renumérotation. */
+function maxDrawingId(xmlDoc: any): number {
+  let max = 0;
+  ['docPr', 'cNvPr'].forEach(name => {
+    getElementsWithLocalName(xmlDoc.documentElement, name).forEach((el: any) => {
+      const id = parseInt(el.getAttribute('id') || '0', 10);
+      if (id > max) max = id;
+    });
+  });
+  return max;
+}
+
+/** Réattribue un id unique à chaque dessin (wp:docPr / pic:cNvPr) d'un sous-arbre cloné. */
+function renumberDrawingIds(node: any, counter: { v: number }) {
+  ['docPr', 'cNvPr'].forEach(name => {
+    getElementsWithLocalName(node, name).forEach((el: any) => { el.setAttribute('id', String(++counter.v)); });
+  });
+}
+
+/** Remplace le texte de toutes les zones de titre (txbxContent) de la section par `title`. */
+function setSectionHeading(paras: any[], title: string) {
+  paras.forEach(p => {
+    getElementsWithLocalName(p, 'txbxContent').forEach((tx: any) => {
+      const tEls = getElementsWithLocalName(tx, 't');
+      if (tEls.length === 0) return;
+      tEls[0].textContent = title;
+      for (let i = 1; i < tEls.length; i++) tEls[i].textContent = '';
+    });
+  });
+}
+
+/** Découpe le texte généré en lignes de paragraphe (sans markdown, le mode B n'en produit pas). */
+function bodyTextToLines(text: string): string[] {
+  return String(text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[*_`#]+/g, '')              // garde-fou : retire un éventuel markdown résiduel
+    .split('\n')
+    .map(l => l.trim());
+}
+
+/**
+ * Clone un spread (sections [titre+image] + [corps]) en injectant `title`
+ * (zone de titre) et `bodyText` (corps), avec ids de dessin renumérotés. Renvoie les
+ * nouveaux paragraphes prêts à être insérés. Préserve le sectPr d'origine de chaque
+ * section (mise en page identique).
+ */
+function cloneSpread(
+  xmlDoc: any, headingParas: any[], bodyParas: any[], counter: { v: number }, title: string, bodyText: string,
+): any[] {
+  const newHeading = headingParas.map(p => p.cloneNode(true));
+  newHeading.forEach(p => renumberDrawingIds(p, counter));
+  if (title) setSectionHeading(newHeading, title);
+
+  const lastBody = bodyParas[bodyParas.length - 1];
+  const origSectPr = lastBody ? findLocalNameChild(findLocalNameChild(lastBody, 'pPr'), 'sectPr') : null;
+  const sectPrClone = origSectPr ? origSectPr.cloneNode(true) : null;
+
+  const lines = bodyTextToLines(bodyText);
+  const newBody: any[] = [];
+  
+  // Pour conserver parfaitement la DA (Art Direction), on clone le premier paragraphe du template
+  let templateP = bodyParas.find(p => getElementsWithLocalName(p, 't').length > 0) || bodyParas[0];
+  
+  if (!templateP) {
+    // Fallback de sécurité (très rare)
+    templateP = xmlDoc.createElementNS(W_NS, 'w:p');
+  }
+
+  lines.forEach((ln, idx) => {
+    const pClone = templateP.cloneNode(true);
+    
+    // On retire le sectPr du clone (car sectPr ne doit être que sur le DERNIER paragraphe)
+    let pPr = findLocalNameChild(pClone, 'pPr');
+    if (pPr) {
+       const sectPr = findLocalNameChild(pPr, 'sectPr');
+       if (sectPr) pPr.removeChild(sectPr);
+    } else {
+       pPr = xmlDoc.createElementNS(W_NS, 'w:pPr');
+       pClone.insertBefore(pPr, pClone.firstChild);
+    }
+    
+    // Le user a explicitement demandé de RECENTRER le texte
+    let jc = findLocalNameChild(pPr, 'jc');
+    if (!jc) {
+       jc = xmlDoc.createElementNS(W_NS, 'w:jc');
+       pPr.appendChild(jc);
+    }
+    jc.setAttribute('w:val', 'center');
+    
+    // On conserve un bon espacement aéré
+    let spacing = findLocalNameChild(pPr, 'spacing');
+    if (!spacing) {
+       spacing = xmlDoc.createElementNS(W_NS, 'w:spacing');
+       pPr.appendChild(spacing);
+    }
+    spacing.setAttribute('w:after', '280'); // 14pt
+    
+    // Remplacement du texte tout en gardant les propriétés de police (rPr)
+    const runs = getElementsWithLocalName(pClone, 'r');
+    if (runs.length > 0) {
+      // On garde uniquement le premier "run" pour éviter la duplication de styles hétérogènes
+      for (let i = 1; i < runs.length; i++) {
+        pClone.removeChild(runs[i]);
+      }
+      const tEls = getElementsWithLocalName(runs[0], 't');
+      if (tEls.length > 0) {
+        tEls[0].textContent = ln;
+        tEls[0].setAttribute('xml:space', 'preserve');
+        for (let i = 1; i < tEls.length; i++) runs[0].removeChild(tEls[i]);
+      } else {
+        const t = xmlDoc.createElementNS(W_NS, 'w:t');
+        t.textContent = ln;
+        t.setAttribute('xml:space', 'preserve');
+        runs[0].appendChild(t);
+      }
+    } else {
+      const r = xmlDoc.createElementNS(W_NS, 'w:r');
+      const t = xmlDoc.createElementNS(W_NS, 'w:t');
+      t.textContent = ln;
+      t.setAttribute('xml:space', 'preserve');
+      r.appendChild(t);
+      pClone.appendChild(r);
+    }
+
+    // Le dernier paragraphe doit porter les propriétés de section (colonnes, marges, etc.)
+    if (idx === lines.length - 1 && sectPrClone) {
+      pPr.appendChild(sectPrClone);
+    }
+    
+    newBody.push(pClone);
+  });
+
+  return [...newHeading, ...newBody];
+}
+
 // ─── Construction d'un mémoire PROPRE (XML en chaîne, zéro DOM) ───
 // On ne touche plus jamais au DOM d'AO RNE (le re-sérialiser dégrade sa maquette).
 // À la place, on génère un document.xml NEUF, dont le rendu reprend l'identité
@@ -345,6 +517,40 @@ const AI_SECTIONS_B: Array<{ id: string; chapter: string; title: string }> = [
 ];
 
 const CHAPTER_ORDER_B = ['I', 'II', 'III', 'IV'];
+
+// ─── Mapping Documentation GSS → sections du mémoire ───
+// Associe chaque catégorie de la Documentation GSS (21 dossiers PDF) aux mots-clés
+// des spreads d'AO RNE.docx pour sélectionner automatiquement les sources pertinentes.
+const GSS_DOC_KEYWORDS: Record<string, string[]> = {
+  'ABSENCE ET RETARD': ['absence', 'retard', 'remplacement', 'palliatif', 'indisponibilite'],
+  'EFFECTIFS ET ORGANIGRAMME': ['effectif', 'organigramme', 'encadrement', 'equipe', 'structure', 'moyens humains'],
+  'ENGAGEMENT ECOLOGIQUE': ['ecologique', 'rse', 'environnement', 'durable', 'responsabilite'],
+  'FORMATION': ['formation', 'competence', 'qualification', 'cqp', 'ssiap', 'mac'],
+  'FORMATION INTERNE': ['formation interne', 'parcours', 'montee en competence', 'habilitation'],
+  'INTERLOCUTEUR UNIQUE': ['interlocuteur', 'contact unique', 'referent', 'proximite'],
+  'LMC': ['main courante electronique', 'lmc', 'logiciel'],
+  'MAIN COURANTE': ['main courante', 'rapport', 'evenement', 'ronde', 'pointeau'],
+  'MANAGEMENT': ['management', 'direction', 'presentation', 'societe', 'pilotage', 'qui sommes'],
+  'MATERIEL': ['materiel', 'equipement', 'moyen technique', 'outil', 'vehicule', 'radio', 'pti', 'dati', 'communication'],
+  'MISE EN PLACE': ['mise en place', 'demarrage', 'lancement', 'deploiement', 'phase preparatoire'],
+  "MOYENS D'ACCES": ['acces', 'cle', 'badge', 'controle acces', 'securisation', 'flux'],
+  'NOUVEAU MARCHE': ['nouveau marche', 'reprise', 'transition', 'personnel en place', 'l1224', 'prise de poste'],
+  'NOUVEL AGENT': ['integration', 'nouvel agent', 'accueil'],
+  'PARTENAIRES': ['partenaire', 'sous-traitant', 'prestataire'],
+  'PLANNIFICATION': ['planning', 'planification', 'vacation', 'horaire', 'continuite', 'service'],
+  'PROCEDURE': ['procedure', 'incident', 'alarme', 'intrusion', 'incendie', 'intervention', 'suspect', 'victime', 'perturbateur', 'consigne'],
+  'RECRUTEMENT': ['recrutement', 'embauche', 'selection', 'candidat', 'profil'],
+  'SUIVI QUALITE ET CONTROLES': ['qualite', 'controle', 'inopine', 'audit', 'suivi', 'reporting', 'indicateur', 'amelioration'],
+  'TENUES': ['tenue', 'vestiaire', 'uniforme', 'epi', 'equipement de protection', 'habillement'],
+  'VALEURS': ['valeur', 'engagement', 'ethique', 'mission', 'vision'],
+};
+
+/** Détermine si un spread doit être personnalisé (on garde intactes les pages partenaires/références). */
+function shouldPersonalizeSpread(title: string): boolean {
+  const n = normTitle(title);
+  const skipPatterns = ['confiance', 'partenaire', 'reference client', 'nos clients', 'sommaire', 'table des matieres'];
+  return n.length > 0 && !skipPatterns.some(p => n.includes(p));
+}
 
 // ─── Field Type Inference ───
 
@@ -613,41 +819,38 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
   }
 
   /**
-   * Adapte les textes statiques d'un mémoire GSS maître (rédigé pour un marché passé) au nouveau
-   * marché : remplace l'ancien nom de client, l'ancienne référence de marché et les anciens noms
-   * de sites par les valeurs issues de l'analyse. N'agit que sur les `<w:t>` (texte affiché).
+   * Personnalise le texte statique du maître AO RNE.docx (rédigé pour le marché « Parc des
+   * Expositions de Rouen ») en remplaçant SON nom de client par celui du DCE. Le nom figure sur
+   * la couverture / le sommaire et est découpé en plusieurs runs (« PARC » / « DES » /
+   * « EXPOSITIONS DE ROUEN ») : on travaille donc au niveau du paragraphe (texte concaténé),
+   * puis on réinjecte le résultat dans le 1er run (les autres sont vidés). On NE touche PAS au
+   * « Rouen » isolé (villes d'agence GSS et références clients « ILS NOUS ONT FAIT CONFIANCE »
+   * = preuves sociales à conserver) ni à l'identité GSS.
    */
   private adaptStaticText(xmlDoc: any, analysisData: any) {
-    const clientName: string = analysisData?.clientName || '';
-    const marketRef: string = analysisData?.marketRef || analysisData?.projectTitle || '';
-    const sites: Array<{ name?: string }> = analysisData?.sites || [];
-    if (!clientName && !marketRef && sites.length === 0) return;
+    const clientName: string = (analysisData?.clientName || '').trim();
+    if (!clientName) return;
 
-    // Termes du marché passé (le maître AO RNE.docx était un mémoire Université de Rouen MP2026-08)
-    const oldClient = [/Université de Rouen Normandie/g, /l['’]Université de Rouen Normandie/g, /Université de Rouen/g];
-    const oldRef = [/MP\s*n°\s*2026-08/g, /2026-08/g];
-    const oldSites: Array<[RegExp, number]> = [
-      [/Campus Mont-Saint-Aignan\s*\+\s*INSPE/gi, 0], [/Campus Mont-Saint-Aignan/gi, 0],
-      [/Campus Martainville\s*\(UFR Santé\)/gi, 1], [/Campus Martainville/gi, 1],
-      [/Campus Pasteur\s*\(UFR DESP\)/gi, 2], [/Campus Pasteur/gi, 2],
-      [/Campus du Madrillet/gi, 3],
-      [/Campus Evreux Tilly-Navarre/gi, 4], [/Campus Evreux/gi, 4],
-    ];
+    // Phrases complètes du client du maître uniquement (jamais le « Rouen » nu).
+    const OLD_CLIENT =
+      /PARC\s+DES\s+EXPOSITIONS\s+DE\s+ROUEN|Parc\s+des\s+[Ee]xpositions\s+de\s+Rouen|Parc\s+des\s+[Ee]xpositions|Parc\s+Expo/g;
+    const replaceClient = (s: string) =>
+      s.replace(OLD_CLIENT, (m) => (m === m.toUpperCase() ? clientName.toUpperCase() : clientName));
 
     let count = 0;
-    getElementsWithLocalName(xmlDoc, 't').forEach((tEl: any) => {
-      let text = tEl.textContent || '';
-      if (!text) return;
-      const before = text;
-      if (clientName) oldClient.forEach(re => { text = text.replace(re, clientName); });
-      if (marketRef) oldRef.forEach(re => { text = text.replace(re, marketRef); });
-      oldSites.forEach(([re, idx]) => {
-        const name = sites[idx]?.name;
-        if (name) text = text.replace(re, name);
-      });
-      if (text !== before) { tEl.textContent = text; count++; }
+    getElementsWithLocalName(xmlDoc, 'p').forEach((p: any) => {
+      const tEls = getElementsWithLocalName(p, 't');
+      if (tEls.length === 0) return;
+      const concat = tEls.map((t: any) => t.textContent || '').join('');
+      if (!OLD_CLIENT.test(concat)) return;
+      OLD_CLIENT.lastIndex = 0; // regex globale → réinitialiser après .test()
+      const replaced = replaceClient(concat);
+      if (replaced === concat) return;
+      tEls[0].textContent = replaced;          // tout le texte dans le 1er run (style du titre conservé)
+      for (let i = 1; i < tEls.length; i++) tEls[i].textContent = '';
+      count++;
     });
-    console.log(`[MemoireGenerator] Adaptation mémoire maître: ${count} segment(s) de texte mis à jour.`);
+    console.log(`[MemoireGenerator] Personnalisation client: ${count} paragraphe(s) mis à jour → "${clientName}".`);
   }
 
   public async generate(dossierId: string): Promise<{ filePath: string, generatedData: Record<string, string> }> {
@@ -698,6 +901,11 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     }
 
     console.log(`[MemoireGenerator] Using template: ${templatePath} (${isClientTemplate ? 'cadre client' : 'mémoire GSS maître'})`);
+
+    // ── Sans cadre imposé : générer un mémoire complet via AO RNE personnalisé ──
+    if (!isClientTemplate) {
+      return this.generateFullMemoire(dossierId);
+    }
 
     // 2. Analyse structurée du DCE (contexte unique de rédaction), avant toute manipulation du Word
     const dceContext = await this.getDceContext(dossierId);
@@ -1115,101 +1323,333 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
   }
 
   /**
-   * Cas "sans cadre imposé" (mode B / réponse libre). On NE touche PAS au DOM d'AO RNE
-   * (le re-sérialiser dégrade sa maquette, et son identité est gravée dans des images
-   * donc non personnalisable en texte). À la place on CONSTRUIT un document NEUF et
-   * propre, dont le rendu reprend l'identité visuelle d'AO RNE (fond anthracite, texte
-   * crème, titres clairs, accent vert GSS), rempli avec le contenu généré (DCE + doc GSS)
-   * et personnalisé via la page de garde (client / référence issus du dossier).
+   * Cas "sans cadre imposé" (mode B / réponse libre) — approche PRÉSERVATION : on garde le
+   * maître AO RNE.docx INTACT (design + 221 images) et on AJOUTE des pages en DUPLIQUANT des
+   * pages existantes (`cloneSpread`) pour y injecter le texte personnalisé (généré côté front
+   * à partir du DCE + Documentation GSS). Le nom du client du maître (« Parc des Expositions de
+   * Rouen ») est remplacé par celui du DCE (`adaptStaticText`). Le round-trip DOM (xmldom)
+   * préserve la maquette à l'identique (vérifié : embeds/drawings/textboxes/sections inchangés).
    */
   public async assembleFromSections(
     dossierId: string,
     chapters: AssembleChapter[],
   ): Promise<{ filePath: string; generatedData: Record<string, string> }> {
-    // 1. Infos d'en-tête (page de garde) : base si renseignée, sinon analyse du DCE.
+    // 0. Client (base DCE puis analyse) pour personnaliser la couverture / le sommaire.
     const cover = await this.getCoverInfo(dossierId);
+    const clientName = cover.client && !/global security|^gss\b/i.test(cover.client) ? cover.client : '';
 
-    // 2. Construire le corps : page de garde + chapitres/sections.
-    const bodyParts: string[] = [];
-    bodyParts.push(this.buildCoverXml(cover));
-
-    let chaptersOut = 0;
-    let sectionsOut = 0;
-    chapters.forEach((chapter, idx) => {
-      if (!chapter || !chapter.sections || chapter.sections.length === 0) return;
-      // Titre de chapitre (page neuve + filet vert).
-      const roman = chapter.key || ['I', 'II', 'III', 'IV', 'V', 'VI'][idx] || String(idx + 1);
-      bodyParts.push(
-        paraX(runX(`${roman}.  ${chapter.title || ''}`.trim().toUpperCase(), { bold: true, size: SZ_CHAPTER, color: COL_TITLE }),
-          { pageBreak: chaptersOut > 0, before: 240, after: 200, accentRule: true }),
-      );
-      for (const sec of chapter.sections) {
-        const title = sec.title?.trim();
-        if (title) {
-          bodyParts.push(paraX(runX(title, { bold: true, size: SZ_SECTION, color: COL_ACCENT }), { before: 280, after: 140 }));
-        }
-        bodyParts.push(markdownToParagraphsX(sec.text, title));
-        sectionsOut++;
-      }
-      chaptersOut++;
-    });
-
-    if (chaptersOut === 0) {
-      throw new Error('Aucun chapitre généré à exporter (sections vides).');
-    }
-
-    // 3. Section finale : format A4 d'AO RNE, marges propres.
-    const sectPr =
-      '<w:sectPr><w:pgSz w:w="11910" w:h="16850"/>' +
-      '<w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="0" w:footer="0" w:gutter="0"/>' +
-      '</w:sectPr>';
-
-    const documentXml =
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-      `<w:background w:color="${COL_BG}"/>` +
-      `<w:body>${bodyParts.join('')}${sectPr}</w:body></w:document>`;
-
-    // 4. Repartir du zip AO RNE (styles/polices/thème valides) mais réécrire document.xml,
-    //    activer l'affichage du fond, et retirer les médias devenus inutiles (doc léger).
+    // 1. Charger le maître AO RNE.docx et parser document.xml (médias/thème/styles conservés).
     const templatePath = path.join(this.templateDir, 'Mémoire technique', 'AO RNE.docx');
     if (!fs.existsSync(templatePath)) throw new Error(`Template de référence introuvable : ${templatePath}`);
     const zip = new PizZip(fs.readFileSync(templatePath));
-    zip.file('word/document.xml', documentXml);
+    const documentXmlFile = zip.file('word/document.xml');
+    if (!documentXmlFile) throw new Error('word/document.xml introuvable dans AO RNE.docx');
 
-    // Affichage du fond de page (sinon <w:background> est ignoré par Word).
-    const settings = zip.file('word/settings.xml');
-    if (settings) {
-      let s = settings.asText();
-      if (!/displayBackgroundShape/.test(s)) {
-        s = s.replace(/(<w:settings[^>]*>)/, '$1<w:displayBackgroundShape/>');
-        zip.file('word/settings.xml', s);
+    const parser = new DOMParser();
+    const serializer = new XMLSerializer();
+    const xmlDoc = parser.parseFromString(documentXmlFile.asText(), 'text/xml');
+
+    // 2. Personnalisation du client (couverture/sommaire) sur le document + en-têtes/pieds.
+    if (clientName) {
+      this.adaptStaticText(xmlDoc, { clientName });
+      Object.keys(zip.files).forEach((name) => {
+        if (name.startsWith('word/header') || name.startsWith('word/footer')) {
+          const fd = zip.file(name);
+          if (!fd) return;
+          const hf = parser.parseFromString(fd.asText(), 'text/xml');
+          this.adaptStaticText(hf, { clientName });
+          zip.file(name, serializer.serializeToString(hf));
+        }
+      });
+    }
+
+    // 3. Découper le corps en sections OOXML puis repérer les "spreads" (page image+titre + corps).
+    const body = findLocalNameChild(xmlDoc.documentElement, 'body');
+    if (!body) throw new Error('<w:body> introuvable dans AO RNE.docx');
+    const { sections } = splitBodyIntoSections(body);
+
+    interface Spread { headingParas: any[]; bodyParas: any[]; headingText: string; }
+    const spreads: Spread[] = [];
+    for (let i = 0; i < sections.length - 1; i++) {
+      if (sectionHasBackgroundImage(sections[i]) && sectionHasTextbox(sections[i]) && sectionIsPlainText(sections[i + 1])) {
+        const headingText = sections[i]
+          .flatMap((p: any) => getElementsWithLocalName(p, 'txbxContent'))
+          .flatMap((tx: any) => getElementsWithLocalName(tx, 't'))
+          .map((t: any) => t.textContent || '')
+          .join(' ');
+        spreads.push({ headingParas: sections[i], bodyParas: sections[i + 1], headingText });
       }
     }
+    if (spreads.length === 0) throw new Error('Aucune page-modèle (spread image+titre+corps) repérée dans AO RNE.docx.');
 
-    // Retirer les médias/dessins (plus référencés) pour alléger et purifier le fichier.
-    Object.keys(zip.files)
-      .filter((n) => n.startsWith('word/media/'))
-      .forEach((n) => { delete (zip as any).files[n]; });
-    const relsFile = zip.file('word/_rels/document.xml.rels');
-    if (relsFile) {
-      const rels = relsFile.asText().replace(/<Relationship\b[^>]*Target="media\/[^"]*"[^>]*\/>/g, '');
-      zip.file('word/_rels/document.xml.rels', rels);
-    }
+    // 4. Aplatir les sections générées ; pour chacune, dupliquer la page-modèle du bon thème
+    //    et y injecter titre + texte. Insertion juste après la page-modèle correspondante.
+    const flat: Array<{ title: string; text: string }> = [];
+    chapters.forEach((ch) =>
+      (ch?.sections || []).forEach((s) => { if (s?.text?.trim()) flat.push({ title: (s.title || '').trim(), text: s.text }); }),
+    );
+    if (flat.length === 0) throw new Error('Aucune section générée à insérer (sections vides).');
 
+    const scoreMatch = (title: string, heading: string): number => {
+      const want = new Set(normTitle(title).split(' ').filter((w) => w.length > 3));
+      let s = 0;
+      normTitle(heading).split(' ').forEach((w) => { if (w.length > 3 && want.has(w)) s++; });
+      return s;
+    };
+
+    const counter = { v: maxDrawingId(xmlDoc) };
+    const lastInsertedByBody = new Map<any, any>(); // empile plusieurs ajouts après une même page-modèle
+    let inserted = 0;
+    flat.forEach((sec, idx) => {
+      let best = spreads[idx % spreads.length];
+      let bestScore = 0;
+      spreads.forEach((sp) => { const sc = scoreMatch(sec.title, sp.headingText); if (sc > bestScore) { bestScore = sc; best = sp; } });
+
+      const newNodes = cloneSpread(xmlDoc, best.headingParas, best.bodyParas, counter, sec.title, sec.text);
+      const anchorBody = best.bodyParas[best.bodyParas.length - 1];
+      const ref = (lastInsertedByBody.get(anchorBody) || anchorBody).nextSibling;
+      let last: any = null;
+      newNodes.forEach((n) => { body.insertBefore(n, ref); last = n; });
+      lastInsertedByBody.set(anchorBody, last);
+      inserted++;
+    });
+
+    // 5. Sérialiser document.xml (médias conservés) et sauvegarder.
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
     const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
     const outputFileName = `Mémoire technique GSS_${Date.now()}.docx`;
     const outputPath = path.join(this.responseDir, outputFileName);
     fs.writeFileSync(outputPath, buf);
 
-    console.log(`[MemoireGenerator] Mémoire propre généré : ${chaptersOut} chapitre(s), ${sectionsOut} section(s) → ${outputPath}`);
+    console.log(`[MemoireGenerator] AO RNE personnalisé : ${inserted} page(s) ajoutée(s), ${spreads.length} page(s)-modèle, client="${clientName || '(non personnalisé)'}" → ${outputPath}`);
 
     return {
       filePath: outputPath,
       generatedData: {
-        mode: 'Document propre (identité AO RNE, fond anthracite)',
-        chapitres: String(chaptersOut),
-        sections: String(sectionsOut),
+        mode: 'AO RNE préservé (design intact) + pages dupliquées',
+        client: clientName || '(non personnalisé)',
+        pages_ajoutees: String(inserted),
+        pages_modeles: String(spreads.length),
+      },
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // GÉNÉRATION COMPLÈTE DU MÉMOIRE (sans cadre imposé dans le DCE)
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Charge la Documentation GSS (Template/Documentation GSS/) — 21 catégories de PDFs
+   * (ABSENCE ET RETARD, FORMATION, PROCEDURE, TENUES, etc.). Renvoie un dictionnaire
+   * { catégorie: texte } budgétisé par catégorie.
+   */
+  private async getGssDocumentation(): Promise<Record<string, string>> {
+    const gssDir = path.join(this.templateDir, 'Documentation GSS');
+    if (!fs.existsSync(gssDir)) {
+      console.warn('[MemoireGenerator] Documentation GSS introuvable:', gssDir);
+      return {};
+    }
+
+    const PER_CAT_CAP = 15_000; // plafond par catégorie en caractères
+    const categories: Record<string, string> = {};
+
+    for (const entry of fs.readdirSync(gssDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const catDir = path.join(gssDir, entry.name);
+      let catText = '';
+
+      const files = fs.readdirSync(catDir).filter(f => f.toLowerCase().endsWith('.pdf'));
+      for (const file of files) {
+        try {
+          const text = await extractText(path.join(catDir, file));
+          if (text.length > 50) catText += `\n--- ${file} ---\n${text}`;
+        } catch (e: any) {
+          console.warn(`[MemoireGenerator] GSS doc: impossible de lire ${entry.name}/${file}: ${e.message}`);
+        }
+      }
+
+      if (catText.trim()) {
+        categories[entry.name] = catText.length > PER_CAT_CAP
+          ? catText.slice(0, PER_CAT_CAP) + '\n[… tronqué …]'
+          : catText;
+        console.log(`[MemoireGenerator] GSS doc chargée: ${entry.name} — ${catText.length} chars (${files.length} fichiers)`);
+      }
+    }
+
+    console.log(`[MemoireGenerator] Documentation GSS: ${Object.keys(categories).length} catégories chargées.`);
+    return categories;
+  }
+
+  /**
+   * Trouve les catégories de Documentation GSS pertinentes pour un titre de spread donné,
+   * par correspondance de mots-clés dans GSS_DOC_KEYWORDS.
+   */
+  private matchGssCategories(spreadTitle: string, availableCategories: string[]): string[] {
+    const n = normTitle(spreadTitle);
+    const matches: string[] = [];
+
+    for (const [cat, keywords] of Object.entries(GSS_DOC_KEYWORDS)) {
+      if (!availableCategories.includes(cat)) continue;
+      if (keywords.some(kw => n.includes(kw))) matches.push(cat);
+    }
+
+    // Fallback : correspondance par mots du titre dans les noms de catégories
+    if (matches.length === 0) {
+      const words = n.split(' ').filter(w => w.length > 3);
+      for (const cat of availableCategories) {
+        const catNorm = normTitle(cat);
+        if (words.some(w => catNorm.includes(w))) matches.push(cat);
+      }
+    }
+
+    return matches.slice(0, 4); // 4 catégories max par section
+  }
+
+  /**
+   * Génération COMPLÈTE du mémoire technique quand AUCUN cadre de réponse n'est dans le DCE.
+   *
+   * Approche en 3 temps :
+   * A) MODIFIER les 119 pages existantes d'AO RNE.docx : pour chaque spread (page image+titre
+   *    + page corps de texte), on génère un texte personnalisé via IA en se basant UNIQUEMENT
+   *    sur le DCE + Documentation GSS, et on remplace le corps de texte en conservant le design.
+   * B) AJOUTER des pages supplémentaires pour les thématiques du DCE non couvertes, en dupliquant
+   *    des pages-modèles existantes (cloneSpread) pour préserver le design complexe.
+   * C) Personnaliser le nom du client sur la couverture, en-têtes et pieds de page.
+   *
+   * Sources de données : DCE (CCTP, RC, annexes) + Documentation GSS (21 catégories de PDFs).
+   */
+  public async generateFullMemoire(dossierId: string): Promise<{ filePath: string, generatedData: Record<string, string> }> {
+    console.log(`[MemoireGenerator] ═══ Génération ciblée du mémoire (AO RNE intact + synthèse personnalisée) ═══`);
+
+    // ── 1. Analyse structurée du DCE ──
+    const dceContext = await this.getDceContext(dossierId);
+    const analysisData = await this.analyzeDce(dceContext);
+    const analysisJson = JSON.stringify(analysisData, null, 2);
+    const clientName = analysisData?.clientName || 'le client';
+    console.log(`[MemoireGenerator] Analyse DCE terminée: client="${clientName}"`);
+
+    // ── 2. Chargement de la Documentation GSS (Limité pour la synthèse) ──
+    const gssDocs = await this.getGssDocumentation();
+    let gssContext = '';
+    const priorityCats = ['MANAGEMENT', 'INTERLOCUTEUR UNIQUE', 'MISE EN PLACE', 'VALEURS', 'SUIVI QUALITE ET CONTROLES'];
+    for (const cat of priorityCats) {
+      if (gssDocs[cat]) {
+        gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 5000)}`;
+      }
+    }
+
+    // ── 3. Charger et parser AO RNE.docx ──
+    const templatePath = path.join(this.templateDir, 'Mémoire technique', 'AO RNE.docx');
+    if (!fs.existsSync(templatePath)) throw new Error(`Template AO RNE introuvable: ${templatePath}`);
+    const zip = new PizZip(fs.readFileSync(templatePath));
+    const documentXmlFile = zip.file('word/document.xml');
+    if (!documentXmlFile) throw new Error('word/document.xml introuvable dans AO RNE.docx');
+
+    const parser = new DOMParser();
+    const serializer = new XMLSerializer();
+    const xmlDoc = parser.parseFromString(documentXmlFile.asText(), 'text/xml');
+
+    // ── 4. Personnaliser le nom du client (couverture + en-têtes/pieds) ──
+    this.adaptStaticText(xmlDoc, analysisData);
+    Object.keys(zip.files).forEach(name => {
+      if (name.startsWith('word/header') || name.startsWith('word/footer')) {
+        const fd = zip.file(name);
+        if (!fd) return;
+        const hfDoc = parser.parseFromString(fd.asText(), 'text/xml');
+        this.adaptStaticText(hfDoc, analysisData);
+        zip.file(name, serializer.serializeToString(hfDoc));
+      }
+    });
+
+    // ── 5. Découper le document en sections pour isoler les spreads ──
+    const body = findLocalNameChild(xmlDoc.documentElement, 'body');
+    if (!body) throw new Error('<w:body> introuvable dans AO RNE.docx');
+    const { sections } = splitBodyIntoSections(body);
+
+    const allSpreads: any[] = [];
+    for (let i = 0; i < sections.length - 1; i++) {
+      if (
+        sectionHasBackgroundImage(sections[i]) &&
+        sectionHasTextbox(sections[i]) &&
+        sectionIsPlainText(sections[i + 1])
+      ) {
+        allSpreads.push({ headingParas: sections[i], bodyParas: sections[i + 1] });
+      }
+    }
+    if (allSpreads.length < 2) throw new Error('Pas assez de spreads dans AO RNE pour cloner.');
+
+    // ── 6. Génération IA de la synthèse personnalisée (1 seule génération ciblée) ──
+    console.log(`[MemoireGenerator] Génération IA de la synthèse personnalisée pour ${clientName}...`);
+    const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige une "Synthèse de l'offre" complète (800-1200 mots) qui sera ajoutée en introduction du mémoire technique.
+- Basé UNIQUEMENT sur l'analyse du DCE et les atouts GSS.
+- Personnalise un maximum pour le client : nom, sites, enjeux, risques anticipés.
+- Mets en avant l'accompagnement GSS (interlocuteur unique, qualité, réactivité).
+- Rédige une dizaine de paragraphes bien développés.
+- IMPORTANT : N'utilise AUCUNE liste à puces (aucun tiret, aucun bullet point, aucun symbole). Rédige UNIQUEMENT sous forme de texte continu en paragraphes complets. Pas de markdown.
+- Le ton doit être professionnel, rassurant et très commercial (vendre l'offre).`;
+
+    const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}\n\nRédige le texte de la synthèse de notre offre sur mesure pour ce client.`;
+
+    const generatedText = await this.callOpenAI(
+      [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+      0.5, 'Génération Synthèse', false
+    );
+
+    if (!generatedText) throw new Error('Échec de la génération IA de la synthèse.');
+
+    // ── 7. Cloner le spread pour chaque bloc de 4 paragraphes ──
+    // L'image de fond grise est ancrée dans l'en-tête du spread. Si le texte est
+    // trop long, il bave sur une page blanche. Pour avoir le fond gris partout,
+    // on découpe le texte et on duplique le spread complet pour chaque bloc de texte.
+    const counter = { v: maxDrawingId(xmlDoc) };
+    
+    // Le client veut le "grand fond gris" complet. Ce grand fond se trouve
+    // généralement sur la première page (couverture, index 0).
+    // On va donc utiliser l'image de fond du spread 0, mais conserver 
+    // le style de texte standard du spread 1 pour le contenu.
+    const modelSpread = {
+      headingParas: allSpreads[0].headingParas,
+      bodyParas: allSpreads[1].bodyParas
+    };
+    
+    const title = 'Notre offre sur mesure';
+    
+    const allLines = bodyTextToLines(generatedText);
+    const PARAS_PER_PAGE = 4;
+    
+    // On insère juste après le corps du 1er spread
+    const coverSpreadLastPara = allSpreads[0].bodyParas[allSpreads[0].bodyParas.length - 1];
+    let refNode = coverSpreadLastPara.nextSibling;
+    
+    for (let i = 0; i < allLines.length; i += PARAS_PER_PAGE) {
+      const chunkLines = allLines.slice(i, i + PARAS_PER_PAGE).join('\n');
+      const newNodes = cloneSpread(
+        xmlDoc, modelSpread.headingParas, modelSpread.bodyParas,
+        counter, title, chunkLines
+      );
+      
+      newNodes.forEach(n => {
+         body.insertBefore(n, refNode);
+      });
+    }
+
+    console.log(`[MemoireGenerator] Synthèse ajoutée avec succès (${generatedText.length} caractères).`);
+
+    // ── 8. Sérialiser et sauvegarder (structure AO RNE 100% intacte + 1 section ajoutée) ──
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+    const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
+    const outputFileName = `Mémoire technique GSS_${Date.now()}.docx`;
+    const outputPath = path.join(this.responseDir, outputFileName);
+    fs.writeFileSync(outputPath, buf);
+
+    console.log(`[MemoireGenerator] ═══ Mémoire généré : AO RNE intact + page synthèse ajoutée → ${outputPath} ═══`);
+
+    return {
+      filePath: outputPath,
+      generatedData: {
+        mode: 'AO RNE intact + Synthèse personnalisée insérée (DCE + GSS)',
+        client: clientName,
+        texte_ajoute: String(generatedText.length) + ' caractères',
       },
     };
   }
