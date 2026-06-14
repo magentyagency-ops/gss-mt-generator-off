@@ -52,4 +52,17 @@ gss-ao/data/*.jsonl
 
 # Dossiers de travail (Réponses et dossiers projets)
 réponse/
+response/
 dossiers/
+
+# --- Sorties générées par l'app (NE PAS versionner) -------------------------
+# Mémoires/DOCX/PDF produits par le générateur, JSON de dossier, previews.
+dossier-*.json
+Mémoire technique GSS*.docx
+Mémoire technique GSS*.pdf
+data/output/
+data/output/*.docx
+data/output/*.pdf
+data/output/*.md
+*.tmp
+dist/

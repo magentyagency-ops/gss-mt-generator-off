@@ -240,17 +240,76 @@ function bodyTextToLines(text: string): string[] {
 }
 
 /**
+ * Refonte V1 — sur une page DUPLIQUÉE, retire les images de fond pleine page
+ * "inutiles" (anchors `behindDoc="1"` porteurs d'une photo) afin de laisser
+ * apparaître le fond gris uniforme. On NE retire QUE les runs qui ne contiennent
+ * PAS de zone de titre (`txbxContent`) : le bandeau d'en-tête / titre est toujours
+ * conservé. Renvoie le nombre de runs-images retirés.
+ */
+function stripStandaloneBgImages(paras: any[]): number {
+  let removed = 0;
+  paras.forEach((p) => {
+    const runs = getElementsWithLocalName(p, 'r');
+    runs.forEach((r: any) => {
+      const anchors = getElementsWithLocalName(r, 'anchor');
+      const isFullPageBg = anchors.some((a: any) => a.getAttribute('behindDoc') === '1');
+      const hasBlip = getElementsWithLocalName(r, 'blip').length > 0;
+      const hasTitle = getElementsWithLocalName(r, 'txbxContent').length > 0;
+      if (isFullPageBg && hasBlip && !hasTitle && r.parentNode) {
+        r.parentNode.removeChild(r);
+        removed++;
+      }
+    });
+  });
+  return removed;
+}
+
+/** Force la couleur de tous les runs (texte) d'un sous-arbre — lisibilité sur fond gris. */
+function forceTextColor(paras: any[], color: string) {
+  paras.forEach((p) => {
+    getElementsWithLocalName(p, 'r').forEach((r: any) => {
+      // ne pas toucher aux runs purement graphiques (drawing/pict) sans texte
+      if (getElementsWithLocalName(r, 't').length === 0) return;
+      let rPr = findLocalNameChild(r, 'rPr');
+      if (!rPr) {
+        rPr = r.ownerDocument.createElementNS(W_NS, 'w:rPr');
+        r.insertBefore(rPr, r.firstChild);
+      }
+      let col = findLocalNameChild(rPr, 'color');
+      if (!col) {
+        col = r.ownerDocument.createElementNS(W_NS, 'w:color');
+        rPr.appendChild(col);
+      }
+      col.setAttribute('w:val', color);
+    });
+  });
+}
+
+/**
  * Clone un spread (sections [titre+image] + [corps]) en injectant `title`
  * (zone de titre) et `bodyText` (corps), avec ids de dessin renumérotés. Renvoie les
  * nouveaux paragraphes prêts à être insérés. Préserve le sectPr d'origine de chaque
  * section (mise en page identique).
+ *
+ * Refonte V1 (`refonte=true`) : retire les images de fond pleine page des pages
+ * dupliquées (fond gris uniforme à la place) et force le texte en sombre (lisibilité).
  */
 function cloneSpread(
   xmlDoc: any, headingParas: any[], bodyParas: any[], counter: { v: number }, title: string, bodyText: string,
+  refonte = false, stats?: { imagesRemoved: number },
 ): any[] {
   const newHeading = headingParas.map(p => p.cloneNode(true));
   newHeading.forEach(p => renumberDrawingIds(p, counter));
   if (title) setSectionHeading(newHeading, title);
+
+  // Refonte V1 : sur la page dupliquée, retire l'image de fond pleine page (le
+  // titre/bandeau est conservé) et force le texte en sombre pour rester lisible
+  // sur le fond gris uniforme injecté au niveau du document.
+  if (refonte) {
+    const removed = stripStandaloneBgImages(newHeading);
+    if (stats) stats.imagesRemoved += removed;
+    forceTextColor(newHeading, DUP_TEXT_COLOR);
+  }
 
   const lastBody = bodyParas[bodyParas.length - 1];
   const origSectPr = lastBody ? findLocalNameChild(findLocalNameChild(lastBody, 'pPr'), 'sectPr') : null;
@@ -331,6 +390,9 @@ function cloneSpread(
     newBody.push(pClone);
   });
 
+  // Refonte V1 : corps de texte en sombre, lisible sur le fond gris uniforme.
+  if (refonte) forceTextColor(newBody, DUP_TEXT_COLOR);
+
   return [...newHeading, ...newBody];
 }
 
@@ -345,6 +407,13 @@ const COL_TITLE = 'FFFFFF';    // titres (blanc)
 const COL_BODY = 'EFE7D3';     // corps de texte (crème, lisible sur fond sombre)
 const COL_ACCENT = 'C81E1E';   // rouge GSS (filets / labels)
 const COL_MUTED = 'D9D9D9';    // gris clair (sous-texte)
+
+// ─── Refonte V1 : fond gris uniforme sur les pages dupliquées ───
+// Couleur de fond de page (Word: <w:background>). Gris clair lisible, configurable.
+// Repli possible sur 'FFFFFF' si le rendu Word pose problème (cf. garde-fou).
+const BACKGROUND_COLOR = 'E5E5E5';
+// Couleur de texte forcée sur les pages dupliquées (lisible sur fond gris clair).
+const DUP_TEXT_COLOR = '1A1A1A';
 
 // Tailles en demi-points (22 = 11 pt) ; espacements en twips (240 = 12 pt).
 const SZ_BODY = 22;
@@ -1333,7 +1402,11 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
   public async assembleFromSections(
     dossierId: string,
     chapters: AssembleChapter[],
+    options: { refonte?: boolean } = {},
   ): Promise<{ filePath: string; generatedData: Record<string, string> }> {
+    // Refonte V1 activée par défaut : fond gris uniforme + retrait des images de fond
+    // pleine page sur les pages dupliquées (bandeau/titre conservé).
+    const refonte = options.refonte !== false;
     // 0. Client (base DCE puis analyse) pour personnaliser la couverture / le sommaire.
     const cover = await this.getCoverInfo(dossierId);
     const clientName = cover.client && !/global security|^gss\b/i.test(cover.client) ? cover.client : '';
@@ -1348,6 +1421,25 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
     const parser = new DOMParser();
     const serializer = new XMLSerializer();
     const xmlDoc = parser.parseFromString(documentXmlFile.asText(), 'text/xml');
+
+    // Refonte V1 — fond gris uniforme : <w:background> en 1er enfant du document +
+    // activation du rendu via <w:displayBackgroundShape/> dans settings.xml.
+    if (refonte) {
+      const docEl = xmlDoc.documentElement;
+      if (docEl && !findLocalNameChild(docEl, 'background')) {
+        const bg = xmlDoc.createElementNS(W_NS, 'w:background');
+        bg.setAttribute('w:color', BACKGROUND_COLOR);
+        docEl.insertBefore(bg, docEl.firstChild);
+      }
+      const settingsFile = zip.file('word/settings.xml');
+      if (settingsFile) {
+        let s = settingsFile.asText();
+        if (!/displayBackgroundShape/.test(s)) {
+          s = s.replace(/(<w:settings[^>]*>)/, '$1<w:displayBackgroundShape/>');
+          zip.file('word/settings.xml', s);
+        }
+      }
+    }
 
     // 2. Personnalisation du client (couverture/sommaire) sur le document + en-têtes/pieds.
     if (clientName) {
@@ -1398,6 +1490,7 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
     };
 
     const counter = { v: maxDrawingId(xmlDoc) };
+    const stats = { imagesRemoved: 0 };
     const lastInsertedByBody = new Map<any, any>(); // empile plusieurs ajouts après une même page-modèle
     let inserted = 0;
     flat.forEach((sec, idx) => {
@@ -1405,7 +1498,7 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
       let bestScore = 0;
       spreads.forEach((sp) => { const sc = scoreMatch(sec.title, sp.headingText); if (sc > bestScore) { bestScore = sc; best = sp; } });
 
-      const newNodes = cloneSpread(xmlDoc, best.headingParas, best.bodyParas, counter, sec.title, sec.text);
+      const newNodes = cloneSpread(xmlDoc, best.headingParas, best.bodyParas, counter, sec.title, sec.text, refonte, stats);
       const anchorBody = best.bodyParas[best.bodyParas.length - 1];
       const ref = (lastInsertedByBody.get(anchorBody) || anchorBody).nextSibling;
       let last: any = null;
@@ -1421,15 +1514,94 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
     const outputPath = path.join(this.responseDir, outputFileName);
     fs.writeFileSync(outputPath, buf);
 
-    console.log(`[MemoireGenerator] AO RNE personnalisé : ${inserted} page(s) ajoutée(s), ${spreads.length} page(s)-modèle, client="${clientName || '(non personnalisé)'}" → ${outputPath}`);
+    console.log(`[MemoireGenerator] AO RNE personnalisé : ${inserted} page(s) ajoutée(s), ${spreads.length} page(s)-modèle, refonte=${refonte} (fond gris ${refonte ? BACKGROUND_COLOR : 'off'}, ${stats.imagesRemoved} image(s) de fond retirée(s)), client="${clientName || '(non personnalisé)'}" → ${outputPath}`);
 
     return {
       filePath: outputPath,
       generatedData: {
-        mode: 'AO RNE préservé (design intact) + pages dupliquées',
+        mode: refonte
+          ? `Refonte V1 : fond gris uniforme #${BACKGROUND_COLOR} + bandeau conservé + images de fond retirées des pages dupliquées`
+          : 'AO RNE préservé (design intact) + pages dupliquées',
         client: clientName || '(non personnalisé)',
         pages_ajoutees: String(inserted),
         pages_modeles: String(spreads.length),
+        images_fond_retirees: String(stats.imagesRemoved),
+      },
+    };
+  }
+
+  /**
+   * Construit un DOCX NU (sans cadre, sans le maître AO RNE) : styles Word par défaut,
+   * aucun fond de page, aucun en-tête/pied, aucune page de garde. Sert de point de
+   * comparaison « génération sans template » face au template refondu.
+   */
+  public async assembleNoTemplate(
+    chapters: AssembleChapter[],
+  ): Promise<{ filePath: string; generatedData: Record<string, string> }> {
+    const esc = (s: string) => escXml(s);
+    const plainRun = (t: string, bold = false, sz?: number) =>
+      `<w:r><w:rPr>${bold ? '<w:b/>' : ''}${sz ? `<w:sz w:val="${sz}"/>` : ''}</w:rPr>` +
+      `<w:t xml:space="preserve">${esc(t)}</w:t></w:r>`;
+    const plainPara = (inner: string) => `<w:p>${inner}</w:p>`;
+
+    const body: string[] = [];
+    let chaptersOut = 0;
+    let sectionsOut = 0;
+    chapters.forEach((chapter, idx) => {
+      if (!chapter || !chapter.sections || chapter.sections.length === 0) return;
+      const roman = chapter.key || ['I', 'II', 'III', 'IV', 'V', 'VI'][idx] || String(idx + 1);
+      body.push(plainPara(plainRun(`${roman}. ${chapter.title || ''}`.trim(), true, 32)));
+      for (const sec of chapter.sections) {
+        const title = sec.title?.trim();
+        if (title) body.push(plainPara(plainRun(title, true, 26)));
+        for (const rawLine of String(sec.text || '').replace(/\r\n/g, '\n').split('\n')) {
+          const line = rawLine.replace(/[`#*_>-]/g, '').trim();
+          if (line) body.push(plainPara(plainRun(line)));
+        }
+        sectionsOut++;
+      }
+      chaptersOut++;
+    });
+
+    if (chaptersOut === 0) throw new Error('Aucun chapitre généré à exporter (sections vides).');
+
+    const sectPr = '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>' +
+      '<w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>';
+    const documentXml =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      `<w:document xmlns:w="${W_NS}"><w:body>${body.join('')}${sectPr}</w:body></w:document>`;
+
+    const zip = new PizZip();
+    zip.file('[Content_Types].xml',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+      '</Types>');
+    zip.file('_rels/.rels',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+      '</Relationships>');
+    zip.file('word/document.xml', documentXml);
+    zip.file('word/_rels/document.xml.rels',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>');
+
+    const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
+    const outputFileName = `Mémoire technique GSS (sans template)_${Date.now()}.docx`;
+    const outputPath = path.join(this.responseDir, outputFileName);
+    fs.writeFileSync(outputPath, buf);
+
+    console.log(`[MemoireGenerator] Mémoire NU (sans template) généré : ${chaptersOut} chapitre(s), ${sectionsOut} section(s) → ${outputPath}`);
+
+    return {
+      filePath: outputPath,
+      generatedData: {
+        mode: 'Document nu (sans template, styles Word par défaut)',
+        chapitres: String(chaptersOut),
+        sections: String(sectionsOut),
       },
     };
   }
