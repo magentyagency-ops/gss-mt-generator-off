@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import * as docx from "docx-preview";
 
 export function DocxPreviewViewer({ fileUrl }: { fileUrl: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -15,9 +16,6 @@ export function DocxPreviewViewer({ fileUrl }: { fileUrl: string }) {
       try {
         setLoading(true);
         setError("");
-        
-        // Dynamically import docx-preview only on the client side
-        const docx = await import("docx-preview");
         
         const response = await fetch(fileUrl);
         if (!response.ok) throw new Error("Failed to fetch document");

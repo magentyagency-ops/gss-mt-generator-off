@@ -21,7 +21,12 @@ import { Badge, Button, Card, Progress } from "@/components/ui";
 import { DossierNav } from "@/components/dossier-nav";
 import { type DceFile } from "@/lib/gss-config";
 import { AI_SECTIONS, CHAPTER_TITLES } from "@/lib/ai/sections";
-import { DocxPreviewViewer } from "@/components/docx-preview-viewer";
+import dynamic from "next/dynamic";
+
+const DocxPreviewViewer = dynamic(
+  () => import("@/components/docx-preview-viewer").then((mod) => mod.DocxPreviewViewer),
+  { ssr: false }
+);
 import { AI_SECTIONS_B, CHAPTER_TITLES_B } from "@/lib/ai/sections-b";
 import { generateSection, getApiKey, type RagChunk } from "@/lib/ai/client";
 import {

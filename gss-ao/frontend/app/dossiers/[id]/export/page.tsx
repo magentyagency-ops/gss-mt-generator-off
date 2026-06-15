@@ -33,7 +33,12 @@ import {
 } from "@/lib/gss-config";
 import { cn } from "@/lib/utils";
 import { use, useEffect, useState } from "react";
-import { DocxPreviewViewer } from "@/components/docx-preview-viewer";
+import dynamic from "next/dynamic";
+
+const DocxPreviewViewer = dynamic(
+  () => import("@/components/docx-preview-viewer").then((mod) => mod.DocxPreviewViewer),
+  { ssr: false }
+);
 
 const CHECKS = [
   { label: "Toutes les pièces administratives présentes", ok: false },
