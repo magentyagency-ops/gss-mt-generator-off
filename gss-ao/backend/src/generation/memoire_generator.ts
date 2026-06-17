@@ -199,6 +199,117 @@ const sectionHasTextbox = (paras: any[]): boolean =>
 const sectionIsPlainText = (paras: any[]): boolean =>
   !paras.some(p => getElementsWithLocalName(p, 'drawing').length > 0 || getElementsWithLocalName(p, 'pict').length > 0);
 
+/** Couleur de l'aplat gris clair pleine page du template (corps des pages). */
+const GREY_BG_HEX = 'D9D9D9';
+
+/**
+ * Trouve le run contenant le rectangle gris clair (#D9D9D9) pleine page utilisé comme
+ * fond sur les pages de corps du template AO RNE. C'est un shape vectoriel (solidFill,
+ * SANS image) ancré en behindDoc="1", de taille ~21cm × 29.7cm, positionné à page
+ * offset (0,0). Attention : le template contient aussi 6 rectangles gris FONCÉ (#494545)
+ * pleine page — on les écarte en exigeant explicitement la couleur #D9D9D9. On saute
+ * également les premiers paragraphes pour ignorer la couverture. Renvoie le run à cloner.
+ */
+function findFullPageBackgroundRun(body: any): any | null {
+  if (!body || !body.childNodes) return null;
+  // On saute les premiers paragraphes (couverture / sommaire) pour cibler les pages de corps
+  const MIN_PARA = 50;  // les pages de corps commencent bien après la couverture
+  let paraCount = 0;
+  for (let i = 0; i < body.childNodes.length; i++) {
+    const node = body.childNodes[i];
+    if (node.nodeType !== 1 || node.localName !== 'p') continue;
+    paraCount++;
+    if (paraCount < MIN_PARA) continue;
+
+    const runs = getElementsWithLocalName(node, 'r');
+    for (const r of runs) {
+      // On ne veut PAS d'image : uniquement l'aplat gris vectoriel
+      if (getElementsWithLocalName(r, 'blip').length > 0) continue;
+      const anchors = getElementsWithLocalName(r, 'anchor');
+      for (const a of anchors) {
+        if (a.getAttribute('behindDoc') !== '1') continue;
+        const extent = findLocalNameChild(a, 'extent');
+        if (!extent) continue;
+        const cx = parseInt(extent.getAttribute('cx') || '0', 10);
+        const cy = parseInt(extent.getAttribute('cy') || '0', 10);
+        const wCm = cx / 914400 * 2.54;
+        const hCm = cy / 914400 * 2.54;
+        // Pleine page A4 : >19cm large, >28cm haut
+        if (wCm < 19 || hCm < 28) continue;
+        // Exiger la couleur gris clair #D9D9D9 (pas le gris foncé #494545)
+        const colors = getElementsWithLocalName(a, 'srgbClr')
+          .map((c: any) => (c.getAttribute('val') || '').toUpperCase());
+        if (colors.includes(GREY_BG_HEX)) return r;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Injecte un clone du rectangle gris clair pleine page dans le premier paragraphe d'un
+ * ensemble de paragraphes (section corps d'un spread cloné). Les IDs de dessin sont
+ * renumérotés pour éviter les doublons Word.
+ */
+function injectFullPageBackground(bodyParas: any[], bgRun: any, counter: { v: number }) {
+  if (!bgRun || bodyParas.length === 0) return;
+  const clone = bgRun.cloneNode(true);
+  renumberDrawingIds(clone, counter);
+  const firstPara = bodyParas[0];
+  firstPara.insertBefore(clone, firstPara.firstChild);
+}
+
+/**
+ * Trouve le run contenant le bandeau « GSS » (logo œil + GSS, image5.png) qui coiffe
+ * le titre de chaque page de corps du template. C'est un groupe autonome (sans texte ni
+ * zone de titre) ancré en behindDoc="1", de largeur pleine page (~21cm) mais PEU haut
+ * (~3.3cm). On le distingue du fond pleine page (haut) par sa faible hauteur, et des
+ * blocs de titre par l'absence de texte. Renvoie le run DOM à cloner, ou null.
+ */
+function findGssBannerRun(body: any): any | null {
+  if (!body || !body.childNodes) return null;
+  const MIN_PARA = 50;        // on saute la couverture / le sommaire
+  const MAX_H_CM = 6;         // bandeau de titre : court (≠ fond pleine page)
+  let paraCount = 0;
+  for (let i = 0; i < body.childNodes.length; i++) {
+    const node = body.childNodes[i];
+    if (node.nodeType !== 1 || node.localName !== 'p') continue;
+    paraCount++;
+    if (paraCount < MIN_PARA) continue;
+
+    const runs = getElementsWithLocalName(node, 'r');
+    for (const r of runs) {
+      // bandeau image autonome : une image, pas de texte, pas de zone de titre
+      if (getElementsWithLocalName(r, 'blip').length === 0) continue;
+      if (getElementsWithLocalName(r, 't').length > 0) continue;
+      if (getElementsWithLocalName(r, 'txbxContent').length > 0) continue;
+      const anchors = getElementsWithLocalName(r, 'anchor');
+      for (const a of anchors) {
+        if (a.getAttribute('behindDoc') !== '1') continue;
+        const extent = findLocalNameChild(a, 'extent');
+        if (!extent) continue;
+        const wCm = parseInt(extent.getAttribute('cx') || '0', 10) / 914400 * 2.54;
+        const hCm = parseInt(extent.getAttribute('cy') || '0', 10) / 914400 * 2.54;
+        // Pleine largeur mais court : c'est le bandeau de titre, pas le fond pleine page
+        if (wCm >= 19 && hCm >= 2 && hCm <= MAX_H_CM) return r;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Injecte un clone du bandeau « GSS » dans le premier paragraphe d'en-tête d'une page
+ * clonée, afin que chaque titre généré porte le logo GSS comme sur les pages du template.
+ */
+function injectGssBanner(headingParas: any[], gssRun: any, counter: { v: number }) {
+  if (!gssRun || headingParas.length === 0) return;
+  const clone = gssRun.cloneNode(true);
+  renumberDrawingIds(clone, counter);
+  const firstPara = headingParas[0];
+  firstPara.insertBefore(clone, firstPara.firstChild);
+}
+
 /** Plus grand id de dessin présent (wp:docPr / pic:cNvPr) — base pour la renumérotation. */
 function maxDrawingId(xmlDoc: any): number {
   let max = 0;
@@ -240,19 +351,28 @@ function bodyTextToLines(text: string): string[] {
 }
 
 /**
- * Refonte V1 — sur une page DUPLIQUÉE, retire les images de fond pleine page
- * "inutiles" (anchors `behindDoc="1"` porteurs d'une photo) afin de laisser
- * apparaître le fond gris uniforme. On NE retire QUE les runs qui ne contiennent
- * PAS de zone de titre (`txbxContent`) : le bandeau d'en-tête / titre est toujours
- * conservé. Renvoie le nombre de runs-images retirés.
+ * Refonte V1 — sur une page DUPLIQUÉE, retire UNIQUEMENT les images de fond
+ * PLEINE PAGE (photo de décor, anchor `behindDoc="1"` de taille ~21×29.7cm) afin de
+ * laisser apparaître le fond gris uniforme. On préserve :
+ *  - les runs porteurs d'une zone de titre (`txbxContent`) ;
+ *  - le bandeau de titre « GSS » (image behindDoc large mais PEU haute, ~21×3.3cm),
+ *    qui doit rester sur chaque titre.
+ * Le critère discriminant est donc la HAUTEUR pleine page (≥ 20cm).
+ * Renvoie le nombre de runs-images retirés.
  */
 function stripStandaloneBgImages(paras: any[]): number {
+  const FULLPAGE_MIN_H_CM = 20; // au-delà : fond pleine page ; en deçà : bandeau de titre, etc.
   let removed = 0;
   paras.forEach((p) => {
     const runs = getElementsWithLocalName(p, 'r');
     runs.forEach((r: any) => {
       const anchors = getElementsWithLocalName(r, 'anchor');
-      const isFullPageBg = anchors.some((a: any) => a.getAttribute('behindDoc') === '1');
+      const isFullPageBg = anchors.some((a: any) => {
+        if (a.getAttribute('behindDoc') !== '1') return false;
+        const extent = findLocalNameChild(a, 'extent');
+        const cy = extent ? parseInt(extent.getAttribute('cy') || '0', 10) : 0;
+        return (cy / 914400 * 2.54) >= FULLPAGE_MIN_H_CM;
+      });
       const hasBlip = getElementsWithLocalName(r, 'blip').length > 0;
       const hasTitle = getElementsWithLocalName(r, 'txbxContent').length > 0;
       if (isFullPageBg && hasBlip && !hasTitle && r.parentNode) {
@@ -317,10 +437,10 @@ function cloneSpread(
 
   const lines = bodyTextToLines(bodyText);
   const newBody: any[] = [];
-  
+
   // Pour conserver parfaitement la DA (Art Direction), on clone le premier paragraphe du template
   let templateP = bodyParas.find(p => getElementsWithLocalName(p, 't').length > 0) || bodyParas[0];
-  
+
   if (!templateP) {
     // Fallback de sécurité (très rare)
     templateP = xmlDoc.createElementNS(W_NS, 'w:p');
@@ -328,33 +448,33 @@ function cloneSpread(
 
   lines.forEach((ln, idx) => {
     const pClone = templateP.cloneNode(true);
-    
+
     // On retire le sectPr du clone (car sectPr ne doit être que sur le DERNIER paragraphe)
     let pPr = findLocalNameChild(pClone, 'pPr');
     if (pPr) {
-       const sectPr = findLocalNameChild(pPr, 'sectPr');
-       if (sectPr) pPr.removeChild(sectPr);
+      const sectPr = findLocalNameChild(pPr, 'sectPr');
+      if (sectPr) pPr.removeChild(sectPr);
     } else {
-       pPr = xmlDoc.createElementNS(W_NS, 'w:pPr');
-       pClone.insertBefore(pPr, pClone.firstChild);
+      pPr = xmlDoc.createElementNS(W_NS, 'w:pPr');
+      pClone.insertBefore(pPr, pClone.firstChild);
     }
-    
+
     // Le user a explicitement demandé de RECENTRER le texte
     let jc = findLocalNameChild(pPr, 'jc');
     if (!jc) {
-       jc = xmlDoc.createElementNS(W_NS, 'w:jc');
-       pPr.appendChild(jc);
+      jc = xmlDoc.createElementNS(W_NS, 'w:jc');
+      pPr.appendChild(jc);
     }
     jc.setAttribute('w:val', 'center');
-    
+
     // On conserve un bon espacement aéré
     let spacing = findLocalNameChild(pPr, 'spacing');
     if (!spacing) {
-       spacing = xmlDoc.createElementNS(W_NS, 'w:spacing');
-       pPr.appendChild(spacing);
+      spacing = xmlDoc.createElementNS(W_NS, 'w:spacing');
+      pPr.appendChild(spacing);
     }
     spacing.setAttribute('w:after', '280'); // 14pt
-    
+
     // Remplacement du texte tout en gardant les propriétés de police (rPr)
     const runs = getElementsWithLocalName(pClone, 'r');
     if (runs.length > 0) {
@@ -386,7 +506,7 @@ function cloneSpread(
     if (idx === lines.length - 1 && sectPrClone) {
       pPr.appendChild(sectPrClone);
     }
-    
+
     newBody.push(pClone);
   });
 
@@ -1492,13 +1612,54 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
     const counter = { v: maxDrawingId(xmlDoc) };
     const stats = { imagesRemoved: 0 };
     const lastInsertedByBody = new Map<any, any>(); // empile plusieurs ajouts après une même page-modèle
+    // Récupérer le fond gris clair (#D9D9D9) pleine page pour l'injecter dans les corps dupliqués
+    const bgRun = findFullPageBackgroundRun(body);
+    if (bgRun) {
+      console.log('[MemoireGenerator] Fond gris clair (#D9D9D9) pleine page trouvé — injection dans les pages dupliquées.');
+    }
+    // Récupérer le bandeau « GSS » de titre pour le poser sur chaque page générée
+    const gssRun = findGssBannerRun(body);
+    if (gssRun) {
+      console.log('[MemoireGenerator] Bandeau « GSS » de titre trouvé — injection sur chaque titre généré.');
+    } else {
+      console.warn('[MemoireGenerator] Bandeau « GSS » de titre NON trouvé.');
+    }
     let inserted = 0;
     flat.forEach((sec, idx) => {
-      let best = spreads[idx % spreads.length];
-      let bestScore = 0;
-      spreads.forEach((sp) => { const sc = scoreMatch(sec.title, sp.headingText); if (sc > bestScore) { bestScore = sc; best = sp; } });
+      // Dernière page : utiliser le dernier spread du template (image pleine page étendue)
+      const isLastPage = idx === flat.length - 1;
+      let best = isLastPage ? spreads[spreads.length - 1] : spreads[idx % spreads.length];
+      if (!isLastPage) {
+        let bestScore = 0;
+        spreads.forEach((sp) => { const sc = scoreMatch(sec.title, sp.headingText); if (sc > bestScore) { bestScore = sc; best = sp; } });
+      }
 
-      const newNodes = cloneSpread(xmlDoc, best.headingParas, best.bodyParas, counter, sec.title, sec.text, refonte, stats);
+      const useRefonte = refonte && !isLastPage;
+      const newNodes = cloneSpread(xmlDoc, best.headingParas, best.bodyParas, counter, sec.title, sec.text, useRefonte, stats);
+
+      const headingCount = best.headingParas.length;
+
+      // La dernière page utilise le spread de clôture (image pleine page) : on retire son
+      // image de fond pour laisser apparaître le fond gris, comme sur les autres pages.
+      if (isLastPage) {
+        stats.imagesRemoved += stripStandaloneBgImages(newNodes.slice(0, headingCount));
+      }
+
+      // Injecter le fond gris clair pleine page dans la section corps de TOUTES les pages
+      // générées (y compris la dernière) — le client veut le fond gris partout.
+      if (bgRun) {
+        const bodyNodes = newNodes.slice(headingCount);
+        if (bodyNodes.length > 0) {
+          injectFullPageBackground(bodyNodes, bgRun, counter);
+        }
+      }
+
+      // Poser le bandeau « GSS » sur le titre de chaque page générée (certains en-têtes
+      // du template ne le portent pas) — garantit un titre cohérent partout.
+      if (gssRun) {
+        injectGssBanner(newNodes.slice(0, headingCount), gssRun, counter);
+      }
+
       const anchorBody = best.bodyParas[best.bodyParas.length - 1];
       const ref = (lastInsertedByBody.get(anchorBody) || anchorBody).nextSibling;
       let last: any = null;
@@ -1770,42 +1931,61 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
     if (!generatedText) throw new Error('Échec de la génération IA de la synthèse.');
 
     // ── 7. Cloner le spread pour chaque bloc de 4 paragraphes ──
-    // L'image de fond grise est ancrée dans l'en-tête du spread. Si le texte est
-    // trop long, il bave sur une page blanche. Pour avoir le fond gris partout,
-    // on découpe le texte et on duplique le spread complet pour chaque bloc de texte.
+    // Le fond des pages de corps est un aplat gris clair pleine page (#D9D9D9, 21cm × 29.7cm),
+    // un shape vectoriel ancré en behindDoc. On le récupère et on l'injecte dans chaque
+    // section corps dupliquée pour conserver le fond gris caractéristique.
     const counter = { v: maxDrawingId(xmlDoc) };
-    
-    // Le client veut le "grand fond gris" complet. Ce grand fond se trouve
-    // généralement sur la première page (couverture, index 0).
-    // On va donc utiliser l'image de fond du spread 0, mais conserver 
-    // le style de texte standard du spread 1 pour le contenu.
+    const bgRun = findFullPageBackgroundRun(body);
+    if (bgRun) {
+      console.log('[MemoireGenerator] Fond gris clair (#D9D9D9) pleine page trouvé — sera injecté dans les pages dupliquées.');
+    } else {
+      console.warn('[MemoireGenerator] Fond gris clair pleine page NON trouvé — les pages dupliquées n\'auront pas de fond.');
+    }
+    const gssRun = findGssBannerRun(body);
+    if (gssRun) {
+      console.log('[MemoireGenerator] Bandeau « GSS » de titre trouvé — injection sur chaque titre généré.');
+    }
+
     const modelSpread = {
       headingParas: allSpreads[0].headingParas,
       bodyParas: allSpreads[1].bodyParas
     };
-    
+
     const title = 'Notre offre sur mesure';
-    
+
     const allLines = bodyTextToLines(generatedText);
     const PARAS_PER_PAGE = 4;
-    
+
     // On insère juste après le corps du 1er spread
     const coverSpreadLastPara = allSpreads[0].bodyParas[allSpreads[0].bodyParas.length - 1];
     let refNode = coverSpreadLastPara.nextSibling;
-    
+
     for (let i = 0; i < allLines.length; i += PARAS_PER_PAGE) {
       const chunkLines = allLines.slice(i, i + PARAS_PER_PAGE).join('\n');
       const newNodes = cloneSpread(
         xmlDoc, modelSpread.headingParas, modelSpread.bodyParas,
         counter, title, chunkLines
       );
-      
+
+      // Injecter le fond gris clair pleine page dans la section corps
+      const headingCount = modelSpread.headingParas.length;
+      if (bgRun) {
+        const bodyNodes = newNodes.slice(headingCount);
+        if (bodyNodes.length > 0) {
+          injectFullPageBackground(bodyNodes, bgRun, counter);
+        }
+      }
+      // Poser le bandeau « GSS » sur le titre de chaque page de synthèse générée
+      if (gssRun) {
+        injectGssBanner(newNodes.slice(0, headingCount), gssRun, counter);
+      }
+
       newNodes.forEach(n => {
-         body.insertBefore(n, refNode);
+        body.insertBefore(n, refNode);
       });
     }
 
-    console.log(`[MemoireGenerator] Synthèse ajoutée avec succès (${generatedText.length} caractères).`);
+    console.log(`[MemoireGenerator] Synthèse ajoutée avec succès (${generatedText.length} caractères, fond gris=${!!bgRun}).`);
 
     // ── 8. Sérialiser et sauvegarder (structure AO RNE 100% intacte + 1 section ajoutée) ──
     zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
