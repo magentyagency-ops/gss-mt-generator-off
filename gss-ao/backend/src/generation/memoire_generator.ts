@@ -329,13 +329,18 @@ function renumberDrawingIds(node: any, counter: { v: number }) {
   });
 }
 
-/** Remplace le texte de toutes les zones de titre (txbxContent) de la section par `title`. */
+/**
+ * Remplace le texte de toutes les zones de titre (txbxContent) de la section par `title`.
+ * Le titre est mis en MAJUSCULES pour respecter l'écriture des titres du template
+ * (ex. « NOS AGENTS CYNOPHILES », « NOS PREVENTEURS »).
+ */
 function setSectionHeading(paras: any[], title: string) {
+  const upper = String(title || '').toUpperCase();
   paras.forEach(p => {
     getElementsWithLocalName(p, 'txbxContent').forEach((tx: any) => {
       const tEls = getElementsWithLocalName(tx, 't');
       if (tEls.length === 0) return;
-      tEls[0].textContent = title;
+      tEls[0].textContent = upper;
       for (let i = 1; i < tEls.length; i++) tEls[i].textContent = '';
     });
   });
@@ -348,6 +353,133 @@ function bodyTextToLines(text: string): string[] {
     .replace(/[*_`#]+/g, '')              // garde-fou : retire un éventuel markdown résiduel
     .split('\n')
     .map(l => l.trim());
+}
+
+/** Marqueur des pages fantômes de synthèse (zones de texte à remplir, casse libre). */
+const CONTEXT_MARKER_RE = /contexte\s+sur\s+mesure/i;
+/** Capacité de texte (caractères) d'une page fantôme 2 colonnes — borne anti-débordement. */
+const MAX_CHARS_PER_MARKER = 2000;
+
+/** Vrai si le nœud est à l'intérieur d'une zone de texte Word (txbxContent). */
+function isInsideTextbox(node: any): boolean {
+  let n = node ? node.parentNode : null;
+  while (n) { if (n.localName === 'txbxContent') return true; n = n.parentNode; }
+  return false;
+}
+
+/** Texte concaténé des runs d'un paragraphe (le texte peut être éclaté en plusieurs `<w:t>`). */
+function paragraphText(p: any): string {
+  return getElementsWithLocalName(p, 't').map((t: any) => t.textContent || '').join('');
+}
+
+/** Écrit `text` dans un paragraphe : tout dans le 1er run, les autres `<w:t>` vidés (style conservé). */
+function setParagraphText(p: any, text: string) {
+  const tEls = getElementsWithLocalName(p, 't');
+  if (tEls.length === 0) return;
+  tEls[0].textContent = text;
+  // Préserver les espaces de début/fin si présents (texte justifié).
+  if (/^\s|\s$/.test(text)) tEls[0].setAttribute('xml:space', 'preserve');
+  for (let i = 1; i < tEls.length; i++) tEls[i].textContent = '';
+}
+
+/** Vrai si le paragraphe porte un saut de section (sectPr) — structurel, à ne jamais supprimer. */
+function paragraphHasSectPr(p: any): boolean {
+  const pPr = findLocalNameChild(p, 'pPr');
+  return !!(pPr && findLocalNameChild(pPr, 'sectPr'));
+}
+
+/** Vrai si le paragraphe est « vide » : aucun texte, aucune image/dessin (ligne blanche de gabarit). */
+function isBlankFillerParagraph(p: any): boolean {
+  const hasText = getElementsWithLocalName(p, 't').some((t: any) => (t.textContent || '').trim() !== '');
+  const hasDrawing = getElementsWithLocalName(p, 'drawing').length > 0 || getElementsWithLocalName(p, 'pict').length > 0;
+  return !hasText && !hasDrawing;
+}
+
+/**
+ * Supprime les paragraphes VIDES inutiles qui suivent immédiatement `marker` (lignes blanches
+ * laissées dans le gabarit). On s'arrête au 1er paragraphe porteur de texte OU d'un saut de
+ * section (sectPr) : la structure des sections/pages est préservée, seuls les blancs parasites
+ * qui cassent la mise en page sont retirés.
+ */
+function removeFollowingBlankFillers(marker: any): number {
+  let removed = 0;
+  let n = marker.nextSibling;
+  while (n) {
+    const next = n.nextSibling;
+    if (n.nodeType === 1) {
+      if (n.localName !== 'p') break;                 // tableau / autre élément → on arrête
+      if (paragraphHasSectPr(n)) break;               // saut de section → garder, on arrête
+      if (!isBlankFillerParagraph(n)) break;          // paragraphe avec contenu → on arrête
+      n.parentNode.removeChild(n);
+      removed++;
+    }
+    n = next;
+  }
+  return removed;
+}
+
+/**
+ * Repère, dans l'ordre du document, les paragraphes-marqueurs « Contexte sur mesure » du corps
+ * (hors zones de texte). Travaille au niveau paragraphe car le marqueur peut être éclaté en runs.
+ */
+function findContextMarkers(body: any): any[] {
+  return getElementsWithLocalName(body, 'p').filter((p: any) =>
+    !isInsideTextbox(p) && CONTEXT_MARKER_RE.test(paragraphText(p)),
+  );
+}
+
+/**
+ * Remplit les pages fantômes : répartit `generatedText` EN CONTINUITÉ sur les marqueurs
+ * « Contexte sur mesure » (bloc i → marqueur i), en réutilisant la mise en forme du marqueur
+ * (pPr/rPr — les sections étant en 2 colonnes, le texte coule gauche→droite). Aucune page n'est
+ * ajoutée : le texte est borné à `MAX_CHARS_PER_MARKER` par page (le surplus est tronqué).
+ * Renvoie un récap pour le log.
+ */
+function fillContextMarkers(body: any, generatedText: string): { markers: number; pagesUsed: number; truncated: boolean; blanksRemoved: number } {
+  const markers = findContextMarkers(body);
+  if (markers.length === 0) return { markers: 0, pagesUsed: 0, truncated: false, blanksRemoved: 0 };
+
+  const paras = bodyTextToLines(generatedText).filter((l) => l.length > 0);
+  const N = markers.length;
+
+  // Cible équilibrée par page, plafonnée pour ne jamais déborder.
+  const total = paras.reduce((s, p) => s + p.length + 1, 0);
+  const target = Math.min(MAX_CHARS_PER_MARKER, Math.max(1, Math.ceil(total / N)));
+
+  // Répartition séquentielle (continuité) : on remplit la page i jusqu'à la cible, puis i+1.
+  const chunks: string[][] = Array.from({ length: N }, () => []);
+  let mi = 0, used = 0, truncated = false;
+  for (const para of paras) {
+    if (mi >= N) { truncated = true; break; }
+    // page pleine (et déjà au moins 1 paragraphe) → page suivante
+    if (chunks[mi].length > 0 && used + para.length > target && mi < N - 1) { mi++; used = 0; }
+    // dernière page : ne pas dépasser le plafond dur
+    if (mi === N - 1 && chunks[mi].length > 0 && used + para.length > MAX_CHARS_PER_MARKER) { truncated = true; break; }
+    chunks[mi].push(para);
+    used += para.length + 1;
+  }
+
+  let pagesUsed = 0, blanksRemoved = 0;
+  markers.forEach((marker, idx) => {
+    const lines = chunks[idx];
+    const parent = marker.parentNode;
+    // Retirer les lignes blanches parasites du gabarit qui suivent le marqueur (cassent la mise en page).
+    blanksRemoved += removeFollowingBlankFillers(marker);
+    if (!lines || lines.length === 0) {
+      setParagraphText(marker, '');     // vider le marqueur restant (pas de « Contexte sur mesure »)
+      return;
+    }
+    pagesUsed++;
+    // Un paragraphe cloné (même style que le marqueur) par ligne, inséré avant le marqueur.
+    lines.forEach((line) => {
+      const clone = marker.cloneNode(true);
+      setParagraphText(clone, line);
+      parent.insertBefore(clone, marker);
+    });
+    parent.removeChild(marker);
+  });
+
+  return { markers: N, pagesUsed, truncated, blanksRemoved };
 }
 
 /**
@@ -1894,30 +2026,25 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
       }
     });
 
-    // ── 5. Découper le document en sections pour isoler les spreads ──
+    // ── 5. Récupérer le corps du document ──
     const body = findLocalNameChild(xmlDoc.documentElement, 'body');
     if (!body) throw new Error('<w:body> introuvable dans AO RNE.docx');
-    const { sections } = splitBodyIntoSections(body);
 
-    const allSpreads: any[] = [];
-    for (let i = 0; i < sections.length - 1; i++) {
-      if (
-        sectionHasBackgroundImage(sections[i]) &&
-        sectionHasTextbox(sections[i]) &&
-        sectionIsPlainText(sections[i + 1])
-      ) {
-        allSpreads.push({ headingParas: sections[i], bodyParas: sections[i + 1] });
-      }
+    const markerCount = findContextMarkers(body).length;
+    if (markerCount === 0) {
+      throw new Error('Aucune page fantôme « Contexte sur mesure » trouvée dans AO RNE.docx — impossible d\'insérer la synthèse.');
     }
-    if (allSpreads.length < 2) throw new Error('Pas assez de spreads dans AO RNE pour cloner.');
 
     // ── 6. Génération IA de la synthèse personnalisée (1 seule génération ciblée) ──
-    console.log(`[MemoireGenerator] Génération IA de la synthèse personnalisée pour ${clientName}...`);
-    const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige une "Synthèse de l'offre" complète (800-1200 mots) qui sera ajoutée en introduction du mémoire technique.
+    // Les pages fantômes (2 colonnes) ont une capacité ~MAX_CHARS_PER_MARKER par page ; on vise
+    // de quoi remplir les pages disponibles sans déborder.
+    console.log(`[MemoireGenerator] ${markerCount} page(s) fantôme(s) « Contexte sur mesure » détectée(s). Génération IA de la synthèse...`);
+    const targetWords = Math.max(600, Math.round((markerCount * MAX_CHARS_PER_MARKER) / 6.5)); // ~6.5 car/mot
+    const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige une "Synthèse de l'offre" complète (environ ${targetWords} mots) qui sera ajoutée en introduction du mémoire technique.
 - Basé UNIQUEMENT sur l'analyse du DCE et les atouts GSS.
 - Personnalise un maximum pour le client : nom, sites, enjeux, risques anticipés.
 - Mets en avant l'accompagnement GSS (interlocuteur unique, qualité, réactivité).
-- Rédige une dizaine de paragraphes bien développés.
+- Rédige plusieurs paragraphes bien développés (un paragraphe par idée, séparés par un saut de ligne).
 - IMPORTANT : N'utilise AUCUNE liste à puces (aucun tiret, aucun bullet point, aucun symbole). Rédige UNIQUEMENT sous forme de texte continu en paragraphes complets. Pas de markdown.
 - Le ton doit être professionnel, rassurant et très commercial (vendre l'offre).`;
 
@@ -1930,62 +2057,11 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
 
     if (!generatedText) throw new Error('Échec de la génération IA de la synthèse.');
 
-    // ── 7. Cloner le spread pour chaque bloc de 4 paragraphes ──
-    // Le fond des pages de corps est un aplat gris clair pleine page (#D9D9D9, 21cm × 29.7cm),
-    // un shape vectoriel ancré en behindDoc. On le récupère et on l'injecte dans chaque
-    // section corps dupliquée pour conserver le fond gris caractéristique.
-    const counter = { v: maxDrawingId(xmlDoc) };
-    const bgRun = findFullPageBackgroundRun(body);
-    if (bgRun) {
-      console.log('[MemoireGenerator] Fond gris clair (#D9D9D9) pleine page trouvé — sera injecté dans les pages dupliquées.');
-    } else {
-      console.warn('[MemoireGenerator] Fond gris clair pleine page NON trouvé — les pages dupliquées n\'auront pas de fond.');
-    }
-    const gssRun = findGssBannerRun(body);
-    if (gssRun) {
-      console.log('[MemoireGenerator] Bandeau « GSS » de titre trouvé — injection sur chaque titre généré.');
-    }
-
-    const modelSpread = {
-      headingParas: allSpreads[0].headingParas,
-      bodyParas: allSpreads[1].bodyParas
-    };
-
-    const title = 'Notre offre sur mesure';
-
-    const allLines = bodyTextToLines(generatedText);
-    const PARAS_PER_PAGE = 4;
-
-    // On insère juste après le corps du 1er spread
-    const coverSpreadLastPara = allSpreads[0].bodyParas[allSpreads[0].bodyParas.length - 1];
-    let refNode = coverSpreadLastPara.nextSibling;
-
-    for (let i = 0; i < allLines.length; i += PARAS_PER_PAGE) {
-      const chunkLines = allLines.slice(i, i + PARAS_PER_PAGE).join('\n');
-      const newNodes = cloneSpread(
-        xmlDoc, modelSpread.headingParas, modelSpread.bodyParas,
-        counter, title, chunkLines
-      );
-
-      // Injecter le fond gris clair pleine page dans la section corps
-      const headingCount = modelSpread.headingParas.length;
-      if (bgRun) {
-        const bodyNodes = newNodes.slice(headingCount);
-        if (bodyNodes.length > 0) {
-          injectFullPageBackground(bodyNodes, bgRun, counter);
-        }
-      }
-      // Poser le bandeau « GSS » sur le titre de chaque page de synthèse générée
-      if (gssRun) {
-        injectGssBanner(newNodes.slice(0, headingCount), gssRun, counter);
-      }
-
-      newNodes.forEach(n => {
-        body.insertBefore(n, refNode);
-      });
-    }
-
-    console.log(`[MemoireGenerator] Synthèse ajoutée avec succès (${generatedText.length} caractères, fond gris=${!!bgRun}).`);
+    // ── 7. Remplir les pages fantômes « Contexte sur mesure » (texte en continuité, 2 colonnes) ──
+    // On ne reconstruit plus la DA : les pages sont déjà designées (titre, fond, bandeau, colonnes).
+    // On remplace simplement chaque marqueur par la suite du texte, sans déborder.
+    const fillResult = fillContextMarkers(body, generatedText);
+    console.log(`[MemoireGenerator] Synthèse insérée : ${generatedText.length} caractères répartis sur ${fillResult.pagesUsed}/${fillResult.markers} page(s) fantôme(s), ${fillResult.blanksRemoved} ligne(s) blanche(s) parasites retirée(s)${fillResult.truncated ? ', texte tronqué pour ne pas déborder' : ''}.`);
 
     // ── 8. Sérialiser et sauvegarder (structure AO RNE 100% intacte + 1 section ajoutée) ──
     zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
