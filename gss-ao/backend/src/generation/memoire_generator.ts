@@ -355,10 +355,22 @@ function bodyTextToLines(text: string): string[] {
     .map(l => l.trim());
 }
 
-/** Marqueur des pages fantômes de synthèse (zones de texte à remplir, casse libre). */
+/**
+ * Marqueur des zones éditables « Contexte sur mesure ». Une zone est ENCADRÉE par une balise
+ * OUVRANTE (« Contexte sur mesure » ou « … début ») et une balise FERMANTE (« … fin »). Les
+ * paragraphes vides entre les deux matérialisent l'espace réservé sur la page : le texte injecté
+ * y est borné pour ne PAS casser la mise en forme (déborder sur la page conçue suivante).
+ */
 const CONTEXT_MARKER_RE = /contexte\s+sur\s+mesure/i;
-/** Capacité de texte (caractères) d'une page fantôme 2 colonnes — borne anti-débordement. */
-const MAX_CHARS_PER_MARKER = 2000;
+/** Balise FERMANTE d'une zone (« Contexte sur mesure fin »). */
+const CONTEXT_CLOSE_RE = /contexte\s+sur\s+mesure\s+fin/i;
+// Largeur de découpe (caractères) garantissant qu'une ligne tient sur UNE seule ligne physique
+// (sinon le paragraphe déborde sur 2 lignes → décale tout le reste). On CONSERVE l'indentation native
+// des lignes réservées (le cadrage voulu) : la largeur utile est donc réduite. Calé sur la géométrie
+// d'AO RNE : colonne 2-col ≈ 5644 twips − indent 1906, texte 1-col ≈ 11485 − 1906, police sz 23.
+// À AUGMENTER si l'espace réservé reste trop vide ; à RÉDUIRE si une ligne déborde.
+const CHARS_PER_LINE_2COL = 26;
+const CHARS_PER_LINE_1COL = 68;
 
 /** Vrai si le nœud est à l'intérieur d'une zone de texte Word (txbxContent). */
 function isInsideTextbox(node: any): boolean {
@@ -382,40 +394,36 @@ function setParagraphText(p: any, text: string) {
   for (let i = 1; i < tEls.length; i++) tEls[i].textContent = '';
 }
 
-/** Vrai si le paragraphe porte un saut de section (sectPr) — structurel, à ne jamais supprimer. */
+/** Vrai si le paragraphe porte un saut de section (sectPr) — structurel (définit les colonnes), à ne JAMAIS toucher. */
 function paragraphHasSectPr(p: any): boolean {
   const pPr = findLocalNameChild(p, 'pPr');
   return !!(pPr && findLocalNameChild(pPr, 'sectPr'));
 }
 
-/** Vrai si le paragraphe est « vide » : aucun texte, aucune image/dessin (ligne blanche de gabarit). */
+/** Vrai si le paragraphe est « vide » : aucun texte, aucune image/dessin, aucun saut de section (ligne blanche de gabarit). */
 function isBlankFillerParagraph(p: any): boolean {
   const hasText = getElementsWithLocalName(p, 't').some((t: any) => (t.textContent || '').trim() !== '');
   const hasDrawing = getElementsWithLocalName(p, 'drawing').length > 0 || getElementsWithLocalName(p, 'pict').length > 0;
-  return !hasText && !hasDrawing;
+  return !hasText && !hasDrawing && !paragraphHasSectPr(p);
 }
 
 /**
- * Supprime les paragraphes VIDES inutiles qui suivent immédiatement `marker` (lignes blanches
- * laissées dans le gabarit). On s'arrête au 1er paragraphe porteur de texte OU d'un saut de
- * section (sectPr) : la structure des sections/pages est préservée, seuls les blancs parasites
- * qui cassent la mise en page sont retirés.
+ * Écrit `text` dans un paragraphe en préservant SA mise en forme et SA section (colonnes). Les
+ * lignes vides du gabarit n'ont souvent pas de run/`<w:t>` : on en crée un, en reprenant le `rPr`
+ * de la marque de paragraphe (`pPr/rPr`) pour conserver police et taille du gabarit.
  */
-function removeFollowingBlankFillers(marker: any): number {
-  let removed = 0;
-  let n = marker.nextSibling;
-  while (n) {
-    const next = n.nextSibling;
-    if (n.nodeType === 1) {
-      if (n.localName !== 'p') break;                 // tableau / autre élément → on arrête
-      if (paragraphHasSectPr(n)) break;               // saut de section → garder, on arrête
-      if (!isBlankFillerParagraph(n)) break;          // paragraphe avec contenu → on arrête
-      n.parentNode.removeChild(n);
-      removed++;
-    }
-    n = next;
-  }
-  return removed;
+function fillParagraphText(p: any, text: string) {
+  if (getElementsWithLocalName(p, 't').length > 0) { setParagraphText(p, text); return; }
+  const doc = p.ownerDocument;
+  const r = doc.createElementNS(W_NS, 'w:r');
+  const pPr = findLocalNameChild(p, 'pPr');
+  const markRPr = pPr ? findLocalNameChild(pPr, 'rPr') : null;
+  if (markRPr) r.appendChild(markRPr.cloneNode(true));   // police/taille de la ligne réservée
+  const t = doc.createElementNS(W_NS, 'w:t');
+  t.setAttribute('xml:space', 'preserve');
+  t.textContent = text;
+  r.appendChild(t);
+  p.appendChild(r);
 }
 
 /**
@@ -429,57 +437,145 @@ function findContextMarkers(body: any): any[] {
 }
 
 /**
- * Remplit les pages fantômes : répartit `generatedText` EN CONTINUITÉ sur les marqueurs
- * « Contexte sur mesure » (bloc i → marqueur i), en réutilisant la mise en forme du marqueur
- * (pPr/rPr — les sections étant en 2 colonnes, le texte coule gauche→droite). Aucune page n'est
- * ajoutée : le texte est borné à `MAX_CHARS_PER_MARKER` par page (le surplus est tronqué).
- * Renvoie un récap pour le log.
+ * Une zone éditable. `blanks` = lignes vides réservées AVANT l'ancre (déjà en 2 colonnes) ;
+ * `postBlanks` = lignes vides réservées APRÈS l'ancre, jusqu'à la fermante (généralement 1 colonne).
+ * On ne remplit QUE ces lignes vides existantes, jamais d'ajout/suppression → le nombre de
+ * paragraphes reste constant et rien ne se décale en dessous (titres, sections suivantes).
  */
-function fillContextMarkers(body: any, generatedText: string): { markers: number; pagesUsed: number; truncated: boolean; blanksRemoved: number } {
+interface ContextZone { open: any; close: any; anchor: any; blanks: any[]; postBlanks: any[]; }
+
+/** sectPr d'un paragraphe (ou null). */
+function paragraphSectPr(p: any): any | null {
+  const pPr = findLocalNameChild(p, 'pPr');
+  return pPr ? findLocalNameChild(pPr, 'sectPr') : null;
+}
+
+/** Vrai si ce sectPr met la section en 2 colonnes (w:cols w:num="2"). */
+function sectPrIsTwoCol(sectPr: any): boolean {
+  if (!sectPr) return false;
+  const cols = findLocalNameChild(sectPr, 'cols');
+  return !!cols && (cols.getAttribute('w:num') || '') === '2';
+}
+
+/** Découpe `text` en lignes de ≤ `maxChars` caractères sans couper les mots (les mots trop longs sont coupés). */
+function wrapToLines(text: string, maxChars: number): string[] {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let cur = '';
+  for (let w of words) {
+    while (w.length > maxChars) {                       // mot plus long que la ligne → on le coupe
+      if (cur) { lines.push(cur); cur = ''; }
+      lines.push(w.slice(0, maxChars));
+      w = w.slice(maxChars);
+    }
+    if (!cur) cur = w;
+    else if (cur.length + 1 + w.length <= maxChars) cur += ' ' + w;
+    else { lines.push(cur); cur = w; }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+/**
+ * Apparie les balises « Contexte sur mesure » en zones [ouvrante → fermante]. L'ANCRE = 1er paragraphe
+ * à sectPr 2 colonnes entre les balises (la section 2 colonnes s'achève sur lui). Les lignes vides
+ * AVANT l'ancre (`blanks`) sont donc en 2 colonnes ; celles APRÈS (`postBlanks`) en 1 colonne. Sans
+ * sectPr 2 colonnes on se rabat sur la fermante (tout en 1 colonne). Fermantes orphelines ignorées.
+ */
+function findContextZones(body: any): ContextZone[] {
   const markers = findContextMarkers(body);
-  if (markers.length === 0) return { markers: 0, pagesUsed: 0, truncated: false, blanksRemoved: 0 };
+  const zones: ContextZone[] = [];
+  for (let i = 0; i < markers.length; i++) {
+    const open = markers[i];
+    if (CONTEXT_CLOSE_RE.test(paragraphText(open))) continue;   // fermante seule → ignorée
+    let close: any = null, ci = -1;
+    for (let j = i + 1; j < markers.length; j++) {
+      if (CONTEXT_CLOSE_RE.test(paragraphText(markers[j]))) { close = markers[j]; ci = j; break; }
+    }
+    if (!close) break;                                          // plus de fermante → fin du document
+    if (open.parentNode !== close.parentNode) { i = ci; continue; }
+    let anchor: any = null;
+    for (let n = open.nextSibling; n && n !== close; n = n.nextSibling) {
+      if (n.nodeType === 1 && n.localName === 'p' && sectPrIsTwoCol(paragraphSectPr(n))) { anchor = n; break; }
+    }
+    if (!anchor) anchor = close;                                // repli : pas de section 2 colonnes
+    const blanks: any[] = [];      // lignes vides 2 colonnes (avant l'ancre)
+    for (let n = open.nextSibling; n && n !== anchor; n = n.nextSibling) {
+      if (n.nodeType === 1 && n.localName === 'p' && isBlankFillerParagraph(n)) blanks.push(n);
+    }
+    const postBlanks: any[] = [];  // lignes vides 1 colonne (après l'ancre, jusqu'à la fermante)
+    if (anchor !== close) {
+      for (let n = anchor.nextSibling; n && n !== close; n = n.nextSibling) {
+        if (n.nodeType === 1 && n.localName === 'p' && isBlankFillerParagraph(n)) postBlanks.push(n);
+      }
+    }
+    zones.push({ open, close, anchor, blanks, postBlanks });
+    i = ci;                                                     // reprendre après la fermante consommée
+  }
+  return zones;
+}
+
+/**
+ * Remplit les zones éditables SANS jamais changer le nombre de paragraphes (donc sans décaler les
+ * titres/sections en dessous). Principe : le texte est découpé en lignes calibrées pour tenir sur UNE
+ * ligne physique, puis écrit DANS les lignes vides déjà réservées (d'abord les lignes 2 colonnes, puis
+ * les lignes 1 colonne). Si le texte dépasse le nombre de lignes réservées → tronqué ; s'il est plus
+ * court → les lignes vides restantes conservent l'espace. Répartition ÉQUILIBRÉE entre les zones pour
+ * étaler le texte sur toutes les pages. Renvoie un récap pour le log.
+ */
+function fillContextMarkers(body: any, generatedText: string): { markers: number; pagesUsed: number; truncated: boolean; linesFilled: number } {
+  const zones = findContextZones(body);
+  if (zones.length === 0) return { markers: 0, pagesUsed: 0, truncated: false, linesFilled: 0 };
 
   const paras = bodyTextToLines(generatedText).filter((l) => l.length > 0);
-  const N = markers.length;
+  const N = zones.length;
+  // Largeur de découpe et capacité (en caractères) par zone : 2 colonnes si la zone a des lignes 2-col.
+  const wrapWidth = zones.map((z) => (z.blanks.length > 0 ? CHARS_PER_LINE_2COL : CHARS_PER_LINE_1COL));
+  const lineBudget = zones.map((z) => z.blanks.length + z.postBlanks.length);
+  const charCap = zones.map((_, i) => lineBudget[i] * wrapWidth[i]);
 
-  // Cible équilibrée par page, plafonnée pour ne jamais déborder.
-  const total = paras.reduce((s, p) => s + p.length + 1, 0);
-  const target = Math.min(MAX_CHARS_PER_MARKER, Math.max(1, Math.ceil(total / N)));
+  // Cible par zone = part équilibrée (total / N), plafonnée par la capacité (espace réservé) de la zone.
+  const totalChars = paras.reduce((s, p) => s + p.length + 1, 0);
+  const share = Math.max(1, Math.ceil(totalChars / N));
+  const targets = charCap.map((c) => Math.min(c, share));
 
-  // Répartition séquentielle (continuité) : on remplit la page i jusqu'à la cible, puis i+1.
+  // Répartition séquentielle des paragraphes : on remplit la zone i jusqu'à sa cible, puis i+1.
   const chunks: string[][] = Array.from({ length: N }, () => []);
-  let mi = 0, used = 0, truncated = false;
+  let zi = 0, used = 0, truncated = false;
   for (const para of paras) {
-    if (mi >= N) { truncated = true; break; }
-    // page pleine (et déjà au moins 1 paragraphe) → page suivante
-    if (chunks[mi].length > 0 && used + para.length > target && mi < N - 1) { mi++; used = 0; }
-    // dernière page : ne pas dépasser le plafond dur
-    if (mi === N - 1 && chunks[mi].length > 0 && used + para.length > MAX_CHARS_PER_MARKER) { truncated = true; break; }
-    chunks[mi].push(para);
+    while (zi < N && chunks[zi].length > 0 && used + para.length > targets[zi]) { zi++; used = 0; }
+    if (zi >= N) { truncated = true; break; }
+    chunks[zi].push(para);
     used += para.length + 1;
   }
 
-  let pagesUsed = 0, blanksRemoved = 0;
-  markers.forEach((marker, idx) => {
-    const lines = chunks[idx];
-    const parent = marker.parentNode;
-    // Retirer les lignes blanches parasites du gabarit qui suivent le marqueur (cassent la mise en page).
-    blanksRemoved += removeFollowingBlankFillers(marker);
-    if (!lines || lines.length === 0) {
-      setParagraphText(marker, '');     // vider le marqueur restant (pas de « Contexte sur mesure »)
-      return;
-    }
+  let pagesUsed = 0, linesFilled = 0;
+  zones.forEach((z, idx) => {
+    // Vider les balises (placeholders) sans rien ajouter/retirer — elles restent des paragraphes vides.
+    setParagraphText(z.open, '');
+    setParagraphText(z.close, '');
+    if (chunks[idx].length === 0) return;
     pagesUsed++;
-    // Un paragraphe cloné (même style que le marqueur) par ligne, inséré avant le marqueur.
-    lines.forEach((line) => {
-      const clone = marker.cloneNode(true);
-      setParagraphText(clone, line);
-      parent.insertBefore(clone, marker);
+
+    // Découper le texte de la zone en lignes physiques contiguës (pas de ligne vide intercalée, qui
+    // créerait de gros trous : l'espacement natif des lignes réservées suffit à aérer le texte).
+    const phys: string[] = [];
+    chunks[idx].forEach((para) => {
+      wrapToLines(para, wrapWidth[idx]).forEach((l) => phys.push(l));
     });
-    parent.removeChild(marker);
+
+    // Écrire UNE ligne par ligne vide réservée (2 colonnes d'abord, puis 1 colonne), en CONSERVANT
+    // intégralement la mise en forme native (indentation/cadrage, police, espacement). Aucun paragraphe
+    // n'est ajouté ni supprimé → mise en page en dessous inchangée. Surplus tronqué, manque laissé vide.
+    const slots = [...z.blanks, ...z.postBlanks];
+    if (phys.length > slots.length) truncated = true;
+    for (let i = 0; i < slots.length && i < phys.length; i++) {
+      fillParagraphText(slots[i], phys[i]);
+      linesFilled++;
+    }
   });
 
-  return { markers: N, pagesUsed, truncated, blanksRemoved };
+  return { markers: N, pagesUsed, truncated, linesFilled };
 }
 
 /**
@@ -2030,16 +2126,18 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
     const body = findLocalNameChild(xmlDoc.documentElement, 'body');
     if (!body) throw new Error('<w:body> introuvable dans AO RNE.docx');
 
-    const markerCount = findContextMarkers(body).length;
-    if (markerCount === 0) {
-      throw new Error('Aucune page fantôme « Contexte sur mesure » trouvée dans AO RNE.docx — impossible d\'insérer la synthèse.');
+    const zones = findContextZones(body);
+    if (zones.length === 0) {
+      throw new Error('Aucune zone « Contexte sur mesure » (balise début/fin) trouvée dans AO RNE.docx — impossible d\'insérer la synthèse.');
     }
 
     // ── 6. Génération IA de la synthèse personnalisée (1 seule génération ciblée) ──
-    // Les pages fantômes (2 colonnes) ont une capacité ~MAX_CHARS_PER_MARKER par page ; on vise
-    // de quoi remplir les pages disponibles sans déborder.
-    console.log(`[MemoireGenerator] ${markerCount} page(s) fantôme(s) « Contexte sur mesure » détectée(s). Génération IA de la synthèse...`);
-    const targetWords = Math.max(600, Math.round((markerCount * MAX_CHARS_PER_MARKER) / 6.5)); // ~6.5 car/mot
+    // Capacité = nombre de lignes vides réservées (entre début/fin) × largeur de ligne ; on vise de
+    // quoi remplir l'espace réservé sans déborder (le surplus serait tronqué pour ne rien décaler).
+    const totalLines = zones.reduce((s, z) => s + z.blanks.length + z.postBlanks.length, 0);
+    const totalCapacity = totalLines * CHARS_PER_LINE_2COL;
+    console.log(`[MemoireGenerator] ${zones.length} zone(s) « Contexte sur mesure » (début/fin), ${totalLines} ligne(s) réservée(s), capacité ~${totalCapacity} caractères. Génération IA de la synthèse...`);
+    const targetWords = Math.max(400, Math.round(totalCapacity / 6.5)); // ~6.5 car/mot
     const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige une "Synthèse de l'offre" complète (environ ${targetWords} mots) qui sera ajoutée en introduction du mémoire technique.
 - Basé UNIQUEMENT sur l'analyse du DCE et les atouts GSS.
 - Personnalise un maximum pour le client : nom, sites, enjeux, risques anticipés.
@@ -2057,11 +2155,12 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
 
     if (!generatedText) throw new Error('Échec de la génération IA de la synthèse.');
 
-    // ── 7. Remplir les pages fantômes « Contexte sur mesure » (texte en continuité, 2 colonnes) ──
+    // ── 7. Remplir les zones « Contexte sur mesure » (texte en continuité, sur place) ──
     // On ne reconstruit plus la DA : les pages sont déjà designées (titre, fond, bandeau, colonnes).
-    // On remplace simplement chaque marqueur par la suite du texte, sans déborder.
+    // On écrit le texte dans les lignes vides réservées (entre début et fin), sans déborder, en
+    // préservant la section de chaque ligne → les zones prévues en 2 colonnes coulent gauche→droite.
     const fillResult = fillContextMarkers(body, generatedText);
-    console.log(`[MemoireGenerator] Synthèse insérée : ${generatedText.length} caractères répartis sur ${fillResult.pagesUsed}/${fillResult.markers} page(s) fantôme(s), ${fillResult.blanksRemoved} ligne(s) blanche(s) parasites retirée(s)${fillResult.truncated ? ', texte tronqué pour ne pas déborder' : ''}.`);
+    console.log(`[MemoireGenerator] Synthèse insérée : ${generatedText.length} caractères sur ${fillResult.pagesUsed}/${fillResult.markers} zone(s), ${fillResult.linesFilled} ligne(s) réservée(s) remplie(s)${fillResult.truncated ? ', texte tronqué pour ne pas déborder' : ''}.`);
 
     // ── 8. Sérialiser et sauvegarder (structure AO RNE 100% intacte + 1 section ajoutée) ──
     zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
