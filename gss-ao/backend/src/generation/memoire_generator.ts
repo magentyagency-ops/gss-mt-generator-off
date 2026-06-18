@@ -5,6 +5,7 @@ import OpenAI from 'openai';
 import { getSettings } from '../core/config';
 import { DB } from '../core/db';
 import { extractText } from '../ingestion/docConverter';
+import { overlaySynthesis, loadTrebuchetFont } from './pdf_overlay';
 // @ts-ignore
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
@@ -1319,9 +1320,9 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
 
     console.log(`[MemoireGenerator] Using template: ${templatePath} (${isClientTemplate ? 'cadre client' : 'mémoire GSS maître'})`);
 
-    // ── Sans cadre imposé : générer un mémoire complet via AO RNE personnalisé ──
+    // ── Sans cadre imposé : synthèse IA superposée sur AO RNE.pdf (overlay, design figé) ──
     if (!isClientTemplate) {
-      return this.generateFullMemoire(dossierId);
+      return this.generateSynthesisPdf(dossierId);
     }
 
     // 2. Analyse structurée du DCE (contexte unique de rédaction), avant toute manipulation du Word
@@ -2177,6 +2178,67 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
         mode: 'AO RNE intact + Synthèse personnalisée insérée (DCE + GSS)',
         client: clientName,
         texte_ajoute: String(generatedText.length) + ' caractères',
+      },
+    };
+  }
+
+  /**
+   * Génère le mémoire en SUPERPOSANT la synthèse IA sur AO RNE.pdf (design figé) : le texte est
+   * dessiné dans le cadre délimité par les balises « Contexte sur mesure début/fin » (pages 5–8),
+   * en 2 colonnes, sans déborder. Aucun reflux possible → la mise en page reste intacte. Sortie PDF.
+   */
+  public async generateSynthesisPdf(dossierId: string): Promise<{ filePath: string, generatedData: Record<string, string> }> {
+    console.log('[MemoireGenerator] ═══ Génération PDF (overlay synthèse sur AO RNE.pdf) ═══');
+
+    // 1. Analyse DCE + contexte GSS (mêmes sources que la génération docx).
+    const dceContext = await this.getDceContext(dossierId);
+    const analysisData = await this.analyzeDce(dceContext);
+    const analysisJson = JSON.stringify(analysisData, null, 2);
+    const clientName = analysisData?.clientName || 'le client';
+
+    const gssDocs = await this.getGssDocumentation();
+    let gssContext = '';
+    for (const cat of ['MANAGEMENT', 'INTERLOCUTEUR UNIQUE', 'MISE EN PLACE', 'VALEURS', 'SUIVI QUALITE ET CONTROLES']) {
+      if (gssDocs[cat]) gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 5000)}`;
+    }
+
+    // 2. Génération du texte : MODÉRÉ, réparti, SANS conclusion (s'affichera en 2 colonnes sur 4 pages).
+    const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige une "Synthèse de notre offre sur mesure" (environ 320 mots) qui s'affichera dans 4 encarts de présentation.
+- Basé UNIQUEMENT sur l'analyse du DCE et les atouts GSS.
+- Personnalise pour le client : nom, sites, enjeux, risques anticipés.
+- Mets en avant l'accompagnement GSS (interlocuteur unique, qualité, réactivité).
+- Rédige EXACTEMENT 4 paragraphes courts et autonomes, séparés par une ligne vide (un par idée).
+- AUCUNE liste à puces, aucun symbole, aucun markdown : uniquement du texte continu.
+- NE TERMINE PAS par une conclusion ni une phrase de synthèse finale : pas de paragraphe de conclusion.
+- Ton professionnel, rassurant et commercial.`;
+    const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}\n\nRédige le texte de la synthèse de notre offre sur mesure pour ce client.`;
+
+    const generatedText = await this.callOpenAI(
+      [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+      0.5, 'Génération Synthèse (PDF)', false,
+    );
+    if (!generatedText) throw new Error('Échec de la génération IA de la synthèse.');
+
+    // 3. Overlay sur AO RNE.pdf.
+    const pdfPath = path.join(this.templateDir, 'Mémoire technique', 'AO RNE.pdf');
+    if (!fs.existsSync(pdfPath)) throw new Error(`Template PDF introuvable: ${pdfPath}`);
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    const fontBytes = loadTrebuchetFont();
+    const { bytes, zonesUsed, linesDrawn, truncated } = await overlaySynthesis(pdfBuffer, generatedText, fontBytes);
+
+    // 4. Sauvegarde.
+    const outputFileName = `Mémoire technique GSS_${Date.now()}.pdf`;
+    const outputPath = path.join(this.responseDir, outputFileName);
+    fs.writeFileSync(outputPath, bytes);
+    console.log(`[MemoireGenerator] Synthèse superposée : ${generatedText.length} car. sur ${zonesUsed} zone(s), ${linesDrawn} ligne(s) dessinée(s)${truncated ? ', surplus tronqué' : ''} → ${outputPath}`);
+
+    return {
+      filePath: outputPath,
+      generatedData: {
+        mode: 'AO RNE.pdf + synthèse IA superposée (2 colonnes, design figé)',
+        client: clientName,
+        zones_remplies: `${zonesUsed}`,
+        texte_genere: `${generatedText.length} caractères`,
       },
     };
   }
