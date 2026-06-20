@@ -1,11 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+import { spawnSync } from 'child_process';
 import PizZip from 'pizzip';
 import OpenAI from 'openai';
 import { getSettings } from '../core/config';
 import { DB } from '../core/db';
 import { extractText } from '../ingestion/docConverter';
-import { overlaySynthesis, loadTrebuchetFont } from './pdf_overlay';
+import { overlaySynthesis, loadTrebuchetFont, measureZonesCapacity, RefReplacement, RefContext } from './pdf_overlay';
 // @ts-ignore
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
@@ -2199,18 +2200,29 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
     const gssDocs = await this.getGssDocumentation();
     let gssContext = '';
     for (const cat of ['MANAGEMENT', 'INTERLOCUTEUR UNIQUE', 'MISE EN PLACE', 'VALEURS', 'SUIVI QUALITE ET CONTROLES']) {
-      if (gssDocs[cat]) gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 5000)}`;
+      if (gssDocs[cat]) gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 7000)}`;
     }
 
-    // 2. Génération du texte : MODÉRÉ, réparti, SANS conclusion (s'affichera en 2 colonnes sur 4 pages).
-    const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige une "Synthèse de notre offre sur mesure" (environ 320 mots) qui s'affichera dans 4 encarts de présentation.
-- Basé UNIQUEMENT sur l'analyse du DCE et les atouts GSS.
-- Personnalise pour le client : nom, sites, enjeux, risques anticipés.
-- Mets en avant l'accompagnement GSS (interlocuteur unique, qualité, réactivité).
-- Rédige EXACTEMENT 4 paragraphes courts et autonomes, séparés par une ligne vide (un par idée).
-- AUCUNE liste à puces, aucun symbole, aucun markdown : uniquement du texte continu.
+    // 2. Mesurer la capacité des 4 cadres AVANT de générer, pour dimensionner le texte (remplir
+    //    presque entièrement sans coder en dur un nombre de mots).
+    const pdfPath = path.join(this.templateDir, 'Mémoire technique', 'AO RNE.pdf');
+    if (!fs.existsSync(pdfPath)) throw new Error(`Template PDF introuvable: ${pdfPath}`);
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    const fontBytes = loadTrebuchetFont();
+    const cap = await measureZonesCapacity(pdfBuffer, fontBytes);
+    const targetWords = Math.max(450, Math.round((cap.totalLines * cap.charsPerLine) / 6.5)); // ~6.5 car/mot
+    console.log(`[MemoireGenerator] Capacité des cadres : ${cap.zones} zone(s), ${cap.totalLines} ligne(s), ~${cap.charsPerLine} car/ligne → cible ~${targetWords} mots.`);
+
+    // 3. Génération du texte : étoffé (remplit les cadres), réparti en 4 blocs, SANS conclusion.
+    const nBlocks = Math.max(1, cap.zones);
+    const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige une "Synthèse de notre offre sur mesure" (environ ${targetWords} mots) qui s'affichera dans ${nBlocks} encarts de présentation, près du début des pages.
+- Basé UNIQUEMENT sur l'analyse du DCE et les atouts GSS fournis.
+- PERSONNALISE FORTEMENT pour ce client : cite explicitement son nom, ses sites, ses enjeux et les risques anticipés (issus de l'analyse), puis montre comment le dispositif GSS sur mesure y répond (interlocuteur unique, démarche qualité, réactivité, moyens humains et matériels adaptés).
+- Rédige EXACTEMENT ${nBlocks} paragraphes autonomes et ÉTOFFÉS (un par encart), séparés par une ligne vide ; chaque paragraphe doit être assez développé pour bien remplir son encart.
+- Répartis le volume de façon équilibrée entre les ${nBlocks} paragraphes (~${Math.round(targetWords / nBlocks)} mots chacun).
+- AUCUNE liste à puces, aucun symbole, aucun markdown, aucun titre : uniquement du texte continu rédigé.
 - NE TERMINE PAS par une conclusion ni une phrase de synthèse finale : pas de paragraphe de conclusion.
-- Ton professionnel, rassurant et commercial.`;
+- Ton professionnel, concret, rassurant et commercial.`;
     const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}\n\nRédige le texte de la synthèse de notre offre sur mesure pour ce client.`;
 
     const generatedText = await this.callOpenAI(
@@ -2219,18 +2231,41 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
     );
     if (!generatedText) throw new Error('Échec de la génération IA de la synthèse.');
 
-    // 3. Overlay sur AO RNE.pdf.
-    const pdfPath = path.join(this.templateDir, 'Mémoire technique', 'AO RNE.pdf');
-    if (!fs.existsSync(pdfPath)) throw new Error(`Template PDF introuvable: ${pdfPath}`);
-    const pdfBuffer = fs.readFileSync(pdfPath);
-    const fontBytes = loadTrebuchetFont();
-    const { bytes, zonesUsed, linesDrawn, truncated } = await overlaySynthesis(pdfBuffer, generatedText, fontBytes);
+    // 4. Personnalisation des références figées (ancien client/sites → DCE) par masque+redraw.
+    //    On ne touche QUE des occurrences bien délimitées (listes de sites, libellés « BASÉ À »),
+    //    jamais les phrases narratives ni la couverture (risque de rustine). Couleurs = corps gris.
+    const siteNames: string[] = (analysisData?.sites || [])
+      .map((s: any) => (s?.name || '').trim()).filter(Boolean);
+    const refCtx: RefContext = { sites: siteNames, client: clientName, marketRef: analysisData?.marketRef || '' };
+    const mainSite = siteNames[0] || clientName;
+    const replacements: RefReplacement[] = [
+      // p28 : « : Rouen, Caen, Lille » → liste des sites du marché
+      { match: /:\s*Rouen\s*,\s*Caen\s*,\s*Lille/i, build: (c) => `: ${c.sites.slice(0, 3).join(', ') || c.client}` },
+      // p34 : « : Rouen Stade Diochon » → 1er site du marché
+      { match: /:\s*Rouen\s+Stade\s+Diochon/i, build: () => `: ${mainSite}` },
+      // p107-109 : « BASÉ À: ROUEN » → ville/site principal (majuscules). On reconstruit l'item
+      // entier (il est redessiné depuis son origine), donc on garde le préfixe « BASÉ ».
+      { match: /BAS\w*\s*À\s*:\s*ROUEN/i, build: () => `BASÉ À: ${mainSite.toUpperCase()}` },
+    ];
 
-    // 4. Sauvegarde.
+    // 5. Overlay sur AO RNE.pdf (réutilise le buffer/police déjà chargés) + remplacements de références.
+    //    Les passages SURLIGNÉS sont traités séparément, en Python (voir étape 6).
+    const { bytes, zonesUsed, linesDrawn, truncated, refsReplaced } =
+      await overlaySynthesis(pdfBuffer, generatedText, fontBytes, replacements, refCtx);
+
     const outputFileName = `Mémoire technique GSS_${Date.now()}.pdf`;
     const outputPath = path.join(this.responseDir, outputFileName);
-    fs.writeFileSync(outputPath, bytes);
-    console.log(`[MemoireGenerator] Synthèse superposée : ${generatedText.length} car. sur ${zonesUsed} zone(s), ${linesDrawn} ligne(s) dessinée(s)${truncated ? ', surplus tronqué' : ''} → ${outputPath}`);
+
+    // 6. Réécriture des passages SURLIGNÉS via Python (PyMuPDF → GPT → PyMuPDF) : PyMuPDF détecte les
+    //    surlignages jaunes posés par l'utilisateur DANS le PDF + extrait le texte, GPT réécrit chaque
+    //    passage adapté au client du DCE, puis PyMuPDF SUPPRIME l'ancien texte et insère le nouveau à
+    //    la même taille. On écrit d'abord le PDF de synthèse (intermédiaire), puis Python produit le final.
+    const interimPath = outputPath.replace(/\.pdf$/, '.interim.pdf');
+    fs.writeFileSync(interimPath, bytes);
+    const hl = this.rewriteHighlightsPython(interimPath, outputPath, analysisData, gssContext, siteNames);
+    try { fs.unlinkSync(interimPath); } catch { /* ignore */ }
+
+    console.log(`[MemoireGenerator] Synthèse superposée : ${generatedText.length} car. sur ${zonesUsed} zone(s), ${linesDrawn} ligne(s) dessinée(s)${truncated ? ', surplus tronqué' : ''}, ${refsReplaced} référence(s) client/sites + ${hl.filled}/${hl.regions} passage(s) surligné(s) réécrit(s) [Python] → ${outputPath}`);
 
     return {
       filePath: outputPath,
@@ -2238,9 +2273,64 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
         mode: 'AO RNE.pdf + synthèse IA superposée (2 colonnes, design figé)',
         client: clientName,
         zones_remplies: `${zonesUsed}`,
+        passages_surlignes: `${hl.filled}/${hl.regions}`,
         texte_genere: `${generatedText.length} caractères`,
       },
     };
+  }
+
+  /**
+   * Réécriture des passages SURLIGNÉS via le script Python (PyMuPDF → GPT → PyMuPDF). PyMuPDF détecte
+   * les surlignages jaunes posés par l'utilisateur DANS le PDF et extrait le texte, GPT réécrit chaque
+   * passage adapté au client du DCE, puis PyMuPDF supprime l'ancien texte et insère le nouveau à la
+   * même taille. Le contexte client (analyse DCE + atouts GSS) est passé en JSON ; la clé OpenAI et le
+   * modèle via l'environnement. En cas d'échec, on recopie le PDF intermédiaire (génération non bloquée).
+   */
+  private rewriteHighlightsPython(
+    inputPdf: string, outputPdf: string, analysisData: any, gssContext: string, sites: string[],
+  ): { regions: number; filled: number } {
+    const baseDir = path.resolve(__dirname, '../../../../');
+    const scriptPath = path.resolve(baseDir, 'gss-ao/backend/python/rewrite_highlights.py');
+    const fallback = () => { try { fs.copyFileSync(inputPdf, outputPdf); } catch { /* ignore */ } return { regions: 0, filled: 0 }; };
+    if (!fs.existsSync(scriptPath)) {
+      console.warn(`[MemoireGenerator] Script Python introuvable: ${scriptPath} → surlignages non traités.`);
+      return fallback();
+    }
+
+    // Contexte transmis au script (le client/secteur/enjeux servent à personnaliser la réécriture).
+    const ctx = {
+      clientName: analysisData?.clientName || 'le client',
+      sites: (sites || []).filter(Boolean),
+      analysis: analysisData ?? {},
+      gssContext: (gssContext || '').slice(0, 8000),
+    };
+    const ctxPath = path.join(this.responseDir, `_hlctx_${Date.now()}.json`);
+    fs.writeFileSync(ctxPath, JSON.stringify(ctx), 'utf8');
+
+    const pythonBin = process.env.PYTHON_BIN || 'py';
+    const proc = spawnSync(
+      pythonBin,
+      [scriptPath, '--input', inputPdf, '--output', outputPdf, '--context', ctxPath],
+      {
+        env: { ...process.env, OPENAI_API_KEY: getSettings().openaiApiKey, MEMOIRE_MODEL: MEMOIRE_MODEL },
+        encoding: 'utf8',
+        timeout: 300000,
+      },
+    );
+    try { fs.unlinkSync(ctxPath); } catch { /* ignore */ }
+
+    if (proc.stderr) proc.stderr.split('\n').filter(Boolean).forEach((l) => console.log(`[py] ${l}`));
+    if (proc.status !== 0 || !fs.existsSync(outputPdf)) {
+      console.warn(`[MemoireGenerator] Script Python échec (status=${proc.status}, err=${proc.error?.message || ''}) → repli sans réécriture.`);
+      return fallback();
+    }
+    try {
+      const line = (proc.stdout || '').trim().split('\n').filter(Boolean).pop() || '{}';
+      const r = JSON.parse(line);
+      return { regions: Number(r.regions) || 0, filled: Number(r.filled) || 0 };
+    } catch {
+      return { regions: 0, filled: 0 };
+    }
   }
 
   /** Récupère client / titre / référence pour la page de garde (base puis analyse DCE). */
