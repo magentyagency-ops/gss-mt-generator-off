@@ -241,7 +241,7 @@ MD_RE = re.compile(r"(^[\s>]*[-*#]\s)|[`*#]", re.MULTILINE)
 
 # Marge de première ligne (alinéa) et facteur de remplissage : on vise un peu MOINS que la capacité
 # brute du cadre pour que la réécriture tienne à la TAILLE D'ORIGINE (sinon insert_fit réduit la police).
-FIRST_LINE_INDENT = "    "  # alinéa (espaces normaux : largeur fiable quelle que soit la fonte)
+FIRST_LINE_INDENT = "       "  # alinéa prononcé (espaces normaux : largeur fiable quelle que soit la fonte)
 FILL_FACTOR = 0.88
 
 
@@ -303,7 +303,7 @@ def rewrite_batch(client, model, passages, budgets, texts, ctx):
     if not passages:
         return []
     messages = _build_messages(passages, budgets, texts, ctx)
-    backoffs = [15, 30, 45]
+    backoffs = [8, 16]  # courts : on préfère retomber sur le texte d'origine que faire exploser le timeout
     for attempt in range(len(backoffs) + 1):
         try:
             resp = client.chat.completions.create(
@@ -350,6 +350,13 @@ def rewrite_passages(regions, ctx):
         return [r["text"].strip() for r in regions]
     model = os.environ.get("MEMOIRE_MODEL", "gpt-4o-mini")
 
+    # Budget de temps global : le page-par-page fait beaucoup d'appels séquentiels ; avec un compte à TPM
+    # faible (429 + backoff) on risquait de dépasser le timeout de 300s du backend → process tué → AUCUNE
+    # sortie → fallback avec TOUT le surlignage. On borne donc le temps passé en GPT : au-delà, les passages
+    # restants gardent le texte d'origine et on enchaîne sur la rédaction (le jaune part toujours).
+    time_budget = float(os.environ.get("REWRITE_TIME_BUDGET", "200"))
+    start = time.monotonic()
+
     budgets = [passage_budget(r) for r in regions]
     out = [None] * len(regions)
     failures = 0
@@ -360,6 +367,10 @@ def rewrite_passages(regions, ctx):
         by_page.setdefault(r["page"], []).append(i)
 
     for pno, idxs in by_page.items():
+        if time.monotonic() - start > time_budget:
+            for gi in idxs:
+                out[gi] = regions[gi]["text"].strip()  # plus de temps : texte d'origine, jaune retiré
+            continue
         rewrites = rewrite_batch(
             client, model, idxs, [budgets[i] for i in idxs], [regions[i]["text"] for i in idxs], ctx,
         )
@@ -370,7 +381,7 @@ def rewrite_passages(regions, ctx):
             txt = txt.strip()
             # Check + ré-essai ciblé du seul passage fautif (×2), puis fallback texte d'origine.
             for _ in range(2):
-                if is_valid_rewrite(txt, regions[gi]["text"], budgets[gi]):
+                if is_valid_rewrite(txt, regions[gi]["text"], budgets[gi]) or time.monotonic() - start > time_budget:
                     break
                 retry = rewrite_batch(client, model, [gi], [budgets[gi]], [regions[gi]["text"]], ctx)
                 txt = ((retry[0] if retry else "") or "").strip()

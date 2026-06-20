@@ -1,4 +1,7 @@
-# Dépendances du script de réécriture des zones surlignées (rewrite_highlights.py)
+# Dépendances des scripts Python :
+#  - rewrite_highlights.py : réécriture des zones surlignées
+#  - fill_image_zones.py    : génération + remplissage des cadres « Zone d'image »
 # Installer avec :  py -m pip install -r requirements.txt
 PyMuPDF>=1.24
 openai>=1.40
+Pillow>=10.0   # recadrage « cover » des images générées (fill_image_zones.py)

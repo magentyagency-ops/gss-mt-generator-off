@@ -14,6 +14,11 @@ import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 // pour gpt-4o sur ce compte) → génération rapide sans throttling. Surchargeable par env.
 const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-4o-mini';
 
+// Modèle de génération d'IMAGES pour remplir les cadres « Zone d'image » du template.
+// Désactivable via GENERATE_IMAGES=false (étape coûteuse, non bloquante).
+const IMAGE_MODEL = process.env.IMAGE_MODEL || 'gpt-image-1';
+const IMAGES_ENABLED = process.env.GENERATE_IMAGES !== 'false';
+
 // ─── DOM Helpers ───
 
 function findLocalNameChild(node: any, name: string): any {
@@ -2265,7 +2270,13 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
     const hl = this.rewriteHighlightsPython(interimPath, outputPath, analysisData, gssContext, siteNames);
     try { fs.unlinkSync(interimPath); } catch { /* ignore */ }
 
-    console.log(`[MemoireGenerator] Synthèse superposée : ${generatedText.length} car. sur ${zonesUsed} zone(s), ${linesDrawn} ligne(s) dessinée(s)${truncated ? ', surplus tronqué' : ''}, ${refsReplaced} référence(s) client/sites + ${hl.filled}/${hl.regions} passage(s) surligné(s) réécrit(s) [Python] → ${outputPath}`);
+    // 7. Remplissage des cadres « Zone d'image » par des images générées (OpenAI Images), fondées sur
+    //    le contexte texte de chaque page. Étape non bloquante (échec → cadres conservés).
+    const img = IMAGES_ENABLED
+      ? this.fillImageZonesPython(outputPath, analysisData, gssContext, siteNames)
+      : { zones: 0, filled: 0 };
+
+    console.log(`[MemoireGenerator] Synthèse superposée : ${generatedText.length} car. sur ${zonesUsed} zone(s), ${linesDrawn} ligne(s) dessinée(s)${truncated ? ', surplus tronqué' : ''}, ${refsReplaced} référence(s) client/sites + ${hl.filled}/${hl.regions} passage(s) surligné(s) réécrit(s) + ${img.filled}/${img.zones} cadre(s) image rempli(s) [Python] → ${outputPath}`);
 
     return {
       filePath: outputPath,
@@ -2274,6 +2285,7 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
         client: clientName,
         zones_remplies: `${zonesUsed}`,
         passages_surlignes: `${hl.filled}/${hl.regions}`,
+        cadres_image: `${img.filled}/${img.zones}`,
         texte_genere: `${generatedText.length} caractères`,
       },
     };
@@ -2314,7 +2326,9 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
       {
         env: { ...process.env, OPENAI_API_KEY: getSettings().openaiApiKey, MEMOIRE_MODEL: MEMOIRE_MODEL },
         encoding: 'utf8',
-        timeout: 300000,
+        // 600s : marge large pour le page-par-page. Le script s'auto-borne en réalité (REWRITE_TIME_BUDGET)
+        // pour toujours finir et retirer le surlignage même si GPT est lent ; ce timeout n'est qu'un garde-fou.
+        timeout: 600000,
       },
     );
     try { fs.unlinkSync(ctxPath); } catch { /* ignore */ }
@@ -2330,6 +2344,63 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
       return { regions: Number(r.regions) || 0, filled: Number(r.filled) || 0 };
     } catch {
       return { regions: 0, filled: 0 };
+    }
+  }
+
+  /**
+   * Remplit les cadres « Zone d'image » du PDF par des images GÉNÉRÉES (OpenAI Images) via le script
+   * Python (PyMuPDF → OpenAI Images → PyMuPDF). PyMuPDF repère chaque cadre blanc et le contexte texte
+   * de la page, OpenAI génère une image photoréaliste adaptée au thème/au client, puis PyMuPDF dessine
+   * l'image pour remplir le cadre. Opère SUR PLACE (input = output, via un fichier temporaire). Étape
+   * non bloquante : en cas d'échec, le PDF d'origine est conservé (cadres intacts).
+   */
+  private fillImageZonesPython(
+    pdfPath: string, analysisData: any, gssContext: string, sites: string[],
+  ): { zones: number; filled: number } {
+    const baseDir = path.resolve(__dirname, '../../../../');
+    const scriptPath = path.resolve(baseDir, 'gss-ao/backend/python/fill_image_zones.py');
+    if (!fs.existsSync(scriptPath)) {
+      console.warn(`[MemoireGenerator] Script Python introuvable: ${scriptPath} → cadres image non remplis.`);
+      return { zones: 0, filled: 0 };
+    }
+
+    const ctx = {
+      clientName: analysisData?.clientName || 'le client',
+      sites: (sites || []).filter(Boolean),
+      analysis: analysisData ?? {},
+      gssContext: (gssContext || '').slice(0, 8000),
+    };
+    const ctxPath = path.join(this.responseDir, `_imgctx_${Date.now()}.json`);
+    fs.writeFileSync(ctxPath, JSON.stringify(ctx), 'utf8');
+    const tmpOut = pdfPath.replace(/\.pdf$/, '.img.pdf');
+
+    const pythonBin = process.env.PYTHON_BIN || 'py';
+    const proc = spawnSync(
+      pythonBin,
+      [scriptPath, '--input', pdfPath, '--output', tmpOut, '--context', ctxPath],
+      {
+        env: { ...process.env, OPENAI_API_KEY: getSettings().openaiApiKey, IMAGE_MODEL },
+        encoding: 'utf8',
+        timeout: 900000, // jusqu'à 15 min : ~11 images générées en parallèle, avec backoff sur 429
+      },
+    );
+    try { fs.unlinkSync(ctxPath); } catch { /* ignore */ }
+
+    if (proc.stderr) proc.stderr.split('\n').filter(Boolean).forEach((l) => console.log(`[py-img] ${l}`));
+    if (proc.status !== 0 || !fs.existsSync(tmpOut)) {
+      console.warn(`[MemoireGenerator] Script image échec (status=${proc.status}, err=${proc.error?.message || ''}) → cadres conservés.`);
+      try { fs.unlinkSync(tmpOut); } catch { /* ignore */ }
+      return { zones: 0, filled: 0 };
+    }
+    // Remplace le PDF par la version avec images (in-place).
+    try { fs.renameSync(tmpOut, pdfPath); } catch { try { fs.copyFileSync(tmpOut, pdfPath); fs.unlinkSync(tmpOut); } catch { /* ignore */ } }
+
+    try {
+      const line = (proc.stdout || '').trim().split('\n').filter(Boolean).pop() || '{}';
+      const r = JSON.parse(line);
+      return { zones: Number(r.zones) || 0, filled: Number(r.filled) || 0 };
+    } catch {
+      return { zones: 0, filled: 0 };
     }
   }
 
