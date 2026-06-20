@@ -2215,16 +2215,22 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
     const pdfBuffer = fs.readFileSync(pdfPath);
     const fontBytes = loadTrebuchetFont();
     const cap = await measureZonesCapacity(pdfBuffer, fontBytes);
-    const targetWords = Math.max(450, Math.round((cap.totalLines * cap.charsPerLine) / 6.5)); // ~6.5 car/mot
-    console.log(`[MemoireGenerator] Capacité des cadres : ${cap.zones} zone(s), ${cap.totalLines} ligne(s), ~${cap.charsPerLine} car/ligne → cible ~${targetWords} mots.`);
+    // Léger SUR-remplissage (×1.15) : on génère un peu plus que la capacité pour que CHAQUE page se
+    // remplisse jusqu'en bas (le surplus éventuel est tronqué zone par zone par l'overlay).
+    const targetWords = Math.max(700, Math.round((cap.totalLines * cap.charsPerLine) / 6.5 * 1.15)); // ~6.5 car/mot
+    // Plusieurs paragraphes par page : gpt-4o-mini tient mieux des paragraphes courts nombreux que de
+    // gros blocs uniques → volume réellement produit bien plus proche de la cible → pages bien remplies.
+    const nZones = Math.max(1, cap.zones);
+    const paraPerZone = 3;
+    const nPara = nZones * paraPerZone;
+    console.log(`[MemoireGenerator] Capacité des cadres : ${cap.zones} zone(s), ${cap.totalLines} ligne(s), ~${cap.charsPerLine} car/ligne → cible ~${targetWords} mots / ${nPara} paragraphes.`);
 
-    // 3. Génération du texte : étoffé (remplit les cadres), réparti en 4 blocs, SANS conclusion.
-    const nBlocks = Math.max(1, cap.zones);
-    const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige une "Synthèse de notre offre sur mesure" (environ ${targetWords} mots) qui s'affichera dans ${nBlocks} encarts de présentation, près du début des pages.
+    // 3. Génération du texte : étoffé pour REMPLIR entièrement chaque page de synthèse, SANS conclusion.
+    const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige une "Synthèse de notre offre sur mesure" (environ ${targetWords} mots) qui s'affichera sur ${nZones} pages de présentation, à remplir ENTIÈREMENT.
 - Basé UNIQUEMENT sur l'analyse du DCE et les atouts GSS fournis.
 - PERSONNALISE FORTEMENT pour ce client : cite explicitement son nom, ses sites, ses enjeux et les risques anticipés (issus de l'analyse), puis montre comment le dispositif GSS sur mesure y répond (interlocuteur unique, démarche qualité, réactivité, moyens humains et matériels adaptés).
-- Rédige EXACTEMENT ${nBlocks} paragraphes autonomes et ÉTOFFÉS (un par encart), séparés par une ligne vide ; chaque paragraphe doit être assez développé pour bien remplir son encart.
-- Répartis le volume de façon équilibrée entre les ${nBlocks} paragraphes (~${Math.round(targetWords / nBlocks)} mots chacun).
+- Rédige ${nPara} paragraphes autonomes et bien développés (plusieurs par page), séparés par une ligne vide, chacun d'environ ${Math.round(targetWords / nPara)} mots. Chaque page doit être REMPLIE de haut en bas, sans espace vide.
+- Couvre des angles VARIÉS et complémentaires (compréhension du contexte, dispositif humain, encadrement et interlocuteur unique, moyens matériels et technologiques, démarche qualité et contrôles, réactivité et gestion des imprévus, transition/mise en place) pour produire assez de matière SANS te répéter.
 - AUCUNE liste à puces, aucun symbole, aucun markdown, aucun titre : uniquement du texte continu rédigé.
 - NE TERMINE PAS par une conclusion ni une phrase de synthèse finale : pas de paragraphe de conclusion.
 - Ton professionnel, concret, rassurant et commercial.`;
