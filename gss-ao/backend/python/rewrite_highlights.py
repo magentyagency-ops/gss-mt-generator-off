@@ -223,6 +223,21 @@ def merge_overlapping_regions(regions):
     return out
 
 
+# ─── Placeholders (<entreprise> → nom du donneur d'ordre du DCE) ───
+
+# Jeton placeholder surligné en jaune dans le template (ex. « <entreprise> », « < entrepris > »).
+# On accepte la troncature « entrepris » + variantes d'espaces/casse.
+PLACEHOLDER_RE = re.compile(r"<\s*entrepris\w*\s*>", re.IGNORECASE)
+
+
+def fill_placeholders(text, ctx):
+    """Remplace les jetons <entreprise> par le nom EXACT du donneur d'ordre extrait du DCE
+    (ctx.clientName). Renvoie (texte substitué, True si au moins un jeton a été remplacé)."""
+    name = (ctx.get("clientName") or "").strip() or "le client"
+    new_text, n = PLACEHOLDER_RE.subn(name, text)
+    return new_text, n > 0
+
+
 # ─── Réécriture GPT ───
 
 def char_budget(r):
@@ -334,12 +349,25 @@ def rewrite_passages(regions, ctx):
     puis on retombe sur le texte d'origine. Renvoie une liste alignée 1:1 avec `regions`."""
     if not regions:
         return []
+    out = [None] * len(regions)
+
+    # Placeholders <entreprise> : remplacement DIRECT par le nom du donneur d'ordre du DCE (pas de GPT).
+    # On le fait AVANT toute logique GPT pour que ces zones soient traitées même sans clé OpenAI.
+    placeholder_idx = set()
+    for i, r in enumerate(regions):
+        new_text, hit = fill_placeholders(r["text"], ctx)
+        if hit:
+            out[i] = new_text.strip()
+            placeholder_idx.add(i)
+    if placeholder_idx:
+        print(f"[rewrite_highlights] {len(placeholder_idx)} placeholder(s) <entreprise> remplacé(s) par \"{(ctx.get('clientName') or 'le client').strip()}\".", file=sys.stderr)
+
     # IMPORTANT : un échec GPT (clé absente/invalide, réseau…) ne doit JAMAIS empêcher la suppression du
     # surlignage. On retombe alors sur le texte d'origine, qui sera quand même réinséré → le jaune part.
     api_key = os.environ.get("OPENAI_API_KEY") or ""
     if not api_key.strip():
         print("[rewrite_highlights] OPENAI_API_KEY absente → texte d'origine conservé, surlignage retiré.", file=sys.stderr)
-        return [r["text"].strip() for r in regions]
+        return [out[i] if out[i] is not None else r["text"].strip() for i, r in enumerate(regions)]
     try:
         from openai import OpenAI
         # max_retries=0 + timeout court : en cas de panne réseau l'échec est IMMÉDIAT (pas de hang qui
@@ -347,7 +375,7 @@ def rewrite_passages(regions, ctx):
         client = OpenAI(api_key=api_key, max_retries=0, timeout=30)
     except Exception as e:  # noqa: BLE001
         print(f"[rewrite_highlights] OpenAI indisponible ({e}) → texte d'origine conservé, surlignage retiré.", file=sys.stderr)
-        return [r["text"].strip() for r in regions]
+        return [out[i] if out[i] is not None else r["text"].strip() for i, r in enumerate(regions)]
     model = os.environ.get("MEMOIRE_MODEL", "gpt-4o-mini")
 
     # Budget de temps global : le page-par-page fait beaucoup d'appels séquentiels ; avec un compte à TPM
@@ -358,12 +386,14 @@ def rewrite_passages(regions, ctx):
     start = time.monotonic()
 
     budgets = [passage_budget(r) for r in regions]
-    out = [None] * len(regions)
     failures = 0
 
-    # Groupement par page en conservant l'index global d'origine.
+    # Groupement par page en conservant l'index global d'origine. Les placeholders déjà résolus
+    # (out[i] renseigné) sont exclus : pas de réécriture GPT pour eux.
     by_page = {}
     for i, r in enumerate(regions):
+        if i in placeholder_idx:
+            continue
         by_page.setdefault(r["page"], []).append(i)
 
     for pno, idxs in by_page.items():
