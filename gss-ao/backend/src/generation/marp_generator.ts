@@ -57,7 +57,7 @@ function splitIntoSlideChunks(text: string): string[] {
 export interface AssembleChapter {
   key: string;
   title: string;
-  sections: { title: string; text: string }[];
+  sections: { title: string; text: string; id?: string; illustration?: string }[];
 }
 
 export interface CoverInfo {
@@ -106,6 +106,12 @@ export class MarpGenerator {
 
     if (fs.existsSync(logoSrc)) {
       fs.copyFileSync(logoSrc, logoDst);
+    }
+
+    const mediaSrc = path.join(MARP_ASSETS_DIR, 'media');
+    const mediaDst = path.join(workDir, 'media');
+    if (fs.existsSync(mediaSrc)) {
+      fs.cpSync(mediaSrc, mediaDst, { recursive: true });
     }
 
     // Render to PDF via marp-cli
@@ -257,9 +263,13 @@ export class MarpGenerator {
         const cleanedText = cleanTextForMarp(section.text);
         const chunks = splitIntoSlideChunks(cleanedText);
 
-        for (const chunk of chunks) {
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i];
           lines.push('---');
           lines.push(`<!-- header: "${headerTitle}" -->`);
+          if (i === 0 && section.illustration) {
+             lines.push(`![bg right:40% 80%](media/${section.illustration})`);
+          }
           lines.push('');
           lines.push(chunk);
           lines.push('');

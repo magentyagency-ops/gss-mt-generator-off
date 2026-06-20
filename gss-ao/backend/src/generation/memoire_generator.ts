@@ -941,6 +941,19 @@ const AI_SECTIONS_B: Array<{ id: string; chapter: string; title: string }> = [
   { id: 'b_amelioration', chapter: 'IV', title: 'Amélioration continue et bilan de prestation' },
 ];
 
+const ILLUSTRATIONS_MAP: Record<string, string> = {
+  'b_presentation': 'illu_encadrement.png',
+  'b_engagement_rse': 'illu_ecologie.png',
+  'b_moyens_humains': 'illu_formation_cqp.png',
+  'b_encadrement': 'illu_encadrement.png',
+  'b_recrutement_formation': 'illu_formations_internes.png',
+  'b_tenues_epi': 'illu_tenues.png',
+  'b_moyens_materiels': 'illu_communication.png',
+  'b_rondes': 'illu_main_courante.png',
+  'b_controle_acces': 'illu_moyens_acces.png',
+  'b_organisation': 'illu_vehicules.jpeg',
+};
+
 const CHAPTER_ORDER_B = ['I', 'II', 'III', 'IV'];
 
 // ─── Mapping Documentation GSS → sections du mémoire ───
@@ -1122,7 +1135,13 @@ export class MemoireGenerator {
         }
       }
     };
-    for (const dceDir of dceDirs) await scanDir(dceDir);
+    for (const dceDir of dceDirs) {
+      const initialPiecesCount = pieces.length;
+      await scanDir(dceDir);
+      if (pieces.length > initialPiecesCount) {
+        break; // On a trouvé des fichiers bruts dans ce dossier, on ignore les dossiers de fallback
+      }
+    }
 
     if (pieces.length === 0) {
       throw new Error('[MemoireGenerator] Aucun contenu DCE trouvé. Vérifiez que les fichiers du DCE sont bien présents.');
@@ -2469,7 +2488,12 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
       title: CHAPTER_TITLES_B[ch],
       sections: AI_SECTIONS_B
         .filter((s) => s.chapter === ch && sectionsMap[s.id]?.trim())
-        .map((s) => ({ title: s.title, text: sectionsMap[s.id] })),
+        .map((s) => ({ 
+          title: s.title, 
+          text: sectionsMap[s.id], 
+          id: s.id, 
+          illustration: ILLUSTRATIONS_MAP[s.id] 
+        })),
     }));
 
     if (chapters.every((c) => c.sections.length === 0)) {
