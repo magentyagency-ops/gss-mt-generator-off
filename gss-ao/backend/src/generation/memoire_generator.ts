@@ -1,3 +1,4 @@
+import { MarpGenerator } from './marp_generator';
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
@@ -1277,11 +1278,15 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     console.log(`[MemoireGenerator] Personnalisation client: ${count} paragraphe(s) mis à jour → "${clientName}".`);
   }
 
-  public async generate(dossierId: string): Promise<{ filePath: string, generatedData: Record<string, string> }> {
+  public async generate(
+    dossierId: string,
+    onProgress?: (progress: number, message: string, status?: string) => void
+  ): Promise<{ filePath: string, generatedData: Record<string, string> }> {
     const settings = getSettings();
     const baseDir = path.resolve(__dirname, '../../../../');
     const uploadedDceDir = path.resolve(baseDir, `gss-ao/data/output/dce_${dossierId}`);
 
+    if (onProgress) onProgress(10, 'Recherche du template...');
     // 1. Find template. isClientTemplate=true → cadre imposé par l'acheteur (on remplit tel quel).
     // isClientTemplate=false → mémoire GSS maître réutilisé (on adapte d'abord client/sites).
     let templatePath: string | null = null;
@@ -1326,9 +1331,9 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
 
     console.log(`[MemoireGenerator] Using template: ${templatePath} (${isClientTemplate ? 'cadre client' : 'mémoire GSS maître'})`);
 
-    // ── Sans cadre imposé : synthèse IA superposée sur AO RNE.pdf (overlay, design figé) ──
+    // ── Sans cadre imposé : génération du mémoire complet via le template Marp ──
     if (!isClientTemplate) {
-      return this.generateSynthesisPdf(dossierId);
+      return this.generateFullMarpPdf(dossierId, onProgress);
     }
 
     // 2. Analyse structurée du DCE (contexte unique de rédaction), avant toute manipulation du Word
@@ -2189,120 +2194,68 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
   }
 
   /**
-   * Génère le mémoire en SUPERPOSANT la synthèse IA sur AO RNE.pdf (design figé) : le texte est
-   * dessiné dans le cadre délimité par les balises « Contexte sur mesure début/fin » (pages 5–8),
-   * en 2 colonnes, sans déborder. Aucun reflux possible → la mise en page reste intacte. Sortie PDF.
+   * Génère le mémoire COMPLET en utilisant le nouveau template Marp.
+   * L'IA génère automatiquement les 19 sections définies dans AI_SECTIONS_B,
+   * en utilisant le contexte DCE et les documents RAG correspondants, puis compile le PDF.
    */
-  public async generateSynthesisPdf(dossierId: string): Promise<{ filePath: string, generatedData: Record<string, string> }> {
-    console.log('[MemoireGenerator] ═══ Génération PDF (overlay synthèse sur AO RNE.pdf) ═══');
+  public async generateFullMarpPdf(
+    dossierId: string,
+    onProgress?: (progress: number, message: string, status?: string) => void
+  ): Promise<{ filePath: string, generatedData: Record<string, string> }> {
+    console.log('[MemoireGenerator] ═══ Génération PDF (Marp Complet) ═══');
 
-    // 1. Analyse DCE + contexte GSS (mêmes sources que la génération docx).
+    if (onProgress) onProgress(10, 'Analyse du DCE et lecture du contexte...');
+
     const dceContext = await this.getDceContext(dossierId);
     const analysisData = await this.analyzeDce(dceContext);
     const analysisJson = JSON.stringify(analysisData, null, 2);
     const clientName = analysisData?.clientName || 'le client';
 
     const gssDocs = await this.getGssDocumentation();
-    let gssContext = '';
-    for (const cat of ['MANAGEMENT', 'INTERLOCUTEUR UNIQUE', 'MISE EN PLACE', 'VALEURS', 'SUIVI QUALITE ET CONTROLES']) {
-      if (gssDocs[cat]) gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 7000)}`;
+    const availableCategories = Object.keys(gssDocs);
+
+    const sectionsMap: Record<string, string> = {};
+    const totalSections = AI_SECTIONS_B.length;
+    let completed = 0;
+
+    for (let i = 0; i < totalSections; i++) {
+      const section = AI_SECTIONS_B[i];
+      if (onProgress) {
+        onProgress(15 + Math.round((completed / totalSections) * 70), `Génération section ${i + 1}/${totalSections}: ${section.title}...`);
+      }
+      
+      const matchedCats = this.matchGssCategories(section.title, availableCategories);
+      let gssContext = '';
+      for (const cat of matchedCats) {
+         gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 4000)}`;
+      }
+      if (!gssContext) {
+        // Fallback si pas de correspondance
+        for (const cat of ['MANAGEMENT', 'INTERLOCUTEUR UNIQUE', 'MISE EN PLACE', 'VALEURS', 'SUIVI QUALITE ET CONTROLES']) {
+          if (gssDocs[cat]) gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 3000)}`;
+        }
+      }
+
+      const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige la partie du mémoire technique intitulée "${section.title}" pour ce marché.
+- Rédige un contenu percutant, commercial, concret et technique.
+- Base-toi UNIQUEMENT sur l'analyse du DCE et les atouts GSS fournis ci-dessous.
+- NE METS PAS le titre principal au début de ta réponse (le titre "${section.title}" sera ajouté automatiquement).
+- Structure ton texte avec de courts paragraphes clairs, et si pertinent, de petites listes à puces.
+- Personnalise FORTEMENT pour le client ${clientName}.
+- Ne rédige QUE le contenu de cette section, SANS introduction globale SANS conclusion générale, et SANS salutations.`;
+
+      const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}\n\nRédige le contenu de cette partie de manière experte.`;
+
+      const text = await this.callOpenAI(
+        [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+        0.5, `Génération ${section.id}`, false
+      );
+      sectionsMap[section.id] = text || 'Contenu non généré.';
+      completed++;
     }
 
-    // 2. Mesurer la capacité des 4 cadres AVANT de générer, pour dimensionner le texte (remplir
-    //    presque entièrement sans coder en dur un nombre de mots).
-    const pdfPath = path.join(this.templateDir, 'Mémoire technique', 'AO RNE.pdf');
-    if (!fs.existsSync(pdfPath)) throw new Error(`Template PDF introuvable: ${pdfPath}`);
-    const pdfBuffer = fs.readFileSync(pdfPath);
-    const fontBytes = loadTrebuchetFont();
-    const cap = await measureZonesCapacity(pdfBuffer, fontBytes);
-    // Léger SUR-remplissage (×1.15) : on génère un peu plus que la capacité pour que CHAQUE page se
-    // remplisse jusqu'en bas (le surplus éventuel est tronqué zone par zone par l'overlay).
-    const targetWords = Math.max(700, Math.round((cap.totalLines * cap.charsPerLine) / 6.5 * 1.15)); // ~6.5 car/mot
-    // Plusieurs paragraphes par page : gpt-4o-mini tient mieux des paragraphes courts nombreux que de
-    // gros blocs uniques → volume réellement produit bien plus proche de la cible → pages bien remplies.
-    const nZones = Math.max(1, cap.zones);
-    const paraPerZone = 3;
-    const nPara = nZones * paraPerZone;
-    console.log(`[MemoireGenerator] Capacité des cadres : ${cap.zones} zone(s), ${cap.totalLines} ligne(s), ~${cap.charsPerLine} car/ligne → cible ~${targetWords} mots / ${nPara} paragraphes.`);
-
-    // 3. Génération du texte : étoffé pour REMPLIR entièrement chaque page de synthèse, SANS conclusion.
-    const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige une "Synthèse de notre offre sur mesure" (environ ${targetWords} mots) qui s'affichera sur ${nZones} pages de présentation, à remplir ENTIÈREMENT.
-- Basé UNIQUEMENT sur l'analyse du DCE et les atouts GSS fournis.
-- PERSONNALISE FORTEMENT pour ce client : cite explicitement son nom, ses sites, ses enjeux et les risques anticipés (issus de l'analyse), puis montre comment le dispositif GSS sur mesure y répond (interlocuteur unique, démarche qualité, réactivité, moyens humains et matériels adaptés).
-- Rédige ${nPara} paragraphes autonomes et bien développés (plusieurs par page), séparés par une ligne vide, chacun d'environ ${Math.round(targetWords / nPara)} mots. Chaque page doit être REMPLIE de haut en bas, sans espace vide.
-- Couvre des angles VARIÉS et complémentaires (compréhension du contexte, dispositif humain, encadrement et interlocuteur unique, moyens matériels et technologiques, démarche qualité et contrôles, réactivité et gestion des imprévus, transition/mise en place) pour produire assez de matière SANS te répéter.
-- AUCUNE liste à puces, aucun symbole, aucun markdown, aucun titre : uniquement du texte continu rédigé.
-- NE TERMINE PAS par une conclusion ni une phrase de synthèse finale : pas de paragraphe de conclusion.
-- Ton professionnel, concret, rassurant et commercial.`;
-    const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}\n\nRédige le texte de la synthèse de notre offre sur mesure pour ce client.`;
-
-    const generatedText = await this.callOpenAI(
-      [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-      0.5, 'Génération Synthèse (PDF)', false,
-    );
-    if (!generatedText) throw new Error('Échec de la génération IA de la synthèse.');
-
-    // 4. Personnalisation des références figées (ancien client/sites → DCE) par masque+redraw.
-    //    On ne touche QUE des occurrences bien délimitées (listes de sites, libellés « BASÉ À »),
-    //    jamais les phrases narratives ni la couverture (risque de rustine). Couleurs = corps gris.
-    const siteNames: string[] = (analysisData?.sites || [])
-      .map((s: any) => (s?.name || '').trim()).filter(Boolean);
-    const refCtx: RefContext = { sites: siteNames, client: clientName, marketRef: analysisData?.marketRef || '' };
-    const mainSite = siteNames[0] || clientName;
-    const replacements: RefReplacement[] = [
-      // p28 : « : Rouen, Caen, Lille » → liste des sites du marché
-      { match: /:\s*Rouen\s*,\s*Caen\s*,\s*Lille/i, build: (c) => `: ${c.sites.slice(0, 3).join(', ') || c.client}` },
-      // p34 : « : Rouen Stade Diochon » → 1er site du marché
-      { match: /:\s*Rouen\s+Stade\s+Diochon/i, build: () => `: ${mainSite}` },
-      // p107-109 : « BASÉ À: ROUEN » → ville/site principal (majuscules). On reconstruit l'item
-      // entier (il est redessiné depuis son origine), donc on garde le préfixe « BASÉ ».
-      { match: /BAS\w*\s*À\s*:\s*ROUEN/i, build: () => `BASÉ À: ${mainSite.toUpperCase()}` },
-    ];
-
-    // 5. Overlay sur AO RNE.pdf (réutilise le buffer/police déjà chargés) + remplacements de références.
-    //    Les passages SURLIGNÉS sont traités séparément, en Python (voir étape 6).
-    const { bytes, zonesUsed, linesDrawn, truncated, refsReplaced } =
-      await overlaySynthesis(pdfBuffer, generatedText, fontBytes, replacements, refCtx);
-
-    const outputFileName = `Mémoire technique GSS_${Date.now()}.pdf`;
-    const outputPath = path.join(this.responseDir, outputFileName);
-
-    // 6. Réécriture des passages SURLIGNÉS via Python (PyMuPDF → GPT → PyMuPDF) : PyMuPDF détecte les
-    //    surlignages jaunes posés par l'utilisateur DANS le PDF + extrait le texte, GPT réécrit chaque
-    //    passage adapté au client du DCE, puis PyMuPDF SUPPRIME l'ancien texte et insère le nouveau à
-    //    la même taille. On écrit d'abord le PDF de synthèse (intermédiaire), puis Python produit le final.
-    const interimPath = outputPath.replace(/\.pdf$/, '.interim.pdf');
-    fs.writeFileSync(interimPath, bytes);
-
-    // 5b. Remplacement DÉTERMINISTE des balises <entreprise> par le client du DCE, en conservant
-    //     police/taille/couleur (≠ réécriture GPT qui ré-insère en Trebuchet). Lancé AVANT l'étape 6
-    //     pour retirer le surlignage de la balise → l'étape GPT ne la retouche pas. Opère sur l'interim.
-    const ph = this.replacePlaceholdersPython(interimPath, analysisData);
-
-    const hl = this.rewriteHighlightsPython(interimPath, outputPath, analysisData, gssContext, siteNames);
-    try { fs.unlinkSync(interimPath); } catch { /* ignore */ }
-
-    // 7. Remplissage des cadres « Zone d'image » par des images générées (OpenAI Images) — DÉSACTIVÉ.
-    //    Pour réactiver : décommenter le bloc ci-dessous (et IMAGES_ENABLED / GENERATE_IMAGES).
-    // const img = IMAGES_ENABLED
-    //   ? this.fillImageZonesPython(outputPath, analysisData, gssContext, siteNames)
-    //   : { zones: 0, filled: 0 };
-    const img = { zones: 0, filled: 0 };
-
-    console.log(`[MemoireGenerator] Synthèse superposée : ${generatedText.length} car. sur ${zonesUsed} zone(s), ${linesDrawn} ligne(s) dessinée(s)${truncated ? ', surplus tronqué' : ''}, ${refsReplaced} référence(s) client/sites + ${ph.replaced} balise(s) <entreprise> + ${hl.filled}/${hl.regions} passage(s) surligné(s) réécrit(s) + ${img.filled}/${img.zones} cadre(s) image rempli(s) [Python] → ${outputPath}`);
-
-    return {
-      filePath: outputPath,
-      generatedData: {
-        mode: 'AO RNE.pdf + synthèse IA superposée (2 colonnes, design figé)',
-        client: clientName,
-        zones_remplies: `${zonesUsed}`,
-        balises_entreprise: `${ph.replaced}`,
-        passages_surlignes: `${hl.filled}/${hl.regions}`,
-        cadres_image: `${img.filled}/${img.zones}`,
-        texte_genere: `${generatedText.length} caractères`,
-      },
-    };
+    if (onProgress) onProgress(90, 'Assemblage final de la présentation Marp...');
+    return this.exportFromSectionsMap(sectionsMap, dossierId);
   }
 
   /**
@@ -2509,6 +2462,7 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
    */
   public async exportFromSectionsMap(
     sectionsMap: Record<string, string>,
+    dossierId: string = 'export',
   ): Promise<{ filePath: string; generatedData: Record<string, string> }> {
     const chapters: AssembleChapter[] = CHAPTER_ORDER_B.map((ch) => ({
       key: ch,
@@ -2522,6 +2476,10 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
       throw new Error('Aucune section générée à exporter (map vide ou ids inconnus).');
     }
 
-    return this.assembleFromSections('export', chapters);
+    const cover = await this.getCoverInfo(dossierId);
+    const generator = new MarpGenerator(this.responseDir);
+    const result = generator.generatePdf(chapters, cover);
+    
+    return { filePath: result.filePath, generatedData: {} };
   }
 }

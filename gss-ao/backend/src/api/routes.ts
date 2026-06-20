@@ -16,9 +16,39 @@ const upload = multer({ dest: uploadDir });
 
 const router = Router();
 
+interface ProgressInfo {
+  status: string;
+  progress: number;
+  message: string;
+  logs: string[];
+}
+
+export const progressStore: Record<string, ProgressInfo> = {};
+
+export function setDossierProgress(id: string, update: Partial<ProgressInfo>) {
+  if (!progressStore[id]) {
+    progressStore[id] = { status: 'idle', progress: 0, message: '', logs: [] };
+  }
+  if (update.status !== undefined) progressStore[id].status = update.status;
+  if (update.progress !== undefined) progressStore[id].progress = update.progress;
+  if (update.message !== undefined) {
+    progressStore[id].message = update.message;
+    progressStore[id].logs.push(`[${new Date().toLocaleTimeString('fr-FR')}] ${update.message}`);
+  }
+  if (update.logs !== undefined) {
+    progressStore[id].logs.push(...update.logs);
+  }
+}
+
 // Probe / healthcheck
 router.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok' });
+});
+
+router.get('/dossiers/:id/progress', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const progress = progressStore[id] || { status: 'idle', progress: 0, message: 'Non démarré', logs: [] };
+  res.json(progress);
 });
 
 // Download a generated file
@@ -147,12 +177,18 @@ router.get('/dce/:dossier_id/checklist', (req: Request, res: Response) => {
 
 // Module C — génération mémoire technique.
 router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
+  const dossierId = req.params.dossier_id;
   try {
+    setDossierProgress(dossierId, { status: 'running', progress: 5, message: 'Démarrage de la génération du mémoire...' });
     const generator = new MemoireGenerator();
-    const result = await generator.generate(req.params.dossier_id);
+    const result = await generator.generate(dossierId, (progress, message) => {
+      setDossierProgress(dossierId, { status: 'running', progress, message });
+    });
+    setDossierProgress(dossierId, { status: 'completed', progress: 100, message: 'Génération terminée avec succès !' });
     res.json({ message: 'Mémoire technique traité', file_path: result.filePath, data_generee_par_ia: result.generatedData });
   } catch (error: any) {
     console.error('Erreur lors de la génération du mémoire:', error);
+    setDossierProgress(dossierId, { status: 'error', message: `Erreur: ${error.message || error}` });
     res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
   }
 });
@@ -241,7 +277,7 @@ router.post('/export-docx', async (req: Request, res: Response) => {
     }
     const generator = new MemoireGenerator();
     const result = await generator.exportFromSectionsMap(sections as Record<string, string>);
-    return res.download(result.filePath, 'Memoire_Technique_GSS.docx');
+    return res.download(result.filePath, 'Memoire_Technique_GSS.pdf');
   } catch (error: any) {
     console.error('Erreur export-docx:', error);
     res.status(500).json({ error: error.message || 'Erreur interne du serveur' });

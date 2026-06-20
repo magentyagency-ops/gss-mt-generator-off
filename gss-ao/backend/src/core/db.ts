@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const DB_DIR = 'C:\\Users\\linal\\stanmerci\\mes dossiers';
+const DB_DIR = path.resolve(__dirname, '../../../data/db');
 
 // Ensure the directory exists
 if (!fs.existsSync(DB_DIR)) {

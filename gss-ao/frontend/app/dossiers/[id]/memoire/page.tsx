@@ -16,6 +16,7 @@ import {
   FileStack,
   FileText,
   ArrowRight,
+  Download,
 } from "lucide-react";
 import { Badge, Button, Card, Progress } from "@/components/ui";
 import { DossierNav } from "@/components/dossier-nav";
@@ -72,6 +73,14 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   const [dossierInfo, setDossierInfo] = useState<any>({ acheteur: "Chargement...", reference: "..." });
   const [hasTemplate, setHasTemplate] = useState(false);
 
+  // Progress polling state
+  const [progressInfo, setProgressInfo] = useState<{
+    status: string;
+    progress: number;
+    message: string;
+    logs: string[];
+  } | null>(null);
+
   useEffect(() => {
     fetch(`http://localhost:8000/api/dossiers/${id}`)
       .then(res => res.json())
@@ -101,11 +110,24 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     }
   }, []);
 
-
-
   async function handleGenerateFullDocx() {
     setIsGeneratingDocx(true);
     setDocxResult(null);
+    setProgressInfo({ status: 'idle', progress: 0, message: 'Démarrage...', logs: [] });
+
+    // Start progress polling
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`http://localhost:8000/api/dossiers/${id}/progress`);
+        if (res.ok) {
+          const data = await res.json();
+          setProgressInfo(data);
+        }
+      } catch (e) {
+        console.error("Error polling progress:", e);
+      }
+    }, 1000);
+
     try {
       const res = await fetch(`http://localhost:8000/api/dce/${id}/memoire`, { method: "POST" });
       const data = await res.json();
@@ -115,11 +137,10 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     } catch (e: any) {
       setDocxResult({ type: "error", message: e.message });
     } finally {
+      clearInterval(interval);
       setIsGeneratingDocx(false);
     }
   }
-
-
 
   return (
     <div className="flex h-full flex-col">
@@ -147,7 +168,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
             <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
             <div className="flex-1">
               <h3 className="text-sm font-semibold text-amber-800">Prérequis manquants pour générer le document</h3>
-              <p className="text-sm text-amber-700 mt-1">L'IA ne peut pas générer un mémoire pertinent si les informations terrain sont manquantes. Ce dossier exige une visite obligatoire.</p>
+              <p className="text-sm text-amber-700 mt-1">L\'IA ne peut pas générer un mémoire pertinent si les informations terrain sont manquantes. Ce dossier exige une visite obligatoire.</p>
               <ul className="mt-3 space-y-2 text-sm text-amber-800">
                 <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" /> Analyse du DCE (CCTP & RC)</li>
                 <li className="flex items-center gap-2">
@@ -155,7 +176,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   Compte Rendu de Visite de Sacha
                   {!crFourni && (
                     <Button variant="outline" size="sm" className="ml-3 h-7 bg-white text-xs" onClick={() => setCrFourni(true)}>
-                      Simuler l'ajout du CR
+                      Simuler l\'ajout du CR
                     </Button>
                   )}
                 </li>
@@ -164,7 +185,6 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
           </div>
         </div>
       )}
-
 
       <DossierNav id={id} />
 
@@ -198,6 +218,30 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
               </Button>
               {!isPrerequisOk && <p className="mt-2 text-xs text-amber-600">Prérequis manquants (CR Visite)</p>}
             </div>
+
+            {progressInfo && (isGeneratingDocx || progressInfo.progress < 100) && (
+              <div className="mt-8 mx-auto w-full max-w-md text-left space-y-4 rounded-xl border border-border bg-card p-6 shadow-sm">
+                <div className="flex items-center justify-between text-sm font-semibold">
+                  <span className="text-primary flex items-center gap-1.5">
+                    {progressInfo.progress < 100 && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                    {progressInfo.message}
+                  </span>
+                  <span className="tabular-nums">{progressInfo.progress}%</span>
+                </div>
+                <Progress value={progressInfo.progress} className="h-2 w-full" />
+                
+                {progressInfo.logs && progressInfo.logs.length > 0 && (
+                  <div className="mt-4">
+                    <div className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider mb-2">Logs de génération</div>
+                    <div className="h-32 overflow-y-auto rounded-md bg-zinc-950 p-3 font-mono text-xs text-zinc-300 space-y-1 scrollbar-thin">
+                      {progressInfo.logs.map((log, index) => (
+                        <div key={index} className="truncate">{log}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {docxResult && docxResult.type === "success" && (
@@ -243,11 +287,28 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   </div>
                 )}
 
-                {/* Prévisualisation Complète du DOCX */}
+                {/* Prévisualisation Complète du DOCX ou PDF */}
                 <div className="mt-12 pt-8 border-t border-slate-200">
-                  <h3 className="font-medium text-lg text-slate-800 mb-2">Aperçu du document final (De A à Z)</h3>
-                  <p className="text-sm text-slate-500 mb-4">Voici le rendu interactif du fichier DOCX tel qu'il a été généré, avec le formatage d'origine conservé.</p>
-                  <DocxPreviewViewer fileUrl={`http://localhost:8000/api/download?file=${encodeURIComponent(docxResult.data.file_path)}`} />
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-medium text-lg text-slate-800">Aperçu du document final (De A à Z)</h3>
+                    <a href={`http://localhost:8000/api/download?file=${encodeURIComponent(docxResult.data.file_path)}`} download className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-300 bg-white hover:bg-slate-100 hover:text-slate-900 h-9 px-4 py-2">
+                      <Download className="mr-2 h-4 w-4" />
+                      Télécharger
+                    </a>
+                  </div>
+                  <p className="text-sm text-slate-500 mb-4">Voici le rendu interactif du fichier tel qu'il a été généré, avec le formatage d'origine conservé.</p>
+                  
+                  {docxResult.data.file_path.toLowerCase().endsWith('.pdf') ? (
+                    <div className="relative w-full rounded-md border border-slate-200 bg-slate-100 mt-6 shadow-inner h-[800px]">
+                      <iframe 
+                        src={`http://localhost:8000/api/download?file=${encodeURIComponent(docxResult.data.file_path)}`}
+                        className="w-full h-full rounded-md"
+                        title="Prévisualisation PDF"
+                      />
+                    </div>
+                  ) : (
+                    <DocxPreviewViewer fileUrl={`http://localhost:8000/api/download?file=${encodeURIComponent(docxResult.data.file_path)}`} />
+                  )}
                 </div>
               </div>
             </Card>

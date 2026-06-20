@@ -413,16 +413,16 @@ def rewrite_passages(regions, ctx):
             continue
         by_page.setdefault(r["page"], []).append(i)
 
-    for pno, idxs in by_page.items():
+    def process_page(pno, idxs):
         if time.monotonic() - start > time_budget:
-            for gi in idxs:
-                out[gi] = regions[gi]["text"].strip()  # plus de temps : texte d'origine, jaune retiré
-            continue
+            return [(gi, regions[gi]["text"].strip()) for gi in idxs]
         rewrites = rewrite_batch(
             client, model, idxs, [budgets[i] for i in idxs], [regions[i]["text"] for i in idxs], ctx,
         )
         if len(rewrites) != len(idxs):
             print(f"[rewrite_highlights] page {pno}: {len(rewrites)} réécriture(s) pour {len(idxs)} passage(s) (appariement partiel).", file=sys.stderr)
+        
+        results = []
         for k, gi in enumerate(idxs):
             txt = (rewrites[k] if k < len(rewrites) else "") or ""
             txt = txt.strip()
@@ -432,10 +432,31 @@ def rewrite_passages(regions, ctx):
                     break
                 retry = rewrite_batch(client, model, [gi], [budgets[gi]], [regions[gi]["text"]], ctx)
                 txt = ((retry[0] if retry else "") or "").strip()
-            if not is_valid_rewrite(txt, regions[gi]["text"], budgets[gi]):
+            
+            is_valid = is_valid_rewrite(txt, regions[gi]["text"], budgets[gi])
+            if not is_valid:
                 txt = regions[gi]["text"].strip()  # repli
-                failures += 1
-            out[gi] = txt
+            results.append((gi, txt, is_valid))
+        return results
+
+    from concurrent.futures import ThreadPoolExecutor
+    # 8 workers maximum en parallèle
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(process_page, pno, idxs) for pno, idxs in by_page.items()]
+        for fut in futures:
+            try:
+                res = fut.result()
+                for gi, txt, is_valid in res:
+                    out[gi] = txt
+                    if not is_valid:
+                        failures += 1
+            except Exception as e:
+                print(f"[rewrite_highlights] Échec traitement page : {e}", file=sys.stderr)
+
+    # Remplir tout champ restant avec le texte d'origine
+    for i in range(len(regions)):
+        if out[i] is None:
+            out[i] = regions[i]["text"].strip()
 
     if failures:
         print(f"[rewrite_highlights] {failures} passage(s) non réécrit(s) → texte d'origine conservé.", file=sys.stderr)

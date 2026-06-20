@@ -490,11 +490,13 @@ export default function NouveauDossierPage() {
           {/* Action */}
           <div className="flex items-center justify-between mt-6">
             <p className="text-sm text-muted-foreground">
-              {isPrerequisOk && tousParses
-                ? "Tous les prérequis sont validés — vous pouvez lancer l'analyse complète."
-                : "Les prérequis obligatoires (RC, CCTP, CR) doivent être renseignés et parsés."}
+              {tousParses
+                ? isPrerequisOk
+                  ? "Tous les prérequis sont validés — vous pouvez lancer l'analyse complète."
+                  : "Certains fichiers requis/recommandés sont manquants, mais vous pouvez tout de même forcer le lancement de l'analyse."
+                : "Les fichiers doivent être parsés avant de pouvoir lancer l'analyse."}
             </p>
-            {isPrerequisOk && tousParses ? (
+            {files.length > 0 && tousParses ? (
               <Button onClick={handleLaunch} disabled={isLaunching}>
                 {isLaunching ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -504,7 +506,7 @@ export default function NouveauDossierPage() {
                 {isLaunching ? "Lancement en cours..." : "Lancer l'analyse"}
               </Button>
             ) : (
-              <div title={`Bloqué — ${missingReason}`} className="cursor-help">
+              <div title={files.length === 0 ? "Ajoutez au moins un fichier" : `Bloqué — ${missingReason}`} className="cursor-help">
                 <Button disabled className="pointer-events-none">
                   <Sparkles className="h-4 w-4 mr-2" /> Lancer l'analyse
                 </Button>

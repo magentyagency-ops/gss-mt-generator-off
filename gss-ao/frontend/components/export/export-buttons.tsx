@@ -65,7 +65,7 @@ export function ExportButtons() {
           acheteur: "Acheteur " + id,
           signataire: "Mme Vaché, Responsable réponse AO",
           dateSignature: formatDate(new Date().toISOString()),
-          filename: "Memoire_Technique_GSS_reponse_libre.docx",
+          filename: "Memoire_Technique_GSS_reponse_libre.pdf",
         });
       } else {
         await exportDocx({
@@ -78,11 +78,11 @@ export function ExportButtons() {
           },
           signataire: "Mme Vaché, Responsable réponse AO",
           dateSignature: formatDate(new Date().toISOString()),
-          filename: "Memoire_Technique_GSS_Univ_Rouen_MP2026-08.docx",
+          filename: "Memoire_Technique_GSS_Univ_Rouen_MP2026-08.pdf",
         });
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Export DOCX échoué");
+      setError(e instanceof Error ? e.message : "Export PDF échoué");
     } finally {
       setBusy(false);
     }
@@ -92,14 +92,9 @@ export function ExportButtons() {
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center gap-2">
         <Button variant="outline" onClick={handleDocx} disabled={busy}>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileType2 className="h-4 w-4" />}
-          Exporter DOCX
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+          Exporter PDF (Marp)
         </Button>
-        <span title="Export DOCX puis Word/LibreOffice pour PDF.">
-          <Button variant="outline" disabled>
-            <FileDown className="h-4 w-4" /> Exporter PDF
-          </Button>
-        </span>
       </div>
       {error && <span className="max-w-xs text-right text-xs text-destructive">{error}</span>}
     </div>
