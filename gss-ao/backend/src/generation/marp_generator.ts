@@ -267,9 +267,6 @@ export class MarpGenerator {
           const chunk = chunks[i];
           lines.push('---');
           lines.push(`<!-- header: "${headerTitle}" -->`);
-          if (i === 0 && section.illustration) {
-             lines.push(`![bg right:40% 80%](media/${section.illustration})`);
-          }
           lines.push('');
           lines.push(chunk);
           lines.push('');
