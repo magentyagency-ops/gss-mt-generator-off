@@ -27,6 +27,13 @@ import fitz  # PyMuPDF
 
 # ─── Détection des surlignages ───
 
+# Décalage horizontal (pt) au-delà duquel la 1re ligne d'un passage est considérée comme contournant
+# une pastille numérotée (gouttière), et non comme un simple alinéa. ~22 pt ≈ 0,78 cm : au-dessus d'un
+# alinéa courant, en dessous du décalage d'une pastille de rétroplanning. À AUGMENTER si des alinéas
+# marqués déclenchent à tort le décalage ; à RÉDUIRE si du texte chevauche encore une pastille.
+GUTTER_MIN_PT = 22.0
+
+
 def is_yellow(c):
     """Couleur (tuple 0-1) proche du jaune surligneur."""
     return c is not None and len(c) >= 3 and c[0] > 0.78 and c[1] > 0.70 and c[2] < 0.6
@@ -147,9 +154,19 @@ def detect_highlights(doc):
                 else:
                     break
             ins_lines = full_run or [lines[0]]
+            origin_x0 = ins_lines[0]["bbox"][0]      # x0 du début réel du texte d'origine
             ins = fitz.Rect(ins_lines[0]["bbox"])
             for L in ins_lines[1:]:
                 ins |= L["bbox"]
+            # Respecter l'emplacement d'origine : sur les pages de rétroplanning, les 1res lignes sont
+            # DÉCALÉES vers la droite pour contourner la pastille numérotée (1, 2, …) posée dans la marge
+            # gauche. L'union des bbox ramène x0 à la marge (lignes suivantes pleine largeur) → la
+            # réécriture repartait SOUS la pastille. On ne déplace x0 vers la droite QUE si ce décalage
+            # est marqué (gouttière de pastille), pas pour un simple alinéa de 1re ligne (géré par
+            # FIRST_LINE_INDENT) : sinon on rétrécirait inutilement tous les paragraphes normaux.
+            body_x0 = min((L["bbox"][0] for L in ins_lines[1:]), default=origin_x0)
+            if origin_x0 - body_x0 > GUTTER_MIN_PT:
+                ins.x0 = origin_x0
 
             colors = {}
             for sp in spans:

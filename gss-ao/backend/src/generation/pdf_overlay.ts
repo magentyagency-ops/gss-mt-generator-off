@@ -12,9 +12,9 @@ import fontkit from '@pdf-lib/fontkit';
 // ─── Réglages (ajustables après validation visuelle) ───
 const BOX_LEFT = 93;          // bord gauche du cadre (le « des marqueurs est à x≈95)
 const BOX_RIGHT = 503;        // bord droit (≈ largeur de contenu des titres de la page)
-const COL_GAP = 22;           // gouttière entre les 2 colonnes (pt)
 const FONT_SIZE = 10.5;       // taille du corps de texte (pt)
 const LINE_LEADING = 1.32;    // interligne (× taille)
+const PARA_INDENT = 18;       // alinéa de 1re ligne de chaque paragraphe (pt)
 const TOP_INSET = 2;          // marge sous le marqueur d'ouverture avant la 1re ligne
 const BOTTOM_INSET = 4;       // marge au-dessus du marqueur « fin »
 const MASK_PAD_TOP = 15;      // recouvrement au-dessus de la base du marqueur (hauteur de glyphe)
@@ -200,12 +200,12 @@ export async function measureZonesCapacity(
   else font = await doc.embedFont(StandardFonts.Helvetica);
 
   const lineHeight = FONT_SIZE * LINE_LEADING;
-  const colWidth = (BOX_RIGHT - BOX_LEFT - COL_GAP) / 2;
-  const totalLines = boxes.reduce((sum, b) => sum + columnCapacity(b, lineHeight) * 2, 0);
+  const blockWidth = BOX_RIGHT - BOX_LEFT;   // 1 colonne pleine largeur
+  const totalLines = boxes.reduce((sum, b) => sum + columnCapacity(b, lineHeight), 0);
 
-  // Largeur moyenne d'un caractère « courant » à FONT_SIZE → nb de car. par ligne de colonne.
+  // Largeur moyenne d'un caractère « courant » à FONT_SIZE → nb de car. par ligne pleine largeur.
   const avgCharW = font.widthOfTextAtSize('en ara ti on le re', FONT_SIZE) / 18;
-  const charsPerLine = Math.max(1, Math.floor(colWidth / avgCharW));
+  const charsPerLine = Math.max(1, Math.floor(blockWidth / avgCharW));
   return { zones: boxes.length, totalLines, charsPerLine };
 }
 
@@ -216,53 +216,60 @@ function columnCapacity(b: ZoneBox, lineHeight: number): number {
   return Math.floor(perCol * MODERATE_FILL);
 }
 
-/** Découpe un paragraphe en lignes tenant dans `maxWidth` (sans couper les mots, sauf mot trop long). */
-function wrapParagraph(text: string, maxWidth: number, font: PDFFont, size: number): string[] {
+/** Découpe un paragraphe en lignes tenant dans `maxWidth` (sans couper les mots, sauf mot trop long).
+ * `firstIndent` réserve un alinéa sur la 1re ligne (largeur dispo réduite d'autant). */
+function wrapParagraph(text: string, maxWidth: number, font: PDFFont, size: number, firstIndent = 0): string[] {
   const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let cur = '';
   const w = (s: string) => font.widthOfTextAtSize(s, size);
+  const limit = () => maxWidth - (lines.length === 0 ? firstIndent : 0); // alinéa seulement sur la 1re ligne
   for (let word of words) {
-    // mot plus large qu'une colonne → on le coupe caractère par caractère
-    while (w(word) > maxWidth && word.length > 1) {
+    // mot plus large qu'une ligne → on le coupe caractère par caractère
+    while (w(word) > limit() && word.length > 1) {
       let k = word.length;
-      while (k > 1 && w(word.slice(0, k)) > maxWidth) k--;
+      while (k > 1 && w(word.slice(0, k)) > limit()) k--;
       if (cur) { lines.push(cur); cur = ''; }
       lines.push(word.slice(0, k));
       word = word.slice(k);
     }
     const trial = cur ? cur + ' ' + word : word;
-    if (w(trial) <= maxWidth) cur = trial;
+    if (w(trial) <= limit()) cur = trial;
     else { if (cur) lines.push(cur); cur = word; }
   }
   if (cur) lines.push(cur);
   return lines;
 }
 
-interface Line { text: string; justify: boolean; }
+interface Line { text: string; justify: boolean; indent: number; }
 
-/** Transforme des paragraphes en lignes (avec drapeau justification + lignes vides entre paragraphes). */
-function paragraphsToLines(paras: string[], maxWidth: number, font: PDFFont, size: number): Line[] {
+/** Transforme des paragraphes en lignes (justification + alinéa de 1re ligne + respiration entre §). */
+function paragraphsToLines(paras: string[], maxWidth: number, font: PDFFont, size: number, indent = 0): Line[] {
   const out: Line[] = [];
   paras.forEach((p, pi) => {
-    const wl = wrapParagraph(p, maxWidth, font, size);
-    wl.forEach((t, i) => out.push({ text: t, justify: i < wl.length - 1 })); // dernière ligne d'un § non justifiée
-    if (pi < paras.length - 1) out.push({ text: '', justify: false });       // respiration entre §
+    const wl = wrapParagraph(p, maxWidth, font, size, indent);
+    // dernière ligne d'un § non justifiée ; alinéa appliqué uniquement à la 1re ligne du §
+    wl.forEach((t, i) => out.push({ text: t, justify: i < wl.length - 1, indent: i === 0 ? indent : 0 }));
+    if (pi < paras.length - 1) out.push({ text: '', justify: false, indent: 0 });
   });
   return out;
 }
 
-/** Dessine une ligne ; si `justify`, répartit l'espace pour atteindre `width` (texte aligné des 2 côtés). */
+/** Dessine une ligne ; si `justify`, répartit l'espace pour atteindre `width` (texte aligné des 2 côtés).
+ * `line.indent` décale le début de ligne (alinéa) et réduit d'autant la largeur de justification. */
 function drawLine(page: PDFPage, line: Line, x: number, y: number, width: number, font: PDFFont, size: number, color: any) {
   if (!line.text) return;
+  const ind = line.indent || 0;
+  const startX = x + ind;
+  const lineWidth = width - ind;
   const words = line.text.split(' ');
   if (!line.justify || words.length === 1) {
-    page.drawText(line.text, { x, y, size, font, color });
+    page.drawText(line.text, { x: startX, y, size, font, color });
     return;
   }
   const wordsWidth = words.reduce((s, wd) => s + font.widthOfTextAtSize(wd, size), 0);
-  const gap = (width - wordsWidth) / (words.length - 1);
-  let cursor = x;
+  const gap = (lineWidth - wordsWidth) / (words.length - 1);
+  let cursor = startX;
   for (const wd of words) {
     page.drawText(wd, { x: cursor, y, size, font, color });
     cursor += font.widthOfTextAtSize(wd, size) + gap;
@@ -296,15 +303,15 @@ export async function overlaySynthesis(
   const pages = doc.getPages();
   const bg = hexToRgb(BG_HEX);
   const textColor = hexToRgb(TEXT_HEX);
-  const colWidth = (BOX_RIGHT - BOX_LEFT - COL_GAP) / 2;
+  const blockWidth = BOX_RIGHT - BOX_LEFT;   // un seul bloc pleine largeur (au lieu de 2 colonnes)
   const lineHeight = FONT_SIZE * LINE_LEADING;
 
-  // Capacité (lignes, 2 colonnes) par zone, plafonnée par le taux de remplissage.
-  const caps = boxes.map((b) => columnCapacity(b, lineHeight) * 2);
+  // Capacité (lignes, 1 colonne pleine largeur) par zone, plafonnée par le taux de remplissage.
+  const caps = boxes.map((b) => columnCapacity(b, lineHeight));
 
-  // Découpe le texte une seule fois (largeur de colonne identique partout) puis répartit équitablement.
+  // Découpe le texte une seule fois (pleine largeur, alinéa de 1re ligne) puis répartit équitablement.
   const paras = fullText.replace(/\r\n/g, '\n').split(/\n\s*\n/).map((p) => p.replace(/\s*\n\s*/g, ' ').trim()).filter(Boolean);
-  const allLines = paragraphsToLines(paras, colWidth, font, FONT_SIZE);
+  const allLines = paragraphsToLines(paras, blockWidth, font, FONT_SIZE, PARA_INDENT);
 
   let cursor = 0, linesDrawn = 0, zonesUsed = 0;
   let truncated = false;
@@ -334,12 +341,8 @@ export async function overlaySynthesis(
     zonesUsed++;
     linesDrawn += zoneLines.filter((l) => l.text).length;
 
-    // 2 colonnes équilibrées : moitié gauche / moitié droite.
-    const half = Math.ceil(zoneLines.length / 2);
-    const col1 = zoneLines.slice(0, half);
-    const col2 = zoneLines.slice(half);
-    drawColumn(page, col1, BOX_LEFT, b.topY - TOP_INSET, colWidth, lineHeight, font, FONT_SIZE, textColor);
-    drawColumn(page, col2, BOX_LEFT + colWidth + COL_GAP, b.topY - TOP_INSET, colWidth, lineHeight, font, FONT_SIZE, textColor);
+    // Un seul bloc paragraphé pleine largeur (justifié, alinéa de 1re ligne) de haut en bas.
+    drawColumn(page, zoneLines, BOX_LEFT, b.topY - TOP_INSET, blockWidth, lineHeight, font, FONT_SIZE, textColor);
   });
 
   if (cursor < allLines.filter((l) => l.text).length) truncated = true;

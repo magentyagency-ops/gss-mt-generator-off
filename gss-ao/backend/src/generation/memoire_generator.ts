@@ -2267,16 +2267,23 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
     //    la même taille. On écrit d'abord le PDF de synthèse (intermédiaire), puis Python produit le final.
     const interimPath = outputPath.replace(/\.pdf$/, '.interim.pdf');
     fs.writeFileSync(interimPath, bytes);
+
+    // 5b. Remplacement DÉTERMINISTE des balises <entreprise> par le client du DCE, en conservant
+    //     police/taille/couleur (≠ réécriture GPT qui ré-insère en Trebuchet). Lancé AVANT l'étape 6
+    //     pour retirer le surlignage de la balise → l'étape GPT ne la retouche pas. Opère sur l'interim.
+    const ph = this.replacePlaceholdersPython(interimPath, analysisData);
+
     const hl = this.rewriteHighlightsPython(interimPath, outputPath, analysisData, gssContext, siteNames);
     try { fs.unlinkSync(interimPath); } catch { /* ignore */ }
 
-    // 7. Remplissage des cadres « Zone d'image » par des images générées (OpenAI Images), fondées sur
-    //    le contexte texte de chaque page. Étape non bloquante (échec → cadres conservés).
-    const img = IMAGES_ENABLED
-      ? this.fillImageZonesPython(outputPath, analysisData, gssContext, siteNames)
-      : { zones: 0, filled: 0 };
+    // 7. Remplissage des cadres « Zone d'image » par des images générées (OpenAI Images) — DÉSACTIVÉ.
+    //    Pour réactiver : décommenter le bloc ci-dessous (et IMAGES_ENABLED / GENERATE_IMAGES).
+    // const img = IMAGES_ENABLED
+    //   ? this.fillImageZonesPython(outputPath, analysisData, gssContext, siteNames)
+    //   : { zones: 0, filled: 0 };
+    const img = { zones: 0, filled: 0 };
 
-    console.log(`[MemoireGenerator] Synthèse superposée : ${generatedText.length} car. sur ${zonesUsed} zone(s), ${linesDrawn} ligne(s) dessinée(s)${truncated ? ', surplus tronqué' : ''}, ${refsReplaced} référence(s) client/sites + ${hl.filled}/${hl.regions} passage(s) surligné(s) réécrit(s) + ${img.filled}/${img.zones} cadre(s) image rempli(s) [Python] → ${outputPath}`);
+    console.log(`[MemoireGenerator] Synthèse superposée : ${generatedText.length} car. sur ${zonesUsed} zone(s), ${linesDrawn} ligne(s) dessinée(s)${truncated ? ', surplus tronqué' : ''}, ${refsReplaced} référence(s) client/sites + ${ph.replaced} balise(s) <entreprise> + ${hl.filled}/${hl.regions} passage(s) surligné(s) réécrit(s) + ${img.filled}/${img.zones} cadre(s) image rempli(s) [Python] → ${outputPath}`);
 
     return {
       filePath: outputPath,
@@ -2284,11 +2291,55 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
         mode: 'AO RNE.pdf + synthèse IA superposée (2 colonnes, design figé)',
         client: clientName,
         zones_remplies: `${zonesUsed}`,
+        balises_entreprise: `${ph.replaced}`,
         passages_surlignes: `${hl.filled}/${hl.regions}`,
         cadres_image: `${img.filled}/${img.zones}`,
         texte_genere: `${generatedText.length} caractères`,
       },
     };
+  }
+
+  /**
+   * Remplacement DÉTERMINISTE des balises <entreprise> (et synonymes : <client>, <société>…) par le
+   * nom du client du DCE, via le script Python, en conservant POLICE, TAILLE et COULEUR d'origine et en
+   * retirant le surlignage. Opère SUR PLACE (via un fichier temporaire). Étape non bloquante : en cas
+   * d'échec, le PDF d'origine est conservé (balises intactes).
+   */
+  private replacePlaceholdersPython(pdfPath: string, analysisData: any): { replaced: number } {
+    const baseDir = path.resolve(__dirname, '../../../../');
+    const scriptPath = path.resolve(baseDir, 'gss-ao/backend/python/replace_placeholders.py');
+    if (!fs.existsSync(scriptPath)) {
+      console.warn(`[MemoireGenerator] Script Python introuvable: ${scriptPath} → balises non remplacées.`);
+      return { replaced: 0 };
+    }
+
+    const ctx = { clientName: analysisData?.clientName || '' };
+    const ctxPath = path.join(this.responseDir, `_phctx_${Date.now()}.json`);
+    fs.writeFileSync(ctxPath, JSON.stringify(ctx), 'utf8');
+    const tmpOut = pdfPath.replace(/\.pdf$/, '.ph.pdf');
+
+    const pythonBin = process.env.PYTHON_BIN || 'py';
+    const proc = spawnSync(
+      pythonBin,
+      [scriptPath, '--input', pdfPath, '--output', tmpOut, '--context', ctxPath],
+      { env: { ...process.env }, encoding: 'utf8', timeout: 120000 },
+    );
+    try { fs.unlinkSync(ctxPath); } catch { /* ignore */ }
+
+    if (proc.stderr) proc.stderr.split('\n').filter(Boolean).forEach((l) => console.log(`[py-ph] ${l}`));
+    if (proc.status !== 0 || !fs.existsSync(tmpOut)) {
+      console.warn(`[MemoireGenerator] Script balises échec (status=${proc.status}, err=${proc.error?.message || ''}) → balises conservées.`);
+      try { fs.unlinkSync(tmpOut); } catch { /* ignore */ }
+      return { replaced: 0 };
+    }
+    try { fs.renameSync(tmpOut, pdfPath); } catch { try { fs.copyFileSync(tmpOut, pdfPath); fs.unlinkSync(tmpOut); } catch { /* ignore */ } }
+
+    try {
+      const line = (proc.stdout || '').trim().split('\n').filter(Boolean).pop() || '{}';
+      return { replaced: Number(JSON.parse(line).replaced) || 0 };
+    } catch {
+      return { replaced: 0 };
+    }
   }
 
   /**
