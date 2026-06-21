@@ -284,4 +284,86 @@ router.post('/export-docx', async (req: Request, res: Response) => {
   }
 });
 
+// Import par email d'alerte Nukema
+import { getSettings } from '../core/config';
+
+router.post('/ingest-email', async (req: Request, res: Response) => {
+  try {
+    const { emailText, api_key } = req.body;
+    if (!emailText || typeof emailText !== 'string' || emailText.trim() === '') {
+      return res.status(400).json({ error: "Le texte de l'email est vide ou manquant." });
+    }
+
+    const apiKey = api_key || getSettings().openaiApiKey;
+    if (!apiKey) {
+      return res.status(400).json({ error: "Clé API OpenAI manquante." });
+    }
+
+    const openai = new OpenAI({ apiKey });
+
+    const prompt = `Tu es un assistant de traitement d'appels d'offres pour l'entreprise de sécurité GSS.
+Tu as reçu un e-mail d'alerte de Nukema décrivant un nouvel appel d'offres.
+Analyse cet e-mail pour extraire les informations suivantes et réponds exclusivement sous la forme d'un objet JSON valide.
+
+L'objet JSON doit avoir les champs suivants exacts :
+{
+  "acheteur": "Nom de l'acheteur (ex: Ville de Rouen, Conseil Départemental, etc.) ou 'Non spécifié' s'il n'est pas présent",
+  "objet": "Objet du marché (ex: Prestations de sécurité et de gardiennage) ou 'Non spécifié'",
+  "dateLimite": "Date limite de dépôt au format ISO AAAA-MM-JJ (ex: 2026-07-15) ou la date la plus probable trouvée, ou 'Non spécifié'",
+  "departement": "Le département français sous forme de numéro de 2 ou 3 chiffres (ex: 76, 75, 974) ou 'Non spécifié'",
+  "description": "Un résumé synthétique de l'appel d'offres en 3 ou 4 phrases détaillant la nature des prestations demandées (ex: gardiennage physique, rondes de nuit, sécurité incendie) et le contexte général",
+  "suggestionSections": [
+    "Une liste de 3 à 5 sections clés ou thématiques que GSS devra aborder dans son mémoire technique pour ce marché (ex: 'Présentation de l'équipe et des agents affectés', 'Plan de surveillance et rondes de nuit', 'Gestion des alarmes et interventions')"
+  ],
+  "lienUnique": "L'URL de l'appel d'offres s'il y en a un présent dans l'e-mail, sinon ''"
+}
+
+Texte de l'e-mail d'alerte :
+\"\"\"
+${emailText}
+\"\"\"`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "system", content: prompt }],
+      temperature: 0.2,
+      response_format: { type: "json_object" }
+    });
+
+    const parsedData = JSON.parse(completion.choices[0].message.content || "{}");
+
+    // Save as a new dossier in database (with status "Brouillon")
+    const id = `dossier-${Date.now()}`;
+    const dossierData: DossierRecord = {
+      id,
+      acheteur: parsedData.acheteur || "Acheteur inconnu",
+      objet: parsedData.objet || "Objet non spécifié",
+      lots: [],
+      dateLimite: parsedData.dateLimite || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      statut: "Brouillon",
+      responsable: "Sacha",
+      importedFromEmail: true,
+      emailSummary: parsedData.description,
+      suggestionSections: parsedData.suggestionSections || [],
+      lienUnique: parsedData.lienUnique || "",
+      departement: parsedData.departement || "",
+      dce_files: [],
+      pieces_candidature: [],
+      pieces_offre: [],
+      memoire_sections: []
+    };
+
+    DB.saveDossier(id, dossierData);
+
+    res.json({
+      success: true,
+      dossierId: id,
+      dossier: dossierData
+    });
+  } catch (error: any) {
+    console.error("Erreur ingestion email:", error);
+    res.status(500).json({ error: error.message || "Erreur interne" });
+  }
+});
+
 export default router;

@@ -1,0 +1,1155 @@
+{
+  "icons": [
+    {
+      "name": "shield",
+      "path": "assets/icons/shield.svg",
+      "type": "icon"
+    },
+    {
+      "name": "shield-alert",
+      "path": "assets/icons/shield-alert.svg",
+      "type": "icon"
+    },
+    {
+      "name": "shield-check",
+      "path": "assets/icons/shield-check.svg",
+      "type": "icon"
+    },
+    {
+      "name": "flame",
+      "path": "assets/icons/flame.svg",
+      "type": "icon"
+    },
+    {
+      "name": "clock",
+      "path": "assets/icons/clock.svg",
+      "type": "icon"
+    },
+    {
+      "name": "calendar",
+      "path": "assets/icons/calendar.svg",
+      "type": "icon"
+    },
+    {
+      "name": "users",
+      "path": "assets/icons/users.svg",
+      "type": "icon"
+    },
+    {
+      "name": "truck",
+      "path": "assets/icons/truck.svg",
+      "type": "icon"
+    },
+    {
+      "name": "activity",
+      "path": "assets/icons/activity.svg",
+      "type": "icon"
+    },
+    {
+      "name": "award",
+      "path": "assets/icons/award.svg",
+      "type": "icon"
+    },
+    {
+      "name": "file-text",
+      "path": "assets/icons/file-text.svg",
+      "type": "icon"
+    },
+    {
+      "name": "leaf",
+      "path": "assets/icons/leaf.svg",
+      "type": "icon"
+    },
+    {
+      "name": "check-circle",
+      "path": "assets/icons/check-circle.svg",
+      "type": "icon"
+    },
+    {
+      "name": "alert-triangle",
+      "path": "assets/icons/alert-triangle.svg",
+      "type": "icon"
+    },
+    {
+      "name": "radio",
+      "path": "assets/icons/radio.svg",
+      "type": "icon"
+    },
+    {
+      "name": "map-pin",
+      "path": "assets/icons/map-pin.svg",
+      "type": "icon"
+    },
+    {
+      "name": "search",
+      "path": "assets/icons/search.svg",
+      "type": "icon"
+    },
+    {
+      "name": "lock",
+      "path": "assets/icons/lock.svg",
+      "type": "icon"
+    },
+    {
+      "name": "eye",
+      "path": "assets/icons/eye.svg",
+      "type": "icon"
+    },
+    {
+      "name": "phone",
+      "path": "assets/icons/phone.svg",
+      "type": "icon"
+    },
+    {
+      "name": "map",
+      "path": "assets/icons/map.svg",
+      "type": "icon"
+    },
+    {
+      "name": "briefcase",
+      "path": "assets/icons/briefcase.svg",
+      "type": "icon"
+    },
+    {
+      "name": "trending-up",
+      "path": "assets/icons/trending-up.svg",
+      "type": "icon"
+    },
+    {
+      "name": "cpu",
+      "path": "assets/icons/cpu.svg",
+      "type": "icon"
+    },
+    {
+      "name": "check",
+      "path": "assets/icons/check.svg",
+      "type": "icon"
+    },
+    {
+      "name": "info",
+      "path": "assets/icons/info.svg",
+      "type": "icon"
+    },
+    {
+      "name": "book-open",
+      "path": "assets/icons/book-open.svg",
+      "type": "icon"
+    },
+    {
+      "name": "building",
+      "path": "assets/icons/building.svg",
+      "type": "icon"
+    },
+    {
+      "name": "car",
+      "path": "assets/icons/car.svg",
+      "type": "icon"
+    },
+    {
+      "name": "cctv",
+      "path": "assets/icons/cctv.svg",
+      "type": "icon"
+    },
+    {
+      "name": "camera",
+      "path": "assets/icons/camera.svg",
+      "type": "icon"
+    },
+    {
+      "name": "clipboard-list",
+      "path": "assets/icons/clipboard-list.svg",
+      "type": "icon"
+    },
+    {
+      "name": "crosshair",
+      "path": "assets/icons/crosshair.svg",
+      "type": "icon"
+    },
+    {
+      "name": "badge-alert",
+      "path": "assets/icons/badge-alert.svg",
+      "type": "icon"
+    },
+    {
+      "name": "badge-check",
+      "path": "assets/icons/badge-check.svg",
+      "type": "icon"
+    },
+    {
+      "name": "siren",
+      "path": "assets/icons/siren.svg",
+      "type": "icon"
+    },
+    {
+      "name": "bell",
+      "path": "assets/icons/bell.svg",
+      "type": "icon"
+    },
+    {
+      "name": "bell-ring",
+      "path": "assets/icons/bell-ring.svg",
+      "type": "icon"
+    },
+    {
+      "name": "megaphone",
+      "path": "assets/icons/megaphone.svg",
+      "type": "icon"
+    },
+    {
+      "name": "video",
+      "path": "assets/icons/video.svg",
+      "type": "icon"
+    },
+    {
+      "name": "monitor",
+      "path": "assets/icons/monitor.svg",
+      "type": "icon"
+    },
+    {
+      "name": "headphones",
+      "path": "assets/icons/headphones.svg",
+      "type": "icon"
+    },
+    {
+      "name": "life-buoy",
+      "path": "assets/icons/life-buoy.svg",
+      "type": "icon"
+    },
+    {
+      "name": "hard-hat",
+      "path": "assets/icons/hard-hat.svg",
+      "type": "icon"
+    },
+    {
+      "name": "key",
+      "path": "assets/icons/key.svg",
+      "type": "icon"
+    },
+    {
+      "name": "door-closed",
+      "path": "assets/icons/door-closed.svg",
+      "type": "icon"
+    },
+    {
+      "name": "door-open",
+      "path": "assets/icons/door-open.svg",
+      "type": "icon"
+    },
+    {
+      "name": "wifi",
+      "path": "assets/icons/wifi.svg",
+      "type": "icon"
+    },
+    {
+      "name": "zap",
+      "path": "assets/icons/zap.svg",
+      "type": "icon"
+    },
+    {
+      "name": "battery",
+      "path": "assets/icons/battery.svg",
+      "type": "icon"
+    },
+    {
+      "name": "sun",
+      "path": "assets/icons/sun.svg",
+      "type": "icon"
+    },
+    {
+      "name": "moon",
+      "path": "assets/icons/moon.svg",
+      "type": "icon"
+    },
+    {
+      "name": "star",
+      "path": "assets/icons/star.svg",
+      "type": "icon"
+    },
+    {
+      "name": "thumbs-up",
+      "path": "assets/icons/thumbs-up.svg",
+      "type": "icon"
+    },
+    {
+      "name": "user-check",
+      "path": "assets/icons/user-check.svg",
+      "type": "icon"
+    },
+    {
+      "name": "users-2",
+      "path": "assets/icons/users-2.svg",
+      "type": "icon"
+    },
+    {
+      "name": "user-cog",
+      "path": "assets/icons/user-cog.svg",
+      "type": "icon"
+    },
+    {
+      "name": "file-check",
+      "path": "assets/icons/file-check.svg",
+      "type": "icon"
+    },
+    {
+      "name": "file-search",
+      "path": "assets/icons/file-search.svg",
+      "type": "icon"
+    },
+    {
+      "name": "clipboard-check",
+      "path": "assets/icons/clipboard-check.svg",
+      "type": "icon"
+    },
+    {
+      "name": "shield-ban",
+      "path": "assets/icons/shield-ban.svg",
+      "type": "icon"
+    },
+    {
+      "name": "shield-half",
+      "path": "assets/icons/shield-half.svg",
+      "type": "icon"
+    },
+    {
+      "name": "flame-kindling",
+      "path": "assets/icons/flame-kindling.svg",
+      "type": "icon"
+    }
+  ],
+  "images": [
+    {
+      "id": "security_guard_1",
+      "path": "assets/images/security_guard_1.jpg",
+      "description": "Security Guard Walking Building Perimeter With Flashlight At Night",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_2",
+      "path": "assets/images/security_guard_2.jpg",
+      "description": "security guard standing on the gray floor",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_3",
+      "path": "assets/images/security_guard_3.jpg",
+      "description": "man in green and blue jacket walking on street during daytime",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_4",
+      "path": "assets/images/security_guard_4.jpg",
+      "description": "black and gray camera stand",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_5",
+      "path": "assets/images/security_guard_5.jpg",
+      "description": "Security Guard Walking Building Perimeter With Flashlight At Night",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_6",
+      "path": "assets/images/security_guard_6.jpg",
+      "description": "selective focus photography of man wearing black top",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_7",
+      "path": "assets/images/security_guard_7.jpg",
+      "description": "a security officer walking down a street",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_8",
+      "path": "assets/images/security_guard_8.jpg",
+      "description": "man in black suit wearing black sunglasses",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_9",
+      "path": "assets/images/security_guard_9.jpg",
+      "description": "a group of security officers standing next to each other",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_10",
+      "path": "assets/images/security_guard_10.jpg",
+      "description": "man in black suit wearing black sunglasses",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_11",
+      "path": "assets/images/security_guard_11.jpg",
+      "description": "cop leaning on metal rail during a sunny day",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_12",
+      "path": "assets/images/security_guard_12.jpg",
+      "description": "man in black police uniform",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_13",
+      "path": "assets/images/security_guard_13.jpg",
+      "description": "Security Guard Walking Building Perimeter With Flashlight At Night",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_14",
+      "path": "assets/images/security_guard_14.jpg",
+      "description": "assorted-color security cameras",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_15",
+      "path": "assets/images/security_guard_15.jpg",
+      "description": "man walking on hallway",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_16",
+      "path": "assets/images/security_guard_16.jpg",
+      "description": "chief standing near body of water",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_17",
+      "path": "assets/images/security_guard_17.jpg",
+      "description": "a white security camera mounted on a wall",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_18",
+      "path": "assets/images/security_guard_18.jpg",
+      "description": "a police officer standing in front of a crowd of people",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_19",
+      "path": "assets/images/security_guard_19.jpg",
+      "description": "man in orange helmet and green and blue stripe polo shirt standing beside white and red",
+      "type": "image"
+    },
+    {
+      "id": "security_guard_20",
+      "path": "assets/images/security_guard_20.jpg",
+      "description": "a group of people standing outside a building",
+      "type": "image"
+    },
+    {
+      "id": "cctv_1",
+      "path": "assets/images/cctv_1.jpg",
+      "description": "a white security camera mounted on a wall",
+      "type": "image"
+    },
+    {
+      "id": "cctv_2",
+      "path": "assets/images/cctv_2.jpg",
+      "description": "white and black camera on tripod",
+      "type": "image"
+    },
+    {
+      "id": "cctv_3",
+      "path": "assets/images/cctv_3.jpg",
+      "description": "white security camera on post",
+      "type": "image"
+    },
+    {
+      "id": "cctv_4",
+      "path": "assets/images/cctv_4.jpg",
+      "description": "black and gray camera stand",
+      "type": "image"
+    },
+    {
+      "id": "cctv_5",
+      "path": "assets/images/cctv_5.jpg",
+      "description": "Close up of two white CCTV cameras attached to a blank gray wall outside. Concept of security and surveillance. 3d rendering toned image",
+      "type": "image"
+    },
+    {
+      "id": "cctv_6",
+      "path": "assets/images/cctv_6.jpg",
+      "description": "white surveillance camera hanging on wall",
+      "type": "image"
+    },
+    {
+      "id": "cctv_7",
+      "path": "assets/images/cctv_7.jpg",
+      "description": "assorted-color security cameras",
+      "type": "image"
+    },
+    {
+      "id": "cctv_8",
+      "path": "assets/images/cctv_8.jpg",
+      "description": "black and silver camera on black stand",
+      "type": "image"
+    },
+    {
+      "id": "cctv_9",
+      "path": "assets/images/cctv_9.jpg",
+      "description": "A security camera mounted on the side of a building",
+      "type": "image"
+    },
+    {
+      "id": "cctv_10",
+      "path": "assets/images/cctv_10.jpg",
+      "description": "a security camera mounted to the ceiling of a building",
+      "type": "image"
+    },
+    {
+      "id": "cctv_11",
+      "path": "assets/images/cctv_11.jpg",
+      "description": "three white CCTV cameras mounted on wall",
+      "type": "image"
+    },
+    {
+      "id": "cctv_12",
+      "path": "assets/images/cctv_12.jpg",
+      "description": "white and black corded device",
+      "type": "image"
+    },
+    {
+      "id": "cctv_13",
+      "path": "assets/images/cctv_13.jpg",
+      "description": "Head of safeguard department and her subordinates looking at security camera while standing in front of large screen in office",
+      "type": "image"
+    },
+    {
+      "id": "cctv_14",
+      "path": "assets/images/cctv_14.jpg",
+      "description": "two bullet security camera attached on wall",
+      "type": "image"
+    },
+    {
+      "id": "cctv_15",
+      "path": "assets/images/cctv_15.jpg",
+      "description": "a security camera attached to the side of a building",
+      "type": "image"
+    },
+    {
+      "id": "cctv_16",
+      "path": "assets/images/cctv_16.jpg",
+      "description": "white security camera at daytime",
+      "type": "image"
+    },
+    {
+      "id": "cctv_17",
+      "path": "assets/images/cctv_17.jpg",
+      "description": "A security camera mounted to the side of a building",
+      "type": "image"
+    },
+    {
+      "id": "cctv_18",
+      "path": "assets/images/cctv_18.jpg",
+      "description": "two grey CCTV cameras",
+      "type": "image"
+    },
+    {
+      "id": "cctv_19",
+      "path": "assets/images/cctv_19.jpg",
+      "description": "white bullet security camera lot",
+      "type": "image"
+    },
+    {
+      "id": "cctv_20",
+      "path": "assets/images/cctv_20.jpg",
+      "description": "white and gray metal pipe",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_1",
+      "path": "assets/images/fire_safety_1.jpg",
+      "description": "Two Firefighter teamwork in fire suit with fire fighting equipment using high pressure water fight a fire",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_2",
+      "path": "assets/images/fire_safety_2.jpg",
+      "description": "firefighters near fire",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_3",
+      "path": "assets/images/fire_safety_3.jpg",
+      "description": "red fire extinguisher on gray wall",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_4",
+      "path": "assets/images/fire_safety_4.jpg",
+      "description": "red fire extinguisher on green wall",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_5",
+      "path": "assets/images/fire_safety_5.jpg",
+      "description": "rear view on reverent, confident man working in fire station ready to save people from fire in emergency situations, wearing uniform and helmet",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_6",
+      "path": "assets/images/fire_safety_6.jpg",
+      "description": "a red fire extinguisher hanging on a wall",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_7",
+      "path": "assets/images/fire_safety_7.jpg",
+      "description": "a firefighter standing in front of a large fire",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_8",
+      "path": "assets/images/fire_safety_8.jpg",
+      "description": "a close up of a red fire hydrant",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_9",
+      "path": "assets/images/fire_safety_9.jpg",
+      "description": "Closeup of red fire extinguishers",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_10",
+      "path": "assets/images/fire_safety_10.jpg",
+      "description": "a group of firefighters standing around a fire hydrant",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_11",
+      "path": "assets/images/fire_safety_11.jpg",
+      "description": "four fire extinguishers lined up against a green wall",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_12",
+      "path": "assets/images/fire_safety_12.jpg",
+      "description": "red fire extinguisher mounted on wall",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_13",
+      "path": "assets/images/fire_safety_13.jpg",
+      "description": "Firefighter in protective uniform with helmet on head checking on hoses before intervention while standing in fire station.",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_14",
+      "path": "assets/images/fire_safety_14.jpg",
+      "description": "A fire extinguisher hanging on a wall",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_15",
+      "path": "assets/images/fire_safety_15.jpg",
+      "description": "firefighter inside burning house",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_16",
+      "path": "assets/images/fire_safety_16.jpg",
+      "description": "red fire extinguisher mounted on white wall",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_17",
+      "path": "assets/images/fire_safety_17.jpg",
+      "description": "Two Firefighter teamwork in fire suit with fire fighting equipment using high pressure water fight a fire",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_18",
+      "path": "assets/images/fire_safety_18.jpg",
+      "description": "red fire stinguesher",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_19",
+      "path": "assets/images/fire_safety_19.jpg",
+      "description": "red and black ceramic mugs on black steel rack",
+      "type": "image"
+    },
+    {
+      "id": "fire_safety_20",
+      "path": "assets/images/fire_safety_20.jpg",
+      "description": "a group of red fire extinguishers sitting on a sidewalk",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_1",
+      "path": "assets/images/datacenter_1.jpg",
+      "description": "silhouette of virtual human on brain delta wave form 3d illustration  , represent meditation and \ndeep sleep therapy.",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_2",
+      "path": "assets/images/datacenter_2.jpg",
+      "description": "cable network",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_3",
+      "path": "assets/images/datacenter_3.jpg",
+      "description": "a bunch of blue wires connected to each other",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_4",
+      "path": "assets/images/datacenter_4.jpg",
+      "description": "a long hallway with glass doors leading to another room",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_5",
+      "path": "assets/images/datacenter_5.jpg",
+      "description": "A server room with rows of servers in it",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_6",
+      "path": "assets/images/datacenter_6.jpg",
+      "description": "a rack of servers in a server room",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_7",
+      "path": "assets/images/datacenter_7.jpg",
+      "description": "a very large array of electronic equipment in a room",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_8",
+      "path": "assets/images/datacenter_8.jpg",
+      "description": "white marble floor tiles",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_9",
+      "path": "assets/images/datacenter_9.jpg",
+      "description": "Macro image of blade servers in blue neon light stacked in data center, copy space",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_10",
+      "path": "assets/images/datacenter_10.jpg",
+      "description": "woman in black top using Surface laptop",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_11",
+      "path": "assets/images/datacenter_11.jpg",
+      "description": "electronic wire lot",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_12",
+      "path": "assets/images/datacenter_12.jpg",
+      "description": "img IX mining rig inside white and gray room",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_13",
+      "path": "assets/images/datacenter_13.jpg",
+      "description": "a close up of a network with wires connected to it",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_14",
+      "path": "assets/images/datacenter_14.jpg",
+      "description": "group of people having a meeting",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_15",
+      "path": "assets/images/datacenter_15.jpg",
+      "description": "rectangular brown wooden table with chair lot inside building",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_16",
+      "path": "assets/images/datacenter_16.jpg",
+      "description": "Servers line a data center hallway.",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_17",
+      "path": "assets/images/datacenter_17.jpg",
+      "description": "a rack of electronic equipment in a dark room",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_18",
+      "path": "assets/images/datacenter_18.jpg",
+      "description": "a close-up of a server room",
+      "type": "image"
+    },
+    {
+      "id": "datacenter_19",
+      "path": "assets/images/datacenter_19.jpg",
+      "description": "a close up of a rack of computer equipment",
+      "type": "image"
+    },
+    {
+      "id": "handshake_1",
+      "path": "assets/images/handshake_1.jpg",
+      "description": "Handshaking. Two businessman shaking hands during a success meeting.",
+      "type": "image"
+    },
+    {
+      "id": "handshake_2",
+      "path": "assets/images/handshake_2.jpg",
+      "description": "people standing inside city building",
+      "type": "image"
+    },
+    {
+      "id": "handshake_3",
+      "path": "assets/images/handshake_3.jpg",
+      "description": "two people shaking hands in front of a laptop",
+      "type": "image"
+    },
+    {
+      "id": "handshake_4",
+      "path": "assets/images/handshake_4.jpg",
+      "description": "two people shaking hands over a wooden table",
+      "type": "image"
+    },
+    {
+      "id": "handshake_5",
+      "path": "assets/images/handshake_5.jpg",
+      "description": "a close up of two people shaking hands",
+      "type": "image"
+    },
+    {
+      "id": "handshake_6",
+      "path": "assets/images/handshake_6.jpg",
+      "description": "two people shaking hands",
+      "type": "image"
+    },
+    {
+      "id": "handshake_7",
+      "path": "assets/images/handshake_7.jpg",
+      "description": "man in white dress shirt sitting beside woman in black long sleeve shirt",
+      "type": "image"
+    },
+    {
+      "id": "handshake_8",
+      "path": "assets/images/handshake_8.jpg",
+      "description": "a man and a woman shaking hands in front of a laptop",
+      "type": "image"
+    },
+    {
+      "id": "handshake_9",
+      "path": "assets/images/handshake_9.jpg",
+      "description": "Close-up of coworkers shaking hands during business meeting in the office.",
+      "type": "image"
+    },
+    {
+      "id": "handshake_10",
+      "path": "assets/images/handshake_10.jpg",
+      "description": "team members gripping wrists in unity gesture",
+      "type": "image"
+    },
+    {
+      "id": "handshake_11",
+      "path": "assets/images/handshake_11.jpg",
+      "description": "person using laptop on white wooden table",
+      "type": "image"
+    },
+    {
+      "id": "handshake_12",
+      "path": "assets/images/handshake_12.jpg",
+      "description": "human hand neon signage",
+      "type": "image"
+    },
+    {
+      "id": "handshake_13",
+      "path": "assets/images/handshake_13.jpg",
+      "description": "Businessmans handshake. Successful businessmen handshaking after good deal. Business partnership meeting concept.",
+      "type": "image"
+    },
+    {
+      "id": "handshake_14",
+      "path": "assets/images/handshake_14.jpg",
+      "description": "two people shaking hands over a piece of paper",
+      "type": "image"
+    },
+    {
+      "id": "handshake_15",
+      "path": "assets/images/handshake_15.jpg",
+      "description": "person holding hands of another person",
+      "type": "image"
+    },
+    {
+      "id": "handshake_16",
+      "path": "assets/images/handshake_16.jpg",
+      "description": "two businessmen looking at phone in office",
+      "type": "image"
+    },
+    {
+      "id": "handshake_17",
+      "path": "assets/images/handshake_17.jpg",
+      "description": "Business People Corporate Connection Greeting Handshake Concept",
+      "type": "image"
+    },
+    {
+      "id": "handshake_18",
+      "path": "assets/images/handshake_18.jpg",
+      "description": "two people sitting during day",
+      "type": "image"
+    },
+    {
+      "id": "handshake_19",
+      "path": "assets/images/handshake_19.jpg",
+      "description": "a man holding a baby",
+      "type": "image"
+    },
+    {
+      "id": "handshake_20",
+      "path": "assets/images/handshake_20.jpg",
+      "description": "man and woman holding hands",
+      "type": "image"
+    },
+    {
+      "id": "crowd_1",
+      "path": "assets/images/crowd_1.jpg",
+      "description": "Security Guard Walking Building Perimeter With Flashlight At Night",
+      "type": "image"
+    },
+    {
+      "id": "crowd_2",
+      "path": "assets/images/crowd_2.jpg",
+      "description": "selective focus photography of man wearing black top",
+      "type": "image"
+    },
+    {
+      "id": "crowd_3",
+      "path": "assets/images/crowd_3.jpg",
+      "description": "a security officer walking down a street",
+      "type": "image"
+    },
+    {
+      "id": "crowd_4",
+      "path": "assets/images/crowd_4.jpg",
+      "description": "a police officer standing in front of a crowd of people",
+      "type": "image"
+    },
+    {
+      "id": "crowd_5",
+      "path": "assets/images/crowd_5.jpg",
+      "description": "a group of security officers standing next to each other",
+      "type": "image"
+    },
+    {
+      "id": "crowd_6",
+      "path": "assets/images/crowd_6.jpg",
+      "description": "Security guard watches over a gathering under a tent",
+      "type": "image"
+    },
+    {
+      "id": "crowd_7",
+      "path": "assets/images/crowd_7.jpg",
+      "description": "people walking on sidewalk during daytime",
+      "type": "image"
+    },
+    {
+      "id": "crowd_8",
+      "path": "assets/images/crowd_8.jpg",
+      "description": "People are waiting in a long, crowded line.",
+      "type": "image"
+    },
+    {
+      "id": "crowd_9",
+      "path": "assets/images/crowd_9.jpg",
+      "description": "Group of police guards in uniform protected by shields standing with side handles and shields against city bridges",
+      "type": "image"
+    },
+    {
+      "id": "crowd_10",
+      "path": "assets/images/crowd_10.jpg",
+      "description": "Security guard stands near building entrance",
+      "type": "image"
+    },
+    {
+      "id": "crowd_11",
+      "path": "assets/images/crowd_11.jpg",
+      "description": "Stanchion poles with chains on pavement",
+      "type": "image"
+    },
+    {
+      "id": "crowd_12",
+      "path": "assets/images/crowd_12.jpg",
+      "description": "A police officer wearing a yellow vest and hat.",
+      "type": "image"
+    },
+    {
+      "id": "crowd_13",
+      "path": "assets/images/crowd_13.jpg",
+      "description": "Policeman in riot helmet standing among coworkers with riot shields and speaking into mefaphone while neutralizing terrorists",
+      "type": "image"
+    },
+    {
+      "id": "crowd_14",
+      "path": "assets/images/crowd_14.jpg",
+      "description": "People on a building rooftop with palm trees",
+      "type": "image"
+    },
+    {
+      "id": "crowd_15",
+      "path": "assets/images/crowd_15.jpg",
+      "description": "Security guard behind caution tape at night event",
+      "type": "image"
+    },
+    {
+      "id": "crowd_16",
+      "path": "assets/images/crowd_16.jpg",
+      "description": "Mounted police officers in uniform riding horses",
+      "type": "image"
+    },
+    {
+      "id": "crowd_17",
+      "path": "assets/images/crowd_17.jpg",
+      "description": "Group of riot police staff in black boots standing on asphalt at street and holding shields",
+      "type": "image"
+    },
+    {
+      "id": "crowd_18",
+      "path": "assets/images/crowd_18.jpg",
+      "description": "people walking on road near buildings",
+      "type": "image"
+    },
+    {
+      "id": "crowd_19",
+      "path": "assets/images/crowd_19.jpg",
+      "description": "A person wearing a police jacket in a crowd",
+      "type": "image"
+    },
+    {
+      "id": "crowd_20",
+      "path": "assets/images/crowd_20.jpg",
+      "description": "Security guard in uniform observing an outdoor public area.",
+      "type": "image"
+    },
+    {
+      "id": "patrol_1",
+      "path": "assets/images/patrol_1.jpg",
+      "description": "a close up of a police car with its lights on",
+      "type": "image"
+    },
+    {
+      "id": "patrol_2",
+      "path": "assets/images/patrol_2.jpg",
+      "description": "police car at street",
+      "type": "image"
+    },
+    {
+      "id": "patrol_3",
+      "path": "assets/images/patrol_3.jpg",
+      "description": "white and blue bmw m 3 coupe parked beside brown concrete building during daytime",
+      "type": "image"
+    },
+    {
+      "id": "patrol_4",
+      "path": "assets/images/patrol_4.jpg",
+      "description": "blue and white car in a parking lot",
+      "type": "image"
+    },
+    {
+      "id": "patrol_5",
+      "path": "assets/images/patrol_5.jpg",
+      "description": "a police officer standing next to a police car",
+      "type": "image"
+    },
+    {
+      "id": "patrol_6",
+      "path": "assets/images/patrol_6.jpg",
+      "description": "white and blue bmw m 3 on road during daytime",
+      "type": "image"
+    },
+    {
+      "id": "patrol_7",
+      "path": "assets/images/patrol_7.jpg",
+      "description": "a police car parked on the side of the road",
+      "type": "image"
+    },
+    {
+      "id": "patrol_8",
+      "path": "assets/images/patrol_8.jpg",
+      "description": "cars parked on side of the road during daytime",
+      "type": "image"
+    },
+    {
+      "id": "patrol_9",
+      "path": "assets/images/patrol_9.jpg",
+      "description": "a police officer standing next to a police car",
+      "type": "image"
+    },
+    {
+      "id": "patrol_10",
+      "path": "assets/images/patrol_10.jpg",
+      "description": "white bmw m 3 on road during daytime",
+      "type": "image"
+    },
+    {
+      "id": "patrol_11",
+      "path": "assets/images/patrol_11.jpg",
+      "description": "a police car parked on the side of the road",
+      "type": "image"
+    },
+    {
+      "id": "patrol_12",
+      "path": "assets/images/patrol_12.jpg",
+      "description": "white and blue car license plate",
+      "type": "image"
+    },
+    {
+      "id": "patrol_13",
+      "path": "assets/images/patrol_13.jpg",
+      "description": "A polarizing topic in political election discussions: Border patrol vehicle on watch at the Mexico / United States border in El Paso Texas / New Mexico USA.\n\nPhoto taken on a hot summer day in USA",
+      "type": "image"
+    },
+    {
+      "id": "patrol_14",
+      "path": "assets/images/patrol_14.jpg",
+      "description": "black honda car on road during daytime",
+      "type": "image"
+    },
+    {
+      "id": "patrol_15",
+      "path": "assets/images/patrol_15.jpg",
+      "description": "a car parked on the street",
+      "type": "image"
+    },
+    {
+      "id": "patrol_16",
+      "path": "assets/images/patrol_16.jpg",
+      "description": "a police car parked in front of a construction site",
+      "type": "image"
+    },
+    {
+      "id": "patrol_17",
+      "path": "assets/images/patrol_17.jpg",
+      "description": "A polarizing topic in political election discussions: Border patrol vehicle on watch at the Mexico / United States border in El Paso Texas / New Mexico USA.\n\nPhoto taken on a hot summer day in USA",
+      "type": "image"
+    },
+    {
+      "id": "patrol_18",
+      "path": "assets/images/patrol_18.jpg",
+      "description": "white coupe on road during daytime",
+      "type": "image"
+    },
+    {
+      "id": "patrol_19",
+      "path": "assets/images/patrol_19.jpg",
+      "description": "white honda car on road during night time",
+      "type": "image"
+    },
+    {
+      "id": "patrol_20",
+      "path": "assets/images/patrol_20.jpg",
+      "description": "a white car parked on the side of a street",
+      "type": "image"
+    }
+  ]
+}

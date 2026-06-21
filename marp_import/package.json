@@ -1,0 +1,19 @@
+{
+  "name": "marp_import",
+  "version": "1.0.0",
+  "description": "Vous pouvez déposer votre fichier de Mémoire Technique (.docx, .pdf, .txt, etc.) dans ce dossier. Une fois déposé, dites-moi son nom exact et je m'occupe de le convertir et le mettre en page avec Marp + CSS.",
+  "main": "extract.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@marp-team/marp-cli": "^4.4.0",
+    "dotenv": "^17.4.2",
+    "mammoth": "^1.12.0",
+    "openai": "^6.44.0"
+  }
+}

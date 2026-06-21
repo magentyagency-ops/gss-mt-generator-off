@@ -1,0 +1,31 @@
+{
+  "id": "demo-dossier-1",
+  "acheteur": "Mairie de Port-Jérôme-sur-Seine",
+  "objet": "Surveillance physique des bâtiments communaux et sécurité événementielle",
+  "dateLimite": "2026-07-25",
+  "departement": "76",
+  "statut": "Brouillon",
+  "responsable": "Sacha",
+  "emailSummary": "Prestations de gardiennage et surveillance humaine des locaux communaux, cinéma, et salles de spectacle de la ville de Port-Jérôme. Le prestataire devra également fournir des agents de sécurité évènementielle pour les festivités locales et des agents SSIAP qualifiés.",
+  "suggestionSections": [
+    "Section I : Moyens humains affectés spécifiquement au marché",
+    "Section II : Organisation des rondes de surveillance dans le cinéma",
+    "Section III : Dispositif de sécurité événementielle et gestion des foules",
+    "Section IV : Plan de continuité d'activité et palliatif des absences"
+  ],
+  "importedFromEmail": true,
+  "dce_files": [
+    {
+      "nom": "CCTP_Gardiennage_Mairie_de_Port-Jérôme-sur-Seine.pdf",
+      "type": "pdf",
+      "taille": "3.8 Mo",
+      "statut": "ok"
+    },
+    {
+      "nom": "RC_Mairie_de_Port-Jérôme-sur-Seine_2026.pdf",
+      "type": "pdf",
+      "taille": "1.5 Mo",
+      "statut": "ok"
+    }
+  ]
+}

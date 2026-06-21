@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 120" fill="none">
+  <!-- Steps -->
+  <circle cx="50" cy="50" r="30" fill="#494545" stroke="#dc2626" stroke-width="2"/>
+  <text x="50" y="55" font-family="'Outfit', sans-serif" font-size="12" fill="#ffffff" font-weight="bold" text-anchor="middle">1. Tri</text>
+
+  <path d="M90 50h40" stroke="#494545" stroke-width="2"/>
+
+  <circle cx="170" cy="50" r="30" fill="#494545" stroke="#dc2626" stroke-width="2"/>
+  <text x="170" y="55" font-family="'Outfit', sans-serif" font-size="12" fill="#ffffff" font-weight="bold" text-anchor="middle">2. Éval</text>
+
+  <path d="M210 50h40" stroke="#494545" stroke-width="2"/>
+
+  <circle cx="290" cy="50" r="30" fill="#494545" stroke="#dc2626" stroke-width="2"/>
+  <text x="290" y="55" font-family="'Outfit', sans-serif" font-size="12" fill="#ffffff" font-weight="bold" text-anchor="middle">3. Entretien</text>
+
+  <path d="M330 50h40" stroke="#494545" stroke-width="2"/>
+
+  <circle cx="410" cy="50" r="30" fill="#494545" stroke="#dc2626" stroke-width="2"/>
+  <text x="410" y="55" font-family="'Outfit', sans-serif" font-size="12" fill="#ffffff" font-weight="bold" text-anchor="middle">4. Intégration</text>
+</svg>

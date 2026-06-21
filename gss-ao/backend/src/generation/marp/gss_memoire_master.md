@@ -288,69 +288,94 @@ Nous avons répertorié les différents secteurs d'activité suivants et allons 
 ---
 <!-- header: "I. PRESENTATION" -->
 
-**5. ILS NOUS ONT FAIT CONFIANCE**
 
-LA DISTRIBUTION	****
 
-Dans le secteur de la distribution, nous travaillons régulièrement avec différentes enseignes comme Carrefour, Leclerc, Intermarché, Intersport, Districenter, But, Noz, ou encore Kiloutou.
+**LA DISTRIBUTION**
 
-La distribution est un secteur bien particulier et très complet en terme d'exigence de compétences. En effet, les besoins sont très diversifiés et ce, du fait du contact avec la clientèle du magasin, et des équipes de vente et gestion. L'agent de sécurité fait le lien entre toutes les zones et toutes les activités de la zone commerciale.
+Dans le secteur de la distribution, nous travaillons régulièrement avec différentes enseignes comme Carrefour, Leclerc, Intermarché, Intersport, Districenter, But, Noz, ou encore Kiloutou. La distribution est un secteur bien particulier et très complet en terme d'exigence de compétences (contact clientèle, équipes de vente, gestion des flux). L'agent de sécurité fait le lien entre toutes les zones. Il se doit de posséder un grand sens de l'observation et de concentration, tout en faisant preuve de dissuasion de façon mesurée pour rester dans une démarche commerciale.
 
-L 'agent se doit de posséder un grand sens de l'observation et de concentration, il doit être alerte sur les comportement des clients et doit pouvoir repérer rapidement un comportement suspect.
-
-Il doit également faire preuve de dissuasion de façon mesurée pour rester dans une démarche commerciale.
+![w:17cm](media/bannier.png)
 ---
 <!-- header: "PRESENTATION" -->
 
-5. ILS NOUS ONT FAIT CONFIANCE**SITE: CARREFOUR - VENETTE**
+### SITE : CARREFOUR - VENETTE
 
-**SITUATION GEOGRAPHIQUE: 6 avenue de l’Europe 60280 EFFECTIF: 13 agents**
+<div style="display: flex; align-items: flex-start; gap: 20px;">
+  <img src="media/logocarrefour.png" style="width: 3cm; margin-top: -6px;" />
+  <div style="display: flex; flex-direction: column;">
+    <span><strong>SITUATION GÉOGRAPHIQUE :</strong> 6 avenue de l’Europe 60280</span>
+    <span><strong>EFFECTIF :</strong> 13 agents</span>
+    <span><strong>COMPÉTENCES :</strong> Télésurveillance, Vidéosurveillance, Sécurité incendie, Gardiennage et sûreté</span>
+  </div>
+</div>
 
-**COMPETENCES:	**
+Nous allons vous présenter dans les grandes lignes nos missions sur un de nos sites Carrefour.
 
-**Nous allons vous présenter dans les grandes lignes nos missions sur un de nos sites Carrefour.**
+**Nos missions :**
+* Prévenir et empêcher le vol de marchandises
+* Escorter les caisses lors des changements
+* Rondes d'ouverture et de fermeture
+* Vidéosurveillance du magasin
+* Gestion et orientation des entrées public
+* Gestion des livraisons fournisseurs et réception des camions
+* Contrôle des installations incendie
+* Surveillance nocturne des zones de parking
+* Installation des systèmes antivols sur les articles onéreux
+* Réarmement de la centrale de lavage en cas de panne
+* Veiller au respect des consignes de sécurité
+* Réaliser les relevés nocturnes de température du matériel de froid
 
-**Nos missions:**
-
-**Prévenir et empêcher le vol de marchandises****Escorter les caisses lors des changements****Rondes ouverture et fermeture****Vidéosurveillance du magasin****Gestion et orientation des entrée public****Gestion des livraisons fournisseurs****Réception des livraisons camions****Contrôle des installations incendie****Surveillance nocturne des zones parking****Installation des systèmes antivols sur les articles onéreux****Réarmement de la centrale de lavage en cas de panne****Remplir les bacs de gel hydroalcooliques****Veiller au respect des gestes barrières****Réaliser les relevés nocturnes de température du matériel de froid****Nous donnons une vraie consistance et un suivi aux missions de nos agents en proposant une remontée d'indicateurs.**
-
-**Nous proposons un suivi chiffré et analysé de certaines actions de nos agents comme par exemple le nombre d'interpellations, le nombre de vol, le nombre de rondes effectuées ou encore le nombre d'incident de températures.**
-
-**Ces analyses vont nous permettre, à nous et au client, de pouvoir mettre en place certaines actions pour faire évoluer notre prestation.**
+Nous donnons une vraie consistance et un suivi aux missions de nos agents en proposant une remontée d'indicateurs (suivi chiffré et analysé : nombre d'interpellations, de vols, de rondes effectuées, d'incidents de température, etc.). Ces analyses nous permettent de faire évoluer notre prestation en synergie avec le client.
 ---
 <!-- header: "ILS NOUS FONT CONFIANCE" -->
 
-LES MAIRIES	Les prestations qui nous sont confiées par les mairies sont de deux natures: la surveillance des bâtiments municipaux et d'autre part la gestion de la sécurité évènementielle.
+**LES MAIRIES**
+
+Les prestations qui nous sont confiées par les mairies sont de deux natures: la surveillance des bâtiments municipaux et d'autre part la gestion de la sécurité évènementielle.
 
 Notre équipe encadrante crée des liens étroits avec les équipes des communes avec lesquelles nous travaillons. En effet, pour la partie évènementielle, il est important de bien cerner les attentes de nos partenaires afin d'y répondre de façon pertinente.
 
 En travaillant régulièrement ensemble, nous connaissons bien les prérogatives des communes et pouvons également les orienter sur les nouveautés en matière de sécurité (comme récemment avec les nouvelles dispositions en matière de lutte contre le Covid). Nous travaillons vraiment en synergie pour réaliser une prestation de qualité.
 
 Pour ce qui est de la surveillance des bâtiments municipaux, il est important pour nous de mettre en place une équipe pérenne, qui va avoir une parfaite connaissance des lieux et des équipes techniques de la mairie afin de pouvoir réaliser à la fois une surveillance pointue des installations incendie, mais aussi de pouvoir être très réactif lors d'une intervention sur alarme
+
+![w:17cm](media/banniere_mairie.png)
 ---
 <!-- header: "ILS NOUS FONT CONFIANCE" -->
 
-**SITE: Cinema - Théâtre - Bâtiments communaux SITUATION GEOGRAPHIQUE: Port-Jérôme-sur-Seine 76330 EFFECTIF: 2 à 30 agents**
+### SITE : CINÉMA - THÉÂTRE - BÂTIMENTS COMMUNAUX
 
-**COMPETENCES:	**
+<div style="display: flex; align-items: flex-start; gap: 20px;">
+  <img src="media/logoseine.png" style="width: 3cm; margin-top: -6px;" />
+  <div style="display: flex; flex-direction: column;">
+    <span><strong>SITUATION GÉOGRAPHIQUE :</strong> Port-Jérôme-sur-Seine 76330</span>
+    <span><strong>EFFECTIF :</strong> 2 à 30 agents</span>
+    <span><strong>COMPÉTENCES :</strong> Sécurité événementielle, Surveillance de bâtiments, Sécurité incendie</span>
+  </div>
+</div>
 
-**Nous allons vous présenter dans les grandes lignes nos missions chez une de nos mairies partenaires: la ville de Port Jérôme sur Seine:**
+Nous allons vous présenter dans les grandes lignes nos missions chez une de nos mairies partenaires : la ville de Port Jérôme sur Seine.
 
-**Nos missions Cinéma et spectacles:**
+**Nos missions Cinéma et spectacles :**
+* Filtrer les entrées du cinéma et de la salle de spectacle
+* Réaliser des rondes de surveillance pendant les séances et spectacles
+* Réaliser des rondes de surveillance incendie pendant les séances et spectacles
+* Veiller au respect des gestes barrières
 
-**Filtrer les entrées du cinéma et de la salle de spectacle****Réaliser des rondes de surveillance pendant les séances et spectacles****Réaliser des rondes de surveillance incendie pendant les séances et spectacles.****Veiller au respect des gestes barrières****Nos missions évènementielles:**
+**Nos missions événementielles :**
+* Filtrer et compter les entrées et sorties lors d'événements de la commune
+* Organiser la surveillance de sûreté et sécurité pendant les événements
+* Réaliser des rondes de contrôle d'installations de sécurité incendie
+* Réaliser des rondes de surveillance des installations événementielles lors de la fermeture au public et veiller à la non-dégradation du matériel
+* Veiller au respect des gestes barrières
 
-**Filtrer et compter les entrées et sorties lors d'évènements de la commune****Organiser la surveillance de sûreté et sécurité pendant les évènements****Réaliser des rondes de contrôle d'installations de sécurité incendie****Réaliser des rondes de surveillance des installations évènementielles lors de la fermeture au public et veiller à la non dégradation du matériel.****-Veiller au respect des gestes barrières**
+**Nos missions surveillance de bâtiments :**
+* Effectuer des interventions sur alarme lorsqu'une alarme d'un bâtiment municipal se déclenche
+* Effectuer régulièrement des rondes de vérification du matériel incendie et du matériel d'alerte.
+---
+<!-- header: "ILS NOUS FONT CONFIANCE" -->
 
-**Nos missions surveillance de bâtiments:**
-
-**Effectuer des interventions sur alarme lorsqu'une alarme d'un bâtiment municipal se déclenche****-Effectuer régulièrement des rondes de vérification du matériel incendie et du matériel d'alerte.**
-
-**ILS NOUS FONT CONFIANCE**
-
-LES SITES INDUSTRIELS
-
-****
+**LES SITES INDUSTRIELS**
 
 Différentes structures industrielles nous ont fait confiance en nous confiant leurs besoins en sécurité.
 
@@ -359,40 +384,80 @@ Ce secteur d'activité est bien particulier et très intéressant de par sa dive
 Notre rôle est de se tenir toujours à la pointe des normes de sécurité dans ce domaine et de tenir nos équipes en perpétuelle formation.
 
 Nos équipes sur place se doivent de faire preuve d'une grande rigueur et de discrétion.
+
+![w:17cm](media/banniere_industriel.png)
 ---
 <!-- header: "ILS NOUS FONT CONFIANCE" -->
 
-**SITE: SNEIDER Electric**
+### SITE : SCHNEIDER ELECTRIC
 
-**SITUATION GEOGRAPHIQUE: Beaumont le Roger 27170 EFFECTIF: 8 agents**
+<div style="display: flex; align-items: flex-start; gap: 20px;">
+  <img src="media/sneierelectric.png" style="width: 3cm; margin-top: -6px;" />
+  <div style="display: flex; flex-direction: column;">
+    <span><strong>SITUATION GÉOGRAPHIQUE :</strong> Beaumont le Roger 27170</span>
+    <span><strong>EFFECTIF :</strong> 8 agents</span>
+    <span><strong>COMPÉTENCES :</strong> Sécurité industrielle, Surveillance, Sûreté, Sécurité incendie, Prévention des risques</span>
+  </div>
+</div>
 
-**COMPETENCES:	**
+Nous allons vous présenter dans les grandes lignes nos missions chez un de nos partenaires industriels :
 
-**Nous allons vous présenter dans les grandes lignes nos missions chez un de nos partenaires industriels:**
+**Nos missions :**
+* Sécurisation du site
+* Réalisation de rondes de surveillance
+* Filtrage des entrées et sorties
+* Gestion des moyens d'accès
+* Gestion des accès livraison
+* Gestion des accès aux entreprises externes intervenantes
+* Intervention sur alarme
+* Vérification des installations électriques
+* Mission de prévention des risques
+* Formation SST et Pompier auprès des salariés du site.
+---
+<!-- header: "ILS NOUS FONT CONFIANCE" -->
 
-**Sécurisation du site****Réalisation de rondes de surveillance****Filtrage des entrées et sorties****Gestion des moyens d'accès****Gestion des accès livraison****Gestion des accès aux entreprises externes intervenantes****Intervention sur alarme****Vérification des installations électriques****Mission de prévention des risques****-Formation SST et Pompier auprès des salariés du site.**
-
-LES ECOLES, UNIVERSITES ET FACULTES
-
-****
+**LES ECOLES, UNIVERSITES ET FACULTES**
 
 Nous sommes régulièrement sollicités pour effectuer des missions de sécurité au sein d'établissement scolaires ou d'enseignement et formation professionnelles, comme par exemple au CESI, NEOMA Business School, l'université Olympe de Gouges à Alençon ou encore pour l'université de Rouen.
 
 Là encore, ces missions sont de natures très différentes. Il peut s'agir de surveillance humaine dans des locaux de type collège ou lycée, en cas de système d'alarme défaillant ou suite à des dégradations. Mais aussi de partenariats plus ancrés, au sein duquel nous effectuons des missions d'accueil, de prévention, et de gestion humaine.
 
 Ici, nos agents sont formés à être en interaction avec le personnel enseignant et une population étudiante. Ils doivent mettre l'accent sur la communication avec une certaine fermeté. Ils doivent également faire preuve de polyvalence et d'adaptabilité.
+
+![w:17cm](media/banniere_ecole.png)
 ---
 <!-- header: "ILS NOUS FONT CONFIANCE" -->
 
-**SITE: CESI - Campus d'Enseignement Supérieur SITUATION GEOGRAPHIQUE: Rouen, Caen, Lille**
+### SITE : CESI - CAMPUS D'ENSEIGNEMENT SUPÉRIEUR
 
-****
+<div style="display: flex; align-items: flex-start; gap: 20px;">
+  <img src="media/logocesi.png" style="width: 3cm; margin-top: -6px;" />
+  <div style="display: flex; flex-direction: column;">
+    <span><strong>SITUATION GÉOGRAPHIQUE :</strong> Rouen, Caen, Lille</span>
+    <span><strong>COMPÉTENCES :</strong> Surveillance & Sûreté, Accueil & Orientation, Sécurité incendie</span>
+  </div>
+</div>
 
-**Nous allons vous présenter dans les grandes lignes nos missions chez une de nos partenaires industrie:**
+Nous allons vous présenter dans les grandes lignes nos missions chez un de nos partenaires d'enseignement supérieur :
 
-**Accueil des étudiants****Accueil des intervenants externes****Accueil des entreprises externes et réception de commandes****Gestion du pôle accueil****Mise en place des badges et création des accès****Gestion du prêt aux étudiants du matériel informatique****Gestion de la circulation sur la zone parking de l'établissement****Gestion du courrier et colis à l'accueil****Renseigner et orienter les intervenants****Ronde de vérification du respect du règlement intérieur****Vérification du respect des gestes barrières****Accompagnement sur les exercices évacuation incendie****Formation du personnel aux bonnes pratiques de sécurité et prévention****Rondes de vérification du matériel incendie****Gestion des évènements du campus (portes ouvertes, fêtes étudiantes, remises de diplômes,...)****Participation et intervention dans un processus d'amélioration de la sécurité****Intervention sur alarme**
+**Nos missions :**
+* Accueil des étudiants et des intervenants externes
+* Accueil des entreprises externes et réception des commandes
+* Gestion du pôle accueil et prêt de matériel informatique aux étudiants
+* Mise en place des badges et création des accès
+* Gestion de la circulation sur la zone de parking de l'établissement
+* Gestion du courrier et des colis à l'accueil
+* Renseigner et orienter les intervenants
+* Rondes de vérification du respect du règlement intérieur
+* Accompagnement sur les exercices d'évacuation incendie
+* Rondes de vérification du matériel incendie
+* Gestion de la sécurité des événements du campus (portes ouvertes, fêtes étudiantes, remises de diplômes...)
+* Participation et intervention dans un processus d'amélioration de la sécurité
+* Intervention sur alarme
+---
+<!-- header: "ILS NOUS FONT CONFIANCE" -->
 
-LES ETABLISSEMENTS BANCAIRES
+**LES ETABLISSEMENTS BANCAIRES**
 
 Nous sommes régulièrement sollicités pour effectuer des missions de sécurité au sein d'établissement bancaires.
 
@@ -400,57 +465,99 @@ Il peut s'agir de sécuriser une agence pendant les plages horaires d'ouverture 
 
 Les agents en place doivent faire preuve d'une bonne communication comme pour tout site accueillant du public, ainsi que le respect des procédures internes du groupe bancaire.
 
-**SITE: Agence CIC**
-
-**SITUATION GEOGRAPHIQUE: Amiens 80000**
-
-**EFFECTIF: 2 agents COMPETENCES: **
-
-**Nous allons vous présenter dans les grandes lignes nos missions chez une de nos partenaires bancaires:**
-
-**Vérification du respect des gestes barrières****Rondes de vérification du matériel incendie****Intervention sur alarme****Sécurisation de l'agence****Accueil des entreprises intervenantes pendant les travaux****Intervention sur alarme**
+![w:17cm](media/banniere_banque.png)
 ---
 <!-- header: "ILS NOUS FONT CONFIANCE" -->
 
-LES INSTITUTIONNELS
+### SITE : AGENCE CIC
 
-****
+<div style="display: flex; align-items: flex-start; gap: 20px;">
+  <img src="media/logocic.png" style="width: 3cm; margin-top: -6px;" />
+  <div style="display: flex; flex-direction: column;">
+    <span><strong>SITUATION GÉOGRAPHIQUE :</strong> Amiens 80000</span>
+    <span><strong>EFFECTIF :</strong> 2 agents</span>
+    <span><strong>COMPÉTENCES :</strong> Sécurité incendie, Gardiennage et sûreté, Vidéosurveillance</span>
+  </div>
+</div>
+
+Nous allons vous présenter dans les grandes lignes nos missions chez un de nos partenaires bancaires :
+
+**Nos missions :**
+* Vérification du respect des gestes barrières
+* Rondes de vérification du matériel incendie
+* Intervention sur alarme
+* Sécurisation de l'agence
+* Accueil des entreprises intervenantes pendant les travaux
+* Intervention sur alarme
+---
+<!-- header: "ILS NOUS FONT CONFIANCE" -->
+
+**LES INSTITUTIONNELS**
 
 Nous accompagnons depuis plusieurs années, différents acteurs institutionnels de notre territoire comme la CAF, la chambre des métiers et de l’artisanat et la région Normandie.
 
 Travailler à leurs côtés nous a permis d’enrichir notre savoir-faire et savoir être, nos procédures et d’être en capacité de pouvoir intervenir avec pertinence sur un siège social.
 
-En effet, sur ce type de site, la représentation, la posture et les compétences doivent être particulièrement accrues et visibles.
+En effet, sur ce type de site, la représentation, la posture et les compétences doivent être particulièrement accrue et visibles.
 
-**SITE: Siège de la Région Normandie**
-
-**SITUATION GEOGRAPHIQUE: Abbaye aux dames 14000 CAEN**
-
-**EFFECTIF: 20 agents COMPETENCES:	**
-
-**Nous avons la chance d’accompagner la région Normandie, à la fois pour sécuriser les sièges de Rouen et de Caen, mais aussi pour sécuriser les différents établissements scolaires placés sous la responsabilité de la Région, lors de différents disfonctionnements.**
-
-**Gardiennage des bâtiments administratifs et des lycées****Rondes de sécurité incendie****Vérification des installations incendie****Ronde de surveillance****Vérification des accès - issues de secours****Accompagnement des différents intervenants travaux****Lever de doutes en cas d’alarme****Accueil , filtrage et orientation du public****Secours à la personne****Renfort et gestion de la sécurité de différents évènements ponctuels****Ronde SSIAP dans les internats de la région**
-
-LES SITES ET EVENEMENTS SPORTIFS
-
-****
-
-Nous intervenons également dans le milieu sportif, à travers des partenariats réguliers comme le qRM, un club de football local; mais aussi sur sollicitation pour des évènements sportifs ponctuels, comme par exemple, le marathon 76 ou encore le tour de France.
-
-Ces missions nous permettent de mettre en œuvre nos capacité de mobiliser nos équipes en nombre pour un évènement ponctuel, l’organisation de ces derniers, ainsi que notre capacité d’adaptation.
+![w:17cm](media/banniere_institutionnel.png)
 ---
 <!-- header: "ILS NOUS FONT CONFIANCE" -->
 
-**SITE: Quevilly Rouen Metropole**
+### SITE : SIÈGE DE LA RÉGION NORMANDIE
 
-**SITUATION GEOGRAPHIQUE: Rouen Stade Diochon EFFECTIF: 40 agents**
+<div style="display: flex; align-items: flex-start; gap: 20px;">
+  <img src="media/regionnormandie.png" style="width: 3cm; margin-top: -6px;" />
+  <div style="display: flex; flex-direction: column;">
+    <span><strong>SITUATION GÉOGRAPHIQUE :</strong> Abbaye aux Dames 14000 CAEN</span>
+    <span><strong>EFFECTIF :</strong> 20 agents</span>
+    <span><strong>COMPÉTENCES :</strong> Surveillance & Sûreté, Sécurité Incendie, Accueil & Filtrage</span>
+  </div>
+</div>
 
-**COMPETENCES:	**
+Nous avons la chance d’accompagner la région Normandie, à la fois pour sécuriser les sièges de Rouen et de Caen, mais aussi pour sécuriser les différents établissements scolaires placés sous la responsabilité de la Région, lors de différents disfonctionnements.
 
-**Nous allons vous présenter dans les grandes lignes nos missions chez un partenaire organisateur d’évènements sportifs: le QRM, où nous allons pouvoir gérer tout type d’évènements et de prestation sûreté et sécurité.**
+**Nos missions :**
+* Gardiennage des bâtiments administratifs et des lycées
+* Rondes de sécurité incendie et SSIAP dans les internats de la région
+* Vérification des installations et matériels incendie
+* Rondes de surveillance et vérification des accès / issues de secours
+* Accompagnement des différents intervenants travaux
+* Lever de doutes en cas d’alarme
+* Accueil, filtrage et orientation du public
+* Secours à la personne
+* Renfort et gestion de la sécurité de différents évènements ponctuels
+---
+<!-- header: "ILS NOUS FONT CONFIANCE" -->
 
-**Ronde de sécurité incendie****Gestion et suivi du SSI****Rondes de sûreté dans les diverses zones du site****Gestion des moyens d'accès****Filtrage du public****Sécurisation des accès****Renfort du personnel d'accueil et orientation public**
+**LES SITES ET EVENEMENTS SPORTIFS**
+
+Nous intervenons également dans le milieu sportif, à travers des partenariats réguliers comme le QRM, un club de football local ; mais aussi sur sollicitation pour des évènements sportifs ponctuels, comme par exemple, le marathon 76 ou encore le tour de France.
+
+Ces missions nous permettent de mettre en œuvre nos capacité de mobiliser nos équipes en nombre pour un évènement ponctuel, l’organisation de ces derniers, ainsi que notre capacité d’adaptation.
+
+![w:17cm](media/banniere_sportif.png)
+---
+<!-- header: "ILS NOUS FONT CONFIANCE" -->
+
+### SITE : QUEVILLY ROUEN METROPOLE
+
+<div style="display: flex; align-items: flex-start; gap: 20px;">
+  <img src="media/qrmlogo.png" style="width: 3cm; margin-top: -6px;" />
+  <div style="display: flex; flex-direction: column;">
+    <span><strong>SITUATION GÉOGRAPHIQUE :</strong> Rouen Stade Diochon</span>
+    <span><strong>EFFECTIF :</strong> 40 agents</span>
+    <span><strong>COMPÉTENCES :</strong> Sécurité événementielle, Sûreté, Sécurité Incendie (SSI)</span>
+  </div>
+</div>
+
+Nous allons vous présenter dans les grandes lignes nos missions chez un partenaire organisateur d’évènements sportifs : le QRM, où nous allons pouvoir gérer tout type d’évènements et de prestation sûreté et sécurité.
+
+**Nos missions :**
+* Rondes de sûreté dans les diverses zones du site
+* Rondes de sécurité incendie, gestion et suivi du SSI
+* Gestion des moyens d'accès et sécurisation des accès
+* Filtrage du public, renfort du personnel d'accueil et orientation du public
 ---
 <!-- header: "LES MOYENS HUMAINS" -->
 

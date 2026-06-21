@@ -129,6 +129,7 @@ export class MarpGenerator {
         '--pdf',
         '-o', pdfPath,
         '--allow-local-files',
+        '--html',
         '--no-stdin',
       ],
       {
@@ -271,10 +272,66 @@ export class MarpGenerator {
           lines.push(chunk);
           lines.push('');
         }
+
+        // Dynamic illustrations mapping based on section id
+        const illustrationMap: Record<string, string> = {
+          'b_encadrement': 'organigramme.png',
+          // More illustrations will be added here pas à pas
+        };
+
+        if (section.id && illustrationMap[section.id]) {
+          lines.push('---');
+          lines.push('<!-- _class: lead -->');
+          lines.push('<!-- _header: "" -->');
+          lines.push(`![bg contain](media/${illustrationMap[section.id]})`);
+          lines.push('');
+        }
+      }
+
+      if (chapter.key === 'I' || chapter.key === '1') {
+        const refSlides = this.getReferencesSlides();
+        for (const slide of refSlides) {
+          lines.push('---');
+          lines.push(slide);
+          lines.push('');
+        }
       }
     }
 
     return lines.join('\n');
+  }
+
+  /**
+   * Extract the static references slides from the master template.
+   */
+  private getReferencesSlides(): string[] {
+    try {
+      const masterPath = path.join(MARP_ASSETS_DIR, 'gss_memoire_master.md');
+      if (!fs.existsSync(masterPath)) return [];
+      const content = fs.readFileSync(masterPath, 'utf-8');
+      const slides = content.replace(/\r\n/g, '\n').split('\n---');
+      const refSlides: string[] = [];
+      let inRef = false;
+      
+      for (const slide of slides) {
+        const cleanSlide = slide.trim();
+        const norm = cleanSlide.toUpperCase();
+        
+        if (norm.includes('ILS NOUS ONT FAIT CONFIANCEZONE D’IMAGE') || norm.includes('ILS NOUS ONT FAIT CONFIANCEZONE D\'IMAGE')) {
+          inRef = true;
+        } else if (norm.includes('LES MOYENS HUMAINS')) {
+          inRef = false;
+        }
+        
+        if (inRef) {
+          refSlides.push(cleanSlide);
+        }
+      }
+      return refSlides;
+    } catch (err) {
+      console.error('[MarpGenerator] Error reading references slides:', err);
+      return [];
+    }
   }
 
   /**

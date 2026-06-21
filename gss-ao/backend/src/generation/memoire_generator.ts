@@ -2255,19 +2255,13 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
         }
       }
 
-      let systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige la partie du mémoire technique intitulée "${section.title}" pour ce marché.
+      const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige la partie du mémoire technique intitulée "${section.title}" pour ce marché.
 - Rédige un contenu percutant, commercial, concret et technique.
 - Base-toi UNIQUEMENT sur l'analyse du DCE et les atouts GSS fournis ci-dessous.
 - NE METS PAS le titre principal au début de ta réponse (le titre "${section.title}" sera ajouté automatiquement).
 - Structure ton texte avec de courts paragraphes clairs, et si pertinent, de petites listes à puces.
 - Personnalise FORTEMENT pour le client ${clientName}.
 - Ne rédige QUE le contenu de cette section, SANS introduction globale SANS conclusion générale, et SANS salutations.`;
-
-      if (ILLUSTRATIONS_MAP[section.id]) {
-        systemPrompt += `\n\n- TRÈS IMPORTANT : Tu DOIS obligatoirement inclure l'illustration suivante dans ton texte, à l'endroit le plus pertinent sémantiquement (par exemple juste avant le paragraphe qui parle de ce sujet).
-Insère EXACTEMENT ce code HTML dans ton texte sans le modifier :
-<img src="media/${ILLUSTRATIONS_MAP[section.id]}" style="float: right; width: 350px; margin-left: 30px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">`;
-      }
 
       const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}\n\nRédige le contenu de cette partie de manière experte.`;
 
@@ -2498,7 +2492,7 @@ Insère EXACTEMENT ce code HTML dans ton texte sans le modifier :
           title: s.title, 
           text: sectionsMap[s.id], 
           id: s.id, 
-          illustration: ILLUSTRATIONS_MAP[s.id] 
+          illustration: undefined 
         })),
     }));
 
