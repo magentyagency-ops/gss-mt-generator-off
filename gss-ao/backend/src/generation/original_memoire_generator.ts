@@ -1,4 +1,3 @@
-import { MarpGenerator } from './marp_generator';
 import fs from 'fs';
 import path from 'path';
 import { spawnSync, spawn } from 'child_process';
@@ -2150,15 +2149,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     console.log(`[MemoireGenerator] Personnalisation client: ${count} paragraphe(s) mis à jour → "${clientName}".`);
   }
 
-  public async generate(
-    dossierId: string,
-    onProgress?: (progress: number, message: string) => void
-  ): Promise<{
-    status?: 'completed' | 'incomplete';
-    filePath?: string;
-    generatedData?: Record<string, string>;
-    missingFields?: any[];
-  }> {
+  public async generate(dossierId: string): Promise<{ filePath: string, generatedData: Record<string, string> }> {
     const settings = getSettings();
     const baseDir = path.resolve(__dirname, '../../../../');
     const uploadedDceDir = path.resolve(baseDir, `gss-ao/data/output/dce_${dossierId}`);
@@ -2214,14 +2205,14 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
 
     // ── Sans cadre imposé : synthèse IA superposée sur AO RNE.pdf (overlay, design figé) ──
     if (!isClientTemplate) {
-      return this.generateFullMarpPdf(dossierId);
+      return this.generateSynthesisPdf(dossierId);
     }
 
     // 2. Analyse structurée du DCE (contexte unique de rédaction), avant toute manipulation du Word
     const dceContext = await this.getDceContext(dossierId);
     const analysisData = await this.analyzeDce(dceContext);
     const analysisJson = JSON.stringify(analysisData, null, 2);
-    if (onProgress) onProgress(12, 'Analyse du DCE terminée');
+    setProgress(dossierId, { phase: 'analyse', pct: 12, label: 'Analyse du DCE terminée' });
 
     // 2 bis. Connaissances GSS pour répondre au cadre client : on explore TOUS les sous-dossiers de
     // la Documentation GSS (moyens, procédures, organisation…) + le dossier « Personnes » (référents).
@@ -3157,28 +3148,23 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     // Internet (identité du client) ou la demander à l'équipe par email (info interne, ex. dirigeant),
     // puis réintégrer la réponse — au lieu de laisser un blanc. Stub non bloquant (no-op tant que les
     // voies web/email ne sont pas implémentées). Activable via RESOLVE_MISSING_INFO=true.
-
-    const missingInfo = replacements
-      .filter((r: any) => /\[À COMPLÉTER\]/.test(String(r.value)))
-      .map((r: any) => {
-        const d = descriptors.find((x: any) => x.id === r.id);
-        const label = (d?.context.match(/Question:\s*"([^"]*)"|option:\s*"([^"]*)"|Tableau:\s*([^|]*)/) || [])
-          .slice(1).find(Boolean) || d?.context || '';
-        return { id: r.id, label: String(label).trim(), context: d?.context || '' };
-      });
-
-    if (missingInfo.length > 0) {
-      const tempPath = require('path').join(this.responseDir, `temp_${dossierId}.docx`);
-      const tempSerializer = new XMLSerializer();
-      zip.file('word/document.xml', tempSerializer.serializeToString(xmlDoc));
-      const tempBuf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
-      require('fs').writeFileSync(tempPath, tempBuf);
-
-      DB.saveDossier(dossierId, {
-        memoire_cadre_state: { tempPath, missingFields: missingInfo }
-      });
-      console.log(`[MemoireGenerator] Bypassing IA chat, forcing generation with ${missingInfo.length} missing fields.`);
-      // return { status: 'incomplete', missingFields: missingInfo };
+    if (process.env.RESOLVE_MISSING_INFO === 'true') {
+      const missing: MissingField[] = replacements
+        .filter(r => /\[À COMPLÉTER\]/.test(String(r.value)))
+        .map(r => {
+          const d = descriptors.find(x => x.id === r.id);
+          const label = (d?.context.match(/Question:\s*"([^"]*)"|option:\s*"([^"]*)"|Tableau:\s*([^|]*)/) || [])
+            .slice(1).find(Boolean) || d?.context || '';
+          return { id: r.id, label: String(label).trim(), context: d?.context || '' };
+        });
+      if (missing.length) {
+        const resolved = await resolveMissingInfo(missing, dossierId);
+        let enriched = 0;
+        for (const res of resolved) {
+          if (res.value) { const r = replacements.find(x => x.id === res.id); if (r) { r.value = res.value; enriched++; } }
+        }
+        console.log(`[MemoireGenerator] Résolution infos manquantes (brief §3): ${missing.length} champ(s) manquant(s), ${enriched} complété(s) [stub web/email — non implémenté].`);
+      }
     }
 
     // 6. Apply replacements in the DOM
@@ -3262,7 +3248,6 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     console.log(`[MemoireGenerator] Successfully generated ${outputPath}`);
 
     return {
-      status: 'completed',
       filePath: outputPath,
       generatedData: {
         modele: this.memoireModel,
@@ -3971,66 +3956,150 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
    * dessiné dans le cadre délimité par les balises « Contexte sur mesure début/fin » (pages 5–8),
    * en 2 colonnes, sans déborder. Aucun reflux possible → la mise en page reste intacte. Sortie PDF.
    */
-  public async generateFullMarpPdf(
-    dossierId: string,
-    onProgress?: (progress: number, message: string, status?: string) => void
-  ): Promise<{ filePath: string, generatedData: Record<string, string> }> {
-    console.log('[MemoireGenerator] ═══ Génération PDF (Marp Complet) ═══');
+  public async generateSynthesisPdf(dossierId: string): Promise<{ filePath: string, generatedData: Record<string, string> }> {
+    console.log('[MemoireGenerator] ═══ Génération PDF (overlay synthèse sur AO RNE.pdf) ═══');
 
-    if (onProgress) onProgress(10, 'Analyse du DCE et lecture du contexte...');
-
+    // 1. Analyse DCE + contexte GSS (mêmes sources que la génération docx).
     const dceContext = await this.getDceContext(dossierId);
     const analysisData = await this.analyzeDce(dceContext);
-    const analysisJson = JSON.stringify(analysisData, null, 2);
     const clientName = analysisData?.clientName || 'le client';
+    setProgress(dossierId, { phase: 'analyse', pct: 12, label: 'Analyse du DCE terminée' });
 
     const gssDocs = await this.getGssDocumentation();
-    const availableCategories = Object.keys(gssDocs);
-
-    const sectionsMap: Record<string, string> = {};
-    const totalSections = AI_SECTIONS_B.length;
-    let completed = 0;
-
-    for (let i = 0; i < totalSections; i++) {
-      const section = AI_SECTIONS_B[i];
-      if (onProgress) {
-        onProgress(15 + Math.round((completed / totalSections) * 70), `Génération section ${i + 1}/${totalSections}: ${section.title}...`);
-      }
-
-      const matchedCats = this.matchGssCategories(section.title, availableCategories);
-      let gssContext = '';
-      for (const cat of matchedCats) {
-        gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 4000)}`;
-      }
-      if (!gssContext) {
-        // Fallback si pas de correspondance
-        for (const cat of ['MANAGEMENT', 'INTERLOCUTEUR UNIQUE', 'MISE EN PLACE', 'VALEURS', 'SUIVI QUALITE ET CONTROLES']) {
-          if (gssDocs[cat]) gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 3000)}`;
-        }
-      }
-
-      const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige la partie du mémoire technique intitulée "${section.title}" pour ce marché.
-- Rédige un contenu percutant, commercial, concret et technique.
-- Base-toi UNIQUEMENT sur l'analyse du DCE et les atouts GSS fournis ci-dessous.
-- NE METS PAS le titre principal au début de ta réponse (le titre "${section.title}" sera ajouté automatiquement).
-- Structure ton texte avec de courts paragraphes clairs, et si pertinent, de petites listes à puces.
-- Mets impérativement en forme les titres et sous-titres en gras ET souligné (par exemple : **<u>Titre de ma partie</u>**).
-- Ajoute TOUJOURS un saut de ligne (ligne vide) entre chaque titre/sous-titre et le paragraphe qui suit.
-- Personnalise FORTEMENT pour le client ${clientName}.
-- Ne rédige QUE le contenu de cette section, SANS introduction globale SANS conclusion générale, et SANS salutations.`;
-
-      const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}\n\nRédige le contenu de cette partie de manière experte.`;
-
-      const text = await this.callOpenAI(
-        [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-        0.5, `Génération ${section.id}`, false
-      );
-      sectionsMap[section.id] = text || 'Contenu non généré.';
-      completed++;
+    let gssContext = '';
+    // On privilégie les catégories OPÉRATIONNELLES (ce que GSS FAIT concrètement sur le terrain :
+    // procédures d'intervention, matériel, contrôle d'accès, mise en place du dispositif) en plus du
+    // management/qualité — sinon la synthèse reste abstraite et ne décrit pas les mesures réelles.
+    for (const cat of ['PROCEDURE', 'MATERIEL', "MOYENS D'ACCES", 'MISE EN PLACE', 'MANAGEMENT', 'INTERLOCUTEUR UNIQUE', 'SUIVI QUALITE ET CONTROLES']) {
+      if (gssDocs[cat]) gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 4000)}`;
     }
 
-    if (onProgress) onProgress(90, 'Assemblage final de la présentation Marp...');
-    return this.exportFromSectionsMap(sectionsMap, dossierId);
+    // 1 bis. INDEX RAG (DCE + Documentation GSS) — c'est ce qui rend la synthèse STRATÉGIQUE : chaque
+    //   page va RECHERCHER les exigences RÉELLES du DCE (CCTP : missions attendues, sites, contraintes)
+    //   et les atouts GSS qui y répondent, au lieu de broder sur un simple résumé. Même infra que le
+    //   remplissage de cadre (buildRetrievalChunks → embedChunks → retrieve).
+    setProgress(dossierId, { phase: 'analyse', pct: 20, label: 'Indexation du DCE et de la doc GSS…' });
+    const retrievalChunks = this.buildRetrievalChunks(gssDocs, dceContext);
+    await this.embedChunks(retrievalChunks);
+    const dceN = retrievalChunks.filter(c => c.source === 'DCE' && c.embedding).length;
+    console.log(`[MemoireGenerator] Index synthèse : ${retrievalChunks.length} chunk(s) (${dceN} DCE) embeddé(s) pour la recherche stratégique.`);
+
+    // 2. Mesurer la capacité des 4 cadres AVANT de générer, pour dimensionner le texte (remplir
+    //    presque entièrement sans coder en dur un nombre de mots).
+    const pdfPath = path.join(this.templateDir, 'Mémoire technique', 'AO RNE.pdf');
+    if (!fs.existsSync(pdfPath)) throw new Error(`Template PDF introuvable: ${pdfPath}`);
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    const fontBytes = loadTrebuchetFont();
+    const cap = await measureZonesCapacity(pdfBuffer, fontBytes);
+    const nZones = Math.max(1, cap.zones);
+    // Budget de mots PAR zone (capacité réelle du cadre, ~6.5 car/mot, marge anti-débordement) → chaque
+    // page est dimensionnée indépendamment ; le surplus éventuel est tronqué zone par zone par l'overlay.
+    const perZoneCapWords = (cap.perZoneLines.length ? cap.perZoneLines : [cap.totalLines])
+      .map((lines) => Math.max(60, Math.round((lines * cap.charsPerLine) / 6.5 * 0.78)));
+    console.log(`[MemoireGenerator] Capacité des cadres : ${cap.zones} zone(s), ${cap.totalLines} ligne(s), ~${cap.charsPerLine} car/ligne → cibles/page (mots) : [${perZoneCapWords.join(', ')}].`);
+
+    // 3. Stratégie sur-mesure + texte PAR PAGE : l'IA comprend le profil du client (type, usagers,
+    //    enjeux), pose des axes, puis rédige un angle DISTINCT par page (cf. STRATEGY_BEATS).
+    setProgress(dossierId, { phase: 'strategie', pct: 28, label: 'Rédaction de la synthèse sur-mesure…' });
+    // Libellés écrits après « Contexte … » = angle imposé de chaque zone (« Une réponse pour vos sites »…).
+    // On privilégie les libellés PROPRES lus dans le DOCX (ordre = zones du PDF) ; repli sur le PDF.
+    const docxLabels = this.getContextZoneLabels();
+    const zoneLabels = docxLabels.length === nZones ? docxLabels : (cap.perZoneLabels || []);
+    if (zoneLabels.some((l) => l)) console.log(`[MemoireGenerator] Angles de zone (libellés « Contexte … ») : [${zoneLabels.map((l) => l || '—').join(' | ')}].`);
+    const strat = await this.buildClientStrategy(analysisData, nZones, gssContext, perZoneCapWords, retrievalChunks, zoneLabels);
+    const zoneTexts = strat.pages;
+    if (!zoneTexts.some((t) => t.trim())) throw new Error('Échec de la génération IA de la synthèse (stratégie vide).');
+    console.log(`[MemoireGenerator] Stratégie client : profil="${strat.profile.slice(0, 90)}…", ${strat.axes.length} axe(s) [${strat.axes.map((a) => a.slice(0, 40)).join(' | ')}], ${zoneTexts.filter((t) => t.trim()).length}/${nZones} page(s) rédigée(s).`);
+
+    // 4. Personnalisation des références figées (ancien client/sites → DCE) par masque+redraw.
+    //    On ne touche QUE des occurrences bien délimitées (listes de sites, libellés « BASÉ À »),
+    //    jamais les phrases narratives ni la couverture (risque de rustine). Couleurs = corps gris.
+    const siteNames: string[] = (analysisData?.sites || [])
+      .map((s: any) => (s?.name || '').trim()).filter(Boolean);
+    const refCtx: RefContext = { sites: siteNames, client: clientName, marketRef: analysisData?.marketRef || '' };
+    // IMPORTANT : on NE réécrit PAS la localisation des pages « Ils nous ont fait confiance » (CESI,
+    // QRM…) ni la ville des CV agents. Ce sont des FAITS réels (références passées, agents basés à Rouen) :
+    // les remplacer par les sites du prospect les rend faux et fait « référence retouchée », ce qui dessert
+    // l'offre. On ne corrige donc QUE les fuites manifestes de l'ancien template vers le client du marché.
+    const replacements: RefReplacement[] = [
+      // Fuite template : « …sites de Carrefour Mondeville » (phrase de présentation des contrôleurs) → client du DCE.
+      { match: /Carrefour\s+Mondeville/gi, build: (c) => c.client },
+    ];
+
+    // 5. Overlay sur AO RNE.pdf (réutilise le buffer/police déjà chargés) + remplacements de références.
+    //    Les passages SURLIGNÉS sont traités séparément, en Python (voir étape 6).
+    // Remplissage PAR ZONE (angle dédié par page) UNIQUEMENT si l'IA a rempli TOUTES les zones. Sinon
+    // (GPT n'a produit qu'une partie des pages), on bascule en mode FLUX : le texte disponible est réparti
+    // sur TOUTES les zones → AUCUNE page « Contexte sur mesure » laissée VIDE en début de mémoire.
+    const synthesisChars = zoneTexts.reduce((s, t) => s + t.length, 0);
+    const filledZones = zoneTexts.filter((t) => t.trim().length > 60).length;
+    const allZonesFilled = filledZones >= nZones;
+    if (!allZonesFilled) {
+      console.warn(`[MemoireGenerator] Synthèse : ${filledZones}/${nZones} zone(s) remplie(s) par l'IA → mode FLUX (réparti sur toutes les zones, pas de page vide).`);
+    }
+    setProgress(dossierId, { phase: 'overlay', pct: 42, label: 'Mise en page de la synthèse…' });
+    const overlayOpts = allZonesFilled
+      ? { zoneTexts, docTitle: `AO ${clientName}` }
+      : { docTitle: `AO ${clientName}` };
+    const { bytes, zonesUsed, linesDrawn, truncated, refsReplaced } =
+      await overlaySynthesis(pdfBuffer, zoneTexts.join('\n\n'), fontBytes, replacements, refCtx, [], overlayOpts);
+
+    const outputFileName = `Mémoire technique GSS_${Date.now()}.pdf`;
+    const outputPath = path.join(this.responseDir, outputFileName);
+
+    // 6. Réécriture des SEULES zones SURLIGNÉES (jaune) via Python (PyMuPDF → GPT → PyMuPDF). On ne
+    //    touche QUE les passages que le template marque comme éditables (surlignage jaune) : ils sont
+    //    supprimés et réécrits, adaptés au client, à la même taille/position. TOUT le reste du corps de
+    //    texte (non surligné) est laissé INTACT. Les pages « Contexte sur mesure » sont déjà remplies
+    //    par l'overlay. On écrit d'abord le PDF de synthèse (intermédiaire), puis Python produit le final.
+    const interimPath = outputPath.replace(/\.pdf$/, '.interim.pdf');
+    fs.writeFileSync(interimPath, bytes);
+
+    // 5b. Remplacement DÉTERMINISTE des balises <entreprise> par le client du DCE, en conservant
+    //     police/taille/couleur. Lancé AVANT l'étape 6 (retire le surlignage de la balise). Opère sur l'interim.
+    const ph = this.replacePlaceholdersPython(interimPath, analysisData);
+
+    setProgress(dossierId, { phase: 'reecriture', pct: 45, label: 'Réécriture des passages surlignés…' });
+    const pg = await this.rewriteHighlightsPython(interimPath, outputPath, analysisData, gssContext, siteNames, dossierId, dceContext);
+    try { fs.unlinkSync(interimPath); } catch { /* ignore */ }
+
+    // 6 bis. PAGES SUR-MESURE : l'IA déduit du DCE 3 à 5 thèmes propres au client, et on RÉPLIQUE une page
+    //   de contenu standard (design GSS) en fin de la SECTION appropriée, avec le titre + un texte ancré
+    //   dans le DCE. Non bloquant : en cas d'échec, le PDF reste tel quel.
+    setProgress(dossierId, { phase: 'pages', pct: 90, label: 'Génération des pages sur-mesure…' });
+    let customPages: { added: number } = { added: 0 };
+    try {
+      const pages = await this.buildCustomPages(analysisData, dceContext, gssContext);
+      if (pages.length) customPages = this.addCustomPagesPython(outputPath, pages);
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Pages sur-mesure ignorées (${e.message}).`);
+    }
+    setProgress(dossierId, { phase: 'finalisation', pct: 97, label: 'Finalisation du PDF…' });
+
+    // 7. Remplissage des cadres « Zone d'image » par des images générées (OpenAI Images) — DÉSACTIVÉ.
+    //    Pour réactiver : décommenter le bloc ci-dessous (et IMAGES_ENABLED / GENERATE_IMAGES).
+    // const img = IMAGES_ENABLED
+    //   ? this.fillImageZonesPython(outputPath, analysisData, gssContext, siteNames)
+    //   : { zones: 0, filled: 0 };
+    const img = { zones: 0, filled: 0 };
+
+    console.log(`[MemoireGenerator] Synthèse superposée : ${synthesisChars} car. sur ${zonesUsed} zone(s), ${linesDrawn} ligne(s) dessinée(s)${truncated ? ', surplus tronqué' : ''}, ${refsReplaced} référence(s) client/sites + ${ph.replaced} balise(s) <entreprise> + ${pg.filled}/${pg.regions} zone(s) surlignée(s) réécrite(s) + ${customPages.added} page(s) sur-mesure + ${img.filled}/${img.zones} cadre(s) image rempli(s) [Python] → ${outputPath}`);
+
+    return {
+      filePath: outputPath,
+      generatedData: {
+        mode: 'AO RNE.pdf + synthèse IA superposée (2 colonnes, design figé)',
+        modele: this.memoireModel,
+        pages_sur_mesure: `${customPages.added}`,
+        client: clientName,
+        zones_remplies: `${zonesUsed}`,
+        balises_entreprise: `${ph.replaced}`,
+        zones_surlignees: `${pg.regions}`,
+        blocs_reecrits: `${pg.filled}`,
+        cadres_image: `${img.filled}/${img.zones}`,
+        texte_genere: `${synthesisChars} caractères`,
+      },
+    };
   }
 
   /**
@@ -4083,25 +4152,36 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
    * même taille. Le contexte client (analyse DCE + atouts GSS) est passé en JSON ; la clé OpenAI et le
    * modèle via l'environnement. En cas d'échec, on recopie le PDF intermédiaire (génération non bloquée).
    */
-  private rewriteHighlightsPython(
+  /**
+   * Réécriture PLEINE PAGE via le script Python rewrite_pages.py (PyMuPDF → GPT → PyMuPDF). Toutes les
+   * pages de CONTENU GSS voient leur corps de texte réécrit et adapté au client ; les pages de faits
+   * réels (références, fiches site, CV, organigrammes, sommaire, coordonnées) et les pages « Contexte
+   * sur mesure » sont gardées intactes par le script. La mise en page (blocs, tailles, couleurs, listes)
+   * est préservée. Non bloquant : en cas d'échec, on recopie le PDF intermédiaire.
+   *
+   * NOTE : mode ALTERNATIF, actuellement NON branché. La génération n'utilise que la réécriture des
+   * zones SURLIGNÉES (rewriteHighlightsPython). Conservé pour réactiver le pleine-page au besoin.
+   */
+  private rewritePagesPython(
     inputPdf: string, outputPdf: string, analysisData: any, gssContext: string, sites: string[],
-  ): { regions: number; filled: number } {
+  ): { pages: number; filled: number } {
     const baseDir = path.resolve(__dirname, '../../../../');
-    const scriptPath = path.resolve(baseDir, 'gss-ao/backend/python/rewrite_highlights.py');
-    const fallback = () => { try { fs.copyFileSync(inputPdf, outputPdf); } catch { /* ignore */ } return { regions: 0, filled: 0 }; };
+    const scriptPath = path.resolve(baseDir, 'gss-ao/backend/python/rewrite_pages.py');
+    const fallback = () => { try { fs.copyFileSync(inputPdf, outputPdf); } catch { /* ignore */ } return { pages: 0, filled: 0 }; };
     if (!fs.existsSync(scriptPath)) {
-      console.warn(`[MemoireGenerator] Script Python introuvable: ${scriptPath} → surlignages non traités.`);
+      console.warn(`[MemoireGenerator] Script Python introuvable: ${scriptPath} → pages non réécrites.`);
       return fallback();
     }
 
-    // Contexte transmis au script (le client/secteur/enjeux servent à personnaliser la réécriture).
     const ctx = {
       clientName: analysisData?.clientName || 'le client',
       sites: (sites || []).filter(Boolean),
       analysis: analysisData ?? {},
       gssContext: (gssContext || '').slice(0, 8000),
+      marketType: detectMarketType(analysisData),
+      sector: detectClientSector(analysisData),
     };
-    const ctxPath = path.join(this.responseDir, `_hlctx_${Date.now()}.json`);
+    const ctxPath = path.join(this.responseDir, `_pgctx_${Date.now()}.json`);
     fs.writeFileSync(ctxPath, JSON.stringify(ctx), 'utf8');
 
     const pythonBin = process.env.PYTHON_BIN || 'py';
@@ -4111,24 +4191,242 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
       {
         env: { ...process.env, OPENAI_API_KEY: getSettings().openaiApiKey, MEMOIRE_MODEL: MEMOIRE_MODEL },
         encoding: 'utf8',
-        // 600s : marge large pour le page-par-page. Le script s'auto-borne en réalité (REWRITE_TIME_BUDGET)
-        // pour toujours finir et retirer le surlignage même si GPT est lent ; ce timeout n'est qu'un garde-fou.
-        timeout: 600000,
+        maxBuffer: 32 * 1024 * 1024,
+        // 900s : le pleine-page fait beaucoup d'appels GPT. Le script s'auto-borne (REWRITE_TIME_BUDGET)
+        // pour toujours finir et produire un PDF même si GPT est lent ; ce timeout n'est qu'un garde-fou.
+        timeout: 900000,
       },
     );
     try { fs.unlinkSync(ctxPath); } catch { /* ignore */ }
 
-    if (proc.stderr) proc.stderr.split('\n').filter(Boolean).forEach((l) => console.log(`[py] ${l}`));
+    if (proc.stderr) proc.stderr.split('\n').filter(Boolean).forEach((l) => console.log(`[py-pages] ${l}`));
     if (proc.status !== 0 || !fs.existsSync(outputPdf)) {
-      console.warn(`[MemoireGenerator] Script Python échec (status=${proc.status}, err=${proc.error?.message || ''}) → repli sans réécriture.`);
+      console.warn(`[MemoireGenerator] rewrite_pages échec (status=${proc.status}, err=${proc.error?.message || ''}) → repli sans réécriture.`);
       return fallback();
     }
     try {
       const line = (proc.stdout || '').trim().split('\n').filter(Boolean).pop() || '{}';
       const r = JSON.parse(line);
-      return { regions: Number(r.regions) || 0, filled: Number(r.filled) || 0 };
+      return { pages: Number(r.pages) || 0, filled: Number(r.filled) || 0 };
     } catch {
-      return { regions: 0, filled: 0 };
+      return { pages: 0, filled: 0 };
+    }
+  }
+
+  private rewriteHighlightsPython(
+    inputPdf: string, outputPdf: string, analysisData: any, gssContext: string, sites: string[],
+    dossierId?: string, dceContext?: string,
+  ): Promise<{ regions: number; filled: number }> {
+    const baseDir = path.resolve(__dirname, '../../../../');
+    const scriptPath = path.resolve(baseDir, 'gss-ao/backend/python/rewrite_highlights.py');
+    const fallback = () => { try { fs.copyFileSync(inputPdf, outputPdf); } catch { /* ignore */ } return { regions: 0, filled: 0 }; };
+    if (!fs.existsSync(scriptPath)) {
+      console.warn(`[MemoireGenerator] Script Python introuvable: ${scriptPath} → surlignages non traités.`);
+      return Promise.resolve(fallback());
+    }
+
+    // Contexte transmis au script (le client/secteur/enjeux servent à personnaliser la réécriture).
+    // `dce` = extrait BRUT du DCE (exigences réelles du client) → la réécriture s'y ANCRE, en plus de
+    // l'analyse structurée. On le tronque pour borner le coût en tokens (réécriture page par page).
+    const ctx = {
+      clientName: analysisData?.clientName || 'le client',
+      sites: (sites || []).filter(Boolean),
+      analysis: analysisData ?? {},
+      gssContext: (gssContext || '').slice(0, 8000),
+      dce: (dceContext || '').slice(0, 9000),
+    };
+    const ctxPath = path.join(this.responseDir, `_hlctx_${Date.now()}.json`);
+    fs.writeFileSync(ctxPath, JSON.stringify(ctx), 'utf8');
+
+    const pythonBin = process.env.PYTHON_BIN || 'py';
+    // On lance Python en ASYNCHRONE (spawn) pour LIRE sa progression page par page en temps réel
+    // (lignes `__PROGRESS__ done total` sur stderr) → la barre de progression du front avance pendant
+    // la réécriture. La réécriture des surlignages utilise le modèle du cas (REWRITE_MODEL surchargeable).
+    return new Promise((resolve) => {
+      const proc = spawn(
+        pythonBin,
+        [scriptPath, '--input', inputPdf, '--output', outputPdf, '--context', ctxPath],
+        {
+          env: {
+            ...process.env,
+            OPENAI_API_KEY: getSettings().openaiApiKey,
+            // Réécriture des surlignages = même modèle que la rédaction du cas courant (gpt-5.4-mini
+            // sans template). Surchargeable via REWRITE_MODEL.
+            MEMOIRE_MODEL: process.env.REWRITE_MODEL || this.memoireModel,
+          },
+        },
+      );
+
+      let stdout = '', stderrTail = '';
+      const PROGRESS_RE = /^__PROGRESS__\s+(\d+)\s+(\d+)/;
+      proc.stdout.on('data', (b) => { stdout += b.toString(); });
+      let buf = '';
+      proc.stderr.on('data', (b) => {
+        buf += b.toString();
+        const lines = buf.split('\n');
+        buf = lines.pop() || '';
+        for (const line of lines) {
+          const m = PROGRESS_RE.exec(line);
+          if (m && dossierId) {
+            const done = Number(m[1]), total = Number(m[2]) || 1;
+            // La réécriture occupe la plage 45–95 % de la barre globale.
+            const pct = 45 + Math.round(50 * Math.min(1, done / total));
+            setProgress(dossierId, {
+              phase: 'reecriture', done, total, pct,
+              label: `Réécriture des passages — page ${done}/${total}`,
+            });
+          } else if (line.trim()) {
+            console.log(`[py] ${line}`);
+          }
+        }
+      });
+
+      // Garde-fou 20 min : gpt-4o a une TPM basse sur ce compte (429 + backoff). Le script s'auto-borne
+      // (REWRITE_TIME_BUDGET) pour toujours finir ; ce timeout ne sert qu'en cas de blocage réseau.
+      const killer = setTimeout(() => { try { proc.kill(); } catch { /* ignore */ } }, 1200000);
+
+      proc.on('close', (code) => {
+        clearTimeout(killer);
+        try { fs.unlinkSync(ctxPath); } catch { /* ignore */ }
+        if (buf.trim() && !PROGRESS_RE.test(buf)) console.log(`[py] ${buf.trim()}`);
+        if (code !== 0 || !fs.existsSync(outputPdf)) {
+          console.warn(`[MemoireGenerator] Script Python échec (code=${code}) → repli sans réécriture. ${stderrTail}`);
+          return resolve(fallback());
+        }
+        try {
+          const last = stdout.trim().split('\n').filter(Boolean).pop() || '{}';
+          const r = JSON.parse(last);
+          resolve({ regions: Number(r.regions) || 0, filled: Number(r.filled) || 0 });
+        } catch {
+          resolve({ regions: 0, filled: 0 });
+        }
+      });
+      proc.on('error', (e) => {
+        clearTimeout(killer);
+        try { fs.unlinkSync(ctxPath); } catch { /* ignore */ }
+        console.warn(`[MemoireGenerator] Lancement Python échoué (${e.message}) → repli sans réécriture.`);
+        resolve(fallback());
+      });
+    });
+  }
+
+  /**
+   * PAGES SUR-MESURE : à partir du DCE, l'IA déduit 3 à 5 thèmes propres à CE client (exigences, lots,
+   * sites, enjeux) et, pour chacun, propose un { section, title, body } — `section` = le chapitre où ranger
+   * la page (I=Présentation, II=Moyens humains, III=Moyens opérationnels, IV=Moyens organisationnels),
+   * `body` = un paragraphe ancré dans le DCE. Ces pages sont ensuite RÉPLIQUÉES sur le design GSS.
+   */
+  /** Liste des sous-sections RÉELLES du mémoire AO RNE (via add_custom_pages.py --list) : [{section, title}]. */
+  private listSubsections(): Array<{ section: string; title: string }> {
+    const baseDir = path.resolve(__dirname, '../../../../');
+    const scriptPath = path.resolve(baseDir, 'gss-ao/backend/python/add_custom_pages.py');
+    const pdfPath = path.join(this.templateDir, 'Mémoire technique', 'AO RNE.pdf');
+    if (!fs.existsSync(scriptPath) || !fs.existsSync(pdfPath)) return [];
+    const pythonBin = process.env.PYTHON_BIN || 'py';
+    const proc = spawnSync(pythonBin, [scriptPath, '--input', pdfPath, '--list'],
+      { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 60000 });
+    if (proc.status !== 0) return [];
+    try {
+      const line = (proc.stdout || '').trim().split('\n').filter(Boolean).pop() || '[]';
+      const arr = JSON.parse(line);
+      return Array.isArray(arr) ? arr.filter((s) => s && s.section && s.title) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private async buildCustomPages(
+    analysisData: any, dceContext: string, gssContext: string,
+  ): Promise<Array<{ section: string; anchor: string; title: string; body: string }>> {
+    const analysisJson = JSON.stringify(analysisData ?? {}, null, 2).slice(0, 9000);
+    // Liste des SOUS-SECTIONS RÉELLES du mémoire : l'IA ne peut ranger une page QUE dans l'une d'elles
+    // (on réplique une page existante). Évite qu'elle invente un thème absent du template (ex.
+    // « télésurveillance ») qui finirait placé n'importe où.
+    const subs = this.listSubsections();
+    if (subs.length === 0) {
+      console.warn('[MemoireGenerator] Sous-sections introuvables → pages sur-mesure désactivées.');
+      return [];
+    }
+    const subsList = subs.map((s) => `- section ${s.section} | ${s.title}`).join('\n');
+    const system =
+      "Tu es rédacteur expert chez GSS (sécurité privée). À partir du DCE, propose 3 à 5 PAGES SUR-MESURE " +
+      "à ajouter au mémoire technique, sur les thèmes les PLUS IMPORTANTS pour CE client (exigences du CCTP, " +
+      "lots, sites, enjeux, risques). Chaque page est RÉPLIQUÉE depuis une sous-section EXISTANTE du mémoire " +
+      "(ci-dessous). Pour chaque page :\n" +
+      "- \"section\" : la lettre du chapitre de la sous-section choisie (I / II / III / IV).\n" +
+      "- \"anchor\" : l'INTITULÉ EXACT de la sous-section choisie DANS LA LISTE (recopie-le tel quel). " +
+      "INTERDIT d'inventer un sous-thème absent de la liste : choisis la sous-section EXISTANTE la plus " +
+      "pertinente pour ton contenu.\n" +
+      "- \"body\" : un texte CONCIS de 1000 à 1300 caractères MAX, en 2 à 3 PARAGRAPHES DISTINCTS séparés par une LIGNE " +
+      "VIDE (\\n\\n), pour tenir ENTIÈREMENT sur une seule page sans être coupé. Chaque paragraphe développe " +
+      "un angle (l'enjeu précis du client, la réponse opérationnelle de GSS, la valeur ajoutée). Le contenu " +
+      "doit RESTER DANS LE THÈME de la sous-section choisie, ancré dans le DCE (missions/sites/contraintes " +
+      "réels). Phrases complètes, AUCUNE puce, AUCUN markdown, AUCUNE donnée chiffrée inventée.\n" +
+      "Évite de choisir deux fois la même sous-section. Renvoie un JSON STRICT : " +
+      "{\"pages\": [ {\"section\":\"…\",\"anchor\":\"…\",\"body\":\"…\"}, … ]}.";
+    const user =
+      `SOUS-SECTIONS EXISTANTES DU MÉMOIRE (choisis l'anchor PARMI elles, à l'identique) :\n${subsList}\n\n` +
+      `ANALYSE DU DCE :\n${analysisJson}\n\n` +
+      `EXTRAIT DU DCE (exigences réelles) :\n${(dceContext || '').slice(0, 7000)}\n\n` +
+      `CONTEXTE GSS (atouts) :\n${(gssContext || '').slice(0, 4000)}`;
+    const content = await this.callOpenAI(
+      [{ role: 'system', content: system }, { role: 'user', content: user }],
+      0.5, 'Pages sur-mesure', true,
+    );
+    try {
+      const data = JSON.parse(content || '{}');
+      const pages: any[] = Array.isArray(data.pages) ? data.pages : [];
+      // On exige seulement un BODY (le titre n'est plus réécrit : on réplique celui de la sous-section).
+      const out = pages
+        .filter((p) => p && String(p.body || '').trim())
+        .slice(0, 5)
+        .map((p) => ({
+          section: String(p.section || '').toUpperCase().replace(/[^IVX]/g, '') || 'I',
+          anchor: String(p.anchor || '').trim(),
+          title: String(p.title || '').trim(),
+          body: String(p.body).replace(/[*_`#]+/g, '').trim(),
+        }));
+      console.log(`[MemoireGenerator] Pages sur-mesure : ${out.length} proposée(s) [${out.map((p) => `${p.section}/${p.anchor.slice(0, 24)}`).join(' | ')}].`);
+      return out;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Réplique le design GSS pour AJOUTER les pages sur-mesure (via add_custom_pages.py) : clone une page de
+   * contenu standard en fin de la section visée, écrit le titre + le corps. Opère SUR PLACE (fichier temp).
+   * Non bloquant : en cas d'échec, le PDF reste inchangé.
+   */
+  private addCustomPagesPython(
+    pdfPath: string, pages: Array<{ section: string; anchor: string; title: string; body: string }>,
+  ): { added: number } {
+    const baseDir = path.resolve(__dirname, '../../../../');
+    const scriptPath = path.resolve(baseDir, 'gss-ao/backend/python/add_custom_pages.py');
+    if (!fs.existsSync(scriptPath) || pages.length === 0) return { added: 0 };
+
+    const pagesPath = path.join(this.responseDir, `_cpages_${Date.now()}.json`);
+    fs.writeFileSync(pagesPath, JSON.stringify(pages), 'utf8');
+    const tmpOut = pdfPath.replace(/\.pdf$/, '.cp.pdf');
+    const pythonBin = process.env.PYTHON_BIN || 'py';
+    const proc = spawnSync(
+      pythonBin,
+      [scriptPath, '--input', pdfPath, '--output', tmpOut, '--pages', pagesPath],
+      { env: { ...process.env }, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 120000 },
+    );
+    try { fs.unlinkSync(pagesPath); } catch { /* ignore */ }
+    if (proc.stderr) proc.stderr.split('\n').filter(Boolean).forEach((l) => console.log(`[py-cp] ${l}`));
+    if (proc.status !== 0 || !fs.existsSync(tmpOut)) {
+      console.warn(`[MemoireGenerator] add_custom_pages échec (status=${proc.status}) → pages non ajoutées.`);
+      try { fs.unlinkSync(tmpOut); } catch { /* ignore */ }
+      return { added: 0 };
+    }
+    try { fs.renameSync(tmpOut, pdfPath); } catch { try { fs.copyFileSync(tmpOut, pdfPath); fs.unlinkSync(tmpOut); } catch { /* ignore */ } }
+    try {
+      const line = (proc.stdout || '').trim().split('\n').filter(Boolean).pop() || '{}';
+      return { added: Number(JSON.parse(line).added) || 0 };
+    } catch {
+      return { added: 0 };
     }
   }
 
@@ -4237,142 +4535,19 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
    */
   public async exportFromSectionsMap(
     sectionsMap: Record<string, string>,
-    dossierId: string = 'export',
   ): Promise<{ filePath: string; generatedData: Record<string, string> }> {
     const chapters: AssembleChapter[] = CHAPTER_ORDER_B.map((ch) => ({
       key: ch,
       title: CHAPTER_TITLES_B[ch],
       sections: AI_SECTIONS_B
         .filter((s) => s.chapter === ch && sectionsMap[s.id]?.trim())
-        .map((s) => ({
-          title: s.title,
-          text: sectionsMap[s.id],
-          id: s.id,
-          illustration: undefined
-        })),
+        .map((s) => ({ title: s.title, text: sectionsMap[s.id] })),
     }));
 
     if (chapters.every((c) => c.sections.length === 0)) {
       throw new Error('Aucune section générée à exporter (map vide ou ids inconnus).');
     }
 
-    const cover = await this.getCoverInfo(dossierId);
-    const generator = new MarpGenerator(this.responseDir);
-    const result = generator.generatePdf(chapters, cover);
-
-    return { filePath: result.filePath, generatedData: {} };
-  }
-
-  /**
-   * Finalise la génération du mémoire avec cadre imposé après intervention de l'utilisateur.
-   */
-  public async finalizeMemoire(dossierId: string, userAnswers: Record<string, string>): Promise<{ filePath: string, generatedData: Record<string, string> }> {
-    const dossier = DB.getDossier(dossierId);
-    if (!dossier || !dossier.memoire_cadre_state) {
-      throw new Error("État de génération introuvable ou expiré.");
-    }
-    const state = dossier.memoire_cadre_state;
-    if (!state.tempPath || !fs.existsSync(state.tempPath)) {
-      throw new Error("Le fichier temporaire est introuvable.");
-    }
-
-    // Charger le docx temporaire
-    const content = fs.readFileSync(state.tempPath);
-    const zip = new PizZip(content);
-    const documentXml = zip.file('word/document.xml');
-    if (!documentXml) throw new Error('word/document.xml introuvable dans le template temporaire');
-
-    const docXmlStr = documentXml.asText();
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(docXmlStr, 'text/xml');
-
-    // Appliquer les réponses utilisateur sur les [CHAMP_XXX] restants
-    let applied = 0;
-    const tEls = getElementsWithLocalName(xmlDoc, 't');
-
-    for (const mf of state.missingFields) {
-      const answer = userAnswers[mf.id];
-      if (answer) {
-        tEls.forEach((tEl: any) => replaceTextInElement(xmlDoc, tEl, `[CHAMP_${mf.id}]`, answer));
-        applied++;
-      }
-    }
-
-    console.log(`[MemoireGenerator] Finalisation : ${applied} champs remplis par l'utilisateur.`);
-
-    // Sauvegarde finale
-    const serializer = new XMLSerializer();
-    documentXml.name = 'word/document.xml';
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
-
-    const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
-    const finalPath = path.join(this.responseDir, `memoire_${dossierId}_${Date.now()}.docx`);
-    fs.writeFileSync(finalPath, buf);
-
-    // Nettoyage de l'état
-    try { fs.unlinkSync(state.tempPath); } catch { /* ignore */ }
-    DB.saveDossier(dossierId, { memoire_cadre_state: null });
-
-    return { filePath: finalPath, generatedData: userAnswers };
-  }
-
-  async evaluateMissingInfoChat(context: string, chatHistory: any[]): Promise<{ status: 'accepted' | 'rejected', extracted_value?: string, bot_reply: string }> {
-    const prompt = `Vous êtes un assistant IA qui aide un utilisateur à remplir les informations manquantes d'un document professionnel (mémoire technique ou appel d'offres).
-
-L'information manquante requise est décrite par ce contexte : 
-"${context}"
-
-Voici l'historique de la conversation actuelle (si vide, c'est que vous devez poser la première question) :
-${JSON.stringify(chatHistory, null, 2)}
-
-TACHE :
-Si l'historique est vide ou si c'est le début de l'échange pour ce champ :
-- status = "rejected"
-- bot_reply = "Posez une question claire, courte et naturelle pour demander l'information décrite dans le contexte."
-
-Si l'utilisateur a répondu, analysez son dernier message. Déterminez si l'information fournie répond complètement au contexte demandé.
-1. Si la réponse est complète :
-   - Extrayez la valeur formelle exacte et propre qui devra être insérée dans le document (ex: "12 Rue de la Paix, 75000 Paris", "M. Jean Dupont").
-   - status = "accepted"
-   - bot_reply = "Un message court de confirmation (ex: Merci, c'est noté.)"
-2. Si la réponse est incomplète ou hors-sujet :
-   - status = "rejected"
-   - bot_reply = "Posez une question claire et polie pour demander la précision manquante."
-
-FORMAT DE SORTIE (JSON EXACT) :
-{
-  "status": "accepted" ou "rejected",
-  "extracted_value": "la valeur propre (uniquement si accepted)",
-  "bot_reply": "votre message naturel à l'utilisateur"
-}
-`;
-
-    const { getSettings } = require('../core/config');
-    const openAiKey = getSettings().openaiApiKey;
-    if (!openAiKey) throw new Error("Clé OpenAI manquante");
-
-    const payload = {
-      model: 'gpt-5.4-mini',
-      messages: [{ role: 'system', content: prompt }],
-      temperature: 0.2,
-      response_format: { type: "json_object" }
-    };
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openAiKey}`
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Erreur OpenAI: ${err}`);
-    }
-
-    const data = await response.json();
-    return JSON.parse(data.choices[0].message.content);
+    return this.assembleFromSections('export', chapters);
   }
 }

@@ -13,7 +13,7 @@ import fontkit from '@pdf-lib/fontkit';
 const BOX_LEFT = 93;          // bord gauche du cadre (le « des marqueurs est à x≈95)
 const BOX_RIGHT = 503;        // bord droit (≈ largeur de contenu des titres de la page)
 const FONT_SIZE = 10.5;       // taille du corps de texte (pt)
-const LINE_LEADING = 1.32;    // interligne (× taille)
+const LINE_LEADING = 1.55;    // interligne (× taille) — aéré pour la lisibilité (était 1.32, trop compact)
 const PARA_INDENT = 18;       // alinéa de 1re ligne de chaque paragraphe (pt)
 const TOP_INSET = 2;          // marge sous le marqueur d'ouverture avant la 1re ligne
 const BOTTOM_INSET = 4;       // marge au-dessus du marqueur « fin »
@@ -29,6 +29,7 @@ export interface ZoneBox {
   pageIndex: number;          // index 0-based de la page
   topY: number;               // y (PDF, origine bas) du marqueur d'ouverture = haut du cadre
   bottomY: number;            // y du marqueur « fin » = bas du cadre
+  label?: string;             // libellé écrit APRÈS « Contexte » (l'angle/le sujet de la zone) — ex. « Une réponse pour vos sites »
 }
 
 /** Contexte client pour reconstruire les libellés personnalisés (sites / nom / référence du marché). */
@@ -67,7 +68,11 @@ function hexToRgb(hex: string) {
   return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
 }
 
-const CONTEXT_RE = /contexte\s+sur\s+mesure/i;
+// Un marqueur de zone éditable = un paragraphe qui COMMENCE par « Contexte … » (ex. « Contexte sur
+// mesure début », « Contexte Une réponse pour vos sites », « Contexte DES MOYENS CALIBRÉS »…). On
+// ancre au DÉBUT (après un éventuel guillemet) pour NE PAS confondre avec les phrases du corps qui
+// contiennent « contexte » plus loin (« Dans le contexte… », « Le contexte réglementaire… »).
+const CONTEXT_RE = /^[\s«»“”"'‹›]*Contexte\b/;   // « Contexte » avec C MAJUSCULE (≠ corps « contexte… », « Le contexte… »)
 const FIN_RE = /\bfin\b/i;
 
 /**
@@ -80,26 +85,32 @@ export async function findZoneBoxes(pdfBuffer: Buffer): Promise<ZoneBox[]> {
   await pdfParse(pdfBuffer, {
     pagerender: (pd: any) => pd.getTextContent().then((tc: any) => {
       const page: number = pd.pageNumber;
-      let openY: number | null = null;
-      let finY: number | null = null;
-      for (const it of tc.items) {
-        const t = (it.str || '').trim();
-        if (!t || !CONTEXT_RE.test(t)) continue;
-        const y = it.transform[5];
-        if (FIN_RE.test(t)) finY = y;       // « Contexte sur mesure fin »
-        else openY = y;                     // « Contexte sur mesure » / « … début »
-      }
-      // Marqueurs parfois éclatés en items séparés : reconstituer via le voisinage.
-      if (openY === null || finY === null) {
-        const ys = tc.items.filter((it: any) => CONTEXT_RE.test((it.str || '')))
-          .map((it: any) => it.transform[5]);
-        const fins = tc.items.filter((it: any) => FIN_RE.test((it.str || '')) && it.transform[5] < 200)
-          .map((it: any) => it.transform[5]);
-        if (openY === null && ys.length) openY = Math.max(...ys);
-        if (finY === null && fins.length) finY = Math.min(...fins);
-      }
+      // Les marqueurs sortent souvent en items « Contexte » SEULS (le libellé et « fin » sont des items
+      // séparés) : impossible de distinguer open/fin sur le texte de l'item. On se fie donc à la
+      // POSITION : sur une page, le marqueur « Contexte » le plus HAUT = ouverture, le plus BAS = fin.
+      const ctxYs = tc.items
+        .filter((it: any) => CONTEXT_RE.test((it.str || '').trim()))
+        .map((it: any) => it.transform[5] as number);
+      // « fin » bas de page (confirme une fermeture quand un seul « Contexte » est présent).
+      const finYs = tc.items
+        .filter((it: any) => FIN_RE.test((it.str || '')) && it.transform[5] < 200)
+        .map((it: any) => it.transform[5] as number);
+      let openY: number | null = ctxYs.length ? Math.max(...ctxYs) : null;
+      let finY: number | null = ctxYs.length >= 2 ? Math.min(...ctxYs)
+        : (finYs.length ? Math.min(...finYs) : null);
       if (openY !== null && finY !== null && openY > finY) {
-        boxes.push({ pageIndex: page - 1, topY: openY, bottomY: finY });
+        // LIBELLÉ de la zone = texte écrit sur la MÊME ligne que le marqueur d'ouverture (les items
+        // sont éclatés : « Contexte » + « Une réponse pour vos sites »…). On le reconstitue puis on
+        // retire « Contexte / début / sur mesure » et les guillemets → il reste l'ANGLE de la zone.
+        const lineItems = tc.items
+          .filter((it: any) => Math.abs(it.transform[5] - (openY as number)) < 3)
+          .sort((a: any, b: any) => a.transform[4] - b.transform[4]);
+        const label = lineItems.map((it: any) => it.str || '').join(' ')
+          .replace(/[«»“”"'‹›]/g, ' ')
+          .replace(/\bContexte\b/i, ' ')
+          .replace(/\b(d[ée]but|sur\s+mesure|fin)\b/ig, ' ')
+          .replace(/\s+/g, ' ').trim();
+        boxes.push({ pageIndex: page - 1, topY: openY, bottomY: finY, label });
       }
       return '';
     }),
@@ -192,7 +203,7 @@ function stripHighlightAnnotations(doc: PDFDocument) {
  */
 export async function measureZonesCapacity(
   pdfBuffer: Buffer, fontBytes: Buffer | null,
-): Promise<{ zones: number; totalLines: number; charsPerLine: number }> {
+): Promise<{ zones: number; totalLines: number; charsPerLine: number; perZoneLines: number[]; perZoneLabels: string[] }> {
   const boxes = await findZoneBoxes(pdfBuffer);
   const doc = await PDFDocument.load(pdfBuffer);
   let font: PDFFont;
@@ -201,12 +212,17 @@ export async function measureZonesCapacity(
 
   const lineHeight = FONT_SIZE * LINE_LEADING;
   const blockWidth = BOX_RIGHT - BOX_LEFT;   // 1 colonne pleine largeur
-  const totalLines = boxes.reduce((sum, b) => sum + columnCapacity(b, lineHeight), 0);
+  // Capacité (lignes) PAR zone, dans le MÊME ordre que `findZoneBoxes` (ordre de lecture des pages),
+  // pour dimensionner le texte de chaque page indépendamment.
+  const perZoneLines = boxes.map((b) => columnCapacity(b, lineHeight));
+  const totalLines = perZoneLines.reduce((sum, n) => sum + n, 0);
 
   // Largeur moyenne d'un caractère « courant » à FONT_SIZE → nb de car. par ligne pleine largeur.
   const avgCharW = font.widthOfTextAtSize('en ara ti on le re', FONT_SIZE) / 18;
   const charsPerLine = Math.max(1, Math.floor(blockWidth / avgCharW));
-  return { zones: boxes.length, totalLines, charsPerLine };
+  // Libellé (angle) de chaque zone, dans le même ordre que perZoneLines.
+  const perZoneLabels = boxes.map((b) => (b.label || '').trim());
+  return { zones: boxes.length, totalLines, charsPerLine, perZoneLines, perZoneLabels };
 }
 
 /** Nb de lignes utiles dans UNE colonne d'un cadre (hauteur exploitable / interligne × remplissage). */
@@ -293,9 +309,12 @@ function drawColumn(page: PDFPage, lines: Line[], x: number, topY: number, colWi
 export async function overlaySynthesis(
   pdfBuffer: Buffer, fullText: string, fontBytes: Buffer | null,
   replacements: RefReplacement[] = [], refCtx?: RefContext, highlightFills: HighlightFill[] = [],
+  opts: { zoneTexts?: string[]; docTitle?: string } = {},
 ): Promise<{ bytes: Uint8Array; zonesUsed: number; linesDrawn: number; truncated: boolean; refsReplaced: number; highlightsFilled: number }> {
   const boxes = await findZoneBoxes(pdfBuffer);
   const doc = await PDFDocument.load(pdfBuffer);
+  // Titre interne du PDF (onglet du lecteur) : remplace celui hérité du template (ancien client).
+  if (opts.docTitle?.trim()) doc.setTitle(opts.docTitle.trim());
   let font: PDFFont;
   if (fontBytes) { doc.registerFontkit(fontkit); font = await doc.embedFont(fontBytes, { subset: true }); }
   else font = await doc.embedFont(StandardFonts.Helvetica);
@@ -309,9 +328,15 @@ export async function overlaySynthesis(
   // Capacité (lignes, 1 colonne pleine largeur) par zone, plafonnée par le taux de remplissage.
   const caps = boxes.map((b) => columnCapacity(b, lineHeight));
 
-  // Découpe le texte une seule fois (pleine largeur, alinéa de 1re ligne) puis répartit équitablement.
-  const paras = fullText.replace(/\r\n/g, '\n').split(/\n\s*\n/).map((p) => p.replace(/\s*\n\s*/g, ' ').trim()).filter(Boolean);
-  const allLines = paragraphsToLines(paras, blockWidth, font, FONT_SIZE, PARA_INDENT);
+  // Mode PAR ZONE : un texte propre à chaque page (zoneTexts[i]). Sinon (fallback rétro-compatible),
+  // un seul bloc continu réparti proportionnellement sur toutes les zones.
+  const perZoneMode = Array.isArray(opts.zoneTexts) && opts.zoneTexts.length > 0;
+  const toLines = (txt: string) => paragraphsToLines(
+    txt.replace(/\r\n/g, '\n').split(/\n\s*\n/).map((p) => p.replace(/\s*\n\s*/g, ' ').trim()).filter(Boolean),
+    blockWidth, font, FONT_SIZE, PARA_INDENT,
+  );
+  // Fallback : tout le texte découpé une fois, réparti à la ligne.
+  const allLines = perZoneMode ? [] : toLines(fullText);
 
   let cursor = 0, linesDrawn = 0, zonesUsed = 0;
   let truncated = false;
@@ -324,20 +349,46 @@ export async function overlaySynthesis(
     const rectTop = b.topY + MASK_PAD_TOP;
     page.drawRectangle({ x: BOX_LEFT - 4, y: rectBottom, width: (BOX_RIGHT - BOX_LEFT) + 8, height: rectTop - rectBottom, color: bg });
 
-    // Répartition PROPORTIONNELLE à la capacité restante : si le texte ne suffit pas à tout remplir,
-    // il est étalé sur TOUTES les zones (aucune page laissée vide) ; s'il y en a assez, chaque cadre
-    // est rempli jusqu'à SA capacité et le surplus est tronqué.
-    const remainingLines = allLines.length - cursor;
-    const remainingCap = caps.slice(i).reduce((s, c) => s + c, 0) || 1;
-    const isLast = i === boxes.length - 1;
-    const take = Math.min(
-      caps[i],
-      remainingLines,
-      isLast ? remainingLines : Math.round(remainingLines * (caps[i] / remainingCap)),
-    );
-    if (take <= 0) return;
-    const zoneLines = allLines.slice(cursor, cursor + take);
-    cursor += take;
+    let zoneLines: Line[];
+    if (perZoneMode) {
+      // Le texte de CETTE page, borné à la capacité du cadre. Si ça dépasse, on RETIRE des PHRASES
+      // ENTIÈRES par la fin (jamais de coupe au milieu d'une phrase) pour finir proprement dans la page.
+      let zText = (opts.zoneTexts![i] || '').trim();
+      let zLines = toLines(zText);
+      if (zLines.length > caps[i]) {
+        truncated = true;
+        // Découpe par paragraphes → phrases, et on enlève la dernière phrase tant que ça déborde.
+        const paras = zText.replace(/\r\n/g, '\n').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+        let sentences = paras.flatMap((p, pi) => splitSentences(p).map((s) => ({ s, pi })));
+        // On retire la dernière phrase tant que ça déborde, en regroupant par paragraphe d'origine (\n\n préservés).
+        while (zLines.length > caps[i] && sentences.length > 1) {
+          sentences = sentences.slice(0, -1);
+          // Reconstruit le texte en regroupant par paragraphe d'origine.
+          const byPara = new Map<number, string[]>();
+          for (const it of sentences) (byPara.get(it.pi) || byPara.set(it.pi, []).get(it.pi)!).push(it.s);
+          zText = [...byPara.values()].map((arr) => arr.join(' ')).join('\n\n');
+          zLines = toLines(zText);
+        }
+        if (zLines.length > caps[i]) zLines = zLines.slice(0, caps[i]); // garde-fou (phrase unique trop longue)
+      }
+      zoneLines = zLines;
+    } else {
+      // Répartition PROPORTIONNELLE à la capacité restante : si le texte ne suffit pas à tout remplir,
+      // il est étalé sur TOUTES les zones (aucune page laissée vide) ; s'il y en a assez, chaque cadre
+      // est rempli jusqu'à SA capacité et le surplus est tronqué.
+      const remainingLines = allLines.length - cursor;
+      const remainingCap = caps.slice(i).reduce((s, c) => s + c, 0) || 1;
+      const isLast = i === boxes.length - 1;
+      const take = Math.min(
+        caps[i],
+        remainingLines,
+        isLast ? remainingLines : Math.round(remainingLines * (caps[i] / remainingCap)),
+      );
+      if (take <= 0) return;
+      zoneLines = allLines.slice(cursor, cursor + take);
+      cursor += take;
+    }
+    if (!zoneLines.length) return;
     zonesUsed++;
     linesDrawn += zoneLines.filter((l) => l.text).length;
 
@@ -345,7 +396,7 @@ export async function overlaySynthesis(
     drawColumn(page, zoneLines, BOX_LEFT, b.topY - TOP_INSET, blockWidth, lineHeight, font, FONT_SIZE, textColor);
   });
 
-  if (cursor < allLines.filter((l) => l.text).length) truncated = true;
+  if (!perZoneMode && cursor < allLines.filter((l) => l.text).length) truncated = true;
 
   // Personnalisation des références figées (ancien client / sites / libellés) par masque+redraw.
   let refsReplaced = 0;

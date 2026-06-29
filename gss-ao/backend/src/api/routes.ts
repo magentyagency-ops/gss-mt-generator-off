@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import OpenAI from 'openai';
 import { DB, DossierRecord } from '../core/db';
+import { initProgress, finishProgress } from '../core/progress';
 import { parseCctp } from '../analysis/cctpParser';
 import { parseRc } from '../analysis/rcParser';
 
@@ -106,7 +107,7 @@ router.post('/dce/upload', upload.array('files'), (req: Request, res: Response) 
   try {
     const dossierId = req.body.id;
     if (!dossierId) throw new Error("ID du dossier manquant");
-    
+
     const targetDir = path.resolve(__dirname, `../../../data/output/dce_${dossierId}`);
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
@@ -159,7 +160,7 @@ router.post('/dce/upload', upload.array('files'), (req: Request, res: Response) 
 
     dossierUpdate.statut = "En cours";
     DB.saveDossier(dossierId, dossierUpdate);
-    
+
     res.json({ message: "Fichiers uploadés et parsés avec succès", dossierId, rcData, cctpData });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -188,10 +189,10 @@ router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
 
     if (result.status === 'incomplete') {
       setDossierProgress(dossierId, { status: 'incomplete', progress: 95, message: 'En attente d\'informations complémentaires.' });
-      return res.json({ 
-        status: 'incomplete', 
-        message: 'Des informations sont manquantes.', 
-        missingFields: result.missingFields 
+      return res.json({
+        status: 'incomplete',
+        message: 'Des informations sont manquantes.',
+        missingFields: result.missingFields
       });
     }
 
@@ -212,7 +213,7 @@ router.post('/dce/:dossier_id/memoire/fill-missing', async (req: Request, res: R
     setDossierProgress(dossierId, { status: 'running', progress: 98, message: 'Intégration des réponses de l\'utilisateur...' });
     const generator = new MemoireGenerator();
     const result = await generator.finalizeMemoire(dossierId, userAnswers);
-    
+
     setDossierProgress(dossierId, { status: 'completed', progress: 100, message: 'Génération terminée avec succès !' });
     res.json({ status: 'completed', message: 'Mémoire finalisé', file_path: result.filePath, data_generee_par_ia: result.generatedData });
   } catch (error: any) {
@@ -260,25 +261,25 @@ router.post('/dossiers/:id/memoire-from-sections', async (req: Request, res: Res
 router.post('/generate-section', async (req: Request, res: Response) => {
   try {
     const { api_key, cctp_extract, rag_chunks, template_question, mode, selected_slides } = req.body;
-    
+
     if (!api_key) {
       return res.status(400).json({ error: "Clé API OpenAI manquante." });
     }
 
     const openai = new OpenAI({ apiKey: api_key });
-    
+
     let prompt = `Tu es un expert en réponse aux appels d'offres pour l'entreprise de sécurité privée GSS.\n`;
     prompt += `Ton objectif est de rédiger une section claire, professionnelle et convaincante pour le mémoire technique.\n\n`;
-    
+
     if (cctp_extract) {
       prompt += `--- EXTRAIT DU CCTP (Attentes du client) ---\n${cctp_extract}\n\n`;
     }
-    
+
     const chunks = mode === 'A' ? rag_chunks : selected_slides;
     if (chunks && chunks.length > 0) {
       prompt += `--- RESSOURCES GSS (À mobiliser dans la réponse) ---\n`;
       chunks.forEach((c: any, i: number) => {
-        prompt += `Source ${i+1} [${c.categorie}]: ${c.texte}\n`;
+        prompt += `Source ${i + 1} [${c.categorie}]: ${c.texte}\n`;
       });
       prompt += `\n`;
     }
