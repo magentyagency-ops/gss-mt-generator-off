@@ -11,9 +11,9 @@ import { overlaySynthesis, loadTrebuchetFont, measureZonesCapacity, RefReplaceme
 // @ts-ignore
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
-// Modèle utilisé pour la génération. gpt-4o-mini a une limite TPM bien plus élevée (200k vs 30k
+// Modèle utilisé pour la génération. gpt-5.4-mini a une limite TPM bien plus élevée (200k vs 30k
 // pour gpt-4o sur ce compte) → génération rapide sans throttling. Surchargeable par env.
-const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-4o-mini';
+const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.4-mini';
 
 // Modèle de génération d'IMAGES pour remplir les cadres « Zone d'image » du template.
 // Désactivable via GENERATE_IMAGES=false (étape coûteuse, non bloquante).
@@ -1053,11 +1053,44 @@ export class MemoireGenerator {
     if (!fs.existsSync(this.responseDir)) fs.mkdirSync(this.responseDir, { recursive: true });
   }
 
+  /**
+   * Normalise un nom de fichier en ASCII pur pour le matching fuzzy.
+   * Gère à la fois les vrais accents (NFD) ET les séquences UTF-8 cassées
+   * (ex. "MÃ©moire" → "Mmoire") en supprimant tous les caractères non-ASCII.
+   */
+  private normFileName(name: string): string {
+    return name
+      .normalize('NFD')             // décompose les vrais accents
+      .replace(/[\u0300-\u036f]/g, '') // retire les diacritiques décomposés
+      .replace(/[^\x00-\x7F]/g, '') // retire tout caractère non-ASCII résiduel (garbled UTF-8)
+      .toLowerCase();
+  }
+
+  /**
+   * Cherche un fichier dans un répertoire par correspondance exacte d'abord,
+   * puis par correspondance floue (normalisation ASCII) si le match exact échoue.
+   * Gère les noms de fichiers avec accents cassés par multer/encodage disque.
+   */
+  private findFileInDir(dir: string, targetBasename: string): string | null {
+    if (!dir || !fs.existsSync(dir)) return null;
+    // 1. Exact match
+    const exact = path.join(dir, targetBasename);
+    if (fs.existsSync(exact)) return exact;
+    // 2. Fuzzy match : compare les noms normalisés en ASCII pur
+    const targetNorm = this.normFileName(targetBasename);
+    try {
+      const entries = fs.readdirSync(dir);
+      const match = entries.find(e => this.normFileName(e) === targetNorm);
+      if (match) return path.join(dir, match);
+    } catch { /* dir non lisible */ }
+    return null;
+  }
+
   private findDceTemplate(dceDir: string): string | null {
     if (!fs.existsSync(dceDir)) return null;
     const files = fs.readdirSync(dceDir);
     const memoireFile = files.find(f => {
-      const normalized = f.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+      const normalized = this.normFileName(f);
       return normalized.includes('memoire') && (normalized.endsWith('.doc') || normalized.endsWith('.docx'));
     });
     return memoireFile ? path.join(dceDir, memoireFile) : null;
@@ -1114,11 +1147,11 @@ export class MemoireGenerator {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) { await scanDir(fullPath); continue; }
 
-        const normalized = entry.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+        const normalized = this.normFileName(entry.name);
         const ext = path.extname(entry.name).toLowerCase();
         if (!['.doc', '.docx', '.pdf'].includes(ext)) continue;
         if (normalized.includes('bpu') || normalized.includes('dpgf')) continue;
-        if (normalized.includes('memoire') && (normalized.includes('technique') || normalized.includes('gss'))) continue;
+        if (normalized.includes('memoire') && (normalized.includes('technique') || normalized.includes('gss') || normalized.includes('cadre') || normalized.includes('lots'))) continue;
         if (loadedFiles.has(normalized)) continue;
         loadedFiles.add(normalized);
 
@@ -1300,7 +1333,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
   public async generate(
     dossierId: string,
     onProgress?: (progress: number, message: string, status?: string) => void
-  ): Promise<{ filePath: string, generatedData: Record<string, string> }> {
+  ): Promise<{ filePath?: string, generatedData?: Record<string, string>, status?: string, missingFields?: any[], intermediateData?: any }> {
     const settings = getSettings();
     const baseDir = path.resolve(__dirname, '../../../../');
     const uploadedDceDir = path.resolve(baseDir, `gss-ao/data/output/dce_${dossierId}`);
@@ -1321,13 +1354,14 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
 
     const dossier = DB.getDossier(dossierId);
     if (dossier && dossier.dce_files) {
-      const templateFile = dossier.dce_files.find((f: any) => f.type === 'Mémoire (cadre)');
+      const templateFile = dossier.dce_files.find((f: any) => f.type === 'Mémoire (cadre)' && !path.basename(f.nom).startsWith('~$'));
       if (templateFile && templateFile.nom) {
         const filename = path.basename(templateFile.nom);
         for (const dir of possibleDirs) {
           if (!dir) continue;
-          const p = path.join(dir, filename);
-          if (fs.existsSync(p)) { templatePath = p; break; }
+          // Utilise findFileInDir pour gérer les noms avec accents cassés (UTF-8 garbled)
+          const found = this.findFileInDir(dir, filename);
+          if (found) { templatePath = found; break; }
         }
       }
     }
@@ -1359,6 +1393,16 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     const dceContext = await this.getDceContext(dossierId);
     const analysisData = await this.analyzeDce(dceContext);
     const analysisJson = JSON.stringify(analysisData, null, 2);
+
+    // 2b. Chargement de la Base de Données GSS
+    const gssDocsRaw = await this.getGssDocumentation();
+    let gssContextStr = '';
+    const priorityCats = ['MANAGEMENT', 'INTERLOCUTEUR UNIQUE', 'MISE EN PLACE', 'VALEURS', 'SUIVI QUALITE ET CONTROLES', 'EFFECTIFS ET ORGANIGRAMME'];
+    for (const cat of priorityCats) {
+      if (gssDocsRaw[cat]) {
+        gssContextStr += `\n\n=== Doc GSS : ${cat} ===\n${gssDocsRaw[cat].slice(0, 5000)}`;
+      }
+    }
 
     // 3. Load DOCX and parse XML DOM
     const content = fs.readFileSync(templatePath);
@@ -1620,12 +1664,17 @@ RÈGLE N°3 — DONNÉES LÉGALES : NE JAMAIS INVENTER
 ══════════════════════════════════════
 Pour tout champ d'identité légale (SIRET, N° CNAPS, NOM du dirigeant, n° d'agrément dirigeant, dates
 d'obtention/validité, n° de certification, adresses, coordonnées/téléphone/email) : n'utilise QUE des
-valeurs présentes dans l'analyse/DCE. Sinon écris EXACTEMENT "[À COMPLÉTER]" (rien d'autre, pas de nom
+valeurs présentes dans l'analyse/DCE ou dans la Doc GSS fournie. Sinon écris EXACTEMENT "[INFO MANQUANTE]" (rien d'autre, pas de nom
 inventé type "Jean Dupont"). N'invente JAMAIS un nom, un numéro, une date, une adresse ou un contact.
+
+══════════════════════════════════════
+RÈGLE N°4 — ANTI-HALLUCINATION GLOBALE
+══════════════════════════════════════
+Si une information demandée (quel que soit le champ) n'est PAS présente dans l'analyse DCE, dans la visite terrain, NI dans la documentation GSS fournie, et que tu n'en es pas absolument sûr, ne l'invente pas. Renvoie EXACTEMENT "[INFO MANQUANTE]".
 
 FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "value": "..."} ]}`;
 
-    // 5. Traitement par lots. gpt-4o-mini (200k TPM) permet des lots plus gros → moins d'allers-retours.
+    // 5. Traitement par lots. gpt-5.4-mini (200k TPM) permet des lots plus gros → moins d'allers-retours.
     const BATCH_SIZE = 20;
     const replacements: Array<{ id: number; value: string }> = [];
 
@@ -1638,6 +1687,7 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
 
       const userPrompt = `Analyse du marché public (contexte unique de rédaction) :
 ${analysisJson}
+${gssContextStr}
 
 Liste des ${batchPrompts.length} champs à remplir (${label}) :
 ${batchPrompts.join('\n')}
@@ -1687,7 +1737,7 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
 
     // Garde-fou anti-invention : pour les champs légaux (SIRET, CNAPS, agrément, dates
     // d'autorisation, adresses), toute valeur dont les chiffres n'apparaissent pas dans les
-    // sources réelles est remplacée par [À COMPLÉTER]. Indépendant du modèle (mini invente parfois).
+    // sources réelles est remplacée par [INFO MANQUANTE]. Indépendant du modèle (mini invente parfois).
     const sourceDigits = (analysisJson + ' ' + dceContext).replace(/\D/g, '');
     const isLegalField = (ctx: string) => /siret|cnaps|n. d.autorisation|numero d.autorisation|agrement dirigeant|date d.obtention|date de validite|adresse du siege|adresse de l.agence/.test(normCtx(ctx));
     const guardLegal = (val: string, ctx: string): string => {
@@ -1695,18 +1745,66 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
       const digitRuns = val.match(/\d{3,}/g) || [];
       const unverified = digitRuns.some(d => !sourceDigits.includes(d));
       if (unverified) {
-        console.log(`[MemoireGenerator] Garde-fou: valeur légale non vérifiée → [À COMPLÉTER] (ctx: ${ctx.slice(0, 60)})`);
-        return '[À COMPLÉTER]';
+        console.log(`[MemoireGenerator] Garde-fou: valeur légale non vérifiée → [INFO MANQUANTE] (ctx: ${ctx.slice(0, 60)})`);
+        return '[INFO MANQUANTE]';
       }
       return val;
     };
 
+    // Appliquer le garde-fou immédiatement
+    replacements.forEach(r => {
+      const desc = descriptors.find(d => d.id === r.id);
+      if (desc) {
+        r.value = guardLegal(String(r.value), desc.context);
+      }
+    });
+
+    // 5b. Check for missing information
+    const finalMissingFields = replacements
+      .filter(r => r.value === '[INFO MANQUANTE]')
+      .map(r => {
+        const desc = descriptors.find(d => d.id === r.id);
+        return {
+          id: r.id,
+          context: desc ? desc.context : 'Champ inconnu'
+        };
+      });
+
+    if (finalMissingFields.length > 0) {
+      console.log(`[MemoireGenerator] ${finalMissingFields.length} champs manquants détectés, pause pour interaction utilisateur.`);
+      
+      // Save state to DB and write temp file
+      const serializer = new XMLSerializer();
+      documentXml.name = 'word/document.xml';
+      zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+      const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
+      const tempPath = path.join(this.responseDir, `memoire_${dossierId}_temp.docx`);
+      fs.writeFileSync(tempPath, buf);
+
+      const dossier = DB.getDossier(dossierId);
+      if (dossier) {
+        DB.saveDossier(dossierId, {
+          memoire_cadre_state: {
+            tempPath,
+            missingFields: finalMissingFields
+          }
+        });
+      }
+
+      return {
+        status: 'incomplete',
+        missingFields: finalMissingFields
+      };
+    }
+
     // 6. Apply replacements in the DOM
     let applied = 0;
     replacements.forEach((rep: any) => {
+      if (rep.value === '[INFO MANQUANTE]') return; // On laisse [CHAMP_XXX] intact pour la finalisation
+
       const desc = descriptors.find(d => d.id === rep.id);
       if (!desc) return;
-      const value = guardLegal(String(rep.value), desc.context);
+      const value = String(rep.value);
       const isChecked = value.includes('☑') || value.toLowerCase() === 'oui' || value.toLowerCase() === 'yes' || value === '1' || value === 'true';
 
       if (desc.type === 'text') {
@@ -2050,11 +2148,20 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
       const catDir = path.join(gssDir, entry.name);
       let catText = '';
 
-      const files = fs.readdirSync(catDir).filter(f => f.toLowerCase().endsWith('.pdf'));
+      const files = fs.readdirSync(catDir).filter(f => {
+        const ext = f.toLowerCase();
+        return ext.endsWith('.pdf') || ext.endsWith('.txt') || ext.endsWith('.md');
+      });
       for (const file of files) {
         try {
-          const text = await extractText(path.join(catDir, file));
-          if (text.length > 50) catText += `\n--- ${file} ---\n${text}`;
+          let text = '';
+          const filePath = path.join(catDir, file);
+          if (file.toLowerCase().endsWith('.pdf')) {
+            text = await extractText(filePath);
+          } else {
+            text = fs.readFileSync(filePath, 'utf8');
+          }
+          if (text.length > 20) catText += `\n--- ${file} ---\n${text}`;
         } catch (e: any) {
           console.warn(`[MemoireGenerator] GSS doc: impossible de lire ${entry.name}/${file}: ${e.message}`);
         }
@@ -2260,6 +2367,8 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
 - Base-toi UNIQUEMENT sur l'analyse du DCE et les atouts GSS fournis ci-dessous.
 - NE METS PAS le titre principal au début de ta réponse (le titre "${section.title}" sera ajouté automatiquement).
 - Structure ton texte avec de courts paragraphes clairs, et si pertinent, de petites listes à puces.
+- Mets impérativement en forme les titres et sous-titres en gras ET souligné (par exemple : **<u>Titre de ma partie</u>**).
+- Ajoute TOUJOURS un saut de ligne (ligne vide) entre chaque titre/sous-titre et le paragraphe qui suit.
 - Personnalise FORTEMENT pour le client ${clientName}.
 - Ne rédige QUE le contenu de cette section, SANS introduction globale SANS conclusion générale, et SANS salutations.`;
 
@@ -2506,4 +2615,118 @@ Renvoie uniquement un objet JSON valide contenant les ${batchPrompts.length} val
     
     return { filePath: result.filePath, generatedData: {} };
   }
+
+  /**
+   * Finalise la génération du mémoire avec cadre imposé après intervention de l'utilisateur.
+   */
+  public async finalizeMemoire(dossierId: string, userAnswers: Record<string, string>): Promise<{ filePath: string, generatedData: Record<string, string> }> {
+    const dossier = DB.getDossier(dossierId);
+    if (!dossier || !dossier.memoire_cadre_state) {
+      throw new Error("État de génération introuvable ou expiré.");
+    }
+    const state = dossier.memoire_cadre_state;
+    if (!state.tempPath || !fs.existsSync(state.tempPath)) {
+      throw new Error("Le fichier temporaire est introuvable.");
+    }
+
+    // Charger le docx temporaire
+    const content = fs.readFileSync(state.tempPath);
+    const zip = new PizZip(content);
+    const documentXml = zip.file('word/document.xml');
+    if (!documentXml) throw new Error('word/document.xml introuvable dans le template temporaire');
+
+    const docXmlStr = documentXml.asText();
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXmlStr, 'text/xml');
+
+    // Appliquer les réponses utilisateur sur les [CHAMP_XXX] restants
+    let applied = 0;
+    const tEls = getElementsWithLocalName(xmlDoc, 't');
+    
+    for (const mf of state.missingFields) {
+      const answer = userAnswers[mf.id];
+      if (answer) {
+        tEls.forEach((tEl: any) => replaceTextInElement(xmlDoc, tEl, `[CHAMP_${mf.id}]`, answer));
+        applied++;
+      }
+    }
+
+    console.log(`[MemoireGenerator] Finalisation : ${applied} champs remplis par l'utilisateur.`);
+
+    // Sauvegarde finale
+    const serializer = new XMLSerializer();
+    documentXml.name = 'word/document.xml';
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+
+    const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
+    const finalPath = path.join(this.responseDir, `memoire_${dossierId}_${Date.now()}.docx`);
+    fs.writeFileSync(finalPath, buf);
+
+    // Nettoyage de l'état
+    try { fs.unlinkSync(state.tempPath); } catch { /* ignore */ }
+    DB.saveDossier(dossierId, { memoire_cadre_state: null });
+
+    return { filePath: finalPath, generatedData: userAnswers };
+  }
+
+  async evaluateMissingInfoChat(context: string, chatHistory: any[]): Promise<{status: 'accepted'|'rejected', extracted_value?: string, bot_reply: string}> {
+    const prompt = `Vous êtes un assistant IA qui aide un utilisateur à remplir les informations manquantes d'un document professionnel (mémoire technique ou appel d'offres).
+
+L'information manquante requise est décrite par ce contexte : 
+"${context}"
+
+Voici l'historique de la conversation actuelle (si vide, c'est que vous devez poser la première question) :
+${JSON.stringify(chatHistory, null, 2)}
+
+TACHE :
+Si l'historique est vide ou si c'est le début de l'échange pour ce champ :
+- status = "rejected"
+- bot_reply = "Posez une question claire, courte et naturelle pour demander l'information décrite dans le contexte."
+
+Si l'utilisateur a répondu, analysez son dernier message. Déterminez si l'information fournie répond complètement au contexte demandé.
+1. Si la réponse est complète :
+   - Extrayez la valeur formelle exacte et propre qui devra être insérée dans le document (ex: "12 Rue de la Paix, 75000 Paris", "M. Jean Dupont").
+   - status = "accepted"
+   - bot_reply = "Un message court de confirmation (ex: Merci, c'est noté.)"
+2. Si la réponse est incomplète ou hors-sujet :
+   - status = "rejected"
+   - bot_reply = "Posez une question claire et polie pour demander la précision manquante."
+
+FORMAT DE SORTIE (JSON EXACT) :
+{
+  "status": "accepted" ou "rejected",
+  "extracted_value": "la valeur propre (uniquement si accepted)",
+  "bot_reply": "votre message naturel à l'utilisateur"
 }
+`;
+
+    const { getSettings } = require('../core/config');
+    const openAiKey = getSettings().openaiApiKey;
+    if (!openAiKey) throw new Error("Clé OpenAI manquante");
+
+    const payload = {
+      model: 'gpt-5.4-mini',
+      messages: [{ role: 'system', content: prompt }],
+      temperature: 0.2,
+      response_format: { type: "json_object" }
+    };
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${openAiKey}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Erreur OpenAI: ${err}`);
+    }
+
+    const data = await response.json();
+    return JSON.parse(data.choices[0].message.content);
+  }
+}
+

@@ -117,9 +117,10 @@ router.post('/dce/upload', upload.array('files'), (req: Request, res: Response) 
 
     if (req.files && Array.isArray(req.files)) {
       for (const file of req.files) {
-        // Renommer le fichier uploadé avec son nom original
-        const ext = path.extname(file.originalname);
-        const base = path.basename(file.originalname, ext);
+        // Renommer le fichier uploadé avec son nom original (corrige l'encodage latin1 par défaut de multer)
+        const utf8Name = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        const ext = path.extname(utf8Name);
+        const base = path.basename(utf8Name, ext);
         const finalName = `${base}${ext}`;
         const finalPath = path.join(targetDir, finalName);
         fs.renameSync(file.path, finalPath);
@@ -184,12 +185,54 @@ router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
     const result = await generator.generate(dossierId, (progress, message) => {
       setDossierProgress(dossierId, { status: 'running', progress, message });
     });
+
+    if (result.status === 'incomplete') {
+      setDossierProgress(dossierId, { status: 'incomplete', progress: 95, message: 'En attente d\'informations complémentaires.' });
+      return res.json({ 
+        status: 'incomplete', 
+        message: 'Des informations sont manquantes.', 
+        missingFields: result.missingFields 
+      });
+    }
+
     setDossierProgress(dossierId, { status: 'completed', progress: 100, message: 'Génération terminée avec succès !' });
-    res.json({ message: 'Mémoire technique traité', file_path: result.filePath, data_generee_par_ia: result.generatedData });
+    res.json({ status: 'completed', message: 'Mémoire technique traité', file_path: result.filePath, data_generee_par_ia: result.generatedData });
   } catch (error: any) {
     console.error('Erreur lors de la génération du mémoire:', error);
     setDossierProgress(dossierId, { status: 'error', message: `Erreur: ${error.message || error}` });
     res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
+  }
+});
+
+// Endpoint pour finaliser la génération après intervention de l'utilisateur (Chatbot)
+router.post('/dce/:dossier_id/memoire/fill-missing', async (req: Request, res: Response) => {
+  const dossierId = req.params.dossier_id;
+  const { userAnswers } = req.body;
+  try {
+    setDossierProgress(dossierId, { status: 'running', progress: 98, message: 'Intégration des réponses de l\'utilisateur...' });
+    const generator = new MemoireGenerator();
+    const result = await generator.finalizeMemoire(dossierId, userAnswers);
+    
+    setDossierProgress(dossierId, { status: 'completed', progress: 100, message: 'Génération terminée avec succès !' });
+    res.json({ status: 'completed', message: 'Mémoire finalisé', file_path: result.filePath, data_generee_par_ia: result.generatedData });
+  } catch (error: any) {
+    console.error('Erreur lors de la finalisation du mémoire:', error);
+    setDossierProgress(dossierId, { status: 'error', message: `Erreur: ${error.message || error}` });
+    res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
+  }
+});
+
+// Endpoint pour évaluer la réponse d'un utilisateur aux infos manquantes (via LLM)
+router.post('/dce/:dossier_id/memoire/chat-missing-eval', async (req: Request, res: Response) => {
+  const dossierId = req.params.dossier_id;
+  const { context, chatHistory } = req.body;
+  try {
+    const generator = new MemoireGenerator();
+    const evaluation = await generator.evaluateMissingInfoChat(context, chatHistory);
+    res.json(evaluation);
+  } catch (error: any) {
+    console.error('Erreur lors de evaluateMissingInfoChat:', error);
+    res.status(500).json({ error: error.message || 'Erreur interne' });
   }
 });
 
@@ -245,9 +288,11 @@ router.post('/generate-section', async (req: Request, res: Response) => {
     }
 
     prompt += `Rédige la section de manière formelle et synthétique. N'inclus pas de salutations.\n`;
+    prompt += `Mets impérativement en forme les titres et sous-titres en gras ET souligné (par exemple : **<u>Titre de ma partie</u>**).\n`;
+    prompt += `Ajoute TOUJOURS un saut de ligne (ligne vide) entre chaque titre/sous-titre et le paragraphe qui suit.\n`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-5.4-mini",
       messages: [{ role: "system", content: prompt }],
       temperature: 0.7,
     });
@@ -257,7 +302,7 @@ router.post('/generate-section', async (req: Request, res: Response) => {
 
     res.json({
       generated_text,
-      model: "gpt-4o",
+      model: "gpt-5.4-mini",
       tokens_used
     });
   } catch (error: any) {
@@ -324,7 +369,7 @@ ${emailText}
 \"\"\"`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-5.4-mini",
       messages: [{ role: "system", content: prompt }],
       temperature: 0.2,
       response_format: { type: "json_object" }

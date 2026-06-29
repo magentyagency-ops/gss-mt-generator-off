@@ -11,7 +11,7 @@ Réécriture des zones surlignées d'un PDF (pipeline : PyMuPDF -> GPT -> PyMuPD
 Usage:
   py rewrite_highlights.py --input IN.pdf --output OUT.pdf --context ctx.json
 Env:
-  OPENAI_API_KEY (requis), MEMOIRE_MODEL (def. gpt-4o-mini)
+  OPENAI_API_KEY (requis), MEMOIRE_MODEL (def. gpt-5.4-mini)
 
 ctx.json: { "clientName": str, "sites": [str], "analysis": {...}, "gssContext": str }
 """
@@ -393,7 +393,7 @@ def rewrite_passages(regions, ctx):
     except Exception as e:  # noqa: BLE001
         print(f"[rewrite_highlights] OpenAI indisponible ({e}) → texte d'origine conservé, surlignage retiré.", file=sys.stderr)
         return [out[i] if out[i] is not None else r["text"].strip() for i, r in enumerate(regions)]
-    model = os.environ.get("MEMOIRE_MODEL", "gpt-4o-mini")
+    model = os.environ.get("MEMOIRE_MODEL", "gpt-5.4-mini")
 
     # Budget de temps global : le page-par-page fait beaucoup d'appels séquentiels ; avec un compte à TPM
     # faible (429 + backoff) on risquait de dépasser le timeout de 300s du backend → process tué → AUCUNE

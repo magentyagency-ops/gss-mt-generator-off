@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { getSettings } from '../core/config';
-const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-4o'; // Always use GPT-4o for strategy
+const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.4-mini'; // Always use GPT-5.4-mini for strategy
 
 export const AI_SECTIONS_B: Array<{ id: string; chapter: string; title: string }> = [
   // I — Présentation de notre structure

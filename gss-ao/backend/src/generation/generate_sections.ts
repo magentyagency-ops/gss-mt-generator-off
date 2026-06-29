@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { getSettings } from '../core/config';
 import { StrategicSection } from './strategic_planner';
 
-const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-4o-mini';
+const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.4-mini';
 
 export class SectionGenerator {
   private openai: OpenAI;
@@ -35,6 +35,8 @@ RÈGLES DE RÉDACTION :
 - Personnalise le contenu avec le nom du client et ses besoins spécifiques si l'action est REWRITE ou ADD.
 - Si l'action est KEEP, rédige une présentation standard et robuste de ce sujet chez GSS, en t'appuyant sur les textes de référence.
 - Génère UNIQUEMENT du texte. Pas de markdown (sauf si nécessaire, mais évite les listes à puces complexes car le formateur Word ne les gère pas toujours bien). Utilise des sauts de ligne pour aérer.
+- Mets impérativement en forme les titres et sous-titres en gras ET souligné (par exemple : **<u>Titre de ma partie</u>**).
+- Ajoute TOUJOURS un saut de ligne (ligne vide) entre chaque titre/sous-titre et le paragraphe qui suit.
 - Le texte doit être assez long pour remplir une page A4 (environ 300 à 400 mots minimum) car il sera inséré dans une "slide" du mémoire. Structure-le en plusieurs paragraphes.`;
 
     const userPrompt = `ANALYSE DU MARCHÉ (DCE) :

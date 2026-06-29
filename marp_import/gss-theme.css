@@ -25,7 +25,10 @@ header {
   background-color: #494545; /* Dark gray banner */
   color: #ffffff; /* White text for section title */
   text-align: center;
-  line-height: 24mm; /* Center text vertically in the larger banner */
+  /* Use flexbox to center wrapped text */
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-family: 'Outfit', sans-serif;
   font-size: 0.95em;
   font-weight: 700;
@@ -33,9 +36,7 @@ header {
   text-transform: uppercase;
   padding: 0 60mm; /* Prevent text overlap with logo on the left/right */
   box-sizing: border-box;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.2;
 }
 
 /* GSS real logo image placement on the left of the header */
