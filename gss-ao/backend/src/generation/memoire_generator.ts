@@ -2842,7 +2842,7 @@ RÈGLE DE FIABILITÉ (PRIORITAIRE) : donne TOUS les éléments que les extraits 
 Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au plus ${N} éléments, dans l'ordre).`;
       const aiResponse = await this.callOpenAI(
         [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-        0.3, `Zone "${zone.label.slice(0, 30)}" (${N}l)`, true,
+        0.15, `Zone "${zone.label.slice(0, 30)}" (${N}l)`, true,
       );
       if (aiResponse === null) return;
       try {
@@ -2946,17 +2946,53 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     const SERVICE_CERT_RE = /ISO\s*\d{4,5}|APSAD(?:\s*R?\s*\d+)?|\bR\s?31\b/gi;
     const guardServiceCert = (val: string, _ctx: string): string => {
       // On scanne la VALEUR (pas le contexte) : si elle CITE une certification de service et que la
-      // Doc GSS ne l'atteste pas → non prouvée. Pour une réponse COURTE (champ « certification »),
-      // on remplace par [À COMPLÉTER] ; pour un paragraphe, on n'altère pas la prose (une mention de
-      // l'exigence du marché peut être légitime, et l'anti-écho gère déjà ce cas).
+      // Doc GSS ne l'atteste pas → non prouvée. Champ court → [À COMPLÉTER]. Paragraphe → on RETIRE
+      // la mention inventée du texte (on ne laisse plus passer).
       const cited = val.match(SERVICE_CERT_RE) || [];
       if (!cited.length) return val;
-      const unproven = cited.some(c => !gssDocCompact.includes(normCtx(c).replace(/\s+/g, '')));
-      if (unproven && val.length <= 80) {
-        console.log(`[MemoireGenerator] Garde-fou certif: certification non attestée par la Doc GSS → [À COMPLÉTER] ("${val.slice(0, 45)}")`);
+      const unproven = cited.filter(c => !gssDocCompact.includes(normCtx(c).replace(/\s+/g, '')));
+      if (!unproven.length) return val;
+      // Champ court : tout remplacer
+      if (val.length <= 200) {
+        console.log(`[MemoireGenerator] Garde-fou certif: certification non attestée par la Doc GSS → [À COMPLÉTER] ("${val.slice(0, 60)}")`);
         return '[À COMPLÉTER]';
       }
-      return val;
+      // Paragraphe : retirer les phrases contenant la certification inventée
+      let cleaned = val;
+      for (const cert of unproven) {
+        const certEsc = cert.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const sentenceRe = new RegExp(`[^.;\n]*${certEsc}[^.;\n]*[.;]?\\s*`, 'gi');
+        cleaned = cleaned.replace(sentenceRe, '');
+      }
+      console.log(`[MemoireGenerator] Garde-fou certif: ${unproven.length} certification(s) non attestée(s) retirée(s) du paragraphe.`);
+      return cleaned.trim() || '[À COMPLÉTER]';
+    };
+
+    // ── Garde-fou ANTI-INVENTION de POLITIQUES/MESURES NON SOURCÉES ──
+    // L'IA invente régulièrement des politiques sociales (primes, avances sur salaire), des mesures RH,
+    // ou présente les pénalités CCAP du client comme une politique qualité de GSS.
+    // On vérifie que chaque CLAIM technique figure dans la Doc GSS ; sinon on la retire.
+    const INVENTED_CLAIMS_RE = /\b(prime[s]?(?:\s+de\s+fin\s+d.ann[ée]e)?|avance[s]?\s+sur\s+salaire|p[ée]nalit[ée][s]?\s+(?:CCAP|contractuelles?)|heures?\s+suppl[ée]mentaires?\s+mensualis[ée]es?|CCAP)\b/gi;
+    const guardInventedClaims = (val: string, _ctx: string): string => {
+      const claims = val.match(INVENTED_CLAIMS_RE) || [];
+      if (!claims.length) return val;
+      // Vérifier chaque claim dans la documentation GSS
+      const inventedClaims = claims.filter(c => !gssDocCompact.includes(normCtx(c).replace(/\s+/g, '')));
+      if (!inventedClaims.length) return val;
+      // Champ court → [À COMPLÉTER]
+      if (val.length <= 200) {
+        console.log(`[MemoireGenerator] Garde-fou invention: claim non sourcée → [À COMPLÉTER] ("${val.slice(0, 60)}")`);
+        return '[À COMPLÉTER]';
+      }
+      // Paragraphe : retirer les phrases contenant le claim inventé
+      let cleaned = val;
+      for (const claim of inventedClaims) {
+        const claimEsc = claim.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const sentenceRe = new RegExp(`[^.;\n]*${claimEsc}[^.;\n]*[.;]?\\s*`, 'gi');
+        cleaned = cleaned.replace(sentenceRe, '');
+      }
+      console.log(`[MemoireGenerator] Garde-fou invention: ${inventedClaims.length} claim(s) non sourcée(s) retirée(s).`);
+      return cleaned.trim() || '[À COMPLÉTER]';
     };
 
     // ── Garde-fou DÉTERMINISTE des CELLULES DE TABLEAU : « 0 inventé » garanti ──
@@ -3186,7 +3222,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     replacements.forEach((rep: any) => {
       const desc = descriptors.find(d => d.id === rep.id);
       if (!desc) return;
-      let value = dedupeClientName(guardPlaceholders(guardNames(guardServiceCert(guardFactual(String(rep.value), desc.context), desc.context)), desc.context));
+      let value = dedupeClientName(guardPlaceholders(guardNames(guardInventedClaims(guardServiceCert(guardFactual(String(rep.value), desc.context), desc.context), desc.context)), desc.context));
       // Cellule de tableau → garde-fou déterministe : retire tout nombre ≥3 chiffres non sourcé (« 170 »…).
       if (desc.kind === 'table') value = guardTableNumbers(value);
       // Contact SINGULIER : si le LIBELLÉ demande UNE personne (« la personne », « l'interlocuteur »…)
