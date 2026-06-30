@@ -67,6 +67,8 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
   const id = params.id;
 
   const [dossierInfo, setDossierInfo] = useState<any>(null);
+  const [isEditingObjet, setIsEditingObjet] = useState(false);
+  const [objetValue, setObjetValue] = useState("");
 
   useEffect(() => {
     fetch(`http://localhost:8000/api/dossiers/${id}`)
@@ -74,6 +76,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
       .then((data) => {
         if (!data.error) {
           setDossierInfo(data);
+          setObjetValue(data.objet);
         }
       })
       .catch((e) => console.error(e));
@@ -97,7 +100,46 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
                 {dossierInfo.reference} · CCAG {dossierInfo.ccag} · CPV {dossierInfo.cpv}
               </span>
             </div>
-            <h1 className="text-xl font-semibold">{dossierInfo.objet}</h1>
+            {isEditingObjet ? (
+              <div className="flex items-center gap-2 mb-1">
+                <input
+                  type="text"
+                  className="text-xl font-semibold bg-background border border-input rounded px-2 py-1 flex-1 min-w-[300px] text-foreground"
+                  value={objetValue}
+                  onChange={(e) => setObjetValue(e.target.value)}
+                  onKeyDown={async (e) => {
+                    if (e.key === "Enter") {
+                      setIsEditingObjet(false);
+                      setDossierInfo({ ...dossierInfo, objet: objetValue });
+                      await fetch(`http://localhost:8000/api/dossiers`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ id, objet: objetValue })
+                      });
+                    } else if (e.key === "Escape") {
+                      setIsEditingObjet(false);
+                      setObjetValue(dossierInfo.objet);
+                    }
+                  }}
+                  autoFocus
+                  onBlur={() => {
+                    setIsEditingObjet(false);
+                    setObjetValue(dossierInfo.objet);
+                  }}
+                />
+              </div>
+            ) : (
+              <h1 
+                className="text-xl font-semibold cursor-pointer hover:bg-white/10 rounded px-1 -ml-1 transition-colors group flex items-center gap-2"
+                onClick={() => { setIsEditingObjet(true); setObjetValue(dossierInfo.objet); }}
+                title="Cliquez pour renommer le dossier"
+              >
+                {dossierInfo.objet}
+                <svg className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </h1>
+            )}
             <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <Building2 className="h-4 w-4" /> {dossierInfo.acheteur}
             </p>

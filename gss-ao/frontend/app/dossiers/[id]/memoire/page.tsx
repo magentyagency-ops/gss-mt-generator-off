@@ -359,7 +359,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
               </div>
             </div>
 
-            {progressInfo && (isGeneratingDocx || progressInfo.progress < 100) && (
+            {isGeneratingDocx && progressInfo && (
               <div className="mt-8 mx-auto w-full max-w-md text-left space-y-4 rounded-xl border border-border bg-card p-6 shadow-sm">
                 <div className="flex items-center justify-between text-sm font-semibold">
                   <span className="text-primary flex items-center gap-1.5">

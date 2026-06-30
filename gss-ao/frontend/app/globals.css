@@ -24,7 +24,7 @@
 
     --destructive: 0 72% 51%; /* rouge-600 */
     --destructive-foreground: 0 0% 100%;
-    --success: 0 72% 51%; /* rouge (touches de rouge pour succès/erreur) */
+    --success: 142 71% 45%; /* vert */
     --success-foreground: 0 0% 100%;
     --warning: 0 72% 51%; /* rouge */
     --warning-foreground: 0 0% 100%;
