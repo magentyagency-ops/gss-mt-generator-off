@@ -91,7 +91,7 @@ export function ExportButtons() {
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center gap-2">
-        <Button variant="outline" onClick={handleDocx} disabled={busy}>
+        <Button onClick={handleDocx} disabled={busy}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
           Exporter PDF (Marp)
         </Button>

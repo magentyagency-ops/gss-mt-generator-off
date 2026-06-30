@@ -190,7 +190,7 @@ export default function DossiersPage() {
                 <TableHead>Lots</TableHead>
                 <TableHead>Date limite</TableHead>
                 <TableHead>Statut</TableHead>
-                <TableHead>Responsable</TableHead>
+
                 <TableHead className="w-[60px]"></TableHead>
               </TableRow>
             </TableHeader>
@@ -260,7 +260,7 @@ export default function DossiersPage() {
                     <TableCell>
                       <Badge variant={STATUT_VARIANT[d.statut]}>{d.statut}</Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{d.responsable}</TableCell>
+
                     <TableCell>
                       <button
                         id={`delete-dossier-${d.id}`}

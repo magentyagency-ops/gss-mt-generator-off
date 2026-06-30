@@ -190,7 +190,7 @@ export default function VeillePage() {
       <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
         <div>
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white">
               <Radar className="h-4 w-4 shrink-0" />
             </div>
             <h1 className="text-xl font-semibold">Boîte de Réception Veille (Nukema)</h1>
@@ -200,7 +200,7 @@ export default function VeillePage() {
           </p>
         </div>
         <div>
-          <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 animate-pulse font-medium">
+          <Badge variant="outline" className="bg-white/10 text-white border-white/20 animate-pulse font-medium">
             🔴 Simulateur d'alertes actif
           </Badge>
         </div>

@@ -46,18 +46,18 @@ function StatPill({
   accent?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
+    <div className="flex items-center gap-3 rounded-lg border border-white/20 bg-white/5 px-4 py-3">
       <div
         className={cn(
           "flex h-9 w-9 items-center justify-center rounded-md",
-          accent ? "bg-destructive/10 text-destructive" : "bg-accent text-accent-foreground",
+          accent ? "bg-destructive/20 text-destructive-foreground" : "bg-white/10 text-white",
         )}
       >
         <Icon className="h-5 w-5" />
       </div>
       <div className="leading-tight">
-        <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
-        <div className="text-sm font-semibold">{value}</div>
+        <div className="text-[11px] uppercase tracking-wide text-white/70">{label}</div>
+        <div className="text-sm font-semibold text-white">{value}</div>
       </div>
     </div>
   );
@@ -178,8 +178,8 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
                   </p>
                 </div>
                 
-                <div className="rounded-lg border border-amber-500/20 bg-background/50 px-4 py-3">
-                  <div className="mb-1 flex items-center gap-2 font-semibold text-amber-600 dark:text-amber-500">
+                <div className="rounded-lg border border-warning/30 bg-background/50 px-4 py-3">
+                  <div className="mb-1 flex items-center gap-2 font-semibold text-warning">
                     <ShieldAlert className="h-4 w-4" /> Certifications sous-traitants
                   </div>
                   <p className="text-sm text-muted-foreground">
@@ -187,8 +187,8 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
                   </p>
                 </div>
 
-                <div className="rounded-lg border border-amber-500/20 bg-background/50 px-4 py-3">
-                  <div className="mb-1 flex items-center gap-2 font-semibold text-amber-600 dark:text-amber-500">
+                <div className="rounded-lg border border-warning/30 bg-background/50 px-4 py-3">
+                  <div className="mb-1 flex items-center gap-2 font-semibold text-warning">
                     <Clock className="h-4 w-4" /> Délais d'exécution serrés
                   </div>
                   <p className="text-sm text-muted-foreground">

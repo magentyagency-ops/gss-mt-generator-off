@@ -111,11 +111,13 @@
      Les boutons principaux (bg-primary = noir) deviennent
      blanc/texte noir pour rester visibles. Les boutons
      destructifs (rouge) ne sont pas inversés. */
-  header button.bg-primary {
+  header button.bg-primary,
+  header a.bg-primary {
     background-color: #ffffff !important;
     color: #000000 !important;
   }
-  header button.bg-primary:hover {
+  header button.bg-primary:hover,
+  header a.bg-primary:hover {
     background-color: #e4e4e7 !important;
   }
 }

@@ -74,6 +74,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
 
   const [dossierInfo, setDossierInfo] = useState<any>({ acheteur: "Chargement...", reference: "..." });
   const [hasTemplate, setHasTemplate] = useState(false);
+  const [selectedSlidesCount, setSelectedSlidesCount] = useState<number>(0);
 
   // Progress polling state
   const [progressInfo, setProgressInfo] = useState<{
@@ -107,10 +108,13 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
       if (localStorage.getItem("gss_cr_fourni") === "true") {
         setCrFourni(true);
       }
+      // Récupérer le nombre de slides sélectionnées dynamiquement
+      const sel = getSelectedIndexes(id);
+      setSelectedSlidesCount(sel.length);
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [id]);
 
   async function handleGenerateFullDocx() {
     setIsGeneratingDocx(true);
@@ -288,19 +292,19 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
       </header>
 
       {!isPrerequisOk && (
-        <div className="bg-amber-50 border-b border-amber-200 px-6 py-4">
+        <div className="bg-warning/10 border-b border-warning/30 px-6 py-4">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h3 className="text-sm font-semibold text-amber-800">Prérequis manquants pour générer le document</h3>
-              <p className="text-sm text-amber-700 mt-1">L\'IA ne peut pas générer un mémoire pertinent si les informations terrain sont manquantes. Ce dossier exige une visite obligatoire.</p>
-              <ul className="mt-3 space-y-2 text-sm text-amber-800">
-                <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" /> Analyse du DCE (CCTP & RC)</li>
+              <h3 className="text-sm font-semibold text-warning">Prérequis manquants pour générer le document</h3>
+              <p className="text-sm text-warning mt-1">L\'IA ne peut pas générer un mémoire pertinent si les informations terrain sont manquantes. Ce dossier exige une visite obligatoire.</p>
+              <ul className="mt-3 space-y-2 text-sm text-warning">
+                <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-success" /> Analyse du DCE (CCTP & RC)</li>
                 <li className="flex items-center gap-2">
-                  {crFourni ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Circle className="h-4 w-4 text-amber-500" />}
+                  {crFourni ? <CheckCircle2 className="h-4 w-4 text-success" /> : <Circle className="h-4 w-4 text-warning" />}
                   Compte Rendu de Visite de Sacha
                   {!crFourni && (
-                    <Button variant="outline" size="sm" className="ml-3 h-7 bg-white text-xs" onClick={() => setCrFourni(true)}>
+                    <Button variant="outline" size="sm" className="ml-3 h-7 bg-card text-xs" onClick={() => setCrFourni(true)}>
                       Simuler l\'ajout du CR
                     </Button>
                   )}
@@ -325,7 +329,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
             <p className="mt-2 text-muted-foreground">
               {hasTemplate 
                 ? "Ce dossier contient un cadre de réponse imposé par le marché. L'IA lit le document complet pour y insérer directement les éléments adaptés (cocher des cases, remplir des champs spécifiques)."
-                : "Aucun cadre de réponse n'est imposé. Le système va personnaliser la couverture de l'AO RNE (119 pages) et y ajouter une synthèse sur-mesure basée sur l'analyse du DCE et la documentation GSS, en gardant la mise en page intacte."}
+                : `Aucun cadre de réponse n'est imposé. Le système va assembler un mémoire sur-mesure à partir des ${selectedSlidesCount > 0 ? selectedSlidesCount : "plusieurs"} slides pré-sélectionnées et y intégrer une synthèse personnalisée basée sur l'analyse du DCE, en gardant la charte graphique GSS intacte.`}
             </p>
 
             <div className="mt-6">
@@ -335,13 +339,13 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 disabled={isGeneratingDocx || !isPrerequisOk}
                 className={cn(
                   "w-full max-w-md transition-all",
-                  isPrerequisOk ? "bg-indigo-600 hover:bg-indigo-700" : "bg-indigo-300 cursor-not-allowed"
+                  isPrerequisOk ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-muted text-muted-foreground cursor-not-allowed"
                 )}
               >
                 {isGeneratingDocx ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <FileStack className="mr-2 h-5 w-5" />}
                 {isGeneratingDocx ? "Génération en cours..." : "Lancer la génération du document"}
               </Button>
-              {!isPrerequisOk && <p className="mt-2 text-xs text-amber-600">Prérequis manquants (CR Visite)</p>}
+              {!isPrerequisOk && <p className="mt-2 text-xs text-warning">Prérequis manquants (CR Visite)</p>}
 
               <div className="mt-4 flex items-center justify-center gap-3">
                 <Button variant="outline" className="gap-2" onClick={() => {}}>
@@ -365,37 +369,27 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   <span className="tabular-nums">{progressInfo.progress}%</span>
                 </div>
                 <Progress value={progressInfo.progress} className="h-2 w-full" />
-                
-                {progressInfo.logs && progressInfo.logs.length > 0 && (
-                  <div className="mt-4">
-                    <div className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider mb-2">Logs de génération</div>
-                    <div className="h-32 overflow-y-auto rounded-md bg-zinc-950 p-3 font-mono text-xs text-zinc-300 space-y-1 scrollbar-thin">
-                      {progressInfo.logs.map((log, index) => (
-                        <div key={index} className="truncate">{log}</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+
               </div>
             )}
           </div>
 
           {docxResult && docxResult.type === "incomplete" && (
-            <Card className="mt-8 overflow-hidden border-amber-200">
-              <div className="bg-amber-50 px-6 py-4 border-b border-amber-100 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-amber-800 font-semibold">
+            <Card className="mt-8 overflow-hidden border-warning/30">
+              <div className="bg-warning/10 px-6 py-4 border-b border-warning/20 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-warning font-semibold">
                   <AlertTriangle className="h-5 w-5" />
                   <span>Assistant : Informations manquantes</span>
                 </div>
               </div>
               <div className="p-0">
-                <div className="h-[400px] overflow-y-auto p-6 space-y-4 bg-slate-50 flex flex-col">
+                <div className="h-[400px] overflow-y-auto p-6 space-y-4 bg-muted/30 flex flex-col">
                   {chatMessages.map((msg, i) => (
                     <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[80%] rounded-xl p-3 text-sm ${msg.sender === 'user' ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none shadow-sm'}`}>
+                      <div className={`max-w-[80%] rounded-xl p-3 text-sm ${msg.sender === 'user' ? 'bg-primary text-primary-foreground rounded-br-none' : 'bg-card border border-border text-foreground rounded-bl-none shadow-sm'}`}>
                         {msg.text}
                         {msg.context && (
-                          <div className="mt-2 p-2 bg-slate-100 border border-slate-200 rounded text-xs font-mono text-slate-700 whitespace-pre-wrap">
+                          <div className="mt-2 p-2 bg-muted border border-border/50 rounded text-xs font-mono text-muted-foreground whitespace-pre-wrap">
                             {msg.context}
                           </div>
                         )}
@@ -404,7 +398,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   ))}
                   {isChatLoading && (
                     <div className="flex justify-start">
-                      <div className="bg-white border border-slate-200 text-slate-800 rounded-xl rounded-bl-none shadow-sm p-3 flex items-center gap-2 text-sm">
+                      <div className="bg-card border border-border text-foreground rounded-xl rounded-bl-none shadow-sm p-3 flex items-center gap-2 text-sm">
                         <Loader2 className="h-4 w-4 animate-spin text-primary" />
                         L'IA réfléchit...
                       </div>
@@ -412,19 +406,19 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   )}
                   {isGeneratingDocx && currentQuestionIndex >= docxResult.missingFields?.length && (
                     <div className="flex justify-start">
-                      <div className="bg-white border border-slate-200 text-slate-800 rounded-xl rounded-bl-none shadow-sm p-3 flex items-center gap-2 text-sm">
+                      <div className="bg-card border border-border text-foreground rounded-xl rounded-bl-none shadow-sm p-3 flex items-center gap-2 text-sm">
                         <Loader2 className="h-4 w-4 animate-spin text-primary" />
                         Génération du Word en cours...
                       </div>
                     </div>
                   )}
                 </div>
-                <div className="p-4 bg-white border-t border-slate-100">
+                <div className="p-4 bg-card border-t border-border/50">
                   <form onSubmit={handleChatSubmit} className="flex gap-2">
                     <input
                       type="text"
                       placeholder="Votre réponse..."
-                      className="flex-1 px-4 py-2 border border-slate-300 rounded-full text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                      className="flex-1 px-4 py-2 border border-input rounded-full text-sm focus-visible:ring-2 focus-visible:ring-ring outline-none transition-all bg-background text-foreground"
                       value={chatInputValue}
                       onChange={e => setChatInputValue(e.target.value)}
                       disabled={isChatLoading || isGeneratingDocx || currentQuestionIndex >= docxResult.missingFields?.length}
@@ -433,7 +427,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                     <Button 
                       type="submit"
                       disabled={!chatInputValue.trim() || isChatLoading || isGeneratingDocx || currentQuestionIndex >= docxResult.missingFields?.length}
-                      className="rounded-full px-6 bg-indigo-600 hover:bg-indigo-700"
+                      className="rounded-full px-6 bg-primary text-primary-foreground hover:bg-primary/90"
                     >
                       Envoyer
                     </Button>
@@ -444,14 +438,14 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
           )}
 
           {docxResult && docxResult.type === "success" && (
-            <Card className="mt-8 overflow-hidden border-emerald-200">
-              <div className="bg-emerald-50 px-6 py-4 border-b border-emerald-100 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-emerald-800 font-semibold">
+            <Card className="mt-8 overflow-hidden border-success/30">
+              <div className="bg-success/5 px-6 py-4 border-b border-success/20 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-success font-semibold">
                   <CheckCircle2 className="h-5 w-5" />
                   <span>Document généré avec succès !</span>
                 </div>
                 <Link href={`/dossiers/${id}/export`}>
-                  <Button variant="default" size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+                  <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
                     Continuer vers l'Export <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 </Link>
@@ -467,13 +461,13 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                       <div key={idx} className="grid grid-cols-2 gap-4 rounded-lg border border-border p-4 bg-card">
                         <div>
                           <div className="text-[11px] font-semibold uppercase text-muted-foreground mb-1">Texte original (Recherche)</div>
-                          <div className="bg-red-50 text-red-900 px-3 py-2 rounded text-sm font-mono border border-red-100 whitespace-pre-wrap break-all line-through opacity-70">
+                          <div className="bg-destructive/5 text-destructive px-3 py-2 rounded text-sm font-mono border border-destructive/20 whitespace-pre-wrap break-all line-through opacity-70">
                             {mod.recherche}
                           </div>
                         </div>
                         <div>
                           <div className="text-[11px] font-semibold uppercase text-muted-foreground mb-1">Proposition IA (Remplacement)</div>
-                          <div className="bg-emerald-50 text-emerald-900 px-3 py-2 rounded text-sm font-mono border border-emerald-100 whitespace-pre-wrap break-all">
+                          <div className="bg-success/5 text-success px-3 py-2 rounded text-sm font-mono border border-success/20 whitespace-pre-wrap break-all">
                             {mod.remplacement}
                           </div>
                         </div>
@@ -481,24 +475,24 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-sm text-slate-600">
+                  <div className="text-sm text-muted-foreground">
                     La synthèse a été ajoutée. Mode: {docxResult.data.data_generee_par_ia?.mode}
                   </div>
                 )}
 
                 {/* Prévisualisation Complète du DOCX ou PDF */}
-                <div className="mt-12 pt-8 border-t border-slate-200">
+                <div className="mt-12 pt-8 border-t border-border">
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-medium text-lg text-slate-800">Aperçu du document final (De A à Z)</h3>
-                    <a href={`http://localhost:8000/api/download?file=${encodeURIComponent(docxResult.data.file_path)}&download=1`} download className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-300 bg-white hover:bg-slate-100 hover:text-slate-900 h-9 px-4 py-2">
+                    <h3 className="font-medium text-lg text-foreground">Aperçu du document final (De A à Z)</h3>
+                    <a href={`http://localhost:8000/api/download?file=${encodeURIComponent(docxResult.data.file_path)}&download=1`} download className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-border bg-card hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
                       <Download className="mr-2 h-4 w-4" />
                       Télécharger
                     </a>
                   </div>
-                  <p className="text-sm text-slate-500 mb-4">Voici le rendu interactif du fichier tel qu'il a été généré, avec le formatage d'origine conservé.</p>
+                  <p className="text-sm text-muted-foreground mb-4">Voici le rendu interactif du fichier tel qu'il a été généré, avec le formatage d'origine conservé.</p>
                   
                   {docxResult.data.file_path.toLowerCase().endsWith('.pdf') ? (
-                    <div className="relative w-full rounded-md border border-slate-200 bg-slate-100 mt-6 shadow-inner h-[800px]">
+                    <div className="relative w-full rounded-md border border-border bg-muted mt-6 shadow-inner h-[800px]">
                       <iframe 
                         src={`http://localhost:8000/api/download?file=${encodeURIComponent(docxResult.data.file_path)}`}
                         className="w-full h-full rounded-md"
@@ -514,7 +508,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
           )}
 
           {docxResult && docxResult.type === "error" && (
-            <div className="mt-8 p-4 bg-red-50 text-red-800 rounded-md border border-red-200">
+            <div className="mt-8 p-4 bg-destructive/10 text-destructive rounded-md border border-destructive/30">
               <strong>Erreur lors de la génération :</strong> {docxResult.message}
             </div>
           )}

@@ -88,7 +88,7 @@ export default function ExportPage({ params }: { params: { id: string } }) {
             <a
               href={`${generatedDocxUrl}&download=1`}
               download={isPdf ? "Mémoire technique GSS.pdf" : "Mémoire technique GSS.docx"}
-              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors h-9 px-4 py-2 border border-emerald-200 text-emerald-800 hover:bg-emerald-50 bg-background"
+              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors h-9 px-4 py-2 bg-primary text-primary-foreground"
             >
               {isPdf ? "Télécharger le document généré (.pdf)" : "Télécharger le document généré (.docx)"}
             </a>
@@ -104,12 +104,12 @@ export default function ExportPage({ params }: { params: { id: string } }) {
         <div className="overflow-y-auto rounded-lg bg-muted/40 p-6">
           {generatedDocxUrl ? (
             <div className="mx-auto max-w-4xl space-y-4">
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2">
+              <div className="rounded-md border border-success/30 bg-success/5 px-4 py-3 text-sm text-success flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4" />
                 Voici le document final généré, prêt pour l'export.
               </div>
               {isPdf ? (
-                <div className="relative h-[800px] w-full rounded-md border border-slate-200 bg-slate-100 shadow-inner">
+                <div className="relative h-[800px] w-full rounded-md border border-border bg-muted shadow-inner">
                   <iframe
                     src={generatedDocxUrl}
                     className="h-full w-full rounded-md"
@@ -121,44 +121,44 @@ export default function ExportPage({ params }: { params: { id: string } }) {
               )}
             </div>
           ) : id !== "rouen-2026-08" ? (
-            <div className="mx-auto max-w-3xl rounded-md border border-slate-200 bg-white p-12 shadow-sm text-center">
+            <div className="mx-auto max-w-3xl rounded-md border border-border bg-card p-12 shadow-sm text-center">
               <h2 className="text-xl font-semibold mb-2">Aucun document final généré</h2>
               <p className="text-muted-foreground">
                 Veuillez retourner à l'étape "Mémoire technique" pour lancer la génération de votre document.
               </p>
             </div>
           ) : (
-            <div className="mx-auto max-w-3xl rounded-md border border-slate-200 bg-white p-12 shadow-sm">
+            <div className="mx-auto max-w-3xl rounded-md border border-border bg-card p-12 shadow-sm">
             {/* En-tête du document */}
-            <div className="mb-8 border-b border-slate-200 pb-6 text-center">
-              <div className="text-xs uppercase tracking-widest text-slate-500">
+            <div className="mb-8 border-b border-border pb-6 text-center">
+              <div className="text-xs uppercase tracking-widest text-muted-foreground">
                 Mémoire technique — cadre de réponse
               </div>
-              <h2 className="mt-2 text-2xl font-bold text-slate-900">{dossierInfo.objet}</h2>
-              <div className="mt-2 text-sm text-slate-500">
+              <h2 className="mt-2 text-2xl font-bold text-foreground">{dossierInfo.objet}</h2>
+              <div className="mt-2 text-sm text-muted-foreground">
                 {dossierInfo.acheteur} · {dossierInfo.reference} · Remise le {dossierInfo.dateLimite ? formatDate(dossierInfo.dateLimite) : "N/A"}
               </div>
-              <div className="mt-4 text-sm font-medium text-slate-700">
+              <div className="mt-4 text-sm font-medium text-muted-foreground">
                 Candidat : GSS — Sécurité privée
               </div>
             </div>
 
             {/* Bloc identité du candidat */}
-            <div className="mb-8 rounded-md border border-slate-200 p-4">
+            <div className="mb-8 rounded-md border border-border p-4">
               <div className="grid gap-1 text-sm">
                 <div className="flex gap-2">
-                  <span className="text-slate-500">Dénomination du candidat :</span>
-                  <span className="font-medium text-slate-800">
+                  <span className="text-muted-foreground">Dénomination du candidat :</span>
+                  <span className="font-medium text-foreground">
                     {IDENTITE_CANDIDAT.denomination}
                   </span>
                 </div>
                 <div className="flex gap-2">
-                  <span className="text-slate-500">N° CNAPS d'autorisation d'exercer :</span>
-                  <span className="font-medium text-slate-800">{IDENTITE_CANDIDAT.num_cnaps}</span>
+                  <span className="text-muted-foreground">N° CNAPS d'autorisation d'exercer :</span>
+                  <span className="font-medium text-foreground">{IDENTITE_CANDIDAT.num_cnaps}</span>
                 </div>
                 <div className="flex gap-2">
-                  <span className="text-slate-500">Date d'obtention de l'autorisation :</span>
-                  <span className="font-medium text-slate-800">
+                  <span className="text-muted-foreground">Date d'obtention de l'autorisation :</span>
+                  <span className="font-medium text-foreground">
                     {IDENTITE_CANDIDAT.date_autorisation}
                   </span>
                 </div>
@@ -201,7 +201,7 @@ export default function ExportPage({ params }: { params: { id: string } }) {
                   {DEFAULT_SECTION_IV.num}. {DEFAULT_SECTION_IV.titre} ({DEFAULT_SECTION_IV.points} pts — lot 3 uniquement)
                 </SectionTitre>
 
-                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                <div className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-sm text-warning">
                   {DEFAULT_SECTION_IV.lotNote}
                 </div>
 
@@ -222,8 +222,8 @@ export default function ExportPage({ params }: { params: { id: string } }) {
                   <SousQuestion numero={3}>{DEFAULT_SECTION_IV.soustraitanceLeverDoute.label}</SousQuestion>
                   <ul className="ml-1 space-y-1">
                     {DEFAULT_SECTION_IV.soustraitanceLeverDoute.departements.map((d: any) => (
-                      <li key={d.dep} className="text-sm text-slate-700">
-                        <span className="font-medium">Département {d.dep} :</span> {d.valeur}
+                      <li key={d.dep} className="text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">Département {d.dep} :</span> {d.valeur}
                       </li>
                     ))}
                   </ul>
@@ -244,7 +244,7 @@ export default function ExportPage({ params }: { params: { id: string } }) {
                 {/* 6. Délais — tableau */}
                 <div className="space-y-2">
                   <SousQuestion numero={6}>{DEFAULT_SECTION_IV.delaisLabel}</SousQuestion>
-                  <div className="rounded-md border border-slate-200">
+                  <div className="rounded-md border border-border">
                     <Table>
                       <TableHeader>
                         <TableRow className="hover:bg-transparent">
@@ -254,8 +254,8 @@ export default function ExportPage({ params }: { params: { id: string } }) {
                       </TableHeader>
                       <TableBody>
                         <TableRow>
-                          <TableCell className="text-slate-700">Site A</TableCell>
-                          <TableCell className="text-right font-medium tabular-nums text-slate-800">
+                          <TableCell className="text-muted-foreground">Site A</TableCell>
+                          <TableCell className="text-right font-medium tabular-nums text-foreground">
                             30 min
                           </TableCell>
                         </TableRow>
@@ -267,22 +267,22 @@ export default function ExportPage({ params }: { params: { id: string } }) {
                 {/* 7. Nombre d'intervenants */}
                 <div className="space-y-1.5">
                   <SousQuestion numero={7}>{DEFAULT_SECTION_IV.intervenantsLabel}</SousQuestion>
-                  <div className="inline-flex items-baseline gap-2 rounded-md border border-slate-200 bg-slate-50 px-4 py-2">
-                    <span className="text-2xl font-bold text-indigo-700">
+                  <div className="inline-flex items-baseline gap-2 rounded-md border border-border bg-muted/30 px-4 py-2">
+                    <span className="text-2xl font-bold text-primary">
                       3
                     </span>
-                    <span className="text-sm text-slate-500">intervenants véhiculés</span>
+                    <span className="text-sm text-muted-foreground">intervenants véhiculés</span>
                   </div>
                 </div>
               </section>
             </div>
 
             {/* Signature */}
-            <div className="mt-10 border-t border-slate-200 pt-6 text-right text-sm leading-6 text-slate-700">
+            <div className="mt-10 border-t border-border pt-6 text-right text-sm leading-6 text-muted-foreground">
               <div>Fait à Rouen, le {dossierInfo.dateLimite ? formatDate(dossierInfo.dateLimite) : "N/A"}</div>
-              <div className="font-medium text-slate-900">GSS — Sécurité privée</div>
+              <div className="font-medium text-foreground">GSS — Sécurité privée</div>
               <div>Mme Vaché, Responsable réponse AO</div>
-              <div className="italic text-slate-400">[Signature électronique]</div>
+              <div className="italic text-muted-foreground/70">[Signature électronique]</div>
             </div>
           </div>
           )}
