@@ -964,7 +964,7 @@ const AI_SECTIONS_B: Array<{ id: string; chapter: string; title: string }> = [
   { id: 'b_moyens_materiels', chapter: 'III', title: 'Moyens matériels et équipements' },
   { id: 'b_rondes', chapter: 'III', title: 'Rondes, pointeaux et main courante électronique' },
   { id: 'b_controle_acces', chapter: 'III', title: 'Gestion des accès et contrôle des flux' },
-  { id: 'b_telesurveillance', chapter: 'III', title: 'Télésurveillance et levée de doute (lot 3)' },
+  { id: 'b_telesurveillance', chapter: 'III', title: 'Télésurveillance et levée de doute' },
   { id: 'b_gestion_alarmes', chapter: 'III', title: "Gestion des alarmes et procédures d'intervention" },
   // IV — Les moyens organisationnels
   { id: 'b_organisation', chapter: 'IV', title: 'Organisation et démarrage de la prestation' },
@@ -2075,7 +2075,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     "equipment": "Rondes, pointeaux par site, PTI, véhicules",
     "qualityControls": "Contrôles inopinés, réunions de suivi, extranet"
   },
-  "telesurveillance": "Lot 3 : délais d'intervention max par site, nb d'intervenants, certifications APSAD demandées (vide si non concerné)",
+  "telesurveillance": "Télésurveillance/levée de doute (le cas échéant) : délais d'intervention max par site, nb d'intervenants, certifications APSAD demandées (vide si non concerné)",
   "legalRequirements": "Exigences d'autorisation (CNAPS, agréments dirigeants, agrément établissement local)",
   "keyRisks": [ "Risque/contrainte opérationnelle identifié" ],
   "proposalStrengths": [ "Argument différenciant technique de GSS pour ce marché" ],
@@ -3841,7 +3841,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige une "Synthèse de l'offre" complète (environ ${targetWords} mots) qui sera ajoutée en introduction du mémoire technique.
 - Basé UNIQUEMENT sur l'analyse du DCE et les atouts GSS.
 - Personnalise par le CONTEXTE et la STRATÉGIE : type d'établissement, usagers, sites/campus, départements, enjeux/risques RÉELS (issus de l'analyse), et METS EN AVANT pour chacun un AVANTAGE concret de GSS (ce que le client gagne). Le texte ne doit pas être recyclable pour un autre client.
-- ANTI-REDONDANCE DU NOM : ne répète PAS « Université de Rouen Normandie » plusieurs fois sur une même page/paragraphe ; cite-le au plus une fois puis utilise des substituts (« l'établissement », « vos campus », « le site concerné »). La personnalisation vient du contexte et des enjeux, pas de la répétition du nom.
+- ANTI-REDONDANCE DU NOM : ne répète PAS le nom du client (acheteur) plusieurs fois sur une même page/paragraphe ; cite-le au plus une fois puis utilise des substituts (« l'établissement », « vos sites », « le site concerné »). La personnalisation vient du contexte et des enjeux, pas de la répétition du nom.
 - STRATÉGIE & VALEUR : chaque paragraphe doit faire comprendre ce que GSS APPORTE — sa valeur ajoutée et son engagement (fiabilité, réactivité, continuité de service, expertise, accompagnement). Ton commercial et affirmé : donner envie de choisir GSS.
 - Mets en avant l'accompagnement GSS (interlocuteur unique, qualité, réactivité).
 - CADRE DU MARCHÉ : Ce marché est un marché ${marketType === 'public' ? 'PUBLIC — utilise le vocabulaire de la commande publique (pouvoir adjudicateur, titulaire, sous-critères), cite les obligations du CCP et mets en avant les garanties de conformité et la transparence' : 'PRIVÉ — adopte un ton commercial direct, mets en avant la flexibilité, les SLA sur mesure et l\'adaptation aux process internes du client'}. Secteur : ${clientSector}.
