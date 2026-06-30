@@ -25,7 +25,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  Separator,
 } from "@/components/ui";
 import { DossierNav } from "@/components/dossier-nav";
 import {
@@ -64,27 +63,6 @@ function StatPill({
   );
 }
 
-function BaremeBar({ libelle, points, max, lots }: { libelle: string; points: number; max: number; lots: number[] }) {
-  return (
-    <div>
-      <div className="mb-1 flex items-center justify-between text-sm">
-        <span className="flex items-center gap-2">
-          {libelle}
-          {lots.length > 0 && (
-            <Badge variant="outline" className="font-normal">
-              Lots {lots.join(", ")}
-            </Badge>
-          )}
-        </span>
-        <span className="font-semibold tabular-nums">{points} pts</span>
-      </div>
-      <div className="h-2.5 w-full overflow-hidden rounded-full bg-secondary">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${(points / max) * 100}%` }} />
-      </div>
-    </div>
-  );
-}
-
 export default function SynthesePage({ params }: { params: { id: string } }) {
   const id = params.id;
 
@@ -106,11 +84,6 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
   }
 
   const jours = joursRestants(dossierInfo.dateLimite);
-  const criteres = dossierInfo.criteres?.sous_criteres || [];
-  const technique = criteres.filter((c: any) => c.axe !== "prix");
-  const prix = criteres.filter((c: any) => c.axe === "prix");
-  const SCORE_TECHNIQUE = dossierInfo.criteres?.valeur_technique_pts || 60;
-  const SCORE_PRIX = dossierInfo.criteres?.prix_pts || 40;
 
   return (
     <div className="flex h-full flex-col">
@@ -143,7 +116,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
       <DossierNav id={id} />
 
       {/* Corps */}
-      <div className="grid flex-1 grid-cols-[1fr_300px] gap-6 overflow-y-auto p-6">
+      <div className="grid flex-1 grid-cols-1 gap-6 overflow-y-auto p-6">
         <div className="space-y-6">
           {/* Résumé Exécutif IA */}
           <Card className="border-primary/20 bg-primary/5 shadow-sm">
@@ -234,62 +207,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
               </div>
             </CardContent>
           </Card>
-
-          {/* Barème */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Barème de notation pondéré</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-primary">Valeur technique</span>
-                  <Badge variant="default">{SCORE_TECHNIQUE} points</Badge>
-                </div>
-                <div className="space-y-3">
-                  {technique.map((c: any) => (
-                    <BaremeBar key={c.libelle} libelle={c.libelle} points={c.points} max={SCORE_TECHNIQUE} lots={c.lots || []} />
-                  ))}
-                </div>
-              </div>
-              <Separator />
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm font-semibold">Prix</span>
-                  <Badge variant="secondary">{SCORE_PRIX} points</Badge>
-                </div>
-                <div className="space-y-3">
-                  {prix.map((c: any) => (
-                    <BaremeBar key={c.libelle} libelle={c.libelle} points={c.points} max={SCORE_TECHNIQUE} lots={c.lots || []} />
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
-
-        {/* Sidebar actions */}
-        <aside className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Informations</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div>
-                <div className="text-xs text-muted-foreground">Responsable</div>
-                <div className="font-medium">{dossierInfo.responsable}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Durée du marché</div>
-                <div className="font-medium">{dossierInfo.duree}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Plateforme de remise</div>
-                <div className="font-medium">{dossierInfo.plateforme}</div>
-              </div>
-            </CardContent>
-          </Card>
-        </aside>
       </div>
     </div>
   );

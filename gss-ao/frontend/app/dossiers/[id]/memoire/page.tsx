@@ -477,7 +477,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 <div className="mt-12 pt-8 border-t border-slate-200">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-medium text-lg text-slate-800">Aperçu du document final (De A à Z)</h3>
-                    <a href={`http://localhost:8000/api/download?file=${encodeURIComponent(docxResult.data.file_path)}`} download className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-300 bg-white hover:bg-slate-100 hover:text-slate-900 h-9 px-4 py-2">
+                    <a href={`http://localhost:8000/api/download?file=${encodeURIComponent(docxResult.data.file_path)}&download=1`} download className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-300 bg-white hover:bg-slate-100 hover:text-slate-900 h-9 px-4 py-2">
                       <Download className="mr-2 h-4 w-4" />
                       Télécharger
                     </a>

@@ -52,6 +52,9 @@ export default function ExportPage({ params }: { params: { id: string } }) {
   const id = params.id;
   const pret = CHECKS.every((c) => c.ok);
   const [generatedDocxUrl, setGeneratedDocxUrl] = useState<string | null>(null);
+  const [generatedPath, setGeneratedPath] = useState<string | null>(null);
+  // Cas sans template → PDF (Marp) ; cas template → DOCX. On adapte libellé, nom de fichier et aperçu.
+  const isPdf = !!generatedPath && generatedPath.toLowerCase().endsWith(".pdf");
 
   const [dossierInfo, setDossierInfo] = useState<any>({ acheteur: "Chargement...", reference: "...", objet: "..." });
 
@@ -65,6 +68,7 @@ export default function ExportPage({ params }: { params: { id: string } }) {
 
     const path = localStorage.getItem(`generated_docx_${id}`);
     if (path) {
+      setGeneratedPath(path);
       setGeneratedDocxUrl(`http://localhost:8000/api/download?file=${encodeURIComponent(path)}`);
     }
   }, [id]);
@@ -82,11 +86,11 @@ export default function ExportPage({ params }: { params: { id: string } }) {
         <div className="flex items-center gap-4">
           {generatedDocxUrl && (
             <a
-              href={generatedDocxUrl}
-              download="Mémoire technique GSS.docx"
+              href={`${generatedDocxUrl}&download=1`}
+              download={isPdf ? "Mémoire technique GSS.pdf" : "Mémoire technique GSS.docx"}
               className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors h-9 px-4 py-2 border border-emerald-200 text-emerald-800 hover:bg-emerald-50 bg-background"
             >
-              Télécharger le document généré (.docx)
+              {isPdf ? "Télécharger le document généré (.pdf)" : "Télécharger le document généré (.docx)"}
             </a>
           )}
           <ExportButtons />
@@ -102,15 +106,25 @@ export default function ExportPage({ params }: { params: { id: string } }) {
             <div className="mx-auto max-w-4xl space-y-4">
               <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4" />
-                Voici le document final généré à partir de votre template, prêt pour l'export.
+                Voici le document final généré, prêt pour l'export.
               </div>
-              <DocxPreviewViewer fileUrl={generatedDocxUrl} />
+              {isPdf ? (
+                <div className="relative h-[800px] w-full rounded-md border border-slate-200 bg-slate-100 shadow-inner">
+                  <iframe
+                    src={generatedDocxUrl}
+                    className="h-full w-full rounded-md"
+                    title="Prévisualisation PDF"
+                  />
+                </div>
+              ) : (
+                <DocxPreviewViewer fileUrl={generatedDocxUrl} />
+              )}
             </div>
           ) : id !== "rouen-2026-08" ? (
             <div className="mx-auto max-w-3xl rounded-md border border-slate-200 bg-white p-12 shadow-sm text-center">
               <h2 className="text-xl font-semibold mb-2">Aucun document final généré</h2>
               <p className="text-muted-foreground">
-                Veuillez retourner à l'étape "Mémoire technique" pour lancer la génération de votre document DOCX.
+                Veuillez retourner à l'étape "Mémoire technique" pour lancer la génération de votre document.
               </p>
             </div>
           ) : (

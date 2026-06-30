@@ -6,8 +6,7 @@ import path from 'path';
 import OpenAI from 'openai';
 import { DB, DossierRecord } from '../core/db';
 import { initProgress, finishProgress } from '../core/progress';
-import { parseCctp } from '../analysis/cctpParser';
-import { parseRc } from '../analysis/rcParser';
+import { extractRcWithLLM, extractCctpWithLLM } from '../analysis/llmExtractor';
 
 const uploadDir = path.resolve(__dirname, '../../../data/output/temp');
 if (!fs.existsSync(uploadDir)) {
@@ -52,13 +51,25 @@ router.get('/dossiers/:id/progress', (req: Request, res: Response) => {
   res.json(progress);
 });
 
-// Download a generated file
+// Download a generated file.
+// Par défaut, on sert le fichier en INLINE (Content-Disposition: inline) pour que la
+// prévisualisation PDF fonctionne dans une <iframe> ; res.download() forçait « attachment »,
+// ce qui faisait télécharger le fichier au lieu de l'afficher → aperçu vide.
+// Le bouton « Télécharger » du front passe ?download=1 pour forcer la pièce jointe.
 router.get('/download', (req: Request, res: Response) => {
   const filePath = req.query.file as string;
   if (!filePath) {
     return res.status(400).send('File path missing');
   }
-  res.download(filePath);
+  const absPath = path.resolve(filePath);
+  if (!fs.existsSync(absPath)) {
+    return res.status(404).send('File not found');
+  }
+  if (req.query.download) {
+    return res.download(absPath);
+  }
+  res.setHeader('Content-Disposition', 'inline');
+  res.sendFile(absPath);
 });
 
 // --- Dossiers Endpoints ---
@@ -103,7 +114,7 @@ router.delete('/dossiers/:id', (req: Request, res: Response) => {
 });
 
 // Module A — upload ZIP/multi-fichiers + classification des pièces.
-router.post('/dce/upload', upload.array('files'), (req: Request, res: Response) => {
+router.post('/dce/upload', upload.array('files'), async (req: Request, res: Response) => {
   try {
     const dossierId = req.body.id;
     if (!dossierId) throw new Error("ID du dossier manquant");
@@ -127,16 +138,19 @@ router.post('/dce/upload', upload.array('files'), (req: Request, res: Response) 
         fs.renameSync(file.path, finalPath);
 
         const lowerName = finalName.toLowerCase();
-        // Extract features
-        if (lowerName.includes('rc') || lowerName.includes('reglement')) {
+        // Le nom de fichier n'est qu'un indice de classification : l'extraction
+        // elle-même est pilotée par LLM et fonctionne pour n'importe quel template.
+        const looksLikeRc = lowerName.includes('rc') || lowerName.includes('reglement') || lowerName.includes('règlement') || lowerName.includes('consultation');
+        const looksLikeCctp = lowerName.includes('cctp') || lowerName.includes('technique') || lowerName.includes('cahier');
+        if (looksLikeRc && !rcData) {
           try {
-            rcData = parseRc(finalPath);
-          } catch (e) { console.warn("Erreur parsing RC:", e); }
+            rcData = await extractRcWithLLM(finalPath);
+          } catch (e) { console.warn("Erreur extraction RC:", e); }
         }
-        if (lowerName.includes('cctp')) {
+        if (looksLikeCctp && !cctpData) {
           try {
-            cctpData = parseCctp(finalPath);
-          } catch (e) { console.warn("Erreur parsing CCTP:", e); }
+            cctpData = await extractCctpWithLLM(finalPath);
+          } catch (e) { console.warn("Erreur extraction CCTP:", e); }
         }
       }
     }

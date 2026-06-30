@@ -1760,7 +1760,6 @@ export class MemoireGenerator {
    */
   private async getDceContext(dossierId: string): Promise<string> {
     const baseDir = path.resolve(__dirname, '../../../../');
-    const settings = getSettings();
     this.lastDceTables = '';   // réinitialisé à chaque analyse de DCE
     this.lastDceSiteCols = [];
 
@@ -1789,14 +1788,13 @@ export class MemoireGenerator {
     if (fs.existsSync(cctpPath)) pieces.push({ label: 'CCTP (analysé)', text: fs.readFileSync(cctpPath, 'utf8'), priority: 120 });
     if (fs.existsSync(rcPath)) pieces.push({ label: 'RC (analysé)', text: fs.readFileSync(rcPath, 'utf8'), priority: 115 });
 
-    // 2. Fichiers bruts (récursif), dédoublonnés
+    // 2. Fichiers bruts (récursif), dédoublonnés.
+    // On ne scanne QUE le dossier réellement uploadé pour CE dossier : scanner en plus des corpus
+    // de référence (Rouen…) ralentissait fortement le démarrage (chaque .doc = conversion LibreOffice)
+    // ET polluait le contexte avec les données d'un autre client → faux pour « n'importe quel client ».
     const dceDirs = [
       path.resolve(baseDir, `gss-ao/data/output/dce_${dossierId}`),
-      settings.corpusDceDir,
-      path.resolve(baseDir, 'GSS analyse et génération/DCEDCE MP2026_08'),
-      path.resolve(baseDir, 'DCEDCE MP2026_08'),
-      path.resolve(baseDir, 'Cas-Univ-Rouen-MP2026-08'),
-    ].filter(Boolean) as string[];
+    ];
 
     const loadedFiles = new Set<string>();
     const scanDir = async (dir: string) => {
@@ -2168,33 +2166,21 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     let templatePath: string | null = null;
     let isClientTemplate = true;
 
-    const possibleDirs = [
-      uploadedDceDir,
-      settings.corpusDceDir,
-      path.resolve(baseDir, 'GSS analyse et génération/DCEDCE MP2026_08'),
-      path.resolve(baseDir, 'DCEDCE MP2026_08'),
-      path.resolve(baseDir, 'Cas-Univ-Rouen-MP2026-08'),
-    ];
-
+    // Un cadre imposé (« Mémoire (cadre) ») n'est valable que s'il provient des fichiers
+    // RÉELLEMENT uploadés pour CE dossier. On ne cherche donc que dans uploadedDceDir et
+    // jamais dans les corpus de référence (Cas-Univ-Rouen, corpusDce…), sinon chaque dossier
+    // hériterait à tort du mémoire de référence comme « cadre client » → faux « cas template ».
     const dossier = DB.getDossier(dossierId);
     if (dossier && dossier.dce_files) {
       const templateFile = dossier.dce_files.find((f: any) => f.type === 'Mémoire (cadre)');
       if (templateFile && templateFile.nom) {
-        const filename = path.basename(templateFile.nom);
-        for (const dir of possibleDirs) {
-          if (!dir) continue;
-          const p = path.join(dir, filename);
-          if (fs.existsSync(p)) { templatePath = p; break; }
-        }
+        const p = path.join(uploadedDceDir, path.basename(templateFile.nom));
+        if (fs.existsSync(p)) { templatePath = p; }
       }
     }
 
     if (!templatePath) {
-      for (const dir of possibleDirs) {
-        if (!dir) continue;
-        const found = this.findDceTemplate(dir);
-        if (found) { templatePath = found; break; }
-      }
+      templatePath = this.findDceTemplate(uploadedDceDir);
     }
 
     if (!templatePath) {
@@ -2213,8 +2199,10 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     console.log(`[MemoireGenerator] Modèle de rédaction : ${this.memoireModel} (${isClientTemplate ? 'cas template' : 'cas sans template'}).`);
 
     // ── Sans cadre imposé : synthèse IA superposée sur AO RNE.pdf (overlay, design figé) ──
+    // On TRANSMET onProgress : sinon la barre de progression du front reste figée sur le dernier
+    // état connu (5 %, « Démarrage ») pendant toute la génération Marp.
     if (!isClientTemplate) {
-      return this.generateFullMarpPdf(dossierId);
+      return this.generateFullMarpPdf(dossierId, onProgress);
     }
 
     // 2. Analyse structurée du DCE (contexte unique de rédaction), avant toute manipulation du Word
@@ -2230,6 +2218,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     const gssDocs = await this.getGssDocumentation();
     const gssDocContext = this.buildFullGssContext(gssDocs);
     const referentsContext = await this.getGssReferents();
+    if (onProgress) onProgress(18, 'Chargement de la documentation GSS…');
     console.log(`[MemoireGenerator] Contexte cadre client: ${Object.keys(gssDocs).length} catégorie(s) Doc GSS (${gssDocContext.length} chars) + référents (${referentsContext.length} chars).`);
 
     // Effectif TOTAL de l'entreprise = somme DÉTERMINISTE des effectifs par catégorie d'EFFECTIFS
@@ -2594,6 +2583,7 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const dceN = retrievalChunks.filter(c => c.source === 'DCE' && c.embedding).length;
     console.log(`[MemoireGenerator] Index sémantique : ${gssN} chunks Doc GSS + ${dceN} chunks DCE.`);
     setProgress(dossierId, { phase: 'preparation', pct: 24, label: 'Indexation des sources (DCE + Doc GSS)…' });
+    if (onProgress) onProgress(24, 'Indexation des sources (DCE + Doc GSS)…');
 
     // Embeddings de TOUTES les requêtes de champ en un lot → la récupération devient du calcul local.
     const queryEmbs = await this.embedTexts(descriptors.map(d => this.buildFieldQuery(d)));
@@ -2871,14 +2861,14 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     const totalJobs = jobs.length;
     let doneJobs = 0;
     setProgress(dossierId, { phase: 'redaction', pct: 30, done: 0, total: totalJobs, label: `Remplissage du cadre — 0/${totalJobs} champ(s)…` });
+    if (onProgress) onProgress(30, `Remplissage du cadre — 0/${totalJobs} champ(s)…`);
     const tracked = jobs.map((job) => async () => {
       await job();
       doneJobs++;
-      setProgress(dossierId, {
-        phase: 'redaction', done: doneJobs, total: totalJobs,
-        pct: 30 + Math.round(60 * doneJobs / Math.max(1, totalJobs)),
-        label: `Remplissage du cadre — ${doneJobs}/${totalJobs} champ(s)…`,
-      });
+      const pct = 30 + Math.round(60 * doneJobs / Math.max(1, totalJobs));
+      const label = `Remplissage du cadre — ${doneJobs}/${totalJobs} champ(s)…`;
+      setProgress(dossierId, { phase: 'redaction', done: doneJobs, total: totalJobs, pct, label });
+      if (onProgress) onProgress(pct, label);
     });
     await runPool(tracked, 2);
 
@@ -2892,6 +2882,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
 
     console.log(`[MemoireGenerator] GPT a renvoyé ${replacements.length} valeurs au total.`);
     setProgress(dossierId, { phase: 'finalisation', pct: 94, label: 'Application des réponses au cadre…' });
+    if (onProgress) onProgress(94, 'Application des réponses au cadre…');
 
     // ── Garde-fou anti-invention de DONNÉES FACTUELLES (le cœur du « pas de données inventées ») ──
     // Le LLM fabrique volontiers adresses, téléphones, emails, dates, n° SIRET/CNAPS plausibles.
@@ -3288,6 +3279,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     console.log(`[MemoireGenerator] Applied ${applied}/${replacements.length} replacements.`);
 
     // 8. Serialize and save
+    if (onProgress) onProgress(98, 'Génération du document Word…');
     const serializer = new XMLSerializer();
     zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
     const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });

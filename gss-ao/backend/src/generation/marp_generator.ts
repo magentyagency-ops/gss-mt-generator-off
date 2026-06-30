@@ -120,14 +120,20 @@ export class MarpGenerator {
     
     console.log(`[MarpGenerator] Rendering PDF with Template: ${mdPath} → ${pdfPath}`);
 
+    // Sous Windows, npx est « npx.cmd » : spawnSync('npx') échoue en ENOENT, et le spawn direct
+    // d'un .cmd est désormais bloqué par Node (EINVAL, suite à CVE-2024-27980). On passe donc par
+    // le shell sur Windows. Comme shell:true concatène les arguments SANS les échapper, on
+    // guillemète les chemins (susceptibles de contenir des espaces).
+    const isWin = process.platform === 'win32';
+    const q = (p: string) => (isWin ? `"${p}"` : p);
     const result = spawnSync(
       'npx',
       [
         '-y', '@marp-team/marp-cli@latest',
-        mdPath,
-        '--theme', cssPath,
+        q(mdPath),
+        '--theme', q(cssPath),
         '--pdf',
-        '-o', pdfPath,
+        '-o', q(pdfPath),
         '--allow-local-files',
         '--html',
         '--no-stdin',
@@ -137,6 +143,7 @@ export class MarpGenerator {
         timeout: 120_000, // 2 minutes max
         stdio: 'pipe',
         encoding: 'utf-8',
+        shell: isWin,
       }
     );
 
