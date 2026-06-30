@@ -7,7 +7,6 @@ import {
   Radar,
   Library,
   Settings,
-  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,9 +22,7 @@ export function AppSidebar() {
   return (
     <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-border bg-card">
       <div className="flex h-14 items-center gap-2 border-b border-border px-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <ShieldCheck className="h-5 w-5" />
-        </div>
+        <img src="/gssAO.png" alt="GSS-AO" className="h-8 w-8 rounded-md object-contain" />
         <div className="leading-tight">
           <div className="text-sm font-semibold">GSS-AO</div>
           <div className="text-[11px] text-muted-foreground">Appels d'offres</div>
@@ -54,17 +51,7 @@ export function AppSidebar() {
         })}
       </nav>
 
-      <div className="border-t border-border p-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-xs font-semibold">
-            MV
-          </div>
-          <div className="leading-tight">
-            <div className="text-sm font-medium">Mme Vaché</div>
-            <div className="text-[11px] text-muted-foreground">Responsable AO</div>
-          </div>
-        </div>
-      </div>
+
     </aside>
   );
 }

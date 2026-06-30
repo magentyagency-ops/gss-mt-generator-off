@@ -21,10 +21,14 @@ import {
   joursRestants,
 } from "@/lib/gss-config";
 import { cn } from "@/lib/utils";
+import { useIntro } from "@/components/intro-provider";
 
 const STATUTS: (Statut | "Tous")[] = ["Tous", "Brouillon", "En cours", "À valider", "Envoyé"];
 
 export default function DossiersPage() {
+  const { introFinished } = useIntro();
+  const isInitialLoad = !introFinished;
+
   const [filtre, setFiltre] = useState<Statut | "Tous">("Tous");
   const [recherche, setRecherche] = useState("");
   const [dossiers, setDossiers] = useState<DossierRow[]>([]);
@@ -90,11 +94,21 @@ export default function DossiersPage() {
     });
   }, [allSelected, lignes]);
 
+  /* ── Animation delays (stagger) ─────────────────────────────── */
+  const headerDelay  = isInitialLoad ? 2800 : 0;
+  const filterDelay  = isInitialLoad ? 2900 : 100;
+  const tableDelay   = isInitialLoad ? 3000 : 200;
+  const rowDelay = (index: number) =>
+    isInitialLoad ? 3100 + index * 100 : 300 + index * 50;
+
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
+      <header
+        className="opacity-0 animate-fade-in-up flex items-center justify-between border-b border-border bg-card px-6 py-4"
+        style={{ animationDelay: `${headerDelay}ms` }}
+      >
         <div>
-          <h1 className="text-xl font-semibold">Dossiers d'appels d'offres</h1>
+          <h1 className="text-xl font-semibold">Dossiers d&apos;appels d&apos;offres</h1>
           <p className="text-sm text-muted-foreground">
             {dossiers.length} dossiers · {dossiers.filter((d) => d.statut === "En cours").length} en
             cours de traitement
@@ -121,7 +135,10 @@ export default function DossiersPage() {
 
       <div className="flex-1 overflow-y-auto p-6">
         {/* Filtres */}
-        <div className="mb-4 flex items-center justify-between gap-4">
+        <div
+          className="opacity-0 animate-fade-in-up mb-4 flex items-center justify-between gap-4"
+          style={{ animationDelay: `${filterDelay}ms` }}
+        >
           <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
             {STATUTS.map((s) => (
               <button
@@ -150,7 +167,10 @@ export default function DossiersPage() {
         </div>
 
         {/* Tableau */}
-        <div className="rounded-lg border border-border bg-card">
+        <div
+          className="opacity-0 animate-fade-in-up rounded-lg border border-border bg-card"
+          style={{ animationDelay: `${tableDelay}ms` }}
+        >
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -175,7 +195,7 @@ export default function DossiersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {lignes.map((d) => {
+              {lignes.map((d, index) => {
                 const jours = joursRestants(d.dateLimite);
                 const urgent = jours <= 14 && d.statut !== "Envoyé";
                 const isSelected = selectedIds.has(d.id);
@@ -183,9 +203,10 @@ export default function DossiersPage() {
                   <TableRow
                     key={d.id}
                     className={cn(
-                      "group cursor-pointer",
+                      "opacity-0 animate-fade-in-up group cursor-pointer",
                       isSelected && "bg-muted/50"
                     )}
+                    style={{ animationDelay: `${rowDelay(index)}ms` }}
                     onClick={() => window.location.href = `/dossiers/${d.id}`}
                   >
                     <TableCell onClick={(e) => e.stopPropagation()}>
@@ -371,3 +392,4 @@ export default function DossiersPage() {
     </div>
   );
 }
+

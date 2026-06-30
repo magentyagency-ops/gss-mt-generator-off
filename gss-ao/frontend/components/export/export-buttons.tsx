@@ -63,7 +63,7 @@ export function ExportButtons() {
           selectedSlides,
           projet: "Dossier " + id,
           acheteur: "Acheteur " + id,
-          signataire: "Mme Vaché, Responsable réponse AO",
+          signataire: "Adil Marchani, Responsable réponse AO",
           dateSignature: formatDate(new Date().toISOString()),
           filename: "Memoire_Technique_GSS_reponse_libre.pdf",
         });
@@ -76,7 +76,7 @@ export function ExportButtons() {
             num_cnaps: IDENTITE_CANDIDAT.num_cnaps,
             date_autorisation: IDENTITE_CANDIDAT.date_autorisation,
           },
-          signataire: "Mme Vaché, Responsable réponse AO",
+          signataire: "Adil Marchani, Responsable réponse AO",
           dateSignature: formatDate(new Date().toISOString()),
           filename: "Memoire_Technique_GSS_Univ_Rouen_MP2026-08.pdf",
         });

@@ -6,31 +6,32 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%; /* slate-900 */
+    /* Thème GSS-AO : Noir / Blanc / Rouge */
+    --background: 0 0% 100%; /* blanc */
+    --foreground: 0 0% 9%; /* presque noir */
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 0 0% 9%;
 
-    --primary: 243 75% 59%; /* indigo-600 */
-    --primary-foreground: 0 0% 100%;
+    --primary: 0 0% 0%; /* noir — boutons principaux, fort contraste */
+    --primary-foreground: 0 0% 100%; /* blanc */
 
-    --secondary: 210 40% 96%; /* slate-100 */
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%; /* slate-500 */
-    --accent: 226 100% 97%; /* indigo-50 */
-    --accent-foreground: 243 75% 45%;
+    --secondary: 0 0% 96%; /* gris très clair */
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 40%; /* gris */
+    --accent: 0 86% 97%; /* rouge très clair (accentuation) */
+    --accent-foreground: 0 72% 45%; /* rouge */
 
-    --destructive: 0 72% 51%; /* red-600 */
+    --destructive: 0 72% 51%; /* rouge-600 */
     --destructive-foreground: 0 0% 100%;
-    --success: 160 84% 31%; /* emerald-600 */
+    --success: 0 72% 51%; /* rouge (touches de rouge pour succès/erreur) */
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%; /* amber-500 */
-    --warning-foreground: 28 80% 18%;
+    --warning: 0 72% 51%; /* rouge */
+    --warning-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%; /* slate-200 */
-    --input: 214 32% 91%;
-    --ring: 243 75% 59%;
+    --border: 0 0% 90%; /* gris clair */
+    --input: 0 0% 90%;
+    --ring: 0 0% 9%; /* noir */
     --radius: 0.5rem;
   }
 
@@ -67,9 +68,54 @@
   * {
     @apply border-border;
   }
+  /* Fond noir derrière la page (effet de "bounce"/overscroll) */
+  html {
+    background-color: #000000;
+  }
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  /* ── Bandeaux supérieurs (headers) : fond noir, texte blanc ── */
+  header {
+    background-color: #000000 !important;
+    border-color: #1f1f23 !important; /* bordure sombre */
+    color: #ffffff;
+  }
+  header h1,
+  header h2,
+  header .text-foreground {
+    color: #ffffff !important;
+  }
+  header p,
+  header .text-muted-foreground {
+    color: #a1a1aa !important; /* gris clair */
+  }
+  /* Champs (inputs) dans un header noir : rester lisibles */
+  header input,
+  header textarea,
+  header select {
+    background-color: #18181b !important;
+    border-color: #3f3f46 !important;
+    color: #ffffff !important;
+  }
+  header input::placeholder {
+    color: #a1a1aa !important;
+  }
+
+  /* ── Contraste des boutons standards dans un header noir ──
+     Les boutons principaux (bg-primary = noir) deviennent
+     blanc/texte noir pour rester visibles. Les boutons
+     destructifs (rouge) ne sont pas inversés. */
+  header button.bg-primary {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+  header button.bg-primary:hover {
+    background-color: #e4e4e7 !important;
   }
 }
