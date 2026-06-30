@@ -17,6 +17,8 @@ import {
   FileText,
   ArrowRight,
   Download,
+  Globe,
+  Users,
 } from "lucide-react";
 import { Badge, Button, Card, Progress } from "@/components/ui";
 import { DossierNav } from "@/components/dossier-nav";
@@ -340,6 +342,17 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 {isGeneratingDocx ? "Génération en cours..." : "Lancer la génération du document"}
               </Button>
               {!isPrerequisOk && <p className="mt-2 text-xs text-amber-600">Prérequis manquants (CR Visite)</p>}
+
+              <div className="mt-4 flex items-center justify-center gap-3">
+                <Button variant="outline" className="gap-2" onClick={() => {}}>
+                  <Globe className="h-4 w-4" />
+                  Trouver l&apos;info sur internet
+                </Button>
+                <Button variant="outline" className="gap-2" onClick={() => {}}>
+                  <Users className="h-4 w-4" />
+                  Demander à l&apos;équipe
+                </Button>
+              </div>
             </div>
 
             {progressInfo && (isGeneratingDocx || progressInfo.progress < 100) && (
