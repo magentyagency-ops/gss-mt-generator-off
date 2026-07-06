@@ -279,6 +279,7 @@ interface SendForm {
   destinataire_email: string;
   destinataire_nom?: string;
   critere_concerne: string;
+  categorie?: string;
   niveau_criticite: string;
   question: string;
   date_limite?: string;
@@ -287,7 +288,7 @@ interface SendForm {
 function SendForm({ onSubmit }: { onSubmit: (f: SendForm) => void }) {
   const [f, setF] = useState<SendForm>({
     destinataire_email: "", destinataire_nom: "", critere_concerne: "",
-    niveau_criticite: "interne", question: "", date_limite: "",
+    categorie: "", niveau_criticite: "interne", question: "", date_limite: "",
   });
   const set = (k: keyof SendForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setF((p) => ({ ...p, [k]: e.target.value }));
@@ -299,6 +300,7 @@ function SendForm({ onSubmit }: { onSubmit: (f: SendForm) => void }) {
         <input className="input" placeholder="Destinataire (email) *" value={f.destinataire_email} onChange={set("destinataire_email")} />
         <input className="input" placeholder="Destinataire (nom)" value={f.destinataire_nom} onChange={set("destinataire_nom")} />
         <input className="input sm:col-span-2" placeholder="Critère concerné *" value={f.critere_concerne} onChange={set("critere_concerne")} />
+        <input className="input" placeholder="Catégorie" value={f.categorie} onChange={set("categorie")} />
         <select className="input" value={f.niveau_criticite} onChange={set("niveau_criticite")}>
           {CRITICITE_OPTIONS.map((c) => <option key={c} value={c}>{CRITICITE_LABEL[c]}</option>)}
         </select>

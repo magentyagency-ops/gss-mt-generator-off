@@ -36,12 +36,19 @@ export interface TemplateInput {
   domaine: string;       // domaine entrant, pour Reply-To
 }
 
+const MOIS_FR = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+];
+
 function formatDateFR(iso: string | null): string {
   if (!iso) return '—';
-  // iso attendu 'YYYY-MM-DD' ; format JJ/MM/AAAA sans dépendance externe.
+  // iso attendu 'YYYY-MM-DD' ; format long FR « 12 juillet 2026 » sans dépendance externe.
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
   if (!m) return iso;
-  return `${m[3]}/${m[2]}/${m[1]}`;
+  const jour = parseInt(m[3], 10);
+  const mois = MOIS_FR[parseInt(m[2], 10) - 1] ?? m[2];
+  return `${jour} ${mois} ${m[1]}`;
 }
 
 export function composeQuestionEmail(t: TemplateInput): OutgoingEmail {
@@ -54,7 +61,7 @@ export function composeQuestionEmail(t: TemplateInput): OutgoingEmail {
   const textBody =
 `Bonjour,
 
-Nous préparons actuellement la réponse de GSS à l'appel d'offres « ${t.nomMarche} ». Une information interne est nécessaire pour compléter le critère « ${t.critereConcerne} ».
+Nous préparons actuellement la réponse de GSS à l'appel d'offres ${t.nomMarche}. Une information interne est nécessaire pour compléter le critère ${t.critereConcerne}.
 
 Question : ${t.question}
 
