@@ -35,7 +35,15 @@ Deno.serve(async (req) => {
   // 2. Extraction robuste du question_id.
   const parsed = parseInbound(payload);
 
-  // 3a. Aucun id exploitable → on ne rattache RIEN (jamais de rattachement « au petit bonheur »).
+  // 3a. Id ambigu (adresses/références conflictuelles) → on ne rattache RIEN (§15).
+  if (parsed.source === 'ambiguous') {
+    console.warn('[inbound] références de question CONFLICTUELLES — réponse NON rattachée', {
+      from: parsed.fromEmail,
+    });
+    return jsonResponse({ status: 'ignored', reason: 'ambiguous_question_id' }, 200);
+  }
+
+  // 3b. Aucun id exploitable → on ne rattache RIEN (jamais de rattachement « au petit bonheur »).
   if (!parsed.questionId) {
     console.warn('[inbound] aucune référence de question trouvée — réponse NON rattachée', {
       from: parsed.fromEmail,
@@ -61,7 +69,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'lookup_failed' }, 500);
   }
 
-  // 3b. Id inconnu → on ne rattache RIEN.
+  // 3c. Id inconnu → on ne rattache RIEN.
   if (!question) {
     console.warn('[inbound] question_id inconnu — réponse NON rattachée', {
       questionId: parsed.questionId, source: parsed.source, from: parsed.fromEmail,
@@ -69,7 +77,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ status: 'ignored', reason: 'unknown_question_id' }, 200);
   }
 
-  // 3c. Doublons / états terminaux : ne jamais écraser une réponse déjà validée ni ré-écrire.
+  // 3d. Doublons / états terminaux : ne jamais écraser une réponse déjà validée ni ré-écrire.
   if (question.statut === 'validee') {
     console.info('[inbound] réponse déjà validée — ignorée (pas de régression)', question.id);
     return jsonResponse({ status: 'ignored', reason: 'already_validated' }, 200);

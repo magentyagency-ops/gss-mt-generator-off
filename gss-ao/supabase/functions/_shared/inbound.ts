@@ -45,52 +45,77 @@ export interface ParsedInbound {
   questionId: string | null;
   fromEmail: string | null;
   text: string;
-  source: 'mailbox_hash' | 'plus_address' | 'body_reference' | 'none';
+  source: 'mailbox_hash' | 'plus_address' | 'body_reference' | 'ambiguous' | 'none';
+}
+
+// Extrait le premier question_id valide d'une chaîne (ou null).
+function extractId(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const m = /q[0-9a-f]{16}/i.exec(s);
+  return m ? m[0].toLowerCase() : null;
 }
 
 /**
- * Extrait le question_id d'un payload entrant, par ordre de fiabilité :
- *   1. MailboxHash (Postmark découpe déjà ao+<hash>@… → hash = question_id) — le plus fiable.
- *   2. Adresse plus-addressée ao+<question_id>@… dans To / ToFull / OriginalRecipient.
- *   3. Fallback lisible : « Référence de suivi : … / <question_id> » dans le corps.
- * Renvoie questionId=null si rien d'exploitable (→ l'appelant ne rattache RIEN).
+ * Extrait le question_id d'un payload entrant — logique à DEUX NIVEAUX (règle §15 : « absent,
+ * inconnu, ou ambigu → NE rattache RIEN »).
  *
- * `payload` est volontairement `any` : forme dépendante du fournisseur (ici schéma Postmark
- * Inbound ; les autres fournisseurs seront adaptés au branchement).
+ *  A. Identifiants AUTORITATIFS = l'adresse de LIVRAISON, non falsifiable par le corps :
+ *       1. MailboxHash (Postmark découpe ao+<hash>@ → hash) ;
+ *       2. plus-address ao+<question_id>@ dans To / ToFull / OriginalRecipient.
+ *     • ≥ 2 id autoritatifs DISTINCTS  → AMBIGU → on ne rattache RIEN.
+ *     • exactement 1 → on rattache (le corps ne peut PAS le contredire : un fil de discussion
+ *       cité contenant d'autres id n'invalide pas une adresse de livraison sans équivoque).
+ *
+ *  B. Aucun id autoritatif → fallback sur le CORPS (« Référence de suivi » puis tout id isolé) :
+ *     • ≥ 2 id distincts dans le corps → AMBIGU → rien ;
+ *     • exactement 1 → on rattache (source body_reference) ;
+ *     • aucun → source 'none'.
+ *
+ * `payload` est volontairement `any` : forme dépendante du fournisseur (schéma Postmark Inbound).
  */
 export function parseInbound(payload: any): ParsedInbound {
-  const text: string = payload?.TextBody ?? payload?.StrippedTextReply ?? payload?.HtmlBody ?? '';
-  const fromEmail: string | null = payload?.FromFull?.Email ?? payload?.From ?? null;
+  // Coercition défensive : un corps de type inattendu (e-mail malformé) est traité comme vide.
+  const rawText = payload?.TextBody ?? payload?.StrippedTextReply ?? payload?.HtmlBody ?? '';
+  const text: string = typeof rawText === 'string' ? rawText : '';
+  const rawFrom = payload?.FromFull?.Email ?? payload?.From ?? null;
+  const fromEmail: string | null = typeof rawFrom === 'string' ? rawFrom : null;
+  const base = { fromEmail, text };
 
-  // 1. MailboxHash (Postmark)
-  const hash = (payload?.MailboxHash ?? '').trim();
-  if (hash && QUESTION_ID_RE.test(hash)) {
-    const m = hash.match(QUESTION_ID_RE)!;
-    return { questionId: m[0].toLowerCase(), fromEmail, text, source: 'mailbox_hash' };
-  }
+  // ── A. Sources autoritatives (adresse de livraison) ────────────────────────────
+  const authoritative: { id: string; source: 'mailbox_hash' | 'plus_address' }[] = [];
 
-  // 2. Adresse plus-addressée dans les destinataires
+  const hashId = extractId((payload?.MailboxHash ?? '').trim());
+  if (hashId) authoritative.push({ id: hashId, source: 'mailbox_hash' });
+
   const recipients: string[] = [];
   if (Array.isArray(payload?.ToFull)) for (const r of payload.ToFull) if (r?.Email) recipients.push(r.Email);
   if (typeof payload?.To === 'string') recipients.push(payload.To);
   if (typeof payload?.OriginalRecipient === 'string') recipients.push(payload.OriginalRecipient);
   for (const addr of recipients) {
     const plus = /(?:^|<|[,;\s])ao\+([^@>\s]+)@/i.exec(addr);
-    if (plus && QUESTION_ID_RE.test(plus[1])) {
-      return { questionId: plus[1].match(QUESTION_ID_RE)![0].toLowerCase(), fromEmail, text, source: 'plus_address' };
-    }
+    const id = plus ? extractId(plus[1]) : null;
+    if (id) authoritative.push({ id, source: 'plus_address' });
   }
 
-  // 3. Fallback : « Référence de suivi » dans le corps
+  const authDistinct = [...new Set(authoritative.map((c) => c.id))];
+  if (authDistinct.length > 1) {
+    return { questionId: null, source: 'ambiguous', ...base }; // conflit d'adresses → rien
+  }
+  if (authDistinct.length === 1) {
+    const id = authDistinct[0];
+    const src = authoritative.some((c) => c.source === 'mailbox_hash') ? 'mailbox_hash' : 'plus_address';
+    return { questionId: id, source: src, ...base };
+  }
+
+  // ── B. Fallback corps (aucune adresse exploitable) ─────────────────────────────
+  const bodyIds = new Set<string>();
   const refLine = /R[ée]f[ée]rence de suivi\s*:\s*.*?(q[0-9a-f]{16})/i.exec(text);
-  if (refLine) {
-    return { questionId: refLine[1].toLowerCase(), fromEmail, text, source: 'body_reference' };
-  }
-  // Dernier recours : un question_id isolé quelque part dans le corps.
-  const anywhere = QUESTION_ID_RE.exec(text);
-  if (anywhere) {
-    return { questionId: anywhere[0].toLowerCase(), fromEmail, text, source: 'body_reference' };
-  }
+  if (refLine) bodyIds.add(refLine[1].toLowerCase());
+  for (const m of text.matchAll(/q[0-9a-f]{16}/gi)) bodyIds.add(m[0].toLowerCase());
 
-  return { questionId: null, fromEmail, text, source: 'none' };
+  const bodyDistinct = [...bodyIds];
+  if (bodyDistinct.length > 1) return { questionId: null, source: 'ambiguous', ...base };
+  if (bodyDistinct.length === 1) return { questionId: bodyDistinct[0], source: 'body_reference', ...base };
+
+  return { questionId: null, source: 'none', ...base };
 }

@@ -48,6 +48,55 @@ check('Id trop court → non extrait (null)', r.questionId === null);
 r = parseInbound({});
 check('Payload vide → questionId null, pas de crash', r.questionId === null);
 
+console.log('\n== Payloads ADVERSES — « en cas de doute, on ne rattache RIEN » (§15) ==\n');
+const QID2 = 'q0f1e2d3c4b5a6978'; // second id distinct valide
+
+// 8. AMBIGU : deux adresses de livraison autoritatives conflictuelles → RIEN
+r = parseInbound({
+  ToFull: [{ Email: `ao+${QID}@ao.gss.fr` }, { Email: `ao+${QID2}@ao.gss.fr` }],
+  TextBody: 'reponse',
+});
+check('2 plus-address DISTINCTES → ambigu, questionId null', r.questionId === null && r.source === 'ambiguous');
+
+// 9. AMBIGU : MailboxHash ≠ plus-address (conflit autoritatif) → RIEN
+r = parseInbound({ MailboxHash: QID, To: `ao+${QID2}@ao.gss.fr`, TextBody: 'reponse' });
+check('MailboxHash ≠ plus-address → ambigu, null', r.questionId === null && r.source === 'ambiguous');
+
+// 10. NON ambigu : adresse autoritative unique + un AUTRE id cité dans le corps (fil de
+//     discussion) → on rattache à l'adresse (le corps ne peut pas contredire la livraison).
+r = parseInbound({
+  MailboxHash: QID,
+  To: `ao+${QID}@ao.gss.fr`,
+  TextBody: `Ma reponse.\n> Le ... a ecrit : Référence de suivi : AO / ${QID2}`,
+});
+check('Adresse unique + autre id cité en corps → rattache à l\'adresse (pas ambigu)',
+  r.questionId === QID && r.source === 'mailbox_hash');
+
+// 11. Id dans le CORPS uniquement (pas en plus-address) → rattache via body_reference
+r = parseInbound({ To: 'ao@ao.gss.fr', TextBody: `Référence de suivi : AO-2026 / ${QID}` });
+check('Id seulement dans le corps → body_reference', r.questionId === QID && r.source === 'body_reference');
+
+// 12. AMBIGU : aucune adresse, DEUX id distincts dans le corps → RIEN
+r = parseInbound({ To: 'ao@ao.gss.fr', TextBody: `id1 ${QID} et id2 ${QID2}` });
+check('2 id distincts dans le corps, sans adresse → ambigu, null', r.questionId === null && r.source === 'ambiguous');
+
+// 13. Même id répété partout (adresse + corps) → NON ambigu (dédup)
+r = parseInbound({
+  MailboxHash: QID, ToFull: [{ Email: `ao+${QID}@ao.gss.fr` }],
+  TextBody: `Référence de suivi : AO / ${QID}`,
+});
+check('Même id répété (adresse+corps) → rattache, pas ambigu', r.questionId === QID && r.source === 'mailbox_hash');
+
+// 14. E-mail malformé : champs de type inattendu → ne plante pas, null
+r = parseInbound({ To: 12345, ToFull: 'pas-un-tableau', MailboxHash: null, TextBody: 42 });
+check('Champs de types inattendus → pas de crash, null', r.questionId === null);
+
+// 15. Usurpation : le corps prétend un id, mais l'adresse en livre un autre → adresse prime,
+//     et si elles diffèrent... ici seule l'adresse est autoritative → rattache à l'adresse.
+r = parseInbound({ MailboxHash: QID, TextBody: `Tentative: ${QID2}` });
+check('Adresse autoritative + id différent en corps → suit l\'adresse (corps ignoré)',
+  r.questionId === QID && r.source === 'mailbox_hash');
+
 console.log('\n== Vérification d\'authenticité du webhook (secret partagé) ==\n');
 const SECRET = 's3cr3t-inbound';
 const H = (obj) => new Headers(obj);
@@ -63,6 +112,14 @@ check('Basic auth mauvais secret → refusé',
 check('Aucun en-tête → refusé', verifyInboundAuth(H({}), SECRET) === false);
 check('Aucun secret configuré (fail-closed) → refusé',
   verifyInboundAuth(H({ 'x-inbound-secret': SECRET }), undefined) === false);
+check('Secret configuré vide (fail-closed) → refusé',
+  verifyInboundAuth(H({ 'x-inbound-secret': '' }), '') === false);
+check('En-tête Basic malformé (pas du base64) → refusé, pas de crash',
+  verifyInboundAuth(H({ authorization: 'Basic @@@not-base64@@@' }), SECRET) === false);
+check('Basic sans « : » mais = secret → accepté (secret seul)',
+  verifyInboundAuth(H({ authorization: 'Basic ' + btoa(SECRET) }), SECRET) === true);
+check('Secret proche mais longueur différente → refusé (comparaison stricte)',
+  verifyInboundAuth(H({ 'x-inbound-secret': SECRET + 'x' }), SECRET) === false);
 
 console.log(`\n== Résultat : ${failures === 0 ? 'TOUS LES TESTS PASSENT ✅' : failures + ' ÉCHEC(S) ❌'} ==\n`);
 process.exit(failures === 0 ? 0 : 1);
