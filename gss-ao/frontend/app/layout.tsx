@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { AppSidebar } from "@/components/app-sidebar";
+import { AppChrome } from "@/components/app-chrome";
 import { IntroProvider } from "@/components/intro-provider";
 
 export const metadata: Metadata = {
@@ -22,10 +22,7 @@ export default function RootLayout({
       {/* Pour activer le mode sombre plus tard : ajouter className="dark" sur <html>. */}
       <body className="font-sans antialiased">
         <IntroProvider>
-          <div className="flex h-screen overflow-hidden bg-background">
-            <AppSidebar />
-            <main className="flex-1 overflow-y-auto">{children}</main>
-          </div>
+          <AppChrome>{children}</AppChrome>
         </IntroProvider>
       </body>
     </html>

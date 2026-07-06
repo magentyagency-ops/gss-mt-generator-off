@@ -18,6 +18,7 @@ import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@/compo
 import { DossierNav } from "@/components/dossier-nav";
 import { type Piece, type DceFile } from "@/lib/gss-config";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
 
 type Etat = Piece["etat"];
 const ETATS: { key: Etat; label: string; icon: React.ElementType; cls: string }[] = [
@@ -106,7 +107,7 @@ export default function ConformitePage({ params }: { params: { id: string } }) {
   const storageKey = `gss_conformite_v4_${id}`;
 
   useEffect(() => {
-    fetch(`http://localhost:8000/api/dossiers/${id}`)
+    apiFetch(`/api/dossiers/${id}`)
       .then(res => res.json())
       .then(data => {
         if (!data.error) setDossierInfo(data);

@@ -36,6 +36,8 @@ export interface Settings {
   llmModelUtility: string;
   s3EndpointUrl: string;
   s3Bucket: string;
+  supabaseUrl: string;
+  supabaseAnonKey: string;
 }
 
 export function getSettings(): Settings {
@@ -84,5 +86,7 @@ export function getSettings(): Settings {
     llmModelUtility: process.env.LLM_MODEL_UTILITY || 'claude-haiku-4-5-20251001',
     s3EndpointUrl: process.env.S3_ENDPOINT_URL || '',
     s3Bucket: process.env.S3_BUCKET || 'gss-ao',
+    supabaseUrl: process.env.SUPABASE_URL || '',
+    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
   };
 }
