@@ -28,7 +28,7 @@ question**, boucle complète de bout en bout.
   Edge Function inbound-email  ◀─POST (webhook signé)─ Fournisseur (inbound parse)
         │  1. vérifie le secret (refuse si absent/invalide)
         │  2. extrait question_id : MailboxHash → ao+<id>@ → « Référence de suivi » du corps
-        │  3. rattachement infaillible : id inconnu/absent → ne rattache RIEN, log, 200
+        │  3. rattachement infaillible : id absent / inconnu / AMBIGU → ne rattache RIEN, log, 200
         ▼
   update question_interne : reponse_contenu, reponse_recue_at, statut → reponse_recue
         │  (JAMAIS de validation auto — §11.8)
@@ -81,6 +81,11 @@ Enum en **slugs ASCII** ; libellés accentués mappés côté UI (`frontend/lib/
   en Basic Auth ou en-tête `x-inbound-secret`) — **fail-closed** (pas de secret → refus). Il
   utilise `service_role` (canal serveur de confiance) pour écrire ; l'infaillibilité vient de
   la logique (match exact du `question_id` UNIQUE, sinon rien).
+- **Rattachement à deux niveaux (anti-ambiguïté §15)** : l'identifiant de **l'adresse de
+  livraison** (MailboxHash / plus-address) fait autorité. Si deux adresses autoritatives
+  diffèrent → **AMBIGU → aucun rattachement**. Le corps ne sert de repli que sans adresse
+  exploitable (et ≥ 2 id distincts dans le corps → ambigu aussi). Prouvé par 24 tests unitaires
+  (`inbound_parse.test.mjs`), dont tous les cas adverses.
 - **`question_id` n'est PAS un secret d'auth.** Il rend le rattachement non ambigu et difficile
   à deviner. Le **filet anti-réponse forgée / usurpation = la validation humaine (§11.8)** :
   une réponse reçue reste `reponse_recue` jusqu'à validation par le responsable.
@@ -107,39 +112,103 @@ Enum en **slugs ASCII** ; libellés accentués mappés côté UI (`frontend/lib/
 
 ---
 
-## 5. Déploiement & tests
+## 5. RUNBOOK « CE SOIR » — exécution clé-en-main
 
+> Objectif : **exécution sans réflexion**. Faire les étapes DANS L'ORDRE. Remplacer les
+> `<placeholders>`. Toutes les commandes se lancent depuis `gss-ao/` (sauf mention).
+> Le CLI `supabase`, `node`, `npm` sont déjà installés (via Homebrew : `export PATH="/opt/homebrew/bin:$PATH"`).
+> On travaille **directement sur le projet cloud de Clarence** : PAS besoin de `supabase start`
+> ni de Docker (le disque est saturé de toute façon).
+
+### Ce qu'il faut avoir sous la main avant de commencer
+- **Référence du projet** Supabase de Clarence : `<REF>` (dashboard → Project Settings → General).
+- **Mot de passe base** : dashboard → Project Settings → Database → *Connection string* / *Database password* → `<DB_PASSWORD>`.
+- **anon key** : Project Settings → API → `anon public` → `<ANON_KEY>`.
+- Un **secret webhook** au choix, ex. généré par : `openssl rand -hex 24` → `<INBOUND_SECRET>`.
+
+### Étape 1 — Se connecter et lier le projet
 ```bash
-# 1. Lier le projet de Clarence
-supabase link --project-ref <REF_PROJET_CLARENCE>
-
-# 2. Appliquer la migration
-supabase db push        # applique supabase/migrations/20260706120000_question_interne.sql
-
-# 3. Définir les secrets
-supabase secrets set INBOUND_EMAIL_DOMAIN=ao.<domaine> INBOUND_WEBHOOK_SECRET=<secret> \
-                     EMAIL_PROVIDER=postmark EMAIL_FROM="GSS AO <ao@ao.<domaine>>" \
-                     POSTMARK_SERVER_TOKEN=<token>
-
-# 4. Déployer les Edge Functions
-supabase functions deploy send-question
-supabase functions deploy inbound-email   # verify_jwt=false (déjà dans config.toml)
-
-# → URLs : https://<REF>.functions.supabase.co/send-question  et  /inbound-email
+export PATH="/opt/homebrew/bin:$PATH"
+cd "<...>/gss-ao"
+supabase login                       # ouvre le navigateur (ou colle un access token)
+supabase link --project-ref <REF>    # demande <DB_PASSWORD>
 ```
 
-### Tests
+### Étape 2 — Appliquer la migration
 ```bash
-# Logique de rattachement §15 (aucune base requise) — PASSE déjà :
-node supabase/tests/inbound_parse.test.mjs
+supabase db push
+# Attendu : applique supabase/migrations/20260706120000_question_interne.sql
+# Vérifier : la table public.question_interne + les policies existent (dashboard → Table editor).
+```
 
-# Isolation RLS 2 organisations (base locale ou projet lié) :
-#   supabase start   (local, ~3 Go d'images)  OU  contre la base liée
+### Étape 3 — TEST D'ISOLATION RLS (2 organisations) — le livrable clé §14
+Le test se connecte en direct à la base (port 5432) et se nettoie tout seul.
+```bash
+export SUPA_DB_HOST="db.<REF>.supabase.co"
+export SUPA_DB_PORT=5432
+export SUPA_DB_USER="postgres"
+export SUPA_DB_PASSWORD="<DB_PASSWORD>"
+export SUPA_DB_NAME="postgres"
 NODE_PATH="backend/node_modules" node supabase/tests/rls_isolation.cjs
+# Attendu : « TOUS LES TESTS PASSENT ✅ » (A ne voit que Org A, B que Org B, anon rien,
+#           insertion/màj cross-org refusées).
+```
+> Si l'insert dans `auth.users` échoue (contrainte selon version) : voir §7 « Fast-follows » —
+> ajouter les colonnes requises dans le seed du test. Peu probable sur Supabase récent.
 
-# Intégration inbound (contre la fonction déployée / servie) :
-BASE_URL="https://<REF>.functions.supabase.co" INBOUND_SECRET="<secret>" \
-  QUESTION_ID="<un question_id réel>" ./supabase/tests/inbound_integration.sh
+### Étape 4 — Secrets des Edge Functions + déploiement
+```bash
+supabase secrets set \
+  INBOUND_EMAIL_DOMAIN="ao.<domaine>" \
+  INBOUND_WEBHOOK_SECRET="<INBOUND_SECRET>" \
+  EMAIL_PROVIDER="postmark" \
+  EMAIL_FROM="GSS AO <ao@ao.<domaine>>" \
+  POSTMARK_SERVER_TOKEN="<POSTMARK_TOKEN>"     # si Postmark prêt ; sinon omettre EMAIL_PROVIDER → DRY-RUN
+
+supabase functions deploy send-question
+supabase functions deploy inbound-email        # verify_jwt=false (déjà dans config.toml)
+# → URLs : https://<REF>.functions.supabase.co/send-question   et   /inbound-email
+```
+
+### Étape 5 — Créer un utilisateur + une organisation pour la démo UI
+1. Dashboard → **Authentication → Add user** : créer `demo@gss.fr` / `<MDP>` (confirmer l'e-mail).
+2. Dashboard → **SQL editor**, coller (remplacer `<USER_ID>` par l'id du user créé, visible dans Authentication) :
+```sql
+insert into public.organisation (id, nom)
+values ('00000000-0000-0000-0000-0000000000a1', 'GSS (démo)');
+
+insert into public.organisation_membre (organisation_id, user_id, role)
+values ('00000000-0000-0000-0000-0000000000a1', '<USER_ID>', 'responsable');
+```
+(L'appel d'offres de test se crée depuis l'UI via le bouton « + AO de test ».)
+
+### Étape 6 — Lancer le front
+```bash
+npm install --prefix frontend            # installe @supabase/supabase-js (non fait ici : disque plein)
+printf 'NEXT_PUBLIC_SUPABASE_URL=https://<REF>.supabase.co\nNEXT_PUBLIC_SUPABASE_ANON_KEY=<ANON_KEY>\n' > frontend/.env.local
+npm run dev --prefix frontend            # http://localhost:3000/sollicitations
+```
+Se connecter avec `demo@gss.fr`, créer un « AO de test », **envoyer une question** à une **vraie
+adresse à toi**. En DRY-RUN, le Reply-To s'affiche ; avec Postmark branché, l'e-mail part.
+
+### Étape 7 — Brancher Postmark (entrant) — cf. §6 étapes manuelles
+Une fois les MX + le webhook inbound configurés (§6), **répondre à l'e-mail** reçu : la réponse
+doit apparaître dans l'UI en **« Réponse reçue »** (temps réel), prête à **Valider**.
+
+### Étape 8 — Tests d'intégration inbound (payloads simulés + adverses)
+```bash
+BASE_URL="https://<REF>.functions.supabase.co" \
+INBOUND_SECRET="<INBOUND_SECRET>" \
+QUESTION_ID="<question_id d'une question réelle>" \
+QUESTION_ID2="<question_id d'une 2e question fraîche>" \
+  ./supabase/tests/inbound_integration.sh
+# Vérifie : attach, refus sans secret (401), id inconnu, sans référence, doublon,
+#           JSON malformé (400), AMBIGU (2 adresses → ignored), attache via corps.
+```
+
+### Test « offline » (déjà vert, rappel — aucune base) — le cœur du risque §15
+```bash
+node supabase/tests/inbound_parse.test.mjs   # 24/24 ✅ (extraction id, cas adverses, secret)
 ```
 
 ---
