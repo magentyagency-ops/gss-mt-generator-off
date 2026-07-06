@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { DossierNav } from "@/components/dossier-nav";
+import { apiFetch } from "@/lib/api";
 
 import { analyzeSlides, getApiKey, type SlideRec } from "@/lib/ai/client";
 import {
@@ -48,7 +49,7 @@ export default function SelectionSlidesPage({ params }: { params: { id: string }
   const [dossierInfo, setDossierInfo] = useState<any>({ acheteur: "Chargement...", reference: "..." });
 
   useEffect(() => {
-    fetch(`http://localhost:8000/api/dossiers/${id}`)
+    apiFetch(`/api/dossiers/${id}`)
       .then(res => res.json())
       .then(data => {
         if (!data.error) setDossierInfo(data);

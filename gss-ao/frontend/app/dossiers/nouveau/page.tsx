@@ -20,6 +20,7 @@ import {
 import { Badge, Button, Card } from "@/components/ui";
 import { type DceFile, type DossierRow } from "@/lib/gss-config";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
 
 const TYPES = ["RC", "CCAP", "CCTP", "BPU / DPGF", "Mémoire (cadre)", "Acte d'Engagement", "Compte Rendu", "Annexe", "Inconnu"];
 
@@ -204,7 +205,7 @@ export default function NouveauDossierPage() {
   }
 
   async function saveDossier(isBrouillon: boolean): Promise<string> {
-    const dossierId = `dossier-${Date.now()}`;
+    const dossierId = crypto.randomUUID();
 
     // Extraire le nom du dossier DCE depuis les chemins des fichiers uploadés
     let dossierName = "";
@@ -231,7 +232,7 @@ export default function NouveauDossierPage() {
     };
 
     try {
-      await fetch("http://localhost:8000/api/dossiers", {
+      await apiFetch("/api/dossiers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newDossier),
@@ -276,7 +277,7 @@ export default function NouveauDossierPage() {
           formData.append("files", f.file);
         }
       });
-      const res = await fetch("http://localhost:8000/api/dce/upload", {
+      const res = await apiFetch("/api/dce/upload", {
         method: "POST",
         body: formData,
       });

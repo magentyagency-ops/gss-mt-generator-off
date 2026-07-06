@@ -33,6 +33,7 @@ import {
   joursRestants,
 } from "@/lib/gss-config";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
 
 function StatPill({
   icon: Icon,
@@ -71,7 +72,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
   const [objetValue, setObjetValue] = useState("");
 
   useEffect(() => {
-    fetch(`http://localhost:8000/api/dossiers/${id}`)
+    apiFetch(`/api/dossiers/${id}`)
       .then((res) => res.json())
       .then((data) => {
         if (!data.error) {
@@ -111,7 +112,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
                     if (e.key === "Enter") {
                       setIsEditingObjet(false);
                       setDossierInfo({ ...dossierInfo, objet: objetValue });
-                      await fetch(`http://localhost:8000/api/dossiers`, {
+                      await apiFetch(`/api/dossiers`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ id, objet: objetValue })

@@ -40,6 +40,7 @@ import {
   type ResponseMode,
 } from "@/lib/ai/mode";
 import { cn } from "@/lib/utils";
+import { apiFetch, apiBase } from "@/lib/api";
 import { use } from "react";
 
 interface GenEntry {
@@ -85,7 +86,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   } | null>(null);
 
   useEffect(() => {
-    fetch(`http://localhost:8000/api/dossiers/${id}`)
+    apiFetch(`/api/dossiers/${id}`)
       .then(res => res.json())
       .then(data => {
         if (!data.error) setDossierInfo(data);
@@ -124,7 +125,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     // Start progress polling
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`http://localhost:8000/api/dossiers/${id}/progress`);
+        const res = await apiFetch(`/api/dossiers/${id}/progress`);
         if (res.ok) {
           const data = await res.json();
           setProgressInfo(data);
@@ -135,7 +136,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     }, 1000);
 
     try {
-      const res = await fetch(`http://localhost:8000/api/dce/${id}/memoire`, { method: "POST" });
+      const res = await apiFetch(`/api/dce/${id}/memoire`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erreur lors de la génération");
       
@@ -165,7 +166,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
         const firstField = docxResult.missingFields[0];
         setIsChatLoading(true);
         try {
-          const res = await fetch(`http://localhost:8000/api/dce/${id}/memoire/chat-missing-eval`, {
+          const res = await apiFetch(`/api/dce/${id}/memoire/chat-missing-eval`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ context: firstField.context, chatHistory: [] })
@@ -208,7 +209,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
       const currentField = docxResult.missingFields[currentQuestionIndex];
       const historyWithUser = [...historyForApi, { role: 'user', content: userMessage }];
       
-      const res = await fetch(`http://localhost:8000/api/dce/${id}/memoire/chat-missing-eval`, {
+      const res = await apiFetch(`/api/dce/${id}/memoire/chat-missing-eval`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ context: currentField.context, chatHistory: historyWithUser })
@@ -224,7 +225,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
         const nextIndex = currentQuestionIndex + 1;
         if (nextIndex < docxResult.missingFields.length) {
           const nextField = docxResult.missingFields[nextIndex];
-          const nextRes = await fetch(`http://localhost:8000/api/dce/${id}/memoire/chat-missing-eval`, {
+          const nextRes = await apiFetch(`/api/dce/${id}/memoire/chat-missing-eval`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ context: nextField.context, chatHistory: [] })
@@ -255,7 +256,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     setIsGeneratingDocx(true);
     setProgressInfo({ status: 'idle', progress: 95, message: 'Finalisation...', logs: [] });
     try {
-      const res = await fetch(`http://localhost:8000/api/dce/${id}/memoire/fill-missing`, {
+      const res = await apiFetch(`/api/dce/${id}/memoire/fill-missing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userAnswers: answersToSubmit })
@@ -484,7 +485,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 <div className="mt-12 pt-8 border-t border-border">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-medium text-lg text-foreground">Aperçu du document final (De A à Z)</h3>
-                    <a href={`http://localhost:8000/api/download?file=${encodeURIComponent(docxResult.data.file_path)}&download=1`} download className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-border bg-card hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
+                    <a href={`${apiBase}/api/download?file=${encodeURIComponent(docxResult.data.file_path)}&download=1`} download className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-border bg-card hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
                       <Download className="mr-2 h-4 w-4" />
                       Télécharger
                     </a>
@@ -494,13 +495,13 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   {docxResult.data.file_path.toLowerCase().endsWith('.pdf') ? (
                     <div className="relative w-full rounded-md border border-border bg-muted mt-6 shadow-inner h-[800px]">
                       <iframe 
-                        src={`http://localhost:8000/api/download?file=${encodeURIComponent(docxResult.data.file_path)}`}
+                        src={`${apiBase}/api/download?file=${encodeURIComponent(docxResult.data.file_path)}`}
                         className="w-full h-full rounded-md"
                         title="Prévisualisation PDF"
                       />
                     </div>
                   ) : (
-                    <DocxPreviewViewer fileUrl={`http://localhost:8000/api/download?file=${encodeURIComponent(docxResult.data.file_path)}`} />
+                    <DocxPreviewViewer fileUrl={`${apiBase}/api/download?file=${encodeURIComponent(docxResult.data.file_path)}`} />
                   )}
                 </div>
               </div>

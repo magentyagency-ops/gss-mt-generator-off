@@ -2170,7 +2170,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     // RÉELLEMENT uploadés pour CE dossier. On ne cherche donc que dans uploadedDceDir et
     // jamais dans les corpus de référence (Cas-Univ-Rouen, corpusDce…), sinon chaque dossier
     // hériterait à tort du mémoire de référence comme « cadre client » → faux « cas template ».
-    const dossier = DB.getDossier(dossierId);
+    const dossier = await DB.getDossier(dossierId);
     if (dossier && dossier.dce_files) {
       const templateFile = dossier.dce_files.find((f: any) => f.type === 'Mémoire (cadre)');
       if (templateFile && templateFile.nom) {
@@ -3201,7 +3201,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       const tempBuf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
       require('fs').writeFileSync(tempPath, tempBuf);
 
-      DB.saveDossier(dossierId, {
+      await DB.saveDossier(dossierId, {
         memoire_cadre_state: { tempPath, missingFields: missingInfo }
       });
       console.log(`[MemoireGenerator] Bypassing IA chat, forcing generation with ${missingInfo.length} missing fields.`);
@@ -4222,7 +4222,7 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
     const fallback = { client: 'GSS — Global Security Service', title: 'Mémoire technique', ref: '' };
     if (!dossierId || dossierId === 'export') return fallback;
     try {
-      const dossier = DB.getDossier(dossierId);
+      const dossier = await DB.getDossier(dossierId);
       if (dossier && (dossier.acheteur || dossier.reference || dossier.objet)) {
         return {
           client: dossier.acheteur || fallback.client,
@@ -4295,7 +4295,7 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
    * Finalise la génération du mémoire avec cadre imposé après intervention de l'utilisateur.
    */
   public async finalizeMemoire(dossierId: string, userAnswers: Record<string, string>): Promise<{ filePath: string, generatedData: Record<string, string> }> {
-    const dossier = DB.getDossier(dossierId);
+    const dossier = await DB.getDossier(dossierId);
     if (!dossier || !dossier.memoire_cadre_state) {
       throw new Error("État de génération introuvable ou expiré.");
     }
@@ -4339,7 +4339,7 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
 
     // Nettoyage de l'état
     try { fs.unlinkSync(state.tempPath); } catch { /* ignore */ }
-    DB.saveDossier(dossierId, { memoire_cadre_state: null });
+    await DB.saveDossier(dossierId, { memoire_cadre_state: null });
 
     return { filePath: finalPath, generatedData: userAnswers };
   }

@@ -22,6 +22,7 @@ import {
 } from "@/lib/gss-config";
 import { cn } from "@/lib/utils";
 import { useIntro } from "@/components/intro-provider";
+import { apiFetch } from "@/lib/api";
 
 const STATUTS: (Statut | "Tous")[] = ["Tous", "Brouillon", "En cours", "À valider", "Envoyé"];
 
@@ -35,7 +36,7 @@ export default function DossiersPage() {
   const [supprimerDossier, setSupprimerDossier] = useState<DossierRow | null>(null);
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/dossiers")
+    apiFetch("/api/dossiers")
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) setDossiers(data);
@@ -55,7 +56,7 @@ export default function DossiersPage() {
   const handleSupprimer = useCallback(() => {
     if (!supprimerDossier) return;
     setDossiers((prev) => prev.filter((d) => d.id !== supprimerDossier.id));
-    fetch(`http://localhost:8000/api/dossiers/${supprimerDossier.id}`, {
+    apiFetch(`/api/dossiers/${supprimerDossier.id}`, {
       method: "DELETE",
     }).catch((e) => console.error(e));
     setSelectedIds((prev) => {
@@ -71,7 +72,7 @@ export default function DossiersPage() {
     
     // Call delete API for each selected
     Array.from(selectedIds).forEach((id) => {
-      fetch(`http://localhost:8000/api/dossiers/${id}`, {
+      apiFetch(`/api/dossiers/${id}`, {
         method: "DELETE",
       }).catch((e) => console.error(e));
     });
