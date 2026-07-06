@@ -7,11 +7,13 @@ import {
   Radar,
   Library,
   Settings,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/", label: "Dossiers", icon: FolderKanban, match: (p: string) => p === "/" || p.startsWith("/dossiers") },
+  { href: "/sollicitations", label: "Sollicitations", icon: Mail, match: (p: string) => p.startsWith("/sollicitations") },
   { href: "/veille", label: "Veille", icon: Radar, match: (p: string) => p.startsWith("/veille") },
   { href: "/base", label: "Base de connaissances", icon: Library, match: (p: string) => p.startsWith("/base") },
   { href: "/parametres", label: "Paramètres", icon: Settings, match: (p: string) => p.startsWith("/parametres") },
