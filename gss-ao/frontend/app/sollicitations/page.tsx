@@ -3,69 +3,57 @@
 // ════════════════════════════════════════════════════════════════════════════════════════
 // Phase 4 — Interface minimale « Sollicitation interne » (Ticket #3, §12)
 // ════════════════════════════════════════════════════════════════════════════════════════
-// Vue simple : liste des questions_interne d'un dossier (statut TEMPS RÉEL via Realtime),
-// bouton « Envoyer une question de test », affichage de la réponse reçue + action « Valider »
-// (réservée au responsable). S'appuie sur la RLS : l'utilisateur ne voit que son organisation.
-//
-// NB spike : auth Supabase minimale (email/mot de passe) pour porter le JWT et donc la RLS.
-// À réconcilier avec l'authentification du ticket #2 quand elle existera.
+// Liste des questions_interne d'un dossier (statut TEMPS RÉEL via Realtime), bouton « Envoyer
+// une question de test », affichage de la réponse reçue + action « Valider ».
+// Branché sur le modèle réel du ticket #2 : client @/lib/supabase/client, table `dossiers`,
+// isolation par utilisateur (la RLS ne renvoie que MES questions ; « Valider » = propriétaire
+// de l'AO = responsable §11.8, la RLS réserve la mise à jour au propriétaire/admin).
 
-import { useCallback, useEffect, useState } from "react";
-import { Send, CheckCircle2, RefreshCw, Mail, AlertTriangle, Inbox } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Send, CheckCircle2, RefreshCw, Mail, Inbox } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
 } from "@/components/ui";
 import {
-  getSupabase, STATUT_LABEL, STATUT_BADGE, CRITICITE_LABEL, CRITICITE_OPTIONS,
-  type QuestionInterne, type AppelOffres,
+  STATUT_LABEL, STATUT_BADGE, CRITICITE_LABEL, CRITICITE_OPTIONS,
+  type QuestionInterne, type Dossier,
 } from "@/lib/sollicitations";
 
 export default function SollicitationsPage() {
-  const supabase = getSupabase();
+  const supabase = useMemo(() => createClient(), []);
   const [ready, setReady] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [orgId, setOrgId] = useState<string | null>(null);
-  const [role, setRole] = useState<string | null>(null);
-  const [aos, setAos] = useState<AppelOffres[]>([]);
+  const [dossiers, setDossiers] = useState<Dossier[]>([]);
   const [aoId, setAoId] = useState<string>("");
   const [questions, setQuestions] = useState<QuestionInterne[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // ── Auth ─────────────────────────────────────────────────────────────────────
+  // ── Session ────────────────────────────────────────────────────────────────────
   const loadSession = useCallback(async () => {
-    if (!supabase) return;
     const { data } = await supabase.auth.getUser();
     setUserEmail(data.user?.email ?? null);
-    if (data.user) {
-      const { data: m } = await supabase
-        .from("organisation_membre")
-        .select("organisation_id, role")
-        .limit(1)
-        .maybeSingle();
-      setOrgId(m?.organisation_id ?? null);
-      setRole(m?.role ?? null);
-    }
     setReady(true);
   }, [supabase]);
 
   useEffect(() => { loadSession(); }, [loadSession]);
 
-  // ── Chargement des AO puis des questions ───────────────────────────────────────
-  const loadAos = useCallback(async () => {
-    if (!supabase || !userEmail) return;
+  // ── Dossiers (RLS : uniquement les miens) ───────────────────────────────────────
+  const loadDossiers = useCallback(async () => {
+    if (!userEmail) return;
     const { data } = await supabase
-      .from("appel_offres")
-      .select("id, organisation_id, reference, nom_marche")
+      .from("dossiers")
+      .select("id, nom, contenu")
       .order("created_at", { ascending: false });
-    setAos(data ?? []);
+    setDossiers((data as Dossier[]) ?? []);
     if (data && data.length && !aoId) setAoId(data[0].id);
   }, [supabase, userEmail, aoId]);
 
-  useEffect(() => { loadAos(); }, [loadAos]);
+  useEffect(() => { loadDossiers(); }, [loadDossiers]);
 
   const loadQuestions = useCallback(async () => {
-    if (!supabase || !aoId) { setQuestions([]); return; }
+    if (!aoId) { setQuestions([]); return; }
     const { data } = await supabase
       .from("question_interne")
       .select("*")
@@ -78,7 +66,7 @@ export default function SollicitationsPage() {
 
   // ── Realtime : statut en temps réel (§12) ──────────────────────────────────────
   useEffect(() => {
-    if (!supabase || !aoId) return;
+    if (!aoId) return;
     const channel = supabase
       .channel(`qi-${aoId}`)
       .on(
@@ -91,33 +79,20 @@ export default function SollicitationsPage() {
   }, [supabase, aoId, loadQuestions]);
 
   // ── Actions ────────────────────────────────────────────────────────────────────
-  async function signIn(email: string, password: string) {
-    if (!supabase) return;
-    setErr(null);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setErr(error.message);
-    else await loadSession();
-  }
-
-  async function signOut() {
-    await supabase?.auth.signOut();
-    setUserEmail(null); setOrgId(null); setRole(null); setAos([]); setQuestions([]);
-  }
-
-  async function createTestAo() {
-    if (!supabase || !orgId) return;
+  async function createTestDossier() {
     setErr(null);
     const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
-    const { error } = await supabase.from("appel_offres").insert({
-      organisation_id: orgId,
-      reference: `AO-TEST-${Math.floor(Number(new Date()) % 100000)}`,
-      nom_marche: `Marché de test (${stamp})`,
+    // user_id = auth.uid() (défaut en base). On stocke une « reference » dans contenu (§11).
+    const ref = `AO-TEST-${String(Date.now()).slice(-5)}`;
+    const { error } = await supabase.from("dossiers").insert({
+      nom: `Marché de test (${stamp})`,
+      contenu: { reference: ref, objet: `Marché de test (${stamp})` },
     });
-    if (error) setErr(error.message); else await loadAos();
+    if (error) setErr(error.message); else await loadDossiers();
   }
 
   async function sendTest(form: SendForm) {
-    if (!supabase || !aoId) return;
+    if (!aoId) return;
     setErr(null); setMsg(null);
     const { data, error } = await supabase.functions.invoke("send-question", {
       body: { ao_id: aoId, ...form },
@@ -134,7 +109,6 @@ export default function SollicitationsPage() {
   }
 
   async function valider(q: QuestionInterne) {
-    if (!supabase) return;
     setErr(null);
     const { error } = await supabase
       .from("question_interne")
@@ -144,42 +118,26 @@ export default function SollicitationsPage() {
   }
 
   // ── Rendu ────────────────────────────────────────────────────────────────────
-  if (!supabase) {
+  if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p></Shell>;
+
+  if (!userEmail) {
     return (
       <Shell>
         <Card>
-          <CardHeader><CardTitle>Configuration requise</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Connexion requise</CardTitle></CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Variables <code>NEXT_PUBLIC_SUPABASE_URL</code> / <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>{" "}
-            manquantes. Copier <code>frontend/.env.local.example</code> → <code>.env.local</code>.
+            Connectez-vous pour accéder aux sollicitations (auth du ticket #2).
           </CardContent>
         </Card>
       </Shell>
     );
   }
 
-  if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p></Shell>;
-
-  if (!userEmail) return <Shell><SignIn onSignIn={signIn} err={err} /></Shell>;
-
   return (
     <Shell>
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <div className="text-sm text-muted-foreground">
-          Connecté : <span className="font-medium text-foreground">{userEmail}</span>
-          {role && <> · rôle <Badge variant="outline">{role}</Badge></>}
-        </div>
-        <Button variant="ghost" size="sm" onClick={signOut}>Se déconnecter</Button>
+      <div className="mb-4 text-sm text-muted-foreground">
+        Connecté : <span className="font-medium text-foreground">{userEmail}</span>
       </div>
-
-      {!orgId && (
-        <Card className="mb-4 border-warning">
-          <CardContent className="flex items-center gap-2 py-3 text-sm">
-            <AlertTriangle className="text-warning" />
-            Aucune organisation rattachée à ce compte. (À seeder côté base — voir README.)
-          </CardContent>
-        </Card>
-      )}
 
       {/* Sélecteur de dossier (AO) */}
       <Card className="mb-4">
@@ -187,22 +145,20 @@ export default function SollicitationsPage() {
           <CardTitle className="text-base">Dossier (appel d'offres)</CardTitle>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={loadQuestions}><RefreshCw /> Rafraîchir</Button>
-            {orgId && <Button variant="outline" size="sm" onClick={createTestAo}>+ AO de test</Button>}
+            <Button variant="outline" size="sm" onClick={createTestDossier}>+ Dossier de test</Button>
           </div>
         </CardHeader>
         <CardContent>
-          {aos.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Aucun appel d'offres. {orgId ? "Créez-en un de test ci-dessus." : ""}
-            </p>
+          {dossiers.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Aucun dossier. Créez-en un de test ci-dessus.</p>
           ) : (
             <select
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={aoId}
               onChange={(e) => setAoId(e.target.value)}
             >
-              {aos.map((ao) => (
-                <option key={ao.id} value={ao.id}>{ao.reference} — {ao.nom_marche}</option>
+              {dossiers.map((d) => (
+                <option key={d.id} value={d.id}>{d.nom}</option>
               ))}
             </select>
           )}
@@ -213,7 +169,7 @@ export default function SollicitationsPage() {
       {err && <Banner kind="err" text={err} />}
 
       {/* Formulaire d'envoi de test */}
-      {aoId && <SendForm onSubmit={sendTest} />}
+      {aoId && <SendFormCard onSubmit={sendTest} />}
 
       {/* Liste des questions */}
       <div className="mt-6 space-y-3">
@@ -224,7 +180,7 @@ export default function SollicitationsPage() {
           <p className="text-sm text-muted-foreground">Aucune question pour ce dossier.</p>
         )}
         {questions.map((q) => (
-          <QuestionCard key={q.id} q={q} canValidate={role === "responsable"} onValider={() => valider(q)} />
+          <QuestionCard key={q.id} q={q} onValider={() => valider(q)} />
         ))}
       </div>
     </Shell>
@@ -254,27 +210,6 @@ function Banner({ kind, text }: { kind: "ok" | "err"; text: string }) {
   );
 }
 
-function SignIn({ onSignIn, err }: { onSignIn: (e: string, p: string) => void; err: string | null }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  return (
-    <Card>
-      <CardHeader><CardTitle>Connexion (spike)</CardTitle></CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Auth Supabase minimale pour porter la RLS. Utilisez un compte de test créé sur le projet.
-        </p>
-        <input className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-          placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <input className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-          placeholder="mot de passe" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        {err && <p className="text-sm text-destructive">{err}</p>}
-        <Button onClick={() => onSignIn(email, password)}>Se connecter</Button>
-      </CardContent>
-    </Card>
-  );
-}
-
 interface SendForm {
   destinataire_email: string;
   destinataire_nom?: string;
@@ -285,7 +220,7 @@ interface SendForm {
   date_limite?: string;
 }
 
-function SendForm({ onSubmit }: { onSubmit: (f: SendForm) => void }) {
+function SendFormCard({ onSubmit }: { onSubmit: (f: SendForm) => void }) {
   const [f, setF] = useState<SendForm>({
     destinataire_email: "", destinataire_nom: "", critere_concerne: "",
     categorie: "", niveau_criticite: "interne", question: "", date_limite: "",
@@ -304,7 +239,7 @@ function SendForm({ onSubmit }: { onSubmit: (f: SendForm) => void }) {
         <select className="input" value={f.niveau_criticite} onChange={set("niveau_criticite")}>
           {CRITICITE_OPTIONS.map((c) => <option key={c} value={c}>{CRITICITE_LABEL[c]}</option>)}
         </select>
-        <input className="input" type="date" value={f.date_limite} onChange={set("date_limite")} />
+        <input className="input sm:col-span-2" type="date" value={f.date_limite} onChange={set("date_limite")} />
         <textarea className="input sm:col-span-2" rows={3} placeholder="Question *" value={f.question} onChange={set("question")} />
         <div className="sm:col-span-2">
           <Button disabled={disabled} onClick={() => onSubmit(f)}><Send /> Envoyer la question</Button>
@@ -318,9 +253,7 @@ function SendForm({ onSubmit }: { onSubmit: (f: SendForm) => void }) {
   );
 }
 
-function QuestionCard({ q, canValidate, onValider }: {
-  q: QuestionInterne; canValidate: boolean; onValider: () => void;
-}) {
+function QuestionCard({ q, onValider }: { q: QuestionInterne; onValider: () => void }) {
   return (
     <Card>
       <CardContent className="space-y-2 py-4">
@@ -337,11 +270,8 @@ function QuestionCard({ q, canValidate, onValider }: {
           <div className="mt-2 rounded-md border border-success bg-success/10 p-3">
             <div className="mb-1 text-xs font-semibold text-muted-foreground">Réponse reçue</div>
             <div className="whitespace-pre-wrap text-sm">{q.reponse_contenu}</div>
-            {canValidate ? (
-              <Button className="mt-2" size="sm" onClick={onValider}><CheckCircle2 /> Valider</Button>
-            ) : (
-              <p className="mt-2 text-xs text-muted-foreground">Validation réservée au responsable.</p>
-            )}
+            {/* La RLS réserve la mise à jour au propriétaire de l'AO (responsable §11.8) / admin. */}
+            <Button className="mt-2" size="sm" onClick={onValider}><CheckCircle2 /> Valider</Button>
           </div>
         )}
         {q.statut === "validee" && (

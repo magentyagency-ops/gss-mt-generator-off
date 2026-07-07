@@ -43,8 +43,8 @@ question**, boucle complète de bout en bout.
 | Colonne | Type | Notes |
 |---|---|---|
 | `id` | uuid PK | |
-| `organisation_id` | uuid FK → organisation | isolation RLS §14 |
-| `ao_id` | uuid FK → appel_offres | dossier concerné |
+| `user_id` | uuid FK → profiles | **propriétaire = responsable §11.8** ; isolation RLS §14 ; défaut `auth.uid()` |
+| `ao_id` | uuid FK → **dossiers** | dossier (appel d'offres) concerné — vraie table du ticket #2 |
 | `exigence_id` | text | id technique du critère DCE (nullable) |
 | `critere_concerne` | text | libellé du critère (dans l'e-mail §11) |
 | `question_id` | text UNIQUE | **clé de rattachement** `'q' + 16 hex` (64 bits, non devinable) |
@@ -62,21 +62,25 @@ question**, boucle complète de bout en bout.
 
 Enum en **slugs ASCII** ; libellés accentués mappés côté UI (`frontend/lib/sollicitations.ts`).
 
-### Tables STUB (temporaires, à réconcilier)
-- **`organisation` + `organisation_membre`** : support minimal de l'isolation multi-orga.
-  Aucune auth n'existe encore → **à réconcilier avec le ticket #2 (authentification)**.
-- **`appel_offres`** : les dossiers réels vivent dans le store JSON du backend Express
-  (`backend/src/core/db.ts`). Stub minimal pour la FK + le gabarit e-mail → **à réconcilier**
-  avec le store de dossiers réel.
+### Dépendance au ticket #2 (auth) — plus de stubs
+La migration se BRANCHE sur le modèle d'auth réel (fusionné depuis `main`) :
+`public.profiles`, `public.dossiers`, `public.is_admin()`, `public.set_updated_at()`.
+Les anciens stubs `organisation` / `organisation_membre` / `appel_offres` ont été **supprimés**
+(le modèle réel est **par utilisateur**, single-tenant GSS — pas multi-organisation).
+**Prérequis** : appliquer `infra/supabase/001_schema.sql` + `003_app_compat.sql` AVANT cette migration.
+
+Le gabarit §11 lit le dossier réel : `Nom du marché` = `dossiers.nom` (ou `contenu.objet`) ;
+`Référence` = `contenu.reference` sinon un id court `AO-<8 hex>`.
 
 ---
 
 ## 3. Sécurité (§12/§14)
 
-- **RLS stricte par organisation** : un utilisateur ne voit/écrit que les lignes de son
-  organisation (`is_org_member()`, SECURITY DEFINER, anti-récursion). `anon` = rien.
+- **RLS stricte par utilisateur** : un utilisateur ne voit/écrit que **ses** questions
+  (`auth.uid() = user_id`), avec override **admin** (`is_admin()`). `anon` = rien. Calquée sur
+  `public.dossiers`. « Valider » (§11.8) est de fait réservé au **propriétaire** (responsable) / admin.
 - **`send-question`** s'exécute avec le **JWT de l'utilisateur** → la RLS s'applique ;
-  `organisation_id` de la question est **dérivé de l'AO**, jamais du client.
+  `user_id` = `auth.uid()` (défaut en base), jamais fourni par le client.
 - **`inbound-email`** est public mais **vérifie un secret partagé** (`INBOUND_WEBHOOK_SECRET`,
   en Basic Auth ou en-tête `x-inbound-secret`) — **fail-closed** (pas de secret → refus). Il
   utilise `service_role` (canal serveur de confiance) pour écrire ; l'infaillibilité vient de
@@ -134,14 +138,16 @@ supabase login                       # ouvre le navigateur (ou colle un access t
 supabase link --project-ref <REF>    # demande <DB_PASSWORD>
 ```
 
-### Étape 2 — Appliquer la migration
+### Étape 2 — Appliquer le schéma d'auth (#2) PUIS la migration #3
 ```bash
+# Prérequis : le schéma du ticket #2 doit exister (une seule fois, si pas déjà fait) :
+#   dashboard → SQL editor → coller infra/supabase/001_schema.sql puis 003_app_compat.sql
 supabase db push
 # Attendu : applique supabase/migrations/20260706120000_question_interne.sql
-# Vérifier : la table public.question_interne + les policies existent (dashboard → Table editor).
+# Vérifier : public.question_interne + policies qi_* existent (dashboard → Table editor).
 ```
 
-### Étape 3 — TEST D'ISOLATION RLS (2 organisations) — le livrable clé §14
+### Étape 3 — TEST D'ISOLATION RLS (2 utilisateurs) — le livrable clé §14
 Le test se connecte en direct à la base (port 5432) et se nettoie tout seul.
 ```bash
 export SUPA_DB_HOST="db.<REF>.supabase.co"
@@ -150,11 +156,9 @@ export SUPA_DB_USER="postgres"
 export SUPA_DB_PASSWORD="<DB_PASSWORD>"
 export SUPA_DB_NAME="postgres"
 NODE_PATH="backend/node_modules" node supabase/tests/rls_isolation.cjs
-# Attendu : « TOUS LES TESTS PASSENT ✅ » (A ne voit que Org A, B que Org B, anon rien,
-#           insertion/màj cross-org refusées).
+# Attendu : « TOUS LES TESTS PASSENT ✅ » (A ne voit que ses questions, B que les siennes,
+#           anon rien, insertion/màj cross-utilisateur refusées).
 ```
-> Si l'insert dans `auth.users` échoue (contrainte selon version) : voir §7 « Fast-follows » —
-> ajouter les colonnes requises dans le seed du test. Peu probable sur Supabase récent.
 
 ### Étape 4 — Secrets des Edge Functions + déploiement
 ```bash
@@ -170,17 +174,11 @@ supabase functions deploy inbound-email        # verify_jwt=false (déjà dans c
 # → URLs : https://<REF>.functions.supabase.co/send-question   et   /inbound-email
 ```
 
-### Étape 5 — Créer un utilisateur + une organisation pour la démo UI
-1. Dashboard → **Authentication → Add user** : créer `demo@gss.fr` / `<MDP>` (confirmer l'e-mail).
-2. Dashboard → **SQL editor**, coller (remplacer `<USER_ID>` par l'id du user créé, visible dans Authentication) :
-```sql
-insert into public.organisation (id, nom)
-values ('00000000-0000-0000-0000-0000000000a1', 'GSS (démo)');
-
-insert into public.organisation_membre (organisation_id, user_id, role)
-values ('00000000-0000-0000-0000-0000000000a1', '<USER_ID>', 'responsable');
-```
-(L'appel d'offres de test se crée depuis l'UI via le bouton « + AO de test ».)
+### Étape 5 — Créer un utilisateur pour la démo UI
+Dashboard → **Authentication → Add user** : créer `demo@gss.fr` / `<MDP>` (confirmer l'e-mail).
+Le trigger `handle_new_user` (ticket #2) crée automatiquement son `public.profiles`.
+Aucun seed d'organisation : le modèle est par utilisateur. Le **dossier de test** se crée
+depuis l'UI (bouton « + Dossier de test »).
 
 ### Étape 6 — Lancer le front
 ```bash
@@ -242,8 +240,9 @@ node supabase/tests/inbound_parse.test.mjs   # 24/24 ✅ (extraction id, cas adv
   l'interlocuteur (annuaire GSS).
 - Vérification **HMAC** de signature spécifique au fournisseur (Mailgun/SendGrid) en plus du
   secret partagé, une fois le fournisseur tranché.
-- Restriction **DB-level** de la validation au rôle `responsable` (aujourd'hui : UI + RLS
-  org-level ; la restriction fine est côté UI).
-- Réconciliation des stubs `organisation`/`appel_offres` avec l'auth (#2) et le store dossiers.
+- Validation §11.8 : aujourd'hui réservée au **propriétaire** du dossier (RLS `user_id`) / admin.
+  Si un vrai rôle « responsable » distinct est voulu, l'ajouter dans `profiles` (ticket #2).
+- Ajouter une **`reference` first-class** sur `public.dossiers` (aujourd'hui lue dans
+  `contenu.reference`, sinon id court) si GSS veut une référence marché normée (ex. MP2026-08).
 - Branchement de `backend/src/generation/missing_info_resolver.ts` (`requestInfoFromTeam`) sur
   cette boucle : c'est son point d'intégration naturel.

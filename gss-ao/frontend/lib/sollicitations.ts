@@ -1,24 +1,10 @@
 // ════════════════════════════════════════════════════════════════════════════════════════
-// Client Supabase + types + mapping d'affichage — Ticket #3 (feature « Sollicitation interne »)
+// Types + mapping d'affichage — Ticket #3 (feature « Sollicitation interne »)
 // ════════════════════════════════════════════════════════════════════════════════════════
-// Le front n'avait aucun client Supabase jusqu'ici (maquette v1). On l'ajoute UNIQUEMENT pour
-// cette feature. Variables publiques attendues (cf. frontend/.env.local.example) :
-//   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+// Le client Supabase est celui livré par le ticket #2 : `@/lib/supabase/client` (createClient).
+// On NE duplique PAS de client ici.
 
-let _client: SupabaseClient | null = null;
-
-/** Client navigateur (singleton). Renvoie null si l'env n'est pas configuré (maquette). */
-export function getSupabase(): SupabaseClient | null {
-  if (_client) return _client;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return null;
-  _client = createClient(url, key);
-  return _client;
-}
-
-// ── Modèle (miroir de la table question_interne) ─────────────────────────────────────────
+// ── Modèle (miroir de la table question_interne — branchée sur profiles/dossiers) ──────────
 export type QuestionStatut =
   | "a_envoyer"
   | "envoyee"
@@ -29,7 +15,7 @@ export type QuestionStatut =
 
 export interface QuestionInterne {
   id: string;
-  organisation_id: string;
+  user_id: string;
   ao_id: string;
   exigence_id: string | null;
   critere_concerne: string;
@@ -49,11 +35,11 @@ export interface QuestionInterne {
   updated_at: string;
 }
 
-export interface AppelOffres {
+/** Dossier (appel d'offres) — table réelle du ticket #2 (public.dossiers). */
+export interface Dossier {
   id: string;
-  organisation_id: string;
-  reference: string;
-  nom_marche: string;
+  nom: string;
+  contenu?: Record<string, unknown> | null;
 }
 
 // ── Mapping ASCII (base) → libellés accentués (UI). Voir migration : pas d'accents en base. ──

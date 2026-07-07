@@ -6,8 +6,8 @@
 //
 // Sécurité :
 //   • S'exécute avec le JWT de l'utilisateur appelant (client anon + Authorization) → la RLS
-//     s'applique : impossible d'écrire hors de son organisation.
-//   • L'organisation_id de la question est DÉRIVÉE de l'appel d'offres (jamais du client).
+//     s'applique : impossible d'écrire au nom d'un autre utilisateur.
+//   • user_id = auth.uid() (défaut en base), jamais fourni par le client ; ao_id = dossier réel.
 //   • Secrets (clés fournisseur, domaine) uniquement en env — jamais en dur (§14).
 //   • Destinataire = paramètre d'entrée (pas de sélection auto pour ce spike §11).
 
@@ -59,19 +59,26 @@ Deno.serve(async (req) => {
     .filter((k) => !((body as Record<string, unknown>)[k]));
   if (missing.length) return jsonResponse({ error: 'missing_fields', fields: missing }, 400);
 
-  // 1. Récupère l'AO (RLS-scoped) → référence, nom marché, organisation_id de confiance.
+  // 1. Récupère le DOSSIER (appel d'offres) — RLS-scoped (ticket #2 : dossiers.user_id).
+  //    Le dossier riche est dans `contenu` (jsonb) : on y lit la « Référence » si présente.
   const { data: ao, error: aoErr } = await supabase
-    .from('appel_offres')
-    .select('id, organisation_id, reference, nom_marche')
+    .from('dossiers')
+    .select('id, nom, contenu')
     .eq('id', body.ao_id)
     .single();
-  if (aoErr || !ao) return jsonResponse({ error: 'appel_offres_introuvable' }, 404);
+  if (aoErr || !ao) return jsonResponse({ error: 'dossier_introuvable' }, 404);
 
-  // 2. Insère la question (organisation_id dérivé de l'AO ; RLS with-check re-valide l'appartenance).
+  // Mapping gabarit §11 depuis le modèle réel :
+  //   Nom du marché = dossiers.nom (ou contenu.objet) ; Référence = contenu.reference sinon id court.
+  const contenu = (ao.contenu ?? {}) as Record<string, unknown>;
+  const nomMarche = (typeof contenu.objet === 'string' && contenu.objet) || ao.nom;
+  const referenceAO = (typeof contenu.reference === 'string' && contenu.reference)
+    || `AO-${String(ao.id).slice(0, 8)}`;
+
+  // 2. Insère la question. user_id = auth.uid() (défaut en base) ; RLS with-check re-valide.
   const { data: question, error: insErr } = await supabase
     .from('question_interne')
     .insert({
-      organisation_id: ao.organisation_id,
       ao_id: ao.id,
       exigence_id: body.exigence_id ?? null,
       critere_concerne: body.critere_concerne,
@@ -93,12 +100,12 @@ Deno.serve(async (req) => {
   // 3. Compose l'e-mail (gabarit §11) + Reply-To plus-addressé.
   const domaine = Deno.env.get('INBOUND_EMAIL_DOMAIN') || 'exemple-domaine.invalid';
   const email = composeQuestionEmail({
-    referenceAO: ao.reference,
-    nomMarche: ao.nom_marche,
+    referenceAO,
+    nomMarche,
     critereConcerne: question.critere_concerne,
     question: question.question,
     dateLimite: question.date_limite,
-    aoId: ao.reference,
+    aoId: referenceAO,
     questionId: question.question_id,
     domaine,
   });

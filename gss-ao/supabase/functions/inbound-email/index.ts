@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
   // Recherche par question_id (colonne UNIQUE → jamais ambigu).
   const { data: question, error: qErr } = await admin
     .from('question_interne')
-    .select('id, statut, ao_id, organisation_id')
+    .select('id, statut, ao_id, user_id')
     .eq('question_id', parsed.questionId)
     .maybeSingle();
 
