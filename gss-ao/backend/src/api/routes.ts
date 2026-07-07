@@ -4,9 +4,10 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import OpenAI from 'openai';
-import { DB, DossierRecord } from '../core/db';
+import { DB, DossierRecord, MemoiresDB, remainingGenerations } from '../core/db';
 import { initProgress, finishProgress } from '../core/progress';
 import { extractRcWithLLM, extractCctpWithLLM } from '../analysis/llmExtractor';
+import { requireAuth } from './authMiddleware';
 
 const uploadDir = path.resolve(__dirname, '../../../data/output/temp');
 if (!fs.existsSync(uploadDir)) {
@@ -15,6 +16,15 @@ if (!fs.existsSync(uploadDir)) {
 const upload = multer({ dest: uploadDir });
 
 const router = Router();
+
+// Authentification obligatoire sur toutes les routes /api, SAUF :
+//  - /health   : sonde de disponibilité
+//  - /download : servi dans des <iframe>/<a download> qui ne peuvent pas
+//                porter d'en-tête Authorization (aperçu/téléchargement fichiers).
+router.use((req: Request, res: Response, next) => {
+  if (req.path === '/health' || req.path === '/download') return next();
+  return requireAuth(req, res, next);
+});
 
 interface ProgressInfo {
   status: string;
@@ -38,6 +48,23 @@ export function setDossierProgress(id: string, update: Partial<ProgressInfo>) {
   if (update.logs !== undefined) {
     progressStore[id].logs.push(...update.logs);
   }
+}
+
+// Bloque la génération si le quota est épuisé — SAUF régénération d'un dossier
+// qui a déjà une mémoire (le trigger BDD ne consomme un crédit qu'à l'INSERT).
+// Renvoie true et répond 429 si bloqué.
+async function quotaBlocked(dossierId: string, res: Response): Promise<boolean> {
+  const existing = await MemoiresDB.getByDossier(dossierId);
+  if (existing) return false; // régénération : aucun crédit consommé
+  const remaining = await remainingGenerations();
+  if (remaining === 0) {
+    res.status(429).json({
+      error:
+        'Quota de génération atteint. Contactez un administrateur pour augmenter votre limite.',
+    });
+    return true;
+  }
+  return false;
 }
 
 // Probe / healthcheck
@@ -74,18 +101,18 @@ router.get('/download', (req: Request, res: Response) => {
 
 // --- Dossiers Endpoints ---
 
-router.get('/dossiers', (req: Request, res: Response) => {
+router.get('/dossiers', async (req: Request, res: Response) => {
   try {
-    const dossiers = DB.getDossiers();
+    const dossiers = await DB.getDossiers();
     res.json(dossiers);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/dossiers/:id', (req: Request, res: Response) => {
+router.get('/dossiers/:id', async (req: Request, res: Response) => {
   try {
-    const dossier = DB.getDossier(req.params.id);
+    const dossier = await DB.getDossier(req.params.id);
     if (!dossier) return res.status(404).json({ error: 'Dossier not found' });
     res.json(dossier);
   } catch (err: any) {
@@ -93,20 +120,20 @@ router.get('/dossiers/:id', (req: Request, res: Response) => {
   }
 });
 
-router.post('/dossiers', (req: Request, res: Response) => {
+router.post('/dossiers', async (req: Request, res: Response) => {
   try {
     const id = req.body.id || `dossier-${Date.now()}`;
     const data = { ...req.body, id };
-    DB.saveDossier(id, data);
+    await DB.saveDossier(id, data);
     res.json({ id, message: 'Dossier créé' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.delete('/dossiers/:id', (req: Request, res: Response) => {
+router.delete('/dossiers/:id', async (req: Request, res: Response) => {
   try {
-    DB.deleteDossier(req.params.id);
+    await DB.deleteDossier(req.params.id);
     res.json({ message: 'Dossier supprimé' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -173,7 +200,7 @@ router.post('/dce/upload', upload.array('files'), async (req: Request, res: Resp
     }
 
     dossierUpdate.statut = "En cours";
-    DB.saveDossier(dossierId, dossierUpdate);
+    await DB.saveDossier(dossierId, dossierUpdate);
 
     res.json({ message: "Fichiers uploadés et parsés avec succès", dossierId, rcData, cctpData });
   } catch (err: any) {
@@ -191,10 +218,22 @@ router.get('/dce/:dossier_id/checklist', (req: Request, res: Response) => {
   res.status(501).json({ error: 'Endpoint check-list — itération ultérieure' });
 });
 
+// Récupère le dernier mémoire technique enregistré en base pour un dossier.
+router.get('/dossiers/:id/memoire', async (req: Request, res: Response) => {
+  try {
+    const memoire = await MemoiresDB.getByDossier(req.params.id);
+    if (!memoire) return res.status(404).json({ error: 'Aucun mémoire enregistré' });
+    res.json(memoire);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Module C — génération mémoire technique.
 router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
   const dossierId = req.params.dossier_id;
   try {
+    if (await quotaBlocked(dossierId, res)) return;
     setDossierProgress(dossierId, { status: 'running', progress: 5, message: 'Démarrage de la génération du mémoire...' });
     const generator = new MemoireGenerator();
     const result = await generator.generate(dossierId, (progress, message) => {
@@ -208,6 +247,16 @@ router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
         message: 'Des informations sont manquantes.',
         missingFields: result.missingFields
       });
+    }
+
+    try {
+      await MemoiresDB.save(dossierId, {
+        generatedData: result.generatedData,
+        filePath: result.filePath,
+        mode: 'cadre',
+      });
+    } catch (e: any) {
+      console.error('Sauvegarde du mémoire en base échouée:', e.message || e);
     }
 
     setDossierProgress(dossierId, { status: 'completed', progress: 100, message: 'Génération terminée avec succès !' });
@@ -224,9 +273,20 @@ router.post('/dce/:dossier_id/memoire/fill-missing', async (req: Request, res: R
   const dossierId = req.params.dossier_id;
   const { userAnswers } = req.body;
   try {
+    if (await quotaBlocked(dossierId, res)) return;
     setDossierProgress(dossierId, { status: 'running', progress: 98, message: 'Intégration des réponses de l\'utilisateur...' });
     const generator = new MemoireGenerator();
     const result = await generator.finalizeMemoire(dossierId, userAnswers);
+
+    try {
+      await MemoiresDB.save(dossierId, {
+        generatedData: result.generatedData,
+        filePath: result.filePath,
+        mode: 'finalise',
+      });
+    } catch (e: any) {
+      console.error('Sauvegarde du mémoire en base échouée:', e.message || e);
+    }
 
     setDossierProgress(dossierId, { status: 'completed', progress: 100, message: 'Génération terminée avec succès !' });
     res.json({ status: 'completed', message: 'Mémoire finalisé', file_path: result.filePath, data_generee_par_ia: result.generatedData });
@@ -259,8 +319,20 @@ router.post('/dossiers/:id/memoire-from-sections', async (req: Request, res: Res
     if (!Array.isArray(chapters) || chapters.length === 0) {
       return res.status(400).json({ error: 'Aucune section fournie.' });
     }
+    if (await quotaBlocked(req.params.id, res)) return;
     const generator = new MemoireGenerator();
     const result = await generator.assembleFromSections(req.params.id, chapters);
+
+    try {
+      await MemoiresDB.save(req.params.id, {
+        generatedData: result.generatedData,
+        filePath: result.filePath,
+        mode: 'sections',
+      });
+    } catch (e: any) {
+      console.error('Sauvegarde du mémoire en base échouée:', e.message || e);
+    }
+
     res.json({
       message: 'Mémoire technique assemblé',
       file_path: result.filePath,
@@ -413,7 +485,7 @@ ${emailText}
       memoire_sections: []
     };
 
-    DB.saveDossier(id, dossierData);
+    await DB.saveDossier(id, dossierData);
 
     res.json({
       success: true,

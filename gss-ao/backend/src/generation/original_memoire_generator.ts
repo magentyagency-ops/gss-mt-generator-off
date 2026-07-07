@@ -2167,7 +2167,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
       path.resolve(baseDir, 'Cas-Univ-Rouen-MP2026-08'),
     ];
 
-    const dossier = DB.getDossier(dossierId);
+    const dossier = await DB.getDossier(dossierId);
     if (dossier && dossier.dce_files) {
       const templateFile = dossier.dce_files.find((f: any) => f.type === 'Mémoire (cadre)');
       if (templateFile && templateFile.nom) {
@@ -4492,7 +4492,7 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
     const fallback = { client: 'GSS — Global Security Service', title: 'Mémoire technique', ref: '' };
     if (!dossierId || dossierId === 'export') return fallback;
     try {
-      const dossier = DB.getDossier(dossierId);
+      const dossier = await DB.getDossier(dossierId);
       if (dossier && (dossier.acheteur || dossier.reference || dossier.objet)) {
         return {
           client: dossier.acheteur || fallback.client,

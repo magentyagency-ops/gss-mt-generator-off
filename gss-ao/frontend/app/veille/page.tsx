@@ -29,6 +29,7 @@ import {
   Badge
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
 
 interface ParsedOpportunity {
   id: string;
@@ -153,14 +154,16 @@ export default function VeillePage() {
   const handleConfirmDossier = (dossierId: string) => {
     const selectedDemo = DEMO_EMAILS.find(d => d.parsed.id === dossierId);
     if (selectedDemo) {
+      // Identifiant réel (UUID) attendu par la table Supabase dossiers.
+      const newId = crypto.randomUUID();
       // Save the dossier in real DB so it gets persisted on dashboard
-      fetch("http://localhost:8000/api/dossiers", {
+      apiFetch("/api/dossiers", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          id: selectedDemo.parsed.id,
+          id: newId,
           acheteur: selectedDemo.parsed.acheteur,
           objet: selectedDemo.parsed.objet,
           dateLimite: selectedDemo.parsed.dateLimite,
@@ -176,7 +179,7 @@ export default function VeillePage() {
           ] : []
         })
       }).then(() => {
-        window.location.href = `/dossiers/${selectedDemo.parsed.id}`;
+        window.location.href = `/dossiers/${newId}`;
       }).catch(err => {
         console.error("Error creating demo dossier:", err);
         window.location.href = "/";

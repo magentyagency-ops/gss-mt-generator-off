@@ -1,12 +1,8 @@
-import fs from 'fs';
-import path from 'path';
+import { getScopedClient, getCurrentUserId } from './supabase';
 
-const DB_DIR = path.resolve(__dirname, '../../../data/db');
-
-// Ensure the directory exists
-if (!fs.existsSync(DB_DIR)) {
-  fs.mkdirSync(DB_DIR, { recursive: true });
-}
+// Champs portés par des colonnes dédiées de public.dossiers.
+// Tout le reste du dossier "riche" est stocké dans la colonne jsonb `contenu`.
+const COLUMN_FIELDS = ['id', 'user_id', 'created_at', 'updated_at', 'nom'] as const;
 
 export interface DossierRecord {
   id: string;
@@ -33,52 +29,230 @@ export interface DossierRecord {
   [key: string]: any;
 }
 
+interface DossierRow {
+  id: string;
+  user_id: string;
+  nom: string;
+  contenu: Record<string, any> | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** Ligne Supabase → enregistrement applicatif "à plat". */
+function rowToRecord(row: DossierRow): DossierRecord {
+  const contenu = row.contenu || {};
+  return {
+    ...contenu,
+    id: row.id,
+    user_id: row.user_id,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  } as unknown as DossierRecord;
+}
+
+/** Calcule un `nom` d'affichage (colonne NOT NULL, 1..500 caractères). */
+function computeNom(data: Record<string, any>, fallback?: string): string {
+  const raw =
+    data.acheteur || data.objet || data.nom || fallback || 'Nouveau dossier';
+  return String(raw).slice(0, 500) || 'Nouveau dossier';
+}
+
+/**
+ * Couche d'accès aux dossiers, adossée à Supabase (table public.dossiers).
+ * Chaque appel s'exécute avec le JWT de l'utilisateur courant (RLS active) —
+ * cf. requestContext dans core/supabase.ts.
+ */
 export class DB {
-  static getDossiers(): DossierRecord[] {
-    const files = fs.readdirSync(DB_DIR);
-    const dossiers: DossierRecord[] = [];
-    for (const file of files) {
-      if (file.endsWith('.json')) {
-        try {
-          const content = fs.readFileSync(path.join(DB_DIR, file), 'utf-8');
-          dossiers.push(JSON.parse(content));
-        } catch (e) {
-          console.error(`Error parsing ${file}`);
+  static async getDossiers(): Promise<DossierRecord[]> {
+    const supabase = getScopedClient();
+    const { data, error } = await supabase
+      .from('dossiers')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data as DossierRow[]).map(rowToRecord);
+  }
+
+  static async getDossier(id: string): Promise<DossierRecord | null> {
+    const supabase = getScopedClient();
+    const { data, error } = await supabase
+      .from('dossiers')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data ? rowToRecord(data as DossierRow) : null;
+  }
+
+  static async saveDossier(
+    id: string,
+    data: Partial<DossierRecord>,
+  ): Promise<void> {
+    const supabase = getScopedClient();
+
+    // Fusion avec l'existant (mêmes sémantiques que l'ancien stockage fichier).
+    const existing = await DB.getDossier(id);
+    const existingContenu: Record<string, any> = {};
+    if (existing) {
+      for (const [k, v] of Object.entries(existing)) {
+        if (!COLUMN_FIELDS.includes(k as any) && k !== 'user_id') {
+          existingContenu[k] = v;
         }
       }
     }
-    return dossiers;
+
+    const merged: Record<string, any> = { ...existingContenu, ...data };
+    // On ne stocke jamais les champs "colonne" dans le jsonb.
+    for (const f of COLUMN_FIELDS) delete merged[f];
+    delete merged.user_id;
+
+    const row = {
+      id,
+      user_id: getCurrentUserId(),
+      nom: computeNom({ ...existing, ...data }, existing?.nom),
+      contenu: merged,
+    };
+
+    const { error } = await supabase
+      .from('dossiers')
+      .upsert(row, { onConflict: 'id' });
+    if (error) throw new Error(error.message);
   }
 
-  static getDossier(id: string): DossierRecord | null {
-    const file = path.join(DB_DIR, `${id}.json`);
-    if (fs.existsSync(file)) {
-      try {
-        const content = fs.readFileSync(file, 'utf-8');
-        return JSON.parse(content);
-      } catch (e) {
-        console.error(`Error reading ${file}`);
+  static async deleteDossier(id: string): Promise<void> {
+    const supabase = getScopedClient();
+    const { error } = await supabase.from('dossiers').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  }
+}
+
+/** Quota de génération atteint (ou email non confirmé) — levé par le trigger BDD. */
+export class QuotaError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'QuotaError';
+  }
+}
+
+/**
+ * Crédits de génération restants pour l'utilisateur courant (RPC BDD).
+ * -1 si indéterminable (profil introuvable).
+ */
+export async function remainingGenerations(): Promise<number> {
+  const supabase = getScopedClient();
+  const { data, error } = await supabase.rpc('remaining_generations');
+  if (error || data === null || data === undefined) return -1;
+  return Number(data);
+}
+
+/** Contenu applicatif d'un mémoire technique généré (stocké en jsonb). */
+export interface MemoireContenu {
+  generatedData?: Record<string, string>; // texte IA par section
+  filePath?: string; // chemin du .docx/.pdf généré
+  mode?: string; // 'cadre' | 'sections' | 'finalise' …
+  generatedAt?: string;
+  [key: string]: any;
+}
+
+export interface MemoireRecord {
+  id: string;
+  dossier_id: string | null;
+  user_id: string;
+  titre?: string | null;
+  contenu: MemoireContenu | null;
+  statut?: string;
+  ai_model?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/**
+ * Couche d'accès aux mémoires techniques (table public.memoires_techniques).
+ * Un mémoire "courant" par dossier : on met à jour la ligne existante si
+ * présente, sinon on l'insère. RLS active (client scoppé au JWT).
+ */
+export class MemoiresDB {
+  static async save(
+    dossierId: string,
+    contenu: MemoireContenu,
+    meta: { titre?: string; aiModel?: string } = {},
+  ): Promise<string> {
+    const supabase = getScopedClient();
+    const payload: MemoireContenu = {
+      ...contenu,
+      generatedAt: contenu.generatedAt || new Date().toISOString(),
+    };
+
+    // Titre lisible : celui fourni, sinon le nom du dossier.
+    let titre = meta.titre;
+    if (!titre) {
+      const { data: dossier } = await supabase
+        .from('dossiers')
+        .select('nom')
+        .eq('id', dossierId)
+        .maybeSingle();
+      titre = dossier?.nom || 'Mémoire technique';
+    }
+
+    const { data: existing, error: selErr } = await supabase
+      .from('memoires_techniques')
+      .select('id')
+      .eq('dossier_id', dossierId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (selErr) throw new Error(selErr.message);
+
+    // Régénération : on met à jour (pas de nouveau crédit consommé — le trigger
+    // quota n'agit qu'à l'INSERT).
+    if (existing) {
+      const { error } = await supabase
+        .from('memoires_techniques')
+        .update({
+          contenu: payload,
+          titre,
+          statut: 'completed',
+          ai_model: meta.aiModel ?? null,
+        })
+        .eq('id', existing.id);
+      if (error) throw new Error(error.message);
+      return existing.id;
+    }
+
+    // 1ʳᵉ création : le trigger enforce_generation_quota vérifie l'email confirmé
+    // + le quota et consomme 1 crédit. On traduit ses erreurs pour l'UI.
+    const { data, error } = await supabase
+      .from('memoires_techniques')
+      .insert({
+        dossier_id: dossierId,
+        user_id: getCurrentUserId(),
+        titre,
+        statut: 'completed',
+        ai_model: meta.aiModel ?? null,
+        contenu: payload,
+      })
+      .select('id')
+      .single();
+    if (error) {
+      if (/quota/i.test(error.message)) {
+        throw new QuotaError(error.message);
       }
+      throw new Error(error.message);
     }
-    return null;
+    return data.id;
   }
 
-  static saveDossier(id: string, data: Partial<DossierRecord>): void {
-    const file = path.join(DB_DIR, `${id}.json`);
-    let existing = {};
-    if (fs.existsSync(file)) {
-      try {
-        existing = JSON.parse(fs.readFileSync(file, 'utf-8'));
-      } catch (e) {}
-    }
-    const updated = { ...existing, ...data, id };
-    fs.writeFileSync(file, JSON.stringify(updated, null, 2));
-  }
-
-  static deleteDossier(id: string): void {
-    const file = path.join(DB_DIR, `${id}.json`);
-    if (fs.existsSync(file)) {
-      fs.unlinkSync(file);
-    }
+  /** Dernier mémoire enregistré pour un dossier (ou null). */
+  static async getByDossier(dossierId: string): Promise<MemoireRecord | null> {
+    const supabase = getScopedClient();
+    const { data, error } = await supabase
+      .from('memoires_techniques')
+      .select('*')
+      .eq('dossier_id', dossierId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return (data as MemoireRecord) || null;
   }
 }

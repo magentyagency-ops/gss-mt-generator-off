@@ -4,8 +4,24 @@
  * La clé OpenAI est lue dans localStorage ("openai_api_key", BYO-key).
  */
 
+import { createClient } from "@/lib/supabase/client";
+
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8000";
+
+/** En-tête Authorization avec le JWT de la session Supabase (si connecté). */
+async function authHeader(): Promise<Record<string, string>> {
+  try {
+    const {
+      data: { session },
+    } = await createClient().auth.getSession();
+    return session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {};
+  } catch {
+    return {};
+  }
+}
 
 export const OPENAI_KEY_STORAGE = "openai_api_key";
 
@@ -25,7 +41,7 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   try {
     res = await fetch(`${API_BASE}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(await authHeader()) },
       body: JSON.stringify(body),
     });
   } catch {
@@ -125,7 +141,7 @@ export async function exportDocx(params: {
   try {
     res = await fetch(`${API_BASE}/api/export-docx`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(await authHeader()) },
       body: JSON.stringify({
         sections: params.sections,
         mode: params.mode || "A",

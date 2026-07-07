@@ -32,6 +32,7 @@ import {
   formatDate,
 } from "@/lib/gss-config";
 import { cn } from "@/lib/utils";
+import { apiFetch, apiBase } from "@/lib/api";
 import { use, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 
@@ -59,7 +60,7 @@ export default function ExportPage({ params }: { params: { id: string } }) {
   const [dossierInfo, setDossierInfo] = useState<any>({ acheteur: "Chargement...", reference: "...", objet: "..." });
 
   useEffect(() => {
-    fetch(`http://localhost:8000/api/dossiers/${id}`)
+    apiFetch(`/api/dossiers/${id}`)
       .then(res => res.json())
       .then(data => {
         if (!data.error) setDossierInfo(data);
@@ -69,7 +70,7 @@ export default function ExportPage({ params }: { params: { id: string } }) {
     const path = localStorage.getItem(`generated_docx_${id}`);
     if (path) {
       setGeneratedPath(path);
-      setGeneratedDocxUrl(`http://localhost:8000/api/download?file=${encodeURIComponent(path)}`);
+      setGeneratedDocxUrl(`${apiBase}/api/download?file=${encodeURIComponent(path)}`);
     }
   }, [id]);
 
