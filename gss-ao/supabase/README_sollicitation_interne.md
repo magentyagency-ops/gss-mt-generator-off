@@ -5,10 +5,13 @@ automatiquement sa réponse** à la bonne question / au bon dossier (appel d'off
 jamais risquer un mauvais rattachement (§15). Périmètre volontairement limité à **une
 question**, boucle complète de bout en bout.
 
-> **État de ce spike** : code complet + tests de la logique de rattachement (§15) qui passent.
-> Le test RLS local via `supabase start` n'a pas pu tourner ici (disque hôte saturé) →
-> **à exécuter ce soir sur le projet Supabase de Clarence** (migration + test d'isolation +
-> tests inbound). Tout est écrit et prêt.
+> **État (déployé sur le projet `GSS-MT-GENERATOR`, ref `azdtombjjnrglfzuqzzz`)** :
+> - Edge Functions **déployées** : `send-question`, `inbound-email` (cf. §4 « État déployé »).
+> - Migration #3 **appliquée** (table + RLS + Realtime) via l'API Management.
+> - Test d'**isolation RLS par utilisateur** : **8/8 ✅** (transaction rollbackée, cf. `tests/rls_isolation_api.sql`).
+> - Tests de rattachement (§15) : **24/24 ✅** (`tests/inbound_parse.test.mjs`).
+> - Envoi **DRY-RUN** validé de bout en bout (statut → `envoyee`, Reply-To avec `question_id`).
+> - **Reste** : brancher le fournisseur e-mail (domaine + clé) pour l'envoi réel + la réception.
 
 ---
 
@@ -114,15 +117,32 @@ Le gabarit §11 lit le dossier réel : `Nom du marché` = `dossiers.nom` (ou `co
 ### Front (`frontend/.env.local`)
 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (cf. `.env.local.example`).
 
+### État déployé (projet `GSS-MT-GENERATOR` / `azdtombjjnrglfzuqzzz`)
+- **Edge Functions** (déployées via `--use-api`, sans Docker) :
+  - `https://azdtombjjnrglfzuqzzz.functions.supabase.co/send-question`
+  - `https://azdtombjjnrglfzuqzzz.functions.supabase.co/inbound-email` (`verify_jwt=false`)
+- **Secrets posés** (via dashboard/CLI, Admin requis) : `INBOUND_EMAIL_DOMAIN` *(placeholder `ao.gss-domaine.fr` — à mettre à jour avec le vrai domaine)*, `INBOUND_WEBHOOK_SECRET`, `EMAIL_FROM` *(placeholder)*. `EMAIL_PROVIDER` **non défini** → **DRY-RUN**.
+- **Secrets locaux (non commités)** : `supabase/.env.run.local` (token, DB password, anon, webhook secret) et `frontend/.env.local` — les deux gitignorés. Template : `supabase/.env.run.example`.
+
+### Comptes/données de démo (persistants sur le projet)
+- **Utilisateur démo** : `demo@gss.fr` / mot de passe `DemoGSS-2026` (compte jetable ; `role='user'`). Créé via l'API ; login vérifié.
+- **Dossier démo** : « Marché de démonstration GSS » (`contenu.reference = AO-DEMO-01`), appartient au user démo.
+- La table `question_interne` est **vide** (la question de test DRY-RUN a été supprimée).
+- Pour rejouer la démo : se connecter en `demo@gss.fr`, aller sur `/sollicitations`, envoyer une question de test (DRY-RUN).
+
 ---
 
-## 5. RUNBOOK « CE SOIR » — exécution clé-en-main
+## 5. RUNBOOK — exécution (historique + reproductible)
 
-> Objectif : **exécution sans réflexion**. Faire les étapes DANS L'ORDRE. Remplacer les
-> `<placeholders>`. Toutes les commandes se lancent depuis `gss-ao/` (sauf mention).
-> Le CLI `supabase`, `node`, `npm` sont déjà installés (via Homebrew : `export PATH="/opt/homebrew/bin:$PATH"`).
-> On travaille **directement sur le projet cloud de Clarence** : PAS besoin de `supabase start`
-> ni de Docker (le disque est saturé de toute façon).
+> Objectif : **exécution sans réflexion**. Toutes les commandes se lancent depuis `gss-ao/`.
+> CLI `supabase`, `node`, `npm` installés (Homebrew : `export PATH="/opt/homebrew/bin:$PATH"`).
+> On travaille **directement sur le projet cloud** : PAS besoin de `supabase start` ni de Docker.
+>
+> **Deux voies selon les droits du token** (les secrets locaux sont dans `supabase/.env.run.local`) :
+> - **Voie API (utilisée ici, sans mot de passe DB)** : migration + test RLS via
+>   `POST https://api.supabase.com/v1/projects/<REF>/database/query` (Bearer `SUPABASE_ACCESS_TOKEN`).
+>   Le deploy des functions marche avec un token **Developer** ; poser les **secrets** exige **Admin**.
+> - **Voie CLI classique** : `supabase link` + `db push` (nécessite le **mot de passe DB**).
 
 ### Ce qu'il faut avoir sous la main avant de commencer
 - **Référence du projet** Supabase de Clarence : `<REF>` (dashboard → Project Settings → General).
@@ -139,25 +159,32 @@ supabase link --project-ref <REF>    # demande <DB_PASSWORD>
 ```
 
 ### Étape 2 — Appliquer le schéma d'auth (#2) PUIS la migration #3
+Prérequis (une seule fois) : `infra/supabase/001_schema.sql` + `003_app_compat.sql` (dashboard → SQL editor).
 ```bash
-# Prérequis : le schéma du ticket #2 doit exister (une seule fois, si pas déjà fait) :
-#   dashboard → SQL editor → coller infra/supabase/001_schema.sql puis 003_app_compat.sql
-supabase db push
-# Attendu : applique supabase/migrations/20260706120000_question_interne.sql
-# Vérifier : public.question_interne + policies qi_* existent (dashboard → Table editor).
+ENVF=supabase/.env.run.local
+TOKEN=$(grep '^SUPABASE_ACCESS_TOKEN=' $ENVF | cut -d= -f2-)
+REF=$(grep '^SUPABASE_PROJECT_REF=' $ENVF | cut -d= -f2-)
+
+# Voie API (utilisée ici — sans mot de passe DB) :
+python3 -c "import json;print(json.dumps({'query':open('supabase/migrations/20260706120000_question_interne.sql').read()}))" \
+  | curl -s -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
+    -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @-
+# Voie CLI (alternative) : supabase link --project-ref $REF && supabase db push
+# Vérifier : public.question_interne + policies qi_* (dashboard → Table editor).
 ```
 
-### Étape 3 — TEST D'ISOLATION RLS (2 utilisateurs) — le livrable clé §14
-Le test se connecte en direct à la base (port 5432) et se nettoie tout seul.
+### Étape 3 — TEST D'ISOLATION RLS (2 utilisateurs + admin) — le livrable clé §14
 ```bash
-export SUPA_DB_HOST="db.<REF>.supabase.co"
-export SUPA_DB_PORT=5432
-export SUPA_DB_USER="postgres"
-export SUPA_DB_PASSWORD="<DB_PASSWORD>"
-export SUPA_DB_NAME="postgres"
-NODE_PATH="backend/node_modules" node supabase/tests/rls_isolation.cjs
-# Attendu : « TOUS LES TESTS PASSENT ✅ » (A ne voit que ses questions, B que les siennes,
-#           anon rien, insertion/màj cross-utilisateur refusées).
+# Voie API (utilisée ici — sans mot de passe DB) : transaction rollbackée, 0 persistance.
+python3 -c "import json;print(json.dumps({'query':open('supabase/tests/rls_isolation_api.sql').read()}))" \
+  | curl -s -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
+    -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @-
+# Attendu : 8 lignes pass=true (A/B isolés, A ne peut pas màj/insérer chez B, is_admin voit tout, anon rien).
+
+# Voie Postgres directe (alternative — nécessite le mot de passe DB) :
+#   SUPA_DB_HOST=db.$REF.supabase.co SUPA_DB_PORT=5432 SUPA_DB_USER=postgres \
+#   SUPA_DB_PASSWORD=<DB_PASSWORD> SUPA_DB_NAME=postgres \
+#   NODE_PATH="backend/node_modules" node supabase/tests/rls_isolation.cjs
 ```
 
 ### Étape 4 — Secrets des Edge Functions + déploiement
@@ -182,12 +209,14 @@ depuis l'UI (bouton « + Dossier de test »).
 
 ### Étape 6 — Lancer le front
 ```bash
-npm install --prefix frontend            # installe @supabase/supabase-js (non fait ici : disque plein)
-printf 'NEXT_PUBLIC_SUPABASE_URL=https://<REF>.supabase.co\nNEXT_PUBLIC_SUPABASE_ANON_KEY=<ANON_KEY>\n' > frontend/.env.local
-npm run dev --prefix frontend            # http://localhost:3000/sollicitations
+npm install --prefix frontend            # déjà fait ; réinstalle si besoin
+# frontend/.env.local doit contenir NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY
+npm run dev --prefix frontend            # /sollicitations (port 3000, ou suivant si occupé)
 ```
-Se connecter avec `demo@gss.fr`, créer un « AO de test », **envoyer une question** à une **vraie
-adresse à toi**. En DRY-RUN, le Reply-To s'affiche ; avec Postmark branché, l'e-mail part.
+Se connecter avec `demo@gss.fr` / `DemoGSS-2026`, sélectionner (ou créer via « + Dossier de
+test ») un dossier, **envoyer une question** à une adresse à toi. En DRY-RUN le Reply-To
+s'affiche (`ao+<question_id>@<domaine de repli>`) et le statut passe à **Envoyée** ; avec Postmark
+branché, l'e-mail part réellement.
 
 ### Étape 7 — Brancher Postmark (entrant) — cf. §6 étapes manuelles
 Une fois les MX + le webhook inbound configurés (§6), **répondre à l'e-mail** reçu : la réponse
@@ -216,10 +245,18 @@ node supabase/tests/inbound_parse.test.mjs   # 24/24 ✅ (extraction id, cas adv
 1. **DNS / MX** — pointer un sous-domaine dédié (ex. `ao.<domaine>`) vers les serveurs
    entrants du fournisseur retenu (MX Postmark inbound / Mailgun / SendGrid). Le plus-addressing
    `ao+<question_id>@ao.<domaine>` doit arriver au fournisseur.
-2. **Tableau de bord du fournisseur** — créer la **route/webhook entrant** vers
-   `https://<REF>.functions.supabase.co/inbound-email`, et y attacher le secret
-   (`INBOUND_WEBHOOK_SECRET`), soit en **Basic Auth** dans l'URL (`https://user:<secret>@…`),
-   soit en en-tête `x-inbound-secret`.
+2. **Tableau de bord du fournisseur** — créer le **webhook entrant** vers `inbound-email`.
+   **Authentification (précis) : ce n'est PAS du HMAC** — `inbound-email` vérifie un **secret
+   partagé** (`INBOUND_WEBHOOK_SECRET`), accepté soit en **HTTP Basic Auth** (partie mot de passe),
+   soit en en-tête `x-inbound-secret`. **Fail-closed** (pas de secret → 401). Le parser attend un
+   POST **JSON au format Postmark inbound** (`MailboxHash`, `ToFull`, `FromFull`, `TextBody`).
+   → **Postmark** convient sans modif ; URL du webhook avec Basic Auth :
+   ```
+   https://postmark:<INBOUND_WEBHOOK_SECRET>@azdtombjjnrglfzuqzzz.functions.supabase.co/inbound-email
+   ```
+   (le « postmark » avant `:` est arbitraire ; seul le mot de passe = le secret compte)
+   ⚠️ Mailgun/SendGrid envoient du **form/multipart** (pas JSON) → nécessiteraient d'adapter le
+   parser (et idéalement d'ajouter la vérif HMAC) — cf. §7.
 3. **Déployer** les Edge Functions (cf. §5) et communiquer les URLs.
 4. **À demander à Clarence** (dépendance §16) :
    - **quel fournisseur e-mail** (décision en attente) — recommandation : **Postmark**
