@@ -128,7 +128,11 @@ export default function AdminPage() {
             de mémoires techniques
           </p>
         </div>
-        <Button variant="outline" onClick={load} disabled={loading}>
+        <Button
+          onClick={load}
+          disabled={loading}
+          className="bg-white text-black hover:bg-zinc-200"
+        >
           <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
           Rafraîchir
         </Button>
