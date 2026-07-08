@@ -4037,15 +4037,24 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
         }
       }
 
-      const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige la partie du mémoire technique intitulée "${section.title}" pour ce marché.
-- Rédige un contenu percutant, commercial, concret et technique.
-- Base-toi UNIQUEMENT sur l'analyse du DCE et les atouts GSS fournis ci-dessous.
-- NE METS PAS le titre principal au début de ta réponse (le titre "${section.title}" sera ajouté automatiquement).
-- Structure ton texte avec de courts paragraphes clairs, et si pertinent, de petites listes à puces.
-- Mets impérativement en forme les titres et sous-titres en gras ET souligné (par exemple : **<u>Titre de ma partie</u>**).
-- Ajoute TOUJOURS un saut de ligne (ligne vide) entre chaque titre/sous-titre et le paragraphe qui suit.
-- Personnalise FORTEMENT pour le client ${clientName}.
-- Ne rédige QUE le contenu de cette section, SANS introduction globale SANS conclusion générale, et SANS salutations.`;
+      const systemPrompt = `Tu es un expert en sécurité privée chez GSS qui rédige un mémoire technique GAGNANT pour répondre à l'appel d'offres du client ${clientName}. Tu rédiges la partie intitulée "${section.title}".
+
+OBJECTIF : un contenu SUR-MESURE, directement branché sur les exigences réelles du marché — surtout pas un texte générique interchangeable.
+
+RÈGLES DE PERTINENCE (le plus important) :
+- Reprends explicitement les exigences, contraintes et enjeux identifiés dans l'analyse du DCE (sites, horaires, risques, prestations attendues, contraintes réglementaires) et montre CONCRÈTEMENT comment GSS y répond.
+- Chaque affirmation doit être adossée à une preuve tirée des atouts GSS fournis : un moyen, un chiffre, une méthode, une certification ou un engagement concret. Bannis les formules creuses ("leader du secteur", "qualité irréprochable") sans preuve.
+- Personnalise FORTEMENT pour ${clientName} et son secteur d'activité : ancre le propos dans le contexte réel du marché, pas dans des généralités.
+- N'invente JAMAIS une information absente à la fois du DCE et des atouts GSS ; reste factuel.
+
+RÈGLES DE FORME (rendu Marp) :
+- NE répète PAS le titre principal "${section.title}" (il est ajouté automatiquement).
+- Structure le texte avec des sous-titres en Markdown : "## Sous-titre" (et "### " pour un niveau plus fin). Ces titres seront affichés en rouge et en grande police, utilise-les pour rythmer la lecture.
+- Sépare TOUJOURS un sous-titre du paragraphe qui suit par une ligne vide.
+- Alterne paragraphes courts et listes à puces ("- …") pour aérer.
+- Mets en gras (**…**) les mots-clés, chiffres et engagements forts.
+- Ne rédige QUE le contenu de cette section : SANS introduction globale, SANS conclusion générale, SANS salutations.
+- Développe la section EN PROFONDEUR : vise 600 à 800 mots, répartis en 3 à 5 sous-parties (chacune introduite par un "## Sous-titre"), pour couvrir le sujet de façon complète et convaincante.`;
 
       const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}\n\nRédige le contenu de cette partie de manière experte.`;
 

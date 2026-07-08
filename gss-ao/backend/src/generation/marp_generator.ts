@@ -4,7 +4,7 @@ import { spawnSync } from 'child_process';
 
 // ─── Constants ───
 /** Maximum words per slide body before splitting to a new slide. */
-const MAX_WORDS_PER_SLIDE = 280;
+const MAX_WORDS_PER_SLIDE = 220;
 /** Path to Marp assets (CSS + logo) bundled with the backend. */
 const MARP_ASSETS_DIR = path.resolve(__dirname, 'marp');
 
@@ -17,12 +17,11 @@ const MARP_ASSETS_DIR = path.resolve(__dirname, 'marp');
 function cleanTextForMarp(raw: string): string {
   return raw
     .replace(/\r\n/g, '\n')
-    // Remove markdown headings (# ## ### etc.)
-    .replace(/^#{1,6}\s+/gm, '')
-    // Remove bold/italic markers but keep the text
-    .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
-    .replace(/_{1,3}([^_]+)_{1,3}/g, '$1')
-    // Escape special Marp/markdown chars that could break rendering
+    // Convertit les sous-titres soulignés que l'IA produit parfois (**<u>Titre</u>**) en vrais
+    // titres Markdown niveau 2 → rendus en ROUGE et plus grands par le thème gss.
+    .replace(/^\s*\*{0,3}<u>\s*(.+?)\s*<\/u>\*{0,3}\s*$/gim, '## $1')
+    // On PRÉSERVE les titres Markdown (##/###) et le gras (**…**) : le thème les met en rouge et
+    // en plus grande police. On escape seulement les caractères qui casseraient le rendu Marp.
     .replace(/([\\()[\]{}])/g, '\\$1')
     .trim();
 }
@@ -32,24 +31,45 @@ function cleanTextForMarp(raw: string): string {
  * splitting on paragraph boundaries (\n\n) when possible.
  */
 function splitIntoSlideChunks(text: string): string[] {
-  const paragraphs = text.split(/\n{2,}/);
+  const paragraphs = text
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+
+  const isHeading = (p: string) => /^#{1,6}\s/.test(p);
+  const wordCount = (p: string) => p.split(/\s+/).length;
+
   const chunks: string[] = [];
   let current = '';
   let currentWords = 0;
 
-  for (const para of paragraphs) {
-    const paraWords = para.trim().split(/\s+/).length;
-    if (currentWords + paraWords > MAX_WORDS_PER_SLIDE && current.trim()) {
-      chunks.push(current.trim());
-      current = '';
-      currentWords = 0;
+  const flush = () => {
+    if (current.trim()) chunks.push(current.trim());
+    current = '';
+    currentWords = 0;
+  };
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    const para = paragraphs[i];
+    const paraWords = wordCount(para);
+
+    if (isHeading(para) && current.trim()) {
+      // Un titre ne doit JAMAIS rester seul en bas d'une slide : on le garde collé au paragraphe
+      // qui le suit. Si le bloc « titre + son 1er paragraphe » ne tient pas sur la slide en cours,
+      // on coupe AVANT le titre pour qu'il ouvre la slide suivante avec son contenu.
+      const next = paragraphs[i + 1];
+      const blockWords = paraWords + (next && !isHeading(next) ? wordCount(next) : 0);
+      if (currentWords + blockWords > MAX_WORDS_PER_SLIDE) {
+        flush();
+      }
+    } else if (currentWords + paraWords > MAX_WORDS_PER_SLIDE && current.trim()) {
+      flush();
     }
-    current += (current ? '\n\n' : '') + para.trim();
+
+    current += (current ? '\n\n' : '') + para;
     currentWords += paraWords;
   }
-  if (current.trim()) {
-    chunks.push(current.trim());
-  }
+  flush();
 
   return chunks.length > 0 ? chunks : [''];
 }
@@ -140,7 +160,7 @@ export class MarpGenerator {
       ],
       {
         cwd: workDir,
-        timeout: 120_000, // 2 minutes max
+        timeout: 300_000, // 5 minutes max (les gros mémoires ~120 pages dépassent 2 min de rendu)
         stdio: 'pipe',
         encoding: 'utf-8',
         shell: isWin,
