@@ -44,7 +44,8 @@ function timingSafeEqual(a: string, b: string): boolean {
 export interface ParsedInbound {
   questionId: string | null;
   fromEmail: string | null;
-  text: string;
+  text: string;       // corps complet (sert à l'extraction du question_id / fallback référence)
+  replyText: string;  // réponse NETTE à stocker (sans la citation) — StrippedTextReply ou fallback
   source: 'mailbox_hash' | 'plus_address' | 'body_reference' | 'ambiguous' | 'none';
 }
 
@@ -53,6 +54,20 @@ function extractId(s: string | null | undefined): string | null {
   if (!s) return null;
   const m = /q[0-9a-f]{16}/i.exec(s);
   return m ? m[0].toLowerCase() : null;
+}
+
+// Fallback : coupe le corps à la 1re ligne de citation pour ne garder que la nouvelle réponse.
+// Déclencheurs : ligne commençant par « > », ou en-tête de citation (« Le … a écrit : »,
+// « On … wrote: », « -----Original Message----- », « De : … »).
+function stripQuote(t: string): string {
+  if (!t) return '';
+  const attribution = /^\s*(le\s.+a\s*[ée]crit\s*:|on\s.+\bwrote:|-{2,}\s*original message|_{5,}|de\s*:\s.*<.+@)/i;
+  const out: string[] = [];
+  for (const line of t.split(/\r?\n/)) {
+    if (/^\s*>/.test(line) || attribution.test(line)) break;
+    out.push(line);
+  }
+  return out.join('\n').trim();
 }
 
 /**
@@ -79,7 +94,12 @@ export function parseInbound(payload: any): ParsedInbound {
   const text: string = typeof rawText === 'string' ? rawText : '';
   const rawFrom = payload?.FromFull?.Email ?? payload?.From ?? null;
   const fromEmail: string | null = typeof rawFrom === 'string' ? rawFrom : null;
-  const base = { fromEmail, text };
+  // Réponse nette : privilégier StrippedTextReply de Postmark ; sinon couper la citation du corps.
+  const stripped = payload?.StrippedTextReply;
+  const replyText = (typeof stripped === 'string' && stripped.trim())
+    ? stripped.trim()
+    : stripQuote(text);
+  const base = { fromEmail, text, replyText };
 
   // ── A. Sources autoritatives (adresse de livraison) ────────────────────────────
   const authoritative: { id: string; source: 'mailbox_hash' | 'plus_address' }[] = [];

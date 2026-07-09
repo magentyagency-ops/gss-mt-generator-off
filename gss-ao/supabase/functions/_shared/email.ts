@@ -52,10 +52,13 @@ function formatDateFR(iso: string | null): string {
 }
 
 export function composeQuestionEmail(t: TemplateInput): OutgoingEmail {
-  const dateFR = formatDateFR(t.dateLimite);
+  // Date d'échéance : null/absente si pas de date_limite → on n'affiche pas « avant le … ».
+  const dateFR = t.dateLimite ? formatDateFR(t.dateLimite) : null;
 
-  // Objet — gabarit §11
-  const subject = `Information requise pour l'appel d'offres ${t.referenceAO} — réponse avant le ${dateFR}`;
+  // Objet — gabarit §11 (mention « — réponse avant le … » seulement si une date est fournie)
+  const subject = dateFR
+    ? `Information requise pour l'appel d'offres ${t.referenceAO} — réponse avant le ${dateFR}`
+    : `Information requise pour l'appel d'offres ${t.referenceAO}`;
 
   // Corps — gabarit §11 (ton et structure du brief respectés)
   const textBody =
@@ -65,7 +68,7 @@ Nous préparons actuellement la réponse de GSS à l'appel d'offres ${t.nomMarch
 
 Question : ${t.question}
 
-Merci de répondre directement à ce message avant le ${dateFR}. Votre réponse sera automatiquement intégrée au dossier puis validée par le responsable de l'appel d'offres.
+Merci de répondre directement à ce message${dateFR ? ` avant le ${dateFR}` : ''}. Votre réponse sera automatiquement intégrée au dossier puis validée par le responsable de l'appel d'offres.
 
 Référence de suivi : ${t.aoId} / ${t.questionId}
 `;

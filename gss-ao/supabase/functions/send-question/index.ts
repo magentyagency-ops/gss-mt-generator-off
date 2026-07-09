@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
       niveau_criticite: body.niveau_criticite ?? 'interne',
       contexte: body.contexte ?? null,
       question: body.question,
-      date_limite: body.date_limite ?? null,
+      date_limite: body.date_limite || null,
       statut: 'a_envoyer',
     })
     .select('*')

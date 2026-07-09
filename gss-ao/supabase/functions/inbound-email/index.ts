@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
   const { error: updErr } = await admin
     .from('question_interne')
     .update({
-      reponse_contenu: (parsed.text || '').trim(),
+      reponse_contenu: parsed.replyText,
       reponse_recue_at: new Date().toISOString(),
       statut: 'reponse_recue',
     })
