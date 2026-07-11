@@ -31,6 +31,8 @@ interface ProgressInfo {
   progress: number;
   message: string;
   logs: string[];
+  /** Informations que GSS ne possède pas et qui doivent être obtenues (notif « consultation requise »). */
+  consultations?: string[];
 }
 
 export const progressStore: Record<string, ProgressInfo> = {};
@@ -48,6 +50,7 @@ export function setDossierProgress(id: string, update: Partial<ProgressInfo>) {
   if (update.logs !== undefined) {
     progressStore[id].logs.push(...update.logs);
   }
+  if (update.consultations !== undefined) progressStore[id].consultations = update.consultations;
 }
 
 // Bloque la génération si le quota est épuisé (chaque génération coûte 1 crédit).
@@ -270,8 +273,18 @@ router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
       }
     }
 
-    setDossierProgress(dossierId, { status: 'completed', progress: 100, message: 'Génération terminée avec succès !' });
-    res.json({ status: 'completed', message: 'Mémoire technique traité', file_path: result.filePath, data_generee_par_ia: result.generatedData });
+    const consultations = result.consultations || [];
+    const doneMessage = consultations.length
+      ? `Génération terminée. ⚠ ${consultations.length} information(s) à obtenir auprès de GSS.`
+      : 'Génération terminée avec succès !';
+    setDossierProgress(dossierId, { status: 'completed', progress: 100, message: doneMessage, consultations });
+    res.json({
+      status: 'completed',
+      message: 'Mémoire technique traité',
+      file_path: result.filePath,
+      data_generee_par_ia: result.generatedData,
+      consultations,
+    });
   } catch (error: any) {
     console.error('Erreur lors de la génération du mémoire:', error);
     setDossierProgress(dossierId, { status: 'error', message: `Erreur: ${error.message || error}` });

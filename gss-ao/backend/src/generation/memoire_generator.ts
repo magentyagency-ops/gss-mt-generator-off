@@ -2114,6 +2114,60 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
   }
 
   /**
+   * Analyse comparative « exigences du DCE ↔ ce que GSS a / fait ». Extrait les exigences du CCTP/RC
+   * comme une CHECK-LIST (ce qui est écrit et demandé), puis confronte CHAQUE exigence à la
+   * Documentation GSS (moyens, formations, procédures réels). Le résultat — une matrice
+   * besoin → réponse GSS → écart — est INTERNE : il nourrit les prompts de rédaction pour que le
+   * mémoire réponde point par point aux exigences, sans rien inventer.
+   */
+  private async analyzeRequirements(
+    dceContext: string,
+    gssContext: string,
+  ): Promise<Array<{ theme: string; exigence: string; reponseGss: string; couverture: string }>> {
+    const systemPrompt = `Tu es responsable de l'analyse des appels d'offres de sécurité privée chez GSS.
+Mission : dépouiller le DCE — le CCTP EN PRIORITÉ (c'est lui qui porte les BESOINS), complété par le RC et les annexes — pour en extraire une CHECK-LIST EXHAUSTIVE des EXIGENCES du donneur d'ordre (ce qui est écrit, imposé ou attendu). Pour CHAQUE exigence, pose-toi la question « Le CCTP demande X — qu'est-ce que GSS propose CONCRÈTEMENT en réponse, et reste-t-il un écart ? » et confronte-la à CE QUE GSS A / FAIT d'après la Documentation GSS fournie.
+RÈGLES :
+- EXHAUSTIVITÉ : passe le CCTP en revue section par section et n'OMETS AUCUN besoin structurant. Descends au niveau du DÉTAIL utile : effectifs/ETP PAR SITE et PAR POSTE, amplitudes/horaires (jour, nuit, week-end, jours fériés), qualifications exigées (CQP APS, SSIAP 1/2/3, H0B0, SST), délais d'intervention, matériel imposé (rondes/pointeaux par site, PTI/DATI, tenues, véhicules, moyens de transmission), procédures (levée de doute, gestion d'alarme, incendie), reprise du personnel, contrôles/reporting, et obligations légales (CNAPS, agréments).
+- Quand une exigence est propre à un site/poste, garde cette précision dans le libellé (ne globalise pas).
+- Cite l'exigence telle qu'écrite dans le CCTP ; n'invente rien côté DCE.
+- La réponse GSS s'appuie UNIQUEMENT sur la Documentation GSS ; n'invente AUCUN moyen absent. Si GSS ne couvre pas ou ne le prouve pas, marque honnêtement l'écart.
+- Vise une couverture COMPLÈTE des besoins (typiquement 30 à 60 exigences pour un CCTP fourni), pas un simple survol. Écarte seulement le pur détail administratif (formalités de dépôt, etc.).`;
+
+    const userPrompt = `=== EXIGENCES DU MARCHÉ (CCTP EN PRIORITÉ, puis RC / annexes) ===
+${dceContext.slice(0, 120_000)}
+
+=== CE QUE GSS A / FAIT (Documentation GSS) ===
+${gssContext.slice(0, 60_000)}
+
+Renvoie un JSON valide :
+{
+  "requirements": [
+    {
+      "theme": "I | II | III | IV  (I=présentation société & conformité légale ; II=moyens humains ; III=moyens opérationnels & matériels ; IV=organisation, qualité, continuité)",
+      "exigence": "Ce que demande le DCE, précis (avec chiffre / délai / qualification si présent)",
+      "reponseGss": "Ce que GSS propose concrètement en réponse (moyen / méthode / chiffre tiré de la Doc GSS)",
+      "couverture": "couvert | partiel | écart"
+    }
+  ]
+}`;
+
+    const content = await this.callOpenAI(
+      [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+      0.2, 'Analyse exigences ↔ GSS', true,
+    );
+    try {
+      const data = JSON.parse(content || '{}');
+      const reqs = Array.isArray(data.requirements) ? data.requirements : [];
+      const by = (c: string) => reqs.filter((r: any) => (r.couverture || '').toLowerCase().includes(c)).length;
+      console.log(`[MemoireGenerator] Matrice de conformité: ${reqs.length} exigence(s) (couvert=${by('couvert')}, partiel=${by('partiel')}, écart=${by('écart')}).`);
+      return reqs;
+    } catch {
+      console.warn('[MemoireGenerator] Matrice de conformité: parse JSON échoué → non injectée.');
+      return [];
+    }
+  }
+
+  /**
    * Personnalise le texte statique du maître AO RNE.docx (rédigé pour le marché « Parc des
    * Expositions de Rouen ») en remplaçant SON nom de client par celui du DCE. Le nom figure sur
    * la couverture / le sommaire et est découpé en plusieurs runs (« PARC » / « DES » /
@@ -2156,6 +2210,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     filePath?: string;
     generatedData?: Record<string, string>;
     missingFields?: any[];
+    consultations?: string[];
   }> {
     const settings = getSettings();
     const baseDir = path.resolve(__dirname, '../../../../');
@@ -4002,7 +4057,7 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
   public async generateFullMarpPdf(
     dossierId: string,
     onProgress?: (progress: number, message: string, status?: string) => void
-  ): Promise<{ filePath: string, generatedData: Record<string, string> }> {
+  ): Promise<{ filePath: string, generatedData: Record<string, string>, consultations: string[] }> {
     console.log('[MemoireGenerator] ═══ Génération PDF (Marp Complet) ═══');
 
     if (onProgress) onProgress(10, 'Analyse du DCE et lecture du contexte...');
@@ -4014,6 +4069,18 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
 
     const gssDocs = await this.getGssDocumentation();
     const availableCategories = Object.keys(gssDocs);
+
+    // Matrice de conformité INTERNE : exigences du CCTP/RC ↔ ce que GSS a / fait. On la calcule une
+    // seule fois, puis on injecte dans chaque section les exigences de SON chapitre pour que la
+    // rédaction réponde point par point aux besoins du DCE (sans rien inventer).
+    if (onProgress) onProgress(13, 'Analyse des exigences du CCTP et comparaison aux capacités GSS…');
+    const gssFullContext = this.buildFullGssContext(gssDocs, 3000, 60_000);
+    const requirementsMatrix = await this.analyzeRequirements(dceContext, gssFullContext);
+    const reqsByTheme: Record<string, typeof requirementsMatrix> = {};
+    for (const r of requirementsMatrix) {
+      const t = (r.theme || '').toString().toUpperCase().replace(/[^IV]/g, '').trim();
+      (reqsByTheme[t] ||= []).push(r);
+    }
 
     const sectionsMap: Record<string, string> = {};
     const totalSections = AI_SECTIONS_B.length;
@@ -4054,9 +4121,18 @@ RÈGLES DE FORME (rendu Marp) :
 - Alterne paragraphes courts et listes à puces ("- …") pour aérer.
 - Mets en gras (**…**) les mots-clés, chiffres et engagements forts.
 - Ne rédige QUE le contenu de cette section : SANS introduction globale, SANS conclusion générale, SANS salutations.
-- Développe la section EN PROFONDEUR : vise 600 à 800 mots, répartis en 3 à 5 sous-parties (chacune introduite par un "## Sous-titre"), pour couvrir le sujet de façon complète et convaincante.`;
+- Développe la section EN PROFONDEUR : vise 600 à 800 mots, répartis en 3 à 5 sous-parties (chacune introduite par un "## Sous-titre"), pour couvrir le sujet de façon complète et convaincante.
+- Traite EXPLICITEMENT chaque exigence du CCTP listée ci-dessous en montrant la réponse concrète de GSS. Si — et SEULEMENT si — GSS n'a aucune réponse spécifique à une exigence (aucun élément dans les atouts GSS), n'invente RIEN : insère à cet endroit, sur sa propre ligne, exactement \`[CONSULTATION REQUISE : <information précise à obtenir auprès de GSS>]\` en décrivant l'information manquante.`;
 
-      const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}\n\nRédige le contenu de cette partie de manière experte.`;
+      const chapterReqs = reqsByTheme[section.chapter] || [];
+      const reqBlock = chapterReqs.length
+        ? '\n\nEXIGENCES DU CCTP À TRAITER DANS CETTE SECTION (réponds à chacune avec ce que fait GSS ; signale les écarts via [CONSULTATION REQUISE : …]) :\n' +
+          chapterReqs
+            .map((r) => `- Le CCTP demande : ${r.exigence}\n  Réponse GSS connue : ${r.reponseGss || '(non documentée)'}${r.couverture && r.couverture.toLowerCase() !== 'couvert' ? `  → couverture : ${r.couverture}` : ''}`)
+            .join('\n')
+        : '';
+
+      const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}${reqBlock}\n\nRédige le contenu de cette partie de manière experte.`;
 
       const text = await this.callOpenAI(
         [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
@@ -4066,8 +4142,49 @@ RÈGLES DE FORME (rendu Marp) :
       completed++;
     }
 
+    // ── Consultations requises : exigences que GSS ne couvre pas et qui doivent être précisées ──
+    // Deux sources : (1) les écarts détectés par la matrice de conformité ; (2) les marqueurs
+    // [CONSULTATION REQUISE : …] que le rédacteur a insérés faute de réponse spécifique dans la Doc GSS.
+    const consultations = new Set<string>();
+    for (const r of requirementsMatrix) {
+      if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence) {
+        consultations.add(r.exigence.trim());
+      }
+    }
+    const markerRe = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
+    for (const txt of Object.values(sectionsMap)) {
+      let m: RegExpExecArray | null;
+      while ((m = markerRe.exec(txt)) !== null) consultations.add(m[1].trim());
+    }
+    const consultationList = [...consultations].filter(Boolean);
+
+    // Les marqueurs sont des flags INTERNES (pour GSS) : on les retire du texte pour qu'ils
+    // n'apparaissent pas dans le PDF remis au client.
+    for (const id of Object.keys(sectionsMap)) {
+      sectionsMap[id] = sectionsMap[id].replace(markerRe, '').replace(/\n{3,}/g, '\n\n').trim();
+    }
+
+    if (consultationList.length) {
+      console.warn(`[MemoireGenerator] ⚠ ${consultationList.length} consultation(s) GSS requise(s) :\n- ${consultationList.join('\n- ')}`);
+      if (onProgress) {
+        onProgress(
+          89,
+          `⚠ ${consultationList.length} information(s) à obtenir auprès de GSS : ${consultationList.slice(0, 3).join(' ; ')}${consultationList.length > 3 ? '…' : ''}`,
+        );
+      }
+    }
+
     if (onProgress) onProgress(90, 'Assemblage final de la présentation Marp...');
-    return this.exportFromSectionsMap(sectionsMap, dossierId);
+    const result = await this.exportFromSectionsMap(sectionsMap, dossierId);
+
+    // On remonte les consultations dans generatedData (→ « data_generee_par_ia » côté API/front) pour
+    // que l'utilisateur voie précisément quelles informations restent à obtenir auprès de GSS.
+    const generatedData: Record<string, string> = { ...result.generatedData };
+    consultationList.forEach((c, i) => {
+      generatedData[`⚠ Consultation requise #${i + 1}`] = c;
+    });
+
+    return { ...result, generatedData, consultations: consultationList };
   }
 
   /**

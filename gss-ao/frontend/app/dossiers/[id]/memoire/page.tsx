@@ -272,6 +272,23 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 </Link>
               </div>
 
+              {Array.isArray(docxResult.data.consultations) && docxResult.data.consultations.length > 0 && (
+                <div className="mx-6 mt-6 rounded-lg border border-amber-400/50 bg-amber-50 dark:bg-amber-950/30 p-4">
+                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-semibold mb-2">
+                    <AlertTriangle className="h-5 w-5 shrink-0" />
+                    <span>Consultation GSS requise — {docxResult.data.consultations.length} information(s) à obtenir</span>
+                  </div>
+                  <p className="text-sm text-amber-800/80 dark:text-amber-300/80 mb-3">
+                    Ces exigences du CCTP ne sont pas couvertes par la documentation GSS actuelle. Merci de réunir ces informations pour compléter le mémoire :
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1 text-sm text-foreground">
+                    {docxResult.data.consultations.map((c: string, i: number) => (
+                      <li key={i}>{c}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-medium text-foreground">Aperçu :</h3>
