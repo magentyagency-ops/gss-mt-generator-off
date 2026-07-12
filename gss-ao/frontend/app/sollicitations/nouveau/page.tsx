@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Send, Plus, Trash2, ArrowLeft, Mail, CheckCircle2, XCircle } from "lucide-react";
+import { Send, Plus, Trash2, ArrowLeft, Mail, CheckCircle2, XCircle, Download } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { type Dossier } from "@/lib/sollicitations";
@@ -22,6 +22,14 @@ import { type Dossier } from "@/lib/sollicitations";
 interface QuestionLine {
   critere_concerne: string;
   question: string;
+}
+
+// Champ manquant tel que persisté par le back dans dossiers.contenu.memoire_cadre_state
+// (cf. memoire_generator.ts:3190-3194). Lecture seule côté front.
+interface MissingField {
+  id: number;
+  label: string;
+  context: string;
 }
 
 // Résultat d'envoi d'une ligne (rapporté à l'utilisateur).
@@ -47,6 +55,9 @@ export default function NouvelleSollicitationPage() {
   const [sending, setSending] = useState(false);
   const [results, setResults] = useState<LineResult[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  const [loadingMissing, setLoadingMissing] = useState(false);
+  const [missingNotice, setMissingNotice] = useState<string | null>(null);
 
   // ── Session ────────────────────────────────────────────────────────────────────
   const loadSession = useCallback(async () => {
@@ -80,6 +91,47 @@ export default function NouvelleSollicitationPage() {
   }
   function removeLine(i: number) {
     setLines((prev) => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)));
+  }
+
+  // ── Chargement des champs manquants du dossier (lecture seule, RLS-scoped) ────────
+  // Source : dossiers.contenu.memoire_cadre_state.missingFields, écrit par le back lors de
+  // la génération du mémoire (memoire_generator.ts). Ne modifie RIEN en base.
+  async function loadMissingFields() {
+    if (!aoId) return;
+    setErr(null);
+    setMissingNotice(null);
+    setLoadingMissing(true);
+    try {
+      const { data, error } = await supabase
+        .from("dossiers")
+        .select("contenu")
+        .eq("id", aoId)
+        .single();
+      if (error) { setErr(error.message); return; }
+
+      const contenu = (data?.contenu ?? {}) as Record<string, any>;
+      const missing: MissingField[] = contenu?.memoire_cadre_state?.missingFields ?? [];
+
+      if (!missing.length) {
+        setMissingNotice("Aucun champ manquant enregistré pour ce dossier.");
+        return; // On ne vide PAS les lignes existantes.
+      }
+
+      // Mapping : 1 champ → 1 ligne. question = contexte si non vide et ≠ label, sinon label.
+      const mapped: QuestionLine[] = missing.map((f) => {
+        const label = String(f.label ?? "").trim();
+        const context = String(f.context ?? "").trim();
+        const question = context && context !== label ? context : label;
+        return { critere_concerne: label, question };
+      });
+
+      // Fusion : lignes toutes vides → on remplace ; sinon → on ajoute à la suite (rien perdu).
+      const allEmpty = lines.every((l) => !l.critere_concerne.trim() && !l.question.trim());
+      setLines((prev) => (allEmpty ? mapped : [...prev, ...mapped]));
+      setMissingNotice(`${mapped.length} champ(s) manquant(s) chargé(s). Ajustez avant d'envoyer.`);
+    } finally {
+      setLoadingMissing(false);
+    }
   }
 
   // Validité : dossier + email + au moins une ligne complète, et toute ligne saisie complète.
@@ -183,9 +235,22 @@ export default function NouvelleSollicitationPage() {
       <Card className="mb-4">
         <CardHeader className="flex-row items-center justify-between gap-2">
           <CardTitle className="text-base">Questions ({lines.length})</CardTitle>
-          <Button variant="outline" size="sm" onClick={addLine}><Plus /> Ajouter une question</Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadMissingFields}
+              disabled={!aoId || loadingMissing}
+            >
+              <Download /> {loadingMissing ? "Chargement…" : "Charger les questions manquantes"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={addLine}><Plus /> Ajouter une question</Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {missingNotice && (
+            <p className="rounded-md border border-input bg-muted/40 p-2 text-xs text-muted-foreground">{missingNotice}</p>
+          )}
           {lines.map((l, i) => (
             <div key={i} className="rounded-md border border-input p-3">
               <div className="mb-2 flex items-center justify-between">
@@ -247,7 +312,7 @@ export default function NouvelleSollicitationPage() {
 
       <div className="flex items-center gap-2">
         <Button disabled={!canSend} onClick={handleSend}>
-          <Send /> {sending ? "Envoi en cours…" : `Envoyer ${lines.length > 1 ? `les ${lines.length} questions` : "la question"}`}
+          <Send /> {sending ? "Envoi en cours…" : "Envoyer"}
         </Button>
         <Link href="/inbox"><Button variant="ghost">Annuler</Button></Link>
       </div>
