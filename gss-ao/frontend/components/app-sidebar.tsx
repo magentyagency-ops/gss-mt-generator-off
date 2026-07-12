@@ -9,6 +9,7 @@ import {
   Library,
   Settings,
   Mail,
+  Inbox,
   ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,7 @@ import { createClient } from "@/lib/supabase/client";
 const NAV = [
   { href: "/", label: "Dossiers", icon: FolderKanban, match: (p: string) => p === "/" || p.startsWith("/dossiers") },
   { href: "/sollicitations", label: "Sollicitations", icon: Mail, match: (p: string) => p.startsWith("/sollicitations") },
+  { href: "/inbox", label: "Boîte de réception", icon: Inbox, match: (p: string) => p.startsWith("/inbox") },
   { href: "/veille", label: "Veille", icon: Radar, match: (p: string) => p.startsWith("/veille") },
   { href: "/base", label: "Base de connaissances", icon: Library, match: (p: string) => p.startsWith("/base") },
   { href: "/parametres", label: "Paramètres", icon: Settings, match: (p: string) => p.startsWith("/parametres") },

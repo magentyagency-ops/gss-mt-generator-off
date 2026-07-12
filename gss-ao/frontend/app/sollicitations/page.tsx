@@ -10,13 +10,14 @@
 // de l'AO = responsable §11.8, la RLS réserve la mise à jour au propriétaire/admin).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Send, CheckCircle2, RefreshCw, Mail, Inbox } from "lucide-react";
+import { Send, RefreshCw, Mail, Inbox } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  Badge, Button, Card, CardContent, CardHeader, CardTitle,
+  Button, Card, CardContent, CardHeader, CardTitle,
 } from "@/components/ui";
+import { QuestionCard } from "@/components/question-card";
 import {
-  STATUT_LABEL, STATUT_BADGE, CRITICITE_LABEL, CRITICITE_OPTIONS,
+  CRITICITE_LABEL, CRITICITE_OPTIONS,
   type QuestionInterne, type Dossier,
 } from "@/lib/sollicitations";
 
@@ -253,34 +254,3 @@ function SendFormCard({ onSubmit }: { onSubmit: (f: SendForm) => void }) {
   );
 }
 
-function QuestionCard({ q, onValider }: { q: QuestionInterne; onValider: () => void }) {
-  return (
-    <Card>
-      <CardContent className="space-y-2 py-4">
-        <div className="flex items-center justify-between gap-2">
-          <Badge variant={STATUT_BADGE[q.statut]}>{STATUT_LABEL[q.statut]}</Badge>
-          <code className="text-xs text-muted-foreground">{q.question_id}</code>
-        </div>
-        <div className="text-sm"><span className="text-muted-foreground">Critère : </span>{q.critere_concerne}</div>
-        <div className="text-sm"><span className="text-muted-foreground">Destinataire : </span>{q.destinataire_nom ? `${q.destinataire_nom} · ` : ""}{q.destinataire_email}</div>
-        <div className="text-sm"><span className="text-muted-foreground">Question : </span>{q.question}</div>
-        {q.date_limite && <div className="text-xs text-muted-foreground">Date limite : {q.date_limite}</div>}
-
-        {q.statut === "reponse_recue" && (
-          <div className="mt-2 rounded-md border border-success bg-success/10 p-3">
-            <div className="mb-1 text-xs font-semibold text-muted-foreground">Réponse reçue</div>
-            <div className="whitespace-pre-wrap text-sm">{q.reponse_contenu}</div>
-            {/* La RLS réserve la mise à jour au propriétaire de l'AO (responsable §11.8) / admin. */}
-            <Button className="mt-2" size="sm" onClick={onValider}><CheckCircle2 /> Valider</Button>
-          </div>
-        )}
-        {q.statut === "validee" && (
-          <div className="mt-2 rounded-md border border-input p-3">
-            <div className="mb-1 text-xs font-semibold text-muted-foreground">Réponse validée</div>
-            <div className="whitespace-pre-wrap text-sm">{q.reponse_contenu}</div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
