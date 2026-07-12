@@ -40,6 +40,7 @@ export interface Settings {
   supabaseAnonKey: string;
   perplexityApiKey: string;        // Ticket #4 : recherche web (Perplexity)
   supabaseServiceRoleKey: string;  // Ticket #4 : insertion traçabilité recherche_web (backend de confiance)
+  resolveMissingInfoEnabled: boolean; // Ticket #4 : flag RESOLVE_MISSING_INFO (OFF par défaut)
 }
 
 export function getSettings(): Settings {
@@ -92,5 +93,6 @@ export function getSettings(): Settings {
     supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
     perplexityApiKey: process.env.PERPLEXITY_API_KEY || '',
     supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+    resolveMissingInfoEnabled: process.env.RESOLVE_MISSING_INFO === 'true',
   };
 }

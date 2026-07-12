@@ -96,7 +96,10 @@ export function groundedResultFromPerplexity(data: any, model = PERPLEXITY_MODEL
  * citation. Sinon → null. Erreurs (clé absente, 401, timeout, rate limit) : log clair + null,
  * sans jamais casser l'appelant.
  */
-export async function searchPublicInfo(query: string): Promise<PublicSearchResult | null> {
+export async function searchPublicInfo(
+  query: string,
+  sollicitationId: string | null = null,
+): Promise<PublicSearchResult | null> {
   const key = getSettings().perplexityApiKey;
   if (!key) {
     console.warn('[searchPublicInfo] PERPLEXITY_API_KEY absente → null (aucune recherche).');
@@ -129,7 +132,7 @@ export async function searchPublicInfo(query: string): Promise<PublicSearchResul
       return null;
     }
     // Traçabilité (non bloquante) : un échec d'insertion ne casse pas le retour.
-    await logRechercheWeb(query, result).catch((e) =>
+    await logRechercheWeb(query, result, sollicitationId).catch((e) =>
       console.warn('[searchPublicInfo] insertion recherche_web échouée (non bloquant):', (e as Error)?.message));
     return result;
   } catch (e) {
@@ -181,19 +184,32 @@ export async function requestInfoFromTeam(_field: MissingField, _dossierId: stri
 }
 
 /**
- * Orchestrateur (brief §3) : pour chaque champ manquant, CLASSE l'info puis tente la résolution —
- * web (public) ou email équipe (interne). Tant que les voies ne sont pas implémentées, renvoie une
- * résolution vide (le champ reste « [À COMPLÉTER] ») : NON BLOQUANT, conforme au brief.
+ * Orchestrateur (brief §3) — phase 2a. GATÉ par le flag RESOLVE_MISSING_INFO (OFF par défaut).
+ *
+ *  • FLAG OFF (défaut) → NO-OP STRICT : aucune classification, aucune recherche, aucune écriture,
+ *    aucun effet de bord. Chaque champ ressort « non résolu » → génération STRICTEMENT INCHANGÉE.
+ *  • FLAG ON → pour chaque champ : classifyMissingInfo() ; si 'public' → searchPublicInfo() dont le
+ *    résultat sourcé est TRACÉ dans recherche_web (statut « en_attente_validation »). RIEN n'est
+ *    injecté dans le dossier ici : on renvoie value=null + pending=true (validation humaine = 2b).
+ *    Aucune citation → null → rien stocké, champ « non résolu ».
  */
-export async function resolveMissingInfo(fields: MissingField[], dossierId: string): Promise<ResolvedInfo[]> {
+export async function resolveMissingInfo(
+  fields: MissingField[],
+  dossierId: string,
+  sollicitationId: string | null = null,
+): Promise<ResolvedInfo[]> {
+  // FLAG OFF → NO-OP STRICT (zéro régression, zéro effet de bord).
+  if (!getSettings().resolveMissingInfoEnabled) {
+    return fields.map((f) => ({ id: f.id, value: null, source: 'none' as const }));
+  }
+
   const out: ResolvedInfo[] = [];
   for (const f of fields) {
     const kind = classifyMissingInfo(f.label, f.context);
     if (kind === 'public') {
-      // NB (phase 1) : compat de type uniquement — le câblage complet (injection mémoire) viendra
-      // plus tard. On ne conserve ici que le texte de réponse ; les citations restent tracées en base.
-      const r = await searchPublicInfo(`${f.label}`);
-      out.push({ id: f.id, value: r ? r.answer : null, source: r ? 'web' : 'none' });
+      // Recherche web + traçabilité « en attente » ; JAMAIS d'injection automatique ici (value=null).
+      const r = await searchPublicInfo(f.label, sollicitationId);
+      out.push({ id: f.id, value: null, source: r ? 'web' : 'none', pending: r ? true : undefined });
     } else if (kind === 'internal') {
       const { sent } = await requestInfoFromTeam(f, dossierId);
       out.push({ id: f.id, value: null, source: 'none', pending: sent });
