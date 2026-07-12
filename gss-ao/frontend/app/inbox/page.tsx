@@ -9,7 +9,8 @@
 // Aucun changement backend / Edge Function / migration : lecture pure via @/lib/supabase/client.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw, Inbox } from "lucide-react";
+import Link from "next/link";
+import { RefreshCw, Inbox, PenLine } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { QuestionCard } from "@/components/question-card";
@@ -107,7 +108,12 @@ export default function InboxPage() {
         <div className="text-sm text-muted-foreground">
           Connecté : <span className="font-medium text-foreground">{userEmail}</span>
         </div>
-        <Button variant="ghost" size="sm" onClick={loadQuestions}><RefreshCw /> Rafraîchir</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={loadQuestions}><RefreshCw /> Rafraîchir</Button>
+          <Link href="/sollicitations/nouveau">
+            <Button size="sm"><PenLine /> Rédiger une sollicitation</Button>
+          </Link>
+        </div>
       </div>
 
       {err && (
