@@ -8,6 +8,7 @@ import { DB, DossierRecord, MemoiresDB, remainingGenerations } from '../core/db'
 import { initProgress, finishProgress } from '../core/progress';
 import { extractRcWithLLM, extractCctpWithLLM } from '../analysis/llmExtractor';
 import { requireAuth } from './authMiddleware';
+import { resolveMissingInfo } from '../generation/missing_info_resolver';
 
 const uploadDir = path.resolve(__dirname, '../../../data/output/temp');
 if (!fs.existsSync(uploadDir)) {
@@ -242,6 +243,22 @@ router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
 
     if (result.status === 'incomplete') {
       setDossierProgress(dossierId, { status: 'incomplete', progress: 95, message: 'En attente d\'informations complémentaires.' });
+
+      // ── Ticket #4 phase 2b — GATÉ par RESOLVE_MISSING_INFO (OFF par défaut = aucun effet). ──
+      // Fire-and-forget : lance en tâche de fond la recherche web des champs 'public' manquants.
+      // Chaque résultat sourcé est TRACÉ (recherche_web, statut « en_attente_validation ») et
+      // JAMAIS injecté dans le mémoire. La réponse ci-dessous part immédiatement, INCHANGÉE.
+      // Le .catch() garantit qu'un échec de la passe ne casse jamais le serveur (backend persistant).
+      if (getSettings().resolveMissingInfoEnabled && Array.isArray(result.missingFields) && result.missingFields.length) {
+        const fields = result.missingFields.map((m: any) => ({
+          id: m.id,
+          label: String(m.label ?? ''),
+          context: String(m.context ?? ''),
+        }));
+        resolveMissingInfo(fields, dossierId).catch((e) =>
+          console.warn('[memoire] resolveMissingInfo (fond) échec non bloquant:', (e as Error)?.message));
+      }
+
       return res.json({
         status: 'incomplete',
         message: 'Des informations sont manquantes.',

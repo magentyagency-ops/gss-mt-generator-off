@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, ListChecks, PenLine, Download, FileStack } from "lucide-react";
+import { FileText, ListChecks, PenLine, Download, FileStack, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getMode } from "@/lib/ai/mode";
 
@@ -25,6 +25,7 @@ export function DossierNav({ id }: { id: string }) {
       ? [{ href: `${base}/selection-slides`, label: "Sélection slides", icon: FileStack }]
       : []),
     { href: `${base}/memoire`, label: "Mémoire technique", icon: PenLine },
+    { href: `${base}/recherches`, label: "Recherches web", icon: Globe },
     { href: `${base}/export`, label: "Export", icon: Download },
   ];
   return (

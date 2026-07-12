@@ -99,6 +99,7 @@ export function groundedResultFromPerplexity(data: any, model = PERPLEXITY_MODEL
 export async function searchPublicInfo(
   query: string,
   sollicitationId: string | null = null,
+  dossierId: string | null = null,
 ): Promise<PublicSearchResult | null> {
   const key = getSettings().perplexityApiKey;
   if (!key) {
@@ -132,7 +133,7 @@ export async function searchPublicInfo(
       return null;
     }
     // Traçabilité (non bloquante) : un échec d'insertion ne casse pas le retour.
-    await logRechercheWeb(query, result, sollicitationId).catch((e) =>
+    await logRechercheWeb(query, result, sollicitationId, dossierId).catch((e) =>
       console.warn('[searchPublicInfo] insertion recherche_web échouée (non bloquant):', (e as Error)?.message));
     return result;
   } catch (e) {
@@ -144,23 +145,47 @@ export async function searchPublicInfo(
   }
 }
 
+/** Client Supabase service_role (backend de confiance, contourne la RLS) — null si non configuré. */
+function adminClient() {
+  const { supabaseUrl, supabaseServiceRoleKey } = getSettings();
+  if (!supabaseUrl || !supabaseServiceRoleKey) return null;
+  return createClient(supabaseUrl, supabaseServiceRoleKey, { auth: { persistSession: false } });
+}
+
 /**
- * Insère une ligne de traçabilité dans public.recherche_web via un client service_role
- * (backend de confiance, contourne la RLS). Silencieux si la clé service_role est absente.
+ * Anti-doublon : true s'il existe déjà, pour ce (dossier, champ=query), une recherche
+ * 'en_attente_validation' ou 'validee'. Dans ce cas on NE relance PAS. Non bloquant.
  */
+export async function hasActiveRecherche(dossierId: string | null, query: string): Promise<boolean> {
+  const admin = adminClient();
+  if (!admin || !dossierId) return false;
+  const { data, error } = await admin
+    .from('recherche_web')
+    .select('id')
+    .eq('dossier_id', dossierId)
+    .eq('query', query)
+    .in('statut', ['en_attente_validation', 'validee'])
+    .limit(1);
+  if (error) {
+    console.warn('[searchPublicInfo] anti-doublon check échoué (non bloquant):', error.message);
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
+}
+
 async function logRechercheWeb(
   query: string,
   r: PublicSearchResult,
   sollicitationId: string | null = null,
+  dossierId: string | null = null,
 ): Promise<void> {
-  const { supabaseUrl, supabaseServiceRoleKey } = getSettings();
-  if (!supabaseUrl || !supabaseServiceRoleKey) {
+  const admin = adminClient();
+  if (!admin) {
     console.info('[searchPublicInfo] traçabilité désactivée (SUPABASE_URL/SERVICE_ROLE_KEY absents).');
     return;
   }
   // Coût de l'appel : Perplexity le fournit dans usage.cost.total_cost (ex. 0.00506).
   const totalCost = (r.rawUsage as any)?.cost?.total_cost;
-  const admin = createClient(supabaseUrl, supabaseServiceRoleKey, { auth: { persistSession: false } });
   const { error } = await admin.from('recherche_web').insert({
     query,
     answer: r.answer,
@@ -168,6 +193,7 @@ async function logRechercheWeb(
     model: r.model,
     cost_usd: typeof totalCost === 'number' ? totalCost : null,
     sollicitation_id: sollicitationId,
+    dossier_id: dossierId,
   });
   if (error) throw error;
 }
@@ -207,8 +233,14 @@ export async function resolveMissingInfo(
   for (const f of fields) {
     const kind = classifyMissingInfo(f.label, f.context);
     if (kind === 'public') {
+      // Anti-doublon : si une recherche 'en_attente_validation'/'validee' existe déjà pour
+      // ce (dossier, champ), on NE relance PAS (évite les appels + lignes redondantes).
+      if (await hasActiveRecherche(dossierId, f.label)) {
+        out.push({ id: f.id, value: null, source: 'web', pending: true });
+        continue;
+      }
       // Recherche web + traçabilité « en attente » ; JAMAIS d'injection automatique ici (value=null).
-      const r = await searchPublicInfo(f.label, sollicitationId);
+      const r = await searchPublicInfo(f.label, sollicitationId, dossierId);
       out.push({ id: f.id, value: null, source: r ? 'web' : 'none', pending: r ? true : undefined });
     } else if (kind === 'internal') {
       const { sent } = await requestInfoFromTeam(f, dossierId);
