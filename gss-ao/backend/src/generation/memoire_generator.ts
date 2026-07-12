@@ -3204,6 +3204,18 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       await DB.saveDossier(dossierId, {
         memoire_cadre_state: { tempPath, missingFields: missingInfo }
       });
+
+      // ── Ticket #4 phase 2b — déclencheur GATÉ par RESOLVE_MISSING_INFO (OFF par défaut). ──
+      // Réutilise missingInfo ({id,label,context}) déjà calculée ci-dessus — AUCUN re-parse du .docx.
+      // FLAG OFF → aucun appel, génération STRICTEMENT inchangée (mémoire + missingFields identiques).
+      // FLAG ON → fire-and-forget : recherche web en fond des champs 'public' → recherche_web
+      // (statut « en_attente_validation », anti-doublon déjà en place). AUCUNE injection : le .docx
+      // n'est PAS modifié ici. Le .catch() garantit qu'un échec ne casse jamais la génération.
+      if (getSettings().resolveMissingInfoEnabled) {
+        resolveMissingInfo(missingInfo as MissingField[], dossierId).catch((e: any) =>
+          console.warn('[MemoireGenerator] resolveMissingInfo (fond) échec non bloquant:', e?.message));
+      }
+
       console.log(`[MemoireGenerator] Bypassing IA chat, forcing generation with ${missingInfo.length} missing fields.`);
       // return { status: 'incomplete', missingFields: missingInfo };
     }
