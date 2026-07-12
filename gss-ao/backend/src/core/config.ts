@@ -38,6 +38,8 @@ export interface Settings {
   s3Bucket: string;
   supabaseUrl: string;
   supabaseAnonKey: string;
+  perplexityApiKey: string;        // Ticket #4 : recherche web (Perplexity)
+  supabaseServiceRoleKey: string;  // Ticket #4 : insertion traçabilité recherche_web (backend de confiance)
 }
 
 export function getSettings(): Settings {
@@ -88,5 +90,7 @@ export function getSettings(): Settings {
     s3Bucket: process.env.S3_BUCKET || 'gss-ao',
     supabaseUrl: process.env.SUPABASE_URL || '',
     supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
+    perplexityApiKey: process.env.PERPLEXITY_API_KEY || '',
+    supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   };
 }

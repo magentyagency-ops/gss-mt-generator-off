@@ -16,6 +16,9 @@
 // Désactivé par défaut côté pipeline (env RESOLVE_MISSING_INFO=true pour activer la passe — qui reste
 // un no-op tant que les TODO ci-dessous ne sont pas implémentés).
 
+import { createClient } from '@supabase/supabase-js';
+import { getSettings } from '../core/config';
+
 /** Nature d'une information manquante (oriente vers web public ou demande interne). */
 export type MissingInfoKind = 'public' | 'internal' | 'unknown';
 
@@ -48,15 +51,122 @@ export function classifyMissingInfo(label: string, context = ''): MissingInfoKin
   return 'unknown';
 }
 
+/** Résultat structuré d'une recherche web publique (Perplexity), ou null si rien de sourcé. */
+export interface PublicSearchResult {
+  answer: string;
+  citations: string[];   // URLs sources — au moins 1 obligatoire (règle « 0 inventé »)
+  model: string;
+  rawUsage: unknown;     // objet `usage` brut de Perplexity (tokens, coût éventuel)
+}
+
+const PERPLEXITY_URL = 'https://api.perplexity.ai/chat/completions';
+const PERPLEXITY_MODEL = 'sonar';
+const PERPLEXITY_TIMEOUT_MS = 20000;
+
 /**
- * [STUB] Recherche d'une information PUBLIQUE sur Internet (ex. SIRET/adresse du client via un registre
- * d'entreprises) et renvoie la valeur vérifiée, ou null si introuvable.
- * TODO: brancher une API de recherche (annuaire-entreprises / INSEE Sirene / moteur web) + extraction
- * et VÉRIFICATION de la valeur (pas d'insertion non vérifiée — cohérent avec la règle « 0 inventé »).
+ * Extrait les URLs de citation d'une réponse Perplexity (`citations` et/ou `search_results`).
+ * Exporté pour testabilité.
  */
-export async function searchPublicInfo(_query: string): Promise<string | null> {
-  // Non implémenté : aucune source web branchée pour l'instant.
-  return null;
+export function extractCitations(data: any): string[] {
+  const fromCitations = Array.isArray(data?.citations)
+    ? data.citations.filter((c: unknown): c is string => typeof c === 'string' && c.trim() !== '')
+    : [];
+  const fromResults = Array.isArray(data?.search_results)
+    ? data.search_results
+        .map((r: any) => r?.url)
+        .filter((u: unknown): u is string => typeof u === 'string' && u.trim() !== '')
+    : [];
+  return [...new Set([...fromCitations, ...fromResults])];
+}
+
+/**
+ * Construit un PublicSearchResult à partir d'une réponse brute Perplexity — ou null.
+ * RÈGLE « 0 INVENTÉ » : null si réponse vide OU s'il n'y a AUCUNE citation. Exporté pour testabilité.
+ */
+export function groundedResultFromPerplexity(data: any, model = PERPLEXITY_MODEL): PublicSearchResult | null {
+  const answer = (data?.choices?.[0]?.message?.content ?? '').trim();
+  const citations = extractCitations(data);
+  if (!answer || citations.length === 0) return null;   // jamais de réponse sans source
+  return { answer, citations, model, rawUsage: data?.usage ?? null };
+}
+
+/**
+ * Recherche d'une information PUBLIQUE sur Internet via l'API Perplexity (modèle `sonar`).
+ * RÈGLE ABSOLUE « 0 inventé » : ne renvoie une réponse QUE si Perplexity fournit au moins une
+ * citation. Sinon → null. Erreurs (clé absente, 401, timeout, rate limit) : log clair + null,
+ * sans jamais casser l'appelant.
+ */
+export async function searchPublicInfo(query: string): Promise<PublicSearchResult | null> {
+  const key = getSettings().perplexityApiKey;
+  if (!key) {
+    console.warn('[searchPublicInfo] PERPLEXITY_API_KEY absente → null (aucune recherche).');
+    return null;
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PERPLEXITY_TIMEOUT_MS);
+  try {
+    const res = await fetch(PERPLEXITY_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: PERPLEXITY_MODEL,
+        messages: [
+          { role: 'system', content: "Réponds de façon concise et factuelle, uniquement à partir de sources vérifiables." },
+          { role: 'user', content: query },
+        ],
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.warn(`[searchPublicInfo] Perplexity HTTP ${res.status} → null. ${body.slice(0, 200)}`);
+      return null;
+    }
+    const data = await res.json();
+    const result = groundedResultFromPerplexity(data, PERPLEXITY_MODEL);
+    if (!result) {
+      console.info('[searchPublicInfo] réponse sans citation → null (règle « 0 inventé »).');
+      return null;
+    }
+    // Traçabilité (non bloquante) : un échec d'insertion ne casse pas le retour.
+    await logRechercheWeb(query, result).catch((e) =>
+      console.warn('[searchPublicInfo] insertion recherche_web échouée (non bloquant):', (e as Error)?.message));
+    return result;
+  } catch (e) {
+    const msg = (e as Error)?.name === 'AbortError' ? 'timeout' : (e as Error)?.message;
+    console.warn(`[searchPublicInfo] échec appel Perplexity (${msg}) → null.`);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Insère une ligne de traçabilité dans public.recherche_web via un client service_role
+ * (backend de confiance, contourne la RLS). Silencieux si la clé service_role est absente.
+ */
+async function logRechercheWeb(
+  query: string,
+  r: PublicSearchResult,
+  sollicitationId: string | null = null,
+): Promise<void> {
+  const { supabaseUrl, supabaseServiceRoleKey } = getSettings();
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    console.info('[searchPublicInfo] traçabilité désactivée (SUPABASE_URL/SERVICE_ROLE_KEY absents).');
+    return;
+  }
+  // Coût de l'appel : Perplexity le fournit dans usage.cost.total_cost (ex. 0.00506).
+  const totalCost = (r.rawUsage as any)?.cost?.total_cost;
+  const admin = createClient(supabaseUrl, supabaseServiceRoleKey, { auth: { persistSession: false } });
+  const { error } = await admin.from('recherche_web').insert({
+    query,
+    answer: r.answer,
+    citations: r.citations,
+    model: r.model,
+    cost_usd: typeof totalCost === 'number' ? totalCost : null,
+    sollicitation_id: sollicitationId,
+  });
+  if (error) throw error;
 }
 
 /**
@@ -80,8 +190,10 @@ export async function resolveMissingInfo(fields: MissingField[], dossierId: stri
   for (const f of fields) {
     const kind = classifyMissingInfo(f.label, f.context);
     if (kind === 'public') {
-      const value = await searchPublicInfo(`${f.label}`);
-      out.push({ id: f.id, value, source: value ? 'web' : 'none' });
+      // NB (phase 1) : compat de type uniquement — le câblage complet (injection mémoire) viendra
+      // plus tard. On ne conserve ici que le texte de réponse ; les citations restent tracées en base.
+      const r = await searchPublicInfo(`${f.label}`);
+      out.push({ id: f.id, value: r ? r.answer : null, source: r ? 'web' : 'none' });
     } else if (kind === 'internal') {
       const { sent } = await requestInfoFromTeam(f, dossierId);
       out.push({ id: f.id, value: null, source: 'none', pending: sent });
