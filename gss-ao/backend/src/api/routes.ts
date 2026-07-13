@@ -275,7 +275,7 @@ router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
 
     const consultations = result.consultations || [];
     const doneMessage = consultations.length
-      ? `Génération terminée. ⚠ ${consultations.length} information(s) à obtenir auprès de GSS.`
+      ? `Génération terminée. ⚠ ${consultations.length} information(s) à compléter.`
       : 'Génération terminée avec succès !';
     setDossierProgress(dossierId, { status: 'completed', progress: 100, message: doneMessage, consultations });
     res.json({

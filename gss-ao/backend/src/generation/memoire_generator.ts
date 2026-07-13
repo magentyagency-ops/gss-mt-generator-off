@@ -120,25 +120,63 @@ function isHeadingParagraph(p: any): boolean {
   return false;
 }
 
+/** Largeur d'une cellule en colonnes de grille (w:gridSpan, défaut 1). */
+function cellGridSpan(cell: any): number {
+  const tcPr = findLocalNameChild(cell, 'tcPr');
+  const gs = tcPr && findLocalNameChild(tcPr, 'gridSpan');
+  const v = gs ? parseInt(gs.getAttribute('w:val') || '1', 10) : 1;
+  return v > 0 ? v : 1;
+}
+
+/** Index de colonne-grille (0-based) où COMMENCE une cellule dans sa ligne (fusions comprises). */
+function cellGridStart(cell: any, tr: any): number {
+  let col = 0;
+  for (const c of getDirectCells(tr)) {
+    if (c === cell) break;
+    col += cellGridSpan(c);
+  }
+  return col;
+}
+
+/** Cellule (texte + largeur) couvrant la colonne-grille `gridCol` d'une ligne donnée. */
+function cellAtGrid(row: any, gridCol: number): { text: string; span: number } {
+  let col = 0;
+  for (const c of getDirectCells(row)) {
+    const span = cellGridSpan(c);
+    if (gridCol >= col && gridCol < col + span) return { text: getElementText(c).trim(), span };
+    col += span;
+  }
+  return { text: '', span: 1 };
+}
+
 function getTableCellContext(cell: any, tr: any): string {
   const directCells = getDirectCells(tr);
-  const cellIndex = directCells.indexOf(cell);
+  // Libellé de ligne : les AUTRES cellules de la ligne (la 1re colonne porte l'intitulé de ligne).
   const rowContext = directCells.filter((c: any) => c !== cell).map((c: any) => getElementText(c).trim()).filter(Boolean).join(' | ');
+
   const tbl = getParentWithLocalName(tr, 'tbl');
+  let colHeader = '';
   if (tbl) {
     const allRows = getElementsWithLocalName(tbl, 'tr');
-    if (allRows.length > 0) {
-      const headerCells = getDirectCells(allRows[0]);
-      if (headerCells.length > 0 && allRows[0] !== tr) {
-        let headerText = '';
-        if (cellIndex >= 0 && cellIndex < headerCells.length) {
-          headerText = getElementText(headerCells[cellIndex]).trim();
-        }
-        if (headerText) return `Colonne: "${headerText}" | Ligne: "${rowContext}"`;
+    const targetIdx = allRows.indexOf(tr);
+    if (targetIdx > 0) {
+      // On mappe par COLONNE DE GRILLE (et non par index de cellule) pour rester juste malgré les
+      // cellules fusionnées horizontalement (w:gridSpan) dans l'en-tête ou dans la ligne.
+      const gridCol = cellGridStart(cell, tr);
+      const h0 = cellAtGrid(allRows[0], gridCol);
+      colHeader = h0.text;
+      // En-tête groupé sur 2 lignes (1re ligne = groupe fusionné, 2e = sous-en-tête) ou 1re ligne
+      // vide → on complète avec la 2e ligne au même emplacement de grille.
+      if ((!h0.text || h0.span > 1) && targetIdx > 1) {
+        const h1 = cellAtGrid(allRows[1], gridCol).text;
+        if (h1) colHeader = h0.text && h0.text !== h1 ? `${h0.text} / ${h1}` : h1;
       }
     }
   }
-  return `Ligne: "${rowContext}"`;
+
+  return colHeader
+    ? `Colonne: "${colHeader}" | Ligne: "${rowContext}"`
+    : `Ligne: "${rowContext}"`;
 }
 
 function replaceTextInElement(xmlDoc: any, tEl: any, placeholder: string, value: string) {
@@ -3245,22 +3283,30 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       .filter((r: any) => /\[À COMPLÉTER\]/.test(String(r.value)))
       .map((r: any) => {
         const d = descriptors.find((x: any) => x.id === r.id);
-        const label = (d?.context.match(/Question:\s*"([^"]*)"|option:\s*"([^"]*)"|Tableau:\s*([^|]*)/) || [])
+        const label = (d?.context.match(/Question:\s*"([^"]*)"|option:\s*"([^"]*)"|Tableau:\s*(.+?)(?:\s*\|\s*Contexte proche:|$)/) || [])
           .slice(1).find(Boolean) || d?.context || '';
         return { id: r.id, label: String(label).trim(), context: d?.context || '' };
       });
 
     if (missingInfo.length > 0) {
-      const tempPath = require('path').join(this.responseDir, `temp_${dossierId}.docx`);
-      const tempSerializer = new XMLSerializer();
-      zip.file('word/document.xml', tempSerializer.serializeToString(xmlDoc));
-      const tempBuf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
-      require('fs').writeFileSync(tempPath, tempBuf);
+      // Persistance de l'état « cadre » pour la reprise avec réponses utilisateur (fonctionnalité
+      // désactivée : le `return incomplete` ci-dessous est commenté). NON ESSENTIEL → ne doit JAMAIS
+      // faire échouer la génération. En particulier, si la ligne `dossiers` appartient à un autre
+      // user_id, l'upsert est bloqué par la RLS Supabase : on log et on continue sans planter.
+      try {
+        const tempPath = require('path').join(this.responseDir, `temp_${dossierId}.docx`);
+        const tempSerializer = new XMLSerializer();
+        zip.file('word/document.xml', tempSerializer.serializeToString(xmlDoc));
+        const tempBuf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
+        require('fs').writeFileSync(tempPath, tempBuf);
 
-      await DB.saveDossier(dossierId, {
-        memoire_cadre_state: { tempPath, missingFields: missingInfo }
-      });
-      console.log(`[MemoireGenerator] Bypassing IA chat, forcing generation with ${missingInfo.length} missing fields.`);
+        await DB.saveDossier(dossierId, {
+          memoire_cadre_state: { tempPath, missingFields: missingInfo }
+        });
+        console.log(`[MemoireGenerator] État cadre sauvegardé (${missingInfo.length} champ(s) manquant(s)).`);
+      } catch (e: any) {
+        console.warn(`[MemoireGenerator] Sauvegarde de l'état cadre ignorée (non bloquant) : ${e?.message || e}`);
+      }
       // return { status: 'incomplete', missingFields: missingInfo };
     }
 
@@ -3334,6 +3380,24 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
 
     console.log(`[MemoireGenerator] Applied ${applied}/${replacements.length} replacements.`);
 
+    // 7 bis. Liste des champs restés « [À COMPLÉTER] » APRÈS garde-fous (fidèle au document remis)
+    // → transformés en QUESTIONS à compléter, remontées comme notification (comme le no-template).
+    const aCompleter: string[] = replacements
+      .filter((r: any) => /\[À COMPLÉTER\]/.test(String(r.value)))
+      .map((r: any) => {
+        const d = descriptors.find((x: any) => x.id === r.id);
+        const ctx = d?.context || '';
+        // Pour un champ de tableau, on garde COLONNE + LIGNE (pas seulement la ligne) afin que la
+        // question soit sans ambiguïté. Sinon on prend la Question / l'option de case à cocher.
+        const m = ctx.match(/Question:\s*"([^"]*)"|option:\s*"([^"]*)"|Tableau:\s*(.+?)(?:\s*\|\s*Contexte proche:|$)/);
+        const label = (m ? m.slice(1).find(Boolean) : '') || ctx.replace(/\s*\|\s*Contexte proche:.*$/, '').trim();
+        return (label || `Champ ${r.id}`).trim();
+      })
+      .filter((s: string, i: number, arr: string[]) => Boolean(s) && arr.indexOf(s) === i);
+    if (aCompleter.length) {
+      console.warn(`[MemoireGenerator] ⚠ ${aCompleter.length} champ(s) « [À COMPLÉTER] » à faire remplir :\n- ${aCompleter.join('\n- ')}`);
+    }
+
     // 8. Serialize and save
     if (onProgress) onProgress(98, 'Génération du document Word…');
     const serializer = new XMLSerializer();
@@ -3356,7 +3420,8 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
           recherche: `[CHAMP_${r.id}]`,
           remplacement: r.value
         })))
-      }
+      },
+      consultations: aCompleter,
     };
   }
 

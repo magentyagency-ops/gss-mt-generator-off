@@ -276,10 +276,16 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 <div className="mx-6 mt-6 rounded-lg border border-amber-400/50 bg-amber-50 dark:bg-amber-950/30 p-4">
                   <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-semibold mb-2">
                     <AlertTriangle className="h-5 w-5 shrink-0" />
-                    <span>Consultation GSS requise — {docxResult.data.consultations.length} information(s) à obtenir</span>
+                    <span>
+                      {hasTemplate
+                        ? `Champs à compléter — ${docxResult.data.consultations.length} information(s) manquante(s)`
+                        : `Consultation GSS requise — ${docxResult.data.consultations.length} information(s) à obtenir`}
+                    </span>
                   </div>
                   <p className="text-sm text-amber-800/80 dark:text-amber-300/80 mb-3">
-                    Ces exigences du CCTP ne sont pas couvertes par la documentation GSS actuelle. Merci de réunir ces informations pour compléter le mémoire :
+                    {hasTemplate
+                      ? "Ces champs du cadre n'ont pas pu être renseignés automatiquement (absents du DCE et de la documentation GSS). Merci de les compléter dans le document :"
+                      : "Ces exigences du CCTP ne sont pas couvertes par la documentation GSS actuelle. Merci de réunir ces informations pour compléter le mémoire :"}
                   </p>
                   <ul className="list-disc pl-5 space-y-1 text-sm text-foreground">
                     {docxResult.data.consultations.map((c: string, i: number) => (
