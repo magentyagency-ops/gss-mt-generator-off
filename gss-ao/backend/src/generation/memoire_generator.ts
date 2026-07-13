@@ -1,4 +1,5 @@
 import { MarpGenerator } from './marp_generator';
+import { ImageLibraryService } from './image_service';
 import fs from 'fs';
 import path from 'path';
 import { spawnSync, spawn } from 'child_process';
@@ -934,7 +935,7 @@ export interface AssembleChapter {
   /** Chapitre I..IV (ordre = ordre des Heading1 dans le template). */
   key: string;
   title: string;
-  sections: Array<{ title: string; text: string }>;
+  sections: Array<{ title: string; text: string; id?: string; illustration?: string }>;
 }
 
 // ─── Mode B (réponse libre / sans cadre imposé) ───
@@ -4175,7 +4176,7 @@ RÈGLES DE FORME (rendu Marp) :
     }
 
     if (onProgress) onProgress(90, 'Assemblage final de la présentation Marp...');
-    const result = await this.exportFromSectionsMap(sectionsMap, dossierId);
+    const result = await this.exportFromSectionsMap(sectionsMap, dossierId, onProgress);
 
     // On remonte les consultations dans generatedData (→ « data_generee_par_ia » côté API/front) pour
     // que l'utilisateur voie précisément quelles informations restent à obtenir auprès de GSS.
@@ -4392,6 +4393,7 @@ RÈGLES DE FORME (rendu Marp) :
   public async exportFromSectionsMap(
     sectionsMap: Record<string, string>,
     dossierId: string = 'export',
+    onProgress?: (progress: number, message: string) => void,
   ): Promise<{ filePath: string; generatedData: Record<string, string> }> {
     const chapters: AssembleChapter[] = CHAPTER_ORDER_B.map((ch) => ({
       key: ch,
@@ -4411,8 +4413,23 @@ RÈGLES DE FORME (rendu Marp) :
     }
 
     const cover = await this.getCoverInfo(dossierId);
+
+    // Bibliothèque d'images (base de données) : on charge le pool, puis on attribue
+    // AU PLUS une image par slide selon le CONTEXTE du texte, chaque image utilisée
+    // une seule fois sur tout le document (unicité stricte, compréhension par LLM).
+    onProgress?.(92, 'Chargement des images de la bibliothèque…');
+    const imageService = new ImageLibraryService();
+    const imagePool = await imageService.loadPool();
+
+    onProgress?.(93, 'Attribution contextuelle des illustrations…');
+    const slides = MarpGenerator.enumerateContentSlides(chapters);
+    const assignments = await imageService.assignImages(slides, imagePool);
+
+    // Le rendu Marp/Chromium est bloquant et peut durer plusieurs minutes sur un
+    // mémoire illustré : on signale l'étape pour que la barre ne semble pas figée.
+    onProgress?.(95, `Rendu du PDF (${assignments.size} illustration(s))…`);
     const generator = new MarpGenerator(this.responseDir);
-    const result = generator.generatePdf(chapters, cover);
+    const result = generator.generatePdf(chapters, cover, assignments);
 
     return { filePath: result.filePath, generatedData: {} };
   }

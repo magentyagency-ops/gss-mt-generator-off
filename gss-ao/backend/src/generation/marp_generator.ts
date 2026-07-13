@@ -1,10 +1,15 @@
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
+import type { PooledIllustration, SlideContext } from './image_service';
+
+/** Illustrations attribuées, indexées par clé de slide (unicité globale garantie amont). */
+export type SlideAssignments = Map<string, PooledIllustration>;
 
 // ─── Constants ───
-/** Maximum words per slide body before splitting to a new slide. */
-const MAX_WORDS_PER_SLIDE = 220;
+/** Maximum words per slide body before splitting to a new slide.
+ *  Abaissé (vs 220) pour réserver l'espace de l'illustration placée sous le texte. */
+const MAX_WORDS_PER_SLIDE = 170;
 /** Path to Marp assets (CSS + logo) bundled with the backend. */
 const MARP_ASSETS_DIR = path.resolve(__dirname, 'marp');
 
@@ -74,6 +79,11 @@ function splitIntoSlideChunks(text: string): string[] {
   return chunks.length > 0 ? chunks : [''];
 }
 
+/** Clé stable d'une slide de contenu, partagée entre l'énumération et le rendu. */
+function slideKeyOf(chapterIdx: number, sectionIdx: number, chunkIdx: number): string {
+  return `${chapterIdx}_${sectionIdx}_${chunkIdx}`;
+}
+
 export interface AssembleChapter {
   key: string;
   title: string;
@@ -98,12 +108,35 @@ export class MarpGenerator {
   }
 
   /**
+   * Énumère, dans l'ORDRE DE RENDU, toutes les slides de contenu (une par chunk
+   * de section) avec leur clé stable. Utilisé en amont pour attribuer les images
+   * selon le contexte : `buildMarkdown` recalcule EXACTEMENT les mêmes clés.
+   */
+  public static enumerateContentSlides(chapters: AssembleChapter[]): SlideContext[] {
+    const slides: SlideContext[] = [];
+    chapters.forEach((chapter, ci) => {
+      if (!chapter.sections || chapter.sections.length === 0) return;
+      chapter.sections.forEach((section, si) => {
+        const chunks = splitIntoSlideChunks(cleanTextForMarp(section.text));
+        chunks.forEach((chunk, k) => {
+          slides.push({ key: slideKeyOf(ci, si, k), title: section.title, text: chunk });
+        });
+      });
+    });
+    return slides;
+  }
+
+  /**
    * Generate a full Marp markdown document from chapters + sections,
    * then render it to PDF using @marp-team/marp-cli.
    * Returns the path to the generated PDF.
    */
-  public generatePdf(chapters: AssembleChapter[], cover: CoverInfo = {}): { filePath: string; markdownPath: string } {
-    const markdown = this.buildMarkdown(chapters, cover);
+  public generatePdf(
+    chapters: AssembleChapter[],
+    cover: CoverInfo = {},
+    assignments: SlideAssignments = new Map(),
+  ): { filePath: string; markdownPath: string } {
+    const markdown = this.buildMarkdown(chapters, cover, assignments);
 
     // Write markdown + copy assets to a temp working directory
     const workDir = path.join(this.outputDir, `marp_work_${Date.now()}`);
@@ -132,6 +165,21 @@ export class MarpGenerator {
     const mediaDst = path.join(workDir, 'media');
     if (fs.existsSync(mediaSrc)) {
       fs.cpSync(mediaSrc, mediaDst, { recursive: true });
+    }
+
+    // Écrit dans media/ UNIQUEMENT les images réellement attribuées (unicité déjà
+    // garantie en amont) → media/<fileName> référencé par le markdown.
+    if (assignments.size > 0) {
+      fs.mkdirSync(mediaDst, { recursive: true });
+      const written = new Set<string>();
+      for (const illus of assignments.values()) {
+        if (written.has(illus.fileName)) continue;
+        fs.writeFileSync(path.join(mediaDst, illus.fileName), illus.data);
+        written.add(illus.fileName);
+      }
+      // Réduit les images « db_ » à leur taille d'affichage : les images pleine
+      // résolution ralentissent énormément (voire bloquent) le rendu Chromium.
+      this.downscaleDbImages(mediaDst);
     }
 
     // Render to PDF via marp-cli
@@ -164,6 +212,10 @@ export class MarpGenerator {
         stdio: 'pipe',
         encoding: 'utf-8',
         shell: isWin,
+        // Marp/Puppeteer abandonne la conversion après 30 s par défaut : insuffisant
+        // pour un mémoire volumineux illustré d'images (base de données). On aligne
+        // ce délai interne sur le timeout du process (cause du « Timed out after 30000ms »).
+        env: { ...process.env, PUPPETEER_TIMEOUT: '280000' },
       }
     );
 
@@ -188,9 +240,42 @@ export class MarpGenerator {
   }
 
   /**
+   * Réduit (in place) les images « db_ » du dossier media à leur taille
+   * d'affichage via Pillow. Étape best-effort : si Python/Pillow est absent ou
+   * échoue, on conserve les images d'origine (le rendu reste possible).
+   */
+  private downscaleDbImages(mediaDir: string): void {
+    try {
+      const script = path.resolve(__dirname, '../../python/downscale_images.py');
+      if (!fs.existsSync(script)) return;
+      const pythonBin = process.env.PYTHON_BIN || 'py';
+      const isWin = process.platform === 'win32';
+      const q = (p: string) => (isWin ? `"${p}"` : p);
+      const proc = spawnSync(
+        pythonBin,
+        [q(script), '--dir', q(mediaDir), '--max', '1000', '--prefix', 'db_'],
+        { encoding: 'utf-8', timeout: 120_000, shell: isWin },
+      );
+      if (proc.status === 0 && proc.stdout) {
+        console.log(`[MarpGenerator] Redimensionnement images: ${proc.stdout.trim()}`);
+      } else if (proc.error || proc.status !== 0) {
+        console.warn(
+          `[MarpGenerator] Redimensionnement images ignoré (${proc.error?.message || 'status ' + proc.status}).`,
+        );
+      }
+    } catch (err: any) {
+      console.warn(`[MarpGenerator] Redimensionnement images ignoré: ${err.message || err}`);
+    }
+  }
+
+  /**
    * Build the full Marp markdown string.
    */
-  private buildMarkdown(chapters: AssembleChapter[], cover: CoverInfo = {}): string {
+  private buildMarkdown(
+    chapters: AssembleChapter[],
+    cover: CoverInfo = {},
+    assignments: SlideAssignments = new Map(),
+  ): string {
     const lines: string[] = [];
 
     // ── Frontmatter ──
@@ -274,8 +359,8 @@ export class MarpGenerator {
     lines.push('');
 
     // ── Chapters & sections ──
-    for (const chapter of chapters) {
-      if (!chapter.sections || chapter.sections.length === 0) continue;
+    chapters.forEach((chapter, ci) => {
+      if (!chapter.sections || chapter.sections.length === 0) return;
 
       // Intercalaire (chapter divider page)
       lines.push('---');
@@ -286,7 +371,7 @@ export class MarpGenerator {
       lines.push('');
 
       // Sections
-      for (const section of chapter.sections) {
+      chapter.sections.forEach((section, si) => {
         const headerTitle = section.title.toUpperCase();
         const cleanedText = cleanTextForMarp(section.text);
         const chunks = splitIntoSlideChunks(cleanedText);
@@ -298,6 +383,15 @@ export class MarpGenerator {
           lines.push('');
           lines.push(chunk);
           lines.push('');
+
+          // Illustration attribuée à CETTE slide selon son contexte (clé stable
+          // = même énumération qu'enumerateContentSlides). Chaque image est unique
+          // sur tout le document. Placée EN BLOC CENTRÉ SOUS le texte.
+          const illus = assignments.get(slideKeyOf(ci, si, i));
+          if (illus) {
+            lines.push(`![${illus.alt}](media/${illus.fileName})`);
+            lines.push('');
+          }
         }
 
         // Dynamic illustrations mapping based on section id
@@ -313,7 +407,7 @@ export class MarpGenerator {
           lines.push(`![bg contain](media/${illustrationMap[section.id]})`);
           lines.push('');
         }
-      }
+      });
 
       if (chapter.key === 'I' || chapter.key === '1') {
         const refSlides = this.getReferencesSlides();
@@ -323,7 +417,7 @@ export class MarpGenerator {
           lines.push('');
         }
       }
-    }
+    });
 
     return lines.join('\n');
   }

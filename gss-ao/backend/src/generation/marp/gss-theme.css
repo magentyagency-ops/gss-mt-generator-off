@@ -177,6 +177,22 @@ img[alt="class:illustration-center"] {
   border: 1px solid #e5e7eb;
 }
 
+/* Illustration contextuelle : bloc centré SOUS le texte (jamais à côté d'un titre).
+   Dimensionnée pour ne pas déborder la slide malgré le corps de texte au-dessus. */
+img[alt="class:illustration-block"] {
+  display: block;
+  width: 62%;
+  max-width: 380px;
+  max-height: 62mm;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  margin: 22px auto 0 auto;
+  clear: both;
+  border-radius: 6px;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.12);
+  border: 1px solid #e5e7eb;
+}
+
 /* Page numbers in footer */
 section::after {
   content: "Page " attr(data-marpit-pagination) " / " attr(data-marpit-pagination-total);
