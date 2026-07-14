@@ -16,8 +16,12 @@
 // Désactivé par défaut côté pipeline (env RESOLVE_MISSING_INFO=true pour activer la passe — qui reste
 // un no-op tant que les TODO ci-dessous ne sont pas implémentés).
 
+import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import { getSettings } from '../core/config';
+
+/** Modèle utilitaire (le petit) pour la classification — même défaut que llmExtractor.ts. */
+const CLASSIFY_MODEL = process.env.EXTRACTION_MODEL || 'gpt-5.4-mini';
 
 /** Nature d'une information manquante (oriente vers web public ou demande interne). */
 export type MissingInfoKind = 'public' | 'internal' | 'unknown';
@@ -49,6 +53,86 @@ export function classifyMissingInfo(label: string, context = ''): MissingInfoKin
   // Identité administrative du CLIENT/acheteur → potentiellement publique (registre des entreprises).
   if (/(acheteur|client|donneur d.ordre).*(siret|siren|adresse|forme juridique|naf|ape)|siret|siren|kbis|forme juridique/.test(n)) return 'public';
   return 'unknown';
+}
+
+const CLASSIFY_SYSTEM_PROMPT =
+  "Tu classes des informations manquantes d'un mémoire de réponse à un appel d'offres. Pour chaque " +
+  "champ, décide s'il est EXTERNE (public, vérifiable par recherche internet : SIRET, SIREN, forme " +
+  "juridique, KBIS, adresse de siège, dirigeants publics d'une entreprise tierce/acheteur, " +
+  "certifications publiques, données publiées) ou INTERNE (connu seulement de l'entreprise qui répond " +
+  "ou d'un humain : effectif dédié, moyens, méthodologie, prix, références, capacité, intentions, " +
+  "signataire interne). En cas de doute, réponds INTERNE.";
+
+/**
+ * Classifieur LLM BATCHÉ (1 seul appel pour tout le lot) : décide EXTERNE ('public') vs INTERNE
+ * ('internal') pour chaque champ manquant. Remplace l'heuristique regex `classifyMissingInfo`, qui
+ * ne sert plus que de FILET DE SECOURS si l'appel LLM échoue.
+ *
+ * Robustesse « en cas de doute → INTERNE » : tout champ dont l'id n'est pas renvoyé, ou dont la
+ * décision est absente/invalide, retombe sur 'internal'. Si l'appel LLM entier échoue (API, JSON
+ * illisible), fallback champ par champ sur la regex `classifyMissingInfo` ('public' conservé, sinon
+ * 'internal'). Ne lève jamais.
+ */
+export async function classifyFieldsLLM(fields: MissingField[]): Promise<Map<number, 'public' | 'internal'>> {
+  const result = new Map<number, 'public' | 'internal'>();
+  if (fields.length === 0) return result; // aucun champ → aucun appel LLM
+
+  const regexFallback = (): Map<number, 'public' | 'internal'> => {
+    const m = new Map<number, 'public' | 'internal'>();
+    for (const f of fields) {
+      const kind = classifyMissingInfo(f.label, f.context) === 'public' ? 'public' : 'internal';
+      m.set(f.id, kind);
+      console.log(`[classifyFieldsLLM] champ ${f.id} → ${kind} (origine: fallback regex)`);
+    }
+    return m;
+  };
+
+  const key = getSettings().openaiApiKey;
+  if (!key) {
+    console.warn('[classifyFieldsLLM] OPENAI_API_KEY absente → fallback regex.');
+    return regexFallback();
+  }
+
+  try {
+    const client = new OpenAI({ apiKey: key });
+    const userPayload = fields.map((f) => ({ id: f.id, label: f.label, context: f.context }));
+    const completion = await client.chat.completions.create({
+      model: CLASSIFY_MODEL,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: CLASSIFY_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content:
+            'Champs à classer (JSON) :\n' +
+            JSON.stringify(userPayload) +
+            '\n\nRéponds UNIQUEMENT par un objet JSON de la forme ' +
+            '{"classifications":[{"id":<number>,"decision":"externe"|"interne"}]}.',
+        },
+      ],
+      temperature: 0.1,
+    });
+    const content = completion.choices[0].message.content || '{}';
+    const data = JSON.parse(content);
+    const decided = new Map<number, 'public' | 'internal'>();
+    if (Array.isArray(data?.classifications)) {
+      for (const c of data.classifications) {
+        if (typeof c?.id !== 'number') continue;
+        const kind = c?.decision === 'externe' ? 'public' : c?.decision === 'interne' ? 'internal' : null;
+        if (kind) decided.set(c.id, kind);
+      }
+    }
+    // Règle du doute : id non renvoyé ou décision invalide → 'internal'.
+    for (const f of fields) {
+      const kind = decided.get(f.id) ?? 'internal';
+      result.set(f.id, kind);
+      console.log(`[classifyFieldsLLM] champ ${f.id} → ${kind} (origine: LLM)`);
+    }
+    return result;
+  } catch (e) {
+    console.warn(`[classifyFieldsLLM] appel LLM échoué (${(e as Error)?.message}) → fallback regex.`);
+    return regexFallback();
+  }
 }
 
 /** Résultat structuré d'une recherche web publique (Perplexity), ou null si rien de sourcé. */
@@ -229,9 +313,12 @@ export async function resolveMissingInfo(
     return fields.map((f) => ({ id: f.id, value: null, source: 'none' as const }));
   }
 
+  // Classification LLM batchée : UN SEUL appel pour tout le lot (regex = filet de secours interne).
+  const kinds = await classifyFieldsLLM(fields);
+
   const out: ResolvedInfo[] = [];
   for (const f of fields) {
-    const kind = classifyMissingInfo(f.label, f.context);
+    const kind = kinds.get(f.id) ?? 'internal';
     if (kind === 'public') {
       // Anti-doublon : si une recherche 'en_attente_validation'/'validee' existe déjà pour
       // ce (dossier, champ), on NE relance PAS (évite les appels + lignes redondantes).
