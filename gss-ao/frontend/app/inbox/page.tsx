@@ -62,6 +62,31 @@ export default function InboxPage() {
 
   useEffect(() => { loadQuestions(); }, [loadQuestions]);
 
+  // ── Regroupement par dossier (Cas A) ─────────────────────────────────────────────
+  // À partir de la liste plate déjà chargée (RLS-scoped), on groupe par `ao_id`.
+  //   • dans chaque groupe : ordre chronologique CROISSANT (created_at asc) → on lit le
+  //     fil comme une conversation (question puis, sur la même carte, sa réponse) ;
+  //   • entre les groupes : le dossier avec l'activité la plus RÉCENTE en premier
+  //     (max de reponse_recue_at/created_at, décroissant).
+  const groupes = useMemo(() => {
+    const map = new Map<string, QuestionInterne[]>();
+    for (const q of questions) {
+      const arr = map.get(q.ao_id);
+      if (arr) arr.push(q); else map.set(q.ao_id, [q]);
+    }
+    const activiteTime = (q: QuestionInterne) =>
+      new Date(q.reponse_recue_at ?? q.created_at).getTime();
+    const groups = Array.from(map.entries()).map(([aoId, items]) => ({
+      aoId,
+      items: [...items].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      ),
+      derniereActivite: Math.max(...items.map(activiteTime)),
+    }));
+    groups.sort((a, b) => b.derniereActivite - a.derniereActivite);
+    return groups;
+  }, [questions]);
+
   // ── Realtime : statut en temps réel (§12), sur toutes MES questions ──────────────
   useEffect(() => {
     if (!userEmail) return;
@@ -120,21 +145,34 @@ export default function InboxPage() {
         <div className="mb-3 rounded-md border border-destructive bg-destructive/10 p-3 text-sm">{err}</div>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-6">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
           <Inbox className="size-4" /> Toutes mes sollicitations ({questions.length})
         </h2>
         {questions.length === 0 && (
           <p className="text-sm text-muted-foreground">Aucune sollicitation pour le moment.</p>
         )}
-        {questions.map((q) => (
-          <QuestionCard
-            key={q.id}
-            q={q}
-            onValider={() => valider(q)}
-            dossierNom={dossierNomById.get(q.ao_id) ?? "Dossier inconnu"}
-          />
-        ))}
+        {groupes.map((g) => {
+          const nom = dossierNomById.get(g.aoId) ?? "Dossier inconnu";
+          return (
+            <section key={g.aoId} className="space-y-3">
+              <h3 className="flex items-baseline gap-2 border-b border-input pb-1">
+                <span className="text-sm font-semibold text-foreground">{nom}</span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  {g.items.length} sollicitation{g.items.length > 1 ? "s" : ""}
+                </span>
+              </h3>
+              {g.items.map((q) => (
+                <QuestionCard
+                  key={q.id}
+                  q={q}
+                  onValider={() => valider(q)}
+                  dossierNom={nom}
+                />
+              ))}
+            </section>
+          );
+        })}
       </div>
     </Shell>
   );
