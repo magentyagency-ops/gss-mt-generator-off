@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useIntro } from "@/components/intro-provider";
 import { apiFetch } from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 
 const STATUTS: (Statut | "Tous")[] = ["Tous", "Brouillon", "En cours", "À valider", "Envoyé"];
 
@@ -43,6 +44,39 @@ export default function DossiersPage() {
       })
       .catch((e) => console.error(e));
   }, []);
+
+  // ── Sollicitations « en attente de réponse » par dossier (front, en parallèle) ────
+  // Requête Supabase SÉPARÉE (indépendante du chargement des dossiers ci-dessus).
+  // La RLS scope déjà à l'utilisateur connecté → aucun filtre user_id.
+  // Règle « en attente » : reponse_recue_at IS NULL ET statut IN ('envoyee','reponse_en_attente').
+  // Exclut a_envoyer (pas encore envoyée), reponse_recue et validee (déjà répondues).
+  // Robustesse : toute erreur laisse la map vide → aucun badge, la liste s'affiche normalement.
+  const [enAttenteByDossier, setEnAttenteByDossier] = useState<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    let annule = false;
+    (async () => {
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("question_interne")
+          .select("ao_id, statut, reponse_recue_at");
+        if (annule || error || !Array.isArray(data)) return;
+        const m = new Map<string, number>();
+        for (const q of data as { ao_id: string; statut: string; reponse_recue_at: string | null }[]) {
+          const enAttente =
+            q.reponse_recue_at == null &&
+            (q.statut === "envoyee" || q.statut === "reponse_en_attente");
+          if (enAttente && q.ao_id) m.set(q.ao_id, (m.get(q.ao_id) ?? 0) + 1);
+        }
+        setEnAttenteByDossier(m);
+      } catch {
+        /* échec silencieux : pas de badge, la liste des dossiers reste intacte */
+      }
+    })();
+    return () => { annule = true; };
+  }, []);
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [supprimerMultiple, setSupprimerMultiple] = useState(false);
 
@@ -259,7 +293,17 @@ export default function DossiersPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={STATUT_VARIANT[d.statut]}>{d.statut}</Badge>
+                      <div className="flex flex-col items-start gap-1">
+                        <Badge variant={STATUT_VARIANT[d.statut]}>{d.statut}</Badge>
+                        {(() => {
+                          const n = enAttenteByDossier.get(d.id) ?? 0;
+                          return n > 0 ? (
+                            <Badge variant="warning" className="font-normal whitespace-nowrap">
+                              {n} en attente de réponse{n > 1 ? "s" : ""}
+                            </Badge>
+                          ) : null;
+                        })()}
+                      </div>
                     </TableCell>
 
                     <TableCell>
