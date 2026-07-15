@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import {
   CalendarClock,
   MapPin,
@@ -34,6 +34,9 @@ import {
 } from "@/lib/gss-config";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
+import { QuestionCard } from "@/components/question-card";
+import { type QuestionInterne } from "@/lib/sollicitations";
 
 function StatPill({
   icon: Icon,
@@ -82,6 +85,69 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
       })
       .catch((e) => console.error(e));
   }, [id]);
+
+  // ── Sollicitations du dossier (requête Supabase front SÉPARÉE, indépendante de l'apiFetch) ─
+  // Filtrée sur ao_id = id du dossier courant ; la RLS scope déjà à l'utilisateur (pas de user_id).
+  // Même client Supabase que /inbox. Ordre chronologique croissant → fil question → réponse.
+  // Robustesse : en cas d'échec, sollicitationsError = true → la section n'est pas rendue et la
+  // fiche s'affiche normalement (jamais de page blanche). Flag `annule` contre le setState post-démontage.
+  const supabase = useMemo(() => createClient(), []);
+  const [sollicitations, setSollicitations] = useState<QuestionInterne[]>([]);
+  const [sollicitationsLoaded, setSollicitationsLoaded] = useState(false);
+  const [sollicitationsError, setSollicitationsError] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
+
+  useEffect(() => {
+    let annule = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("question_interne")
+          .select("*")
+          .eq("ao_id", id)
+          .order("created_at", { ascending: true });
+        if (annule) return;
+        if (error || !Array.isArray(data)) { setSollicitationsError(true); return; }
+        setSollicitationsError(false);
+        setSollicitations(data as QuestionInterne[]);
+        setSollicitationsLoaded(true);
+      } catch {
+        if (!annule) setSollicitationsError(true);
+      }
+    })();
+    return () => { annule = true; };
+  }, [supabase, id, reloadTick]);
+
+  // Realtime : recharge les sollicitations de CE dossier au moindre changement (même pattern que /inbox).
+  useEffect(() => {
+    const channel = supabase
+      .channel(`qi-dossier-${id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "question_interne", filter: `ao_id=eq.${id}` },
+        () => setReloadTick((t) => t + 1),
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [supabase, id]);
+
+  // Nombre « en attente de réponse » (règle identique au badge de la liste des dossiers).
+  const enAttente = useMemo(
+    () =>
+      sollicitations.filter(
+        (q) => q.reponse_recue_at == null && (q.statut === "envoyee" || q.statut === "reponse_en_attente"),
+      ).length,
+    [sollicitations],
+  );
+
+  // Valider une sollicitation (RLS : réservé au propriétaire de l'AO / admin), puis recharge.
+  async function validerSollicitation(q: QuestionInterne) {
+    const { error } = await supabase
+      .from("question_interne")
+      .update({ statut: "validee" })
+      .eq("id", q.id);
+    if (!error) setReloadTick((t) => t + 1);
+  }
 
   if (!dossierInfo) {
     return <div className="p-8 text-center">Chargement du dossier...</div>;
@@ -250,6 +316,40 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
               </div>
             </CardContent>
           </Card>
+
+          {/* Sollicitations du dossier (mails internes en attente / répondus) */}
+          {!sollicitationsError && (
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Mail className="h-5 w-5" /> Sollicitations
+                  {sollicitationsLoaded && (
+                    <span className="text-sm font-normal text-muted-foreground">
+                      ({sollicitations.length} sollicitation{sollicitations.length > 1 ? "s" : ""})
+                    </span>
+                  )}
+                </CardTitle>
+                {sollicitationsLoaded && sollicitations.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {enAttente > 0
+                      ? `${enAttente} en attente de réponse${enAttente > 1 ? "s" : ""}`
+                      : "Aucune en attente de réponse"}
+                  </p>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!sollicitationsLoaded ? (
+                  <p className="text-sm text-muted-foreground">Chargement des sollicitations…</p>
+                ) : sollicitations.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Aucune sollicitation pour ce dossier.</p>
+                ) : (
+                  sollicitations.map((q) => (
+                    <QuestionCard key={q.id} q={q} onValider={() => validerSollicitation(q)} />
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
