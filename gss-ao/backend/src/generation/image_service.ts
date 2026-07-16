@@ -6,7 +6,7 @@ import { getSettings } from '../core/config';
 const IMAGES_BUCKET = 'images-library';
 
 /** Modèle utilisé pour comprendre le contexte des slides et attribuer les images. */
-const MATCH_MODEL = process.env.IMAGE_MATCH_MODEL || 'gpt-5.4-mini';
+const MATCH_MODEL = process.env.IMAGE_MATCH_MODEL || 'luna';
 
 /** Nombre maximal d'images chargées dans le pool (borne de sécurité mémoire). */
 const MAX_POOL_SIZE = 40;
