@@ -4,7 +4,7 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import OpenAI from 'openai';
-import { DB, DossierRecord, MemoiresDB, remainingGenerations } from '../core/db';
+import { DB, DossierRecord, MemoiresDB, remainingGenerations, QuotaError } from '../core/db';
 import { initProgress, finishProgress } from '../core/progress';
 import { extractRcWithLLM, extractCctpWithLLM } from '../analysis/llmExtractor';
 import { requireAuth } from './authMiddleware';
@@ -31,6 +31,8 @@ interface ProgressInfo {
   progress: number;
   message: string;
   logs: string[];
+  /** Informations que GSS ne possède pas et qui doivent être obtenues (notif « consultation requise »). */
+  consultations?: string[];
 }
 
 export const progressStore: Record<string, ProgressInfo> = {};
@@ -48,14 +50,12 @@ export function setDossierProgress(id: string, update: Partial<ProgressInfo>) {
   if (update.logs !== undefined) {
     progressStore[id].logs.push(...update.logs);
   }
+  if (update.consultations !== undefined) progressStore[id].consultations = update.consultations;
 }
 
-// Bloque la génération si le quota est épuisé — SAUF régénération d'un dossier
-// qui a déjà une mémoire (le trigger BDD ne consomme un crédit qu'à l'INSERT).
+// Bloque la génération si le quota est épuisé (chaque génération coûte 1 crédit).
 // Renvoie true et répond 429 si bloqué.
-async function quotaBlocked(dossierId: string, res: Response): Promise<boolean> {
-  const existing = await MemoiresDB.getByDossier(dossierId);
-  if (existing) return false; // régénération : aucun crédit consommé
+async function quotaBlocked(res: Response): Promise<boolean> {
   const remaining = await remainingGenerations();
   if (remaining === 0) {
     res.status(429).json({
@@ -232,8 +232,20 @@ router.get('/dossiers/:id/memoire', async (req: Request, res: Response) => {
 // Module C — génération mémoire technique.
 router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
   const dossierId = req.params.dossier_id;
+  let memoireId: string | null = null;
   try {
-    if (await quotaBlocked(dossierId, res)) return;
+    if (await quotaBlocked(res)) return;
+    // Consomme 1 crédit dès le lancement (nouvelle ligne mémoire 'generating').
+    try {
+      memoireId = await MemoiresDB.createGenerating(dossierId);
+    } catch (e: any) {
+      if (e instanceof QuotaError) {
+        return res.status(429).json({
+          error: 'Quota de génération atteint (ou email non confirmé).',
+        });
+      }
+      console.error('Initialisation du mémoire en base échouée:', e.message || e);
+    }
     setDossierProgress(dossierId, { status: 'running', progress: 5, message: 'Démarrage de la génération du mémoire...' });
     const generator = new MemoireGenerator();
     const result = await generator.generate(dossierId, (progress, message) => {
@@ -249,18 +261,30 @@ router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
       });
     }
 
-    try {
-      await MemoiresDB.save(dossierId, {
-        generatedData: result.generatedData,
-        filePath: result.filePath,
-        mode: 'cadre',
-      });
-    } catch (e: any) {
-      console.error('Sauvegarde du mémoire en base échouée:', e.message || e);
+    if (memoireId) {
+      try {
+        await MemoiresDB.finish(memoireId, {
+          generatedData: result.generatedData,
+          filePath: result.filePath,
+          mode: 'cadre',
+        });
+      } catch (e: any) {
+        console.error('Sauvegarde du contenu du mémoire échouée:', e.message || e);
+      }
     }
 
-    setDossierProgress(dossierId, { status: 'completed', progress: 100, message: 'Génération terminée avec succès !' });
-    res.json({ status: 'completed', message: 'Mémoire technique traité', file_path: result.filePath, data_generee_par_ia: result.generatedData });
+    const consultations = result.consultations || [];
+    const doneMessage = consultations.length
+      ? `Génération terminée. ⚠ ${consultations.length} information(s) à compléter.`
+      : 'Génération terminée avec succès !';
+    setDossierProgress(dossierId, { status: 'completed', progress: 100, message: doneMessage, consultations });
+    res.json({
+      status: 'completed',
+      message: 'Mémoire technique traité',
+      file_path: result.filePath,
+      data_generee_par_ia: result.generatedData,
+      consultations,
+    });
   } catch (error: any) {
     console.error('Erreur lors de la génération du mémoire:', error);
     setDossierProgress(dossierId, { status: 'error', message: `Erreur: ${error.message || error}` });
@@ -273,7 +297,7 @@ router.post('/dce/:dossier_id/memoire/fill-missing', async (req: Request, res: R
   const dossierId = req.params.dossier_id;
   const { userAnswers } = req.body;
   try {
-    if (await quotaBlocked(dossierId, res)) return;
+    if (await quotaBlocked(res)) return;
     setDossierProgress(dossierId, { status: 'running', progress: 98, message: 'Intégration des réponses de l\'utilisateur...' });
     const generator = new MemoireGenerator();
     const result = await generator.finalizeMemoire(dossierId, userAnswers);
@@ -319,18 +343,31 @@ router.post('/dossiers/:id/memoire-from-sections', async (req: Request, res: Res
     if (!Array.isArray(chapters) || chapters.length === 0) {
       return res.status(400).json({ error: 'Aucune section fournie.' });
     }
-    if (await quotaBlocked(req.params.id, res)) return;
+    if (await quotaBlocked(res)) return;
+    let memoireId: string | null = null;
+    try {
+      memoireId = await MemoiresDB.createGenerating(req.params.id);
+    } catch (e: any) {
+      if (e instanceof QuotaError) {
+        return res.status(429).json({
+          error: 'Quota de génération atteint (ou email non confirmé).',
+        });
+      }
+      console.error('Initialisation du mémoire en base échouée:', e.message || e);
+    }
     const generator = new MemoireGenerator();
     const result = await generator.assembleFromSections(req.params.id, chapters);
 
-    try {
-      await MemoiresDB.save(req.params.id, {
-        generatedData: result.generatedData,
-        filePath: result.filePath,
-        mode: 'sections',
-      });
-    } catch (e: any) {
-      console.error('Sauvegarde du mémoire en base échouée:', e.message || e);
+    if (memoireId) {
+      try {
+        await MemoiresDB.finish(memoireId, {
+          generatedData: result.generatedData,
+          filePath: result.filePath,
+          mode: 'sections',
+        });
+      } catch (e: any) {
+        console.error('Sauvegarde du contenu du mémoire échouée:', e.message || e);
+      }
     }
 
     res.json({

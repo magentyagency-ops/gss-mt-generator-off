@@ -1,4 +1,5 @@
 import { MarpGenerator } from './marp_generator';
+import { ImageLibraryService } from './image_service';
 import fs from 'fs';
 import path from 'path';
 import { spawnSync, spawn } from 'child_process';
@@ -19,8 +20,8 @@ import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 //  - AVEC template client (remplissage d'un cadre imposé : extraction/insertion ciblée) → tâche plus
 //    mécanique → gpt-5.4-nano (moins cher, suffisant).
 // Le modèle effectif est choisi dans generate() puis porté par this.memoireModel. Surchargeable par env.
-const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.4-mini';              // cas SANS template
-const MODEL_TEMPLATE = process.env.MEMOIRE_MODEL_TEMPLATE || 'gpt-5.4-nano';    // cas AVEC template client
+const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'luna';              // cas SANS template
+const MODEL_TEMPLATE = process.env.MEMOIRE_MODEL_TEMPLATE || 'luna';    // cas AVEC template client
 
 // Modèle de génération d'IMAGES pour remplir les cadres « Zone d'image » du template.
 // Désactivable via GENERATE_IMAGES=false (étape coûteuse, non bloquante).
@@ -119,25 +120,63 @@ function isHeadingParagraph(p: any): boolean {
   return false;
 }
 
+/** Largeur d'une cellule en colonnes de grille (w:gridSpan, défaut 1). */
+function cellGridSpan(cell: any): number {
+  const tcPr = findLocalNameChild(cell, 'tcPr');
+  const gs = tcPr && findLocalNameChild(tcPr, 'gridSpan');
+  const v = gs ? parseInt(gs.getAttribute('w:val') || '1', 10) : 1;
+  return v > 0 ? v : 1;
+}
+
+/** Index de colonne-grille (0-based) où COMMENCE une cellule dans sa ligne (fusions comprises). */
+function cellGridStart(cell: any, tr: any): number {
+  let col = 0;
+  for (const c of getDirectCells(tr)) {
+    if (c === cell) break;
+    col += cellGridSpan(c);
+  }
+  return col;
+}
+
+/** Cellule (texte + largeur) couvrant la colonne-grille `gridCol` d'une ligne donnée. */
+function cellAtGrid(row: any, gridCol: number): { text: string; span: number } {
+  let col = 0;
+  for (const c of getDirectCells(row)) {
+    const span = cellGridSpan(c);
+    if (gridCol >= col && gridCol < col + span) return { text: getElementText(c).trim(), span };
+    col += span;
+  }
+  return { text: '', span: 1 };
+}
+
 function getTableCellContext(cell: any, tr: any): string {
   const directCells = getDirectCells(tr);
-  const cellIndex = directCells.indexOf(cell);
+  // Libellé de ligne : les AUTRES cellules de la ligne (la 1re colonne porte l'intitulé de ligne).
   const rowContext = directCells.filter((c: any) => c !== cell).map((c: any) => getElementText(c).trim()).filter(Boolean).join(' | ');
+
   const tbl = getParentWithLocalName(tr, 'tbl');
+  let colHeader = '';
   if (tbl) {
     const allRows = getElementsWithLocalName(tbl, 'tr');
-    if (allRows.length > 0) {
-      const headerCells = getDirectCells(allRows[0]);
-      if (headerCells.length > 0 && allRows[0] !== tr) {
-        let headerText = '';
-        if (cellIndex >= 0 && cellIndex < headerCells.length) {
-          headerText = getElementText(headerCells[cellIndex]).trim();
-        }
-        if (headerText) return `Colonne: "${headerText}" | Ligne: "${rowContext}"`;
+    const targetIdx = allRows.indexOf(tr);
+    if (targetIdx > 0) {
+      // On mappe par COLONNE DE GRILLE (et non par index de cellule) pour rester juste malgré les
+      // cellules fusionnées horizontalement (w:gridSpan) dans l'en-tête ou dans la ligne.
+      const gridCol = cellGridStart(cell, tr);
+      const h0 = cellAtGrid(allRows[0], gridCol);
+      colHeader = h0.text;
+      // En-tête groupé sur 2 lignes (1re ligne = groupe fusionné, 2e = sous-en-tête) ou 1re ligne
+      // vide → on complète avec la 2e ligne au même emplacement de grille.
+      if ((!h0.text || h0.span > 1) && targetIdx > 1) {
+        const h1 = cellAtGrid(allRows[1], gridCol).text;
+        if (h1) colHeader = h0.text && h0.text !== h1 ? `${h0.text} / ${h1}` : h1;
       }
     }
   }
-  return `Ligne: "${rowContext}"`;
+
+  return colHeader
+    ? `Colonne: "${colHeader}" | Ligne: "${rowContext}"`
+    : `Ligne: "${rowContext}"`;
 }
 
 function replaceTextInElement(xmlDoc: any, tEl: any, placeholder: string, value: string) {
@@ -934,7 +973,7 @@ export interface AssembleChapter {
   /** Chapitre I..IV (ordre = ordre des Heading1 dans le template). */
   key: string;
   title: string;
-  sections: Array<{ title: string; text: string }>;
+  sections: Array<{ title: string; text: string; id?: string; illustration?: string }>;
 }
 
 // ─── Mode B (réponse libre / sans cadre imposé) ───
@@ -2114,6 +2153,60 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
   }
 
   /**
+   * Analyse comparative « exigences du DCE ↔ ce que GSS a / fait ». Extrait les exigences du CCTP/RC
+   * comme une CHECK-LIST (ce qui est écrit et demandé), puis confronte CHAQUE exigence à la
+   * Documentation GSS (moyens, formations, procédures réels). Le résultat — une matrice
+   * besoin → réponse GSS → écart — est INTERNE : il nourrit les prompts de rédaction pour que le
+   * mémoire réponde point par point aux exigences, sans rien inventer.
+   */
+  private async analyzeRequirements(
+    dceContext: string,
+    gssContext: string,
+  ): Promise<Array<{ theme: string; exigence: string; reponseGss: string; couverture: string }>> {
+    const systemPrompt = `Tu es responsable de l'analyse des appels d'offres de sécurité privée chez GSS.
+Mission : dépouiller le DCE — le CCTP EN PRIORITÉ (c'est lui qui porte les BESOINS), complété par le RC et les annexes — pour en extraire une CHECK-LIST EXHAUSTIVE des EXIGENCES du donneur d'ordre (ce qui est écrit, imposé ou attendu). Pour CHAQUE exigence, pose-toi la question « Le CCTP demande X — qu'est-ce que GSS propose CONCRÈTEMENT en réponse, et reste-t-il un écart ? » et confronte-la à CE QUE GSS A / FAIT d'après la Documentation GSS fournie.
+RÈGLES :
+- EXHAUSTIVITÉ : passe le CCTP en revue section par section et n'OMETS AUCUN besoin structurant. Descends au niveau du DÉTAIL utile : effectifs/ETP PAR SITE et PAR POSTE, amplitudes/horaires (jour, nuit, week-end, jours fériés), qualifications exigées (CQP APS, SSIAP 1/2/3, H0B0, SST), délais d'intervention, matériel imposé (rondes/pointeaux par site, PTI/DATI, tenues, véhicules, moyens de transmission), procédures (levée de doute, gestion d'alarme, incendie), reprise du personnel, contrôles/reporting, et obligations légales (CNAPS, agréments).
+- Quand une exigence est propre à un site/poste, garde cette précision dans le libellé (ne globalise pas).
+- Cite l'exigence telle qu'écrite dans le CCTP ; n'invente rien côté DCE.
+- La réponse GSS s'appuie UNIQUEMENT sur la Documentation GSS ; n'invente AUCUN moyen absent. Si GSS ne couvre pas ou ne le prouve pas, marque honnêtement l'écart.
+- Vise une couverture COMPLÈTE des besoins (typiquement 30 à 60 exigences pour un CCTP fourni), pas un simple survol. Écarte seulement le pur détail administratif (formalités de dépôt, etc.).`;
+
+    const userPrompt = `=== EXIGENCES DU MARCHÉ (CCTP EN PRIORITÉ, puis RC / annexes) ===
+${dceContext.slice(0, 120_000)}
+
+=== CE QUE GSS A / FAIT (Documentation GSS) ===
+${gssContext.slice(0, 60_000)}
+
+Renvoie un JSON valide :
+{
+  "requirements": [
+    {
+      "theme": "I | II | III | IV  (I=présentation société & conformité légale ; II=moyens humains ; III=moyens opérationnels & matériels ; IV=organisation, qualité, continuité)",
+      "exigence": "Ce que demande le DCE, précis (avec chiffre / délai / qualification si présent)",
+      "reponseGss": "Ce que GSS propose concrètement en réponse (moyen / méthode / chiffre tiré de la Doc GSS)",
+      "couverture": "couvert | partiel | écart"
+    }
+  ]
+}`;
+
+    const content = await this.callOpenAI(
+      [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+      0.2, 'Analyse exigences ↔ GSS', true,
+    );
+    try {
+      const data = JSON.parse(content || '{}');
+      const reqs = Array.isArray(data.requirements) ? data.requirements : [];
+      const by = (c: string) => reqs.filter((r: any) => (r.couverture || '').toLowerCase().includes(c)).length;
+      console.log(`[MemoireGenerator] Matrice de conformité: ${reqs.length} exigence(s) (couvert=${by('couvert')}, partiel=${by('partiel')}, écart=${by('écart')}).`);
+      return reqs;
+    } catch {
+      console.warn('[MemoireGenerator] Matrice de conformité: parse JSON échoué → non injectée.');
+      return [];
+    }
+  }
+
+  /**
    * Personnalise le texte statique du maître AO RNE.docx (rédigé pour le marché « Parc des
    * Expositions de Rouen ») en remplaçant SON nom de client par celui du DCE. Le nom figure sur
    * la couverture / le sommaire et est découpé en plusieurs runs (« PARC » / « DES » /
@@ -2156,6 +2249,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     filePath?: string;
     generatedData?: Record<string, string>;
     missingFields?: any[];
+    consultations?: string[];
   }> {
     const settings = getSettings();
     const baseDir = path.resolve(__dirname, '../../../../');
@@ -3189,21 +3283,30 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       .filter((r: any) => /\[À COMPLÉTER\]/.test(String(r.value)))
       .map((r: any) => {
         const d = descriptors.find((x: any) => x.id === r.id);
-        const label = (d?.context.match(/Question:\s*"([^"]*)"|option:\s*"([^"]*)"|Tableau:\s*([^|]*)/) || [])
+        const label = (d?.context.match(/Question:\s*"([^"]*)"|option:\s*"([^"]*)"|Tableau:\s*(.+?)(?:\s*\|\s*Contexte proche:|$)/) || [])
           .slice(1).find(Boolean) || d?.context || '';
         return { id: r.id, label: String(label).trim(), context: d?.context || '' };
       });
 
     if (missingInfo.length > 0) {
-      const tempPath = require('path').join(this.responseDir, `temp_${dossierId}.docx`);
-      const tempSerializer = new XMLSerializer();
-      zip.file('word/document.xml', tempSerializer.serializeToString(xmlDoc));
-      const tempBuf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
-      require('fs').writeFileSync(tempPath, tempBuf);
+      // Persistance de l'état « cadre » pour la reprise avec réponses utilisateur (fonctionnalité
+      // désactivée : le `return incomplete` ci-dessous est commenté). NON ESSENTIEL → ne doit JAMAIS
+      // faire échouer la génération. En particulier, si la ligne `dossiers` appartient à un autre
+      // user_id, l'upsert est bloqué par la RLS Supabase : on log et on continue sans planter.
+      try {
+        const tempPath = require('path').join(this.responseDir, `temp_${dossierId}.docx`);
+        const tempSerializer = new XMLSerializer();
+        zip.file('word/document.xml', tempSerializer.serializeToString(xmlDoc));
+        const tempBuf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
+        require('fs').writeFileSync(tempPath, tempBuf);
 
-      await DB.saveDossier(dossierId, {
-        memoire_cadre_state: { tempPath, missingFields: missingInfo }
-      });
+        await DB.saveDossier(dossierId, {
+          memoire_cadre_state: { tempPath, missingFields: missingInfo }
+        });
+        console.log(`[MemoireGenerator] État cadre sauvegardé (${missingInfo.length} champ(s) manquant(s)).`);
+      } catch (e: any) {
+        console.warn(`[MemoireGenerator] Sauvegarde de l'état cadre ignorée (non bloquant) : ${e?.message || e}`);
+      }
 
       // ── Ticket #4 phase 2b — déclencheur GATÉ par RESOLVE_MISSING_INFO (OFF par défaut). ──
       // Réutilise missingInfo ({id,label,context}) déjà calculée ci-dessus — AUCUN re-parse du .docx.
@@ -3215,8 +3318,6 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
         resolveMissingInfo(missingInfo as MissingField[], dossierId).catch((e: any) =>
           console.warn('[MemoireGenerator] resolveMissingInfo (fond) échec non bloquant:', e?.message));
       }
-
-      console.log(`[MemoireGenerator] Bypassing IA chat, forcing generation with ${missingInfo.length} missing fields.`);
       // return { status: 'incomplete', missingFields: missingInfo };
     }
 
@@ -3290,6 +3391,24 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
 
     console.log(`[MemoireGenerator] Applied ${applied}/${replacements.length} replacements.`);
 
+    // 7 bis. Liste des champs restés « [À COMPLÉTER] » APRÈS garde-fous (fidèle au document remis)
+    // → transformés en QUESTIONS à compléter, remontées comme notification (comme le no-template).
+    const aCompleter: string[] = replacements
+      .filter((r: any) => /\[À COMPLÉTER\]/.test(String(r.value)))
+      .map((r: any) => {
+        const d = descriptors.find((x: any) => x.id === r.id);
+        const ctx = d?.context || '';
+        // Pour un champ de tableau, on garde COLONNE + LIGNE (pas seulement la ligne) afin que la
+        // question soit sans ambiguïté. Sinon on prend la Question / l'option de case à cocher.
+        const m = ctx.match(/Question:\s*"([^"]*)"|option:\s*"([^"]*)"|Tableau:\s*(.+?)(?:\s*\|\s*Contexte proche:|$)/);
+        const label = (m ? m.slice(1).find(Boolean) : '') || ctx.replace(/\s*\|\s*Contexte proche:.*$/, '').trim();
+        return (label || `Champ ${r.id}`).trim();
+      })
+      .filter((s: string, i: number, arr: string[]) => Boolean(s) && arr.indexOf(s) === i);
+    if (aCompleter.length) {
+      console.warn(`[MemoireGenerator] ⚠ ${aCompleter.length} champ(s) « [À COMPLÉTER] » à faire remplir :\n- ${aCompleter.join('\n- ')}`);
+    }
+
     // 8. Serialize and save
     if (onProgress) onProgress(98, 'Génération du document Word…');
     const serializer = new XMLSerializer();
@@ -3312,7 +3431,8 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
           recherche: `[CHAMP_${r.id}]`,
           remplacement: r.value
         })))
-      }
+      },
+      consultations: aCompleter,
     };
   }
 
@@ -4014,7 +4134,7 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
   public async generateFullMarpPdf(
     dossierId: string,
     onProgress?: (progress: number, message: string, status?: string) => void
-  ): Promise<{ filePath: string, generatedData: Record<string, string> }> {
+  ): Promise<{ filePath: string, generatedData: Record<string, string>, consultations: string[] }> {
     console.log('[MemoireGenerator] ═══ Génération PDF (Marp Complet) ═══');
 
     if (onProgress) onProgress(10, 'Analyse du DCE et lecture du contexte...');
@@ -4026,6 +4146,18 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
 
     const gssDocs = await this.getGssDocumentation();
     const availableCategories = Object.keys(gssDocs);
+
+    // Matrice de conformité INTERNE : exigences du CCTP/RC ↔ ce que GSS a / fait. On la calcule une
+    // seule fois, puis on injecte dans chaque section les exigences de SON chapitre pour que la
+    // rédaction réponde point par point aux besoins du DCE (sans rien inventer).
+    if (onProgress) onProgress(13, 'Analyse des exigences du CCTP et comparaison aux capacités GSS…');
+    const gssFullContext = this.buildFullGssContext(gssDocs, 3000, 60_000);
+    const requirementsMatrix = await this.analyzeRequirements(dceContext, gssFullContext);
+    const reqsByTheme: Record<string, typeof requirementsMatrix> = {};
+    for (const r of requirementsMatrix) {
+      const t = (r.theme || '').toString().toUpperCase().replace(/[^IV]/g, '').trim();
+      (reqsByTheme[t] ||= []).push(r);
+    }
 
     const sectionsMap: Record<string, string> = {};
     const totalSections = AI_SECTIONS_B.length;
@@ -4049,17 +4181,35 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
         }
       }
 
-      const systemPrompt = `Tu es un expert en sécurité privée chez GSS. Rédige la partie du mémoire technique intitulée "${section.title}" pour ce marché.
-- Rédige un contenu percutant, commercial, concret et technique.
-- Base-toi UNIQUEMENT sur l'analyse du DCE et les atouts GSS fournis ci-dessous.
-- NE METS PAS le titre principal au début de ta réponse (le titre "${section.title}" sera ajouté automatiquement).
-- Structure ton texte avec de courts paragraphes clairs, et si pertinent, de petites listes à puces.
-- Mets impérativement en forme les titres et sous-titres en gras ET souligné (par exemple : **<u>Titre de ma partie</u>**).
-- Ajoute TOUJOURS un saut de ligne (ligne vide) entre chaque titre/sous-titre et le paragraphe qui suit.
-- Personnalise FORTEMENT pour le client ${clientName}.
-- Ne rédige QUE le contenu de cette section, SANS introduction globale SANS conclusion générale, et SANS salutations.`;
+      const systemPrompt = `Tu es un expert en sécurité privée chez GSS qui rédige un mémoire technique GAGNANT pour répondre à l'appel d'offres du client ${clientName}. Tu rédiges la partie intitulée "${section.title}".
 
-      const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}\n\nRédige le contenu de cette partie de manière experte.`;
+OBJECTIF : un contenu SUR-MESURE, directement branché sur les exigences réelles du marché — surtout pas un texte générique interchangeable.
+
+RÈGLES DE PERTINENCE (le plus important) :
+- Reprends explicitement les exigences, contraintes et enjeux identifiés dans l'analyse du DCE (sites, horaires, risques, prestations attendues, contraintes réglementaires) et montre CONCRÈTEMENT comment GSS y répond.
+- Chaque affirmation doit être adossée à une preuve tirée des atouts GSS fournis : un moyen, un chiffre, une méthode, une certification ou un engagement concret. Bannis les formules creuses ("leader du secteur", "qualité irréprochable") sans preuve.
+- Personnalise FORTEMENT pour ${clientName} et son secteur d'activité : ancre le propos dans le contexte réel du marché, pas dans des généralités.
+- N'invente JAMAIS une information absente à la fois du DCE et des atouts GSS ; reste factuel.
+
+RÈGLES DE FORME (rendu Marp) :
+- NE répète PAS le titre principal "${section.title}" (il est ajouté automatiquement).
+- Structure le texte avec des sous-titres en Markdown : "## Sous-titre" (et "### " pour un niveau plus fin). Ces titres seront affichés en rouge et en grande police, utilise-les pour rythmer la lecture.
+- Sépare TOUJOURS un sous-titre du paragraphe qui suit par une ligne vide.
+- Alterne paragraphes courts et listes à puces ("- …") pour aérer.
+- Mets en gras (**…**) les mots-clés, chiffres et engagements forts.
+- Ne rédige QUE le contenu de cette section : SANS introduction globale, SANS conclusion générale, SANS salutations.
+- Développe la section EN PROFONDEUR : vise 600 à 800 mots, répartis en 3 à 5 sous-parties (chacune introduite par un "## Sous-titre"), pour couvrir le sujet de façon complète et convaincante.
+- Traite EXPLICITEMENT chaque exigence du CCTP listée ci-dessous en montrant la réponse concrète de GSS. Si — et SEULEMENT si — GSS n'a aucune réponse spécifique à une exigence (aucun élément dans les atouts GSS), n'invente RIEN : insère à cet endroit, sur sa propre ligne, exactement \`[CONSULTATION REQUISE : <information précise à obtenir auprès de GSS>]\` en décrivant l'information manquante.`;
+
+      const chapterReqs = reqsByTheme[section.chapter] || [];
+      const reqBlock = chapterReqs.length
+        ? '\n\nEXIGENCES DU CCTP À TRAITER DANS CETTE SECTION (réponds à chacune avec ce que fait GSS ; signale les écarts via [CONSULTATION REQUISE : …]) :\n' +
+          chapterReqs
+            .map((r) => `- Le CCTP demande : ${r.exigence}\n  Réponse GSS connue : ${r.reponseGss || '(non documentée)'}${r.couverture && r.couverture.toLowerCase() !== 'couvert' ? `  → couverture : ${r.couverture}` : ''}`)
+            .join('\n')
+        : '';
+
+      const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}${reqBlock}\n\nRédige le contenu de cette partie de manière experte.`;
 
       const text = await this.callOpenAI(
         [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
@@ -4069,8 +4219,49 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
       completed++;
     }
 
+    // ── Consultations requises : exigences que GSS ne couvre pas et qui doivent être précisées ──
+    // Deux sources : (1) les écarts détectés par la matrice de conformité ; (2) les marqueurs
+    // [CONSULTATION REQUISE : …] que le rédacteur a insérés faute de réponse spécifique dans la Doc GSS.
+    const consultations = new Set<string>();
+    for (const r of requirementsMatrix) {
+      if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence) {
+        consultations.add(r.exigence.trim());
+      }
+    }
+    const markerRe = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
+    for (const txt of Object.values(sectionsMap)) {
+      let m: RegExpExecArray | null;
+      while ((m = markerRe.exec(txt)) !== null) consultations.add(m[1].trim());
+    }
+    const consultationList = [...consultations].filter(Boolean);
+
+    // Les marqueurs sont des flags INTERNES (pour GSS) : on les retire du texte pour qu'ils
+    // n'apparaissent pas dans le PDF remis au client.
+    for (const id of Object.keys(sectionsMap)) {
+      sectionsMap[id] = sectionsMap[id].replace(markerRe, '').replace(/\n{3,}/g, '\n\n').trim();
+    }
+
+    if (consultationList.length) {
+      console.warn(`[MemoireGenerator] ⚠ ${consultationList.length} consultation(s) GSS requise(s) :\n- ${consultationList.join('\n- ')}`);
+      if (onProgress) {
+        onProgress(
+          89,
+          `⚠ ${consultationList.length} information(s) à obtenir auprès de GSS : ${consultationList.slice(0, 3).join(' ; ')}${consultationList.length > 3 ? '…' : ''}`,
+        );
+      }
+    }
+
     if (onProgress) onProgress(90, 'Assemblage final de la présentation Marp...');
-    return this.exportFromSectionsMap(sectionsMap, dossierId);
+    const result = await this.exportFromSectionsMap(sectionsMap, dossierId, onProgress);
+
+    // On remonte les consultations dans generatedData (→ « data_generee_par_ia » côté API/front) pour
+    // que l'utilisateur voie précisément quelles informations restent à obtenir auprès de GSS.
+    const generatedData: Record<string, string> = { ...result.generatedData };
+    consultationList.forEach((c, i) => {
+      generatedData[`⚠ Consultation requise #${i + 1}`] = c;
+    });
+
+    return { ...result, generatedData, consultations: consultationList };
   }
 
   /**
@@ -4278,6 +4469,7 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
   public async exportFromSectionsMap(
     sectionsMap: Record<string, string>,
     dossierId: string = 'export',
+    onProgress?: (progress: number, message: string) => void,
   ): Promise<{ filePath: string; generatedData: Record<string, string> }> {
     const chapters: AssembleChapter[] = CHAPTER_ORDER_B.map((ch) => ({
       key: ch,
@@ -4297,8 +4489,23 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
     }
 
     const cover = await this.getCoverInfo(dossierId);
+
+    // Bibliothèque d'images (base de données) : on charge le pool, puis on attribue
+    // AU PLUS une image par slide selon le CONTEXTE du texte, chaque image utilisée
+    // une seule fois sur tout le document (unicité stricte, compréhension par LLM).
+    onProgress?.(92, 'Chargement des images de la bibliothèque…');
+    const imageService = new ImageLibraryService();
+    const imagePool = await imageService.loadPool();
+
+    onProgress?.(93, 'Attribution contextuelle des illustrations…');
+    const slides = MarpGenerator.enumerateContentSlides(chapters);
+    const assignments = await imageService.assignImages(slides, imagePool);
+
+    // Le rendu Marp/Chromium est bloquant et peut durer plusieurs minutes sur un
+    // mémoire illustré : on signale l'étape pour que la barre ne semble pas figée.
+    onProgress?.(95, `Rendu du PDF (${assignments.size} illustration(s))…`);
     const generator = new MarpGenerator(this.responseDir);
-    const result = generator.generatePdf(chapters, cover);
+    const result = generator.generatePdf(chapters, cover, assignments);
 
     return { filePath: result.filePath, generatedData: {} };
   }

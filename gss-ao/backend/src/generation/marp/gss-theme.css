@@ -60,9 +60,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 h1 {
-  font-size: 2.2em;
+  font-size: 2.8em;
   font-weight: 800;
-  color: #000000;
+  color: #dc2626; /* Red GSS titles */
   margin-bottom: 20px;
   border-bottom: 3px solid #dc2626; /* Red GSS accent line */
   padding-bottom: 8px;
@@ -70,7 +70,7 @@ h1 {
 }
 
 h2 {
-  font-size: 1.6em;
+  font-size: 2em;
   font-weight: 700;
   color: #dc2626; /* Red GSS subheadings */
   margin-bottom: 15px;
@@ -78,9 +78,9 @@ h2 {
 }
 
 h3 {
-  font-size: 1.2em;
-  font-weight: 600;
-  color: #111827;
+  font-size: 1.5em;
+  font-weight: 700;
+  color: #dc2626; /* Red GSS sub-subheadings */
   margin-top: 20px;
 }
 
@@ -177,6 +177,22 @@ img[alt="class:illustration-center"] {
   border: 1px solid #e5e7eb;
 }
 
+/* Illustration contextuelle : bloc centré SOUS le texte (jamais à côté d'un titre).
+   Dimensionnée pour ne pas déborder la slide malgré le corps de texte au-dessus. */
+img[alt="class:illustration-block"] {
+  display: block;
+  width: 62%;
+  max-width: 380px;
+  max-height: 62mm;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  margin: 22px auto 0 auto;
+  clear: both;
+  border-radius: 6px;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.12);
+  border: 1px solid #e5e7eb;
+}
+
 /* Page numbers in footer */
 section::after {
   content: "Page " attr(data-marpit-pagination) " / " attr(data-marpit-pagination-total);
@@ -207,9 +223,9 @@ section.intercalaire header {
   display: none;
 }
 section.intercalaire h1 {
-  font-size: 2.8em;
+  font-size: 3.4em;
   border-bottom: none;
-  color: #000000;
+  color: #dc2626; /* Red GSS chapter titles */
 }
 section.intercalaire::before {
   content: "";
