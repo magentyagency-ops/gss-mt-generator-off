@@ -172,6 +172,56 @@ export interface MemoireRecord {
  * présente, sinon on l'insère. RLS active (client scoppé au JWT).
  */
 export class MemoiresDB {
+  /**
+   * Crée une NOUVELLE ligne mémoire (statut 'generating') À CHAQUE génération.
+   * C'est cet INSERT qui consomme 1 crédit (trigger enforce_generation_quota),
+   * de façon fiable (opération courte, contexte JWT garanti). Renvoie l'id créé.
+   * → 1 crédit consommé par génération lancée (même dossier = crédits séparés).
+   * Lève QuotaError si le quota est atteint / l'email n'est pas confirmé.
+   */
+  static async createGenerating(dossierId: string): Promise<string> {
+    const supabase = getScopedClient();
+    const { data, error } = await supabase
+      .from('memoires_techniques')
+      .insert({
+        dossier_id: dossierId,
+        user_id: getCurrentUserId(),
+        statut: 'generating',
+        contenu: {},
+      })
+      .select('id')
+      .single();
+    if (error) {
+      if (/quota|email non confirm/i.test(error.message)) {
+        throw new QuotaError(error.message);
+      }
+      throw new Error(error.message);
+    }
+    return data.id;
+  }
+
+  /** Renseigne le contenu final d'une mémoire (par id) et la passe en 'completed'. */
+  static async finish(
+    memoireId: string,
+    contenu: MemoireContenu,
+    meta: { titre?: string; aiModel?: string } = {},
+  ): Promise<void> {
+    const supabase = getScopedClient();
+    const { error } = await supabase
+      .from('memoires_techniques')
+      .update({
+        contenu: {
+          ...contenu,
+          generatedAt: contenu.generatedAt || new Date().toISOString(),
+        },
+        statut: 'completed',
+        titre: meta.titre ?? null,
+        ai_model: meta.aiModel ?? null,
+      })
+      .eq('id', memoireId);
+    if (error) throw new Error(error.message);
+  }
+
   static async save(
     dossierId: string,
     contenu: MemoireContenu,
