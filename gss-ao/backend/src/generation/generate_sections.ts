@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { getSettings } from '../core/config';
 import { StrategicSection } from './strategic_planner';
 
-const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.4-mini';
+const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'luna';
 
 export class SectionGenerator {
   private openai: OpenAI;

@@ -41,6 +41,7 @@ import {
 } from "@/lib/ai/mode";
 import { cn } from "@/lib/utils";
 import { apiFetch, apiBase } from "@/lib/api";
+import { CreditsBadge } from "@/components/credits-badge";
 import { use } from "react";
 
 interface GenEntry {
@@ -68,6 +69,8 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   // States for full DOCX generation (Backend API)
   const [isGeneratingDocx, setIsGeneratingDocx] = useState(false);
   const [docxResult, setDocxResult] = useState<any>(null);
+  // Change à chaque génération → force le badge crédits à se recharger.
+  const [creditKey, setCreditKey] = useState(0);
 
   // States for Prerequisite System (Required System)
   const [crFourni, setCrFourni] = useState(false);
@@ -139,135 +142,14 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
       const res = await apiFetch(`/api/dce/${id}/memoire`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erreur lors de la génération");
-      
-      if (data.status === 'incomplete') {
-        setDocxResult({ type: 'incomplete', missingFields: data.missingFields });
-      } else {
-        setDocxResult({ type: "success", data });
-        localStorage.setItem(`generated_docx_${id}`, data.file_path);
-      }
+
+      setDocxResult({ type: "success", data });
+      setCreditKey((k) => k + 1); // recharge le badge crédits
+      if (data.file_path) localStorage.setItem(`generated_docx_${id}`, data.file_path);
     } catch (e: any) {
       setDocxResult({ type: "error", message: e.message });
     } finally {
       clearInterval(interval);
-      setIsGeneratingDocx(false);
-    }
-  }
-
-  const [missingAnswers, setMissingAnswers] = useState<Record<string, string>>({});
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [chatInputValue, setChatInputValue] = useState('');
-  const [chatMessages, setChatMessages] = useState<Array<{ sender: 'bot' | 'user', text: string, context?: string }>>([]);
-  const [isChatLoading, setIsChatLoading] = useState(false);
-
-  useEffect(() => {
-    async function initChat() {
-      if (docxResult && docxResult.type === 'incomplete' && chatMessages.length === 0 && docxResult.missingFields?.length > 0) {
-        const firstField = docxResult.missingFields[0];
-        setIsChatLoading(true);
-        try {
-          const res = await apiFetch(`/api/dce/${id}/memoire/chat-missing-eval`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ context: firstField.context, chatHistory: [] })
-          });
-          const data = await res.json();
-          setChatMessages([
-            { sender: 'bot', text: `L'IA a terminé l'analyse du DCE, mais n'a pas pu identifier certaines informations de manière certaine. Je vais vous poser ${docxResult.missingFields.length} question(s) rapide(s).` },
-            { sender: 'bot', text: data.bot_reply }
-          ]);
-        } catch (e) {
-          setChatMessages([
-            { sender: 'bot', text: "Erreur d'initialisation du chatbot." }
-          ]);
-        } finally {
-          setIsChatLoading(false);
-          setCurrentQuestionIndex(0);
-        }
-      }
-    }
-    initChat();
-  }, [docxResult]);
-
-  async function handleChatSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!chatInputValue.trim() || isChatLoading) return;
-
-    const userMessage = chatInputValue;
-    setChatInputValue('');
-
-    const historyForApi = chatMessages.slice(1).map(m => ({
-      role: m.sender === 'bot' ? 'assistant' : 'user',
-      content: m.text
-    }));
-
-    const newMessages = [...chatMessages, { sender: 'user', text: userMessage }];
-    setChatMessages([...newMessages]);
-    
-    setIsChatLoading(true);
-    try {
-      const currentField = docxResult.missingFields[currentQuestionIndex];
-      const historyWithUser = [...historyForApi, { role: 'user', content: userMessage }];
-      
-      const res = await apiFetch(`/api/dce/${id}/memoire/chat-missing-eval`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context: currentField.context, chatHistory: historyWithUser })
-      });
-      const data = await res.json();
-      
-      if (data.status === 'accepted') {
-        const newAnswers = { ...missingAnswers, [currentField.id]: data.extracted_value };
-        setMissingAnswers(newAnswers);
-        
-        newMessages.push({ sender: 'bot', text: data.bot_reply });
-        
-        const nextIndex = currentQuestionIndex + 1;
-        if (nextIndex < docxResult.missingFields.length) {
-          const nextField = docxResult.missingFields[nextIndex];
-          const nextRes = await apiFetch(`/api/dce/${id}/memoire/chat-missing-eval`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ context: nextField.context, chatHistory: [] })
-          });
-          const nextData = await nextRes.json();
-          newMessages.push({ sender: 'bot', text: `(Question ${nextIndex + 1}/${docxResult.missingFields.length}) ` + nextData.bot_reply });
-          setChatMessages([...newMessages]);
-          setCurrentQuestionIndex(nextIndex);
-        } else {
-          newMessages.push({ sender: 'bot', text: "Merci ! Toutes les informations sont complètes. Je finalise le document..." });
-          setChatMessages([...newMessages]);
-          setCurrentQuestionIndex(nextIndex);
-          handleSubmitMissingInfo(newAnswers);
-        }
-      } else {
-        newMessages.push({ sender: 'bot', text: data.bot_reply });
-        setChatMessages([...newMessages]);
-      }
-    } catch (e) {
-      newMessages.push({ sender: 'bot', text: "Une erreur est survenue lors de l'évaluation. Réessayez." });
-      setChatMessages([...newMessages]);
-    } finally {
-      setIsChatLoading(false);
-    }
-  }
-
-  async function handleSubmitMissingInfo(answersToSubmit = missingAnswers) {
-    setIsGeneratingDocx(true);
-    setProgressInfo({ status: 'idle', progress: 95, message: 'Finalisation...', logs: [] });
-    try {
-      const res = await apiFetch(`/api/dce/${id}/memoire/fill-missing`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userAnswers: answersToSubmit })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erreur lors de la finalisation");
-      setDocxResult({ type: "success", data });
-      localStorage.setItem(`generated_docx_${id}`, data.file_path);
-    } catch (e: any) {
-      setDocxResult({ type: "error", message: e.message });
-    } finally {
       setIsGeneratingDocx(false);
     }
   }
@@ -289,6 +171,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
               )}
             </h1>
           </div>
+          <CreditsBadge key={creditKey} />
         </div>
       </header>
 
@@ -375,69 +258,6 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
             )}
           </div>
 
-          {docxResult && docxResult.type === "incomplete" && (
-            <Card className="mt-8 overflow-hidden border-warning/30">
-              <div className="bg-warning/10 px-6 py-4 border-b border-warning/20 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-warning font-semibold">
-                  <AlertTriangle className="h-5 w-5" />
-                  <span>Assistant : Informations manquantes</span>
-                </div>
-              </div>
-              <div className="p-0">
-                <div className="h-[400px] overflow-y-auto p-6 space-y-4 bg-muted/30 flex flex-col">
-                  {chatMessages.map((msg, i) => (
-                    <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[80%] rounded-xl p-3 text-sm ${msg.sender === 'user' ? 'bg-primary text-primary-foreground rounded-br-none' : 'bg-card border border-border text-foreground rounded-bl-none shadow-sm'}`}>
-                        {msg.text}
-                        {msg.context && (
-                          <div className="mt-2 p-2 bg-muted border border-border/50 rounded text-xs font-mono text-muted-foreground whitespace-pre-wrap">
-                            {msg.context}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  {isChatLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-card border border-border text-foreground rounded-xl rounded-bl-none shadow-sm p-3 flex items-center gap-2 text-sm">
-                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                        L'IA réfléchit...
-                      </div>
-                    </div>
-                  )}
-                  {isGeneratingDocx && currentQuestionIndex >= docxResult.missingFields?.length && (
-                    <div className="flex justify-start">
-                      <div className="bg-card border border-border text-foreground rounded-xl rounded-bl-none shadow-sm p-3 flex items-center gap-2 text-sm">
-                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                        Génération du Word en cours...
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="p-4 bg-card border-t border-border/50">
-                  <form onSubmit={handleChatSubmit} className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Votre réponse..."
-                      className="flex-1 px-4 py-2 border border-input rounded-full text-sm focus-visible:ring-2 focus-visible:ring-ring outline-none transition-all bg-background text-foreground"
-                      value={chatInputValue}
-                      onChange={e => setChatInputValue(e.target.value)}
-                      disabled={isChatLoading || isGeneratingDocx || currentQuestionIndex >= docxResult.missingFields?.length}
-                      autoFocus
-                    />
-                    <Button 
-                      type="submit"
-                      disabled={!chatInputValue.trim() || isChatLoading || isGeneratingDocx || currentQuestionIndex >= docxResult.missingFields?.length}
-                      className="rounded-full px-6 bg-primary text-primary-foreground hover:bg-primary/90"
-                    >
-                      Envoyer
-                    </Button>
-                  </form>
-                </div>
-              </div>
-            </Card>
-          )}
-
           {docxResult && docxResult.type === "success" && (
             <Card className="mt-8 overflow-hidden border-success/30">
               <div className="bg-success/5 px-6 py-4 border-b border-success/20 flex items-center justify-between">
@@ -451,6 +271,29 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   </Button>
                 </Link>
               </div>
+
+              {Array.isArray(docxResult.data.consultations) && docxResult.data.consultations.length > 0 && (
+                <div className="mx-6 mt-6 rounded-lg border border-amber-400/50 bg-amber-50 dark:bg-amber-950/30 p-4">
+                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-semibold mb-2">
+                    <AlertTriangle className="h-5 w-5 shrink-0" />
+                    <span>
+                      {hasTemplate
+                        ? `Champs à compléter — ${docxResult.data.consultations.length} information(s) manquante(s)`
+                        : `Consultation GSS requise — ${docxResult.data.consultations.length} information(s) à obtenir`}
+                    </span>
+                  </div>
+                  <p className="text-sm text-amber-800/80 dark:text-amber-300/80 mb-3">
+                    {hasTemplate
+                      ? "Ces champs du cadre n'ont pas pu être renseignés automatiquement (absents du DCE et de la documentation GSS). Merci de les compléter dans le document :"
+                      : "Ces exigences du CCTP ne sont pas couvertes par la documentation GSS actuelle. Merci de réunir ces informations pour compléter le mémoire :"}
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1 text-sm text-foreground">
+                    {docxResult.data.consultations.map((c: string, i: number) => (
+                      <li key={i}>{c}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
