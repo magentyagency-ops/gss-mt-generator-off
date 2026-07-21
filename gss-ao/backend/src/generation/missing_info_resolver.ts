@@ -286,14 +286,83 @@ async function logRechercheWeb(
 }
 
 /**
- * [STUB] Envoie un email à l'équipe GSS pour obtenir une information INTERNE (ex. nom du dirigeant),
- * et crée un suivi ; à la réponse, la valeur devra être réinjectée dans le mémoire.
- * TODO: brancher un envoi SMTP (nodemailer) + un magasin de tickets (id de suivi) + un webhook/relance
- * pour intégrer la réponse au document une fois reçue.
+ * Appelle l'Edge Function `send-question` (API atomique : insert `question_interne` + composition
+ * e-mail gabarit §11 + envoi Postmark + passage statut → `envoyee`). Exactement le même chemin
+ * que `supabase.functions.invoke("send-question")` côté frontend (sollicitations/page.tsx).
+ *
+ * Mapping : MissingField → SendQuestionBody (contrat de l'Edge Function).
+ *
+ * Auth : le `authToken` (JWT de l'utilisateur, transmis depuis le endpoint Express) est passé
+ * en Bearer à l'Edge Function, qui fait `auth.getUser()` pour isoler le `user_id` (RLS §14).
+ * Fallback : `SUPABASE_SERVICE_ROLE_KEY` quand appelé depuis `resolveMissingInfo` (pipeline
+ * sans contexte HTTP) — le service_role contourne la RLS côté Edge Function.
+ *
+ * Ne lève jamais (cohérent avec `searchPublicInfo`).
  */
-export async function requestInfoFromTeam(_field: MissingField, _dossierId: string): Promise<{ sent: boolean; ticketId?: string }> {
-  // Non implémenté : pas d'envoi d'email branché pour l'instant.
-  return { sent: false };
+export async function requestInfoFromTeam(
+  field: MissingField,
+  dossierId: string,
+  destinataireEmail?: string,
+  authToken?: string,
+): Promise<{ sent: boolean; ticketId?: string }> {
+  const { supabaseUrl, supabaseServiceRoleKey } = getSettings();
+  if (!supabaseUrl) {
+    console.warn('[requestInfoFromTeam] SUPABASE_URL absent → skip.');
+    return { sent: false };
+  }
+
+  // Destinataire configurable sans recompiler — jamais d'adresse en dur.
+  const to = destinataireEmail || process.env.DEFAULT_TEAM_EMAIL;
+  if (!to) {
+    console.warn('[requestInfoFromTeam] Aucun destinataire (DEFAULT_TEAM_EMAIL absent) → skip.');
+    return { sent: false };
+  }
+
+  // Token d'auth : JWT utilisateur (priorité) ou service_role (fallback pipeline).
+  const bearer = authToken || (supabaseServiceRoleKey ? `Bearer ${supabaseServiceRoleKey}` : '');
+  if (!bearer) {
+    console.warn('[requestInfoFromTeam] Aucun token d\'auth disponible → skip.');
+    return { sent: false };
+  }
+
+  // Mapping MissingField → SendQuestionBody (contrat exact de l'Edge Function send-question).
+  const body = {
+    ao_id: dossierId,
+    critere_concerne: field.label,
+    destinataire_email: to,
+    question: `Pourriez-vous fournir l'information suivante pour compléter le mémoire technique : ${field.label} ?`,
+    contexte: field.context || undefined,
+    niveau_criticite: 'interne',
+  };
+
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/send-question`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': bearer.toLowerCase().startsWith('bearer ') ? bearer : `Bearer ${bearer}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      console.warn(`[requestInfoFromTeam] send-question HTTP ${res.status}:`, data?.error || data);
+      return { sent: false };
+    }
+
+    const ticketId = data?.question?.question_id;
+    const provider = data?.send?.provider || 'unknown';
+    const dryRun = data?.send?.dryRun;
+    console.info(
+      `[requestInfoFromTeam] question envoyée via ${provider}${dryRun ? ' (dry-run)' : ''}, ticketId=${ticketId}`,
+    );
+    return { sent: true, ticketId };
+  } catch (e) {
+    console.warn(`[requestInfoFromTeam] appel send-question échoué: ${(e as Error)?.message}`);
+    return { sent: false };
+  }
 }
 
 /**

@@ -8,7 +8,7 @@ import { DB, DossierRecord, MemoiresDB, remainingGenerations, QuotaError } from 
 import { initProgress, finishProgress } from '../core/progress';
 import { extractRcWithLLM, extractCctpWithLLM } from '../analysis/llmExtractor';
 import { requireAuth } from './authMiddleware';
-import { resolveMissingInfo, MissingField } from '../generation/missing_info_resolver';
+import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeam, MissingField } from '../generation/missing_info_resolver';
 import { injectValidatedRecherches } from '../generation/inject_recherches';
 import { getSettings } from '../core/config';
 
@@ -396,6 +396,52 @@ router.post('/dossiers/:id/recherches/inject', async (req: Request, res: Respons
     res.json({ status: 'ok', injected: result.injected, skipped: result.skipped, file_path: result.filePath });
   } catch (error: any) {
     console.error('Erreur lors de l\'injection des recherches validées:', error);
+    res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
+  }
+});
+
+// Ticket #3/#4 — « Demander à l'équipe » : déclenche requestInfoFromTeam pour les champs INTERNES.
+// Même logique que /recherches (lit missingFields persistés), mais n'agit que sur les champs classifiés 'internal'.
+// Appelle l'Edge Function send-question (insert + email Postmark + statut 'envoyee').
+router.post('/dossiers/:id/ask-team', async (req: Request, res: Response) => {
+  const dossierId = req.params.id;
+  try {
+    if (!getSettings().resolveMissingInfoEnabled) {
+      return res.status(409).json({ error: 'Résolution des infos manquantes désactivée (RESOLVE_MISSING_INFO non actif).' });
+    }
+
+    const dossier = await DB.getDossier(dossierId);
+    if (!dossier) return res.status(404).json({ error: 'Dossier introuvable' });
+
+    const raw = dossier.memoire_cadre_state?.missingFields;
+    const fields: MissingField[] = Array.isArray(raw)
+      ? raw
+          .filter((m: any) => m && (m.label ?? '') !== '')
+          .map((m: any) => ({ id: Number(m.id), label: String(m.label ?? ''), context: String(m.context ?? '') }))
+      : [];
+
+    if (fields.length === 0) {
+      return res.json({ status: 'ok', triggered: 0, message: 'Aucun champ manquant.' });
+    }
+
+    // Classification LLM batchée (même classifieur que /recherches).
+    const kinds = await classifyFieldsLLM(fields);
+    const internals = fields.filter((f) => (kinds.get(f.id) ?? 'internal') === 'internal');
+
+    if (internals.length === 0) {
+      return res.json({ status: 'ok', triggered: 0, internal: 0, message: 'Aucune information interne à demander.' });
+    }
+
+    const results = [];
+    for (const f of internals) {
+      const r = await requestInfoFromTeam(f, dossierId, undefined, req.headers.authorization);
+      results.push({ id: f.id, label: f.label, ...r });
+    }
+
+    const sent = results.filter((r) => r.sent).length;
+    res.json({ status: 'ok', triggered: internals.length, sent, results });
+  } catch (error: any) {
+    console.error('Erreur ask-team:', error);
     res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
   }
 });

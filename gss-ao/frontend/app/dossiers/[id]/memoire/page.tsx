@@ -73,6 +73,10 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);   // échec (rouge)
   const [searchNotice, setSearchNotice] = useState<string | null>(null); // info neutre (ex. rien à chercher)
+  // Demande à l'équipe (bouton « Demander à l'équipe ») — canaux DÉDIÉS.
+  const [isAskingTeam, setIsAskingTeam] = useState(false);
+  const [askTeamError, setAskTeamError] = useState<string | null>(null);
+  const [askTeamNotice, setAskTeamNotice] = useState<string | null>(null);
   // Change à chaque génération → force le badge crédits à se recharger.
   const [creditKey, setCreditKey] = useState(0);
 
@@ -187,6 +191,27 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     }
   }
 
+  // Déclenche la création de questions internes pour les champs manquants classifiés 'internal'.
+  async function handleAskTeam() {
+    setIsAskingTeam(true);
+    setAskTeamError(null);
+    setAskTeamNotice(null);
+    try {
+      const res = await apiFetch(`/api/dossiers/${id}/ask-team`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Échec de la demande à l'équipe.");
+      if (data.triggered === 0) {
+        setAskTeamNotice(data.message || "Aucune information interne à demander pour ce dossier.");
+      } else {
+        setAskTeamNotice(`${data.sent}/${data.triggered} question(s) interne(s) créée(s) pour l'équipe.`);
+      }
+    } catch (e: any) {
+      setAskTeamError(e.message || "Échec de la demande à l'équipe.");
+    } finally {
+      setIsAskingTeam(false);
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       <header className="border-b border-border bg-card px-6 py-3">
@@ -269,13 +294,15 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
                   {isSearching ? "Recherche en cours..." : "Trouver l'info sur internet"}
                 </Button>
-                <Button variant="outline" className="gap-2" onClick={() => {}}>
-                  <Users className="h-4 w-4" />
-                  Demander à l&apos;équipe
+                <Button variant="outline" className="gap-2" disabled={isAskingTeam} onClick={handleAskTeam}>
+                  {isAskingTeam ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+                  {isAskingTeam ? "Envoi en cours..." : "Demander \u00e0 l'\u00e9quipe"}
                 </Button>
               </div>
               {searchError && <p className="mt-2 text-xs text-destructive">{searchError}</p>}
               {searchNotice && <p className="mt-2 text-xs text-muted-foreground">{searchNotice}</p>}
+              {askTeamError && <p className="mt-2 text-xs text-destructive">{askTeamError}</p>}
+              {askTeamNotice && <p className="mt-2 text-xs text-muted-foreground">{askTeamNotice}</p>}
             </div>
 
             {isGeneratingDocx && progressInfo && (
