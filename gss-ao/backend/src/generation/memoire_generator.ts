@@ -20,8 +20,8 @@ import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 //  - AVEC template client (remplissage d'un cadre imposé : extraction/insertion ciblée) → tâche plus
 //    mécanique → gpt-5.4-nano (moins cher, suffisant).
 // Le modèle effectif est choisi dans generate() puis porté par this.memoireModel. Surchargeable par env.
-const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'luna';              // cas SANS template
-const MODEL_TEMPLATE = process.env.MEMOIRE_MODEL_TEMPLATE || 'luna';    // cas AVEC template client
+const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.4-mini';              // cas SANS template
+const MODEL_TEMPLATE = process.env.MEMOIRE_MODEL_TEMPLATE || 'gpt-5.4-nano';    // cas AVEC template client
 
 // Modèle de génération d'IMAGES pour remplir les cadres « Zone d'image » du template.
 // Désactivable via GENERATE_IMAGES=false (étape coûteuse, non bloquante).
