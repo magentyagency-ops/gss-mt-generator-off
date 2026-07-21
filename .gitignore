@@ -66,3 +66,6 @@ data/output/*.pdf
 data/output/*.md
 *.tmp
 dist/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
