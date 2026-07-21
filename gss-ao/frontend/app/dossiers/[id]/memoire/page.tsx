@@ -69,6 +69,10 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   // States for full DOCX generation (Backend API)
   const [isGeneratingDocx, setIsGeneratingDocx] = useState(false);
   const [docxResult, setDocxResult] = useState<any>(null);
+  // Recherche web à la demande (bouton « Trouver l'info sur internet ») — canaux DÉDIÉS.
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);   // échec (rouge)
+  const [searchNotice, setSearchNotice] = useState<string | null>(null); // info neutre (ex. rien à chercher)
   // Change à chaque génération → force le badge crédits à se recharger.
   const [creditKey, setCreditKey] = useState(0);
 
@@ -154,6 +158,35 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     }
   }
 
+  // Déclenche la recherche web des infos publiques manquantes, puis redirige vers l'écran de validation.
+  async function handleFindOnInternet() {
+    setIsSearching(true);
+    setSearchError(null);
+    setSearchNotice(null);
+    try {
+      const res = await apiFetch(`/api/dossiers/${id}/recherches`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Échec du déclenchement de la recherche.");
+
+      // Aucun champ manquant enregistré : ne pas rediriger vers un écran vide (ça fait croire à un bug).
+      if (data.triggered === 0) {
+        setSearchNotice("Aucune information manquante à rechercher pour ce dossier.");
+        setIsSearching(false);
+        return;
+      }
+      // Des champs manquent, mais aucun n'est public (tous internes) → rien à valider côté recherche web.
+      if (data.web === 0) {
+        setSearchNotice("Les informations manquantes de ce dossier sont toutes internes : aucune recherche web à valider.");
+        setIsSearching(false);
+        return;
+      }
+      router.push(`/dossiers/${id}/recherches`);
+    } catch (e: any) {
+      setSearchError(e.message || "Échec du déclenchement de la recherche.");
+      setIsSearching(false);
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       <header className="border-b border-border bg-card px-6 py-3">
@@ -232,15 +265,17 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
               {!isPrerequisOk && <p className="mt-2 text-xs text-warning">Prérequis manquants (CR Visite)</p>}
 
               <div className="mt-4 flex items-center justify-center gap-3">
-                <Button variant="outline" className="gap-2" onClick={() => {}}>
-                  <Globe className="h-4 w-4" />
-                  Trouver l&apos;info sur internet
+                <Button variant="outline" className="gap-2" disabled={isSearching} onClick={handleFindOnInternet}>
+                  {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+                  {isSearching ? "Recherche en cours..." : "Trouver l'info sur internet"}
                 </Button>
                 <Button variant="outline" className="gap-2" onClick={() => {}}>
                   <Users className="h-4 w-4" />
                   Demander à l&apos;équipe
                 </Button>
               </div>
+              {searchError && <p className="mt-2 text-xs text-destructive">{searchError}</p>}
+              {searchNotice && <p className="mt-2 text-xs text-muted-foreground">{searchNotice}</p>}
             </div>
 
             {isGeneratingDocx && progressInfo && (

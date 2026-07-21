@@ -10,6 +10,7 @@ import { DB } from '../core/db';
 import { extractText, loadDocxStructure } from '../ingestion/docConverter';
 import { overlaySynthesis, loadTrebuchetFont, measureZonesCapacity, RefReplacement, RefContext } from './pdf_overlay';
 import { resolveMissingInfo, MissingField } from './missing_info_resolver';
+import { uploadTempDocx, downloadTempDocx } from '../core/temp_storage';
 import { setProgress } from '../core/progress';
 // @ts-ignore
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
@@ -3300,10 +3301,20 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
         const tempBuf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
         require('fs').writeFileSync(tempPath, tempBuf);
 
+        // Persistance CROSS-POSTE : le temp local est lié à CETTE machine (injoignable ailleurs) →
+        // on le pousse aussi dans un bucket privé et on stocke sa clé. L'upload a lieu ICI, à la
+        // génération, donc AVANT toute suppression locale (finalizeMemoire) → temp récupérable après.
+        let storageKey: string | null = null;
+        try {
+          storageKey = await uploadTempDocx(dossierId, tempBuf);
+        } catch (e: any) {
+          console.warn(`[MemoireGenerator] Upload temp Storage échoué (on garde le fallback local): ${e?.message || e}`);
+        }
+
         await DB.saveDossier(dossierId, {
-          memoire_cadre_state: { tempPath, missingFields: missingInfo }
+          memoire_cadre_state: { tempPath, storageKey, missingFields: missingInfo }
         });
-        console.log(`[MemoireGenerator] État cadre sauvegardé (${missingInfo.length} champ(s) manquant(s)).`);
+        console.log(`[MemoireGenerator] État cadre sauvegardé (${missingInfo.length} champ(s) manquant(s))${storageKey ? ` — temp uploadé (${storageKey})` : ''}.`);
       } catch (e: any) {
         console.warn(`[MemoireGenerator] Sauvegarde de l'état cadre ignorée (non bloquant) : ${e?.message || e}`);
       }
@@ -4519,12 +4530,18 @@ RÈGLES DE FORME (rendu Marp) :
       throw new Error("État de génération introuvable ou expiré.");
     }
     const state = dossier.memoire_cadre_state;
-    if (!state.tempPath || !fs.existsSync(state.tempPath)) {
-      throw new Error("Le fichier temporaire est introuvable.");
-    }
 
-    // Charger le docx temporaire
-    const content = fs.readFileSync(state.tempPath);
+    // Charger le docx temporaire : local en priorité, sinon récupération CROSS-POSTE depuis le Storage
+    // (le temp a pu être généré sur une autre machine → tempPath local injoignable ici).
+    let content: Buffer;
+    if (state.tempPath && fs.existsSync(state.tempPath)) {
+      content = fs.readFileSync(state.tempPath);
+    } else if (state.storageKey) {
+      console.log(`[MemoireGenerator] Temp local absent → download depuis le Storage (${state.storageKey}).`);
+      content = await downloadTempDocx(state.storageKey);
+    } else {
+      throw new Error("Le fichier temporaire est introuvable (ni local, ni Storage).");
+    }
     const zip = new PizZip(content);
     const documentXml = zip.file('word/document.xml');
     if (!documentXml) throw new Error('word/document.xml introuvable dans le template temporaire');

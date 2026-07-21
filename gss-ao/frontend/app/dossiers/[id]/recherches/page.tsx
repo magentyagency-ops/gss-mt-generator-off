@@ -9,10 +9,14 @@ import {
   Loader2,
   Info,
   Clock,
+  Download,
+  FileDown,
+  AlertTriangle,
 } from "lucide-react";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { DossierNav } from "@/components/dossier-nav";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch, apiBase } from "@/lib/api";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Ticket #4 phase 2b — Recherches web (Perplexity) en attente de validation humaine.
@@ -34,6 +38,7 @@ interface Recherche {
   model: string | null;
   cost_usd: number | null;
   statut: Statut;
+  valeur_retenue: string | null;
   created_at: string;
 }
 
@@ -82,13 +87,18 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Valeurs éditées par l'utilisateur (id → valeur retenue). C'est CE champ, jamais answer, qui sera injecté.
+  const [values, setValues] = useState<Record<string, string>>({});
+  // Injection (action finale) : état + résultat (nb injecté + lien de téléchargement).
+  const [injecting, setInjecting] = useState(false);
+  const [injectResult, setInjectResult] = useState<{ injected: number; url?: string; message?: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     const { data, error } = await supabase
       .from("recherche_web")
-      .select("id, query, answer, citations, model, cost_usd, statut, created_at")
+      .select("id, query, answer, citations, model, cost_usd, statut, valeur_retenue, created_at")
       .eq("dossier_id", id)
       .order("created_at", { ascending: false });
     if (error) setError(error.message);
@@ -98,21 +108,65 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Valider / Rejeter → change UNIQUEMENT le statut (RLS + trigger DB l'imposent).
-  const setStatut = async (rechercheId: string, statut: "validee" | "rejetee") => {
-    setBusyId(rechercheId);
+  // Valeur courante d'un champ : saisie en cours, sinon valeur déjà enregistrée, sinon vide.
+  const valOf = (r: Recherche) => (values[r.id] !== undefined ? values[r.id] : (r.valeur_retenue ?? ""));
+
+  // VALIDER : enregistre la valeur retenue (saisie humaine OBLIGATOIRE) + statut='validee'.
+  // Sans valeur non vide, pas de validation possible (c'est le cœur de l'anti-invention).
+  const validate = async (r: Recherche) => {
+    const v = valOf(r).trim();
+    if (!v) { setError("Saisis d'abord la valeur retenue avant de valider."); return; }
+    setBusyId(r.id);
     setError(null);
     const { error } = await supabase
       .from("recherche_web")
-      .update({ statut })
-      .eq("id", rechercheId);
+      .update({ statut: "validee", valeur_retenue: v })
+      .eq("id", r.id);
     if (error) setError(error.message);
-    else setItems((prev) => prev.map((r) => (r.id === rechercheId ? { ...r, statut } : r)));
+    else setItems((prev) => prev.map((x) => (x.id === r.id ? { ...x, statut: "validee", valeur_retenue: v } : x)));
     setBusyId(null);
+  };
+
+  // REJETER : change UNIQUEMENT le statut (aucune valeur injectée).
+  const reject = async (rechercheId: string) => {
+    setBusyId(rechercheId);
+    setError(null);
+    const { error } = await supabase.from("recherche_web").update({ statut: "rejetee" }).eq("id", rechercheId);
+    if (error) setError(error.message);
+    else setItems((prev) => prev.map((r) => (r.id === rechercheId ? { ...r, statut: "rejetee" } : r)));
+    setBusyId(null);
+  };
+
+  // INJECTER (action finale, one-shot) : injecte TOUTES les recherches validées, puis consomme le cadre.
+  const runInject = async () => {
+    if (!window.confirm(
+      "Injecter TOUTES les recherches validées dans le mémoire ?\n\n" +
+      "Action finale : le cadre temporaire est consommé après l'injection."
+    )) return;
+    setInjecting(true);
+    setError(null);
+    setInjectResult(null);
+    try {
+      const res = await apiFetch(`/api/dossiers/${id}/recherches/inject`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Échec de l'injection.");
+      if (!data.injected) {
+        setInjectResult({ injected: 0, message: data.message || "Aucune recherche validée à injecter." });
+      } else {
+        const url = `${apiBase}/api/download?file=${encodeURIComponent(data.file_path)}&download=1`;
+        setInjectResult({ injected: data.injected, url });
+        await load(); // rafraîchit : validee → injectee
+      }
+    } catch (e: any) {
+      setError(e.message || "Échec de l'injection.");
+    } finally {
+      setInjecting(false);
+    }
   };
 
   const enAttente = items.filter((r) => r.statut === "en_attente_validation");
   const traitees = items.filter((r) => r.statut !== "en_attente_validation");
+  const validatedCount = items.filter((r) => r.statut === "validee").length;
 
   return (
     <div className="flex h-full flex-col">
@@ -123,10 +177,18 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
           </div>
           <h1 className="text-xl font-semibold">Recherches web à valider</h1>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
-          Rafraîchir
-        </Button>
+        <div className="flex items-center gap-2">
+          {validatedCount > 0 && (
+            <Button size="sm" onClick={runInject} disabled={injecting}>
+              {injecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+              Injecter ({validatedCount})
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={load} disabled={loading || injecting}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+            Rafraîchir
+          </Button>
+        </div>
       </header>
 
       <DossierNav id={id} />
@@ -138,15 +200,38 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
             <Info className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
             <div className="text-sm text-muted-foreground">
               Ces réponses proviennent d'une recherche web sourcée (Perplexity) pour des informations
-              <strong> publiques manquantes</strong>. Elles ne sont <strong>jamais insérées automatiquement</strong> dans
-              le mémoire. « Valider » ou « Rejeter » ne fait qu'enregistrer votre décision —
-              <strong> le mémoire généré n'est pas modifié</strong>.
+              <strong> publiques manquantes</strong>. Rien n'est inséré automatiquement : vous <strong>saisissez vous-même
+              la valeur retenue</strong> (c'est elle, jamais le texte brut, qui sera injectée), puis vous validez.
+              L'injection dans le mémoire n'a lieu que via le bouton <strong>« Injecter »</strong> — une action finale
+              qui traite toutes les recherches validées d'un coup.
             </div>
           </div>
 
           {error && (
             <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
               {error}
+            </div>
+          )}
+
+          {injectResult && injectResult.injected > 0 && injectResult.url && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-success/40 bg-success/10 p-4 text-sm">
+              <span className="flex items-center gap-2 text-foreground">
+                <CheckCircle2 className="h-5 w-5 text-success" />
+                {injectResult.injected} recherche(s) injectée(s) dans un nouveau mémoire.
+              </span>
+              <a
+                href={injectResult.url}
+                download
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2 font-medium hover:bg-accent hover:text-accent-foreground"
+              >
+                <Download className="h-4 w-4" /> Télécharger le mémoire
+              </a>
+            </div>
+          )}
+
+          {injectResult && injectResult.injected === 0 && (
+            <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+              {injectResult.message}
             </div>
           )}
 
@@ -181,7 +266,22 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
                       <p className="whitespace-pre-wrap text-sm leading-6 text-foreground/90">{r.answer}</p>
                     )}
                     <SourceLinks urls={r.citations ?? []} />
-                    <div className="mt-4 flex items-center justify-between gap-3">
+
+                    {/* Valeur retenue : saisie/confirmation HUMAINE — c'est CE texte qui sera injecté. */}
+                    <div className="mt-4">
+                      <label className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <AlertTriangle className="h-3.5 w-3.5" /> Valeur retenue (saisie obligatoire, injectée telle quelle)
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={valOf(r)}
+                        onChange={(e) => setValues((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                        placeholder="Saisir la valeur exacte à insérer dans le mémoire (à partir des sources ci-dessus)…"
+                        className="w-full resize-y rounded-md border border-border bg-background p-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between gap-3">
                       <span className="text-[11px] text-muted-foreground">
                         {r.model ?? "—"}
                         {typeof r.cost_usd === "number" ? ` · ${r.cost_usd.toFixed(5)} $` : ""}
@@ -191,15 +291,15 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
                           variant="outline"
                           size="sm"
                           disabled={busyId === r.id}
-                          onClick={() => setStatut(r.id, "rejetee")}
+                          onClick={() => reject(r.id)}
                         >
                           {busyId === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
                           Rejeter
                         </Button>
                         <Button
                           size="sm"
-                          disabled={busyId === r.id}
-                          onClick={() => setStatut(r.id, "validee")}
+                          disabled={busyId === r.id || valOf(r).trim() === ""}
+                          onClick={() => validate(r)}
                         >
                           {busyId === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                           Valider

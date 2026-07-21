@@ -8,6 +8,9 @@ import { DB, DossierRecord, MemoiresDB, remainingGenerations, QuotaError } from 
 import { initProgress, finishProgress } from '../core/progress';
 import { extractRcWithLLM, extractCctpWithLLM } from '../analysis/llmExtractor';
 import { requireAuth } from './authMiddleware';
+import { resolveMissingInfo, MissingField } from '../generation/missing_info_resolver';
+import { injectValidatedRecherches } from '../generation/inject_recherches';
+import { getSettings } from '../core/config';
 
 const uploadDir = path.resolve(__dirname, '../../../data/output/temp');
 if (!fs.existsSync(uploadDir)) {
@@ -335,6 +338,68 @@ router.post('/dce/:dossier_id/memoire/chat-missing-eval', async (req: Request, r
   }
 });
 
+// Ticket #4 — Déclencheur à la demande de la recherche web (bouton « Trouver l'info sur internet »).
+// Relit les champs manquants déjà persistés (memoire_cadre_state.missingFields) et lance
+// resolveMissingInfo : classification interne/publique + recherche Perplexity des champs publics,
+// dont les résultats sourcés sont écrits dans recherche_web (statut « en_attente_validation »).
+// NE TOUCHE JAMAIS au .docx : aucune injection ici — la validation humaine se fait sur /recherches.
+router.post('/dossiers/:id/recherches', async (req: Request, res: Response) => {
+  const dossierId = req.params.id;
+  try {
+    // Garde-fou : sans le flag, resolveMissingInfo est un no-op strict → on le dit clairement (pas de 200 muet).
+    if (!getSettings().resolveMissingInfoEnabled) {
+      return res.status(409).json({ error: 'Recherche web désactivée (RESOLVE_MISSING_INFO non actif).' });
+    }
+
+    const dossier = await DB.getDossier(dossierId);
+    if (!dossier) return res.status(404).json({ error: 'Dossier introuvable' });
+
+    // Champs manquants déjà calculés et persistés lors de la génération (aucun re-parse du .docx).
+    const raw = dossier.memoire_cadre_state?.missingFields;
+    const fields: MissingField[] = Array.isArray(raw)
+      ? raw
+          .filter((m: any) => m && (m.label ?? '') !== '')
+          .map((m: any) => ({ id: Number(m.id), label: String(m.label ?? ''), context: String(m.context ?? '') }))
+      : [];
+
+    if (fields.length === 0) {
+      return res.json({ status: 'ok', triggered: 0, message: 'Aucun champ manquant à rechercher.' });
+    }
+
+    // resolveMissingInfo classe, cherche les champs publics et REMPLIT recherche_web (en_attente_validation).
+    const results = await resolveMissingInfo(fields, dossierId);
+    const web = results.filter((r) => r.source === 'web').length;
+    const pending = results.filter((r) => r.pending).length;
+
+    res.json({ status: 'ok', total: results.length, web, pending });
+  } catch (error: any) {
+    console.error('Erreur lors du déclenchement des recherches web:', error);
+    res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
+  }
+});
+
+// Ticket #4 phase 3 — INJECTION (action finale, one-shot) des recherches VALIDÉES dans le mémoire.
+// Injecte toutes les lignes recherche_web statut='validee' (champ_id non nul) → nouveau .docx, puis
+// consomme le cadre. RÈGLE BLOQUANTE : jamais une ligne non validée, jamais `answer` (seulement valeur_retenue).
+router.post('/dossiers/:id/recherches/inject', async (req: Request, res: Response) => {
+  const dossierId = req.params.id;
+  try {
+    // Contrôle d'accès : DB.getDossier passe par le client scoppé (RLS) → 404 si non-propriétaire/absent.
+    // (Le service d'injection tourne ensuite en service_role : cette vérif est la barrière d'autorisation.)
+    const dossier = await DB.getDossier(dossierId);
+    if (!dossier) return res.status(404).json({ error: 'Dossier introuvable' });
+
+    const result = await injectValidatedRecherches(dossierId);
+    if (result.injected === 0) {
+      return res.json({ status: 'ok', injected: 0, message: 'Aucune recherche validée à injecter.' });
+    }
+    res.json({ status: 'ok', injected: result.injected, skipped: result.skipped, file_path: result.filePath });
+  } catch (error: any) {
+    console.error('Erreur lors de l\'injection des recherches validées:', error);
+    res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
+  }
+});
+
 // Assemble un .docx à partir des sections déjà générées (cas sans cadre imposé) :
 // remplace le contenu de chaque chapitre du mémoire de référence GSS par le texte IA.
 router.post('/dossiers/:id/memoire-from-sections', async (req: Request, res: Response) => {
@@ -454,8 +519,6 @@ router.post('/export-docx', async (req: Request, res: Response) => {
 });
 
 // Import par email d'alerte Nukema
-import { getSettings } from '../core/config';
-
 router.post('/ingest-email', async (req: Request, res: Response) => {
   try {
     const { emailText, api_key } = req.body;

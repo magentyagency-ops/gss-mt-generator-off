@@ -184,6 +184,7 @@ export async function searchPublicInfo(
   query: string,
   sollicitationId: string | null = null,
   dossierId: string | null = null,
+  champId: number | null = null,
 ): Promise<PublicSearchResult | null> {
   const key = getSettings().perplexityApiKey;
   if (!key) {
@@ -217,7 +218,7 @@ export async function searchPublicInfo(
       return null;
     }
     // Traçabilité (non bloquante) : un échec d'insertion ne casse pas le retour.
-    await logRechercheWeb(query, result, sollicitationId, dossierId).catch((e) =>
+    await logRechercheWeb(query, result, sollicitationId, dossierId, champId).catch((e) =>
       console.warn('[searchPublicInfo] insertion recherche_web échouée (non bloquant):', (e as Error)?.message));
     return result;
   } catch (e) {
@@ -262,6 +263,7 @@ async function logRechercheWeb(
   r: PublicSearchResult,
   sollicitationId: string | null = null,
   dossierId: string | null = null,
+  champId: number | null = null,
 ): Promise<void> {
   const admin = adminClient();
   if (!admin) {
@@ -278,6 +280,7 @@ async function logRechercheWeb(
     cost_usd: typeof totalCost === 'number' ? totalCost : null,
     sollicitation_id: sollicitationId,
     dossier_id: dossierId,
+    champ_id: champId, // id stable du champ (cible univoque de l'injection) — cf. migration phase 3
   });
   if (error) throw error;
 }
@@ -327,7 +330,8 @@ export async function resolveMissingInfo(
         continue;
       }
       // Recherche web + traçabilité « en attente » ; JAMAIS d'injection automatique ici (value=null).
-      const r = await searchPublicInfo(f.label, sollicitationId, dossierId);
+      // champ_id = f.id : lien STABLE ligne↔champ (marqueur [CHAMP_<id>]), remplace le lien fragile par label.
+      const r = await searchPublicInfo(f.label, sollicitationId, dossierId, f.id);
       out.push({ id: f.id, value: null, source: r ? 'web' : 'none', pending: r ? true : undefined });
     } else if (kind === 'internal') {
       const { sent } = await requestInfoFromTeam(f, dossierId);
