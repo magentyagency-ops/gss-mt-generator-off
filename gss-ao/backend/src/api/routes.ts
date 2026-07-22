@@ -4,10 +4,15 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import OpenAI from 'openai';
-import { DB, DossierRecord, MemoiresDB, remainingGenerations, QuotaError } from '../core/db';
+import { DB, DossierRecord, MemoiresDB, FichiersDB, remainingGenerations, QuotaError } from '../core/db';
 import { initProgress, finishProgress } from '../core/progress';
 import { extractRcWithLLM, extractCctpWithLLM } from '../analysis/llmExtractor';
 import { requireAuth } from './authMiddleware';
+import { getScopedClient, getCurrentUserId } from '../core/supabase';
+
+// Bucket privé où sont archivées les pièces des dossiers (DCE). Chemin : <userId>/dce/<dossierId>/<nom>
+// (le préfixe <userId> est imposé par la RLS Storage, cf. infra/supabase/001_schema.sql).
+const USER_FILES_BUCKET = 'user-files';
 
 const uploadDir = path.resolve(__dirname, '../../../data/output/temp');
 if (!fs.existsSync(uploadDir)) {
@@ -146,38 +151,54 @@ router.post('/dce/upload', upload.array('files'), async (req: Request, res: Resp
     const dossierId = req.body.id;
     if (!dossierId) throw new Error("ID du dossier manquant");
 
-    const targetDir = path.resolve(__dirname, `../../../data/output/dce_${dossierId}`);
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
-    }
+    const userId = getCurrentUserId();
+    const supabase = getScopedClient();
 
     let rcData: any = null;
     let cctpData: any = null;
 
     if (req.files && Array.isArray(req.files)) {
       for (const file of req.files) {
-        // Renommer le fichier uploadé avec son nom original (corrige l'encodage latin1 par défaut de multer)
+        // Nom d'origine (corrige l'encodage latin1 par défaut de multer).
         const utf8Name = Buffer.from(file.originalname, 'latin1').toString('utf8');
         const ext = path.extname(utf8Name);
         const base = path.basename(utf8Name, ext);
         const finalName = `${base}${ext}`;
-        const finalPath = path.join(targetDir, finalName);
-        fs.renameSync(file.path, finalPath);
 
-        const lowerName = finalName.toLowerCase();
-        // Le nom de fichier n'est qu'un indice de classification : l'extraction
-        // elle-même est pilotée par LLM et fonctionne pour n'importe quel template.
-        const looksLikeRc = lowerName.includes('rc') || lowerName.includes('reglement') || lowerName.includes('règlement') || lowerName.includes('consultation');
-        const looksLikeCctp = lowerName.includes('cctp') || lowerName.includes('technique') || lowerName.includes('cahier');
-        if (looksLikeRc && !rcData) {
-          try {
-            rcData = await extractRcWithLLM(finalPath);
-          } catch (e) { console.warn("Erreur extraction RC:", e); }
-        }
-        if (looksLikeCctp && !cctpData) {
-          try {
-            cctpData = await extractCctpWithLLM(finalPath);
-          } catch (e) { console.warn("Erreur extraction CCTP:", e); }
+        // Le fichier temporaire multer sert UNIQUEMENT à l'upload + l'extraction, puis est supprimé :
+        // aucune pièce ne reste sur le disque de l'app. La source durable = Supabase Storage.
+        const tmpPath = file.path;
+        try {
+          const buffer = fs.readFileSync(tmpPath);
+          // Storage : <userId>/dce/<dossierId>/<nom> (préfixe userId imposé par la RLS Storage).
+          const storagePath = `${userId}/dce/${dossierId}/${finalName}`;
+          const { error: upErr } = await supabase.storage
+            .from(USER_FILES_BUCKET)
+            .upload(storagePath, buffer, {
+              contentType: file.mimetype || 'application/octet-stream',
+              upsert: true,
+            });
+          if (upErr) throw new Error(`upload Storage échoué (${finalName}): ${upErr.message}`);
+
+          await FichiersDB.upsert(dossierId, {
+            nom: finalName,
+            storagePath,
+            mimeType: file.mimetype || null,
+            tailleOctets: buffer.length,
+          });
+
+          const lowerName = finalName.toLowerCase();
+          // Le nom de fichier n'est qu'un indice de classification : l'extraction est pilotée par LLM.
+          const looksLikeRc = lowerName.includes('rc') || lowerName.includes('reglement') || lowerName.includes('règlement') || lowerName.includes('consultation');
+          const looksLikeCctp = lowerName.includes('cctp') || lowerName.includes('technique') || lowerName.includes('cahier');
+          if (looksLikeRc && !rcData) {
+            try { rcData = await extractRcWithLLM(tmpPath); } catch (e) { console.warn("Erreur extraction RC:", e); }
+          }
+          if (looksLikeCctp && !cctpData) {
+            try { cctpData = await extractCctpWithLLM(tmpPath); } catch (e) { console.warn("Erreur extraction CCTP:", e); }
+          }
+        } finally {
+          try { fs.unlinkSync(tmpPath); } catch { /* déjà supprimé */ }
         }
       }
     }
