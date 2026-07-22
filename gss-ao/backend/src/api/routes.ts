@@ -8,7 +8,7 @@ import { DB, DossierRecord, MemoiresDB, remainingGenerations, QuotaError } from 
 import { initProgress, finishProgress } from '../core/progress';
 import { extractRcWithLLM, extractCctpWithLLM } from '../analysis/llmExtractor';
 import { requireAuth } from './authMiddleware';
-import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeam, MissingField } from '../generation/missing_info_resolver';
+import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeamBulk, MissingField } from '../generation/missing_info_resolver';
 import { injectValidatedRecherches } from '../generation/inject_recherches';
 import { getSettings } from '../core/config';
 
@@ -356,11 +356,33 @@ router.post('/dossiers/:id/recherches', async (req: Request, res: Response) => {
 
     // Champs manquants déjà calculés et persistés lors de la génération (aucun re-parse du .docx).
     const raw = dossier.memoire_cadre_state?.missingFields;
-    const fields: MissingField[] = Array.isArray(raw)
+    let fields: MissingField[] = Array.isArray(raw)
       ? raw
           .filter((m: any) => m && (m.label ?? '') !== '')
-          .map((m: any) => ({ id: Number(m.id), label: String(m.label ?? ''), context: String(m.context ?? '') }))
+          .map((m: any) => ({ id: String(m.id), label: String(m.label ?? ''), context: String(m.context ?? '') }))
       : [];
+
+    // Fallback pour "AO RNE" (sans cadre imposé) : on lit les consultations (tableau de strings) du dernier mémoire.
+    if (fields.length === 0) {
+      const memoire = await MemoiresDB.getByDossier(dossierId);
+      if (memoire && memoire.contenu?.generatedData?.consultations) {
+        let consList: string[] = [];
+        try {
+          consList = Array.isArray(memoire.contenu.generatedData.consultations) 
+            ? memoire.contenu.generatedData.consultations 
+            : JSON.parse(memoire.contenu.generatedData.consultations as string);
+        } catch(e) {
+          // ignore
+        }
+        if (Array.isArray(consList)) {
+          fields = consList.map((c, idx) => ({
+            id: `cons-${idx}`, // ID synthétique
+            label: String(c),
+            context: 'Consultation requise issue de l\'analyse du DCE',
+          }));
+        }
+      }
+    }
 
     if (fields.length === 0) {
       return res.json({ status: 'ok', triggered: 0, message: 'Aucun champ manquant à rechercher.' });
@@ -414,11 +436,33 @@ router.post('/dossiers/:id/ask-team', async (req: Request, res: Response) => {
     if (!dossier) return res.status(404).json({ error: 'Dossier introuvable' });
 
     const raw = dossier.memoire_cadre_state?.missingFields;
-    const fields: MissingField[] = Array.isArray(raw)
+    console.log('[ask-team] Raw missingFields:', raw);
+    let fields: MissingField[] = Array.isArray(raw)
       ? raw
           .filter((m: any) => m && (m.label ?? '') !== '')
-          .map((m: any) => ({ id: Number(m.id), label: String(m.label ?? ''), context: String(m.context ?? '') }))
+          .map((m: any) => ({ id: String(m.id), label: String(m.label ?? ''), context: String(m.context ?? '') }))
       : [];
+
+    if (fields.length === 0) {
+      const memoire = await MemoiresDB.getByDossier(dossierId);
+      if (memoire && memoire.contenu?.generatedData?.consultations) {
+        let consList: string[] = [];
+        try {
+          consList = Array.isArray(memoire.contenu.generatedData.consultations) 
+            ? memoire.contenu.generatedData.consultations 
+            : JSON.parse(memoire.contenu.generatedData.consultations as string);
+        } catch(e) {
+          // ignore
+        }
+        if (Array.isArray(consList)) {
+          fields = consList.map((c, idx) => ({
+            id: `cons-${idx}`,
+            label: String(c),
+            context: 'Consultation requise issue de l\'analyse du DCE',
+          }));
+        }
+      }
+    }
 
     if (fields.length === 0) {
       return res.json({ status: 'ok', triggered: 0, message: 'Aucun champ manquant.' });
@@ -432,13 +476,12 @@ router.post('/dossiers/:id/ask-team', async (req: Request, res: Response) => {
       return res.json({ status: 'ok', triggered: 0, internal: 0, message: 'Aucune information interne à demander.' });
     }
 
-    const results = [];
-    for (const f of internals) {
-      const r = await requestInfoFromTeam(f, dossierId, undefined, req.headers.authorization);
-      results.push({ id: f.id, label: f.label, ...r });
-    }
+    const r = await requestInfoFromTeamBulk(internals, dossierId, undefined, req.headers.authorization);
+    
+    // Pour la compatibilité du frontend, on simule que TOUS les internes ont le même `sent` et `ticketId`
+    const results = internals.map((f) => ({ id: f.id, label: f.label, ...r }));
 
-    const sent = results.filter((r) => r.sent).length;
+    const sent = r.sent ? internals.length : 0;
     res.json({ status: 'ok', triggered: internals.length, sent, results });
   } catch (error: any) {
     console.error('Erreur ask-team:', error);

@@ -3155,13 +3155,13 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
           const d = descriptors.find(x => x.id === r.id);
           const label = (d?.context.match(/Question:\s*"([^"]*)"|option:\s*"([^"]*)"|Tableau:\s*([^|]*)/) || [])
             .slice(1).find(Boolean) || d?.context || '';
-          return { id: r.id, label: String(label).trim(), context: d?.context || '' };
+          return { id: String(r.id), label: String(label).trim(), context: d?.context || '' };
         });
       if (missing.length) {
         const resolved = await resolveMissingInfo(missing, dossierId);
         let enriched = 0;
         for (const res of resolved) {
-          if (res.value) { const r = replacements.find(x => x.id === res.id); if (r) { r.value = res.value; enriched++; } }
+          if (res.value) { const r = replacements.find(x => String(x.id) === res.id); if (r) { r.value = res.value; enriched++; } }
         }
         console.log(`[MemoireGenerator] Résolution infos manquantes (brief §3): ${missing.length} champ(s) manquant(s), ${enriched} complété(s) [stub web/email — non implémenté].`);
       }

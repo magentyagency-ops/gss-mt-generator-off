@@ -28,14 +28,14 @@ export type MissingInfoKind = 'public' | 'internal' | 'unknown';
 
 /** Un champ resté « [À COMPLÉTER] » à l'issue de la génération. */
 export interface MissingField {
-  id: number;
+  id: string;
   label: string;     // libellé/question du champ (ce qui est demandé)
   context: string;   // contexte complet du champ (section, tableau, etc.)
 }
 
 /** Résultat de résolution d'un champ manquant. */
 export interface ResolvedInfo {
-  id: number;
+  id: string;
   value: string | null;                 // valeur trouvée (sinon null → reste [À COMPLÉTER])
   source: 'web' | 'team' | 'none';      // d'où vient la valeur
   pending?: boolean;                     // true si une demande équipe a été envoyée, en attente de réponse
@@ -73,12 +73,12 @@ const CLASSIFY_SYSTEM_PROMPT =
  * illisible), fallback champ par champ sur la regex `classifyMissingInfo` ('public' conservé, sinon
  * 'internal'). Ne lève jamais.
  */
-export async function classifyFieldsLLM(fields: MissingField[]): Promise<Map<number, 'public' | 'internal'>> {
-  const result = new Map<number, 'public' | 'internal'>();
+export async function classifyFieldsLLM(fields: MissingField[]): Promise<Map<string, 'public' | 'internal'>> {
+  const result = new Map<string, 'public' | 'internal'>();
   if (fields.length === 0) return result; // aucun champ → aucun appel LLM
 
-  const regexFallback = (): Map<number, 'public' | 'internal'> => {
-    const m = new Map<number, 'public' | 'internal'>();
+  const regexFallback = (): Map<string, 'public' | 'internal'> => {
+    const m = new Map<string, 'public' | 'internal'>();
     for (const f of fields) {
       const kind = classifyMissingInfo(f.label, f.context) === 'public' ? 'public' : 'internal';
       m.set(f.id, kind);
@@ -107,17 +107,17 @@ export async function classifyFieldsLLM(fields: MissingField[]): Promise<Map<num
             'Champs à classer (JSON) :\n' +
             JSON.stringify(userPayload) +
             '\n\nRéponds UNIQUEMENT par un objet JSON de la forme ' +
-            '{"classifications":[{"id":<number>,"decision":"externe"|"interne"}]}.',
+            '{"classifications":[{"id":<string>,"decision":"externe"|"interne"}]}.',
         },
       ],
       temperature: 0.1,
     });
     const content = completion.choices[0].message.content || '{}';
     const data = JSON.parse(content);
-    const decided = new Map<number, 'public' | 'internal'>();
+    const decided = new Map<string, 'public' | 'internal'>();
     if (Array.isArray(data?.classifications)) {
       for (const c of data.classifications) {
-        if (typeof c?.id !== 'number') continue;
+        if (typeof c?.id !== 'string') continue;
         const kind = c?.decision === 'externe' ? 'public' : c?.decision === 'interne' ? 'internal' : null;
         if (kind) decided.set(c.id, kind);
       }
@@ -184,7 +184,7 @@ export async function searchPublicInfo(
   query: string,
   sollicitationId: string | null = null,
   dossierId: string | null = null,
-  champId: number | null = null,
+  champId: string | null = null,
 ): Promise<PublicSearchResult | null> {
   const key = getSettings().perplexityApiKey;
   if (!key) {
@@ -263,7 +263,7 @@ async function logRechercheWeb(
   r: PublicSearchResult,
   sollicitationId: string | null = null,
   dossierId: string | null = null,
-  champId: number | null = null,
+  champId: string | null = null,
 ): Promise<void> {
   const admin = adminClient();
   if (!admin) {
@@ -299,8 +299,8 @@ async function logRechercheWeb(
  *
  * Ne lève jamais (cohérent avec `searchPublicInfo`).
  */
-export async function requestInfoFromTeam(
-  field: MissingField,
+export async function requestInfoFromTeamBulk(
+  fields: MissingField[],
   dossierId: string,
   destinataireEmail?: string,
   authToken?: string,
@@ -325,13 +325,20 @@ export async function requestInfoFromTeam(
     return { sent: false };
   }
 
-  // Mapping MissingField → SendQuestionBody (contrat exact de l'Edge Function send-question).
+  // Mapping MissingField[] → SendQuestionBody
+  const isSingle = fields.length === 1;
+  const labelText = isSingle ? fields[0].label : `Informations manquantes (${fields.length} éléments)`;
+  
+  const questionText = isSingle 
+    ? `Pourriez-vous fournir l'information suivante pour compléter le mémoire technique : ${fields[0].label} ?`
+    : `Pourriez-vous fournir les informations suivantes pour compléter le mémoire technique ?\n\n${fields.map(f => `- ${f.label}${f.context ? ` (Contexte: ${f.context})` : ''}`).join('\n')}`;
+
   const body = {
     ao_id: dossierId,
-    critere_concerne: field.label,
+    critere_concerne: labelText,
     destinataire_email: to,
-    question: `Pourriez-vous fournir l'information suivante pour compléter le mémoire technique : ${field.label} ?`,
-    contexte: field.context || undefined,
+    question: questionText,
+    contexte: isSingle ? fields[0].context : undefined,
     niveau_criticite: 'interne',
   };
 
@@ -403,8 +410,7 @@ export async function resolveMissingInfo(
       const r = await searchPublicInfo(f.label, sollicitationId, dossierId, f.id);
       out.push({ id: f.id, value: null, source: r ? 'web' : 'none', pending: r ? true : undefined });
     } else if (kind === 'internal') {
-      const { sent } = await requestInfoFromTeam(f, dossierId);
-      out.push({ id: f.id, value: null, source: 'none', pending: sent });
+      out.push({ id: f.id, value: null, source: 'none', pending: false });
     } else {
       out.push({ id: f.id, value: null, source: 'none' });
     }
