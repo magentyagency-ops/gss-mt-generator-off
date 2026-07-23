@@ -1828,7 +1828,15 @@ export class MemoireGenerator {
       try {
         const { data, error } = await supabase.storage.from(USER_FILES_BUCKET).download(f.storage_path!);
         if (error || !data) { console.warn(`[MemoireGenerator] DCE Storage: ${f.nom} illisible (${error?.message || 'vide'})`); continue; }
-        fs.writeFileSync(path.join(tmpDir, f.nom), Buffer.from(await data.arrayBuffer()));
+        // `nom` peut porter un CHEMIN RELATIF (sous-dossiers) → on recrée l'arborescence dans le tmp.
+        // Garde anti-traversée : on résout et on vérifie que la cible reste DANS tmpDir.
+        const dest = path.resolve(tmpDir, f.nom);
+        if (dest !== tmpDir && !dest.startsWith(tmpDir + path.sep)) {
+          console.warn(`[MemoireGenerator] DCE Storage: chemin hors périmètre ignoré (${f.nom})`);
+          continue;
+        }
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.writeFileSync(dest, Buffer.from(await data.arrayBuffer()));
         got++;
       } catch (e: any) {
         console.warn(`[MemoireGenerator] DCE Storage: échec téléchargement ${f.nom} — ${e?.message || e}`);

@@ -8,7 +8,7 @@ import { DB, DossierRecord, MemoiresDB, FichiersDB, remainingGenerations, QuotaE
 import { initProgress, finishProgress } from '../core/progress';
 import { extractRcWithLLM, extractCctpWithLLM } from '../analysis/llmExtractor';
 import { requireAuth } from './authMiddleware';
-import { getScopedClient, getCurrentUserId } from '../core/supabase';
+import { getScopedClient, requestContext } from '../core/supabase';
 
 // Bucket privé où sont archivées les pièces des dossiers (DCE). Chemin : <userId>/dce/<dossierId>/<nom>
 // (le préfixe <userId> est imposé par la RLS Storage, cf. infra/supabase/001_schema.sql).
@@ -147,11 +147,20 @@ router.delete('/dossiers/:id', async (req: Request, res: Response) => {
 
 // Module A — upload ZIP/multi-fichiers + classification des pièces.
 router.post('/dce/upload', upload.array('files'), async (req: Request, res: Response) => {
+  // multer parse le multipart de façon ASYNCHRONE : quand ce handler s'exécute, le contexte
+  // AsyncLocalStorage posé par requireAuth (run(() => next())) est déjà refermé → getScopedClient()
+  // / getCurrentUserId() / FichiersDB lèveraient « hors contexte de requête ». On le RÉTABLIT ici
+  // depuis les infos portées par la requête (token d'en-tête + userId posé par requireAuth).
+  const authToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  const authUserId = (req as any).userId as string | undefined;
+  if (!authToken || !authUserId) { res.status(401).json({ error: "Authentification requise" }); return; }
+
+  await requestContext.run({ accessToken: authToken, userId: authUserId }, async () => {
   try {
     const dossierId = req.body.id;
     if (!dossierId) throw new Error("ID du dossier manquant");
 
-    const userId = getCurrentUserId();
+    const userId = authUserId;
     const supabase = getScopedClient();
 
     let rcData: any = null;
@@ -159,19 +168,34 @@ router.post('/dce/upload', upload.array('files'), async (req: Request, res: Resp
 
     if (req.files && Array.isArray(req.files)) {
       for (const file of req.files) {
-        // Nom d'origine (corrige l'encodage latin1 par défaut de multer).
+        // Nom d'origine (corrige l'encodage latin1 par défaut de multer). Peut contenir un CHEMIN
+        // RELATIF quand l'utilisateur uploade un dossier (« DCE/annexes/plan.pdf ») → on préserve
+        // les sous-dossiers pour éviter les collisions de noms entre sous-dossiers.
         const utf8Name = Buffer.from(file.originalname, 'latin1').toString('utf8');
-        const ext = path.extname(utf8Name);
-        const base = path.basename(utf8Name, ext);
-        const finalName = `${base}${ext}`;
+        const relPath = utf8Name.replace(/\\/g, '/').replace(/^\/+/, '');  // sépas Windows → '/', pas de '/' initial
+        const finalName = relPath;                                          // chemin relatif complet (colonne `nom`)
 
         // Le fichier temporaire multer sert UNIQUEMENT à l'upload + l'extraction, puis est supprimé :
         // aucune pièce ne reste sur le disque de l'app. La source durable = Supabase Storage.
         const tmpPath = file.path;
         try {
           const buffer = fs.readFileSync(tmpPath);
-          // Storage : <userId>/dce/<dossierId>/<nom> (préfixe userId imposé par la RLS Storage).
-          const storagePath = `${userId}/dce/${dossierId}/${finalName}`;
+          // Clé Storage SÛRE : Supabase rejette les clés avec accents/espaces/caractères spéciaux.
+          // On sanitise CHAQUE segment du chemin et on conserve l'arborescence (séparateur '/').
+          // Le nom D'ORIGINE (avec accents/sous-dossiers) reste dans la colonne `nom`, utilisé tel
+          // quel à la génération pour recréer l'arborescence et classer les pièces.
+          const safeRel = relPath
+            .split('/')
+            .map((seg) =>
+              seg
+                .normalize('NFD').replace(/[̀-ͯ]/g, '')
+                .replace(/[^a-zA-Z0-9._-]+/g, '_')
+                .replace(/_+/g, '_').replace(/^_|_$/g, ''),
+            )
+            .filter(Boolean)
+            .join('/') || 'fichier';
+          // Storage : <userId>/dce/<dossierId>/<chemin sûr> (préfixe userId imposé par la RLS Storage).
+          const storagePath = `${userId}/dce/${dossierId}/${safeRel}`;
           const { error: upErr } = await supabase.storage
             .from(USER_FILES_BUCKET)
             .upload(storagePath, buffer, {
@@ -181,13 +205,13 @@ router.post('/dce/upload', upload.array('files'), async (req: Request, res: Resp
           if (upErr) throw new Error(`upload Storage échoué (${finalName}): ${upErr.message}`);
 
           await FichiersDB.upsert(dossierId, {
-            nom: finalName,
+            nom: finalName,          // chemin relatif d'origine — pour recréer l'arborescence + extraction
             storagePath,
             mimeType: file.mimetype || null,
             tailleOctets: buffer.length,
           });
 
-          const lowerName = finalName.toLowerCase();
+          const lowerName = path.basename(finalName).toLowerCase();
           // Le nom de fichier n'est qu'un indice de classification : l'extraction est pilotée par LLM.
           const looksLikeRc = lowerName.includes('rc') || lowerName.includes('reglement') || lowerName.includes('règlement') || lowerName.includes('consultation');
           const looksLikeCctp = lowerName.includes('cctp') || lowerName.includes('technique') || lowerName.includes('cahier');
@@ -227,6 +251,7 @@ router.post('/dce/upload', upload.array('files'), async (req: Request, res: Resp
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+  });
 });
 
 // Module B — fiche de synthèse DCE.
