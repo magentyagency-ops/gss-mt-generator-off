@@ -126,6 +126,59 @@ export class DB {
   }
 }
 
+/** Une pièce jointe d'un dossier (fichier DCE), stockée dans Supabase Storage. */
+export interface FichierRow {
+  id: string;
+  dossier_id: string;
+  nom: string;
+  storage_path: string | null;
+  mime_type: string | null;
+  taille_octets: number | null;
+  created_at?: string;
+}
+
+/**
+ * Couche d'accès aux pièces d'un dossier (table public.fichiers). Les octets vivent dans
+ * Supabase Storage (bucket user-files) ; cette table n'en garde que les métadonnées + le chemin.
+ * Chaque appel s'exécute avec le JWT de l'utilisateur (RLS active).
+ */
+export class FichiersDB {
+  static async listByDossier(dossierId: string): Promise<FichierRow[]> {
+    const supabase = getScopedClient();
+    const { data, error } = await supabase
+      .from('fichiers')
+      .select('id, dossier_id, nom, storage_path, mime_type, taille_octets, created_at')
+      .eq('dossier_id', dossierId)
+      .order('created_at', { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data as FichierRow[]) || [];
+  }
+
+  /** Insère la métadonnée d'une pièce ; remplace une éventuelle ligne au même storage_path. */
+  static async upsert(
+    dossierId: string,
+    f: { nom: string; storagePath: string; mimeType?: string | null; tailleOctets?: number | null },
+  ): Promise<string> {
+    const supabase = getScopedClient();
+    // Ré-upload du même fichier → on évite les doublons (pas de contrainte unique sur le chemin).
+    await supabase.from('fichiers').delete().eq('dossier_id', dossierId).eq('storage_path', f.storagePath);
+    const { data, error } = await supabase
+      .from('fichiers')
+      .insert({
+        dossier_id: dossierId,
+        user_id: getCurrentUserId(),
+        nom: f.nom,
+        storage_path: f.storagePath,
+        mime_type: f.mimeType ?? null,
+        taille_octets: f.tailleOctets ?? null,
+      })
+      .select('id')
+      .single();
+    if (error) throw new Error(error.message);
+    return (data as { id: string }).id;
+  }
+}
+
 /** Quota de génération atteint (ou email non confirmé) — levé par le trigger BDD. */
 export class QuotaError extends Error {
   constructor(message: string) {

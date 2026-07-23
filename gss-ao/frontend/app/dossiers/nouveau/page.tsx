@@ -274,7 +274,12 @@ export default function NouveauDossierPage() {
       formData.append("id", dossierId);
       files.forEach((f) => {
         if (f.file) {
-          formData.append("files", f.file);
+          // Conserve le chemin relatif (upload de dossier) → sous-dossiers préservés côté backend.
+          const relPath =
+            (f.file as any).webkitRelativePath ||
+            (f.file as any).customPath ||
+            f.file.name;
+          formData.append("files", f.file, relPath);
         }
       });
       const res = await apiFetch("/api/dce/upload", {

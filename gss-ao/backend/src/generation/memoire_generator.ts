@@ -1,12 +1,15 @@
 import { MarpGenerator } from './marp_generator';
 import { ImageLibraryService } from './image_service';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { spawnSync, spawn } from 'child_process';
 import PizZip from 'pizzip';
 import OpenAI from 'openai';
+import { Client as PgClient } from 'pg';
 import { getSettings } from '../core/config';
-import { DB } from '../core/db';
+import { DB, FichiersDB } from '../core/db';
+import { getScopedClient } from '../core/supabase';
 import { extractText, loadDocxStructure } from '../ingestion/docConverter';
 import { overlaySynthesis, loadTrebuchetFont, measureZonesCapacity, RefReplacement, RefContext } from './pdf_overlay';
 import { resolveMissingInfo, MissingField } from './missing_info_resolver';
@@ -32,6 +35,9 @@ const IMAGES_ENABLED = process.env.GENERATE_IMAGES !== 'false';
 // Modèle d'EMBEDDINGS pour la recherche sémantique (index Doc GSS + DCE). text-embedding-3-small :
 // 1536 dim, peu coûteux, TPM élevée → on peut indexer toute la doc + embedder chaque requête de champ.
 const EMBED_MODEL = process.env.EMBEDDING_MODEL_MEMOIRE || 'text-embedding-3-small';
+
+// Bucket privé où sont archivées les pièces des dossiers (cf. routes.ts /dce/upload).
+const USER_FILES_BUCKET = 'user-files';
 
 /** Un passage indexable pour la recherche sémantique (Doc GSS ou DCE). */
 interface RetrievalChunk { source: 'GSS' | 'DCE'; label: string; text: string; embedding?: number[]; }
@@ -1798,10 +1804,58 @@ export class MemoireGenerator {
    * Sans ce plafond, le seul CCTP+annexes (~733k caractères) dépasse la limite → l'appel échoue
    * et le document ressort vierge.
    */
+  /**
+   * Matérialise les pièces DCE du dossier depuis Supabase Storage dans un dossier temporaire.
+   * L'extraction (LibreOffice pour .doc, tableaux .docx) exige des fichiers réels sur disque :
+   * on télécharge donc les octets le temps du traitement, puis l'appelant supprime le dossier.
+   * Renvoie le chemin temporaire, ou null si aucune pièce en base → l'appelant retombe alors sur
+   * l'ancien emplacement disque (data/output/dce_<id>), pour les dossiers créés avant la migration.
+   */
+  private async materializeDceFromStorage(dossierId: string): Promise<string | null> {
+    let fichiers;
+    try {
+      fichiers = await FichiersDB.listByDossier(dossierId);
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Table fichiers illisible (${e?.message || e}) — repli sur le disque.`);
+      return null;
+    }
+    const dce = fichiers.filter((f) => f.storage_path && /\/dce\//.test(f.storage_path));
+    if (!dce.length) return null;
+
+    const supabase = getScopedClient();
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `dce_${dossierId}_`));
+    let got = 0;
+    for (const f of dce) {
+      try {
+        const { data, error } = await supabase.storage.from(USER_FILES_BUCKET).download(f.storage_path!);
+        if (error || !data) { console.warn(`[MemoireGenerator] DCE Storage: ${f.nom} illisible (${error?.message || 'vide'})`); continue; }
+        // `nom` peut porter un CHEMIN RELATIF (sous-dossiers) → on recrée l'arborescence dans le tmp.
+        // Garde anti-traversée : on résout et on vérifie que la cible reste DANS tmpDir.
+        const dest = path.resolve(tmpDir, f.nom);
+        if (dest !== tmpDir && !dest.startsWith(tmpDir + path.sep)) {
+          console.warn(`[MemoireGenerator] DCE Storage: chemin hors périmètre ignoré (${f.nom})`);
+          continue;
+        }
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.writeFileSync(dest, Buffer.from(await data.arrayBuffer()));
+        got++;
+      } catch (e: any) {
+        console.warn(`[MemoireGenerator] DCE Storage: échec téléchargement ${f.nom} — ${e?.message || e}`);
+      }
+    }
+    if (!got) { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ } return null; }
+    console.log(`[MemoireGenerator] ${got} pièce(s) DCE téléchargée(s) depuis Storage (dossier temporaire, nettoyé après).`);
+    return tmpDir;
+  }
+
   private async getDceContext(dossierId: string): Promise<string> {
     const baseDir = path.resolve(__dirname, '../../../../');
     this.lastDceTables = '';   // réinitialisé à chaque analyse de DCE
     this.lastDceSiteCols = [];
+
+    // Source des pièces DCE : Supabase Storage (via table fichiers) matérialisé en /tmp transitoire.
+    // Repli sur l'ancien emplacement disque pour les dossiers antérieurs à la migration Storage.
+    const materializedDir = await this.materializeDceFromStorage(dossierId);
 
     // Budget global et plafond par fichier (en caractères ; ~4 car/token)
     const TOTAL_BUDGET = 240_000;
@@ -1833,8 +1887,12 @@ export class MemoireGenerator {
     // de référence (Rouen…) ralentissait fortement le démarrage (chaque .doc = conversion LibreOffice)
     // ET polluait le contexte avec les données d'un autre client → faux pour « n'importe quel client ».
     const dceDirs = [
-      path.resolve(baseDir, `gss-ao/data/output/dce_${dossierId}`),
+      materializedDir || path.resolve(baseDir, `gss-ao/data/output/dce_${dossierId}`),
     ];
+    // Nettoyage du dossier temporaire (rien ne reste sur le disque de l'app après la génération).
+    const cleanupTmp = () => {
+      if (materializedDir) { try { fs.rmSync(materializedDir, { recursive: true, force: true }); } catch { /* ignore */ } }
+    };
 
     const loadedFiles = new Set<string>();
     const scanDir = async (dir: string) => {
@@ -1894,6 +1952,7 @@ export class MemoireGenerator {
     for (const dceDir of dceDirs) await scanDir(dceDir);
 
     if (pieces.length === 0) {
+      cleanupTmp();
       throw new Error('[MemoireGenerator] Aucun contenu DCE trouvé. Vérifiez que les fichiers du DCE sont bien présents.');
     }
 
@@ -1916,6 +1975,7 @@ export class MemoireGenerator {
     }
 
     console.log(`[MemoireGenerator] Contexte DCE assemblé: ${context.length} chars (budget ${TOTAL_BUDGET}), ${pieces.length} fichiers candidats`);
+    cleanupTmp();
     return context;
   }
 
@@ -2011,6 +2071,116 @@ export class MemoireGenerator {
   private async embedChunks(chunks: RetrievalChunk[]): Promise<void> {
     const embs = await this.embedTexts(chunks.map(c => c.text));
     chunks.forEach((c, i) => { c.embedding = embs[i]; });
+  }
+
+  /**
+   * Charge les chunks Doc GSS DÉJÀ EMBEDDÉS depuis la table public.rag_chunk (Supabase),
+   * au lieu de relire les 118 PDF et de rappeler OpenAI à chaque génération.
+   *
+   * → PERFORMANCE : les ~146 embeddings GSS ne sont plus recalculés (ni le risque de 429).
+   * → PERTINENCE : identique — mêmes textes, mêmes vecteurs (text-embedding-3-small, 1536 dim) ;
+   *   la recherche hybride retrieve() reste inchangée en aval.
+   *
+   * Activation : MEMOIRE_RAG_FROM_DB=true. Source : RAG_DATABASE_URL (sinon DATABASE_URL).
+   * Robustesse : toute erreur (flag off, table vide, base injoignable) renvoie null → l'appelant
+   * retombe sur le comportement historique (embeddings à la volée). Jamais bloquant.
+   */
+  private async loadGssChunksFromDb(): Promise<RetrievalChunk[] | null> {
+    const client = this.ragDbClient();
+    if (!client) return null;
+    try {
+      await client.connect();
+      const res = await client.query(
+        `select categorie, text, embedding::text as embedding
+           from public.rag_chunk
+          where source = 'GSS' and actif and embedding is not null`
+      );
+      const chunks: RetrievalChunk[] = [];
+      for (const r of res.rows) {
+        // pgvector renvoyé en texte '[0.1,0.2,…]' → tableau de nombres (JSON valide).
+        let emb: number[] | undefined;
+        try { emb = JSON.parse(r.embedding); } catch { emb = undefined; }
+        if (!emb || !emb.length) continue;
+        chunks.push({ source: 'GSS', label: r.categorie || 'GSS', text: r.text, embedding: emb });
+      }
+      return chunks.length ? chunks : null;
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] RAG depuis bdd indisponible (${e?.message || e}) — repli sur embeddings à la volée.`);
+      return null;
+    } finally {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+
+  /**
+   * Client Postgres vers la base RAG, ou null si le mode bdd est désactivé / non configuré.
+   * Source : MEMOIRE_RAG_FROM_DB=true + RAG_DATABASE_URL (sinon DATABASE_URL). SSL auto pour Supabase.
+   */
+  private ragDbClient(): PgClient | null {
+    if (process.env.MEMOIRE_RAG_FROM_DB !== 'true') return null;
+    const raw = process.env.RAG_DATABASE_URL || getSettings().databaseUrl || '';
+    const url = raw.replace(/^postgresql\+psycopg:\/\//, 'postgresql://');
+    if (!url) return null;
+    const needsSsl = /supabase\.(co|com)/.test(url) || process.env.RAG_DB_SSL === 'true';
+    return new PgClient({ connectionString: url, ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}) });
+  }
+
+  /**
+   * Reconstitue la Documentation GSS (texte complet par catégorie) DEPUIS la bdd rag_chunk, au lieu
+   * de relire les PDF du dossier Template. Concatène les chunks par catégorie, dans l'ordre du fichier.
+   * Renvoie null si mode bdd off / base vide / injoignable → l'appelant relit alors les fichiers.
+   */
+  private async getGssDocsTextFromDb(): Promise<Record<string, string> | null> {
+    const client = this.ragDbClient();
+    if (!client) return null;
+    const PER_CAT_CAP = 15_000;   // même plafond que la lecture fichier
+    try {
+      await client.connect();
+      const res = await client.query(
+        `select categorie, source_file, text
+           from public.rag_chunk
+          where source = 'GSS' and actif
+          order by categorie, source_file, chunk_index`
+      );
+      const cats: Record<string, string> = {};
+      let lastKey = '';
+      for (const r of res.rows) {
+        const cat = r.categorie || 'GSS';
+        const key = `${cat}|${r.source_file}`;
+        if (!cats[cat]) cats[cat] = '';
+        if (key !== lastKey) { cats[cat] += `\n--- ${r.source_file} ---\n`; lastKey = key; }
+        cats[cat] += r.text + '\n';
+      }
+      for (const k of Object.keys(cats)) {
+        if (cats[k].length > PER_CAT_CAP) cats[k] = cats[k].slice(0, PER_CAT_CAP) + '\n[… tronqué …]';
+      }
+      return Object.keys(cats).length ? cats : null;
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Doc GSS depuis bdd indisponible (${e?.message || e}) — repli sur les fichiers.`);
+      return null;
+    } finally {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+
+  /** Texte de « EFFECTIFS MOYENS.pdf » depuis la bdd (pour le calcul d'effectif), ou null. */
+  private async getEffectifTextFromDb(): Promise<string | null> {
+    const client = this.ragDbClient();
+    if (!client) return null;
+    try {
+      await client.connect();
+      const res = await client.query(
+        `select text from public.rag_chunk
+          where source = 'GSS' and actif and source_file ilike 'EFFECTIFS MOYENS%'
+          order by chunk_index`
+      );
+      if (!res.rows.length) return null;
+      return res.rows.map((r) => r.text).join('\n');
+    } catch {
+      return null;
+    } finally {
+      try { await client.end(); } catch { /* ignore */ }
+    }
   }
 
   /**
@@ -2266,16 +2436,24 @@ Renvoie un JSON valide :
     // jamais dans les corpus de référence (Cas-Univ-Rouen, corpusDce…), sinon chaque dossier
     // hériterait à tort du mémoire de référence comme « cadre client » → faux « cas template ».
     const dossier = await DB.getDossier(dossierId);
+    // Nouveaux dossiers : les pièces vivent dans Storage, pas dans uploadedDceDir. On matérialise
+    // pour y chercher un éventuel cadre imposé, puis on nettoie dès le template chargé en mémoire.
+    let templateSearchDir = uploadedDceDir;
+    let templateTmpDir: string | null = null;
+    if (!fs.existsSync(uploadedDceDir)) {
+      templateTmpDir = await this.materializeDceFromStorage(dossierId);
+      if (templateTmpDir) templateSearchDir = templateTmpDir;
+    }
     if (dossier && dossier.dce_files) {
       const templateFile = dossier.dce_files.find((f: any) => f.type === 'Mémoire (cadre)');
       if (templateFile && templateFile.nom) {
-        const p = path.join(uploadedDceDir, path.basename(templateFile.nom));
+        const p = path.join(templateSearchDir, path.basename(templateFile.nom));
         if (fs.existsSync(p)) { templatePath = p; }
       }
     }
 
     if (!templatePath) {
-      templatePath = this.findDceTemplate(uploadedDceDir);
+      templatePath = this.findDceTemplate(templateSearchDir);
     }
 
     if (!templatePath) {
@@ -2324,6 +2502,8 @@ Renvoie un JSON valide :
 
     // 3. Load DOCX and parse XML DOM
     const content = fs.readFileSync(templatePath);
+    // Template chargé en mémoire → le dossier temporaire de recherche n'est plus utile.
+    if (templateTmpDir) { try { fs.rmSync(templateTmpDir, { recursive: true, force: true }); } catch { /* ignore */ } }
     const zip = new PizZip(content);
     const documentXml = zip.file('word/document.xml');
     if (!documentXml) throw new Error('word/document.xml introuvable dans le template');
@@ -2673,7 +2853,18 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     // UN appel IA dédié pour rédiger sa valeur. Plus de blob générique partagé par 20 champs :
     // chaque réponse est ancrée dans les bonnes sources (« fouiller là où il faut »).
     const retrievalChunks = this.buildRetrievalChunks(gssDocs, dceContext);
-    await this.embedChunks(retrievalChunks);
+    // Chunks Doc GSS pré-embeddés en base (si MEMOIRE_RAG_FROM_DB=true) : on évite de recalculer
+    // leurs embeddings à chaque génération. Le DCE (propre au marché) reste embeddé à la volée.
+    const dbGss = await this.loadGssChunksFromDb();
+    if (dbGss && dbGss.length) {
+      const dceChunks = retrievalChunks.filter(c => c.source === 'DCE');
+      await this.embedChunks(dceChunks);              // seul le DCE est embeddé en direct
+      retrievalChunks.length = 0;
+      retrievalChunks.push(...dbGss, ...dceChunks);    // GSS depuis la bdd + DCE frais
+      console.log(`[MemoireGenerator] Doc GSS chargée depuis la bdd (${dbGss.length} chunks pré-embeddés).`);
+    } else {
+      await this.embedChunks(retrievalChunks);         // comportement historique (repli)
+    }
     const gssN = retrievalChunks.filter(c => c.source === 'GSS' && c.embedding).length;
     const dceN = retrievalChunks.filter(c => c.source === 'DCE' && c.embedding).length;
     console.log(`[MemoireGenerator] Index sémantique : ${gssN} chunks Doc GSS + ${dceN} chunks DCE.`);
@@ -3713,6 +3904,13 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
    * { catégorie: texte } budgétisé par catégorie.
    */
   private async getGssDocumentation(): Promise<Record<string, string>> {
+    // Priorité à la bdd (si MEMOIRE_RAG_FROM_DB=true) : le dossier Template n'est plus lu.
+    const fromDb = await this.getGssDocsTextFromDb();
+    if (fromDb) {
+      console.log(`[MemoireGenerator] Documentation GSS chargée depuis la bdd : ${Object.keys(fromDb).length} catégories (dossier Template non lu).`);
+      return fromDb;
+    }
+
     const gssDir = path.join(this.templateDir, 'Documentation GSS');
     if (!fs.existsSync(gssDir)) {
       console.warn('[MemoireGenerator] Documentation GSS introuvable:', gssDir);
@@ -3759,10 +3957,13 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
    * source est absente/illisible (le champ restera alors « [À COMPLÉTER] »).
    */
   private async getGssTotalEffectif(): Promise<{ total: number; breakdown: string } | null> {
-    const p = path.join(this.templateDir, 'Documentation GSS', 'EFFECTIFS ET ORGANIGRAMME', 'EFFECTIFS MOYENS.pdf');
-    if (!fs.existsSync(p)) return null;
-    let text: string;
-    try { text = await extractText(p); } catch { return null; }
+    // Priorité à la bdd (mode MEMOIRE_RAG_FROM_DB) ; repli sur le PDF du dossier Template.
+    let text: string | null = await this.getEffectifTextFromDb();
+    if (!text) {
+      const p = path.join(this.templateDir, 'Documentation GSS', 'EFFECTIFS ET ORGANIGRAMME', 'EFFECTIFS MOYENS.pdf');
+      if (!fs.existsSync(p)) return null;
+      try { text = await extractText(p); } catch { return null; }
+    }
     const tokens = text.replace(/\s+/g, ' ').trim().split(/\s+/);
     let total = 0;
     const parts: number[] = [];

@@ -4,13 +4,18 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import OpenAI from 'openai';
-import { DB, DossierRecord, MemoiresDB, remainingGenerations, QuotaError } from '../core/db';
+import { DB, DossierRecord, MemoiresDB, FichiersDB, remainingGenerations, QuotaError } from '../core/db';
 import { initProgress, finishProgress } from '../core/progress';
 import { extractRcWithLLM, extractCctpWithLLM } from '../analysis/llmExtractor';
 import { requireAuth } from './authMiddleware';
 import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeamBulk, MissingField } from '../generation/missing_info_resolver';
 import { injectValidatedRecherches } from '../generation/inject_recherches';
 import { getSettings } from '../core/config';
+import { getScopedClient, requestContext } from '../core/supabase';
+
+// Bucket privé où sont archivées les pièces des dossiers (DCE). Chemin : <userId>/dce/<dossierId>/<nom>
+// (le préfixe <userId> est imposé par la RLS Storage, cf. infra/supabase/001_schema.sql).
+const USER_FILES_BUCKET = 'user-files';
 
 const uploadDir = path.resolve(__dirname, '../../../data/output/temp');
 if (!fs.existsSync(uploadDir)) {
@@ -145,42 +150,82 @@ router.delete('/dossiers/:id', async (req: Request, res: Response) => {
 
 // Module A — upload ZIP/multi-fichiers + classification des pièces.
 router.post('/dce/upload', upload.array('files'), async (req: Request, res: Response) => {
+  // multer parse le multipart de façon ASYNCHRONE : quand ce handler s'exécute, le contexte
+  // AsyncLocalStorage posé par requireAuth (run(() => next())) est déjà refermé → getScopedClient()
+  // / getCurrentUserId() / FichiersDB lèveraient « hors contexte de requête ». On le RÉTABLIT ici
+  // depuis les infos portées par la requête (token d'en-tête + userId posé par requireAuth).
+  const authToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  const authUserId = (req as any).userId as string | undefined;
+  if (!authToken || !authUserId) { res.status(401).json({ error: "Authentification requise" }); return; }
+
+  await requestContext.run({ accessToken: authToken, userId: authUserId }, async () => {
   try {
     const dossierId = req.body.id;
     if (!dossierId) throw new Error("ID du dossier manquant");
 
-    const targetDir = path.resolve(__dirname, `../../../data/output/dce_${dossierId}`);
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
-    }
+    const userId = authUserId;
+    const supabase = getScopedClient();
 
     let rcData: any = null;
     let cctpData: any = null;
 
     if (req.files && Array.isArray(req.files)) {
       for (const file of req.files) {
-        // Renommer le fichier uploadé avec son nom original (corrige l'encodage latin1 par défaut de multer)
+        // Nom d'origine (corrige l'encodage latin1 par défaut de multer). Peut contenir un CHEMIN
+        // RELATIF quand l'utilisateur uploade un dossier (« DCE/annexes/plan.pdf ») → on préserve
+        // les sous-dossiers pour éviter les collisions de noms entre sous-dossiers.
         const utf8Name = Buffer.from(file.originalname, 'latin1').toString('utf8');
-        const ext = path.extname(utf8Name);
-        const base = path.basename(utf8Name, ext);
-        const finalName = `${base}${ext}`;
-        const finalPath = path.join(targetDir, finalName);
-        fs.renameSync(file.path, finalPath);
+        const relPath = utf8Name.replace(/\\/g, '/').replace(/^\/+/, '');  // sépas Windows → '/', pas de '/' initial
+        const finalName = relPath;                                          // chemin relatif complet (colonne `nom`)
 
-        const lowerName = finalName.toLowerCase();
-        // Le nom de fichier n'est qu'un indice de classification : l'extraction
-        // elle-même est pilotée par LLM et fonctionne pour n'importe quel template.
-        const looksLikeRc = lowerName.includes('rc') || lowerName.includes('reglement') || lowerName.includes('règlement') || lowerName.includes('consultation');
-        const looksLikeCctp = lowerName.includes('cctp') || lowerName.includes('technique') || lowerName.includes('cahier');
-        if (looksLikeRc && !rcData) {
-          try {
-            rcData = await extractRcWithLLM(finalPath);
-          } catch (e) { console.warn("Erreur extraction RC:", e); }
-        }
-        if (looksLikeCctp && !cctpData) {
-          try {
-            cctpData = await extractCctpWithLLM(finalPath);
-          } catch (e) { console.warn("Erreur extraction CCTP:", e); }
+        // Le fichier temporaire multer sert UNIQUEMENT à l'upload + l'extraction, puis est supprimé :
+        // aucune pièce ne reste sur le disque de l'app. La source durable = Supabase Storage.
+        const tmpPath = file.path;
+        try {
+          const buffer = fs.readFileSync(tmpPath);
+          // Clé Storage SÛRE : Supabase rejette les clés avec accents/espaces/caractères spéciaux.
+          // On sanitise CHAQUE segment du chemin et on conserve l'arborescence (séparateur '/').
+          // Le nom D'ORIGINE (avec accents/sous-dossiers) reste dans la colonne `nom`, utilisé tel
+          // quel à la génération pour recréer l'arborescence et classer les pièces.
+          const safeRel = relPath
+            .split('/')
+            .map((seg) =>
+              seg
+                .normalize('NFD').replace(/[̀-ͯ]/g, '')
+                .replace(/[^a-zA-Z0-9._-]+/g, '_')
+                .replace(/_+/g, '_').replace(/^_|_$/g, ''),
+            )
+            .filter(Boolean)
+            .join('/') || 'fichier';
+          // Storage : <userId>/dce/<dossierId>/<chemin sûr> (préfixe userId imposé par la RLS Storage).
+          const storagePath = `${userId}/dce/${dossierId}/${safeRel}`;
+          const { error: upErr } = await supabase.storage
+            .from(USER_FILES_BUCKET)
+            .upload(storagePath, buffer, {
+              contentType: file.mimetype || 'application/octet-stream',
+              upsert: true,
+            });
+          if (upErr) throw new Error(`upload Storage échoué (${finalName}): ${upErr.message}`);
+
+          await FichiersDB.upsert(dossierId, {
+            nom: finalName,          // chemin relatif d'origine — pour recréer l'arborescence + extraction
+            storagePath,
+            mimeType: file.mimetype || null,
+            tailleOctets: buffer.length,
+          });
+
+          const lowerName = path.basename(finalName).toLowerCase();
+          // Le nom de fichier n'est qu'un indice de classification : l'extraction est pilotée par LLM.
+          const looksLikeRc = lowerName.includes('rc') || lowerName.includes('reglement') || lowerName.includes('règlement') || lowerName.includes('consultation');
+          const looksLikeCctp = lowerName.includes('cctp') || lowerName.includes('technique') || lowerName.includes('cahier');
+          if (looksLikeRc && !rcData) {
+            try { rcData = await extractRcWithLLM(tmpPath); } catch (e) { console.warn("Erreur extraction RC:", e); }
+          }
+          if (looksLikeCctp && !cctpData) {
+            try { cctpData = await extractCctpWithLLM(tmpPath); } catch (e) { console.warn("Erreur extraction CCTP:", e); }
+          }
+        } finally {
+          try { fs.unlinkSync(tmpPath); } catch { /* déjà supprimé */ }
         }
       }
     }
@@ -209,6 +254,7 @@ router.post('/dce/upload', upload.array('files'), async (req: Request, res: Resp
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+  });
 });
 
 // Module B — fiche de synthèse DCE.
