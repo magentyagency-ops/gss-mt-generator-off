@@ -73,8 +73,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);   // échec (rouge)
   const [searchNotice, setSearchNotice] = useState<string | null>(null); // info neutre (ex. rien à chercher)
-  // Demande à l'équipe (bouton « Demander à l'équipe ») — canaux DÉDIÉS.
-  const [isAskingTeam, setIsAskingTeam] = useState(false);
+  // Demande à l'équipe (bouton « Demander à l'équipe ») — redirige vers l'écran de sollicitation.
   const [askTeamError, setAskTeamError] = useState<string | null>(null);
   const [askTeamNotice, setAskTeamNotice] = useState<string | null>(null);
   // Change à chaque génération → force le badge crédits à se recharger.
@@ -191,25 +190,48 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     }
   }
 
-  // Déclenche la création de questions internes pour les champs manquants classifiés 'internal'.
-  async function handleAskTeam() {
-    setIsAskingTeam(true);
+  // Redirige vers l'écran de sollicitation avec, en corps de message, les informations à obtenir
+  // (consultations de la dernière génération, sinon champs manquants enregistrés du dossier).
+  function handleAskTeam() {
     setAskTeamError(null);
     setAskTeamNotice(null);
-    try {
-      const res = await apiFetch(`/api/dossiers/${id}/ask-team`, { method: "POST" });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Échec de la demande à l'équipe.");
-      if (data.triggered === 0) {
-        setAskTeamNotice(data.message || "Aucune information interne à demander pour ce dossier.");
-      } else {
-        setAskTeamNotice(`${data.sent}/${data.triggered} question(s) interne(s) créée(s) pour l'équipe.`);
-      }
-    } catch (e: any) {
-      setAskTeamError(e.message || "Échec de la demande à l'équipe.");
-    } finally {
-      setIsAskingTeam(false);
+
+    const consultations: string[] = Array.isArray(docxResult?.data?.consultations)
+      ? docxResult.data.consultations
+      : [];
+    const missing: string[] = Array.isArray(dossierInfo?.memoire_cadre_state?.missingFields)
+      ? dossierInfo.memoire_cadre_state.missingFields.map((m: any) =>
+          m?.context ? `${m.label} (${m.context})` : m?.label,
+        ).filter(Boolean)
+      : [];
+    const items = consultations.length ? consultations : missing;
+
+    if (items.length === 0) {
+      setAskTeamNotice(
+        "Aucune information manquante à demander. Lancez d'abord la génération pour identifier les informations à obtenir.",
+      );
+      return;
     }
+
+    const ref = dossierInfo?.reference || dossierInfo?.acheteur || "";
+    const body =
+      `Bonjour,\n\nDans le cadre du mémoire technique${ref ? ` (${ref})` : ""}, ` +
+      `nous avons besoin des informations suivantes :\n\n` +
+      items.map((c) => `• ${c}`).join("\n") +
+      `\n\nMerci de nous les communiquer.`;
+    const critere = "Informations manquantes du mémoire technique";
+
+    // Le corps du message peut être long → on le passe par sessionStorage (une URL trop longue
+    // provoque une erreur HTTP 431). L'URL ne porte qu'un drapeau court.
+    try {
+      sessionStorage.setItem(
+        "gss_ask_team_prefill",
+        JSON.stringify({ aoId: String(id), critere, question: body }),
+      );
+    } catch {
+      /* sessionStorage indisponible : on redirige quand même (formulaire non pré-rempli). */
+    }
+    router.push(`/sollicitations?ao=${encodeURIComponent(String(id))}&prefill=1`);
   }
 
   return (
@@ -294,9 +316,9 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
                   {isSearching ? "Recherche en cours..." : "Trouver l'info sur internet"}
                 </Button>
-                <Button variant="outline" className="gap-2" disabled={isAskingTeam} onClick={handleAskTeam}>
-                  {isAskingTeam ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
-                  {isAskingTeam ? "Envoi en cours..." : "Demander \u00e0 l'\u00e9quipe"}
+                <Button variant="outline" className="gap-2" onClick={handleAskTeam}>
+                  <Users className="h-4 w-4" />
+                  Demander {"\u00e0"} l'{"\u00e9"}quipe
                 </Button>
               </div>
               {searchError && <p className="mt-2 text-xs text-destructive">{searchError}</p>}

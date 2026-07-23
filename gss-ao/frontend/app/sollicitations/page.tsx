@@ -30,6 +30,28 @@ export default function SollicitationsPage() {
   const [questions, setQuestions] = useState<QuestionInterne[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // Pré-remplissage depuis « Demander à l'équipe » (params d'URL ao / critere / question).
+  const [prefill, setPrefill] = useState<Partial<SendForm> | null>(null);
+
+  // Au montage (client only) : présélectionne le dossier (param court `ao`) et récupère le
+  // pré-remplissage déposé par « Demander à l'équipe » dans sessionStorage (le corps du message
+  // ne transite PAS par l'URL — trop long → HTTP 431). Lecture one-shot, puis on nettoie.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const ao = sp.get("ao");
+    if (ao) setAoId(ao);
+    try {
+      const raw = sessionStorage.getItem("gss_ask_team_prefill");
+      if (raw) {
+        const data = JSON.parse(raw) as { aoId?: string; critere?: string; question?: string };
+        if (data.aoId) setAoId(data.aoId);
+        setPrefill({ question: data.question || "", critere_concerne: data.critere || "" });
+        sessionStorage.removeItem("gss_ask_team_prefill");
+      }
+    } catch {
+      /* prefill indisponible/corrompu : formulaire vide, pas bloquant. */
+    }
+  }, []);
 
   // ── Session ────────────────────────────────────────────────────────────────────
   const loadSession = useCallback(async () => {
@@ -193,8 +215,14 @@ export default function SollicitationsPage() {
       {msg && <Banner kind="ok" text={msg} />}
       {err && <Banner kind="err" text={err} />}
 
-      {/* Formulaire d'envoi de test */}
-      {aoId && <SendFormCard onSubmit={sendTest} />}
+      {/* Formulaire d'envoi (pré-rempli si arrivé depuis « Demander à l'équipe ») */}
+      {aoId && (
+        <SendFormCard
+          key={prefill ? "prefilled" : "empty"}
+          onSubmit={sendTest}
+          initial={prefill ?? undefined}
+        />
+      )}
 
       {/* Liste des questions */}
       <div className="mt-6 space-y-3">
@@ -245,10 +273,11 @@ interface SendForm {
   date_limite?: string;
 }
 
-function SendFormCard({ onSubmit }: { onSubmit: (f: SendForm) => void }) {
+function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; initial?: Partial<SendForm> }) {
   const [f, setF] = useState<SendForm>({
     destinataire_email: "", destinataire_nom: "", critere_concerne: "",
     categorie: "", niveau_criticite: "interne", question: "", date_limite: "",
+    ...initial,
   });
   const set = (k: keyof SendForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setF((p) => ({ ...p, [k]: e.target.value }));
