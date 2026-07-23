@@ -166,6 +166,18 @@ router.post('/dce/upload', upload.array('files'), async (req: Request, res: Resp
     const userId = authUserId;
     const supabase = getScopedClient();
 
+    // Dossier lisible dans le Storage : « <slug-du-marché>-<id court> » au lieu d'un UUID brut.
+    // Unicité garantie par le suffixe (8 premiers caractères de l'id). Le 1er segment du chemin
+    // reste l'userId (imposé par la RLS Storage) et ne peut pas être rendu lisible.
+    const dossierRec = await DB.getDossier(dossierId);
+    const dossierLabel = (dossierRec?.reference || dossierRec?.nom || dossierRec?.objet || 'dossier').toString();
+    const dossierSlug =
+      dossierLabel
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-zA-Z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+        .toLowerCase().slice(0, 40) || 'dossier';
+    const dossierFolder = `${dossierSlug}-${String(dossierId).slice(0, 8)}`;
+
     let rcData: any = null;
     let cctpData: any = null;
 
@@ -181,8 +193,13 @@ router.post('/dce/upload', upload.array('files'), async (req: Request, res: Resp
         // Le fichier temporaire multer sert UNIQUEMENT à l'upload + l'extraction, puis est supprimé :
         // aucune pièce ne reste sur le disque de l'app. La source durable = Supabase Storage.
         const tmpPath = file.path;
+        // multer nomme le fichier temporaire SANS extension → les parseurs RC/CCTP (et l'extraction
+        // en général) exigent une extension .doc/.docx/.pdf. On renomme le temp pour la lui donner.
+        const ext = path.extname(relPath).toLowerCase();
+        const workPath = ext ? `${tmpPath}${ext}` : tmpPath;
         try {
-          const buffer = fs.readFileSync(tmpPath);
+          if (workPath !== tmpPath) fs.renameSync(tmpPath, workPath);
+          const buffer = fs.readFileSync(workPath);
           // Clé Storage SÛRE : Supabase rejette les clés avec accents/espaces/caractères spéciaux.
           // On sanitise CHAQUE segment du chemin et on conserve l'arborescence (séparateur '/').
           // Le nom D'ORIGINE (avec accents/sous-dossiers) reste dans la colonne `nom`, utilisé tel
@@ -197,8 +214,8 @@ router.post('/dce/upload', upload.array('files'), async (req: Request, res: Resp
             )
             .filter(Boolean)
             .join('/') || 'fichier';
-          // Storage : <userId>/dce/<dossierId>/<chemin sûr> (préfixe userId imposé par la RLS Storage).
-          const storagePath = `${userId}/dce/${dossierId}/${safeRel}`;
+          // Storage : <userId>/dce/<dossier lisible>/<chemin sûr> (préfixe userId imposé par la RLS Storage).
+          const storagePath = `${userId}/dce/${dossierFolder}/${safeRel}`;
           const { error: upErr } = await supabase.storage
             .from(USER_FILES_BUCKET)
             .upload(storagePath, buffer, {
@@ -219,13 +236,14 @@ router.post('/dce/upload', upload.array('files'), async (req: Request, res: Resp
           const looksLikeRc = lowerName.includes('rc') || lowerName.includes('reglement') || lowerName.includes('règlement') || lowerName.includes('consultation');
           const looksLikeCctp = lowerName.includes('cctp') || lowerName.includes('technique') || lowerName.includes('cahier');
           if (looksLikeRc && !rcData) {
-            try { rcData = await extractRcWithLLM(tmpPath); } catch (e) { console.warn("Erreur extraction RC:", e); }
+            try { rcData = await extractRcWithLLM(workPath); } catch (e) { console.warn("Erreur extraction RC:", e); }
           }
           if (looksLikeCctp && !cctpData) {
-            try { cctpData = await extractCctpWithLLM(tmpPath); } catch (e) { console.warn("Erreur extraction CCTP:", e); }
+            try { cctpData = await extractCctpWithLLM(workPath); } catch (e) { console.warn("Erreur extraction CCTP:", e); }
           }
         } finally {
-          try { fs.unlinkSync(tmpPath); } catch { /* déjà supprimé */ }
+          try { fs.unlinkSync(workPath); } catch { /* déjà supprimé */ }
+          try { fs.unlinkSync(tmpPath); } catch { /* déjà renommé/supprimé */ }
         }
       }
     }
