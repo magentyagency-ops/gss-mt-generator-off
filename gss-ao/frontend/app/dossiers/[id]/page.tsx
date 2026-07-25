@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarClock,
   MapPin,
@@ -86,12 +86,51 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
       .catch((e) => console.error(e));
   }, [id]);
 
+  // ── Infos manquantes détectées APRÈS l'analyse du DCE (indépendant de la génération) ─────────
+  // Si déjà persistées → on les affiche. Sinon, dès qu'un DCE est présent, on lance la détection
+  // automatiquement (une seule fois, garde par ref pour ne pas relancer à chaque re-render).
+  const [missingFields, setMissingFields] = useState<Array<{ id: string; label: string; context: string; criticite?: "bloquant" | "facultatif" | "normal"; demande?: "web" | "equipe" }> | null>(null);
+  const [completude, setCompletude] = useState<number | null>(null);
+  const [contradictions, setContradictions] = useState<Array<{ sujet: string; detail: string }>>([]);
+  const [detectingMissing, setDetectingMissing] = useState(false);
+  const detectStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (!dossierInfo) return;
+    // La détection se fait APRÈS l'upload pour LES DEUX cas (cadre imposé = basé sur le template ;
+    // sans cadre = basé sur les exigences). Le backend choisit la bonne stratégie.
+    const st = dossierInfo?.memoire_cadre_state;
+    const existing = st?.missingFields;
+    if (Array.isArray(existing)) {
+      setMissingFields(existing);
+      setCompletude(typeof st?.completude === "number" ? st.completude : null);
+      setContradictions(Array.isArray(st?.contradictions) ? st.contradictions : []);
+      return;
+    }
+    if (detectStartedRef.current) return;
+    const hasDce = Array.isArray(dossierInfo?.dce_files) && dossierInfo.dce_files.length > 0;
+    if (!hasDce) return;
+    detectStartedRef.current = true;
+    setDetectingMissing(true);
+    apiFetch(`/api/dossiers/${id}/detect-missing`, { method: "POST" })
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data.missingFields)) setMissingFields(data.missingFields);
+        if (typeof data.completude === "number") setCompletude(data.completude);
+        if (Array.isArray(data.contradictions)) setContradictions(data.contradictions);
+      })
+      .catch(() => {})
+      .finally(() => setDetectingMissing(false));
+  }, [dossierInfo, id]);
+
   // ── Sollicitations du dossier (requête Supabase front SÉPARÉE, indépendante de l'apiFetch) ─
   // Filtrée sur ao_id = id du dossier courant ; la RLS scope déjà à l'utilisateur (pas de user_id).
   // Même client Supabase que /inbox. Ordre chronologique croissant → fil question → réponse.
   // Robustesse : en cas d'échec, sollicitationsError = true → la section n'est pas rendue et la
   // fiche s'affiche normalement (jamais de page blanche). Flag `annule` contre le setState post-démontage.
   const supabase = useMemo(() => createClient(), []);
+  const [relancing, setRelancing] = useState(false);
+  const [relanceMsg, setRelanceMsg] = useState<string | null>(null);
   const [sollicitations, setSollicitations] = useState<QuestionInterne[]>([]);
   const [sollicitationsLoaded, setSollicitationsLoaded] = useState(false);
   const [sollicitationsError, setSollicitationsError] = useState(false);
@@ -317,6 +356,90 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
             </CardContent>
           </Card>
 
+          {/* Contradictions / ambiguïtés relevées dans le DCE */}
+          {contradictions.length > 0 && (
+            <Card className="shadow-sm border-destructive/40">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base text-destructive">
+                  <AlertTriangle className="h-5 w-5" /> Contradictions / ambiguïtés du DCE
+                  <span className="text-sm font-normal text-muted-foreground">({contradictions.length})</span>
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">Incohérences relevées dans le dossier — à lever avant de répondre.</p>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <ul className="space-y-1.5">
+                  {contradictions.map((c, i) => (
+                    <li key={i} className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-sm">
+                      <div className="font-medium">{c.sujet}</div>
+                      {c.detail && <div className="mt-0.5 text-xs text-muted-foreground">{c.detail}</div>}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Infos manquantes détectées après l'analyse du DCE (avant génération), pour les deux cas. */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <AlertTriangle className="h-5 w-5" /> Informations manquantes
+                {missingFields && (
+                  <span className="text-sm font-normal text-muted-foreground">({missingFields.length})</span>
+                )}
+                {typeof completude === "number" && (
+                  <Badge variant={completude >= 80 ? "default" : completude >= 50 ? "secondary" : "outline"} className="ml-auto">
+                    Complétude {completude}%
+                  </Badge>
+                )}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Exigences du DCE non couvertes par la documentation GSS — à obtenir avant la génération.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {detectingMissing ? (
+                <p className="text-sm text-muted-foreground">Analyse des exigences du DCE en cours…</p>
+              ) : !missingFields ? (
+                <p className="text-sm text-muted-foreground">En attente de l'analyse du DCE.</p>
+              ) : missingFields.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Aucune information manquante détectée.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {missingFields.map((m) => (
+                    <li
+                      key={m.id}
+                      className={cn(
+                        "rounded-md border p-2 text-sm",
+                        m.criticite === "bloquant" ? "border-destructive/40 bg-destructive/5" : "border-border",
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="font-medium">{m.label}</div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {m.criticite === "bloquant" && <Badge variant="destructive">Bloquant</Badge>}
+                          {m.criticite === "facultatif" && <Badge variant="outline">Facultatif</Badge>}
+                          {m.demande === "web" ? (
+                            <Badge variant="secondary" className="gap-1">
+                              <Sparkles className="h-3 w-3" /> Recherche web
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="gap-1">
+                              <Mail className="h-3 w-3" /> Demander à l'équipe
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      {m.context && <div className="mt-0.5 text-xs text-muted-foreground">{m.context}</div>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* L'action « Demander à l'équipe » (routage IA) est sur la page Mémoire du dossier. */}
+            </CardContent>
+          </Card>
+
           {/* Sollicitations du dossier (mails internes en attente / répondus) */}
           {!sollicitationsError && (
             <Card className="shadow-sm">
@@ -328,7 +451,36 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
                       ({sollicitations.length} sollicitation{sollicitations.length > 1 ? "s" : ""})
                     </span>
                   )}
+                  {sollicitationsLoaded && sollicitations.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="ml-auto"
+                      disabled={relancing}
+                      onClick={async () => {
+                        setRelancing(true);
+                        setRelanceMsg(null);
+                        try {
+                          const r = await apiFetch(`/api/dossiers/${id}/relancer`, { method: "POST" });
+                          const d = await r.json().catch(() => ({}));
+                          setRelanceMsg(
+                            d.relances > 0
+                              ? `${d.relances} relance(s) envoyée(s).`
+                              : d.message || "Aucune relance nécessaire.",
+                          );
+                          setReloadTick((t) => t + 1);
+                        } catch {
+                          setRelanceMsg("Échec de la relance.");
+                        } finally {
+                          setRelancing(false);
+                        }
+                      }}
+                    >
+                      {relancing ? "Relance…" : "Relancer les non répondues"}
+                    </Button>
+                  )}
                 </CardTitle>
+                {relanceMsg && <p className="text-xs text-muted-foreground">{relanceMsg}</p>}
                 {sollicitationsLoaded && sollicitations.length > 0 && (
                   <p className="text-xs text-muted-foreground">
                     {enAttente > 0

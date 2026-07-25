@@ -39,6 +39,7 @@ interface Recherche {
   cost_usd: number | null;
   statut: Statut;
   valeur_retenue: string | null;
+  niveau_confiance: number | null;
   created_at: string;
 }
 
@@ -98,7 +99,7 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
     setError(null);
     const { data, error } = await supabase
       .from("recherche_web")
-      .select("id, query, answer, citations, model, cost_usd, statut, valeur_retenue, created_at")
+      .select("id, query, answer, citations, model, cost_usd, statut, valeur_retenue, niveau_confiance, created_at")
       .eq("dossier_id", id)
       .order("created_at", { ascending: false });
     if (error) setError(error.message);
@@ -259,6 +260,11 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
                     <CardTitle className="flex items-start justify-between gap-3 text-base">
                       <span className="min-w-0">{r.query}</span>
                       <Badge variant={STATUT_BADGE[r.statut].variant}>{STATUT_BADGE[r.statut].label}</Badge>
+                      {typeof r.niveau_confiance === "number" && (
+                        <Badge variant={r.niveau_confiance >= 0.66 ? "success" : r.niveau_confiance >= 0.33 ? "warning" : "secondary"}>
+                          Confiance {Math.round(r.niveau_confiance * 100)}%
+                        </Badge>
+                      )}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -322,6 +328,11 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
                     <CardTitle className="flex items-start justify-between gap-3 text-sm">
                       <span className="min-w-0 font-medium">{r.query}</span>
                       <Badge variant={STATUT_BADGE[r.statut].variant}>{STATUT_BADGE[r.statut].label}</Badge>
+                      {typeof r.niveau_confiance === "number" && (
+                        <Badge variant={r.niveau_confiance >= 0.66 ? "success" : r.niveau_confiance >= 0.33 ? "warning" : "secondary"}>
+                          Confiance {Math.round(r.niveau_confiance * 100)}%
+                        </Badge>
+                      )}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>

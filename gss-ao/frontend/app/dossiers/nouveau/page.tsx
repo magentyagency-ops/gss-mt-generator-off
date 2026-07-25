@@ -288,6 +288,14 @@ export default function NouveauDossierPage() {
       });
       if (!res.ok) {
         console.warn("Erreur lors de l'envoi des fichiers au serveur.");
+      } else {
+        // Détection des infos manquantes UNE SEULE FOIS, ici après l'upload/analyse. On la lance
+        // en tâche de fond (keepalive → survit à la navigation) ; la fiche dossier se contente de
+        // l'afficher. keepalive garde la requête vivante même après le router.push.
+        apiFetch(`/api/dossiers/${dossierId}/detect-missing`, {
+          method: "POST",
+          keepalive: true,
+        }).catch(() => {});
       }
     } catch (e) {
       console.error("Impossible de joindre le serveur pour l'upload", e);

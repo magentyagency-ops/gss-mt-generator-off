@@ -230,6 +230,69 @@ export async function searchPublicInfo(
   }
 }
 
+/** Une personne de l'annuaire (pour le routage des questions internes). */
+export interface Personne { id: string; nom: string; fonction: string; email: string; }
+
+/**
+ * Moteur de décision « QUI ENVOYER » (brief §11). Pour CHAQUE question interne, l'IA choisit la
+ * personne la PLUS ADAPTÉE de l'annuaire (d'après sa FONCTION). Renvoie une Map field.id → personne.id.
+ * Robuste : sans clé OpenAI, ou en cas d'échec, renvoie une map vide → l'appelant retombe sur un
+ * destinataire par défaut. Ne lève jamais.
+ */
+export async function matchQuestionsToPeople(
+  fields: MissingField[],
+  people: Personne[],
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  if (fields.length === 0 || people.length === 0) return result;
+
+  const key = getSettings().openaiApiKey;
+  if (!key) {
+    console.warn('[matchQuestionsToPeople] OPENAI_API_KEY absente → aucun routage (destinataire par défaut).');
+    return result;
+  }
+  try {
+    const client = new OpenAI({ apiKey: key });
+    const questions = fields.map((f) => ({ id: f.id, question: f.label, contexte: f.context }));
+    const annuaire = people.map((p) => ({ id: p.id, nom: p.nom, fonction: p.fonction }));
+    const completion = await client.chat.completions.create({
+      model: CLASSIFY_MODEL,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            "Tu affectes des questions internes d'une entreprise de sécurité privée (GSS) aux bonnes personnes. " +
+            "On te donne une liste de PERSONNES (avec leur fonction) et une liste de QUESTIONS. Pour CHAQUE question, " +
+            "choisis l'id de la personne DONT LA FONCTION est la plus pertinente pour y répondre. Une question = une " +
+            "personne. Si aucune personne n'est clairement adaptée, choisis la plus plausible. N'invente pas d'id.",
+        },
+        {
+          role: 'user',
+          content:
+            'PERSONNES (JSON) :\n' + JSON.stringify(annuaire) +
+            '\n\nQUESTIONS (JSON) :\n' + JSON.stringify(questions) +
+            '\n\nRéponds UNIQUEMENT par : {"affectations":[{"question_id":<string>,"personne_id":<string>}]}.',
+        },
+      ],
+      temperature: 0.1,
+    });
+    const data = JSON.parse(completion.choices[0].message.content || '{}');
+    const validIds = new Set(people.map((p) => p.id));
+    if (Array.isArray(data?.affectations)) {
+      for (const a of data.affectations) {
+        if (typeof a?.question_id === 'string' && typeof a?.personne_id === 'string' && validIds.has(a.personne_id)) {
+          result.set(a.question_id, a.personne_id);
+        }
+      }
+    }
+    return result;
+  } catch (e) {
+    console.warn(`[matchQuestionsToPeople] échec LLM (${(e as Error)?.message}) → routage par défaut.`);
+    return result;
+  }
+}
+
 /** Client Supabase service_role (backend de confiance, contourne la RLS) — null si non configuré. */
 function adminClient() {
   const { supabaseUrl, supabaseServiceRoleKey } = getSettings();
@@ -272,12 +335,18 @@ async function logRechercheWeb(
   }
   // Coût de l'appel : Perplexity le fournit dans usage.cost.total_cost (ex. 0.00506).
   const totalCost = (r.rawUsage as any)?.cost?.total_cost;
+  // Niveau de confiance (0..1) : proportion de citations par rapport à une CIBLE configurable
+  // (RECHERCHE_WEB_CONFIANCE_CIBLE, jamais en dur). Plus il y a de sources concordantes, plus la
+  // confiance est élevée ; plafonnée à 1.
+  const cible = Math.max(1, parseInt(process.env.RECHERCHE_WEB_CONFIANCE_CIBLE || '3', 10) || 3);
+  const niveauConfiance = Math.min(1, (r.citations?.length || 0) / cible);
   const { error } = await admin.from('recherche_web').insert({
     query,
     answer: r.answer,
     citations: r.citations,
     model: r.model,
     cost_usd: typeof totalCost === 'number' ? totalCost : null,
+    niveau_confiance: niveauConfiance,
     sollicitation_id: sollicitationId,
     dossier_id: dossierId,
     champ_id: champId, // id stable du champ (cible univoque de l'injection) — cf. migration phase 3
@@ -386,14 +455,18 @@ export async function resolveMissingInfo(
   fields: MissingField[],
   dossierId: string,
   sollicitationId: string | null = null,
+  opts: { forcePublic?: boolean } = {},
 ): Promise<ResolvedInfo[]> {
   // FLAG OFF → NO-OP STRICT (zéro régression, zéro effet de bord).
   if (!getSettings().resolveMissingInfoEnabled) {
     return fields.map((f) => ({ id: f.id, value: null, source: 'none' as const }));
   }
 
-  // Classification LLM batchée : UN SEUL appel pour tout le lot (regex = filet de secours interne).
-  const kinds = await classifyFieldsLLM(fields);
+  // forcePublic : l'appelant a DÉJÀ décidé (moteur de décision : demande='web') que ces champs sont
+  // publics → on ne re-classifie PAS (sinon double décision contradictoire → « aucune recherche »).
+  const kinds = opts.forcePublic
+    ? new Map(fields.map((f) => [f.id, 'public' as const]))
+    : await classifyFieldsLLM(fields);
 
   const out: ResolvedInfo[] = [];
   for (const f of fields) {

@@ -8,7 +8,7 @@ import { DB, DossierRecord, MemoiresDB, FichiersDB, remainingGenerations, QuotaE
 import { initProgress, finishProgress } from '../core/progress';
 import { extractRcWithLLM, extractCctpWithLLM } from '../analysis/llmExtractor';
 import { requireAuth } from './authMiddleware';
-import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeamBulk, MissingField } from '../generation/missing_info_resolver';
+import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeamBulk, matchQuestionsToPeople, Personne, MissingField } from '../generation/missing_info_resolver';
 import { injectValidatedRecherches } from '../generation/inject_recherches';
 import { getSettings } from '../core/config';
 import { getScopedClient, requestContext } from '../core/supabase';
@@ -296,6 +296,20 @@ router.get('/dossiers/:id/memoire', async (req: Request, res: Response) => {
   }
 });
 
+// Détection des infos manquantes APRÈS l'analyse du DCE (indépendante de la génération).
+// Persiste dossier.memoire_cadre_state.missingFields → consommé par « Demander à l'équipe » / recherche web.
+router.post('/dossiers/:id/detect-missing', async (req: Request, res: Response) => {
+  const dossierId = req.params.id;
+  try {
+    const force = req.query.force === '1' || req.query.force === 'true';
+    const generator = new MemoireGenerator();
+    const { missingFields, completude, contradictions, cached } = await generator.detectMissingInfo(dossierId, { force });
+    res.json({ status: 'ok', count: missingFields.length, cached: !!cached, missingFields, completude, contradictions });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Module C — génération mémoire technique.
 router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
   const dossierId = req.params.dossier_id;
@@ -418,13 +432,21 @@ router.post('/dossiers/:id/recherches', async (req: Request, res: Response) => {
     const dossier = await DB.getDossier(dossierId);
     if (!dossier) return res.status(404).json({ error: 'Dossier introuvable' });
 
-    // Champs manquants déjà calculés et persistés lors de la génération (aucun re-parse du .docx).
+    // Champs manquants déjà calculés et persistés (détection après upload).
     const raw = dossier.memoire_cadre_state?.missingFields;
-    let fields: MissingField[] = Array.isArray(raw)
+    let fields: Array<MissingField & { demande?: string }> = Array.isArray(raw)
       ? raw
           .filter((m: any) => m && (m.label ?? '') !== '')
-          .map((m: any) => ({ id: String(m.id), label: String(m.label ?? ''), context: String(m.context ?? '') }))
+          .map((m: any) => ({ id: String(m.id), label: String(m.label ?? ''), context: String(m.context ?? ''), demande: m.demande }))
       : [];
+
+    // Répartition par le MOTEUR DE DÉCISION : ce bouton ne cherche QUE les manques classés 'web'
+    // (canal public). Repli : si aucune décision stockée (anciennes données), on laisse tout et
+    // resolveMissingInfo re-classifie en interne comme avant.
+    const decisionApplied = fields.some((f) => f.demande === 'web' || f.demande === 'equipe');
+    if (decisionApplied) {
+      fields = fields.filter((f) => f.demande === 'web');
+    }
 
     // Fallback pour "AO RNE" (sans cadre imposé) : on lit les consultations (tableau de strings) du dernier mémoire.
     if (fields.length === 0) {
@@ -449,15 +471,17 @@ router.post('/dossiers/:id/recherches', async (req: Request, res: Response) => {
     }
 
     if (fields.length === 0) {
-      return res.json({ status: 'ok', triggered: 0, message: 'Aucun champ manquant à rechercher.' });
+      return res.json({ status: 'ok', triggered: 0, web: 0, message: 'Aucun champ manquant à rechercher.' });
     }
 
-    // resolveMissingInfo classe, cherche les champs publics et REMPLIT recherche_web (en_attente_validation).
-    const results = await resolveMissingInfo(fields, dossierId);
+    // resolveMissingInfo cherche les champs publics et REMPLIT recherche_web (en_attente_validation).
+    // forcePublic : quand la décision a déjà tranché 'web', on NE re-classifie PAS (sinon le champ
+    // pouvait être re-jugé « interne » → aucune recherche → « aucun » à tort).
+    const results = await resolveMissingInfo(fields, dossierId, null, { forcePublic: decisionApplied });
     const web = results.filter((r) => r.source === 'web').length;
     const pending = results.filter((r) => r.pending).length;
 
-    res.json({ status: 'ok', total: results.length, web, pending });
+    res.json({ status: 'ok', triggered: fields.length, total: results.length, web, pending });
   } catch (error: any) {
     console.error('Erreur lors du déclenchement des recherches web:', error);
     res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
@@ -500,11 +524,10 @@ router.post('/dossiers/:id/ask-team', async (req: Request, res: Response) => {
     if (!dossier) return res.status(404).json({ error: 'Dossier introuvable' });
 
     const raw = dossier.memoire_cadre_state?.missingFields;
-    console.log('[ask-team] Raw missingFields:', raw);
-    let fields: MissingField[] = Array.isArray(raw)
+    let fields: Array<MissingField & { demande?: string }> = Array.isArray(raw)
       ? raw
           .filter((m: any) => m && (m.label ?? '') !== '')
-          .map((m: any) => ({ id: String(m.id), label: String(m.label ?? ''), context: String(m.context ?? '') }))
+          .map((m: any) => ({ id: String(m.id), label: String(m.label ?? ''), context: String(m.context ?? ''), demande: m.demande }))
       : [];
 
     if (fields.length === 0) {
@@ -512,8 +535,8 @@ router.post('/dossiers/:id/ask-team', async (req: Request, res: Response) => {
       if (memoire && memoire.contenu?.generatedData?.consultations) {
         let consList: string[] = [];
         try {
-          consList = Array.isArray(memoire.contenu.generatedData.consultations) 
-            ? memoire.contenu.generatedData.consultations 
+          consList = Array.isArray(memoire.contenu.generatedData.consultations)
+            ? memoire.contenu.generatedData.consultations
             : JSON.parse(memoire.contenu.generatedData.consultations as string);
         } catch(e) {
           // ignore
@@ -532,23 +555,111 @@ router.post('/dossiers/:id/ask-team', async (req: Request, res: Response) => {
       return res.json({ status: 'ok', triggered: 0, message: 'Aucun champ manquant.' });
     }
 
-    // Classification LLM batchée (même classifieur que /recherches).
-    const kinds = await classifyFieldsLLM(fields);
-    const internals = fields.filter((f) => (kinds.get(f.id) ?? 'internal') === 'internal');
+    // Répartition par le MOTEUR DE DÉCISION : ce bouton n'envoie QUE les manques classés 'equipe'
+    // (canal interne). Le champ `demande` est déjà calculé à la détection. Repli sur une
+    // classification à la volée pour les anciennes données sans `demande`.
+    const hasDecision = fields.some((f) => f.demande === 'web' || f.demande === 'equipe');
+    let internals: MissingField[];
+    if (hasDecision) {
+      internals = fields.filter((f) => f.demande === 'equipe').map(({ demande, ...f }) => f);
+    } else {
+      const kinds = await classifyFieldsLLM(fields.map(({ demande, ...f }) => f));
+      internals = fields.filter((f) => (kinds.get(f.id) ?? 'internal') === 'internal').map(({ demande, ...f }) => f);
+    }
 
     if (internals.length === 0) {
       return res.json({ status: 'ok', triggered: 0, internal: 0, message: 'Aucune information interne à demander.' });
     }
 
-    const r = await requestInfoFromTeamBulk(internals, dossierId, undefined, req.headers.authorization);
-    
-    // Pour la compatibilité du frontend, on simule que TOUS les internes ont le même `sent` et `ticketId`
-    const results = internals.map((f) => ({ id: f.id, label: f.label, ...r }));
+    // Moteur de décision « QUI ENVOYER » (§11) : l'IA affecte chaque question à la personne la plus
+    // adaptée de l'annuaire (table personne), puis on groupe et on envoie un e-mail par personne.
+    const { data: peopleRows } = await getScopedClient()
+      .from('personne')
+      .select('id, nom, fonction, email')
+      .eq('actif', true);
+    const people: Personne[] = (peopleRows as Personne[]) || [];
 
-    const sent = r.sent ? internals.length : 0;
-    res.json({ status: 'ok', triggered: internals.length, sent, results });
+    const results: Array<{ id: string; label: string; personne?: string; email?: string; sent: boolean }> = [];
+    let sent = 0;
+
+    if (people.length > 0) {
+      const affectations = await matchQuestionsToPeople(internals, people);
+      const byId = new Map(people.map((p) => [p.id, p]));
+      // Groupe les questions par personne affectée (les non affectées → 1er de l'annuaire par défaut).
+      const groups = new Map<string, MissingField[]>();
+      for (const f of internals) {
+        const pid = affectations.get(f.id) || people[0].id;
+        (groups.get(pid) ?? groups.set(pid, []).get(pid)!).push(f);
+      }
+      for (const [pid, qs] of groups) {
+        const p = byId.get(pid)!;
+        const r = await requestInfoFromTeamBulk(qs, dossierId, p.email, req.headers.authorization);
+        for (const f of qs) {
+          results.push({ id: f.id, label: f.label, personne: p.nom, email: p.email, sent: !!r.sent });
+          if (r.sent) sent++;
+        }
+      }
+    } else {
+      // Repli : aucun annuaire → destinataire par défaut (DEFAULT_TEAM_EMAIL), comme avant.
+      const r = await requestInfoFromTeamBulk(internals, dossierId, undefined, req.headers.authorization);
+      for (const f of internals) {
+        results.push({ id: f.id, label: f.label, sent: !!r.sent });
+        if (r.sent) sent++;
+      }
+    }
+
+    res.json({ status: 'ok', triggered: internals.length, sent, routed: people.length > 0, results });
   } catch (error: any) {
     console.error('Erreur ask-team:', error);
+    res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
+  }
+});
+
+// Relance des sollicitations SANS réponse et en retard. Délai et nombre max de relances
+// entièrement configurables (RELANCE_DELAI_HEURES / RELANCE_MAX) — rien en dur.
+// Peut être appelé à la demande (bouton) ou par un planificateur externe (cron/Edge Function).
+router.post('/dossiers/:id/relancer', async (req: Request, res: Response) => {
+  const dossierId = req.params.id;
+  try {
+    const delaiHeures = Math.max(1, parseInt(process.env.RELANCE_DELAI_HEURES || '48', 10) || 48);
+    const maxRelances = Math.max(0, parseInt(process.env.RELANCE_MAX || '2', 10));
+    const seuil = new Date(Date.now() - delaiHeures * 3600 * 1000).toISOString();
+
+    const supabase = getScopedClient();
+    // Questions envoyées, toujours sans réponse, assez anciennes et pas encore trop relancées.
+    const { data, error } = await supabase
+      .from('question_interne')
+      .select('id, critere_concerne, question, contexte, destinataire_email, nb_relances, created_at, statut, reponse_recue_at')
+      .eq('ao_id', dossierId)
+      .is('reponse_recue_at', null)
+      .in('statut', ['envoyee', 'reponse_en_attente'])
+      .lt('created_at', seuil);
+    if (error) throw new Error(error.message);
+
+    const aRelancer = (data || []).filter((q: any) => (q.nb_relances ?? 0) < maxRelances);
+    if (aRelancer.length === 0) {
+      return res.json({ status: 'ok', relances: 0, message: 'Aucune sollicitation à relancer (délai non atteint ou plafond de relances atteint).' });
+    }
+
+    let done = 0;
+    for (const q of aRelancer) {
+      // Ré-envoi de la relance (même contenu) via le canal e-mail existant.
+      const r = await requestInfoFromTeamBulk(
+        [{ id: q.id, label: q.critere_concerne || 'Information manquante', context: q.contexte || '' }],
+        dossierId,
+        q.destinataire_email || undefined,
+        req.headers.authorization,
+      );
+      if (r.sent) {
+        await supabase.from('question_interne')
+          .update({ nb_relances: (q.nb_relances ?? 0) + 1 })
+          .eq('id', q.id);
+        done++;
+      }
+    }
+    res.json({ status: 'ok', relances: done, candidats: aRelancer.length, delaiHeures, maxRelances });
+  } catch (error: any) {
+    console.error('Erreur relance:', error);
     res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
   }
 });

@@ -42,6 +42,7 @@ import {
 import { cn } from "@/lib/utils";
 import { apiFetch, apiBase } from "@/lib/api";
 import { CreditsBadge } from "@/components/credits-badge";
+import { createClient } from "@/lib/supabase/client";
 import { use } from "react";
 
 interface GenEntry {
@@ -73,7 +74,8 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);   // échec (rouge)
   const [searchNotice, setSearchNotice] = useState<string | null>(null); // info neutre (ex. rien à chercher)
-  // Demande à l'équipe (bouton « Demander à l'équipe ») — redirige vers l'écran de sollicitation.
+  // Demande à l'équipe (bouton « Demander à l'équipe ») — routage IA direct (aucune étape manuelle).
+  const [isAskingTeam, setIsAskingTeam] = useState(false);
   const [askTeamError, setAskTeamError] = useState<string | null>(null);
   const [askTeamNotice, setAskTeamNotice] = useState<string | null>(null);
   // Change à chaque génération → force le badge crédits à se recharger.
@@ -83,9 +85,46 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   const [crFourni, setCrFourni] = useState(false);
   const isPrerequisOk = true; // CR requirement temporarily disabled
 
+  // Blocage de la génération tant que les questions détectées ne sont pas RÉSOLUES.
+  // On bloque dès qu'il RESTE des manques sans réponse — même si aucune sollicitation n'a encore
+  // été envoyée. Résolu = réponse d'équipe reçue/validée OU recherche web validée.
+  const supabaseCli = useMemo(() => createClient(), []);
+  const [resolus, setResolus] = useState(0);
+
+  const loadResolus = async () => {
+    let answered = 0;
+    let webValides = 0;
+    try {
+      const { data } = await supabaseCli
+        .from("question_interne")
+        .select("id")
+        .eq("ao_id", id)
+        .in("statut", ["reponse_recue", "validee"]);
+      answered = Array.isArray(data) ? data.length : 0;
+    } catch { answered = 0; }
+    try {
+      const { data } = await supabaseCli
+        .from("recherche_web")
+        .select("id")
+        .eq("dossier_id", id)
+        .eq("statut", "validee");
+      webValides = Array.isArray(data) ? data.length : 0;
+    } catch { webValides = 0; }
+    setResolus(answered + webValides);
+  };
+
+  useEffect(() => { loadResolus(); }, [id]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   const [dossierInfo, setDossierInfo] = useState<any>({ acheteur: "Chargement...", reference: "..." });
   const [hasTemplate, setHasTemplate] = useState(false);
   const [selectedSlidesCount, setSelectedSlidesCount] = useState<number>(0);
+
+  // Nombre de manques détectés (persistés à l'analyse du DCE) et blocage de la génération tant
+  // qu'il RESTE des questions sans réponse (même sans sollicitation encore envoyée).
+  const nbManques = Array.isArray(dossierInfo?.memoire_cadre_state?.missingFields)
+    ? dossierInfo.memoire_cadre_state.missingFields.length : 0;
+  const questionsRestantes = Math.max(0, nbManques - resolus);
+  const canGenerate = isPrerequisOk && questionsRestantes === 0;
 
   // Progress polling state
   const [progressInfo, setProgressInfo] = useState<{
@@ -171,15 +210,15 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Échec du déclenchement de la recherche.");
 
-      // Aucun champ manquant enregistré : ne pas rediriger vers un écran vide (ça fait croire à un bug).
+      // Aucun champ 'web' à rechercher (soit rien de manquant, soit tout est classé « équipe »).
       if (data.triggered === 0) {
-        setSearchNotice("Aucune information manquante à rechercher pour ce dossier.");
+        setSearchNotice("Aucune information à rechercher sur le web (les manques sont classés « équipe »).");
         setIsSearching(false);
         return;
       }
-      // Des champs manquent, mais aucun n'est public (tous internes) → rien à valider côté recherche web.
+      // Des champs web ont été cherchés mais aucune source publique fiable n'a été trouvée.
       if (data.web === 0) {
-        setSearchNotice("Les informations manquantes de ce dossier sont toutes internes : aucune recherche web à valider.");
+        setSearchNotice("Recherche lancée, mais aucune source publique fiable trouvée pour ces informations.");
         setIsSearching(false);
         return;
       }
@@ -190,48 +229,31 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     }
   }
 
-  // Redirige vers l'écran de sollicitation avec, en corps de message, les informations à obtenir
-  // (consultations de la dernière génération, sinon champs manquants enregistrés du dossier).
-  function handleAskTeam() {
+  // Routage IA DIRECT : l'IA affecte chaque question interne à la personne la plus adaptée de
+  // l'annuaire (Administration → Annuaire) et envoie. Aucune saisie manuelle du destinataire.
+  async function handleAskTeam() {
     setAskTeamError(null);
     setAskTeamNotice(null);
-
-    const consultations: string[] = Array.isArray(docxResult?.data?.consultations)
-      ? docxResult.data.consultations
-      : [];
-    const missing: string[] = Array.isArray(dossierInfo?.memoire_cadre_state?.missingFields)
-      ? dossierInfo.memoire_cadre_state.missingFields.map((m: any) =>
-          m?.context ? `${m.label} (${m.context})` : m?.label,
-        ).filter(Boolean)
-      : [];
-    const items = consultations.length ? consultations : missing;
-
-    if (items.length === 0) {
-      setAskTeamNotice(
-        "Aucune information manquante à demander. Lancez d'abord la génération pour identifier les informations à obtenir.",
-      );
-      return;
-    }
-
-    const ref = dossierInfo?.reference || dossierInfo?.acheteur || "";
-    const body =
-      `Bonjour,\n\nDans le cadre du mémoire technique${ref ? ` (${ref})` : ""}, ` +
-      `nous avons besoin des informations suivantes :\n\n` +
-      items.map((c) => `• ${c}`).join("\n") +
-      `\n\nMerci de nous les communiquer.`;
-    const critere = "Informations manquantes du mémoire technique";
-
-    // Le corps du message peut être long → on le passe par sessionStorage (une URL trop longue
-    // provoque une erreur HTTP 431). L'URL ne porte qu'un drapeau court.
+    setIsAskingTeam(true);
     try {
-      sessionStorage.setItem(
-        "gss_ask_team_prefill",
-        JSON.stringify({ aoId: String(id), critere, question: body }),
-      );
-    } catch {
-      /* sessionStorage indisponible : on redirige quand même (formulaire non pré-rempli). */
+      const res = await apiFetch(`/api/dossiers/${id}/ask-team`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Échec de la demande à l'équipe.");
+      const results: any[] = Array.isArray(data.results) ? data.results : [];
+      if (results.length === 0) {
+        setAskTeamNotice(data.message || "Aucune information interne à demander.");
+      } else {
+        const lignes = results.map(
+          (r) => `${r.sent ? "✓" : "✗"} ${r.label}${r.personne ? ` → ${r.personne} (${r.email})` : " → destinataire par défaut"}`,
+        );
+        setAskTeamNotice(`${data.sent}/${data.triggered} envoyée(s) :\n${lignes.join("\n")}`);
+      }
+    } catch (e: any) {
+      setAskTeamError(e.message || "Échec de la demande à l'équipe.");
+    } finally {
+      setIsAskingTeam(false);
+      loadResolus();   // rafraîchit le nombre de réponses obtenues
     }
-    router.push(`/sollicitations?ao=${encodeURIComponent(String(id))}&prefill=1`);
   }
 
   return (
@@ -300,31 +322,37 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
               <Button
                 size="lg"
                 onClick={handleGenerateFullDocx}
-                disabled={isGeneratingDocx || !isPrerequisOk}
+                disabled={isGeneratingDocx || !canGenerate}
                 className={cn(
                   "w-full max-w-md transition-all",
-                  isPrerequisOk ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-muted text-muted-foreground cursor-not-allowed"
+                  canGenerate ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-muted text-muted-foreground cursor-not-allowed"
                 )}
               >
                 {isGeneratingDocx ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <FileStack className="mr-2 h-5 w-5" />}
                 {isGeneratingDocx ? "Génération en cours..." : "Lancer la génération du document"}
               </Button>
               {!isPrerequisOk && <p className="mt-2 text-xs text-warning">Prérequis manquants (CR Visite)</p>}
+              {isPrerequisOk && questionsRestantes > 0 && (
+                <p className="mt-2 text-xs text-warning">
+                  Génération bloquée : {questionsRestantes} question{questionsRestantes > 1 ? "s" : ""} sans réponse
+                  {" "}(sur {nbManques} détectée{nbManques > 1 ? "s" : ""}). Obtenez les réponses (équipe / recherche web) avant de générer.
+                </p>
+              )}
 
               <div className="mt-4 flex items-center justify-center gap-3">
                 <Button variant="outline" className="gap-2" disabled={isSearching} onClick={handleFindOnInternet}>
                   {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
                   {isSearching ? "Recherche en cours..." : "Trouver l'info sur internet"}
                 </Button>
-                <Button variant="outline" className="gap-2" onClick={handleAskTeam}>
-                  <Users className="h-4 w-4" />
-                  Demander {"\u00e0"} l'{"\u00e9"}quipe
+                <Button variant="outline" className="gap-2" disabled={isAskingTeam} onClick={handleAskTeam}>
+                  {isAskingTeam ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+                  {isAskingTeam ? "Envoi en cours..." : "Demander \u00e0 l'\u00e9quipe"}
                 </Button>
               </div>
               {searchError && <p className="mt-2 text-xs text-destructive">{searchError}</p>}
               {searchNotice && <p className="mt-2 text-xs text-muted-foreground">{searchNotice}</p>}
               {askTeamError && <p className="mt-2 text-xs text-destructive">{askTeamError}</p>}
-              {askTeamNotice && <p className="mt-2 text-xs text-muted-foreground">{askTeamNotice}</p>}
+              {askTeamNotice && <p className="mt-2 whitespace-pre-line text-left text-xs text-muted-foreground">{askTeamNotice}</p>}
             </div>
 
             {isGeneratingDocx && progressInfo && (
@@ -356,28 +384,8 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 </Link>
               </div>
 
-              {Array.isArray(docxResult.data.consultations) && docxResult.data.consultations.length > 0 && (
-                <div className="mx-6 mt-6 rounded-lg border border-amber-400/50 bg-amber-50 dark:bg-amber-950/30 p-4">
-                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-semibold mb-2">
-                    <AlertTriangle className="h-5 w-5 shrink-0" />
-                    <span>
-                      {hasTemplate
-                        ? `Champs à compléter — ${docxResult.data.consultations.length} information(s) manquante(s)`
-                        : `Consultation GSS requise — ${docxResult.data.consultations.length} information(s) à obtenir`}
-                    </span>
-                  </div>
-                  <p className="text-sm text-amber-800/80 dark:text-amber-300/80 mb-3">
-                    {hasTemplate
-                      ? "Ces champs du cadre n'ont pas pu être renseignés automatiquement (absents du DCE et de la documentation GSS). Merci de les compléter dans le document :"
-                      : "Ces exigences du CCTP ne sont pas couvertes par la documentation GSS actuelle. Merci de réunir ces informations pour compléter le mémoire :"}
-                  </p>
-                  <ul className="list-disc pl-5 space-y-1 text-sm text-foreground">
-                    {docxResult.data.consultations.map((c: string, i: number) => (
-                      <li key={i}>{c}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              {/* Listing des infos manquantes retiré ici : il est fait APRÈS l'analyse de l'upload
+                  (fiche dossier), pour les DEUX cas (cadre imposé basé template, sans cadre basé exigences). */}
 
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">

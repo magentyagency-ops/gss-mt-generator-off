@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ShieldAlert, RefreshCw, Check, RotateCcw, Users } from "lucide-react";
+import { ShieldAlert, RefreshCw, Check, RotateCcw, Users, BookUser, Trash2, Plus } from "lucide-react";
 import {
   Badge,
   Button,
@@ -37,6 +37,49 @@ export default function AdminPage() {
   // Valeur de limite en cours d'édition par utilisateur.
   const [edits, setEdits] = useState<Record<string, number>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
+
+  // ── Rubrique Annuaire (collaborateurs pour le routage IA des questions internes, §11) ─────
+  const [people, setPeople] = useState<Array<{ id: string; nom: string; fonction: string; email: string }>>([]);
+  const [annForm, setAnnForm] = useState({ nom: "", fonction: "", email: "" });
+  const [annErr, setAnnErr] = useState<string | null>(null);
+  const [annSaving, setAnnSaving] = useState(false);
+
+  const loadPeople = useCallback(async () => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("personne")
+      .select("id, nom, fonction, email")
+      .order("created_at", { ascending: true });
+    if (!error) setPeople((data as any[]) ?? []);
+  }, []);
+
+  useEffect(() => { loadPeople(); }, [loadPeople]);
+
+  async function addPersonne() {
+    setAnnErr(null);
+    if (!annForm.nom.trim() || !annForm.fonction.trim() || !annForm.email.trim()) {
+      setAnnErr("Nom, fonction et e-mail sont requis.");
+      return;
+    }
+    setAnnSaving(true);
+    const supabase = createClient();
+    const { error } = await supabase.from("personne").insert({
+      nom: annForm.nom.trim(),
+      fonction: annForm.fonction.trim(),
+      email: annForm.email.trim(),
+    });
+    setAnnSaving(false);
+    if (error) { setAnnErr(error.message); return; }
+    setAnnForm({ nom: "", fonction: "", email: "" });
+    await loadPeople();
+  }
+
+  async function removePersonne(id: string) {
+    setAnnErr(null);
+    const supabase = createClient();
+    const { error } = await supabase.from("personne").delete().eq("id", id);
+    if (error) setAnnErr(error.message); else await loadPeople();
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -236,6 +279,48 @@ export default function AdminPage() {
                 )}
               </TableBody>
             </Table>
+          </CardContent>
+        </Card>
+
+        {/* Rubrique Annuaire : collaborateurs pour le routage IA des questions internes (§11) */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BookUser className="h-5 w-5 text-primary" /> Annuaire des collaborateurs
+              <span className="text-sm font-normal text-muted-foreground">({people.length})</span>
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              L'IA choisit, pour chaque question interne, la personne dont la fonction est la plus adaptée.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {annErr && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{annErr}</div>
+            )}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+              <input className="rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Nom *"
+                value={annForm.nom} onChange={(e) => setAnnForm((f) => ({ ...f, nom: e.target.value }))} />
+              <input className="rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Fonction * (ex. Responsable RH)"
+                value={annForm.fonction} onChange={(e) => setAnnForm((f) => ({ ...f, fonction: e.target.value }))} />
+              <input className="rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="E-mail *"
+                value={annForm.email} onChange={(e) => setAnnForm((f) => ({ ...f, email: e.target.value }))} />
+              <Button disabled={annSaving} onClick={addPersonne}><Plus className="mr-1 h-4 w-4" /> Ajouter</Button>
+            </div>
+            {people.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Aucune personne. Ajoutez-en pour activer le routage IA.</p>
+            ) : (
+              <div className="space-y-2">
+                {people.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between gap-3 rounded-md border border-border p-2.5">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium">{p.nom} — <span className="text-muted-foreground">{p.fonction}</span></div>
+                      <div className="text-xs text-muted-foreground">{p.email}</div>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => removePersonne(p.id)}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

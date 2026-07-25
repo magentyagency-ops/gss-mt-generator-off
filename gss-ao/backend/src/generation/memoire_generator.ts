@@ -12,7 +12,7 @@ import { DB, FichiersDB } from '../core/db';
 import { getScopedClient } from '../core/supabase';
 import { extractText, loadDocxStructure } from '../ingestion/docConverter';
 import { overlaySynthesis, loadTrebuchetFont, measureZonesCapacity, RefReplacement, RefContext } from './pdf_overlay';
-import { resolveMissingInfo, MissingField } from './missing_info_resolver';
+import { resolveMissingInfo, classifyFieldsLLM, MissingField } from './missing_info_resolver';
 import { uploadTempDocx, downloadTempDocx } from '../core/temp_storage';
 import { setProgress } from '../core/progress';
 // @ts-ignore
@@ -38,6 +38,17 @@ const EMBED_MODEL = process.env.EMBEDDING_MODEL_MEMOIRE || 'text-embedding-3-sma
 
 // Bucket privé où sont archivées les pièces des dossiers (cf. routes.ts /dce/upload).
 const USER_FILES_BUCKET = 'user-files';
+
+/** Un manque détecté, avec sa criticité (bloquant = éliminatoire, facultatif = bonus, normal). */
+type MissingFieldDetected = { id: string; label: string; context: string; criticite: 'bloquant' | 'facultatif' | 'normal' };
+
+/** Normalise la criticité renvoyée par l'IA vers l'un des 3 niveaux attendus. */
+function normCriticite(c: any): 'bloquant' | 'facultatif' | 'normal' {
+  const s = String(c || '').toLowerCase();
+  if (s.includes('bloqu') || s.includes('élimin') || s.includes('elimin') || s.includes('obligat')) return 'bloquant';
+  if (s.includes('facult') || s.includes('bonus') || s.includes('option')) return 'facultatif';
+  return 'normal';
+}
 
 /** Un passage indexable pour la recherche sémantique (Doc GSS ou DCE). */
 interface RetrievalChunk { source: 'GSS' | 'DCE'; label: string; text: string; embedding?: number[]; }
@@ -2333,21 +2344,26 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
   private async analyzeRequirements(
     dceContext: string,
     gssContext: string,
-  ): Promise<Array<{ theme: string; exigence: string; reponseGss: string; couverture: string }>> {
+  ): Promise<Array<{ theme: string; exigence: string; reponseGss: string; couverture: string; criticite?: string }>> {
     const systemPrompt = `Tu es responsable de l'analyse des appels d'offres de sécurité privée chez GSS.
 Mission : dépouiller le DCE — le CCTP EN PRIORITÉ (c'est lui qui porte les BESOINS), complété par le RC et les annexes — pour en extraire une CHECK-LIST EXHAUSTIVE des EXIGENCES du donneur d'ordre (ce qui est écrit, imposé ou attendu). Pour CHAQUE exigence, pose-toi la question « Le CCTP demande X — qu'est-ce que GSS propose CONCRÈTEMENT en réponse, et reste-t-il un écart ? » et confronte-la à CE QUE GSS A / FAIT d'après la Documentation GSS fournie.
 RÈGLES :
 - EXHAUSTIVITÉ : passe le CCTP en revue section par section et n'OMETS AUCUN besoin structurant. Descends au niveau du DÉTAIL utile : effectifs/ETP PAR SITE et PAR POSTE, amplitudes/horaires (jour, nuit, week-end, jours fériés), qualifications exigées (CQP APS, SSIAP 1/2/3, H0B0, SST), délais d'intervention, matériel imposé (rondes/pointeaux par site, PTI/DATI, tenues, véhicules, moyens de transmission), procédures (levée de doute, gestion d'alarme, incendie), reprise du personnel, contrôles/reporting, et obligations légales (CNAPS, agréments).
 - Quand une exigence est propre à un site/poste, garde cette précision dans le libellé (ne globalise pas).
 - Cite l'exigence telle qu'écrite dans le CCTP ; n'invente rien côté DCE.
-- La réponse GSS s'appuie UNIQUEMENT sur la Documentation GSS ; n'invente AUCUN moyen absent. Si GSS ne couvre pas ou ne le prouve pas, marque honnêtement l'écart.
+- La réponse GSS s'appuie UNIQUEMENT sur la Documentation GSS ; n'invente AUCUN moyen absent.
+- CLASSE la couverture STRICTEMENT ainsi :
+    • "couvert"  = GSS a le moyen/la capacité ET c'est présent dans la Doc GSS.
+    • "partiel"  = GSS a bien un moyen approchant, mais un DÉTAIL précis (chiffre, délai, preuve) manque. NE PAS classer "écart" dans ce cas.
+    • "écart"    = GSS N'A PAS ce moyen / ne fournit PAS cette prestation / RIEN dans la Doc GSS ne s'en approche. C'est une vraie information à OBTENIR (certification, attestation, capacité chiffrée réellement absente…).
+  Dans le doute entre "partiel" et "écart", choisis "partiel". Réserve "écart" aux manques FRANCS.
 - Vise une couverture COMPLÈTE des besoins (typiquement 30 à 60 exigences pour un CCTP fourni), pas un simple survol. Écarte seulement le pur détail administratif (formalités de dépôt, etc.).`;
 
     const userPrompt = `=== EXIGENCES DU MARCHÉ (CCTP EN PRIORITÉ, puis RC / annexes) ===
 ${dceContext.slice(0, 120_000)}
 
 === CE QUE GSS A / FAIT (Documentation GSS) ===
-${gssContext.slice(0, 60_000)}
+${gssContext.slice(0, 120_000)}
 
 Renvoie un JSON valide :
 {
@@ -2356,7 +2372,8 @@ Renvoie un JSON valide :
       "theme": "I | II | III | IV  (I=présentation société & conformité légale ; II=moyens humains ; III=moyens opérationnels & matériels ; IV=organisation, qualité, continuité)",
       "exigence": "Ce que demande le DCE, précis (avec chiffre / délai / qualification si présent)",
       "reponseGss": "Ce que GSS propose concrètement en réponse (moyen / méthode / chiffre tiré de la Doc GSS)",
-      "couverture": "couvert | partiel | écart"
+      "couverture": "couvert | partiel | écart",
+      "criticite": "bloquant | facultatif | normal  (bloquant = éliminatoire/obligatoire, sans quoi l'offre est irrecevable ou fortement pénalisée ; facultatif = confort/bonus ; normal = attendu mais non éliminatoire)"
     }
   ]
 }`;
@@ -2374,6 +2391,235 @@ Renvoie un JSON valide :
     } catch {
       console.warn('[MemoireGenerator] Matrice de conformité: parse JSON échoué → non injectée.');
       return [];
+    }
+  }
+
+  /**
+   * Détecte les INFORMATIONS MANQUANTES d'un dossier APRÈS l'analyse du DCE (et non plus seulement
+   * à la génération). S'appuie sur la matrice exigences ↔ Doc GSS (analyzeRequirements) : toute
+   * exigence du DCE en « écart » ou « partiel » vis-à-vis de ce que GSS couvre devient une info à
+   * obtenir. Le résultat est PERSISTÉ dans dossier.memoire_cadre_state.missingFields (même format
+   * que la génération) → les flux « Demander à l'équipe » / « recherche web » le consomment tel quel.
+   *
+   * Abordable (une seule passe d'analyse) → lançable automatiquement après l'upload. Fonctionne pour
+   * les deux cas (avec/sans cadre imposé) au niveau EXIGENCE.
+   */
+  public async detectMissingInfo(
+    dossierId: string,
+    opts: { force?: boolean } = {},
+  ): Promise<{ missingFields: Array<{ id: string; label: string; context: string; criticite: 'bloquant' | 'facultatif' | 'normal'; demande: 'web' | 'equipe' }>; completude?: number | null; contradictions?: Array<{ sujet: string; detail: string }>; cached?: boolean }> {
+    // Idempotence : la détection ne se fait QU'UNE FOIS. Si elle a déjà tourné pour ce dossier
+    // (missingDetectedAt présent), on renvoie la liste en cache — sûr d'appeler depuis plusieurs
+    // endroits (upload + repli fiche dossier). `force:true` permet de la relancer explicitement.
+    if (!opts.force) {
+      const existing = await DB.getDossier(dossierId);
+      const st: any = existing?.memoire_cadre_state;
+      if (st && st.missingDetectedAt && Array.isArray(st.missingFields)) {
+        console.log(`[MemoireGenerator] Détection déjà faite (${st.missingFields.length}) — cache renvoyé.`);
+        return { missingFields: st.missingFields, completude: st.completude ?? null, contradictions: st.contradictions ?? [], cached: true };
+      }
+    }
+
+    const dceContext = await this.getDceContext(dossierId);
+    const gssDocs = await this.getGssDocumentation();
+    // Contexte GSS LARGE (≈120k car au lieu de 24k) : sinon l'IA ne voit qu'une tranche de la Doc
+    // GSS et sur-signale des « écarts » sur des points en réalité couverts.
+    const gssContext = this.buildFullGssContext(gssDocs, 12_000, 120_000);
+
+    // Deux systèmes de détection, tous deux APRÈS l'upload :
+    //  • CADRE IMPOSÉ (« Mémoire (cadre) ») → basé sur le TEMPLATE : champs du formulaire non
+    //    renseignables depuis le DCE + la Doc GSS.
+    //  • SANS CADRE (AO RNE)               → basé sur les EXIGENCES : écarts DCE ↔ Doc GSS.
+    const templateText = await this.getClientTemplateText(dossierId);
+    const detected = templateText
+      ? await this.detectMissingFromTemplate(templateText, dceContext, gssContext)
+      : await this.detectMissingFromRequirements(dceContext, gssContext);
+    const baseFields = detected.fields;
+    const total = detected.total;
+    const exigences = (detected as any).exigences || null;   // matrice complète (cas sans cadre)
+
+    // Score de complétude : part des besoins/champs déjà couverts (0..100). Le dénominateur est le
+    // TOTAL (exigences pour le cas sans cadre, champs du template pour le cadre imposé).
+    const completude = total > 0 ? Math.round(((total - baseFields.length) / total) * 100) : null;
+
+    // Contradictions / ambiguïtés relevées dans le DCE (traçabilité, alerte à l'utilisateur).
+    const contradictions = await this.detectContradictions(dceContext);
+
+    // Moteur de décision : pour CHAQUE manque, vers quel canal aller le chercher —
+    // 'web' (public, cherchable sur internet) vs 'equipe' (interne, à demander à un référent GSS).
+    const kinds = await classifyFieldsLLM(baseFields.map(({ criticite, ...f }) => f));
+    const missingFields = baseFields.map((m) => ({
+      ...m,   // id, label, context, criticite
+      demande: (kinds.get(m.id) === 'public' ? 'web' : 'equipe') as 'web' | 'equipe',
+    }));
+
+    // Persistance : on fusionne avec l'éventuel memoire_cadre_state existant (sans l'écraser).
+    const dossier = await DB.getDossier(dossierId);
+    const prevState = (dossier?.memoire_cadre_state && typeof dossier.memoire_cadre_state === 'object')
+      ? dossier.memoire_cadre_state : {};
+    await DB.saveDossier(dossierId, {
+      memoire_cadre_state: {
+        ...prevState,
+        missingFields,
+        completude,
+        contradictions,
+        ...(exigences ? { exigences } : {}),
+        missingDetectedAt: new Date().toISOString(),
+      },
+    });
+
+    const nbBloq = missingFields.filter((m) => m.criticite === 'bloquant').length;
+    console.log(`[MemoireGenerator] Détection (${templateText ? 'cadre imposé' : 'sans cadre'}): ${missingFields.length} manque(s) dont ${nbBloq} bloquant(s), complétude ${completude ?? '?'}%, ${contradictions.length} contradiction(s).`);
+    return { missingFields, completude, contradictions };
+  }
+
+  /**
+   * Repère les CONTRADICTIONS / AMBIGUÏTÉS internes du DCE (chiffres qui se contredisent, exigences
+   * incompatibles, informations manquantes structurantes). Une seule passe IA. Best-effort : en cas
+   * d'échec, renvoie une liste vide (non bloquant).
+   */
+  private async detectContradictions(dceContext: string): Promise<Array<{ sujet: string; detail: string }>> {
+    const content = await this.callOpenAI(
+      [
+        { role: 'system', content: "Tu relis un DCE (dossier de consultation) de marché de sécurité privée pour GSS. Repère uniquement les VRAIES contradictions ou ambiguïtés INTERNES au dossier : chiffres/dates/horaires qui se contredisent entre pièces, exigences incompatibles, renvois à des annexes absentes, formulations réellement ambiguës qui empêchent de répondre. N'invente rien ; si tout est cohérent, renvoie une liste vide." },
+        { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON valide : { "contradictions": [ { "sujet": "de quoi il s'agit (court)", "detail": "la contradiction/ambiguïté constatée (1-2 phrases, cite les valeurs en conflit si possible)" } ] }` },
+      ],
+      0.1, 'Détection contradictions DCE', true,
+    );
+    try {
+      const data = JSON.parse(content || '{}');
+      const items = Array.isArray(data.contradictions) ? data.contradictions : [];
+      return items
+        .map((it: any) => ({ sujet: String(it?.sujet ?? '').trim(), detail: String(it?.detail ?? '').trim() }))
+        .filter((c: any) => c.detail !== '');
+    } catch {
+      return [];
+    }
+  }
+
+  /** Détection SANS cadre : écarts DCE ↔ Doc GSS (via analyzeRequirements). Renvoie aussi la
+   *  matrice complète des exigences (à persister) et le total (pour le score de complétude). */
+  private async detectMissingFromRequirements(
+    dceContext: string,
+    gssContext: string,
+  ): Promise<{ fields: MissingFieldDetected[]; total: number; exigences: any[] }> {
+    const reqs = await this.analyzeRequirements(dceContext, gssContext);
+    const norm = (c: string) => (c || '').toLowerCase();
+    const gaps = reqs.filter((r) => norm(r.couverture).includes('écart') || norm(r.couverture).includes('ecart'));
+    const fields = gaps.map((r, i) => ({
+      id: `req-${i}`,
+      label: r.exigence || '',
+      context: `[${r.couverture || 'écart'}] ${r.theme ? `Chapitre ${r.theme} — ` : ''}${
+        r.reponseGss ? `Réponse GSS actuelle : ${r.reponseGss}` : 'Non couvert par la Documentation GSS'
+      }`,
+      criticite: normCriticite(r.criticite),
+    })).filter((m) => m.label.trim() !== '');
+    // Exigences persistées (fiches réutilisables) : toute la matrice, avec un id + statut.
+    const exigences = reqs
+      .filter((r: any) => (r.exigence || '').trim() !== '')
+      .map((r: any, i: number) => ({
+        id: `ex-${i}`,
+        theme: r.theme || '',
+        exigence: r.exigence,
+        reponseGss: r.reponseGss || '',
+        couverture: norm(r.couverture).includes('écart') || norm(r.couverture).includes('ecart')
+          ? 'écart' : norm(r.couverture).includes('partiel') ? 'partiel' : 'couvert',
+        criticite: normCriticite(r.criticite),
+      }));
+    return { fields, total: exigences.length, exigences };
+  }
+
+  /**
+   * Texte du CADRE IMPOSÉ (« Mémoire (cadre) ») uploadé avec le DCE, ou null si le dossier n'a pas
+   * de cadre client. Sert à détecter les champs du formulaire non renseignables, sans lancer la
+   * génération. Matérialise le DCE depuis Storage (ou repli disque), extrait le texte, nettoie.
+   */
+  private async getClientTemplateText(dossierId: string): Promise<string | null> {
+    const dossier = await DB.getDossier(dossierId);
+    const hasTemplate = Array.isArray(dossier?.dce_files)
+      && dossier!.dce_files.some((f: any) => f?.type === 'Mémoire (cadre)');
+    if (!hasTemplate) return null;
+
+    const baseDir = path.resolve(__dirname, '../../../../');
+    const tmpDir = await this.materializeDceFromStorage(dossierId);
+    const searchDir = tmpDir || path.resolve(baseDir, `gss-ao/data/output/dce_${dossierId}`);
+    try {
+      const tpl = this.findDceTemplate(searchDir);
+      if (!tpl) return null;
+      let text = '';
+      try {
+        text = await extractText(tpl);
+      } catch {
+        if (tpl.toLowerCase().endsWith('.docx')) {
+          const xml = new PizZip(fs.readFileSync(tpl)).file('word/document.xml')?.asText() || '';
+          text = xml.split(/<w:p[ >]/).slice(1)
+            .map((p) => (p.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || []).map((m) => m.replace(/<[^>]+>/g, '')).join(''))
+            .map((t) => t.replace(/&amp;/g, '&').trim()).filter(Boolean).join('\n');
+        }
+      }
+      return text && text.trim() ? text : null;
+    } finally {
+      if (tmpDir) { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ } }
+    }
+  }
+
+  /**
+   * Détection AVEC cadre imposé : une seule passe IA qui, vu le TEXTE DU TEMPLATE + le DCE + la Doc
+   * GSS, liste les CHAMPS du formulaire qu'on ne peut PAS renseigner à partir des sources.
+   * Abordable (1 appel) et sans toucher au moteur de génération (qui, lui, remplit champ par champ).
+   */
+  private async detectMissingFromTemplate(
+    templateText: string,
+    dceContext: string,
+    gssContext: string,
+  ): Promise<{ fields: MissingFieldDetected[]; total: number }> {
+    const systemPrompt = `Tu analyses un CADRE DE RÉPONSE imposé par un acheteur public (formulaire de mémoire technique à remplir) pour GSS (sécurité privée).
+Mission : repérer les CHAMPS À RENSEIGNER du cadre (lignes à compléter, questions, tableaux, rubriques attendant une valeur) et déterminer, pour chacun, s'il est renseignable À PARTIR des sources fournies (le DCE et la Documentation GSS).
+RÈGLES :
+- Compte le NOMBRE TOTAL de champs à renseigner du cadre (total_champs).
+- Ne liste QUE les champs qui NE PEUVENT PAS être renseignés depuis les sources (information réellement absente du DCE ET de la Doc GSS). Ignore ce qui est déjà renseignable.
+- N'invente rien. Dans le doute (l'info existe peut-être dans les sources), NE liste PAS le champ.
+- Formule un libellé court et clair de l'information manquante (pas de recopie du formulaire entier).
+- Indique la criticité de chaque champ manquant : "bloquant" (champ obligatoire/éliminatoire), "facultatif" (bonus/confort) ou "normal".`;
+
+    const userPrompt = `=== CADRE DE RÉPONSE À REMPLIR (template acheteur) ===
+${templateText.slice(0, 80_000)}
+
+=== SOURCES DISPONIBLES : DCE ===
+${dceContext.slice(0, 80_000)}
+
+=== SOURCES DISPONIBLES : DOCUMENTATION GSS ===
+${gssContext.slice(0, 80_000)}
+
+Renvoie un JSON valide :
+{
+  "total_champs": 0,
+  "manquants": [
+    { "champ": "libellé court du champ / information non renseignable", "raison": "pourquoi c'est absent des sources (1 phrase)", "criticite": "bloquant | facultatif | normal" }
+  ]
+}`;
+
+    const content = await this.callOpenAI(
+      [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+      0.2, 'Détection champs manquants (template)', true,
+    );
+    try {
+      const data = JSON.parse(content || '{}');
+      const items = Array.isArray(data.manquants) ? data.manquants : [];
+      const fields: MissingFieldDetected[] = items
+        .map((it: any, i: number) => ({
+          id: `champ-${i}`,
+          label: String(it?.champ ?? '').trim(),
+          context: String(it?.raison ?? '').trim() || 'Champ du cadre non renseignable depuis le DCE et la Documentation GSS.',
+          criticite: normCriticite(it?.criticite),
+        }))
+        .filter((m: any) => m.label !== '');
+      const declared = Number(data.total_champs);
+      const total = Number.isFinite(declared) && declared >= fields.length ? declared : fields.length;
+      return { fields, total };
+    } catch {
+      console.warn('[MemoireGenerator] Détection template: parse JSON échoué → liste vide.');
+      return { fields: [], total: 0 };
     }
   }
 
