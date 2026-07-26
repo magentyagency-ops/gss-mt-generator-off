@@ -101,16 +101,6 @@ export default function InboxPage() {
     return () => { supabase.removeChannel(channel); };
   }, [supabase, userEmail, loadQuestions]);
 
-  // ── Action « Valider » (RLS : réservé au propriétaire de l'AO / admin) ───────────
-  async function valider(q: QuestionInterne) {
-    setErr(null);
-    const { error } = await supabase
-      .from("question_interne")
-      .update({ statut: "validee" })
-      .eq("id", q.id);
-    if (error) setErr(error.message); else await loadQuestions();
-  }
-
   // ── Rendu ────────────────────────────────────────────────────────────────────
   if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p></Shell>;
 
@@ -166,7 +156,6 @@ export default function InboxPage() {
                 <QuestionCard
                   key={q.id}
                   q={q}
-                  onValider={() => valider(q)}
                   dossierNom={nom}
                 />
               ))}

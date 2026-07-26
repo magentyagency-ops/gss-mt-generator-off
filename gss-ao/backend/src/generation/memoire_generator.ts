@@ -2475,8 +2475,8 @@ Renvoie un JSON valide :
 
   /**
    * Extrait la LISTE des besoins à couvrir (SANS juger la couverture) :
-   *  - cadre imposé → les CHAMPS du formulaire ;
-   *  - sans cadre   → les EXIGENCES du CCTP.
+   *  - cadre imposé → les CHAMPS du formulaire (champs texte, cases à cocher, cellules de tableau) ;
+   *  - sans cadre   → les GRANDS BESOINS / THÈMES du CCTP (généraux et regroupés, pas ligne à ligne).
    */
   private async extractRequirementsList(
     templateText: string | null,
@@ -2522,10 +2522,19 @@ Renvoie un JSON valide :
     }
     const content = await this.callOpenAI(
       [
-        { role: 'system', content: "Tu extrais la CHECK-LIST EXHAUSTIVE des EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. Un libellé PRÉCIS par exigence (avec chiffre / délai / qualification si présent). N'invente rien." },
-        { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON : {"items":[{"label":"...","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}` },
+        {
+          role: 'system',
+          content:
+            "Tu extrais, à partir d'un DCE (CCTP en priorité) pour un marché de sécurité privée, la liste des GRANDS BESOINS / THÈMES auxquels GSS devra répondre dans son mémoire technique. " +
+            "OBJECTIF : des sujets GÉNÉRAUX et SYNTHÉTIQUES, pas une check-list ligne à ligne. " +
+            "RÈGLES :\n" +
+            "- REGROUPE les exigences ponctuelles d'un même sujet en UN SEUL besoin général (ex. « Moyens humains et qualifications de l'équipe », « Organisation des rondes et de la surveillance », « Continuité de service et gestion des remplacements », « Matériel et équipements », « Formation du personnel », « Reporting et traçabilité »).\n" +
+            "- Un libellé COURT et GÉNÉRIQUE par thème. NE recopie PAS les chiffres, délais, quantités ou références d'articles précis dans le libellé — ils restent du détail de rédaction, pas un besoin.\n" +
+            "- Vise une DIZAINE à une VINGTAINE de besoins généraux au total (pas 50+). N'invente rien : chaque thème doit être réellement demandé par le DCE.",
+        },
+        { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON : {"items":[{"label":"besoin général / thème","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}` },
       ],
-      0.2, 'Extraction exigences CCTP', true,
+      0.2, 'Extraction besoins CCTP (généraux)', true,
     );
     return parse(content);
   }

@@ -155,15 +155,6 @@ export default function SollicitationsPage() {
     await loadQuestions();
   }
 
-  async function valider(q: QuestionInterne) {
-    setErr(null);
-    const { error } = await supabase
-      .from("question_interne")
-      .update({ statut: "validee" })
-      .eq("id", q.id);
-    if (error) setErr(error.message); else await loadQuestions();
-  }
-
   // ── Rendu ────────────────────────────────────────────────────────────────────
   if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p></Shell>;
 
@@ -233,7 +224,7 @@ export default function SollicitationsPage() {
           <p className="text-sm text-muted-foreground">Aucune question pour ce dossier.</p>
         )}
         {questions.map((q) => (
-          <QuestionCard key={q.id} q={q} onValider={() => valider(q)} />
+          <QuestionCard key={q.id} q={q} />
         ))}
       </div>
     </Shell>

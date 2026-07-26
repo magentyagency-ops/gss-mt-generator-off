@@ -48,7 +48,7 @@ export const STATUT_LABEL: Record<QuestionStatut, string> = {
   envoyee: "Envoyée",
   reponse_en_attente: "Réponse en attente",
   reponse_recue: "Réponse reçue",
-  validee: "Validée",
+  validee: "Intégrée au RAG",
   bloquante: "Bloquante",
 };
 

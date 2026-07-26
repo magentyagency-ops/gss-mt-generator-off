@@ -5,7 +5,7 @@
 //   1. Vérifie l'authenticité (secret partagé) — refuse tout non signé.
 //   2. Extrait le question_id (MailboxHash → plus-address → référence dans le corps).
 //   3. Rattachement INFAILLIBLE : id absent/inconnu/ambigu → NE rattache RIEN, log propre, 200.
-//   4. Réponse stockée à l'état `reponse_recue` — PAS de validation auto (§11.8).
+//   4. Réponse stockée et VALIDÉE AUTOMATIQUEMENT (`validee`) + apprise dans le RAG, sans clic humain.
 //
 // Utilise la clé service_role (canal serveur de confiance, authentifié par la signature du
 // fournisseur) qui contourne la RLS de façon légitime. L'infaillibilité vient de la logique :
@@ -87,13 +87,16 @@ Deno.serve(async (req) => {
     return jsonResponse({ status: 'ignored', reason: 'duplicate' }, 200);
   }
 
-  // 4. Rattachement : stocke la réponse, passe à `reponse_recue` (jamais `validee` — §11.8).
+  // 4. Rattachement : stocke la réponse et VALIDE AUTOMATIQUEMENT (statut `validee`).
+  //    Plus de validation manuelle : dès qu'une réponse est reçue, elle est considérée validée
+  //    et apprise dans le RAG (étape 5). L'idempotence est assurée par le garde `already_validated`.
+  const now = new Date().toISOString();
   const { error: updErr } = await admin
     .from('question_interne')
     .update({
       reponse_contenu: parsed.replyText,
-      reponse_recue_at: new Date().toISOString(),
-      statut: 'reponse_recue',
+      reponse_recue_at: now,
+      statut: 'validee',
     })
     .eq('id', question.id);
 
