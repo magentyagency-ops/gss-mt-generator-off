@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
   // Recherche par question_id (colonne UNIQUE → jamais ambigu).
   const { data: question, error: qErr } = await admin
     .from('question_interne')
-    .select('id, statut, ao_id, user_id, critere_concerne')
+    .select('id, statut, ao_id, user_id, critere_concerne, reponse_contenu')
     .eq('question_id', parsed.questionId)
     .maybeSingle();
 
@@ -77,19 +77,18 @@ Deno.serve(async (req) => {
     return jsonResponse({ status: 'ignored', reason: 'unknown_question_id' }, 200);
   }
 
-  // 3d. Doublons / états terminaux : ne jamais écraser une réponse déjà validée ni ré-écrire.
-  if (question.statut === 'validee') {
-    console.info('[inbound] réponse déjà validée — ignorée (pas de régression)', question.id);
-    return jsonResponse({ status: 'ignored', reason: 'already_validated' }, 200);
-  }
-  if (question.statut === 'reponse_recue') {
-    console.info('[inbound] réponse déjà reçue — doublon ignoré', question.id);
-    return jsonResponse({ status: 'ignored', reason: 'duplicate' }, 200);
+  // 3d. Anti-doublon de RELIVRAISON uniquement : le fournisseur peut livrer 2× le MÊME e-mail.
+  //     On ignore SEULEMENT si le texte reçu est STRICTEMENT identique à celui déjà enregistré.
+  //     Toute réponse au contenu DIFFÉRENT (même sur une question déjà validée) est ré-apprise :
+  //     les échanges successifs ENRICHISSENT le RAG au lieu d'être bloqués (chunk_id par contenu).
+  const incoming = (parsed.replyText || '').trim();
+  if (incoming && incoming === (question.reponse_contenu || '').trim()) {
+    console.info('[inbound] réponse identique déjà enregistrée — rien à réindexer', question.id);
+    return jsonResponse({ status: 'ignored', reason: 'duplicate_identical' }, 200);
   }
 
   // 4. Rattachement : stocke la réponse et VALIDE AUTOMATIQUEMENT (statut `validee`).
-  //    Plus de validation manuelle : dès qu'une réponse est reçue, elle est considérée validée
-  //    et apprise dans le RAG (étape 5). L'idempotence est assurée par le garde `already_validated`.
+  //    Plus de validation manuelle ; chaque nouvelle réponse est apprise dans le RAG (étape 5).
   const now = new Date().toISOString();
   const { error: updErr } = await admin
     .from('question_interne')
@@ -109,137 +108,12 @@ Deno.serve(async (req) => {
     questionId: parsed.questionId, source: parsed.source, questionRow: question.id,
   });
 
-  // 5. Apprentissage RAG : la réponse devient une connaissance réutilisable (table rag_chunk),
-  //    embeddée et interrogeable par match_rag_chunk. Automatique, sans validation humaine.
-  //    Best-effort : un échec ici n'annule PAS le rattachement de la réponse (déjà persisté).
-  try {
-    await learnFromResponse(admin, {
-      questionRowId: question.id,
-      aoId: question.ao_id,
-      critere: question.critere_concerne,
-      text: parsed.replyText,
-    });
-  } catch (e) {
-    console.error('[inbound] apprentissage RAG échoué (réponse tout de même enregistrée) :', (e as Error).message);
-  }
-
+  // 5. Apprentissage RAG : PLUS FAIT ICI (option B). L'affinage IA + l'indexation dans rag_chunk
+  //    sont désormais réalisés par le BACKEND (endpoint /dossiers/:id/sollicitations/learn), qui
+  //    possède déjà la clé OpenAI et l'accès RAG. L'Edge Function se limite à RATTACHER la réponse.
   return jsonResponse({
     status: 'attached',
     question_id: parsed.questionId,
     source: parsed.source,
   }, 200);
 });
-
-// ── Apprentissage RAG ──────────────────────────────────────────────────────────────────────
-// Modèle d'embeddings aligné sur rag_chunk.embedding = vector(1536).
-const RAG_EMBEDDING_MODEL = 'text-embedding-3-small';
-// Modèle de nettoyage/reformulation de la réponse (configurable ; défaut économique).
-const RAG_REFINE_MODEL = Deno.env.get('RAG_REFINE_MODEL') || 'gpt-4o-mini';
-
-/**
- * Passe la réponse brute à l'IA pour en tirer un ÉNONCÉ DE CONNAISSANCE propre : factuel, autonome
- * (compréhensible sans la question), débarrassé des salutations, signatures et bruit d'e-mail.
- * Renvoie '' si la réponse ne contient aucune information exploitable. En cas d'échec IA, on
- * retombe sur le texte brut (best-effort : mieux vaut une connaissance brute que rien).
- */
-async function refineAnswer(apiKey: string, critere: string | null, rawText: string): Promise<string> {
-  const system =
-    "Tu prépares une base de connaissance interne pour GSS (sécurité privée). On te donne une " +
-    "question interne et la réponse d'un collègue par e-mail. Reformule la réponse en un texte " +
-    "FACTUEL, clair et AUTONOME (compréhensible sans la question), utilisable tel quel dans un " +
-    "mémoire technique. Enlève salutations, formules de politesse, signatures et mentions d'e-mail. " +
-    "N'ajoute AUCUNE information absente de la réponse. Si la réponse ne contient aucune information " +
-    "exploitable, réponds STRICTEMENT par une chaîne vide.";
-  const user = `Question interne : "${critere || '(non précisée)'}"\n\nRéponse reçue :\n${rawText}\n\nÉnoncé de connaissance :`;
-
-  try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: RAG_REFINE_MODEL,
-        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-      }),
-    });
-    if (!res.ok) throw new Error(`chat ${res.status} : ${await res.text()}`);
-    const json = await res.json();
-    const out = (json.choices?.[0]?.message?.content ?? '').trim();
-    return out;
-  } catch (e) {
-    console.warn('[inbound] nettoyage IA échoué → texte brut conservé :', (e as Error).message);
-    return rawText.trim();
-  }
-}
-
-/** Découpe simple, chevauchante — les réponses d'équipe sont généralement courtes (1 chunk). */
-function chunkText(text: string, size = 1200, overlap = 150): string[] {
-  const clean = (text || '').replace(/\r\n/g, '\n').trim();
-  if (!clean) return [];
-  if (clean.length <= size) return [clean];
-  const out: string[] = [];
-  let start = 0;
-  while (start < clean.length) {
-    const end = Math.min(start + size, clean.length);
-    const piece = clean.slice(start, end).trim();
-    if (piece) out.push(piece);
-    if (end >= clean.length) break;
-    start = Math.max(end - overlap, start + 1);
-  }
-  return out;
-}
-
-/** Embeddings OpenAI (par lot). Renvoie un vecteur par texte. */
-async function embedTexts(apiKey: string, texts: string[]): Promise<number[][]> {
-  const res = await fetch('https://api.openai.com/v1/embeddings', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: RAG_EMBEDDING_MODEL, input: texts }),
-  });
-  if (!res.ok) throw new Error(`OpenAI embeddings ${res.status} : ${await res.text()}`);
-  const json = await res.json();
-  return (json.data as Array<{ embedding: number[] }>).map((d) => d.embedding);
-}
-
-/**
- * Indexe la réponse d'une sollicitation dans public.rag_chunk (source='SOLLICITATION').
- * chunk_id déterministe (basé sur l'id de la question) → un ré-appel fait un UPSERT, jamais
- * de doublon. Nécessite OPENAI_API_KEY côté Edge Function (sinon on saute proprement).
- */
-async function learnFromResponse(
-  admin: ReturnType<typeof createClient>,
-  p: { questionRowId: string; aoId: string; critere: string | null; text: string },
-): Promise<void> {
-  if (!(p.text || '').trim()) return;   // réponse vide → rien à apprendre
-
-  const apiKey = Deno.env.get('OPENAI_API_KEY');
-  if (!apiKey) {
-    console.warn('[inbound] OPENAI_API_KEY absent → réponse NON indexée dans le RAG (rattachement OK).');
-    return;
-  }
-
-  // Nettoyage IA : réponse e-mail brute → énoncé de connaissance propre, avant embedding.
-  const refined = await refineAnswer(apiKey, p.critere, p.text);
-  const chunks = chunkText(refined);
-  if (chunks.length === 0) {
-    console.info('[inbound] réponse sans information exploitable → non indexée.', p.questionRowId);
-    return;
-  }
-
-  const embeddings = await embedTexts(apiKey, chunks);
-  const rows = chunks.map((text, i) => ({
-    chunk_id: `sollicitation-${p.questionRowId}-${i}`,
-    text,
-    source: 'SOLLICITATION',
-    categorie: p.critere || 'Réponse équipe',
-    source_file: `sollicitation:${p.questionRowId}`,
-    source_path: `sollicitation/${p.aoId}/${p.questionRowId}`,
-    chunk_index: i,
-    extra: { ao_id: p.aoId, question_row: p.questionRowId, critere: p.critere },
-    embedding: embeddings[i] ? `[${embeddings[i].join(',')}]` : null,
-    actif: true,
-  }));
-
-  const { error } = await admin.from('rag_chunk').upsert(rows, { onConflict: 'chunk_id' });
-  if (error) throw new Error(error.message);
-  console.info(`[inbound] réponse indexée dans le RAG (${rows.length} chunk(s)) — question ${p.questionRowId}`);
-}

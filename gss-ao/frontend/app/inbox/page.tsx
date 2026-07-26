@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { RefreshCw, Inbox, PenLine } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { QuestionCard } from "@/components/question-card";
 import { type QuestionInterne, type Dossier } from "@/lib/sollicitations";
@@ -61,6 +62,25 @@ export default function InboxPage() {
   }, [supabase, userEmail]);
 
   useEffect(() => { loadQuestions(); }, [loadQuestions]);
+
+  // ── Apprentissage RAG (option B) : à l'affichage, on demande au backend d'affiner + indexer les
+  //    réponses reçues dans rag_chunk. Idempotent (le backend ignore ce qui est déjà indexé), donc
+  //    sûr à appeler à chaque chargement. Une fois par dossier ayant au moins une réponse.
+  useEffect(() => {
+    const dossiersAvecReponse = [...new Set(
+      questions.filter((q) => (q.reponse_contenu ?? "").trim() !== "").map((q) => q.ao_id),
+    )];
+    if (dossiersAvecReponse.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      for (const aoId of dossiersAvecReponse) {
+        if (cancelled) break;
+        try { await apiFetch(`/api/dossiers/${aoId}/sollicitations/learn`, { method: "POST" }); }
+        catch { /* best-effort : un échec d'indexation ne bloque pas l'affichage */ }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [questions]);
 
   // ── Regroupement par dossier (Cas A) ─────────────────────────────────────────────
   // À partir de la liste plate déjà chargée (RLS-scoped), on groupe par `ao_id`.

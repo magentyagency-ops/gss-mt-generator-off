@@ -10,6 +10,7 @@ import { extractRcWithLLM, extractCctpWithLLM } from '../analysis/llmExtractor';
 import { requireAuth } from './authMiddleware';
 import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeamBulk, matchQuestionsToPeople, Personne, MissingField } from '../generation/missing_info_resolver';
 import { injectValidatedRecherches } from '../generation/inject_recherches';
+import { learnSollicitationsForDossier } from '../generation/learn_sollicitation';
 import { getSettings } from '../core/config';
 import { getScopedClient, requestContext } from '../core/supabase';
 
@@ -364,6 +365,18 @@ router.post('/dossiers/:id/detect-missing', async (req: Request, res: Response) 
     const generator = new MemoireGenerator();
     const { missingFields, completude, contradictions, cached } = await generator.detectMissingInfo(dossierId, { force });
     res.json({ status: 'ok', count: missingFields.length, cached: !!cached, missingFields, completude, contradictions });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Apprentissage RAG des réponses de sollicitation (option B) : affine côté BACKEND (clé OpenAI déjà
+// présente) les réponses reçues d'un dossier et les indexe dans rag_chunk. Idempotent, appelable
+// depuis l'app à l'affichage des sollicitations. Ne double-indexe pas (extra.reply_hash).
+router.post('/dossiers/:id/sollicitations/learn', async (req: Request, res: Response) => {
+  try {
+    const result = await learnSollicitationsForDossier(req.params.id);
+    res.json({ status: 'ok', ...result });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
