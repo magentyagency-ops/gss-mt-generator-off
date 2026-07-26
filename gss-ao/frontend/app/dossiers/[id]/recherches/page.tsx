@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Globe,
   CheckCircle2,
@@ -17,6 +18,7 @@ import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@/compo
 import { DossierNav } from "@/components/dossier-nav";
 import { createClient } from "@/lib/supabase/client";
 import { apiFetch, apiBase } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Ticket #4 phase 2b — Recherches web (Perplexity) en attente de validation humaine.
@@ -83,6 +85,7 @@ function SourceLinks({ urls }: { urls: string[] }) {
 export default function RecherchesPage({ params }: { params: { id: string } }) {
   const id = params.id;
   const supabase = createClient();
+  const router = useRouter();
 
   const [items, setItems] = useState<Recherche[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,6 +93,8 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   // Valeurs éditées par l'utilisateur (id → valeur retenue). C'est CE champ, jamais answer, qui sera injecté.
   const [values, setValues] = useState<Record<string, string>>({});
+  // Sélection pour validation par lot (checkboxes)
+  const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
   // Injection (action finale) : état + résultat (nb injecté + lien de téléchargement).
   const [injecting, setInjecting] = useState(false);
   const [injectResult, setInjectResult] = useState<{ injected: number; url?: string; message?: string } | null>(null);
@@ -109,8 +114,16 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Valeur courante d'un champ : saisie en cours, sinon valeur déjà enregistrée, sinon vide.
-  const valOf = (r: Recherche) => (values[r.id] !== undefined ? values[r.id] : (r.valeur_retenue ?? ""));
+  // Garde d'accès : la page n'est atteignable qu'APRÈS obtention de résultats (bouton « Trouver
+  // l'info sur internet »). Aucune recherche pour ce dossier → on renvoie vers la page mémoire.
+  useEffect(() => {
+    if (!loading && !error && items.length === 0) {
+      router.replace(`/dossiers/${id}/memoire`);
+    }
+  }, [loading, error, items.length, id, router]);
+
+  // Valeur courante d'un champ : saisie en cours, sinon valeur déjà enregistrée, sinon réponse Perplexity par défaut, sinon vide.
+  const valOf = (r: Recherche) => (values[r.id] !== undefined ? values[r.id] : (r.valeur_retenue ?? r.answer ?? ""));
 
   // VALIDER : enregistre la valeur retenue (saisie humaine OBLIGATOIRE) + statut='validee'.
   // Sans valeur non vide, pas de validation possible (c'est le cœur de l'anti-invention).
@@ -126,6 +139,59 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
     if (error) setError(error.message);
     else setItems((prev) => prev.map((x) => (x.id === r.id ? { ...x, statut: "validee", valeur_retenue: v } : x)));
     setBusyId(null);
+  };
+
+  const toggleSelectAll = (enAttenteList: Recherche[]) => {
+    const allSelected = enAttenteList.length > 0 && enAttenteList.every((r) => selectedIds[r.id]);
+    const next: Record<string, boolean> = { ...selectedIds };
+    for (const r of enAttenteList) {
+      next[r.id] = !allSelected;
+    }
+    setSelectedIds(next);
+  };
+
+  const validateBatch = async () => {
+    const toValidate = items.filter((r) => r.statut === "en_attente_validation" && selectedIds[r.id]);
+    if (toValidate.length === 0) return;
+
+    const emptyItems = toValidate.filter((r) => !valOf(r).trim());
+    if (emptyItems.length > 0) {
+      setError("Impossible de valider : certains champs sélectionnés ont une valeur retenue vide.");
+      return;
+    }
+
+    setBusyId("batch");
+    setError(null);
+    try {
+      await Promise.all(
+        toValidate.map(async (r) => {
+          const v = valOf(r).trim();
+          const { error } = await supabase
+            .from("recherche_web")
+            .update({ statut: "validee", valeur_retenue: v })
+            .eq("id", r.id);
+          if (error) throw new Error(`Erreur pour "${r.query}": ${error.message}`);
+        })
+      );
+
+      const validatedMap = new Map(toValidate.map((r) => [r.id, valOf(r).trim()]));
+      setItems((prev) =>
+        prev.map((x) =>
+          validatedMap.has(x.id)
+            ? { ...x, statut: "validee", valeur_retenue: validatedMap.get(x.id)! }
+            : x
+        )
+      );
+      setSelectedIds((prev) => {
+        const next = { ...prev };
+        toValidate.forEach((r) => delete next[r.id]);
+        return next;
+      });
+    } catch (e: any) {
+      setError(e.message || "Erreur lors de la validation par lot.");
+    } finally {
+      setBusyId(null);
+    }
   };
 
   // REJETER : change UNIQUEMENT le statut (aucune valeur injectée).
@@ -154,8 +220,8 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
       if (!data.injected) {
         setInjectResult({ injected: 0, message: data.message || "Aucune recherche validée à injecter." });
       } else {
-        const url = `${apiBase}/api/download?file=${encodeURIComponent(data.file_path)}&download=1`;
-        setInjectResult({ injected: data.injected, url });
+        const url = data.file_path ? `${apiBase}/api/download?file=${encodeURIComponent(data.file_path)}&download=1` : undefined;
+        setInjectResult({ injected: data.injected, url, message: data.message });
         await load(); // rafraîchit : validee → injectee
       }
     } catch (e: any) {
@@ -230,6 +296,15 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
             </div>
           )}
 
+          {injectResult && injectResult.injected > 0 && !injectResult.url && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-success/40 bg-success/10 p-4 text-sm">
+              <span className="flex items-center gap-2 text-foreground">
+                <CheckCircle2 className="h-5 w-5 text-success" />
+                {injectResult.message || `${injectResult.injected} recherche(s) enregistrée(s) en base (statut injectée) et indexée(s) dans la mémoire RAG avec succès !`}
+              </span>
+            </div>
+          )}
+
           {injectResult && injectResult.injected === 0 && (
             <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
               {injectResult.message}
@@ -251,20 +326,55 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
           {/* À valider */}
           {enAttente.length > 0 && (
             <section className="space-y-3">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Clock className="h-4 w-4 text-warning" /> À valider ({enAttente.length})
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Clock className="h-4 w-4 text-warning" /> À valider ({enAttente.length})
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => toggleSelectAll(enAttente)}
+                  >
+                    {enAttente.length > 0 && enAttente.every((r) => selectedIds[r.id]) ? "Désélectionner tout" : "Sélectionner tout"}
+                  </Button>
+                  {enAttente.some((r) => selectedIds[r.id]) && (
+                    <Button
+                      size="sm"
+                      disabled={busyId !== null}
+                      onClick={validateBatch}
+                    >
+                      {busyId === "batch" ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4" />
+                      )}
+                      Valider la sélection ({enAttente.filter((r) => selectedIds[r.id]).length})
+                    </Button>
+                  )}
+                </div>
               </div>
               {enAttente.map((r) => (
-                <Card key={r.id}>
+                <Card key={r.id} className={cn("transition-colors", selectedIds[r.id] && "border-primary/50 bg-primary/5")}>
                   <CardHeader>
                     <CardTitle className="flex items-start justify-between gap-3 text-base">
-                      <span className="min-w-0">{r.query}</span>
-                      <Badge variant={STATUT_BADGE[r.statut].variant}>{STATUT_BADGE[r.statut].label}</Badge>
-                      {typeof r.niveau_confiance === "number" && (
-                        <Badge variant={r.niveau_confiance >= 0.66 ? "success" : r.niveau_confiance >= 0.33 ? "warning" : "secondary"}>
-                          Confiance {Math.round(r.niveau_confiance * 100)}%
-                        </Badge>
-                      )}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={!!selectedIds[r.id]}
+                          onChange={(e) => setSelectedIds((prev) => ({ ...prev, [r.id]: e.target.checked }))}
+                          className="h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-ring cursor-pointer"
+                        />
+                        <span className="min-w-0">{r.query}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant={STATUT_BADGE[r.statut].variant}>{STATUT_BADGE[r.statut].label}</Badge>
+                        {typeof r.niveau_confiance === "number" && (
+                          <Badge variant={r.niveau_confiance >= 0.66 ? "success" : r.niveau_confiance >= 0.33 ? "warning" : "secondary"}>
+                            Confiance {Math.round(r.niveau_confiance * 100)}%
+                          </Badge>
+                        )}
+                      </div>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -296,7 +406,7 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
                         <Button
                           variant="outline"
                           size="sm"
-                          disabled={busyId === r.id}
+                          disabled={busyId !== null}
                           onClick={() => reject(r.id)}
                         >
                           {busyId === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
@@ -304,7 +414,7 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
                         </Button>
                         <Button
                           size="sm"
-                          disabled={busyId === r.id || valOf(r).trim() === ""}
+                          disabled={busyId !== null || valOf(r).trim() === ""}
                           onClick={() => validate(r)}
                         >
                           {busyId === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}

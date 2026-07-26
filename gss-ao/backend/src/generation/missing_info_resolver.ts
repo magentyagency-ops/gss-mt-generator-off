@@ -50,18 +50,22 @@ export function classifyMissingInfo(label: string, context = ''): MissingInfoKin
   const n = `${label} ${context}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   // Identité d'une personne GSS / donnée interne → demande à l'équipe.
   if (/dirigeant|gerant|representant legal|agrement dirigeant|nom du signataire/.test(n)) return 'internal';
+  // Certifications, qualifications, agréments DE GSS (APSAD, MASE, ISO, SSIAP, CNAPS…) → interne.
+  if (/certifi|apsad|mase|ssiap|agrement|habilitation|conformite|qualification|accreditation/.test(n)) return 'internal';
   // Identité administrative du CLIENT/acheteur → potentiellement publique (registre des entreprises).
   if (/(acheteur|client|donneur d.ordre).*(siret|siren|adresse|forme juridique|naf|ape)|siret|siren|kbis|forme juridique/.test(n)) return 'public';
   return 'unknown';
 }
 
 const CLASSIFY_SYSTEM_PROMPT =
-  "Tu classes des informations manquantes d'un mémoire de réponse à un appel d'offres. Pour chaque " +
-  "champ, décide s'il est EXTERNE (public, vérifiable par recherche internet : SIRET, SIREN, forme " +
-  "juridique, KBIS, adresse de siège, dirigeants publics d'une entreprise tierce/acheteur, " +
-  "certifications publiques, données publiées) ou INTERNE (connu seulement de l'entreprise qui répond " +
-  "ou d'un humain : effectif dédié, moyens, méthodologie, prix, références, capacité, intentions, " +
-  "signataire interne). En cas de doute, réponds INTERNE.";
+  "Tu classes des informations manquantes d'un mémoire de réponse à un appel d'offres pour GSS " +
+  "(entreprise de sécurité privée). Pour chaque champ, décide s'il est EXTERNE (public, vérifiable " +
+  "par recherche internet : SIRET, SIREN, forme juridique, KBIS, adresse de siège, dirigeants " +
+  "publics d'une entreprise TIERCE/acheteur, données publiées d'organismes tiers) ou INTERNE (connu " +
+  "seulement de GSS ou d'un humain GSS). ATTENTION : les certifications, qualifications, agréments, " +
+  "habilitations et conformités DE GSS (ex. APSAD, MASE, ISO, SSIAP, agrément CNAPS…) sont TOUJOURS " +
+  "INTERNES — seule GSS sait si elle les détient. De même : effectif dédié, moyens, méthodologie, " +
+  "prix, références, capacité, intentions, signataire interne. En cas de doute, réponds INTERNE.";
 
 /**
  * Classifieur LLM BATCHÉ (1 seul appel pour tout le lot) : décide EXTERNE ('public') vs INTERNE
@@ -272,7 +276,7 @@ export async function matchQuestionsToPeople(
           content:
             'PERSONNES (JSON) :\n' + JSON.stringify(annuaire) +
             '\n\nQUESTIONS (JSON) :\n' + JSON.stringify(questions) +
-            '\n\nRéponds UNIQUEMENT par : {"affectations":[{"question_id":<string>,"personne_id":<string>}]}.',
+            '\n\nRéponds UNIQUEMENT par un objet JSON : {"affectations":[{"question_id":<string>,"personne_id":<string>}]}.',
         },
       ],
       temperature: 0.1,
@@ -340,6 +344,14 @@ async function logRechercheWeb(
   // confiance est élevée ; plafonnée à 1.
   const cible = Math.max(1, parseInt(process.env.RECHERCHE_WEB_CONFIANCE_CIBLE || '3', 10) || 3);
   const niveauConfiance = Math.min(1, (r.citations?.length || 0) / cible);
+  let parsedChampId: number | null = null;
+  if (champId !== null && champId !== undefined) {
+    const match = String(champId).match(/\d+/);
+    if (match) {
+      parsedChampId = parseInt(match[0], 10);
+      if (isNaN(parsedChampId)) parsedChampId = null;
+    }
+  }
   const { error } = await admin.from('recherche_web').insert({
     query,
     answer: r.answer,
@@ -349,7 +361,7 @@ async function logRechercheWeb(
     niveau_confiance: niveauConfiance,
     sollicitation_id: sollicitationId,
     dossier_id: dossierId,
-    champ_id: champId, // id stable du champ (cible univoque de l'injection) — cf. migration phase 3
+    champ_id: parsedChampId, // id stable du champ en entier (cible univoque de l'injection) — cf. migration phase 3
   });
   if (error) throw error;
 }
@@ -442,6 +454,60 @@ export async function requestInfoFromTeamBulk(
 }
 
 /**
+ * Reformule un label d'exigence brut (texte du DCE) en une QUESTION de recherche ciblée pour
+ * Perplexity. Le label brut (ex. « prestation certifiée APSAD type P2 ou P3 préférable ; contrat
+ * conforme APSAD R31 ») est trop technique et mal formulé pour un moteur de recherche conversationnel.
+ * On le transforme en question naturelle incluant le contexte (GSS, sécurité privée, appel d'offres).
+ *
+ * Utilise un appel LLM léger (nano, rapide + pas cher) avec un FALLBACK template en cas d'échec.
+ */
+async function reformulateForSearch(label: string, context: string = ''): Promise<string> {
+  const key = getSettings().openaiApiKey;
+  if (!key) {
+    // Fallback template : préfixe le label avec une recherche ciblée GSS.
+    return `Quelle est la donnée exacte concernant la société GSS (GSS Sécurité Privée en France) pour : ${label} ?`;
+  }
+  try {
+    const client = new OpenAI({ apiKey: key });
+    const completion = await client.chat.completions.create({
+      model: process.env.EXTRACTION_MODEL || 'gpt-5.4-mini',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Tu es un expert en recherche web d\'informations d\'entreprise pour compléter un mémoire technique d\'appel d\'offres. ' +
+            'Ta tâche est de transformer l\'intitulé d\'une information manquante (ex: SIRET, adresse du siège, statut PME, effectif, certifications) ' +
+            'en une QUESTION de recherche web ultra-précise, factuelle et directe destinée à Perplexity.\n' +
+            'RÈGLES CRUCIALES :\n' +
+            '1. Nous voulons trouver la donnée CONCRÈTE, CHIFFRÉE ou FACTUELLE (numéro, date, adresse officielle, oui/non, effectif) concernant l\'entreprise candidate, qui est la société GSS (GSS Sécurité Privée en France), ou concernant le client/marché public.\n' +
+            '2. INTERDICTION FORMELLE de poser des questions d\'ordre juridique, réglementaire, général ou théorique (ne demande jamais si c\'est obligatoire dans le DCE, quelles sont les règles du code des marchés, etc.).\n' +
+            '3. Exemple pour "SIRET" -> "Quel est le numéro SIRET exact et officiel de la société de sécurité privée GSS (GSS Sécurité) en France ?"\n' +
+            '4. Exemple pour "Statut PME" -> "La société GSS Sécurité Privée en France a-t-elle le statut de PME ? Quels sont son effectif et son chiffre d\'affaires ?"\n' +
+            '5. Exemple pour "Adresse du siège" -> "Quelle est l\'adresse officielle du siège social de la société GSS Sécurité Privée ?"\n' +
+            '6. Exemple pour "Effectif total" -> "Quel est l\'effectif total de la société GSS Sécurité Privée en France ?"\n' +
+            'Réponds UNIQUEMENT par la question reformulée, sans guillemets ni commentaire.',
+        },
+        {
+          role: 'user',
+          content: `Information manquante à chercher : ${label}${context ? `\nContexte / Raison : ${context}` : ''}`,
+        },
+      ],
+      temperature: 0.2,
+      max_completion_tokens: 200,
+    });
+    const reformulated = (completion.choices[0].message.content || '').trim();
+    if (reformulated && reformulated.length > 10) {
+      console.log(`[reformulateForSearch] "${label.slice(0, 60)}…" → "${reformulated.slice(0, 80)}…"`);
+      return reformulated;
+    }
+  } catch (e) {
+    console.warn(`[reformulateForSearch] échec LLM (${(e as Error)?.message}) → fallback template.`);
+  }
+  // Fallback template
+  return `Quelle est la donnée exacte concernant la société GSS (GSS Sécurité Privée en France) pour : ${label} ?`;
+}
+
+/**
  * Orchestrateur (brief §3) — phase 2a. GATÉ par le flag RESOLVE_MISSING_INFO (OFF par défaut).
  *
  *  • FLAG OFF (défaut) → NO-OP STRICT : aucune classification, aucune recherche, aucune écriture,
@@ -478,9 +544,12 @@ export async function resolveMissingInfo(
         out.push({ id: f.id, value: null, source: 'web', pending: true });
         continue;
       }
+      // Reformulation : le label brut (exigence DCE) est un mauvais prompt Perplexity. On le
+      // transforme en question ciblée incluant le contexte (GSS, appel d'offres sécurité).
+      const searchQuery = await reformulateForSearch(f.label, f.context).catch(() => f.label);
       // Recherche web + traçabilité « en attente » ; JAMAIS d'injection automatique ici (value=null).
       // champ_id = f.id : lien STABLE ligne↔champ (marqueur [CHAMP_<id>]), remplace le lien fragile par label.
-      const r = await searchPublicInfo(f.label, sollicitationId, dossierId, f.id);
+      const r = await searchPublicInfo(searchQuery, sollicitationId, dossierId, f.id);
       out.push({ id: f.id, value: null, source: r ? 'web' : 'none', pending: r ? true : undefined });
     } else if (kind === 'internal') {
       out.push({ id: f.id, value: null, source: 'none', pending: false });

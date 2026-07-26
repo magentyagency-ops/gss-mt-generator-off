@@ -1551,6 +1551,10 @@ export const GSS_IDENTITE = {
   denomination: process.env.GSS_DENOMINATION || 'GSS — Sécurité privée',
   numCnaps: process.env.GSS_CNAPS || '',
   dateAutorisation: process.env.GSS_DATE_AUTORISATION || '',
+  siret: process.env.GSS_SIRET || '905 274 635 00010',
+  siren: process.env.GSS_SIREN || '905 274 635',
+  adresse: process.env.GSS_ADRESSE || '31 boulevard Gambetta, 76000 Rouen',
+  adresseAgence: process.env.GSS_ADRESSE_AGENCE || '31 boulevard Gambetta, 76000 Rouen',
 };
 
 /**
@@ -1573,6 +1577,12 @@ export function identiteCandidatForLabel(label: string, identite = GSS_IDENTITE)
   // Testé AVANT le CNAPS : « Date d'autorisation d'exercer » contient « autorisation d'exercer ».
   if (/\bdate\b/.test(n) && /(autorisation|agrement)/.test(n) && !/(validit|expir|\bfin\b|echeance)/.test(n))
     return identite.dateAutorisation;
+  // N° SIRET / SIREN
+  if (/\bsiret\b/.test(n)) return identite.siret;
+  if (/\bsiren\b/.test(n)) return identite.siren;
+  // Adresse du siège / de l'entreprise / de l'agence (pour GSS)
+  if (/\badresse\b/.test(n) && (/\bsiege\b|\bentreprise\b|\bsociete\b|\bagence\b|\bgss\b/.test(n)))
+    return identite.adresse;
   // N° CNAPS d'autorisation d'exercer de l'ÉTABLISSEMENT. On EXIGE le contexte « autorisation /
   // exercer » (pas le simple mot « cnaps », qui apparaît aussi pour l'agrément dirigeant, déjà écarté).
   if (/autorisation d.exercer|num[ée]ro d.autorisation|(?=.*cnaps)(?=.*autoris)/.test(n)) return identite.numCnaps;

@@ -140,9 +140,68 @@ router.post('/dossiers', async (req: Request, res: Response) => {
 });
 
 router.delete('/dossiers/:id', async (req: Request, res: Response) => {
+  const dossierId = req.params.id;
   try {
-    await DB.deleteDossier(req.params.id);
+    // 1. Supprimer les FICHIERS du Storage (les lignes `fichiers` partiront en cascade avec le
+    //    dossier, mais les objets Storage, eux, ne sont pas liés → on les efface explicitement).
+    try {
+      const fichiers = await FichiersDB.listByDossier(dossierId);
+      const paths = fichiers.map((f) => f.storage_path).filter((p): p is string => !!p);
+      if (paths.length > 0) {
+        const { error } = await getScopedClient().storage.from(USER_FILES_BUCKET).remove(paths);
+        if (error) console.warn(`[delete] Storage: échec suppression (${error.message}) — dossier supprimé quand même.`);
+        else console.log(`[delete] ${paths.length} fichier(s) Storage supprimé(s) pour le dossier ${dossierId}.`);
+      }
+    } catch (e: any) {
+      console.warn(`[delete] Storage: nettoyage impossible (${e?.message || e}) — on poursuit la suppression bdd.`);
+    }
+
+    // 2. Supprimer le dossier en bdd (cascade : fichiers, memoires_techniques, question_interne…).
+    await DB.deleteDossier(dossierId);
+
+    // 3. Nettoyer l'éventuel dossier DCE legacy sur le disque (anciens dossiers avant migration Storage).
+    try {
+      const legacy = path.resolve(__dirname, '../../../../', `gss-ao/data/output/dce_${dossierId}`);
+      if (fs.existsSync(legacy)) fs.rmSync(legacy, { recursive: true, force: true });
+    } catch { /* non bloquant */ }
+
     res.json({ message: 'Dossier supprimé' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Supprimer UNE pièce DCE d'un dossier existant : objet Storage + ligne `fichiers` + entrée `dce_files`.
+router.delete('/dossiers/:id/fichiers/:fid', async (req: Request, res: Response) => {
+  const dossierId = req.params.id;
+  const fid = req.params.fid;
+  try {
+    const supabase = getScopedClient();
+    const { data: f, error } = await supabase
+      .from('fichiers')
+      .select('id, nom, storage_path, dossier_id')
+      .eq('id', fid)
+      .eq('dossier_id', dossierId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!f) return res.status(404).json({ error: 'Fichier introuvable' });
+
+    // 1. Objet Storage.
+    if (f.storage_path) {
+      const { error: sErr } = await getScopedClient().storage.from(USER_FILES_BUCKET).remove([f.storage_path]);
+      if (sErr) console.warn(`[delete-fichier] Storage: ${sErr.message} — on poursuit.`);
+    }
+    // 2. Ligne fichiers.
+    await supabase.from('fichiers').delete().eq('id', fid);
+    // 3. Entrée dans dce_files (jsonb du dossier) — on retire par nom.
+    const dossier = await DB.getDossier(dossierId);
+    if (dossier && Array.isArray(dossier.dce_files)) {
+      const newDce = dossier.dce_files.filter((x: any) => (x?.nom ?? '') !== (f.nom ?? ''));
+      if (newDce.length !== dossier.dce_files.length) {
+        await DB.saveDossier(dossierId, { dce_files: newDce });
+      }
+    }
+    res.json({ message: 'Pièce supprimée', nom: f.nom });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -503,7 +562,7 @@ router.post('/dossiers/:id/recherches/inject', async (req: Request, res: Respons
     if (result.injected === 0) {
       return res.json({ status: 'ok', injected: 0, message: 'Aucune recherche validée à injecter.' });
     }
-    res.json({ status: 'ok', injected: result.injected, skipped: result.skipped, file_path: result.filePath });
+    res.json({ status: 'ok', injected: result.injected, skipped: result.skipped, file_path: result.filePath, message: result.message });
   } catch (error: any) {
     console.error('Erreur lors de l\'injection des recherches validées:', error);
     res.status(500).json({ error: error.message || 'Erreur interne du serveur' });

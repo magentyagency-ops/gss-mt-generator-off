@@ -19,6 +19,7 @@ import {
   Download,
   Globe,
   Users,
+  Lock,
 } from "lucide-react";
 import { Badge, Button, Card, Progress } from "@/components/ui";
 import { DossierNav } from "@/components/dossier-nav";
@@ -44,6 +45,7 @@ import { apiFetch, apiBase } from "@/lib/api";
 import { CreditsBadge } from "@/components/credits-badge";
 import { createClient } from "@/lib/supabase/client";
 import { use } from "react";
+import { useDossier } from "../dossier-context";
 
 interface GenEntry {
   text: string;
@@ -115,7 +117,8 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
 
   useEffect(() => { loadResolus(); }, [id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [dossierInfo, setDossierInfo] = useState<any>({ acheteur: "Chargement...", reference: "..." });
+  const { dossier: rawDossier, refresh: refreshDossier } = useDossier();
+  const dossierInfo = rawDossier || { acheteur: "Chargement...", reference: "..." };
   const [hasTemplate, setHasTemplate] = useState(false);
   const [selectedSlidesCount, setSelectedSlidesCount] = useState<number>(0);
 
@@ -126,6 +129,15 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   const questionsRestantes = Math.max(0, nbManques - resolus);
   const canGenerate = isPrerequisOk && questionsRestantes === 0;
 
+  // Blocage : accès au mémoire technique interdit tant que l'analyse des infos manquantes n'est pas faite.
+  const hasDce = Array.isArray(dossierInfo?.dce_files) && dossierInfo.dce_files.length > 0;
+  const analyseDone = !!(
+    dossierInfo?.memoire_cadre_state?.missingDetectedAt ||
+    dossierInfo?.memoire_cadre_state?.tempPath ||
+    dossierInfo?.memoire_cadre_state?.storageKey ||
+    dossierInfo?.memoire_cadre_state?.missingFields
+  );
+
   // Progress polling state
   const [progressInfo, setProgressInfo] = useState<{
     status: string;
@@ -133,15 +145,6 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     message: string;
     logs: string[];
   } | null>(null);
-
-  useEffect(() => {
-    apiFetch(`/api/dossiers/${id}`)
-      .then(res => res.json())
-      .then(data => {
-        if (!data.error) setDossierInfo(data);
-      })
-      .catch(e => console.error(e));
-  }, [id]);
 
   useEffect(() => {
     // Detect template from dce_files stored in the dossier (API)
@@ -254,6 +257,47 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
       setIsAskingTeam(false);
       loadResolus();   // rafraîchit le nombre de réponses obtenues
     }
+  }
+
+  // ── Blocage tant que l'analyse des infos manquantes n'est pas terminée ──────────────────
+  if (!analyseDone) {
+    return (
+      <div className="flex h-full flex-col">
+        <header className="border-b border-border bg-card px-6 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {dossierInfo.acheteur} · {dossierInfo.reference}
+              </div>
+              <h1 className="flex items-center gap-2 text-lg font-semibold">
+                Mémoire technique — génération IA
+              </h1>
+            </div>
+            <CreditsBadge key={creditKey} />
+          </div>
+        </header>
+        <DossierNav id={id} />
+        <div className="flex flex-1 flex-col items-center justify-center bg-muted/10 p-8">
+          <div className="w-full max-w-lg text-center space-y-6">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-warning/10">
+              <Lock className="h-10 w-10 text-warning" />
+            </div>
+            <h2 className="text-xl font-bold text-foreground">Accès verrouillé</h2>
+            <p className="text-muted-foreground leading-relaxed">
+              {!hasDce
+                ? "Aucun DCE n'a été uploadé pour ce dossier. Uploadez les pièces du DCE depuis la fiche de synthèse avant de pouvoir générer le mémoire technique."
+                : "L'analyse des informations manquantes du DCE est en cours ou n'a pas encore été lancée. Retournez à la fiche de synthèse pour que l'analyse se termine avant de générer le mémoire technique."}
+            </p>
+            <Link href={`/dossiers/${id}`}>
+              <Button size="lg" className="mt-2 gap-2">
+                <ArrowRight className="h-4 w-4 rotate-180" />
+                Retour à la fiche de synthèse
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

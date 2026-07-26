@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FileText, ListChecks, PenLine, Download, FileStack, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getMode } from "@/lib/ai/mode";
+import { createClient } from "@/lib/supabase/client";
 
 /** Onglets d'étapes au sein d'un dossier (écrans 3 → 6).
  *  En Mode B (réponse libre), une étape « Sélection slides » s'intercale. */
@@ -13,10 +14,25 @@ export function DossierNav({ id }: { id: string }) {
   const pathname = usePathname();
   const base = `/dossiers/${id}`;
   const [modeB, setModeB] = useState(false);
+  // L'onglet « Recherches web » n'apparaît qu'APRÈS des résultats (recherche_web) — c.-à-d. après
+  // avoir cliqué « Trouver l'info sur internet ». Tant qu'il n'y en a pas, l'onglet est masqué.
+  const supabase = useMemo(() => createClient(), []);
+  const [hasRecherches, setHasRecherches] = useState(false);
 
   useEffect(() => {
     setModeB(getMode(id) === "B");
   }, [id, pathname]);
+
+  useEffect(() => {
+    let annule = false;
+    (async () => {
+      try {
+        const { data } = await supabase.from("recherche_web").select("id").eq("dossier_id", id).limit(1);
+        if (!annule) setHasRecherches(Array.isArray(data) && data.length > 0);
+      } catch { if (!annule) setHasRecherches(false); }
+    })();
+    return () => { annule = true; };
+  }, [supabase, id, pathname]);
 
   const steps = [
     { href: base, label: "Synthèse", icon: FileText },
@@ -25,7 +41,10 @@ export function DossierNav({ id }: { id: string }) {
       ? [{ href: `${base}/selection-slides`, label: "Sélection slides", icon: FileStack }]
       : []),
     { href: `${base}/memoire`, label: "Mémoire technique", icon: PenLine },
-    { href: `${base}/recherches`, label: "Recherches web", icon: Globe },
+    // Onglet Recherches web : seulement s'il existe des résultats à valider (ou déjà sur la page).
+    ...(hasRecherches || pathname === `${base}/recherches`
+      ? [{ href: `${base}/recherches`, label: "Recherches web", icon: Globe }]
+      : []),
     { href: `${base}/export`, label: "Export", icon: Download },
   ];
   return (

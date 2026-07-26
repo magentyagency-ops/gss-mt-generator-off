@@ -10,7 +10,7 @@ import { Client as PgClient } from 'pg';
 import { getSettings } from '../core/config';
 import { DB, FichiersDB } from '../core/db';
 import { getScopedClient } from '../core/supabase';
-import { extractText, loadDocxStructure } from '../ingestion/docConverter';
+import { extractText, loadDocxStructure, loadDocxTemplateAnnotated } from '../ingestion/docConverter';
 import { overlaySynthesis, loadTrebuchetFont, measureZonesCapacity, RefReplacement, RefContext } from './pdf_overlay';
 import { resolveMissingInfo, classifyFieldsLLM, MissingField } from './missing_info_resolver';
 import { uploadTempDocx, downloadTempDocx } from '../core/temp_storage';
@@ -1609,6 +1609,10 @@ export const GSS_IDENTITE = {
   denomination: process.env.GSS_DENOMINATION || 'GSS — Sécurité privée',
   numCnaps: process.env.GSS_CNAPS || '',
   dateAutorisation: process.env.GSS_DATE_AUTORISATION || '',
+  siret: process.env.GSS_SIRET || '905 274 635 00010',
+  siren: process.env.GSS_SIREN || '905 274 635',
+  adresse: process.env.GSS_ADRESSE || '31 boulevard Gambetta, 76000 Rouen',
+  adresseAgence: process.env.GSS_ADRESSE_AGENCE || '31 boulevard Gambetta, 76000 Rouen',
 };
 
 /**
@@ -1631,6 +1635,12 @@ export function identiteCandidatForLabel(label: string, identite = GSS_IDENTITE)
   // Testé AVANT le CNAPS : « Date d'autorisation d'exercer » contient « autorisation d'exercer ».
   if (/\bdate\b/.test(n) && /(autorisation|agrement)/.test(n) && !/(validit|expir|\bfin\b|echeance)/.test(n))
     return identite.dateAutorisation;
+  // N° SIRET / SIREN
+  if (/\bsiret\b/.test(n)) return identite.siret;
+  if (/\bsiren\b/.test(n)) return identite.siren;
+  // Adresse du siège / de l'entreprise / de l'agence (pour GSS)
+  if (/\badresse\b/.test(n) && (/\bsiege\b|\bentreprise\b|\bsociete\b|\bagence\b|\bgss\b/.test(n)))
+    return identite.adresse;
   // N° CNAPS d'autorisation d'exercer de l'ÉTABLISSEMENT. On EXIGE le contexte « autorisation /
   // exercer » (pas le simple mot « cnaps », qui apparaît aussi pour l'agrément dirigeant, déjà écarté).
   if (/autorisation d.exercer|num[ée]ro d.autorisation|(?=.*cnaps)(?=.*autoris)/.test(n)) return identite.numCnaps;
@@ -1781,8 +1791,12 @@ export class MemoireGenerator {
     // le nom brut ET sa réparation latin1→utf8, sinon « memoire » n'est jamais reconnu → repli
     // sur le mémoire GSS maître (génération « hors cadre ») au lieu de remplir le cadre imposé.
     const repaired = (s: string) => { try { return Buffer.from(s, 'latin1').toString('utf8'); } catch { return s; } };
+    // Un cadre de réponse imposé s'appelle « …mémoire… », mais AUSSI « Cadre de réponse »,
+    // « Cadre de mémoire technique », « Trame mémoire technique »… On reconnaît donc memoire | cadre | trame
+    // (nom brut ET réparé latin1→utf8, à cause du mojibake multer).
+    const TEMPLATE_NAME_RE = /memoire|cadre|trame/;
     const isMemoire = (f: string) =>
-      /\.docx?$/i.test(f) && (norm(f).includes('memoire') || norm(repaired(f)).includes('memoire'));
+      /\.docx?$/i.test(f) && (TEMPLATE_NAME_RE.test(norm(f)) || TEMPLATE_NAME_RE.test(norm(repaired(f))));
     const memoireFile = files.find(isMemoire);
     return memoireFile ? path.join(dceDir, memoireFile) : null;
   }
@@ -1997,6 +2011,11 @@ export class MemoireGenerator {
    * Renvoie le contenu texte, ou null si échec définitif.
    */
   private async callOpenAI(messages: any[], temperature: number, label: string, jsonMode: boolean): Promise<string | null> {
+    // Garde-fou : le mode JSON d'OpenAI EXIGE que le mot « json » figure dans les messages, sinon
+    // l'appel renvoie 400. On l'ajoute si absent (évite les échecs silencieux → 0 résultat).
+    if (jsonMode && !messages.some((m) => typeof m?.content === 'string' && /json/i.test(m.content))) {
+      messages = [...messages, { role: 'system', content: 'Réponds uniquement par un objet JSON valide.' }];
+    }
     const maxAttempts = 5;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -2102,9 +2121,9 @@ export class MemoireGenerator {
     try {
       await client.connect();
       const res = await client.query(
-        `select categorie, text, embedding::text as embedding
+        `select source, categorie, text, embedding::text as embedding
            from public.rag_chunk
-          where source = 'GSS' and actif and embedding is not null`
+          where source in ('GSS', 'WEB', 'SOLLICITATION') and actif and embedding is not null`
       );
       const chunks: RetrievalChunk[] = [];
       for (const r of res.rows) {
@@ -2112,7 +2131,7 @@ export class MemoireGenerator {
         let emb: number[] | undefined;
         try { emb = JSON.parse(r.embedding); } catch { emb = undefined; }
         if (!emb || !emb.length) continue;
-        chunks.push({ source: 'GSS', label: r.categorie || 'GSS', text: r.text, embedding: emb });
+        chunks.push({ source: r.source || 'GSS', label: r.categorie || 'GSS', text: r.text, embedding: emb });
       }
       return chunks.length ? chunks : null;
     } catch (e: any) {
@@ -2150,7 +2169,7 @@ export class MemoireGenerator {
       const res = await client.query(
         `select categorie, source_file, text
            from public.rag_chunk
-          where source = 'GSS' and actif
+          where source in ('GSS', 'WEB', 'SOLLICITATION') and actif
           order by categorie, source_file, chunk_index`
       );
       const cats: Record<string, string> = {};
@@ -2161,6 +2180,28 @@ export class MemoireGenerator {
         if (!cats[cat]) cats[cat] = '';
         if (key !== lastKey) { cats[cat] += `\n--- ${r.source_file} ---\n`; lastKey = key; }
         cats[cat] += r.text + '\n';
+      }
+      // On enrichit avec TOUTES les recherches web (même en attente) et questions internes en base,
+      // pour que l'analyse IA comparant au template ou CCTP voie bien toutes les infos disponibles en BDD.
+      try {
+        const webRes = await client.query(
+          `select query, answer, valeur_retenue, statut
+             from public.recherche_web
+            where statut in ('validee', 'injectee', 'en_attente_validation') and (answer is not null or valeur_retenue is not null)`
+        );
+        if (webRes.rows.length > 0) {
+          cats['RECHERCHES WEB BDD'] = webRes.rows.map(r => `--- Recherche Web : ${r.query} ---\nQuestion : ${r.query}\nRéponse BDD (${r.statut}) : ${r.valeur_retenue || r.answer}`).join('\n\n');
+        }
+        const qRes = await client.query(
+          `select question, reponse
+             from public.question_interne
+            where reponse is not null and reponse != ''`
+        );
+        if (qRes.rows.length > 0) {
+          cats['QUESTIONS INTERNES BDD'] = qRes.rows.map(r => `--- Question Équipe : ${r.question} ---\nQuestion : ${r.question}\nRéponse Équipe : ${r.reponse}`).join('\n\n');
+        }
+      } catch (eWeb: any) {
+        console.warn(`[MemoireGenerator] Lecture recherche_web/question_interne depuis BDD ignorée : ${eWeb?.message || eWeb}`);
       }
       for (const k of Object.keys(cats)) {
         if (cats[k].length > PER_CAT_CAP) cats[k] = cats[k].slice(0, PER_CAT_CAP) + '\n[… tronqué …]';
@@ -2395,14 +2436,165 @@ Renvoie un JSON valide :
   }
 
   /**
-   * Détecte les INFORMATIONS MANQUANTES d'un dossier APRÈS l'analyse du DCE (et non plus seulement
-   * à la génération). S'appuie sur la matrice exigences ↔ Doc GSS (analyzeRequirements) : toute
-   * exigence du DCE en « écart » ou « partiel » vis-à-vis de ce que GSS couvre devient une info à
-   * obtenir. Le résultat est PERSISTÉ dans dossier.memoire_cadre_state.missingFields (même format
-   * que la génération) → les flux « Demander à l'équipe » / « recherche web » le consomment tel quel.
-   *
-   * Abordable (une seule passe d'analyse) → lançable automatiquement après l'upload. Fonctionne pour
-   * les deux cas (avec/sans cadre imposé) au niveau EXIGENCE.
+   * Élimine de la liste des manques tout champ dont le sujet fait déjà l'objet d'une recherche web
+   * ou d'une question interne en BDD (recherche_web / question_interne), même en attente de validation.
+   */
+  private async filterAlreadyKnownInDb(fields: MissingFieldDetected[], dossierId: string): Promise<MissingFieldDetected[]> {
+    const client = this.ragDbClient();
+    if (!client || !fields.length) return fields;
+    try {
+      await client.connect();
+      const resWeb = await client.query(`select query from public.recherche_web where query is not null`);
+      const resQ = await client.query(`select question from public.question_interne where question is not null and reponse_contenu is not null`);
+      const existingQueries = [
+        ...resWeb.rows.map(r => (r.query || '').toLowerCase()),
+        ...resQ.rows.map(r => (r.question || '').toLowerCase()),
+      ];
+      if (!existingQueries.length) return fields;
+      return fields.filter(f => {
+        const flab = f.label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        const words = flab.split(/[^a-z0-9]+/).filter(w => w.length >= 3 && !w.match(/^(pour|dans|avec|cette|votre|notre|leur|candidat|entreprise|societe|titulaire|marche|question|section|champ|total|france|statut)$/));
+        if (!words.length) return true;
+        for (const eq of existingQueries) {
+          const eqNorm = eq.normalize('NFD').replace(/[̀-ͯ]/g, '');
+          const matches = words.filter(w => eqNorm.includes(w));
+          if (matches.length >= Math.min(1, words.length)) {
+            console.log(`[MemoireGenerator] Manque ignoré car déjà recherché/présent dans BDD : "${f.label}" (~ "${eq}")`);
+            return false;
+          }
+        }
+        return true;
+      });
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Erreur filtrage BDD dans detectMissingInfo : ${e?.message || e}`);
+      return fields;
+    } finally {
+      try { await client.end(); } catch { /* ignore */ }
+    }
+  }
+
+  /**
+   * Extrait la LISTE des besoins à couvrir (SANS juger la couverture) :
+   *  - cadre imposé → les CHAMPS du formulaire ;
+   *  - sans cadre   → les EXIGENCES du CCTP.
+   */
+  private async extractRequirementsList(
+    templateText: string | null,
+    dceContext: string,
+  ): Promise<Array<{ label: string; theme?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal' }>> {
+    const parse = (content: string | null) => {
+      if (content === null) console.warn('[MemoireGenerator] extractRequirements DIAG : callOpenAI a renvoyé NULL (échec IA/rate-limit).');
+      try {
+        const d = JSON.parse(content || '{}');
+        const normKind = (t: any): 'champ' | 'case' | 'tableau' | undefined => {
+          const s = String(t ?? '').toLowerCase();
+          return s === 'case' || s === 'tableau' || s === 'champ' ? s as any : undefined;
+        };
+        const items = (Array.isArray(d.items) ? d.items : [])
+          .map((c: any) => ({ label: String(c?.label ?? '').trim(), theme: c?.theme, kind: normKind(c?.type), criticite: normCriticite(c?.criticite) }))
+          .filter((x: any) => x.label !== '');
+        if (items.length === 0) console.warn(`[MemoireGenerator] extractRequirements DIAG : 0 item extrait. Réponse IA (200c) = ${(content || '').slice(0, 200)}`);
+        return items;
+      } catch { console.warn('[MemoireGenerator] extractRequirements DIAG : JSON illisible.'); return []; }
+    };
+    if (templateText) {
+      const content = await this.callOpenAI(
+        [
+          {
+            role: 'system',
+            content:
+              "Tu extrais la LISTE EXHAUSTIVE de TOUT ce qui reste À RENSEIGNER dans un cadre de réponse imposé (formulaire d'un acheteur public) pour GSS (sécurité privée). " +
+              "Le texte est ANNOTÉ :\n" +
+              "  • « [CHAMP À REMPLIR] … » = zone de saisie texte à compléter ;\n" +
+              "  • « [CASE ☐ vide] libellé » = case à cocher NON cochée (choix/option à trancher) ; « [CASE ☒ cochée] » = déjà cochée ;\n" +
+              "  • « [TABLEAU] … [/TABLEAU] » = tableau ; « ⬚ (à remplir — colonne: « X », ligne: « Y ») » marque une CELLULE VIDE, avec son en-tête de colonne et son libellé de ligne.\n" +
+              "RÈGLES :\n" +
+              "- Relève CHAQUE champ texte à compléter, CHAQUE case à cocher à trancher, et CHAQUE cellule de tableau à renseigner (⬚).\n" +
+              "- Pour une cellule de tableau, REPRENDS dans le libellé la colonne ET la ligne indiquées (ex. « Tableau moyens humains — ligne « Chef de poste », colonne « Effectif » à compléter »). Regroupe si toute une colonne est vide.\n" +
+              "- Un libellé court et clair par élément ; indique son type dans `type` : \"champ\" | \"case\" | \"tableau\". Ne recopie pas le formulaire entier.\n" +
+              "- Ignore les cases DÉJÀ cochées et les zones déjà renseignées.",
+          },
+          { role: 'user', content: `=== CADRE (annoté) ===\n${templateText.slice(0, 80_000)}\n\nRenvoie un JSON : {"items":[{"label":"...","type":"champ|case|tableau","criticite":"bloquant|facultatif|normal"}]}` },
+        ],
+        0.1, 'Extraction champs template', true,
+      );
+      return parse(content);
+    }
+    const content = await this.callOpenAI(
+      [
+        { role: 'system', content: "Tu extrais la CHECK-LIST EXHAUSTIVE des EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. Un libellé PRÉCIS par exigence (avec chiffre / délai / qualification si présent). N'invente rien." },
+        { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON : {"items":[{"label":"...","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}` },
+      ],
+      0.2, 'Extraction exigences CCTP', true,
+    );
+    return parse(content);
+  }
+
+  /**
+   * Détection FONDÉE SUR LA RAG : pour CHAQUE exigence/champ, recherche sémantique dans la base de
+   * connaissance (rag_chunk) → passages GSS les plus proches → l'IA juge COUVERT vs MANQUANT.
+   * Renvoie null si la RAG n'est pas disponible (→ l'appelant retombe sur l'ancienne méthode).
+   */
+  private async detectMissingViaRag(
+    requirements: Array<{ label: string; theme?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal' }>,
+  ): Promise<{ fields: MissingFieldDetected[]; total: number; exigences: any[] } | null> {
+    if (requirements.length === 0) return null;
+    const gss = await this.loadGssChunksFromDb();
+    if (!gss || gss.length === 0) return null;   // pas de RAG → repli sur l'ancienne méthode
+
+    const embs = await this.embedTexts(requirements.map((r) => r.label));
+    const withCtx = requirements.map((r, i) => {
+      const top = this.retrieve(embs[i] || [], gss, 5, r.label);
+      return {
+        i, label: r.label, criticite: r.criticite, theme: r.theme, kind: r.kind,
+        ctx: top.map((c) => `- [${c.label}] ${c.text.replace(/\s+/g, ' ').slice(0, 350)}`).join('\n'),
+      };
+    });
+
+    const missing: MissingFieldDetected[] = [];
+    const exigences: any[] = [];
+    const BATCH = 12;
+    for (let b = 0; b < withCtx.length; b += BATCH) {
+      const batch = withCtx.slice(b, b + BATCH);
+      const payload = batch.map((x) => ({ index: x.i, exigence: x.label, passages_gss: x.ctx || '(aucun passage proche)' }));
+      const content = await this.callOpenAI(
+        [
+          { role: 'system', content: "Pour CHAQUE exigence, on te donne les passages de la Documentation GSS les PLUS PROCHES (recherche sémantique dans la base de connaissance). Décide si GSS COUVRE l'exigence (le moyen/l'information est réellement présent dans ces passages) ou si elle MANQUE (rien de pertinent → à demander en interne ou à rechercher). N'invente RIEN : si les passages ne le prouvent pas, c'est MANQUANT." },
+          { role: 'user', content: `Exigences + passages GSS (JSON) :\n${JSON.stringify(payload)}\n\nRenvoie un JSON : {"resultats":[{"index":<n>,"statut":"couvert|manquant"}]}` },
+        ],
+        0.1, 'Jugement couverture RAG', true,
+      );
+      const map = new Map<number, string>();
+      try {
+        const d = JSON.parse(content || '{}');
+        for (const r of (Array.isArray(d.resultats) ? d.resultats : [])) {
+          if (typeof r?.index === 'number') map.set(r.index, String(r?.statut ?? '').toLowerCase());
+        }
+      } catch { /* batch illisible → tout considéré manquant par prudence */ }
+      for (const x of batch) {
+        const statut = map.get(x.i);
+        const manquant = statut ? statut.includes('manqu') : true;   // défaut prudent : manquant
+        const kindLabel = x.kind === 'case' ? 'Case à cocher du cadre' : x.kind === 'tableau' ? 'Cellule/colonne de tableau du cadre' : x.kind === 'champ' ? 'Champ à renseigner du cadre' : null;
+        exigences.push({ id: `ex-${x.i}`, theme: x.theme || '', exigence: x.label, couverture: manquant ? 'écart' : 'couvert', criticite: x.criticite, ...(x.kind ? { kind: x.kind } : {}) });
+        if (manquant) {
+          missing.push({
+            id: `req-${x.i}`,
+            label: x.label,
+            context: `${kindLabel ? kindLabel + '. ' : ''}Non couvert par la base de connaissance GSS (recherche sémantique RAG).`,
+            criticite: x.criticite,
+          });
+        }
+      }
+    }
+    console.log(`[MemoireGenerator] Détection RAG : ${requirements.length} exigence(s) → ${missing.length} manque(s).`);
+    return { fields: missing, total: requirements.length, exigences };
+  }
+
+  /**
+   * Détecte les INFORMATIONS MANQUANTES d'un dossier APRÈS l'analyse du DCE. Compare chaque exigence
+   * (CCTP) ou champ (cadre imposé) à la BASE DE CONNAISSANCE RAG (recherche sémantique) pour savoir
+   * si l'information existe déjà chez GSS, ou doit être demandée / recherchée. Résultat PERSISTÉ dans
+   * dossier.memoire_cadre_state.missingFields (consommé par « Demander à l'équipe » / recherche web).
    */
   public async detectMissingInfo(
     dossierId: string,
@@ -2431,10 +2623,27 @@ Renvoie un JSON valide :
     //    renseignables depuis le DCE + la Doc GSS.
     //  • SANS CADRE (AO RNE)               → basé sur les EXIGENCES : écarts DCE ↔ Doc GSS.
     const templateText = await this.getClientTemplateText(dossierId);
-    const detected = templateText
-      ? await this.detectMissingFromTemplate(templateText, dceContext, gssContext)
-      : await this.detectMissingFromRequirements(dceContext, gssContext);
-    const baseFields = detected.fields;
+    // 1) Extraire la LISTE des besoins (champs du template OU exigences du CCTP).
+    // 2) Comparer CHACUN à la base de connaissance RAG (recherche sémantique) → couvert / manquant.
+    // Repli sur l'ancienne méthode (contexte GSS complet) si la RAG n'est pas disponible.
+    const requirements = await this.extractRequirementsList(templateText, dceContext);
+    console.log(`[MemoireGenerator] detectMissing DIAG : template=${templateText ? `${templateText.length} car` : 'NON TROUVÉ'}, dceContext=${dceContext.length} car, exigences extraites=${requirements.length}`);
+    const viaRag = await this.detectMissingViaRag(requirements);
+    console.log(`[MemoireGenerator] detectMissing DIAG : RAG=${viaRag ? `${viaRag.fields.length} manque(s)/${viaRag.total} exigence(s)` : 'INDISPONIBLE → repli ancienne méthode'}`);
+    const detected =
+      viaRag ??
+      (templateText
+        ? await this.detectMissingFromTemplate(templateText, dceContext, gssContext)
+        : await this.detectMissingFromRequirements(dceContext, gssContext));
+    const rawFields = detected.fields;
+    const filteredIdentite = rawFields.filter((m) => {
+      if (identiteCandidatForLabel(m.label) !== '') {
+        console.log(`[MemoireGenerator] Manque ignoré (identité légale GSS connue) : "${m.label}"`);
+        return false;
+      }
+      return true;
+    });
+    const baseFields = await this.filterAlreadyKnownInDb(filteredIdentite, dossierId);
     const total = detected.total;
     const exigences = (detected as any).exigences || null;   // matrice complète (cas sans cadre)
 
@@ -2535,20 +2744,31 @@ Renvoie un JSON valide :
    * génération. Matérialise le DCE depuis Storage (ou repli disque), extrait le texte, nettoie.
    */
   private async getClientTemplateText(dossierId: string): Promise<string | null> {
-    const dossier = await DB.getDossier(dossierId);
-    const hasTemplate = Array.isArray(dossier?.dce_files)
-      && dossier!.dce_files.some((f: any) => f?.type === 'Mémoire (cadre)');
-    if (!hasTemplate) return null;
-
+    // Détection ALIGNÉE sur la génération (cf. generate(), plus bas) : on ne se fie PAS au champ
+    // `dce_files[].type === 'Mémoire (cadre)'` — il n'est jamais peuplé à l'upload, donc s'y fier
+    // rendait CE chemin toujours « sans cadre » (bug : les champs du template ne ressortaient jamais).
+    // On scanne DIRECTEMENT les pièces réellement uploadées du dossier via findDceTemplate (nom du
+    // fichier « …mémoire… .docx »), exactement comme le fait la génération.
     const baseDir = path.resolve(__dirname, '../../../../');
-    const tmpDir = await this.materializeDceFromStorage(dossierId);
-    const searchDir = tmpDir || path.resolve(baseDir, `gss-ao/data/output/dce_${dossierId}`);
+    const uploadedDceDir = path.resolve(baseDir, `gss-ao/data/output/dce_${dossierId}`);
+    // Priorité au dossier disque s'il existe (moins coûteux) ; sinon on matérialise depuis Storage.
+    let searchDir = uploadedDceDir;
+    let tmpDir: string | null = null;
+    if (!fs.existsSync(uploadedDceDir)) {
+      tmpDir = await this.materializeDceFromStorage(dossierId);
+      if (tmpDir) searchDir = tmpDir;
+    }
     try {
       const tpl = this.findDceTemplate(searchDir);
       if (!tpl) return null;
       let text = '';
       try {
-        text = await extractText(tpl);
+        // Extraction ANNOTÉE pour les .docx : préserve cases à cocher et cellules de tableau vides
+        // (balises [CASE ☐], [CHAMP À REMPLIR], ⬚) — indispensable pour repérer TOUT ce qui reste à
+        // renseigner. Repli sur extractText (aplati) pour les .doc ou en cas d'échec.
+        text = tpl.toLowerCase().endsWith('.docx')
+          ? loadDocxTemplateAnnotated(tpl)
+          : await extractText(tpl);
       } catch {
         if (tpl.toLowerCase().endsWith('.docx')) {
           const xml = new PizZip(fs.readFileSync(tpl)).file('word/document.xml')?.asText() || '';
@@ -2578,7 +2798,7 @@ Mission : repérer les CHAMPS À RENSEIGNER du cadre (lignes à compléter, ques
 RÈGLES :
 - Compte le NOMBRE TOTAL de champs à renseigner du cadre (total_champs).
 - Ne liste QUE les champs qui NE PEUVENT PAS être renseignés depuis les sources (information réellement absente du DCE ET de la Doc GSS). Ignore ce qui est déjà renseignable.
-- N'invente rien. Dans le doute (l'info existe peut-être dans les sources), NE liste PAS le champ.
+- Sois exhaustif et rigoureux : si une information demandée par le cadre n'est pas clairement et explicitement écrite dans le DCE ou la Documentation GSS, liste-la comme champ manquant.
 - Formule un libellé court et clair de l'information manquante (pas de recopie du formulaire entier).
 - Indique la criticité de chaque champ manquant : "bloquant" (champ obligatoire/éliminatoire), "facultatif" (bonus/confort) ou "normal".`;
 
@@ -3748,8 +3968,11 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
           console.warn(`[MemoireGenerator] Upload temp Storage échoué (on garde le fallback local): ${e?.message || e}`);
         }
 
+        const curDossier = await DB.getDossier(dossierId);
+        const prevSt = (curDossier?.memoire_cadre_state && typeof curDossier.memoire_cadre_state === 'object')
+          ? curDossier.memoire_cadre_state : {};
         await DB.saveDossier(dossierId, {
-          memoire_cadre_state: { tempPath, storageKey, missingFields: missingInfo }
+          memoire_cadre_state: { ...prevSt, tempPath, storageKey, missingFields: prevSt.missingFields || missingInfo }
         });
         console.log(`[MemoireGenerator] État cadre sauvegardé (${missingInfo.length} champ(s) manquant(s))${storageKey ? ` — temp uploadé (${storageKey})` : ''}.`);
       } catch (e: any) {

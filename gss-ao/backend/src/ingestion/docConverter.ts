@@ -299,6 +299,106 @@ export function loadDocxText(filePath: string): string {
   return lines.join('\n');
 }
 
+/**
+ * Extraction ANNOTÉE d'un cadre de réponse (.docx) pour la DÉTECTION des champs à remplir.
+ * Contrairement à loadDocxText (qui aplatit tout en texte), on préserve les éléments interactifs
+ * du formulaire pour que l'IA repère ce qui reste à renseigner :
+ *   • cases à cocher — form field `w:checkBox`, content control `w14:checkbox`, symboles Wingdings
+ *     (☐ = F0A8, cochés = F0FE/F0FD/F06F/F0FB/F0FC) ou glyphes littéraux ☐ ☑ ☒ ✔ ✗
+ *     → balisées « [CASE ☐ vide] » / « [CASE ☒ cochée] » ;
+ *   • champs de formulaire texte (`FORMTEXT`) → « [CHAMP À REMPLIR] » ;
+ *   • tableaux → rendus en grille, chaque cellule vide balisée « ⬚ » (à remplir).
+ * Best-effort et tolérant (regex) : sert UNIQUEMENT à l'analyse des manques, jamais à la génération.
+ */
+export function loadDocxTemplateAnnotated(filePath: string): string {
+  if (!fs.existsSync(filePath)) throw new DocConverterError(`Fichier non trouvé : ${filePath}`);
+  const zip = new AdmZip(filePath);
+  const entry = zip.getEntry('word/document.xml');
+  if (!entry) throw new DocConverterError(`word/document.xml non trouvé : ${filePath}`);
+  const xmlText = entry.getData().toString('utf8');
+  const bodyMatch = xmlText.match(/<w:body>([\s\S]*?)<\/w:body>/);
+  const bodyXml = bodyMatch ? bodyMatch[1] : xmlText;
+
+  // Texte brut d'un fragment XML (concatène les <w:t>, décode les entités).
+  const runText = (xml: string): string =>
+    (xml.match(/<w:t[ >][\s\S]*?<\/w:t>/g) || [])
+      .map((m) => m.replace(/<[^>]+>/g, ''))
+      .join('')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+
+  const SYM_UNCHECKED = /w:char="F0A8"/i;                       // ☐ Wingdings
+  const SYM_CHECKED = /w:char="(F0FE|F0FD|F06F|F0FB|F0FC)"/i;   // ☒/☑ Wingdings
+  const LITERAL_UNCHECKED = /[☐❏❑⬜□]/; // ☐ ❏ ❑ ⬜ □
+  const LITERAL_CHECKED = /[☑☒✅✔✓✗]/; // ☑ ☒ ✅ ✔ ✓ ✗
+
+  // Analyse un fragment (paragraphe ou cellule) → ligne annotée (case à cocher / champ / texte).
+  const analyzeFragment = (frag: string): string => {
+    const text = runText(frag).trim();
+    const hasCheckboxField = /<w:checkBox/.test(frag) || /<w14:checkbox/.test(frag);
+    const checkedField = /<w:checked\b(?![^>]*w:val="0")/.test(frag) || /<w14:checked[^>]*w14:val="1"/.test(frag);
+    const symUnchecked = SYM_UNCHECKED.test(frag);
+    const symChecked = SYM_CHECKED.test(frag);
+    const litUnchecked = LITERAL_UNCHECKED.test(text);
+    const litChecked = LITERAL_CHECKED.test(text);
+    const hasFormText = /FORMTEXT/.test(frag);
+
+    if (hasCheckboxField || symUnchecked || symChecked || litUnchecked || litChecked) {
+      const checked = (hasCheckboxField && checkedField) || symChecked || litChecked;
+      const clean = text.replace(LITERAL_UNCHECKED, '').replace(LITERAL_CHECKED, '').replace(/\s+/g, ' ').trim();
+      return `[CASE ${checked ? '☒ cochée' : '☐ vide'}] ${clean}`.trim();
+    }
+    if (hasFormText) return `[CHAMP À REMPLIR] ${text}`.trim();
+    return text;
+  };
+
+  const lines: string[] = [];
+  let idx = 0;
+  while (idx < bodyXml.length) {
+    const nextP = bodyXml.indexOf('<w:p', idx);
+    const nextTbl = bodyXml.indexOf('<w:tbl', idx);
+    if (nextP === -1 && nextTbl === -1) break;
+
+    if (nextP !== -1 && (nextTbl === -1 || nextP < nextTbl)) {
+      const closeP = bodyXml.indexOf('</w:p>', nextP);
+      if (closeP === -1) break;
+      const pXml = bodyXml.substring(nextP, closeP + 6);
+      idx = closeP + 6;
+      const line = analyzeFragment(pXml);
+      if (line) lines.push(line);
+    } else {
+      const closeTbl = bodyXml.indexOf('</w:tbl>', nextTbl);
+      if (closeTbl === -1) break;
+      const tblXml = bodyXml.substring(nextTbl, closeTbl + 8);
+      idx = closeTbl + 8;
+      lines.push('[TABLEAU]');
+      // Matrice des cellules ANALYSÉES (texte / case à cocher), puis annotation ligne↔colonne.
+      const rowXmls = tblXml.match(/<w:tr[ >][\s\S]*?<\/w:tr>/g) || [];
+      const matrix: string[][] = rowXmls.map((trXml) => {
+        const cellXmls = trXml.match(/<w:tc[ >][\s\S]*?<\/w:tc>/g) || [];
+        return cellXmls.map((tc) => analyzeFragment(tc).trim());
+      });
+      // En-têtes de COLONNE = 1re ligne ; libellé de LIGNE = 1re cellule non vide de la ligne.
+      const colHeaders = matrix[0] || [];
+      matrix.forEach((row, r) => {
+        const rowHeader = (row.find((c) => c !== '') || '').replace(/^\[[^\]]+\]\s*/, '').slice(0, 60);
+        const cells = row.map((cell, c) => {
+          if (cell !== '') return cell;
+          // Cellule VIDE à remplir : on rattache colonne + ligne pour lever l'ambiguïté.
+          const col = (colHeaders[c] || '').replace(/^\[[^\]]+\]\s*/, '').slice(0, 60);
+          const parts: string[] = [];
+          if (r > 0 && col) parts.push(`colonne: « ${col} »`);
+          if (c > 0 && rowHeader) parts.push(`ligne: « ${rowHeader} »`);
+          return parts.length ? `⬚ (à remplir — ${parts.join(', ')})` : '⬚ (à remplir)';
+        });
+        lines.push('| ' + cells.join(' | ') + ' |');
+      });
+      lines.push('[/TABLEAU]');
+    }
+  }
+  return lines.join('\n');
+}
+
 export async function extractPdfText(filePath: string): Promise<string> {
   if (!fs.existsSync(filePath)) {
     throw new DocConverterError(`Fichier non trouvé : ${filePath}`);

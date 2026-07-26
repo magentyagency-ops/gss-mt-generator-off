@@ -37,6 +37,7 @@ import { apiFetch } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
 import { QuestionCard } from "@/components/question-card";
 import { type QuestionInterne } from "@/lib/sollicitations";
+import { useDossier } from "./dossier-context";
 
 function StatPill({
   icon: Icon,
@@ -69,22 +70,16 @@ function StatPill({
 
 export default function SynthesePage({ params }: { params: { id: string } }) {
   const id = params.id;
+  const { dossier: dossierInfo, refresh: refreshDossier } = useDossier();
 
-  const [dossierInfo, setDossierInfo] = useState<any>(null);
   const [isEditingObjet, setIsEditingObjet] = useState(false);
   const [objetValue, setObjetValue] = useState("");
 
   useEffect(() => {
-    apiFetch(`/api/dossiers/${id}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.error) {
-          setDossierInfo(data);
-          setObjetValue(data.objet);
-        }
-      })
-      .catch((e) => console.error(e));
-  }, [id]);
+    if (dossierInfo?.objet) {
+      setObjetValue(dossierInfo.objet);
+    }
+  }, [dossierInfo?.objet]);
 
   // ── Infos manquantes détectées APRÈS l'analyse du DCE (indépendant de la génération) ─────────
   // Si déjà persistées → on les affiche. Sinon, dès qu'un DCE est présent, on lance la détection
@@ -118,10 +113,11 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
         if (Array.isArray(data.missingFields)) setMissingFields(data.missingFields);
         if (typeof data.completude === "number") setCompletude(data.completude);
         if (Array.isArray(data.contradictions)) setContradictions(data.contradictions);
+        refreshDossier();
       })
       .catch(() => {})
       .finally(() => setDetectingMissing(false));
-  }, [dossierInfo, id]);
+  }, [dossierInfo, id, refreshDossier]);
 
   // ── Sollicitations du dossier (requête Supabase front SÉPARÉE, indépendante de l'apiFetch) ─
   // Filtrée sur ao_id = id du dossier courant ; la RLS scope déjà à l'utilisateur (pas de user_id).
@@ -129,6 +125,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
   // Robustesse : en cas d'échec, sollicitationsError = true → la section n'est pas rendue et la
   // fiche s'affiche normalement (jamais de page blanche). Flag `annule` contre le setState post-démontage.
   const supabase = useMemo(() => createClient(), []);
+
   const [relancing, setRelancing] = useState(false);
   const [relanceMsg, setRelanceMsg] = useState<string | null>(null);
   const [sollicitations, setSollicitations] = useState<QuestionInterne[]>([]);
@@ -216,12 +213,12 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
                   onKeyDown={async (e) => {
                     if (e.key === "Enter") {
                       setIsEditingObjet(false);
-                      setDossierInfo({ ...dossierInfo, objet: objetValue });
                       await apiFetch(`/api/dossiers`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ id, objet: objetValue })
                       });
+                      refreshDossier();
                     } else if (e.key === "Escape") {
                       setIsEditingObjet(false);
                       setObjetValue(dossierInfo.objet);

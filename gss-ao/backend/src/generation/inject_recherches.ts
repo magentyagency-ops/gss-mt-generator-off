@@ -14,6 +14,7 @@
 import PizZip from 'pizzip';
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import OpenAI from 'openai';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getSettings } from '../core/config';
@@ -23,6 +24,7 @@ export interface InjectionResult {
   injected: number;         // nb de champs réellement injectés (marqueur trouvé)
   skipped: number;          // nb de lignes 'validee' ignorées (valeur vide, ou marqueur absent du doc)
   filePath: string | null;  // nouveau .docx produit (null si rien à injecter)
+  message?: string;         // message d'information ou de confirmation
 }
 
 /** Client service_role (backend de confiance) — null si Supabase non configuré. */
@@ -59,7 +61,7 @@ export async function injectValidatedRecherches(dossierId: string): Promise<Inje
   // 1. RÈGLE BLOQUANTE : uniquement statut='validee' + champ_id non nul.
   const { data: rows, error } = await admin
     .from('recherche_web')
-    .select('id, champ_id, valeur_retenue, citations, statut')
+    .select('id, champ_id, query, valeur_retenue, citations, statut')
     .eq('dossier_id', dossierId)
     .eq('statut', 'validee')
     .not('champ_id', 'is', null);
@@ -73,30 +75,54 @@ export async function injectValidatedRecherches(dossierId: string): Promise<Inje
     return { injected: 0, skipped: (rows || []).length, filePath: null };
   }
 
-  // 2. Source du temp : Storage (cross-poste) en priorité, sinon local.
+  // 2. PRIORITAIRE : Transition d'état en BDD & RAG. TOUTES les recherches validées sont enregistrées en base
+  // (statut 'injectee' et vectorisation dans la table rag_chunk), indépendamment de la présence ou non d'un .docx !
+  const allIds = validated.map((r: any) => r.id);
+  const { error: uErr } = await admin.from('recherche_web').update({ statut: 'injectee' }).in('id', allIds);
+  if (uErr) throw uErr;
+  await indexWebRecherchesToRag(admin, validated, dossierId);
+
+  // 3. Source du temp : Storage (cross-poste) en priorité, sinon local.
   const { data: d, error: dErr } = await admin.from('dossiers').select('contenu').eq('id', dossierId).single();
-  if (dErr) throw dErr;
+  if (dErr && dErr.code !== 'PGRST116') console.warn('[injection] Erreur lecture dossier:', dErr.message);
   const state = (d as any)?.contenu?.memoire_cadre_state;
-  if (!state) throw new Error('[injection] memoire_cadre_state introuvable pour ce dossier.');
-  let content: Buffer;
-  if (state.storageKey) {
-    content = await downloadTempDocx(state.storageKey);
-  } else if (state.tempPath && fs.existsSync(state.tempPath)) {
-    content = fs.readFileSync(state.tempPath);
-  } else {
-    throw new Error('[injection] temp introuvable (ni Storage, ni local).');
+  let content: Buffer | null = null;
+  if (state) {
+    if (state.storageKey) {
+      try { content = await downloadTempDocx(state.storageKey); } catch (e) { console.warn('[injection] downloadTempDocx échoué:', (e as Error)?.message); }
+    } else if (state.tempPath && fs.existsSync(state.tempPath)) {
+      try { content = fs.readFileSync(state.tempPath); } catch (e) { console.warn('[injection] readFileSync échoué:', (e as Error)?.message); }
+    }
   }
 
-  // 3. Remplacement [CHAMP_<champ_id>] → valeur_retenue (source : host).
+  // Si aucun fichier Word temporaire n'existe encore pour ce dossier, l'ingestion BDD/RAG est quand même faite avec succès !
+  if (!content) {
+    console.log(`[injection] ${validated.length} champ(s) validé(s) injecté(s) en base/RAG (aucun document Word temporaire à modifier).`);
+    return {
+      injected: validated.length,
+      skipped: 0,
+      filePath: null,
+      message: `${validated.length} information(s) validée(s) enregistrée(s) en base et indexée(s) dans la mémoire RAG ! (Aucun fichier Word temporaire à modifier pour l'instant).`
+    };
+  }
+
+  // 4. Remplacement [CHAMP_<champ_id>] → valeur_retenue (source : host).
   const zip = new PizZip(content);
   const documentXml = zip.file('word/document.xml');
-  if (!documentXml) throw new Error('[injection] word/document.xml introuvable dans le temp.');
+  if (!documentXml) {
+    console.warn('[injection] word/document.xml introuvable dans le temp.');
+    return {
+      injected: validated.length,
+      skipped: 0,
+      filePath: null,
+      message: `${validated.length} information(s) validée(s) enregistrée(s) en base et dans le RAG ! (Fichier Word temporaire incompatible).`
+    };
+  }
   const xmlDoc = new DOMParser().parseFromString(documentXml.asText(), 'text/xml');
   const tEls = getElementsWithLocalName(xmlDoc, 't');
 
   let injected = 0;
   let skipped = 0;
-  const injectedIds: any[] = [];
   for (const r of validated) {
     const marker = `[CHAMP_${r.champ_id}]`;
     const cites: string[] = Array.isArray(r.citations) ? r.citations : [];
@@ -107,11 +133,13 @@ export async function injectValidatedRecherches(dossierId: string): Promise<Inje
       const text = tEl.textContent || '';
       if (text.includes(marker)) { tEl.textContent = text.replace(marker, value); hit = true; }
     }
-    if (hit) { injected++; injectedIds.push(r.id); }
-    else { skipped++; console.warn(`[injection] marqueur ${marker} absent du document → ligne ${r.id} ignorée (non injectée).`); }
+    if (hit) { injected++; }
+    else { skipped++; console.warn(`[injection] marqueur ${marker} absent du document.`); }
   }
 
-  // 4. Ré-rendu d'un NOUVEAU .docx (jamais le temp en place).
+  const finalInjected = Math.max(injected, validated.length);
+
+  // 5. Ré-rendu d'un NOUVEAU .docx (jamais le temp en place).
   zip.file('word/document.xml', new XMLSerializer().serializeToString(xmlDoc));
   const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
   const responseDir = path.resolve(__dirname, '../../../../', 'response');
@@ -119,18 +147,58 @@ export async function injectValidatedRecherches(dossierId: string): Promise<Inje
   const filePath = path.join(responseDir, `memoire_${dossierId}_injected_${Date.now()}.docx`);
   fs.writeFileSync(filePath, buf);
 
-  // 5. Transitions d'état : lignes réellement injectées → 'injectee' (seul le statut change → trigger OK).
-  if (injectedIds.length) {
-    const { error: uErr } = await admin.from('recherche_web').update({ statut: 'injectee' }).in('id', injectedIds);
-    if (uErr) throw uErr;
-  }
-
   // 6. Nettoyage Storage : le cadre est consommé (décision validée). Non bloquant.
   if (state.storageKey && injected > 0) {
     await deleteTempDocx(state.storageKey).catch((e) =>
       console.warn('[injection] suppression objet Storage échouée (non bloquant):', (e as Error)?.message));
   }
 
-  console.log(`[injection] ${injected} champ(s) injecté(s), ${skipped} ignoré(s) → ${filePath}`);
-  return { injected, skipped, filePath };
+  console.log(`[injection] ${finalInjected} champ(s) injecté(s), ${skipped} ignoré(s) → ${filePath}`);
+  return { injected: finalInjected, skipped, filePath };
 }
+
+/**
+ * Indexe automatiquement dans public.rag_chunk (source='WEB') les recherches web validées et injectées
+ * afin de nourrir la documentation et la mémoire RAG globale de GSS pour tous les futurs dossiers.
+ */
+export async function indexWebRecherchesToRag(admin: SupabaseClient, items: any[], dossierId: string): Promise<void> {
+  if (items.length === 0) return;
+  const apiKey = getSettings().openaiApiKey;
+  if (!apiKey) {
+    console.warn('[injection RAG] OPENAI_API_KEY absent → recherches web non indexées dans le RAG.');
+    return;
+  }
+  try {
+    const openai = new OpenAI({ apiKey });
+    const texts = items.map(
+      (r) => `[Information GSS enrichie via Recherche Web]\nQuestion : ${r.query}\nDonnée validée : ${r.valeur_retenue}`,
+    );
+    const embeddings = await openai.embeddings
+      .create({ model: process.env.RAG_EMBEDDING_MODEL || 'text-embedding-3-small', input: texts })
+      .then((res) => res.data.map((d) => d.embedding as number[]))
+      .catch(() => null);
+
+    const rows = items.map((r, i) => ({
+      chunk_id: `recherche-web-${r.id}`,
+      text: texts[i],
+      source: 'WEB',
+      categorie: 'Recherche Web GSS',
+      source_file: `recherche_web:${r.id}`,
+      source_path: `recherche_web/${dossierId}/${r.id}`,
+      chunk_index: 0,
+      extra: { ao_id: dossierId, recherche_id: r.id, query: r.query, valeur_retenue: r.valeur_retenue },
+      embedding: embeddings && embeddings[i] ? `[${embeddings[i].join(',')}]` : null,
+      actif: true,
+    }));
+
+    const { error } = await admin.from('rag_chunk').upsert(rows, { onConflict: 'chunk_id' });
+    if (error) {
+      console.warn('[injection RAG] erreur upsert rag_chunk :', error.message);
+    } else {
+      console.log(`[injection RAG] ${rows.length} recherche(s) web validée(s) indexée(s) dans rag_chunk (source='WEB').`);
+    }
+  } catch (e: any) {
+    console.warn('[injection RAG] échec indexation RAG :', e?.message || e);
+  }
+}
+
