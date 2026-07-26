@@ -1,3 +1,6 @@
+import WebSocket from 'ws';
+(global as any).WebSocket = WebSocket;
+
 import express from 'express';
 import cors from 'cors';
 import routes from './api/routes';

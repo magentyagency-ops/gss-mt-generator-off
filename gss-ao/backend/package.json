@@ -26,7 +26,8 @@
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
     "pg": "^8.12.0",
-    "pizzip": "^3.2.0"
+    "pizzip": "^3.2.0",
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@marp-team/marp-cli": "^4.4.0",
@@ -36,6 +37,7 @@
     "@types/node": "^20.12.12",
     "@types/pdf-parse": "^1.1.4",
     "@types/pg": "^8.11.6",
+    "@types/ws": "^8.18.1",
     "nodemon": "^3.1.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5",
