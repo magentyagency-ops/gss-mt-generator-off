@@ -39,6 +39,88 @@ const EMBED_MODEL = process.env.EMBEDDING_MODEL_MEMOIRE || 'text-embedding-3-sma
 // Bucket privé où sont archivées les pièces des dossiers (cf. routes.ts /dce/upload).
 const USER_FILES_BUCKET = 'user-files';
 
+// Mots vides : trop fréquents pour porter le SUJET d'un manque ou d'une question. Sans cette liste,
+// deux phrases quelconques d'un DCE de sécurité partagent toujours « les », « des », « sécurité »…
+const MOTS_VIDES = new Set([
+  'les', 'des', 'aux', 'une', 'unes', 'uns', 'par', 'sur', 'sous', 'pour', 'dans', 'avec', 'sans', 'cette', 'ces',
+  'son', 'ses', 'leur', 'leurs', 'votre', 'vos', 'notre', 'nos', 'que', 'qui', 'quel', 'quelle', 'quels', 'quelles',
+  'est', 'sont', 'etre', 'doit', 'doivent', 'peut', 'peuvent', 'tout', 'toute', 'tous', 'toutes', 'autre', 'autres',
+  'plus', 'moins', 'ainsi', 'donc', 'lors', 'apres', 'avant', 'entre', 'chaque', 'meme', 'selon', 'afin', 'cas',
+  'candidat', 'entreprise', 'societe', 'titulaire', 'marche', 'question', 'section', 'champ', 'total', 'france',
+  'statut', 'exact', 'officiel', 'officielle', 'adresse', 'nom', 'numero', 'date',
+]);
+
+/**
+ * Mots significatifs d'un libellé : minuscules, sans accents, ≥ 3 lettres, hors mots vides.
+ * Utilisé pour comparer un manque à une question déjà posée — comparaison MOT À MOT, jamais en
+ * sous-chaîne (« les » ne doit pas matcher « télésurveillance », ni « prise » « entreprise »).
+ */
+export function significantWords(texte: string): Set<string> {
+  const norm = texte.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return new Set(
+    norm.split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !MOTS_VIDES.has(w)),
+  );
+}
+
+/**
+ * Découpe un contexte DCE en segments d'au plus `maxLen` caractères, en coupant EN PRIORITÉ sur les
+ * frontières de pièces (« \n\n--- label ---\n », posées par getDceContext) pour qu'un CCTP ne soit
+ * pas scindé au milieu d'un article. Repli : coupure sur un saut de ligne, puis coupure sèche.
+ * Un DCE qui tient dans `maxLen` ressort en un seul segment (cas le plus fréquent).
+ */
+export function splitOnPieceBoundaries(text: string, maxLen: number): string[] {
+  if (text.length <= maxLen) return [text];
+  const re = /\n\n--- .+? ---\n/g;
+  // Bornes des pièces : [0, début pièce 2, …, fin du texte].
+  const bounds: number[] = [0];
+  for (let m = re.exec(text); m; m = re.exec(text)) if (m.index > 0) bounds.push(m.index);
+  bounds.push(text.length);
+
+  /** Tronçonne un bloc plus long que maxLen, de préférence sur un saut de ligne. */
+  const hardSplit = (block: string): string[] => {
+    const parts: string[] = [];
+    let rest = block;
+    while (rest.length > maxLen) {
+      const window = rest.slice(0, maxLen);
+      const cut = window.lastIndexOf('\n');
+      const end = cut > maxLen * 0.5 ? cut : maxLen;
+      parts.push(rest.slice(0, end));
+      rest = rest.slice(end);
+    }
+    if (rest.length > 0) parts.push(rest);
+    return parts;
+  };
+
+  const out: string[] = [];
+  let current = '';
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const piece = text.slice(bounds[i], bounds[i + 1]);
+    if (piece.length > maxLen) {
+      // Pièce plus grosse que la fenêtre : on ferme le segment courant, puis on la tronçonne.
+      if (current) { out.push(current); current = ''; }
+      out.push(...hardSplit(piece));
+      continue;
+    }
+    if (current.length + piece.length <= maxLen) current += piece;
+    else { out.push(current); current = piece; }
+  }
+  if (current) out.push(current);
+  return out.filter((s) => s.trim().length > 0);
+}
+
+// Détection des manques, cas SANS CADRE : nombre maximum d'exigences détaillées confrontées à la
+// RAG. Un CCTP est souvent rédigé en listes à puces ; sans plafond, l'extraction en sort plusieurs
+// centaines (une par puce) → liste de manques inexploitable et coût inutile. Au-delà, une passe de
+// consolidation fusionne les exigences qui relèvent du même moyen.
+const MAX_DETAILED_REQUIREMENTS = Number(process.env.MAX_DETAILED_REQUIREMENTS || 80);
+
+// Version de l'algorithme de détection des manques. À INCRÉMENTER dès que la méthode change
+// (extraction, jugement, filtrage) : les dossiers analysés avec une version antérieure sont
+// automatiquement réanalysés au lieu de servir un cache obsolète (cf. detectMissingInfo).
+//   1 → thèmes généraux jugés directement face à la RAG
+//   2 → exigences détaillées + consolidation, et filtre « déjà recherché » scopé au dossier
+const DETECTION_VERSION = 2;
+
 /** Un manque détecté, avec sa criticité (bloquant = éliminatoire, facultatif = bonus, normal). */
 type MissingFieldDetected = { id: string; label: string; context: string; criticite: 'bloquant' | 'facultatif' | 'normal' };
 
@@ -2449,22 +2531,26 @@ Renvoie un JSON valide :
     if (!client || !fields.length) return fields;
     try {
       await client.connect();
-      const resWeb = await client.query(`select query from public.recherche_web where query is not null`);
-      const resQ = await client.query(`select question from public.question_interne where question is not null and reponse_contenu is not null`);
+      // Scopé AU DOSSIER : une recherche menée pour un autre marché ne dit rien de celui-ci.
+      const resWeb = await client.query(`select query from public.recherche_web where query is not null and dossier_id = $1`, [dossierId]);
+      const resQ = await client.query(`select question from public.question_interne where question is not null and reponse_contenu is not null and ao_id = $1`, [dossierId]);
       const existingQueries = [
-        ...resWeb.rows.map(r => (r.query || '').toLowerCase()),
-        ...resQ.rows.map(r => (r.question || '').toLowerCase()),
-      ];
+        ...resWeb.rows.map(r => String(r.query || '')),
+        ...resQ.rows.map(r => String(r.question || '')),
+      ].filter((q) => q.trim() !== '');
       if (!existingQueries.length) return fields;
+      const indexed = existingQueries.map((q) => ({ texte: q, mots: significantWords(q) }));
       return fields.filter(f => {
-        const flab = f.label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-        const words = flab.split(/[^a-z0-9]+/).filter(w => w.length >= 3 && !w.match(/^(pour|dans|avec|cette|votre|notre|leur|candidat|entreprise|societe|titulaire|marche|question|section|champ|total|france|statut)$/));
-        if (!words.length) return true;
-        for (const eq of existingQueries) {
-          const eqNorm = eq.normalize('NFD').replace(/[̀-ͯ]/g, '');
-          const matches = words.filter(w => eqNorm.includes(w));
-          if (matches.length >= Math.min(1, words.length)) {
-            console.log(`[MemoireGenerator] Manque ignoré car déjà recherché/présent dans BDD : "${f.label}" (~ "${eq}")`);
+        const uniques = significantWords(f.label);
+        if (uniques.size === 0) return true;
+        for (const { texte, mots } of indexed) {
+          // Recouvrement de SUJET : au moins 2 mots significatifs en commun ET 60 % des mots du
+          // manque. Comparaison mot à mot (pas en sous-chaîne : « les » ne doit pas matcher
+          // « télésurveillance », ni « prise » « entreprise »).
+          const communs = [...uniques].filter((w) => mots.has(w));
+          const seuil = Math.max(2, Math.ceil(uniques.size * 0.6));
+          if (communs.length >= seuil) {
+            console.log(`[MemoireGenerator] Manque ignoré car déjà recherché/présent dans BDD : "${f.label}" (~ "${texte}")`);
             return false;
           }
         }
@@ -2546,22 +2632,172 @@ Renvoie un JSON valide :
   }
 
   /**
+   * Second niveau d'extraction (cas SANS CADRE) : les exigences ATOMIQUES et VÉRIFIABLES du DCE,
+   * rattachées aux thèmes généraux d'extractRequirementsList.
+   *
+   * Pourquoi : les thèmes généraux (« Main courante et traçabilité », 2-6 mots, sans chiffre ni
+   * délai) sont trop larges pour être confrontés à la RAG — n'importe quel passage GSS vaguement
+   * proche les fait passer « couvert », et la complétude sort systématiquement à ~100 %. Ce sont les
+   * exigences fines (garanties techniques attendues, engagements de délai, procédures nommées) qui
+   * révèlent ce que la base de connaissance ne sait pas prouver. Les thèmes restent utiles pour le
+   * PLAN du mémoire ; les exigences fines servent au diagnostic de couverture.
+   *
+   * Volontairement générique : aucune règle propre à un marché ou à un type de site.
+   */
+  private async extractDetailedRequirements(
+    dceContext: string,
+    themes: Array<{ label: string; criticite: 'bloquant' | 'facultatif' | 'normal' }>,
+  ): Promise<Array<{ label: string; theme?: string; ref?: string; criticite: 'bloquant' | 'facultatif' | 'normal' }>> {
+    const themeList = themes.map((t) => `- ${t.label}`).join('\n') || '(aucun thème pré-extrait)';
+
+    // Le DCE assemblé peut dépasser la fenêtre d'un appel (getDceContext va jusqu'à 240k car ; un
+    // seul CCTP volumineux en fait déjà ~110k). Tronquer ferait silencieusement disparaître les
+    // exigences des dernières pièces (souvent CCAP, BPU et annexes). On découpe donc sur les
+    // frontières de pièces (« --- label --- », posées par getDceContext) et on extrait segment par
+    // segment. Un seul appel pour la grande majorité des DCE ; deux ou trois pour les plus gros.
+    const segments = splitOnPieceBoundaries(dceContext, 110_000);
+    if (segments.length > 1) {
+      console.log(`[MemoireGenerator] extractDetailedRequirements : DCE de ${dceContext.length} car → ${segments.length} segments.`);
+    }
+    const all: Array<{ label: string; theme?: string; ref?: string; criticite: 'bloquant' | 'facultatif' | 'normal' }> = [];
+    for (const [n, segment] of segments.entries()) {
+      all.push(...await this.extractDetailedRequirementsFromSegment(segment, themeList, n + 1, segments.length));
+    }
+
+    // Dédoublonnage sur le libellé normalisé (l'IA répète parfois une exigence d'un article à
+    // l'autre, et deux segments peuvent se recouper sur une même obligation).
+    const seen = new Set<string>();
+    const uniq = all.filter((x) => {
+      const k = x.label.toLowerCase().replace(/\s+/g, ' ').trim();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    if (uniq.length <= MAX_DETAILED_REQUIREMENTS) return uniq;
+    console.log(`[MemoireGenerator] extractDetailedRequirements : ${uniq.length} exigences → consolidation (max ${MAX_DETAILED_REQUIREMENTS}).`);
+    return await this.consolidateRequirements(uniq);
+  }
+
+  /** Un appel d'extraction d'exigences sur UN segment de DCE (cf. extractDetailedRequirements). */
+  private async extractDetailedRequirementsFromSegment(
+    segment: string,
+    themeList: string,
+    numero: number,
+    total: number,
+  ): Promise<Array<{ label: string; theme?: string; ref?: string; criticite: 'bloquant' | 'facultatif' | 'normal' }>> {
+    // Quota par segment : le plafond global reste MAX_DETAILED_REQUIREMENTS (la consolidation
+    // repasse derrière), mais on évite qu'un segment à lui seul sature la liste.
+    const cible = Math.max(15, Math.round(MAX_DETAILED_REQUIREMENTS / total));
+    const content = await this.callOpenAI(
+      [
+        {
+          role: 'system',
+          content:
+            "Tu extrais, à partir d'un DCE de marché de sécurité privée, la liste des EXIGENCES PRÉCISES que le titulaire devra tenir et dont il devra faire la preuve dans son mémoire technique. " +
+            "C'est le niveau DÉTAIL (pas le niveau chapitre) : chaque ligne doit être un engagement VÉRIFIABLE, opposable au titulaire.\n" +
+            "RÈGLES :\n" +
+            "- Une exigence = UNE seule obligation ATOMIQUE. Si un article en contient plusieurs, éclate-les.\n" +
+            "- CONSERVE la donnée qui rend l'exigence vérifiable : le délai, l'effectif, la fréquence, la qualification, le format de livrable, la garantie technique attendue, la périodicité.\n" +
+            "- Formule l'exigence du point de vue de ce que le TITULAIRE doit fournir ou prouver (moyen, procédure, outil, engagement), pas du point de vue de l'acheteur.\n" +
+            "- Rattache chaque exigence à l'UN des thèmes suivants (recopie le libellé exact) :\n" + themeList + "\n" +
+            "  Si aucune ne convient, mets le thème le plus proche.\n" +
+            "- `ref` = repère de localisation dans le DCE (n° d'article, titre de section ou page), pour la traçabilité. Vide si introuvable.\n" +
+            `- Vise au moins ${cible} exigences sur CE segment. Couvre-le en ENTIER, pas seulement son début. Pas de doublon.\n` +
+            "- NE RELÈVE PAS chaque puce du DCE. Une ligne ne mérite d'être extraite que si elle engage un MOYEN, un LIVRABLE, une QUALIFICATION, un DÉLAI ou une PÉRIODICITÉ, ou une GARANTIE TECHNIQUE identifiable.\n" +
+            "- FUSIONNE dans l'exigence de moyen correspondante les formulations génériques de mission (« surveiller », « rendre compte », « être vigilant », « appliquer les consignes ») : elles ne se jugent pas séparément.\n" +
+            "- ÉCARTE le pur formalisme de dépôt (adresse de remise, nombre d'exemplaires, signature électronique).\n" +
+            "- N'invente RIEN : chaque exigence doit être réellement écrite dans le DCE.",
+        },
+        {
+          role: 'user',
+          content:
+            `=== DCE${total > 1 ? ` (segment ${numero}/${total})` : ''} ===\n${segment}\n\n` +
+            'Renvoie un JSON : {"items":[{"label":"exigence précise et vérifiable","theme":"libellé du thème","ref":"art. / section / page","criticite":"bloquant|facultatif|normal"}]}',
+        },
+      ],
+      0.2, `Extraction exigences DCE (détaillées${total > 1 ? ` ${numero}/${total}` : ''})`, true,
+    );
+    try {
+      const d = JSON.parse(content || '{}');
+      return (Array.isArray(d.items) ? d.items : [])
+        .map((c: any) => ({
+          label: String(c?.label ?? '').trim(),
+          theme: c?.theme ? String(c.theme).trim() : undefined,
+          ref: c?.ref ? String(c.ref).trim() : undefined,
+          criticite: normCriticite(c?.criticite),
+        }))
+        .filter((x: any) => x.label !== '');
+    } catch {
+      console.warn(`[MemoireGenerator] extractDetailedRequirements DIAG : JSON illisible (segment ${numero}/${total}).`);
+      return [];
+    }
+  }
+
+  /**
+   * Ramène une liste d'exigences trop granulaire sous MAX_DETAILED_REQUIREMENTS en FUSIONNANT celles
+   * qui relèvent du même moyen — sans perdre de sujet : un libellé fusionné doit couvrir l'ensemble
+   * des exigences qu'il absorbe. Repli sûr : en cas d'échec IA, troncature simple (bloquants d'abord).
+   */
+  private async consolidateRequirements(
+    items: Array<{ label: string; theme?: string; ref?: string; criticite: 'bloquant' | 'facultatif' | 'normal' }>,
+  ): Promise<Array<{ label: string; theme?: string; ref?: string; criticite: 'bloquant' | 'facultatif' | 'normal' }>> {
+    const payload = items.map((x, i) => ({ i, label: x.label, theme: x.theme || '', ref: x.ref || '', criticite: x.criticite }));
+    const content = await this.callOpenAI(
+      [
+        {
+          role: 'system',
+          content:
+            "On te donne une liste d'exigences extraites d'un DCE de sécurité privée. Elle est TROP GRANULAIRE (une entrée par puce du document). " +
+            `Consolide-la en AU PLUS ${MAX_DETAILED_REQUIREMENTS} exigences.\n` +
+            "RÈGLES :\n" +
+            "- FUSIONNE les exigences qui se tiennent par le même MOYEN (même procédure, même outil, même livrable, même qualification). Le libellé fusionné doit COUVRIR tout ce qu'il absorbe — ne perds aucun sujet.\n" +
+            "- CONSERVE les données vérifiables présentes (délais, effectifs, fréquences, périodicités, garanties techniques, formats de livrable) : elles sont ce qui rend l'exigence contrôlable.\n" +
+            "- Garde le `theme` d'origine et une `ref` représentative.\n" +
+            "- `criticite` du groupe = la plus forte des exigences fusionnées (bloquant > normal > facultatif).\n" +
+            "- N'invente aucune exigence nouvelle.",
+        },
+        { role: 'user', content: `Exigences (JSON) :\n${JSON.stringify(payload)}\n\nRenvoie un JSON : {"items":[{"label":"...","theme":"...","ref":"...","criticite":"bloquant|facultatif|normal"}]}` },
+      ],
+      0.1, 'Consolidation exigences DCE', true,
+    );
+    try {
+      const d = JSON.parse(content || '{}');
+      const out = (Array.isArray(d.items) ? d.items : [])
+        .map((c: any) => ({
+          label: String(c?.label ?? '').trim(),
+          theme: c?.theme ? String(c.theme).trim() : undefined,
+          ref: c?.ref ? String(c.ref).trim() : undefined,
+          criticite: normCriticite(c?.criticite),
+        }))
+        .filter((x: any) => x.label !== '')
+        .slice(0, MAX_DETAILED_REQUIREMENTS);
+      if (out.length > 0) return out;
+    } catch { /* repli ci-dessous */ }
+    console.warn('[MemoireGenerator] consolidateRequirements : échec IA → troncature (bloquants prioritaires).');
+    const rank = (c: string) => (c === 'bloquant' ? 0 : c === 'normal' ? 1 : 2);
+    return [...items].sort((a, b) => rank(a.criticite) - rank(b.criticite)).slice(0, MAX_DETAILED_REQUIREMENTS);
+  }
+
+  /**
    * Détection FONDÉE SUR LA RAG : pour CHAQUE exigence/champ, recherche sémantique dans la base de
    * connaissance (rag_chunk) → passages GSS les plus proches → l'IA juge COUVERT vs MANQUANT.
    * Renvoie null si la RAG n'est pas disponible (→ l'appelant retombe sur l'ancienne méthode).
    */
   private async detectMissingViaRag(
-    requirements: Array<{ label: string; theme?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal' }>,
+    requirements: Array<{ label: string; theme?: string; ref?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal' }>,
   ): Promise<{ fields: MissingFieldDetected[]; total: number; exigences: any[] } | null> {
     if (requirements.length === 0) return null;
     const gss = await this.loadGssChunksFromDb();
     if (!gss || gss.length === 0) return null;   // pas de RAG → repli sur l'ancienne méthode
 
-    const embs = await this.embedTexts(requirements.map((r) => r.label));
+    // La requête d'embedding porte le thème EN PLUS du libellé : une exigence fine (« export des
+    // données au format PDF et Excel ») est sinon trop pauvre pour retrouver la bonne fiche GSS.
+    const queries = requirements.map((r) => (r.theme ? `${r.theme} — ${r.label}` : r.label));
+    const embs = await this.embedTexts(queries);
     const withCtx = requirements.map((r, i) => {
-      const top = this.retrieve(embs[i] || [], gss, 5, r.label);
+      const top = this.retrieve(embs[i] || [], gss, 6, queries[i]);
       return {
-        i, label: r.label, criticite: r.criticite, theme: r.theme, kind: r.kind,
+        i, label: r.label, criticite: r.criticite, theme: r.theme, ref: r.ref, kind: r.kind,
         ctx: top.map((c) => `- [${c.label}] ${c.text.replace(/\s+/g, ' ').slice(0, 350)}`).join('\n'),
       };
     });
@@ -2571,7 +2807,10 @@ Renvoie un JSON valide :
     const BATCH = 12;
     for (let b = 0; b < withCtx.length; b += BATCH) {
       const batch = withCtx.slice(b, b + BATCH);
-      const payload = batch.map((x) => ({ index: x.i, element: x.label, type: x.kind || 'exigence', passages_gss: x.ctx || '(aucun passage proche)' }));
+      const payload = batch.map((x) => ({
+        index: x.i, element: x.label, theme: x.theme || '', type: x.kind || 'exigence',
+        passages_gss: x.ctx || '(aucun passage proche)',
+      }));
       const content = await this.callOpenAI(
         [
           {
@@ -2586,7 +2825,12 @@ Renvoie un JSON valide :
               "Pour CHAQUE élément, décide STRICTEMENT :\n" +
               "  • 'couvert' = la base de connaissance GSS contient RÉELLEMENT l'information ou le moyen permettant de renseigner cet élément, et c'est PROUVÉ par les passages fournis.\n" +
               "  • 'manquant' = les passages ne contiennent PAS cette information → l'élément est À COMPLÉTER (à demander en interne ou à rechercher).\n" +
-              "RÈGLES : n'invente RIEN. Si les passages ne prouvent pas explicitement l'information, c'est MANQUANT. Toute information SPÉCIFIQUE À CE MARCHÉ / CE SITE (donc absente d'une base générique GSS) est MANQUANTE. En cas de doute → MANQUANT.",
+              "RÈGLES : n'invente RIEN. Si les passages ne prouvent pas explicitement l'information, c'est MANQUANT. En cas de doute → MANQUANT.\n" +
+              "CAS 'champ' / 'case' / 'tableau' (cadre imposé) : toute information SPÉCIFIQUE À CE MARCHÉ / CE SITE (donc absente d'une base générique GSS) est MANQUANTE.\n" +
+              "CAS 'exigence' : la question est « la base GSS décrit-elle le MOYEN (procédure, outil, organisation, qualification, matériel, engagement) qui permet de tenir cette exigence, et de l'écrire dans le mémoire ? ».\n" +
+              "  • Le chiffre du marché (délai, effectif, fréquence) vient du DCE : son absence de la base N'EST PAS un manque. Ce qui compte est le MOYEN correspondant.\n" +
+              "  • MAIS le moyen doit répondre à CE QUI EST DEMANDÉ : si l'exigence porte sur une garantie, un livrable, une périodicité ou une caractéristique technique précise et que les passages n'en parlent pas — ou décrivent un dispositif d'une AUTRE nature (organisation différente, autre type de site, autre mode d'intervention) — alors c'est MANQUANT.\n" +
+              "  • Un passage seulement THÉMATIQUEMENT proche (même sujet général, sans la réponse) ne vaut PAS couverture.",
           },
           { role: 'user', content: `Éléments + passages GSS (JSON) :\n${JSON.stringify(payload)}\n\nRenvoie un JSON : {"resultats":[{"index":<n>,"statut":"couvert|manquant"}]}` },
         ],
@@ -2603,12 +2847,15 @@ Renvoie un JSON valide :
         const statut = map.get(x.i);
         const manquant = statut ? statut.includes('manqu') : true;   // défaut prudent : manquant
         const kindLabel = x.kind === 'case' ? 'Case à cocher du cadre' : x.kind === 'tableau' ? 'Cellule/colonne de tableau du cadre' : x.kind === 'champ' ? 'Champ à renseigner du cadre' : null;
-        exigences.push({ id: `ex-${x.i}`, theme: x.theme || '', exigence: x.label, couverture: manquant ? 'écart' : 'couvert', criticite: x.criticite, ...(x.kind ? { kind: x.kind } : {}) });
+        exigences.push({ id: `ex-${x.i}`, theme: x.theme || '', exigence: x.label, couverture: manquant ? 'écart' : 'couvert', criticite: x.criticite, ...(x.ref ? { ref: x.ref } : {}), ...(x.kind ? { kind: x.kind } : {}) });
         if (manquant) {
+          // Contexte lisible par l'humain qui devra aller chercher l'info (sollicitation interne /
+          // recherche web) : le thème situe la demande, la référence renvoie à l'article du DCE.
+          const situe = [x.theme, x.ref].filter(Boolean).join(' — ');
           missing.push({
             id: `req-${x.i}`,
             label: x.label,
-            context: `${kindLabel ? kindLabel + '. ' : ''}Non couvert par la base de connaissance GSS (recherche sémantique RAG).`,
+            context: `${kindLabel ? kindLabel + '. ' : ''}${situe ? `${situe}. ` : ''}Non couvert par la base de connaissance GSS (recherche sémantique RAG).`,
             criticite: x.criticite,
           });
         }
@@ -2700,12 +2947,18 @@ Renvoie un JSON valide :
     // Idempotence : la détection ne se fait QU'UNE FOIS. Si elle a déjà tourné pour ce dossier
     // (missingDetectedAt présent), on renvoie la liste en cache — sûr d'appeler depuis plusieurs
     // endroits (upload + repli fiche dossier). `force:true` permet de la relancer explicitement.
+    // Le cache est INVALIDÉ quand l'algorithme change (DETECTION_VERSION) : sans cela, un dossier
+    // analysé avec une version antérieure garde indéfiniment son ancien résultat, et le front —
+    // qui n'envoie jamais `force` — continue d'afficher une liste obsolète.
     if (!opts.force) {
       const existing = await DB.getDossier(dossierId);
       const st: any = existing?.memoire_cadre_state;
       if (st && st.missingDetectedAt && Array.isArray(st.missingFields)) {
-        console.log(`[MemoireGenerator] Détection déjà faite (${st.missingFields.length}) — cache renvoyé.`);
-        return { missingFields: st.missingFields, completude: st.completude ?? null, contradictions: st.contradictions ?? [], cached: true };
+        if (st.detectionVersion === DETECTION_VERSION) {
+          console.log(`[MemoireGenerator] Détection déjà faite (${st.missingFields.length}) — cache renvoyé.`);
+          return { missingFields: st.missingFields, completude: st.completude ?? null, contradictions: st.contradictions ?? [], cached: true };
+        }
+        console.log(`[MemoireGenerator] Cache de détection obsolète (v${st.detectionVersion ?? '?'} ≠ v${DETECTION_VERSION}) → relance.`);
       }
     }
 
@@ -2735,8 +2988,16 @@ Renvoie un JSON valide :
       detected = await this.judgeTemplateFieldsVsRag(requirements, gssContext);
       console.log(`[MemoireGenerator] detectMissing DIAG : cadre holistique → ${detected.fields.length} à compléter / ${detected.total} champs.`);
     } else {
-      // SANS CADRE → besoins CCTP GÉNÉRAUX comparés à la base RAG (recherche sémantique par thème).
-      const viaRag = await this.detectMissingViaRag(requirements);
+      // SANS CADRE → détection en DEUX NIVEAUX :
+      //   1. thèmes généraux (`requirements`, déjà extraits) → structure / plan du mémoire ;
+      //   2. exigences ATOMIQUES rattachées à ces thèmes → ce qui est réellement confronté à la RAG.
+      // Juger la couverture sur les thèmes seuls sortait ~100 % de complétude sur tous les DCE :
+      // un libellé de 2-6 mots trouve toujours un passage GSS thématiquement proche. Les exigences
+      // fines (garantie technique, livrable, périodicité, engagement de délai) sont, elles,
+      // discriminantes. Repli sur les thèmes si l'extraction fine échoue.
+      const detailed = await this.extractDetailedRequirements(dceContext, requirements);
+      console.log(`[MemoireGenerator] detectMissing DIAG : exigences détaillées=${detailed.length}${detailed.length === 0 ? ' → repli sur les thèmes généraux' : ''}`);
+      const viaRag = await this.detectMissingViaRag(detailed.length > 0 ? detailed : requirements);
       console.log(`[MemoireGenerator] detectMissing DIAG : RAG=${viaRag ? `${viaRag.fields.length} manque(s)/${viaRag.total} besoin(s)` : 'INDISPONIBLE → repli ancienne méthode'}`);
       detected = viaRag ?? await this.detectMissingFromRequirements(dceContext, gssContext);
     }
@@ -2778,6 +3039,7 @@ Renvoie un JSON valide :
         completude,
         contradictions,
         ...(exigences ? { exigences } : {}),
+        detectionVersion: DETECTION_VERSION,
         missingDetectedAt: new Date().toISOString(),
       },
     });

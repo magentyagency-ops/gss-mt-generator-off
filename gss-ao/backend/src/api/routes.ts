@@ -7,10 +7,11 @@ import OpenAI from 'openai';
 import { DB, DossierRecord, MemoiresDB, FichiersDB, remainingGenerations, QuotaError } from '../core/db';
 import { initProgress, finishProgress } from '../core/progress';
 import { extractRcWithLLM, extractCctpWithLLM } from '../analysis/llmExtractor';
+import { pickBestPieces } from '../ingestion/dceClassifier';
 import { requireAuth } from './authMiddleware';
 import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeamBulk, matchQuestionsToPeople, Personne, MissingField } from '../generation/missing_info_resolver';
 import { injectValidatedRecherches } from '../generation/inject_recherches';
-import { learnSollicitationsForDossier } from '../generation/learn_sollicitation';
+import { learnSollicitationsForDossier, learnPendingSollicitations } from '../generation/learn_sollicitation';
 import { getSettings } from '../core/config';
 import { getScopedClient, requestContext } from '../core/supabase';
 
@@ -241,6 +242,19 @@ router.post('/dce/upload', upload.array('files'), async (req: Request, res: Resp
     let rcData: any = null;
     let cctpData: any = null;
 
+    // Quelle pièce parser comme RC / comme CCTP ? On tranche AVANT la boucle, sur l'ensemble des
+    // noms : un DCE contient plusieurs candidats plausibles (« 4-CCTP 2026-08.docx » à la racine,
+    // « CCTP SECURITE GARDIENNAGE.pdf » dans un sous-dossier, sept « Annexe N CCTP - … ») et
+    // l'ancien test `nom.includes('cctp') || nom.includes('cahier')` retenait le PREMIER venu,
+    // souvent une annexe ou le CCAP. pickBestPieces retient le nom le plus explicite.
+    const uploads = (req.files && Array.isArray(req.files) ? req.files : []).map((file) => ({
+      file,
+      rel: Buffer.from(file.originalname, 'latin1').toString('utf8').replace(/\\/g, '/').replace(/^\/+/, ''),
+    }));
+    const bestPieces = pickBestPieces(uploads, (u) => u.rel);
+    const rcFile = bestPieces.rc?.item.file;
+    const cctpFile = bestPieces.cctp?.item.file;
+
     if (req.files && Array.isArray(req.files)) {
       for (const file of req.files) {
         // Nom d'origine (corrige l'encodage latin1 par défaut de multer). Peut contenir un CHEMIN
@@ -291,14 +305,12 @@ router.post('/dce/upload', upload.array('files'), async (req: Request, res: Resp
             tailleOctets: buffer.length,
           });
 
-          const lowerName = path.basename(finalName).toLowerCase();
-          // Le nom de fichier n'est qu'un indice de classification : l'extraction est pilotée par LLM.
-          const looksLikeRc = lowerName.includes('rc') || lowerName.includes('reglement') || lowerName.includes('règlement') || lowerName.includes('consultation');
-          const looksLikeCctp = lowerName.includes('cctp') || lowerName.includes('technique') || lowerName.includes('cahier');
-          if (looksLikeRc && !rcData) {
+          // Le classement (rcFile / cctpFile) a été décidé avant la boucle sur TOUS les noms ;
+          // ici on ne fait qu'extraire, tant que le fichier temporaire existe encore.
+          if (file === rcFile && !rcData) {
             try { rcData = await extractRcWithLLM(workPath); } catch (e) { console.warn("Erreur extraction RC:", e); }
           }
-          if (looksLikeCctp && !cctpData) {
+          if (file === cctpFile && !cctpData) {
             try { cctpData = await extractCctpWithLLM(workPath); } catch (e) { console.warn("Erreur extraction CCTP:", e); }
           }
         } finally {
@@ -376,6 +388,18 @@ router.post('/dossiers/:id/detect-missing', async (req: Request, res: Response) 
 router.post('/dossiers/:id/sollicitations/learn', async (req: Request, res: Response) => {
   try {
     const result = await learnSollicitationsForDossier(req.params.id);
+    res.json({ status: 'ok', ...result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Même chose TOUS DOSSIERS confondus : rattrape les réponses reçues par e-mail qui ne sont pas
+// encore dans le RAG. Tourne déjà en tâche de fond (core/sollicitation_watcher) ; cet endpoint sert
+// à forcer un passage immédiat sans attendre le tour suivant.
+router.post('/sollicitations/learn-pending', async (_req: Request, res: Response) => {
+  try {
+    const result = await learnPendingSollicitations();
     res.json({ status: 'ok', ...result });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

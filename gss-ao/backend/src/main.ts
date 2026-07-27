@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import routes from './api/routes';
+import { startSollicitationWatcher } from './core/sollicitation_watcher';
 
 const app = express();
 const port = process.env.PORT || 8000;
@@ -17,6 +18,8 @@ app.use('/api', routes);
 
 const server = app.listen(port, () => {
   console.log(`GSS-AO Backend server listening at http://localhost:${port}`);
+  // Rattrapage des réponses de sollicitation reçues par e-mail → RAG, sans dépendre de l'app.
+  startSollicitationWatcher();
 });
 
 // La génération d'un mémoire (téléchargement des images de la bibliothèque +

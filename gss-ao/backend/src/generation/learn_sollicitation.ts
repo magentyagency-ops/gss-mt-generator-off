@@ -88,6 +88,22 @@ export interface LearnResult {
  * Idempotent (extra.reply_hash). Ne lève jamais — renvoie un compte-rendu détaillé.
  */
 export async function learnSollicitationsForDossier(dossierId: string): Promise<LearnResult> {
+  return learnSollicitations({ dossierId });
+}
+
+/**
+ * Balayage GLOBAL : toutes les réponses reçues, tous dossiers confondus, qui ne sont pas encore
+ * dans le RAG. C'est ce qui rend l'apprentissage indépendant de l'app — l'Edge Function
+ * inbound-email se contente d'écrire `reponse_contenu`, ce balayage récupère la suite.
+ */
+export async function learnPendingSollicitations(): Promise<LearnResult> {
+  return learnSollicitations({});
+}
+
+/** Cœur commun : affine + indexe les réponses reçues (d'un dossier, ou de tous si `dossierId` est absent). */
+async function learnSollicitations(opts: { dossierId?: string }): Promise<LearnResult> {
+  const { dossierId } = opts;
+  const portee = dossierId ? `dossier ${dossierId}` : 'tous dossiers';
   const empty: LearnResult = { processed: 0, indexed: 0, skipped: 0, details: [] };
   const admin = adminClient();
   if (!admin) return { ...empty, reason: 'supabase_not_configured' };
@@ -96,12 +112,13 @@ export async function learnSollicitationsForDossier(dossierId: string): Promise<
   if (!apiKey) return { ...empty, reason: 'missing_openai_key' };
   const openai = new OpenAI({ apiKey });
 
-  // Réponses reçues de ce dossier (contenu non nul).
-  const { data: rows, error } = await admin
+  // Réponses reçues (contenu non nul), filtrées sur le dossier si demandé.
+  let query = admin
     .from('question_interne')
     .select('id, question_id, ao_id, critere_concerne, reponse_contenu')
-    .eq('ao_id', dossierId)
     .not('reponse_contenu', 'is', null);
+  if (dossierId) query = query.eq('ao_id', dossierId);
+  const { data: rows, error } = await query;
   if (error) return { ...empty, reason: `query_failed: ${error.message}` };
 
   const result: LearnResult = { processed: 0, indexed: 0, skipped: 0, details: [] };
@@ -148,9 +165,9 @@ export async function learnSollicitationsForDossier(dossierId: string): Promise<
       source: 'SOLLICITATION',
       categorie: row.critere_concerne || 'Réponse équipe',
       source_file: `sollicitation:${row.id}`,
-      source_path: `sollicitation/${dossierId}/${row.id}`,
+      source_path: `sollicitation/${row.ao_id}/${row.id}`,
       chunk_index: i,
-      extra: { ao_id: dossierId, question_row: row.id, critere: row.critere_concerne, reply_hash: hash },
+      extra: { ao_id: row.ao_id, question_row: row.id, critere: row.critere_concerne, reply_hash: hash },
       embedding: embeddings[i] ? `[${embeddings[i].join(',')}]` : null,
       actif: true,
     }));
@@ -164,6 +181,10 @@ export async function learnSollicitationsForDossier(dossierId: string): Promise<
     result.details.push({ questionId: row.question_id, indexed: true, reason: 'ok', chunks: chunkRows.length });
   }
 
-  console.log(`[learnSollicitation] dossier ${dossierId} : ${result.indexed} indexée(s), ${result.skipped} ignorée(s) / ${result.processed} réponse(s).`);
+  // Le balayage global tourne en boucle : on ne loggue que s'il s'est passé quelque chose.
+  // Un appel ciblé (depuis l'app) reste tracé dans tous les cas.
+  if (dossierId || result.indexed > 0) {
+    console.log(`[learnSollicitation] ${portee} : ${result.indexed} indexée(s), ${result.skipped} ignorée(s) / ${result.processed} réponse(s).`);
+  }
   return result;
 }

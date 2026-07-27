@@ -14,8 +14,14 @@ const CPV_RE = /\b(\d{8}-\d)\b/g;
 // Sous-critère regex
 const SOUSCRIT_RE = /^(.+?)\s*:\s*(\d+)\s*points?\s*(?:\(([^)]*)\))?[\s,.;]*$/i;
 
-// Section regex
-const SECTION_RE = /^\s*(\d{1,2}(?:\.\d{1,2})?)\s+[–—\-]\s+(.+?)\s*$/;
+// Section regex.
+// Deux formes acceptées, car les RC ne suivent pas tous le gabarit de Rouen :
+//   - « 4.1 – Pièces de la candidature », « Article 7 – Présentation… » : séparateur explicite ;
+//   - « 7.1 Pièces de la candidature »                                 : numéro puis titre, sans
+//     séparateur. Cette 2e forme est ambiguë (« 12 mois de préavis » y ressemble), on exige donc
+//     une initiale MAJUSCULE et on la marque « faible » (cf. `strong` plus bas) pour qu'un vrai
+//     titre l'emporte toujours en cas de collision de numéro.
+const SECTION_RE = /^\s*(?:[Aa]rticles?\s+)?(\d{1,2}(?:\.\d{1,2})?)\s*(?:[–—\-.)]\s*(.+?)|\s+([A-ZÀ-ÝŒ][^\n]{2,120}?))\s*$/;
 
 function stripAccents(s: string): string {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -45,11 +51,14 @@ class Section {
   start: number;
   end: number = -1;
   lines: string[] = [];
+  /** Titre reconnu avec un séparateur explicite (« 4.1 – Titre ») : prioritaire sur « 7.1 Titre ». */
+  strong: boolean;
 
-  constructor(num: string, title: string, start: number) {
+  constructor(num: string, title: string, start: number, strong = true) {
     this.num = num;
     this.title = title;
     this.start = start;
+    this.strong = strong;
   }
 
   get text(): string {
@@ -63,7 +72,8 @@ function splitSections(lines: string[]): Section[] {
     const line = lines[i];
     const m = SECTION_RE.exec(line);
     if (m) {
-      raw.push(new Section(m[1], m[2].trim(), i));
+      // m[2] = titre avec séparateur (fort), m[3] = titre sans séparateur (faible).
+      raw.push(new Section(m[1], (m[2] ?? m[3]).trim(), i, m[2] !== undefined));
     }
   }
 
@@ -74,11 +84,16 @@ function splitSections(lines: string[]): Section[] {
     raw[idx].lines = lines.slice(raw[idx].start + 1, nxt);
   }
 
-  // Deduplicate table of contents: keep the longest section by num
+  // Deduplicate table of contents: keep the longest section by num.
+  // Un titre « fort » (avec séparateur) l'emporte toujours sur un titre « faible » de même
+  // numéro, même plus long : « 12 Mois de préavis » ne doit pas évincer « 12 – Sous-traitance ».
   const byNum: Record<string, Section> = {};
   for (const sec of raw) {
     const prev = byNum[sec.num];
-    if (!prev || sec.text.length > prev.text.length) {
+    if (!prev) { byNum[sec.num] = sec; continue; }
+    if (sec.strong !== prev.strong) {
+      if (sec.strong) byNum[sec.num] = sec;
+    } else if (sec.text.length > prev.text.length) {
       byNum[sec.num] = sec;
     }
   }
@@ -90,36 +105,70 @@ function findSection(sections: Section[], num: string): Section | null {
   return sections.find(s => s.num === num) || null;
 }
 
-const PIECES_CANDIDATURE: [string, string][] = [
-  ['declaration sur l.honneur', "Déclaration sur l'honneur"],
-  ['\\bDC1\\b', "DC1 — Lettre de candidature"],
-  ['\\bDC2\\b', "DC2 — Déclaration du candidat"],
-  ['note de pr[ée]sentation', "Note de présentation de l'entreprise"],
-  ['r[ée]f[ée]rences.*?(moins de\\s*)?3\\s*ans|liste.*?r[ée]f[ée]rences', "Liste de références (< 3 ans)"],
-  ['r[ée]gularit[ée].*fiscale|attestation.*fiscale', "Attestation de régularité fiscale"],
-  ['attestations?\\s*d.assurance', "Attestations d'assurance"],
-];
-const PIECE_DUME: [string, string] = ['\\bDUME\\b', "DUME (alternative à DC1/DC2)"];
+/**
+ * Retrouve une section par son TITRE. Indispensable : la numérotation des pièces à fournir
+ * varie d'un acheteur à l'autre (« 4.1 » à Rouen, « 7.1 » ailleurs, parfois « 3.2 »), alors
+ * que l'intitulé, lui, dit toujours « Pièces de la candidature » / « Pièces de l'offre ».
+ */
+function findSectionByTitle(sections: Section[], re: RegExp): Section | null {
+  return sections.find(s => re.test(s.title)) || null;
+}
 
-const PIECES_OFFRE: [string, string][] = [
-  ['acte d.engagement', "Acte d'Engagement complété, daté et signé"],
-  ['\\bBPU\\b|bordereau de prix', "BPU — Bordereau de Prix Unitaire"],
-  ['\\bDPGF\\b|d[ée]composition du prix', "DPGF — Décomposition du Prix Global et Forfaitaire"],
-  ['m[ée]moire technique', "Mémoire technique valant cadre de réponse"],
-  ['\\bRIB\\b', "RIB de l'entreprise"],
+const TITRE_CANDIDATURE = /pi[eè]ces?\b.{0,20}\bcandidatures?\b|dossier\s+de\s+candidature/i;
+const TITRE_OFFRE = /pi[eè]ces?\b.{0,20}\boffres?\b|contenu\s+de\s+l['’\s]*offre/i;
+
+/**
+ * Motifs des pièces à fournir. `famille` évite les doublons dans la check-list : plusieurs
+ * motifs décrivent la même pièce selon le vocabulaire de l'acheteur (« attestation d'assurance »
+ * vs « responsabilité civile professionnelle »), on ne garde que le PREMIER de chaque famille —
+ * d'où l'ordre : du libellé le plus spécifique au plus générique.
+ */
+type PieceSpec = { famille: string; pattern: string; label: string };
+
+const PIECES_CANDIDATURE: PieceSpec[] = [
+  { famille: 'honneur', pattern: 'd[ée]claration sur l.honneur', label: "Déclaration sur l'honneur" },
+  { famille: 'lettre_candidature', pattern: '\\bDC1\\b', label: 'DC1 — Lettre de candidature' },
+  { famille: 'lettre_candidature', pattern: 'lettre de candidature', label: 'Lettre de candidature' },
+  { famille: 'dc2', pattern: '\\bDC2\\b', label: 'DC2 — Déclaration du candidat' },
+  { famille: 'kbis', pattern: '\\bk\\s*[-]?\\s*bis\\b|extrait\\s+k', label: 'Extrait Kbis' },
+  { famille: 'note_presentation', pattern: 'note de pr[ée]sentation', label: "Note de présentation de l'entreprise" },
+  { famille: 'references', pattern: 'r[ée]f[ée]rences.*?(moins de\\s*)?3\\s*ans|liste.*?r[ée]f[ée]rences|r[ée]f[ée]rences de prestations', label: 'Liste de références (< 3 ans)' },
+  { famille: 'fiscale', pattern: 'r[ée]gularit[ée].*fiscale|attestation.*fiscale|obligations sociales et fiscales', label: 'Attestation de régularité fiscale et sociale' },
+  // Assurance : la formulation « RC professionnelle » est la plus courante hors marchés publics.
+  { famille: 'assurance', pattern: 'assurance.{0,60}responsabilit[ée] civile|responsabilit[ée] civile professionnelle', label: "Attestation d'assurance RC professionnelle" },
+  { famille: 'assurance', pattern: 'attestations?\\s*d.assurance', label: "Attestations d'assurance" },
+  // Spécifique sécurité privée : sans agrément CNAPS l'offre est irrecevable.
+  { famille: 'cnaps', pattern: '\\bCNAPS\\b|autorisation d.exercice|agr[ée]ment des dirigeants', label: "Autorisation d'exercice CNAPS / agrément des dirigeants" },
+  { famille: 'cartes_pro', pattern: 'cartes?\\s+professionnelles?', label: 'Cartes professionnelles des agents' },
+  { famille: 'qualifications', pattern: '\\bSSIAP\\b|\\bCQP\\s*APS\\b|\\bSST\\b', label: 'Qualifications des agents (SSIAP / CQP APS / SST)' },
+  { famille: 'ca', pattern: 'chiffres?\\s+d.affaires', label: "Chiffre d'affaires des 3 derniers exercices" },
+];
+const PIECE_DUME: PieceSpec = { famille: 'dume', pattern: '\\bDUME\\b', label: 'DUME (alternative à DC1/DC2)' };
+
+const PIECES_OFFRE: PieceSpec[] = [
+  { famille: 'acte_engagement', pattern: 'acte d.engagement', label: "Acte d'Engagement complété, daté et signé" },
+  { famille: 'bpu', pattern: '\\bBPU\\b|bordereau de prix', label: 'BPU / bordereau de prix (annexe financière)' },
+  { famille: 'dpgf', pattern: '\\bDPGF\\b|d[ée]composition du prix', label: 'DPGF — Décomposition du Prix Global et Forfaitaire' },
+  { famille: 'memoire', pattern: 'm[ée]moire technique', label: 'Mémoire technique valant cadre de réponse' },
+  { famille: 'paraphes', pattern: '(?:CCAP|CCTP)[^\\n]{0,40}(?:paraph|accept[ée]s? sans r[ée]serve)', label: 'CCAP et CCTP paraphés et acceptés sans réserve' },
+  { famille: 'sous_traitance', pattern: 'sous.?trait', label: "Demandes d'acceptation des sous-traitants (le cas échéant)" },
+  { famille: 'rib', pattern: '\\bRIB\\b', label: "RIB de l'entreprise" },
 ];
 
-function extractPieces(section: Section | null, specs: [string, string][], type: TypePiece): PieceAFournir[] {
+function extractPieces(section: Section | null, specs: PieceSpec[], type: TypePiece): PieceAFournir[] {
   const pieces: PieceAFournir[] = [];
   if (!section) return pieces;
   const text = section.text;
+  const vues = new Set<string>();
 
-  for (const [pattern, label] of specs) {
-    const re = new RegExp(pattern, 'i');
+  for (const spec of specs) {
+    if (vues.has(spec.famille)) continue;
+    const re = new RegExp(spec.pattern, 'i');
     if (re.test(text)) {
+      vues.add(spec.famille);
       const ref = section.lines.find(ln => re.test(ln)) || null;
       pieces.push({
-        nom: label,
+        nom: spec.label,
         type,
         obligatoire: true,
         alternative: null,
@@ -348,7 +397,6 @@ function extractModalites(lines: string[]): ModalitesRemise {
 }
 
 export function parseRc(filePath: string): RCDocument {
-  const warnings: string[] = [];
   const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase();
 
   let text = '';
@@ -365,13 +413,23 @@ export function parseRc(filePath: string): RCDocument {
     throw new Error(`parseRc attend un .doc ou .docx (reçu ${ext}).`);
   }
 
+  return parseRcText(text, method, filePath);
+}
+
+/**
+ * Cœur du parseur, séparé de la lecture du fichier : permet de le tester sur des extraits
+ * de RC réels (cf. tests/rcParser.pieces.test.ts) sans fabriquer un .docx.
+ */
+export function parseRcText(text: string, method: ExtractionMethod, filePath: string): RCDocument {
+  const warnings: string[] = [];
   const lines = text.split(/\r?\n/).map(ln => ln.trimEnd());
   const sections = splitSections(lines);
   if (sections.length === 0) {
     warnings.push('Aucune section numérotée détectée — structure inattendue.');
   }
 
-  const secCand = findSection(sections, '4.1');
+  // Le TITRE prime sur le numéro : « 4.1 » n'est le bon numéro que dans le gabarit de Rouen.
+  const secCand = findSectionByTitle(sections, TITRE_CANDIDATURE) || findSection(sections, '4.1');
   const piecesCand = extractPieces(secCand, PIECES_CANDIDATURE, TypePiece.CANDIDATURE);
   const dume = extractPieces(secCand, [PIECE_DUME], TypePiece.CANDIDATURE);
   for (const p of dume) {
@@ -380,7 +438,7 @@ export function parseRc(filePath: string): RCDocument {
   }
   piecesCand.push(...dume);
 
-  const secOffre = findSection(sections, '4.2');
+  const secOffre = findSectionByTitle(sections, TITRE_OFFRE) || findSection(sections, '4.2');
   const piecesOffre = extractPieces(secOffre, PIECES_OFFRE, TypePiece.OFFRE);
 
   const criteres = extractCriteres(sections);
@@ -388,10 +446,18 @@ export function parseRc(filePath: string): RCDocument {
     warnings.push('Barème de notation non détecté (section 6).');
   }
   if (piecesCand.length === 0) {
-    warnings.push('Aucune pièce de candidature détectée (section 4.1).');
+    warnings.push(
+      secCand
+        ? `Aucune pièce de candidature reconnue dans « ${secCand.title} » — vocabulaire inconnu.`
+        : 'Aucune section « pièces de la candidature » trouvée dans le RC.',
+    );
   }
   if (piecesOffre.length === 0) {
-    warnings.push("Aucune pièce d'offre détectée (section 4.2).");
+    warnings.push(
+      secOffre
+        ? `Aucune pièce d'offre reconnue dans « ${secOffre.title} » — vocabulaire inconnu.`
+        : "Aucune section « pièces de l'offre » trouvée dans le RC.",
+    );
   }
 
   return {

@@ -21,12 +21,17 @@ import { Badge, Button, Card } from "@/components/ui";
 import { type DceFile, type DossierRow } from "@/lib/gss-config";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
+import { classifyDceFile, TYPE_LABELS } from "@/lib/dce-detect";
 
+// Ordre de la liste déroulante « type détecté » (l'utilisateur peut toujours corriger).
 const TYPES = ["RC", "CCAP", "CCTP", "BPU / DPGF", "Mémoire (cadre)", "Acte d'Engagement", "Compte Rendu", "Annexe", "Inconnu"];
+
+/** Fichier en cours de dépôt : DceFile + le File brut + le score de confiance du classement. */
+type StagedFile = DceFile & { file?: File; score?: number };
 
 export default function NouveauDossierPage() {
   const router = useRouter();
-  const [files, setFiles] = useState<(DceFile & { file?: File })[]>([]);
+  const [files, setFiles] = useState<StagedFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -54,37 +59,19 @@ export default function NouveauDossierPage() {
     if (e.target.files) {
       let isDceFolder = false;
       const newFiles = Array.from(e.target.files).map(file => {
-        const nomLow = file.name.toLowerCase();
-        let detectType = "Inconnu";
-        
-        // Match exact RC words to avoid false positives like 'commercial'
-        const isAnnexe = /\b(annexe|annexes)\b/.test(nomLow);
-        const isRC = /\b(rc|règlement|reglement)\b/.test(nomLow);
-        const isCCTP = /\b(cctp)\b/.test(nomLow);
-        const isCCAP = /\b(ccap)\b/.test(nomLow);
-        const isCR = nomLow.includes("compte rendu") || nomLow.includes("visite") || /\bcr\b/.test(nomLow);
-        const isBPU = nomLow.includes("bpu") || nomLow.includes("dpgf") || nomLow.includes("dqe");
-        const isActe = nomLow.includes("acte") || nomLow.includes("engagement");
-        const normalizedNom = nomLow.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const isMemoire = normalizedNom.includes("memoire") && (nomLow.endsWith(".doc") || nomLow.endsWith(".docx"));
-
-        if (isAnnexe) detectType = "Annexe";
-        else if (isRC) detectType = "RC";
-        else if (isCCTP) detectType = "CCTP";
-        else if (isCR) detectType = "Compte Rendu";
-        else if (isCCAP) detectType = "CCAP";
-        else if (isBPU) detectType = "BPU / DPGF";
-        else if (isActe) detectType = "Acte d'Engagement";
-        else if (isMemoire) detectType = "Mémoire (cadre)";
-
         // file.webkitRelativePath might look like "DCE/mon_fichier.pdf"
         const relativePath = (file as any).customPath || file.webkitRelativePath || file.name;
         if (relativePath.includes("/")) {
           isDceFolder = true;
         }
+        // Classement par le classifieur partagé (lib/dce-detect.ts, jumeau du backend) : on lui
+        // passe le CHEMIN complet pour qu'un DCE rangé par sous-dossiers (« DCE/CCTP/final.pdf »)
+        // soit reconnu même quand le nom du fichier seul ne dit rien.
+        const detected = classifyDceFile(relativePath);
         return {
           nom: relativePath,
-          type: detectType,
+          type: TYPE_LABELS[detected.type],
+          score: detected.score,
           taille: (file.size / 1024).toFixed(0) + " Ko",
           statut: "parsing" as const,
           file: file
@@ -176,6 +163,14 @@ export default function NouveauDossierPage() {
   const tousParses = files.length > 0 && files.every((f) => f.statut === "ok");
   const enCours = files.filter((f) => f.statut === "parsing").length;
 
+  // Meilleur candidat pour un slot : un DCE contient souvent plusieurs fichiers du même type
+  // (CCTP à la racine + CCTP dans un sous-dossier « AWS-MPI-… »). On affiche celui dont le nom
+  // est le plus explicite, pas le premier de la liste.
+  const bestFor = (type: string) =>
+    files
+      .filter((f) => f.type === type)
+      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0];
+
   const hasRC = files.some(f => f.type === "RC");
   const hasCCTP = files.some(f => f.type === "CCTP");
   const hasCCAP = files.some(f => f.type === "CCAP");
@@ -198,7 +193,8 @@ export default function NouveauDossierPage() {
     setFiles((prev) => prev.map((f) => (f.statut === "parsing" ? { ...f, statut: "ok" } : f)));
   }
   function setType(nom: string, type: string) {
-    setFiles((prev) => prev.map((f) => (f.nom === nom ? { ...f, type } : f)));
+    // Correction manuelle : elle prime sur toute détection automatique pour le choix du slot.
+    setFiles((prev) => prev.map((f) => (f.nom === nom ? { ...f, type, score: 100 } : f)));
   }
   function remove(nom: string) {
     setFiles((prev) => prev.filter((f) => f.nom !== nom));
@@ -383,7 +379,7 @@ export default function NouveauDossierPage() {
                 { type: "BPU / DPGF", label: "BPU / DPGF (Chiffrage)", icon: Table, missingBadge: "REQUIS", missingColor: "destructive" },
                 { type: "Mémoire (cadre)", label: "Template Mémoire Client (.docx)", icon: Layers, missingBadge: "NON DÉTECTÉ", missingColor: "destructive" },
               ].map((slot) => {
-                const foundFile = files.find((f) => f.type === slot.type);
+                const foundFile = bestFor(slot.type);
                 const Icon = slot.icon;
                 
                 if (foundFile) {

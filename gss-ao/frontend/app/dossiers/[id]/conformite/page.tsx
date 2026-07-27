@@ -28,6 +28,18 @@ const ETATS: { key: Etat; label: string; icon: React.ElementType; cls: string }[
   { key: "na", label: "N/A", icon: MinusCircle, cls: "text-muted-foreground" },
 ];
 
+/**
+ * Pièces sans lesquelles l'offre est irrecevable. `type` = libellé produit par le
+ * classifieur de l'écran de dépôt (lib/dce-detect.ts) : les deux listes doivent concorder.
+ */
+const OBLIGATOIRES: { type: string; label: string }[] = [
+  { type: "CCTP", label: "CCTP / CCP (Exigences techniques)" },
+  { type: "RC", label: "Règlement de Consultation (RC)" },
+  { type: "CCAP", label: "Cahier des Clauses Administratives Particulières (CCAP)" },
+  { type: "BPU / DPGF", label: "BPU / DPGF (Chiffrage)" },
+  { type: "Acte d'Engagement", label: "Acte d'Engagement" },
+];
+
 function PieceRow({
   piece,
   onUpload,
@@ -107,55 +119,55 @@ export default function ConformitePage({ params }: { params: { id: string } }) {
   const storageKey = `gss_conformite_v4_${id}`;
 
   useEffect(() => {
+    // Les pièces réellement déposées vivent côté serveur (dossier.dce_files, alimenté par
+    // l'écran de dépôt). L'ancienne version lisait une clé localStorage `dce_files_<id>` que
+    // RIEN n'écrivait : la check-list retombait donc toujours sur la liste en dur ci-dessous,
+    // et aucun fichier du DCE n'était reconnu comme pièce requise.
     apiFetch(`/api/dossiers/${id}`)
-      .then(res => res.json())
-      .then(data => {
-        if (!data.error) setDossierInfo(data);
-      })
-      .catch(e => console.error(e));
-    
-    // Charger d'abord dce_files (les fichiers déposés) pour créer les pièces de base
-    const uploadedFilesRaw = localStorage.getItem(`dce_files_${id}`);
-    let basePieces: Piece[] = [];
-    
-    if (uploadedFilesRaw) {
-      try {
-        const uploadedFiles: DceFile[] = JSON.parse(uploadedFilesRaw);
-        basePieces = uploadedFiles.map(f => ({
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) return;
+        setDossierInfo(data);
+
+        const uploaded: DceFile[] = Array.isArray(data.dce_files) ? data.dce_files : [];
+        const deposees: Piece[] = uploaded.map((f) => ({
           nom: f.nom,
-          obligatoire: ["RC", "CCTP", "CCAP", "BPU / DPGF"].includes(f.type),
+          obligatoire: OBLIGATOIRES.some((o) => o.type === f.type),
           alternative: null,
           etat: "obtenu" as Etat,
-          ref: f.type
+          ref: f.type,
         }));
-      } catch (e) {
-        console.error("Failed to parse uploaded files");
-      }
-    } else {
-      // Fallback
-      basePieces = [
-        { nom: "CCTP / CCP (Exigences techniques)", obligatoire: true, alternative: null, etat: "obtenu" as Etat, ref: "Prérequis DCE" },
-        { nom: "Règlement de Consultation (RC)", obligatoire: true, alternative: null, etat: "obtenu" as Etat, ref: "Prérequis DCE" },
-        { nom: "Cahier des Clauses Administratives Particulières (CCAP)", obligatoire: true, alternative: null, etat: "obtenu" as Etat, ref: "Prérequis DCE" },
-        { nom: "BPU / DPGF (Chiffrage)", obligatoire: true, alternative: null, etat: "obtenu" as Etat, ref: "Prérequis DCE" },
-        { nom: "Template Mémoire Client (.docx)", obligatoire: true, alternative: null, etat: "obtenu" as Etat, ref: "Prérequis DCE" },
-      ];
-    }
 
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        if (data.pieces) {
-          setPieces(data.pieces);
-          return;
+        // Un prérequis qui n'a été retrouvé dans AUCUN fichier déposé doit apparaître
+        // explicitement comme manquant (c'est lui qui rend l'offre irrecevable).
+        const manquants: Piece[] = OBLIGATOIRES.filter(
+          (o) => !uploaded.some((f) => f.type === o.type),
+        ).map((o) => ({
+          nom: o.label,
+          obligatoire: true,
+          alternative: null,
+          etat: "manquant" as Etat,
+          ref: o.type,
+        }));
+
+        const basePieces = [...deposees, ...manquants];
+
+        // On réapplique les états déjà saisis (uploads manuels depuis cette page), par nom.
+        const saved = localStorage.getItem(storageKey);
+        let etatsSauves: Record<string, Etat> = {};
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            for (const p of parsed.pieces ?? []) etatsSauves[p.nom] = p.etat;
+          } catch (e) {
+            console.error("Failed to parse conformite data");
+          }
         }
-      } catch (e) {
-        console.error("Failed to parse conformite data");
-      }
-    }
-    
-    setPieces(basePieces);
+        setPieces(
+          basePieces.map((p) => (etatsSauves[p.nom] ? { ...p, etat: etatsSauves[p.nom] } : p)),
+        );
+      })
+      .catch((e) => console.error(e));
   }, [id, storageKey]);
 
 

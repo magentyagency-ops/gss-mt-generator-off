@@ -17,9 +17,10 @@ import {
 } from "@/components/ui";
 import { QuestionCard } from "@/components/question-card";
 import {
-  CRITICITE_LABEL, CRITICITE_OPTIONS,
+  CRITICITE_LABEL, CRITICITE_OPTIONS, learnReponsesRecues,
   type QuestionInterne, type Dossier,
 } from "@/lib/sollicitations";
+import { apiFetch } from "@/lib/api";
 
 export default function SollicitationsPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -86,6 +87,10 @@ export default function SollicitationsPage() {
   }, [supabase, aoId]);
 
   useEffect(() => { loadQuestions(); }, [loadQuestions]);
+
+  // Apprentissage RAG des réponses reçues : le Realtime ci-dessous recharge `questions` dès
+  // qu'une réponse arrive → l'indexation part sans attendre un passage par la boîte de réception.
+  useEffect(() => { learnReponsesRecues(questions, apiFetch); }, [questions]);
 
   // ── Realtime : statut en temps réel (§12) ──────────────────────────────────────
   useEffect(() => {

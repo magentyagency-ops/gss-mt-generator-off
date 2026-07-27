@@ -73,3 +73,28 @@ export const CRITICITE_LABEL: Record<string, string> = {
   bloquant: "Bloquant",
 };
 export const CRITICITE_OPTIONS = Object.keys(CRITICITE_LABEL);
+
+// ── Apprentissage RAG des réponses reçues (option B) ──────────────────────────────────────
+// L'affinage IA + l'indexation dans rag_chunk sont faits par le BACKEND
+// (POST /dossiers/:id/sollicitations/learn). Rien ne les déclenche à la réception du mail :
+// l'Edge Function inbound-email ne fait qu'enregistrer la réponse. Il faut donc que l'app le
+// demande — depuis TOUTE page où une réponse est visible, sinon une réponse lue ailleurs que
+// dans la boîte de réception n'est jamais indexée (le cas rencontré).
+// Le backend est idempotent (extra.reply_hash) : appeler à chaque chargement est sans risque.
+export async function learnReponsesRecues(
+  questions: Array<{ ao_id: string; reponse_contenu: string | null }>,
+  apiFetch: (path: string, init?: RequestInit) => Promise<Response>,
+): Promise<void> {
+  const dossiers = [...new Set(
+    questions.filter((q) => (q.reponse_contenu ?? "").trim() !== "").map((q) => q.ao_id),
+  )];
+  for (const aoId of dossiers) {
+    try {
+      await apiFetch(`/api/dossiers/${aoId}/sollicitations/learn`, { method: "POST" });
+    } catch (e) {
+      // Best-effort : un échec n'empêche pas l'affichage. On le TRACE quand même — l'échec
+      // silencieux d'origine rendait l'absence d'indexation impossible à diagnostiquer.
+      console.warn(`[sollicitations] apprentissage RAG échoué pour le dossier ${aoId}`, e);
+    }
+  }
+}
