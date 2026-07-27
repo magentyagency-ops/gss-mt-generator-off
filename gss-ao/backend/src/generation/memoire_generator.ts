@@ -51,7 +51,9 @@ function normCriticite(c: any): 'bloquant' | 'facultatif' | 'normal' {
 }
 
 /** Un passage indexable pour la recherche sémantique (Doc GSS ou DCE). */
-interface RetrievalChunk { source: 'GSS' | 'DCE'; label: string; text: string; embedding?: number[]; }
+// 'GSS'/'DCE' = sources fichiers ; 'WEB'/'SOLLICITATION' = connaissances issues de la bdd rag_chunk
+// (recherches web validées et réponses d'équipe indexées).
+interface RetrievalChunk { source: 'GSS' | 'DCE' | 'WEB' | 'SOLLICITATION'; label: string; text: string; embedding?: number[]; }
 
 /** Similarité cosinus entre deux vecteurs (0 si l'un est nul). */
 function cosine(a: number[], b: number[]): number {
@@ -2143,11 +2145,14 @@ export class MemoireGenerator {
   }
 
   /**
-   * Client Postgres vers la base RAG, ou null si le mode bdd est désactivé / non configuré.
-   * Source : MEMOIRE_RAG_FROM_DB=true + RAG_DATABASE_URL (sinon DATABASE_URL). SSL auto pour Supabase.
+   * Client Postgres vers la base RAG, ou null si non configuré / explicitement désactivé.
+   * IMPÉRATIF : la génération DOIT lire rag_chunk (doc GSS + recherches web + réponses d'équipe
+   * SOLLICITATION). La lecture en base est donc ACTIVÉE PAR DÉFAUT dès qu'une URL est configurée
+   * (RAG_DATABASE_URL, sinon DATABASE_URL). Opt-out explicite via MEMOIRE_RAG_FROM_DB=false. Sans URL,
+   * ou si la base est vide/injoignable, chaque appelant retombe proprement sur les fichiers.
    */
   private ragDbClient(): PgClient | null {
-    if (process.env.MEMOIRE_RAG_FROM_DB !== 'true') return null;
+    if (process.env.MEMOIRE_RAG_FROM_DB === 'false') return null;   // opt-out explicite uniquement
     const raw = process.env.RAG_DATABASE_URL || getSettings().databaseUrl || '';
     const url = raw.replace(/^postgresql\+psycopg:\/\//, 'postgresql://');
     if (!url) return null;
@@ -2193,12 +2198,12 @@ export class MemoireGenerator {
           cats['RECHERCHES WEB BDD'] = webRes.rows.map(r => `--- Recherche Web : ${r.query} ---\nQuestion : ${r.query}\nRéponse BDD (${r.statut}) : ${r.valeur_retenue || r.answer}`).join('\n\n');
         }
         const qRes = await client.query(
-          `select question, reponse
+          `select question, reponse_contenu
              from public.question_interne
-            where reponse is not null and reponse != ''`
+            where reponse_contenu is not null and reponse_contenu != ''`
         );
         if (qRes.rows.length > 0) {
-          cats['QUESTIONS INTERNES BDD'] = qRes.rows.map(r => `--- Question Équipe : ${r.question} ---\nQuestion : ${r.question}\nRéponse Équipe : ${r.reponse}`).join('\n\n');
+          cats['QUESTIONS INTERNES BDD'] = qRes.rows.map(r => `--- Question Équipe : ${r.question} ---\nQuestion : ${r.question}\nRéponse Équipe : ${r.reponse_contenu}`).join('\n\n');
         }
       } catch (eWeb: any) {
         console.warn(`[MemoireGenerator] Lecture recherche_web/question_interne depuis BDD ignorée : ${eWeb?.message || eWeb}`);
@@ -2526,11 +2531,12 @@ Renvoie un JSON valide :
           role: 'system',
           content:
             "Tu extrais, à partir d'un DCE (CCTP en priorité) pour un marché de sécurité privée, la liste des GRANDS BESOINS / THÈMES auxquels GSS devra répondre dans son mémoire technique. " +
-            "OBJECTIF : des sujets GÉNÉRAUX et SYNTHÉTIQUES, pas une check-list ligne à ligne. " +
-            "RÈGLES :\n" +
-            "- REGROUPE les exigences ponctuelles d'un même sujet en UN SEUL besoin général (ex. « Moyens humains et qualifications de l'équipe », « Organisation des rondes et de la surveillance », « Continuité de service et gestion des remplacements », « Matériel et équipements », « Formation du personnel », « Reporting et traçabilité »).\n" +
-            "- Un libellé COURT et GÉNÉRIQUE par thème. NE recopie PAS les chiffres, délais, quantités ou références d'articles précis dans le libellé — ils restent du détail de rédaction, pas un besoin.\n" +
-            "- Vise une DIZAINE à une VINGTAINE de besoins généraux au total (pas 50+). N'invente rien : chaque thème doit être réellement demandé par le DCE.",
+            "OBJECTIF : des sujets GÉNÉRAUX et SYNTHÉTIQUES (niveau chapitre), PAS une check-list de détails opérationnels. " +
+            "RÈGLES STRICTES :\n" +
+            "- INTERDIT dans le libellé : toute HEURE ou horaire (ex. « rondes à 17h »), toute QUANTITÉ ou effectif chiffré, tout DÉLAI, toute référence d'article, tout nom de site précis. Ces détails NE sont PAS des besoins à relever ici — ils seront traités à la rédaction.\n" +
+            "- REGROUPE tous les points d'un même sujet en UN SEUL besoin global. Exemples de BON niveau : « Moyens humains et qualifications de l'équipe », « Organisation des rondes et de la surveillance », « Continuité de service et gestion des remplacements », « Matériel et équipements », « Formation du personnel », « Contrôle d'accès et filtrage », « Télésurveillance et levée de doute », « Pilotage, qualité et reporting ».\n" +
+            "- Exemple de CE QU'IL NE FAUT PAS FAIRE : « Rondes à 17h et 22h sur le site A », « 4 agents SSIAP 2 de nuit », « intervention sous 15 min » → à REGROUPER en « Organisation des rondes et de la surveillance » / « Moyens humains » / « Délais d'intervention ».\n" +
+            "- Un libellé COURT et GÉNÉRIQUE par thème (2 à 6 mots). Vise ENVIRON 8 à 15 besoins globaux au total (jamais 30+). N'invente rien : chaque thème doit être réellement demandé par le DCE.",
         },
         { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON : {"items":[{"label":"besoin général / thème","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}` },
       ],
@@ -2565,11 +2571,24 @@ Renvoie un JSON valide :
     const BATCH = 12;
     for (let b = 0; b < withCtx.length; b += BATCH) {
       const batch = withCtx.slice(b, b + BATCH);
-      const payload = batch.map((x) => ({ index: x.i, exigence: x.label, passages_gss: x.ctx || '(aucun passage proche)' }));
+      const payload = batch.map((x) => ({ index: x.i, element: x.label, type: x.kind || 'exigence', passages_gss: x.ctx || '(aucun passage proche)' }));
       const content = await this.callOpenAI(
         [
-          { role: 'system', content: "Pour CHAQUE exigence, on te donne les passages de la Documentation GSS les PLUS PROCHES (recherche sémantique dans la base de connaissance). Décide si GSS COUVRE l'exigence (le moyen/l'information est réellement présent dans ces passages) ou si elle MANQUE (rien de pertinent → à demander en interne ou à rechercher). N'invente RIEN : si les passages ne le prouvent pas, c'est MANQUANT." },
-          { role: 'user', content: `Exigences + passages GSS (JSON) :\n${JSON.stringify(payload)}\n\nRenvoie un JSON : {"resultats":[{"index":<n>,"statut":"couvert|manquant"}]}` },
+          {
+            role: 'system',
+            content:
+              "On te donne des ÉLÉMENTS à traiter dans une réponse à un appel d'offres de sécurité privée pour GSS, et pour CHACUN les passages les PLUS PROCHES de la base de connaissance GSS (documentation GSS + recherches web validées + réponses d'équipe). " +
+              "Le champ `type` indique la nature de l'élément :\n" +
+              "  • 'exigence' = un besoin du CCTP ;\n" +
+              "  • 'champ' = un champ à renseigner d'un cadre de réponse imposé (formulaire) ;\n" +
+              "  • 'case' = une case à cocher à trancher ;\n" +
+              "  • 'tableau' = une cellule/colonne de tableau à remplir.\n" +
+              "Pour CHAQUE élément, décide STRICTEMENT :\n" +
+              "  • 'couvert' = la base de connaissance GSS contient RÉELLEMENT l'information ou le moyen permettant de renseigner cet élément, et c'est PROUVÉ par les passages fournis.\n" +
+              "  • 'manquant' = les passages ne contiennent PAS cette information → l'élément est À COMPLÉTER (à demander en interne ou à rechercher).\n" +
+              "RÈGLES : n'invente RIEN. Si les passages ne prouvent pas explicitement l'information, c'est MANQUANT. Toute information SPÉCIFIQUE À CE MARCHÉ / CE SITE (donc absente d'une base générique GSS) est MANQUANTE. En cas de doute → MANQUANT.",
+          },
+          { role: 'user', content: `Éléments + passages GSS (JSON) :\n${JSON.stringify(payload)}\n\nRenvoie un JSON : {"resultats":[{"index":<n>,"statut":"couvert|manquant"}]}` },
         ],
         0.1, 'Jugement couverture RAG', true,
       );
@@ -2597,6 +2616,75 @@ Renvoie un JSON valide :
     }
     console.log(`[MemoireGenerator] Détection RAG : ${requirements.length} exigence(s) → ${missing.length} manque(s).`);
     return { fields: missing, total: requirements.length, exigences };
+  }
+
+  /**
+   * Jugement HOLISTIQUE des champs d'un CADRE IMPOSÉ face à la base de connaissance GSS (contexte RAG
+   * complet, en texte). Reçoit la LISTE COMPLÈTE des champs déjà extraits (extractRequirementsList) et
+   * les classe TOUS en un seul passage → cohérent (mêmes cellules de tableau jugées pareil) et complet
+   * (verdict par index, pas de champ oublié). Remplace le per-champ embed+retrieve+juge, trop bruité
+   * pour un formulaire. Règle clé : une info SPÉCIFIQUE À CE MARCHÉ/CE SITE est TOUJOURS « à compléter ».
+   */
+  private async judgeTemplateFieldsVsRag(
+    requirements: Array<{ label: string; theme?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal' }>,
+    gssContext: string,
+  ): Promise<{ fields: MissingFieldDetected[]; total: number; exigences: any[] }> {
+    const total = requirements.length;
+    if (total === 0) return { fields: [], total: 0, exigences: [] };
+
+    const systemPrompt =
+      "On te donne la LISTE COMPLÈTE des champs à renseigner d'un CADRE DE RÉPONSE imposé (formulaire) pour GSS " +
+      "(sécurité privée), et le CONTEXTE de ce que GSS SAIT (Documentation GSS + réponses d'équipe + recherches web). " +
+      "Pour CHAQUE champ (par index), décide STRICTEMENT :\n" +
+      "  • 'renseignable' = l'information nécessaire est RÉELLEMENT présente dans ce que GSS SAIT — identité légale, " +
+      "certifications DÉTENUES, effectifs de l'entreprise, méthodologie/moyens habituels (rondes, logiciels, tenues, " +
+      "reporting, politique sociale, démarche RSE…) décrits dans le contexte GSS.\n" +
+      "  • 'a_completer' = (a) information SPÉCIFIQUE À CE MARCHÉ / CE SITE, décidée par le répondant : moyens ou " +
+      "effectif DÉDIÉS par site, délais d'intervention par site, taux de reprise du personnel, nombre d'intervenants " +
+      "par site, choix des lots, coordonnées de l'interlocuteur DÉDIÉ à ce marché, date/signature ; OU (b) information " +
+      "que GSS devrait avoir mais ABSENTE du contexte fourni.\n" +
+      "RÈGLES : réponds pour TOUS les index, sans exception. COHÉRENCE ABSOLUE : deux champs de même nature (ex. la " +
+      "même ligne d'un tableau répétée par site) reçoivent le MÊME verdict. En cas de doute → 'a_completer'.";
+
+    const payload = requirements.map((r, i) => ({ index: i, champ: r.label, type: r.kind || 'champ' }));
+    // Un seul passage (les cadres tiennent largement : ~60 champs). Contexte GSS plafonné pour la fenêtre.
+    const content = await this.callOpenAI(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content:
+          `=== CHAMPS DU CADRE (JSON) ===\n${JSON.stringify(payload)}\n\n` +
+          `=== CE QUE GSS SAIT (Doc GSS + réponses équipe + web) ===\n${gssContext.slice(0, 90_000)}\n\n` +
+          `Renvoie un JSON : {"resultats":[{"index":<n>,"statut":"renseignable|a_completer"}]}` },
+      ],
+      0.1, 'Jugement cadre ↔ RAG (holistique)', true,
+    );
+
+    const statut = new Map<number, string>();
+    try {
+      const d = JSON.parse(content || '{}');
+      for (const r of (Array.isArray(d.resultats) ? d.resultats : [])) {
+        if (typeof r?.index === 'number') statut.set(r.index, String(r?.statut ?? '').toLowerCase());
+      }
+    } catch { /* réponse illisible → tout considéré à compléter (prudence) */ }
+
+    const fields: MissingFieldDetected[] = [];
+    const exigences: any[] = [];
+    requirements.forEach((r, i) => {
+      const s = statut.get(i);
+      const aCompleter = s ? s.includes('complet') || s.includes('manqu') : true;   // défaut prudent
+      const kindLabel = r.kind === 'case' ? 'Case à cocher du cadre' : r.kind === 'tableau' ? 'Cellule/colonne de tableau du cadre' : 'Champ à renseigner du cadre';
+      exigences.push({ id: `ex-${i}`, theme: r.theme || '', exigence: r.label, couverture: aCompleter ? 'écart' : 'couvert', criticite: r.criticite, ...(r.kind ? { kind: r.kind } : {}) });
+      if (aCompleter) {
+        fields.push({
+          id: `req-${i}`,
+          label: r.label,
+          context: `${kindLabel}. À compléter : information non disponible dans la base de connaissance GSS (spécifique à ce marché, ou absente).`,
+          criticite: r.criticite,
+        });
+      }
+    });
+    console.log(`[MemoireGenerator] Jugement cadre holistique : ${total} champs → ${fields.length} à compléter.`);
+    return { fields, total, exigences };
   }
 
   /**
@@ -2636,14 +2724,22 @@ Renvoie un JSON valide :
     // 2) Comparer CHACUN à la base de connaissance RAG (recherche sémantique) → couvert / manquant.
     // Repli sur l'ancienne méthode (contexte GSS complet) si la RAG n'est pas disponible.
     const requirements = await this.extractRequirementsList(templateText, dceContext);
-    console.log(`[MemoireGenerator] detectMissing DIAG : template=${templateText ? `${templateText.length} car` : 'NON TROUVÉ'}, dceContext=${dceContext.length} car, exigences extraites=${requirements.length}`);
-    const viaRag = await this.detectMissingViaRag(requirements);
-    console.log(`[MemoireGenerator] detectMissing DIAG : RAG=${viaRag ? `${viaRag.fields.length} manque(s)/${viaRag.total} exigence(s)` : 'INDISPONIBLE → repli ancienne méthode'}`);
-    const detected =
-      viaRag ??
-      (templateText
-        ? await this.detectMissingFromTemplate(templateText, dceContext, gssContext)
-        : await this.detectMissingFromRequirements(dceContext, gssContext));
+    console.log(`[MemoireGenerator] detectMissing DIAG : template=${templateText ? `${templateText.length} car` : 'NON TROUVÉ'}, dceContext=${dceContext.length} car, éléments extraits=${requirements.length}`);
+    let detected: { fields: MissingFieldDetected[]; total: number; exigences?: any[] };
+    if (templateText) {
+      // CADRE IMPOSÉ → jugement HOLISTIQUE : tous les champs extraits (liste complète) sont classés
+      // en UN seul passage face au contexte GSS complet (issu de la base RAG). On abandonne le
+      // per-champ embed+retrieve+juge : il ramène toujours un passage vaguement proche → verdicts
+      // incohérents (mêmes cellules de tableau classées différemment) et faux (spécifique marché
+      // marqué « couvert »). Le passage holistique voit tous les champs ensemble → cohérent.
+      detected = await this.judgeTemplateFieldsVsRag(requirements, gssContext);
+      console.log(`[MemoireGenerator] detectMissing DIAG : cadre holistique → ${detected.fields.length} à compléter / ${detected.total} champs.`);
+    } else {
+      // SANS CADRE → besoins CCTP GÉNÉRAUX comparés à la base RAG (recherche sémantique par thème).
+      const viaRag = await this.detectMissingViaRag(requirements);
+      console.log(`[MemoireGenerator] detectMissing DIAG : RAG=${viaRag ? `${viaRag.fields.length} manque(s)/${viaRag.total} besoin(s)` : 'INDISPONIBLE → repli ancienne méthode'}`);
+      detected = viaRag ?? await this.detectMissingFromRequirements(dceContext, gssContext);
+    }
     const rawFields = detected.fields;
     const filteredIdentite = rawFields.filter((m) => {
       if (identiteCandidatForLabel(m.label) !== '') {
@@ -2724,14 +2820,34 @@ Renvoie un JSON valide :
     const reqs = await this.analyzeRequirements(dceContext, gssContext);
     const norm = (c: string) => (c || '').toLowerCase();
     const gaps = reqs.filter((r) => norm(r.couverture).includes('écart') || norm(r.couverture).includes('ecart'));
-    const fields = gaps.map((r, i) => ({
+
+    // La liste des MANQUES doit rester GLOBALE (pas « rondes à 17h »…). On REGROUPE les écarts par
+    // thème → un seul manque général par thème, avec un libellé lisible. La matrice détaillée
+    // (exigences, ci-dessous) reste, elle, complète et inchangée.
+    const themeLabel = (t: string): string => {
+      switch ((t || '').trim().toUpperCase()) {
+        case 'I': return 'Présentation société et conformité légale';
+        case 'II': return 'Moyens humains et qualifications';
+        case 'III': return 'Moyens opérationnels et matériels';
+        case 'IV': return 'Organisation, qualité et continuité de service';
+        default: return 'Autres besoins du CCTP';
+      }
+    };
+    const critRank = (c: string) => (c === 'bloquant' ? 2 : c === 'normal' ? 1 : 0);
+    const groups = new Map<string, { theme: string; count: number; crit: 'bloquant' | 'facultatif' | 'normal' }>();
+    for (const r of gaps) {
+      const key = (r.theme || '').trim().toUpperCase() || '?';
+      const crit = normCriticite(r.criticite);
+      const g = groups.get(key);
+      if (!g) groups.set(key, { theme: r.theme || '', count: 1, crit });
+      else { g.count++; if (critRank(crit) > critRank(g.crit)) g.crit = crit; }
+    }
+    const fields = [...groups.entries()].map(([key, g], i) => ({
       id: `req-${i}`,
-      label: r.exigence || '',
-      context: `[${r.couverture || 'écart'}] ${r.theme ? `Chapitre ${r.theme} — ` : ''}${
-        r.reponseGss ? `Réponse GSS actuelle : ${r.reponseGss}` : 'Non couvert par la Documentation GSS'
-      }`,
-      criticite: normCriticite(r.criticite),
-    })).filter((m) => m.label.trim() !== '');
+      label: themeLabel(g.theme || key),
+      context: `${g.count} exigence(s) de ce thème non couverte(s) par la documentation GSS — à obtenir de façon globale.`,
+      criticite: g.crit,
+    }));
     // Exigences persistées (fiches réutilisables) : toute la matrice, avec un id + statut.
     const exigences = reqs
       .filter((r: any) => (r.exigence || '').trim() !== '')
@@ -3333,12 +3449,20 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const dbGss = await this.loadGssChunksFromDb();
     if (dbGss && dbGss.length) {
       const dceChunks = retrievalChunks.filter(c => c.source === 'DCE');
-      await this.embedChunks(dceChunks);              // seul le DCE est embeddé en direct
+      await this.embedChunks(dceChunks);              // le DCE (propre au marché) est embeddé en direct
+      // Si la base fournit la doc GSS, on l'utilise (et on abandonne les fichiers pour éviter les
+      // doublons). Sinon (base ne contenant que WEB/SOLLICITATION), on CONSERVE la doc GSS fichiers
+      // pour ne rien perdre — tout en AJOUTANT les chunks base (recherches web + réponses d'équipe).
+      const dbHasGss = dbGss.some(c => c.source === 'GSS');
+      const fileGss = dbHasGss ? [] : retrievalChunks.filter(c => c.source === 'GSS');
+      if (fileGss.length) await this.embedChunks(fileGss);
       retrievalChunks.length = 0;
-      retrievalChunks.push(...dbGss, ...dceChunks);    // GSS depuis la bdd + DCE frais
-      console.log(`[MemoireGenerator] Doc GSS chargée depuis la bdd (${dbGss.length} chunks pré-embeddés).`);
+      retrievalChunks.push(...dbGss, ...fileGss, ...dceChunks);
+      const solN = dbGss.filter(c => c.source === 'SOLLICITATION').length;
+      const webN = dbGss.filter(c => c.source === 'WEB').length;
+      console.log(`[MemoireGenerator] Index depuis la bdd : ${dbGss.length} chunks (dont ${solN} réponses équipe, ${webN} web)${fileGss.length ? ` + ${fileGss.length} chunks GSS fichiers` : ''}.`);
     } else {
-      await this.embedChunks(retrievalChunks);         // comportement historique (repli)
+      await this.embedChunks(retrievalChunks);         // repli complet fichiers (aucune base configurée)
     }
     const gssN = retrievalChunks.filter(c => c.source === 'GSS' && c.embedding).length;
     const dceN = retrievalChunks.filter(c => c.source === 'DCE' && c.embedding).length;
