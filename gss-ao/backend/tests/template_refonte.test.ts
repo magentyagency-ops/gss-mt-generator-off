@@ -1,3 +1,6 @@
+import WebSocket from 'ws';
+(global as any).WebSocket = WebSocket;
+
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import PizZip from 'pizzip';

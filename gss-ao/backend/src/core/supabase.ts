@@ -1,3 +1,8 @@
+import WebSocket from 'ws';
+if (typeof global !== 'undefined' && !(global as any).WebSocket) {
+  (global as any).WebSocket = WebSocket;
+}
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AsyncLocalStorage } from 'async_hooks';
 import { getSettings } from './config';

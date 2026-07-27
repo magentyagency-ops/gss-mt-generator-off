@@ -434,7 +434,16 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
               )}
 
               {/* L'action « Demander à l'équipe » (routage IA) est sur la page Mémoire du dossier. */}
+              <div className="pt-2 flex justify-end">
+                <Link href={`/dossiers/${id}/memoire`}>
+                  <Button variant="outline" size="sm" className="gap-2 text-xs border-warning/50 text-warning hover:bg-warning/10 hover:text-warning font-semibold">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Lancer le mémoire quand même
+                  </Button>
+                </Link>
+              </div>
             </CardContent>
+
           </Card>
 
           {/* Sollicitations du dossier (mails internes en attente / répondus) */}

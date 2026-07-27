@@ -1,5 +1,6 @@
-import { MarpGenerator } from './marp_generator';
+import { MarpGenerator, AssembleChapter, AssembleSection } from './marp_generator';
 import { ImageLibraryService } from './image_service';
+import { D2Service } from './d2_service';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -987,12 +988,6 @@ function markdownToParagraphsX(raw: string, skipTitle?: string): string {
   return out.join('');
 }
 
-export interface AssembleChapter {
-  /** Chapitre I..IV (ordre = ordre des Heading1 dans le template). */
-  key: string;
-  title: string;
-  sections: Array<{ title: string; text: string; id?: string; illustration?: string }>;
-}
 
 // ─── Mode B (réponse libre / sans cadre imposé) ───
 // Mapping miroir de frontend/lib/ai/sections-b.ts : permet de regrouper la map
@@ -2718,9 +2713,8 @@ Renvoie un JSON valide :
     const fields = gaps.map((r, i) => ({
       id: `req-${i}`,
       label: r.exigence || '',
-      context: `[${r.couverture || 'écart'}] ${r.theme ? `Chapitre ${r.theme} — ` : ''}${
-        r.reponseGss ? `Réponse GSS actuelle : ${r.reponseGss}` : 'Non couvert par la Documentation GSS'
-      }`,
+      context: `[${r.couverture || 'écart'}] ${r.theme ? `Chapitre ${r.theme} — ` : ''}${r.reponseGss ? `Réponse GSS actuelle : ${r.reponseGss}` : 'Non couvert par la Documentation GSS'
+        }`,
       criticite: normCriticite(r.criticite),
     })).filter((m) => m.label.trim() !== '');
     // Exigences persistées (fiches réutilisables) : toute la matrice, avec un id + statut.
@@ -4885,9 +4879,9 @@ RÈGLES DE FORME (rendu Marp) :
       const chapterReqs = reqsByTheme[section.chapter] || [];
       const reqBlock = chapterReqs.length
         ? '\n\nEXIGENCES DU CCTP À TRAITER DANS CETTE SECTION (réponds à chacune avec ce que fait GSS ; signale les écarts via [CONSULTATION REQUISE : …]) :\n' +
-          chapterReqs
-            .map((r) => `- Le CCTP demande : ${r.exigence}\n  Réponse GSS connue : ${r.reponseGss || '(non documentée)'}${r.couverture && r.couverture.toLowerCase() !== 'couvert' ? `  → couverture : ${r.couverture}` : ''}`)
-            .join('\n')
+        chapterReqs
+          .map((r) => `- Le CCTP demande : ${r.exigence}\n  Réponse GSS connue : ${r.reponseGss || '(non documentée)'}${r.couverture && r.couverture.toLowerCase() !== 'couvert' ? `  → couverture : ${r.couverture}` : ''}`)
+          .join('\n')
         : '';
 
       const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}${reqBlock}\n\nRédige le contenu de cette partie de manière experte.`;
@@ -5157,12 +5151,14 @@ RÈGLES DE FORME (rendu Marp) :
       title: CHAPTER_TITLES_B[ch],
       sections: AI_SECTIONS_B
         .filter((s) => s.chapter === ch && sectionsMap[s.id]?.trim())
-        .map((s) => ({
+        .map((s): AssembleSection => ({
           title: s.title,
           text: sectionsMap[s.id],
           id: s.id,
-          illustration: undefined
+          illustration: undefined,
+          d2Code: undefined,
         })),
+
     }));
 
     if (chapters.every((c) => c.sections.length === 0)) {
@@ -5170,6 +5166,41 @@ RÈGLES DE FORME (rendu Marp) :
     }
 
     const cover = await this.getCoverInfo(dossierId);
+
+    // Génération automatique des schémas d'architecture D2 pour les sections les plus pertinentes (~15)
+    onProgress?.(91, 'Génération des schémas d’architecture D2…');
+    const D2_ELIGIBLE_SECTIONS = [
+      'b_implantation', 'b_moyens_humains', 'b_encadrement',
+      'b_recrutement_formation', 'b_dispositif_absence',
+      'b_moyens_materiels', 'b_rondes', 'b_controle_acces', 'b_telesurveillance',
+      'b_gestion_alarmes', 'b_organisation', 'b_planning',
+      'b_suivi_qualite', 'b_procedures', 'b_amelioration'
+    ];
+
+    const d2Promises: Promise<void>[] = [];
+    for (const chapter of chapters) {
+      for (const sec of chapter.sections) {
+        if (!sec.d2Code && sec.text && sec.text.length > 100 && sec.id && D2_ELIGIBLE_SECTIONS.includes(sec.id)) {
+          d2Promises.push((async () => {
+            try {
+              const d2Code = await D2Service.generateD2Code(sec.title, sec.text, cover.client);
+              console.log("===== D2 GENERATED =====");
+              console.log("Section :", sec.title);
+              console.log(d2Code);
+              console.log("========================");
+
+              if (d2Code) sec.d2Code = d2Code;
+            } catch (e: any) {
+              console.warn(`[MemoireGenerator] Génération D2 ignorée pour ${sec.title}:`, e.message || e);
+            }
+          })());
+        }
+      }
+    }
+    
+    if (d2Promises.length > 0) {
+      await Promise.all(d2Promises);
+    }
 
     // Bibliothèque d'images (base de données) : on charge le pool, puis on attribue
     // AU PLUS une image par slide selon le CONTEXTE du texte, chaque image utilisée
@@ -5186,7 +5217,7 @@ RÈGLES DE FORME (rendu Marp) :
     // mémoire illustré : on signale l'étape pour que la barre ne semble pas figée.
     onProgress?.(95, `Rendu du PDF (${assignments.size} illustration(s))…`);
     const generator = new MarpGenerator(this.responseDir);
-    const result = generator.generatePdf(chapters, cover, assignments);
+    const result = await generator.generatePdf(chapters, cover, assignments);
 
     return { filePath: result.filePath, generatedData: {} };
   }

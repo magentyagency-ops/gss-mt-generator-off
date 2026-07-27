@@ -121,6 +121,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   const dossierInfo = rawDossier || { acheteur: "Chargement...", reference: "..." };
   const [hasTemplate, setHasTemplate] = useState(false);
   const [selectedSlidesCount, setSelectedSlidesCount] = useState<number>(0);
+  const [forceBypassLock, setForceBypassLock] = useState(false);
 
   // Nombre de manques détectés (persistés à l'analyse du DCE) et blocage de la génération tant
   // qu'il RESTE des questions sans réponse (même sans sollicitation encore envoyée).
@@ -260,7 +261,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   }
 
   // ── Blocage tant que l'analyse des infos manquantes n'est pas terminée ──────────────────
-  if (!analyseDone) {
+  if (!analyseDone && !forceBypassLock) {
     return (
       <div className="flex h-full flex-col">
         <header className="border-b border-border bg-card px-6 py-3">
@@ -288,12 +289,23 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 ? "Aucun DCE n'a été uploadé pour ce dossier. Uploadez les pièces du DCE depuis la fiche de synthèse avant de pouvoir générer le mémoire technique."
                 : "L'analyse des informations manquantes du DCE est en cours ou n'a pas encore été lancée. Retournez à la fiche de synthèse pour que l'analyse se termine avant de générer le mémoire technique."}
             </p>
-            <Link href={`/dossiers/${id}`}>
-              <Button size="lg" className="mt-2 gap-2">
-                <ArrowRight className="h-4 w-4 rotate-180" />
-                Retour à la fiche de synthèse
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-2">
+              <Link href={`/dossiers/${id}`}>
+                <Button size="lg" className="gap-2">
+                  <ArrowRight className="h-4 w-4 rotate-180" />
+                  Retour à la fiche de synthèse
+                </Button>
+              </Link>
+              <Button
+                size="lg"
+                variant="outline"
+                className="gap-2 border-warning/40 text-warning hover:bg-warning/10 hover:text-warning"
+                onClick={() => setForceBypassLock(true)}
+              >
+                <Sparkles className="h-4 w-4" />
+                Accéder au mémoire quand même
               </Button>
-            </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -382,6 +394,22 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   {" "}(sur {nbManques} détectée{nbManques > 1 ? "s" : ""}). Obtenez les réponses (équipe / recherche web) avant de générer.
                 </p>
               )}
+
+              {!canGenerate && (
+                <div className="mt-3 flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={handleGenerateFullDocx}
+                    disabled={isGeneratingDocx}
+                    className="w-full max-w-md gap-2 border-warning/50 bg-warning/10 text-warning hover:bg-warning/20 hover:text-warning font-semibold shadow-sm"
+                  >
+                    {isGeneratingDocx ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5 text-warning" />}
+                    {isGeneratingDocx ? "Génération en cours..." : "Lancer le mémoire quand même (forcer)"}
+                  </Button>
+                </div>
+              )}
+
 
               <div className="mt-4 flex items-center justify-center gap-3">
                 <Button variant="outline" className="gap-2" disabled={isSearching} onClick={handleFindOnInternet}>

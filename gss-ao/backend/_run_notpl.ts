@@ -1,3 +1,6 @@
+import WebSocket from 'ws';
+(global as any).WebSocket = WebSocket;
+
 import { MemoireGenerator } from './src/generation/memoire_generator';
 const start = Date.now();
 const ts = () => ((Date.now()-start)/1000).toFixed(1).padStart(6)+'s';
