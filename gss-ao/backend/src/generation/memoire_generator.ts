@@ -125,7 +125,9 @@ const MAX_DETAILED_REQUIREMENTS = Number(process.env.MAX_DETAILED_REQUIREMENTS |
 // automatiquement réanalysés au lieu de servir un cache obsolète (cf. detectMissingInfo).
 //   1 → thèmes généraux jugés directement face à la RAG
 //   2 → exigences détaillées + consolidation, et filtre « déjà recherché » scopé au dossier
-const DETECTION_VERSION = 2;
+// Déclenche l'invalidation du cache de détection des infos manquantes sur tous les dossiers (lors
+// de changements sur les prompts ou la logique d'extraction).
+const DETECTION_VERSION = 3;
 
 /** Un manque détecté, avec sa criticité (bloquant = éliminatoire, facultatif = bonus, normal). */
 type MissingFieldDetected = { id: string; label: string; context: string; criticite: 'bloquant' | 'facultatif' | 'normal' };
@@ -3004,13 +3006,9 @@ Renvoie un JSON valide :
     console.log(`[MemoireGenerator] detectMissing DIAG : template=${templateText ? `${templateText.length} car` : 'NON TROUVÉ'}, dceContext=${dceContext.length} car, éléments extraits=${requirements.length}`);
     let detected: { fields: MissingFieldDetected[]; total: number; exigences?: any[] };
     if (templateText) {
-      // CADRE IMPOSÉ → jugement HOLISTIQUE : tous les champs extraits (liste complète) sont classés
-      // en UN seul passage face au contexte GSS complet (issu de la base RAG). On abandonne le
-      // per-champ embed+retrieve+juge : il ramène toujours un passage vaguement proche → verdicts
-      // incohérents (mêmes cellules de tableau classées différemment) et faux (spécifique marché
-      // marqué « couvert »). Le passage holistique voit tous les champs ensemble → cohérent.
-      detected = await this.judgeTemplateFieldsVsRag(requirements, gssContext);
-      console.log(`[MemoireGenerator] detectMissing DIAG : cadre holistique → ${detected.fields.length} à compléter / ${detected.total} champs.`);
+      const viaRag = await this.detectMissingViaRag(requirements);
+      detected = viaRag ?? await this.judgeTemplateFieldsVsRag(requirements, gssContext);
+      console.log(`[MemoireGenerator] detectMissing DIAG : cadre RAG -> ${detected.fields.length} à compléter / ${detected.total} champs.`);
     } else {
       // SANS CADRE → détection en DEUX NIVEAUX :
       //   1. thèmes généraux (`requirements`, déjà extraits) → structure / plan du mémoire ;
