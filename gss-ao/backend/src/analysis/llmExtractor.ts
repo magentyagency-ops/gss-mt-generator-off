@@ -21,7 +21,7 @@ import { Lot, DateEcheance } from '../schemas/common';
 import { parseRc } from './rcParser';
 import { parseCctp } from './cctpParser';
 
-const EXTRACTION_MODEL = process.env.EXTRACTION_MODEL || 'gpt-5.4-mini';
+const EXTRACTION_MODEL = process.env.EXTRACTION_MODEL || 'gpt-5.6-luna';
 
 // Garde-fou : on borne la taille du texte envoyé au LLM (les RC/CCTP dépassent
 // rarement quelques dizaines de milliers de caractères ; au-delà on tronque).
@@ -45,7 +45,7 @@ async function callJson(client: OpenAI, system: string, user: string): Promise<a
       { role: 'system', content: system },
       { role: 'user', content: user },
     ],
-    temperature: 0.1,
+    temperature: 1,
   });
   const content = completion.choices[0].message.content || '{}';
   return JSON.parse(content);

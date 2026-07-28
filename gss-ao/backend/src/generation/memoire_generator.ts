@@ -15,17 +15,18 @@ import { overlaySynthesis, loadTrebuchetFont, measureZonesCapacity, RefReplaceme
 import { resolveMissingInfo, classifyFieldsLLM, MissingField } from './missing_info_resolver';
 import { uploadTempDocx, downloadTempDocx } from '../core/temp_storage';
 import { setProgress } from '../core/progress';
+import { learnSollicitationsForDossier } from './learn_sollicitation';
 // @ts-ignore
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
 // Modèle de génération SELON LE CAS :
 //  - SANS template (mémoire GSS maître AO RNE : synthèse + réécriture des surlignages) → qualité
-//    rédactionnelle prioritaire → gpt-5.4-mini.
+//    rédactionnelle prioritaire → gpt-5.6-luna.
 //  - AVEC template client (remplissage d'un cadre imposé : extraction/insertion ciblée) → tâche plus
-//    mécanique → gpt-5.4-nano (moins cher, suffisant).
+//    mécanique → gpt-5.6-luna (moins cher, suffisant).
 // Le modèle effectif est choisi dans generate() puis porté par this.memoireModel. Surchargeable par env.
-const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.4-mini';              // cas SANS template
-const MODEL_TEMPLATE = process.env.MEMOIRE_MODEL_TEMPLATE || 'gpt-5.4-nano';    // cas AVEC template client
+const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.6-luna';              // cas SANS template
+const MODEL_TEMPLATE = process.env.MEMOIRE_MODEL_TEMPLATE || 'gpt-5.6-luna';    // cas AVEC template client
 
 // Modèle de génération d'IMAGES pour remplir les cadres « Zone d'image » du template.
 // Désactivable via GENERATE_IMAGES=false (étape coûteuse, non bloquante).
@@ -1848,8 +1849,8 @@ export class MemoireGenerator {
   // Tableaux du DCE vus PAR COLONNE (par site) : pour une cellule, on n'injecte QUE la colonne du
   // site concerné → le modèle ne peut PAS piocher les données d'un autre site (anti-mélange colonnes).
   private lastDceSiteCols: SiteColumn[] = [];
-  // Modèle de rédaction effectif : gpt-5.4-mini par défaut (cas SANS template), basculé sur
-  // gpt-5.4-nano dans generate() quand un cadre client imposé est détecté (cas AVEC template).
+  // Modèle de rédaction effectif : gpt-5.6-luna par défaut (cas SANS template), basculé sur
+  // gpt-5.6-luna dans generate() quand un cadre client imposé est détecté (cas AVEC template).
   private memoireModel: string = MEMOIRE_MODEL;
 
   constructor(apiKey?: string) {
@@ -2112,7 +2113,7 @@ export class MemoireGenerator {
           model: this.memoireModel,
           ...(jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
           messages,
-          temperature,
+          temperature: 1,
         });
         return completion.choices[0].message.content || '';
       } catch (e: any) {
@@ -2536,7 +2537,9 @@ Renvoie un JSON valide :
     if (!client || !fields.length) return fields;
     try {
       await client.connect();
-      // Scopé AU DOSSIER : une recherche menée pour un autre marché ne dit rien de celui-ci.
+      // Scopé AU DOSSIER : une recherche menée pour un autre marché ne dit rien de celui-ci
+      // (sauf pour les questions factuelles, mais l'IA juge désormais la couverture globale
+      // grâce à l'injection de la table RAG dans le contexte de détection).
       const resWeb = await client.query(`select query from public.recherche_web where query is not null and dossier_id = $1`, [dossierId]);
       const resQ = await client.query(`select question from public.question_interne where question is not null and reponse_contenu is not null and ao_id = $1`, [dossierId]);
       const existingQueries = [
@@ -2546,6 +2549,9 @@ Renvoie un JSON valide :
       if (!existingQueries.length) return fields;
       const indexed = existingQueries.map((q) => ({ texte: q, mots: significantWords(q) }));
       return fields.filter(f => {
+        // IGNORE : champs liés à la signature (ex: 'Fait à', 'Date', 'Signature', 'Cachet')
+        if (/signature|fait\s*à|le\s*(?:\d{2}\/){2}\d{4}|cachet|signataire/i.test(f.label)) return false;
+
         const uniques = significantWords(f.label);
         if (uniques.size === 0) return true;
         for (const { texte, mots } of indexed) {
@@ -2608,7 +2614,8 @@ Renvoie un JSON valide :
               "- Relève CHAQUE champ texte à compléter, CHAQUE case à cocher à trancher, et CHAQUE cellule de tableau à renseigner (⬚).\n" +
               "- Pour une cellule de tableau, REPRENDS dans le libellé la colonne ET la ligne indiquées (ex. « Tableau moyens humains — ligne « Chef de poste », colonne « Effectif » à compléter »). Regroupe si toute une colonne est vide.\n" +
               "- Un libellé court et clair par élément ; indique son type dans `type` : \"champ\" | \"case\" | \"tableau\". Ne recopie pas le formulaire entier.\n" +
-              "- Ignore les cases DÉJÀ cochées et les zones déjà renseignées.",
+              "- Ignore les cases DÉJÀ cochées et les zones déjà renseignées.\n" +
+              "- IGNORE ABSOLUMENT tous les champs liés à la signature, date et lieu de signature (ex: 'Fait à', 'Le', 'Signature', 'Nom et qualité du signataire', 'Cachet').",
           },
           { role: 'user', content: `=== CADRE (annoté) ===\n${templateText.slice(0, 80_000)}\n\nRenvoie un JSON : {"items":[{"label":"...","type":"champ|case|tableau","criticite":"bloquant|facultatif|normal"}]}` },
         ],
@@ -2971,7 +2978,19 @@ Renvoie un JSON valide :
     const gssDocs = await this.getGssDocumentation();
     // Contexte GSS LARGE (≈120k car au lieu de 24k) : sinon l'IA ne voit qu'une tranche de la Doc
     // GSS et sur-signale des « écarts » sur des points en réalité couverts.
-    const gssContext = this.buildFullGssContext(gssDocs, 12_000, 120_000);
+    let gssContext = this.buildFullGssContext(gssDocs, 12_000, 120_000);
+    
+    // Intégrer également les connaissances RAG (WEB et équipe) pour que l'évaluation du template
+    // ou des exigences sache ce qui a déjà été trouvé (ex: PME, réponses aux mails). On les met au
+    // DÉBUT du contexte pour être sûr qu'elles ne soient pas tronquées par le slice(0, 80000).
+    const dbChunks = await this.loadGssChunksFromDb();
+    if (dbChunks) {
+      const extraCtx = dbChunks
+        .filter(c => c.source === 'WEB' || c.source === 'SOLLICITATION')
+        .map(c => `[${c.source} - ${c.label}] ${c.text}`)
+        .join('\n\n');
+      if (extraCtx) gssContext = `--- RECHERCHES WEB ET SOLLICITATIONS ---\n${extraCtx}\n\n--- DOCUMENTATION GSS ---\n${gssContext}`;
+    }
 
     // Deux systèmes de détection, tous deux APRÈS l'upload :
     //  • CADRE IMPOSÉ (« Mémoire (cadre) ») → basé sur le TEMPLATE : champs du formulaire non
@@ -3007,6 +3026,34 @@ Renvoie un JSON valide :
       detected = viaRag ?? await this.detectMissingFromRequirements(dceContext, gssContext);
     }
     const rawFields = detected.fields;
+
+    // PRESERVE IDs FROM PREVIOUS RUNS
+    const dossier = await DB.getDossier(dossierId);
+    const prevState = (dossier?.memoire_cadre_state && typeof dossier.memoire_cadre_state === 'object')
+      ? dossier.memoire_cadre_state : {};
+    
+    const prevFields = (Array.isArray(prevState.missingFields) ? prevState.missingFields : []) as any[];
+    const prevMap = new Map<string, string>();
+    let maxPrevNum = -1;
+    for (const pf of prevFields) {
+      if (pf.label) prevMap.set(normTitle(pf.label), pf.id);
+      const match = String(pf.id).match(/\d+/);
+      if (match) {
+        const n = parseInt(match[0], 10);
+        if (!isNaN(n) && n > maxPrevNum) maxPrevNum = n;
+      }
+    }
+    
+    let nextIdNum = maxPrevNum + 1;
+    for (const f of rawFields) {
+      const nt = normTitle(f.label);
+      if (prevMap.has(nt)) {
+        f.id = prevMap.get(nt)!;
+      } else {
+        f.id = `req-${nextIdNum++}`;
+      }
+    }
+
     const filteredIdentite = rawFields.filter((m) => {
       if (identiteCandidatForLabel(m.label) !== '') {
         console.log(`[MemoireGenerator] Manque ignoré (identité légale GSS connue) : "${m.label}"`);
@@ -3034,9 +3081,6 @@ Renvoie un JSON valide :
     }));
 
     // Persistance : on fusionne avec l'éventuel memoire_cadre_state existant (sans l'écraser).
-    const dossier = await DB.getDossier(dossierId);
-    const prevState = (dossier?.memoire_cadre_state && typeof dossier.memoire_cadre_state === 'object')
-      ? dossier.memoire_cadre_state : {};
     await DB.saveDossier(dossierId, {
       memoire_cadre_state: {
         ...prevState,
@@ -3324,8 +3368,8 @@ Renvoie un JSON valide :
 
     console.log(`[MemoireGenerator] Using template: ${templatePath} (${isClientTemplate ? 'cadre client' : 'mémoire GSS maître'})`);
 
-    // Choix du modèle selon le cas : cadre client imposé → gpt-5.4-nano (tâche mécanique, moins cher) ;
-    // mémoire GSS maître (sans template) → gpt-5.4-mini (qualité rédactionnelle). Porté par callOpenAI.
+    // Choix du modèle selon le cas : cadre client imposé → gpt-5.6-luna (tâche mécanique, moins cher) ;
+    // mémoire GSS maître (sans template) → gpt-5.6-luna (qualité rédactionnelle). Porté par callOpenAI.
     this.memoireModel = isClientTemplate ? MODEL_TEMPLATE : MEMOIRE_MODEL;
     console.log(`[MemoireGenerator] Modèle de rédaction : ${this.memoireModel} (${isClientTemplate ? 'cas template' : 'cas sans template'}).`);
 
@@ -3770,7 +3814,7 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const answerField = async (f: FieldDesc): Promise<void> => {
       const qEmb = queryEmbById.get(f.id);
       const top = qEmb ? this.retrieve(qEmb, retrievalChunks, 12, this.buildFieldQuery(f)) : [];
-      const gssPassages = top.filter(c => c.source === 'GSS');
+      const gssPassages = top.filter(c => c.source === 'GSS' || c.source === 'WEB' || c.source === 'SOLLICITATION');
       const dcePassages = top.filter(c => c.source === 'DCE');
       const fmtBlock = (title: string, cs: RetrievalChunk[]) => cs.length
         ? `\n--- ${title} ---\n` + cs.map((c, i) => `[${c.label} #${i + 1}]\n${c.text}`).join('\n\n') + '\n' : '';
@@ -3977,7 +4021,7 @@ ${analysisJson}
 
 --- CONTEXTE STRATÉGIQUE GSS ---
 ${strategicCtx}
-${fmtBlock("EXTRAITS PERTINENTS DU DCE (exigences de l'acheteur)", top.filter(c => c.source === 'DCE'))}${fmtBlock('DOCUMENTATION GSS PERTINENTE (sources internes — appuie ta réponse dessus)', top.filter(c => c.source === 'GSS'))}${isRef && referentsContext ? `\n--- RÉFÉRENTS GSS (« Personnes ») ---\n${referentsContext}\n` : ''}
+${fmtBlock("EXTRAITS PERTINENTS DU DCE (exigences de l'acheteur)", top.filter(c => c.source === 'DCE'))}${fmtBlock('DOCUMENTATION GSS PERTINENTE (sources internes — appuie ta réponse dessus)', top.filter(c => c.source !== 'DCE'))}${isRef && referentsContext ? `\n--- RÉFÉRENTS GSS (« Personnes ») ---\n${referentsContext}\n` : ''}
 LIBELLÉ / QUESTION À TRAITER : « ${zone.label} »
 Sous ce libellé, il y a ${N} ligne(s) à remplir. Donne jusqu'à ${N} éléments de réponse COURTS, DISTINCTS et COMPLÉMENTAIRES (un par ligne), du plus important au moins important, fondés UNIQUEMENT sur les extraits ci-dessus, en restant sur le sujet du libellé. AUCUNE répétition entre les éléments.
 RÈGLE DE FIABILITÉ (PRIORITAIRE) : donne TOUS les éléments que les extraits justifient DIRECTEMENT (ne laisse pas de côté une info réellement présente) ; mais ne donne un élément QUE s'il est fondé sur les extraits. N'invente, ne déduis ni n'extrapole aucune donnée (nom, date, SIRET/SIREN, CNAPS, agrément, adresse, téléphone, email, effectif, taux, montant) absente des sources. NE DÉTOURNE PAS une donnée d'entreprise/générale pour une question spécifique (dédié au marché / par site / par département). NE RECOPIE PAS l'intitulé ni les options des cases. Si tu n'as de quoi remplir que k < ${N} lignes (voire 0), ne donne QUE k éléments — ne meuble JAMAIS, mieux vaut vide que non fiable.
@@ -5139,7 +5183,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
         beatExtracts = beats.map((_, i) => {
           const top = this.retrieve(beatEmbs[i], retrievalChunks, 7);
           const dce = fmtChunks(top.filter((c) => c.source === 'DCE').slice(0, 5));
-          const gss = fmtChunks(top.filter((c) => c.source === 'GSS').slice(0, 3));
+          const gss = fmtChunks(top.filter((c) => c.source !== 'DCE').slice(0, 3));
           return `${dce ? `EXIGENCES DU DCE À TRAITER ICI :\n${dce}\n` : ''}${gss ? `ATOUTS GSS MOBILISABLES :\n${gss}\n` : ''}`;
         });
       } catch (e) {
@@ -5686,9 +5730,9 @@ FORMAT DE SORTIE (JSON EXACT) :
     if (!openAiKey) throw new Error("Clé OpenAI manquante");
 
     const payload = {
-      model: 'gpt-5.4-mini',
+      model: 'gpt-5.6-luna',
       messages: [{ role: 'system', content: prompt }],
-      temperature: 0.2,
+      temperature: 1,
       response_format: { type: "json_object" }
     };
 

@@ -12,6 +12,7 @@ import { requireAuth } from './authMiddleware';
 import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeamBulk, matchQuestionsToPeople, Personne, MissingField } from '../generation/missing_info_resolver';
 import { injectValidatedRecherches } from '../generation/inject_recherches';
 import { learnSollicitationsForDossier, learnPendingSollicitations } from '../generation/learn_sollicitation';
+import { getGenerationGate } from '../generation/generation_gate';
 import { getSettings } from '../core/config';
 import { getScopedClient, requestContext } from '../core/supabase';
 
@@ -406,11 +407,38 @@ router.post('/sollicitations/learn-pending', async (_req: Request, res: Response
   }
 });
 
+// État du verrou de génération (champs manquants encore sans réponse). Le front s'aligne dessus
+// pour (dés)activer le bouton — c'est la MÊME source de vérité que le blocage serveur ci-dessous.
+router.get('/dossiers/:id/generation-gate', async (req: Request, res: Response) => {
+  try {
+    res.json({ status: 'ok', ...(await getGenerationGate(req.params.id)) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Module C — génération mémoire technique.
 router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
   const dossierId = req.params.dossier_id;
   let memoireId: string | null = null;
   try {
+    // VERROU : aucune génération tant qu'il reste des informations manquantes sans réponse. La
+    // vérification est ici (et pas seulement dans l'UI) pour qu'un onglet resté ouvert, un
+    // rechargement ou un appel direct ne puissent pas passer outre. `force=1` reste possible pour
+    // un lancement volontaire malgré les manques.
+    const force = req.query.force === '1' || req.query.force === 'true';
+    if (!force) {
+      const gate = await getGenerationGate(dossierId);
+      if (!gate.canGenerate) {
+        return res.status(409).json({
+          error: `Génération bloquée : ${gate.unresolved.length} information(s) manquante(s) sans réponse (sur ${gate.total} détectée(s)). Obtenez les réponses (équipe / recherche web) avant de générer.`,
+          reason: 'missing_info',
+          total: gate.total,
+          resolved: gate.resolved,
+          unresolved: gate.unresolved,
+        });
+      }
+    }
     if (await quotaBlocked(res)) return;
     // Consomme 1 crédit dès le lancement (nouvelle ligne mémoire 'generating').
     try {
@@ -841,9 +869,9 @@ router.post('/generate-section', async (req: Request, res: Response) => {
     prompt += `Ajoute TOUJOURS un saut de ligne (ligne vide) entre chaque titre/sous-titre et le paragraphe qui suit.\n`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5.4-mini",
+      model: "gpt-5.6-luna",
       messages: [{ role: "system", content: prompt }],
-      temperature: 0.7,
+      temperature: 1,
     });
 
     const generated_text = completion.choices[0].message.content || "";
@@ -851,7 +879,7 @@ router.post('/generate-section', async (req: Request, res: Response) => {
 
     res.json({
       generated_text,
-      model: "gpt-5.4-mini",
+      model: "gpt-5.6-luna",
       tokens_used
     });
   } catch (error: any) {
@@ -916,9 +944,9 @@ ${emailText}
 \"\"\"`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5.4-mini",
+      model: "gpt-5.6-luna",
       messages: [{ role: "system", content: prompt }],
-      temperature: 0.2,
+      temperature: 1,
       response_format: { type: "json_object" }
     });
 

@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { getSettings } from '../core/config';
 import { StrategicSection } from './strategic_planner';
 
-const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.4-mini';
+const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.6-luna';
 
 export class SectionGenerator {
   private openai: OpenAI;
@@ -54,7 +54,7 @@ Rédige le contenu complet de la section "${section.title}".`;
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0.5,
+        temperature: 1,
       });
 
       return completion.choices[0].message.content || '';

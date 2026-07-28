@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { getSettings } from '../core/config';
-const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.4-mini'; // Always use GPT-5.4-mini for strategy
+const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.6-luna'; // Always use GPT-5.4-mini for strategy
 
 export const AI_SECTIONS_B: Array<{ id: string; chapter: string; title: string }> = [
   // I — Présentation de notre structure
@@ -89,7 +89,7 @@ Génère le plan stratégique JSON.`;
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.3,
+      temperature: 1,
     });
 
     const content = completion.choices[0].message.content || '{}';

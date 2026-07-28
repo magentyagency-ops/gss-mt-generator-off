@@ -15,7 +15,7 @@ import OpenAI from 'openai';
 import { getSettings } from '../core/config';
 
 /** Modèles alignés sur le reste du RAG (embedding = celui de la lecture, cf. memoire_generator). */
-const REFINE_MODEL = process.env.RAG_REFINE_MODEL || process.env.EXTRACTION_MODEL || 'gpt-5.4-mini';
+const REFINE_MODEL = process.env.RAG_REFINE_MODEL || process.env.EXTRACTION_MODEL || 'gpt-5.6-luna';
 const EMBED_MODEL = process.env.RAG_EMBEDDING_MODEL || process.env.EMBEDDING_MODEL_MEMOIRE || 'text-embedding-3-small';
 
 /** Même délai que la génération de mémoire (5 min) — évite les « Request timed out » sur l'affinage. */

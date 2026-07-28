@@ -40,7 +40,7 @@ const EXPECTED: Record<number, 'public' | 'internal'> = {
 
 async function main() {
   const s = getSettings();
-  console.log(`env → OPENAI_API_KEY:${!!s.openaiApiKey} | modèle:${process.env.EXTRACTION_MODEL || 'gpt-5.4-mini (défaut)'}`);
+  console.log(`env → OPENAI_API_KEY:${!!s.openaiApiKey} | modèle:${process.env.EXTRACTION_MODEL || 'gpt-5.6-luna (défaut)'}`);
 
   console.log('\n=== CAS 1 — lot de 7 champs (un seul appel attendu) ===');
   openaiCalls = 0;

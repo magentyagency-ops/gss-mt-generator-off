@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -43,7 +43,6 @@ import {
 import { cn } from "@/lib/utils";
 import { apiFetch, apiBase } from "@/lib/api";
 import { CreditsBadge } from "@/components/credits-badge";
-import { createClient } from "@/lib/supabase/client";
 import { use } from "react";
 import { useDossier } from "../dossier-context";
 
@@ -87,46 +86,40 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   const [crFourni, setCrFourni] = useState(false);
   const isPrerequisOk = true; // CR requirement temporarily disabled
 
-  // Blocage de la génération tant que les questions détectées ne sont pas RÉSOLUES.
-  // On bloque dès qu'il RESTE des manques sans réponse — même si aucune sollicitation n'a encore
-  // été envoyée. Résolu = réponse d'équipe reçue/validée OU recherche web validée.
-  const supabaseCli = useMemo(() => createClient(), []);
-  const [resolus, setResolus] = useState(0);
+  // Blocage de la génération tant que les manques détectés ne sont pas RÉSOLUS.
+  // La résolution est calculée CHAMP PAR CHAMP par le backend (/generation-gate) : c'est la même
+  // source de vérité que le refus serveur (409) sur la génération — l'ancien calcul local
+  // (nbManques − nbRéponses) pouvait ouvrir le bouton alors que des champs restaient sans réponse.
+  const [gate, setGate] = useState<{ canGenerate: boolean; total: number; resolved: number; unresolved: Array<{ id: string; label: string }> } | null>(null);
 
-  const loadResolus = async () => {
-    let answered = 0;
-    let webValides = 0;
+  const loadGate = async () => {
     try {
-      const { data } = await supabaseCli
-        .from("question_interne")
-        .select("id")
-        .eq("ao_id", id)
-        .in("statut", ["reponse_recue", "validee"]);
-      answered = Array.isArray(data) ? data.length : 0;
-    } catch { answered = 0; }
-    try {
-      const { data } = await supabaseCli
-        .from("recherche_web")
-        .select("id")
-        .eq("dossier_id", id)
-        .eq("statut", "validee");
-      webValides = Array.isArray(data) ? data.length : 0;
-    } catch { webValides = 0; }
-    setResolus(answered + webValides);
+      // 1. Force l'apprentissage des mails reçus pour s'assurer qu'ils sont dans le RAG avant génération
+      await apiFetch(`/api/dossiers/${id}/sollicitations/learn`, { method: "POST" }).catch(() => {});
+      // 2. Charge l'état de la porte de génération
+      const res = await apiFetch(`/api/dossiers/${id}/generation-gate`);
+      const data = await res.json();
+      if (res.ok && !data.error) setGate(data);
+    } catch {
+      /* verrou inconnu → on laisse le serveur trancher (409 explicite) */
+    }
   };
 
-  useEffect(() => { loadResolus(); }, [id]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadGate(); }, [id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const { dossier: rawDossier, refresh: refreshDossier } = useDossier();
   const dossierInfo = rawDossier || { acheteur: "Chargement...", reference: "..." };
   const [hasTemplate, setHasTemplate] = useState(false);
   const [selectedSlidesCount, setSelectedSlidesCount] = useState<number>(0);
 
-  // Nombre de manques détectés (persistés à l'analyse du DCE) et blocage de la génération tant
-  // qu'il RESTE des questions sans réponse (même sans sollicitation encore envoyée).
-  const nbManques = Array.isArray(dossierInfo?.memoire_cadre_state?.missingFields)
-    ? dossierInfo.memoire_cadre_state.missingFields.length : 0;
-  const questionsRestantes = Math.max(0, nbManques - resolus);
+  // Manques détectés (persistés à l'analyse du DCE) et manques encore sans réponse, d'après le
+  // verrou serveur. Tant que le verrou n'est pas chargé, on n'active pas le bouton (le serveur
+  // refuserait de toute façon) — sauf s'il n'y a aucun manque connu côté dossier.
+  const nbManques = gate
+    ? gate.total
+    : Array.isArray(dossierInfo?.memoire_cadre_state?.missingFields)
+      ? dossierInfo.memoire_cadre_state.missingFields.length : 0;
+  const questionsRestantes = gate ? gate.unresolved.length : nbManques;
   const canGenerate = isPrerequisOk && questionsRestantes === 0;
 
   // Blocage : accès au mémoire technique interdit tant que l'analyse des infos manquantes n'est pas faite.
@@ -255,7 +248,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
       setAskTeamError(e.message || "Échec de la demande à l'équipe.");
     } finally {
       setIsAskingTeam(false);
-      loadResolus();   // rafraîchit le nombre de réponses obtenues
+      loadGate();   // rafraîchit les manques encore sans réponse
     }
   }
 
@@ -377,10 +370,20 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
               </Button>
               {!isPrerequisOk && <p className="mt-2 text-xs text-warning">Prérequis manquants (CR Visite)</p>}
               {isPrerequisOk && questionsRestantes > 0 && (
-                <p className="mt-2 text-xs text-warning">
-                  Génération bloquée : {questionsRestantes} question{questionsRestantes > 1 ? "s" : ""} sans réponse
-                  {" "}(sur {nbManques} détectée{nbManques > 1 ? "s" : ""}). Obtenez les réponses (équipe / recherche web) avant de générer.
-                </p>
+                <div className="mt-2 text-xs text-warning">
+                  <p>
+                    Génération bloquée : {questionsRestantes} information{questionsRestantes > 1 ? "s" : ""} manquante{questionsRestantes > 1 ? "s" : ""} sans réponse
+                    {" "}(sur {nbManques} détectée{nbManques > 1 ? "s" : ""}). Obtenez les réponses (équipe / recherche web) avant de générer.
+                  </p>
+                  {gate && gate.unresolved.length > 0 && (
+                    <ul className="mx-auto mt-2 max-w-md list-disc space-y-0.5 text-left">
+                      {gate.unresolved.slice(0, 8).map((f) => (
+                        <li key={f.id} className="truncate">{f.label}</li>
+                      ))}
+                      {gate.unresolved.length > 8 && <li>… et {gate.unresolved.length - 8} autre(s)</li>}
+                    </ul>
+                  )}
+                </div>
               )}
 
               <div className="mt-4 flex items-center justify-center gap-3">

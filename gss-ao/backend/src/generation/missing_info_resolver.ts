@@ -21,7 +21,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getSettings } from '../core/config';
 
 /** Modèle utilitaire (le petit) pour la classification — même défaut que llmExtractor.ts. */
-const CLASSIFY_MODEL = process.env.EXTRACTION_MODEL || 'gpt-5.4-mini';
+const CLASSIFY_MODEL = process.env.EXTRACTION_MODEL || 'gpt-5.6-luna';
 
 /** Même délai que la génération de mémoire (5 min) : un « Request timed out » ici fait rejouer la
  *  détection des besoins et duplique les sollicitations. */
@@ -118,7 +118,7 @@ export async function classifyFieldsLLM(fields: MissingField[]): Promise<Map<str
             '{"classifications":[{"id":<string>,"decision":"externe"|"interne"}]}.',
         },
       ],
-      temperature: 0.1,
+      temperature: 1,
     });
     const content = completion.choices[0].message.content || '{}';
     const data = JSON.parse(content);
@@ -283,7 +283,7 @@ export async function matchQuestionsToPeople(
             '\n\nRéponds UNIQUEMENT par un objet JSON : {"affectations":[{"question_id":<string>,"personne_id":<string>}]}.',
         },
       ],
-      temperature: 0.1,
+      temperature: 1,
     });
     const data = JSON.parse(completion.choices[0].message.content || '{}');
     const validIds = new Set(people.map((p) => p.id));
@@ -420,6 +420,10 @@ export async function requestInfoFromTeamBulk(
 
   const body = {
     ao_id: dossierId,
+    // Rattachement CHAMP↔SOLLICITATION : un envoi groupé couvre N champs → on liste leurs ids.
+    // C'est ce qui permet au verrou de génération de savoir QUELS manques une réponse couvre
+    // (generation_gate.ts), au lieu de comparer des compteurs.
+    exigence_id: fields.map((f) => f.id).join(','),
     critere_concerne: labelText,
     destinataire_email: to,
     question: questionText,
@@ -474,7 +478,7 @@ async function reformulateForSearch(label: string, context: string = ''): Promis
   try {
     const client = new OpenAI({ apiKey: key, timeout: OPENAI_TIMEOUT_MS });
     const completion = await client.chat.completions.create({
-      model: process.env.EXTRACTION_MODEL || 'gpt-5.4-mini',
+      model: process.env.EXTRACTION_MODEL || 'gpt-5.6-luna',
       messages: [
         {
           role: 'system',
@@ -496,7 +500,7 @@ async function reformulateForSearch(label: string, context: string = ''): Promis
           content: `Information manquante à chercher : ${label}${context ? `\nContexte / Raison : ${context}` : ''}`,
         },
       ],
-      temperature: 0.2,
+      temperature: 1,
       max_completion_tokens: 200,
     });
     const reformulated = (completion.choices[0].message.content || '').trim();

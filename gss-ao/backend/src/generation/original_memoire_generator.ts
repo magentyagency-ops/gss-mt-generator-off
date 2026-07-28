@@ -14,12 +14,12 @@ import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
 // Modèle de génération SELON LE CAS :
 //  - SANS template (mémoire GSS maître AO RNE : synthèse + réécriture des surlignages) → qualité
-//    rédactionnelle prioritaire → gpt-5.4-mini.
+//    rédactionnelle prioritaire → gpt-5.6-luna.
 //  - AVEC template client (remplissage d'un cadre imposé : extraction/insertion ciblée) → tâche plus
-//    mécanique → gpt-5.4-nano (moins cher, suffisant).
+//    mécanique → gpt-5.6-luna (moins cher, suffisant).
 // Le modèle effectif est choisi dans generate() puis porté par this.memoireModel. Surchargeable par env.
-const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.4-mini';              // cas SANS template
-const MODEL_TEMPLATE = process.env.MEMOIRE_MODEL_TEMPLATE || 'gpt-5.4-nano';    // cas AVEC template client
+const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.6-luna';              // cas SANS template
+const MODEL_TEMPLATE = process.env.MEMOIRE_MODEL_TEMPLATE || 'gpt-5.6-luna';    // cas AVEC template client
 
 // Modèle de génération d'IMAGES pour remplir les cadres « Zone d'image » du template.
 // Désactivable via GENERATE_IMAGES=false (étape coûteuse, non bloquante).
@@ -1701,8 +1701,8 @@ export class MemoireGenerator {
   // Tableaux du DCE vus PAR COLONNE (par site) : pour une cellule, on n'injecte QUE la colonne du
   // site concerné → le modèle ne peut PAS piocher les données d'un autre site (anti-mélange colonnes).
   private lastDceSiteCols: SiteColumn[] = [];
-  // Modèle de rédaction effectif : gpt-5.4-mini par défaut (cas SANS template), basculé sur
-  // gpt-5.4-nano dans generate() quand un cadre client imposé est détecté (cas AVEC template).
+  // Modèle de rédaction effectif : gpt-5.6-luna par défaut (cas SANS template), basculé sur
+  // gpt-5.6-luna dans generate() quand un cadre client imposé est détecté (cas AVEC template).
   private memoireModel: string = MEMOIRE_MODEL;
 
   constructor(apiKey?: string) {
@@ -1904,7 +1904,7 @@ export class MemoireGenerator {
           model: this.memoireModel,
           ...(jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
           messages,
-          temperature,
+          temperature: 1,
         });
         return completion.choices[0].message.content || '';
       } catch (e: any) {
@@ -2208,8 +2208,8 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
 
     console.log(`[MemoireGenerator] Using template: ${templatePath} (${isClientTemplate ? 'cadre client' : 'mémoire GSS maître'})`);
 
-    // Choix du modèle selon le cas : cadre client imposé → gpt-5.4-nano (tâche mécanique, moins cher) ;
-    // mémoire GSS maître (sans template) → gpt-5.4-mini (qualité rédactionnelle). Porté par callOpenAI.
+    // Choix du modèle selon le cas : cadre client imposé → gpt-5.6-luna (tâche mécanique, moins cher) ;
+    // mémoire GSS maître (sans template) → gpt-5.6-luna (qualité rédactionnelle). Porté par callOpenAI.
     this.memoireModel = isClientTemplate ? MODEL_TEMPLATE : MEMOIRE_MODEL;
     console.log(`[MemoireGenerator] Modèle de rédaction : ${this.memoireModel} (${isClientTemplate ? 'cas template' : 'cas sans template'}).`);
 
@@ -4260,7 +4260,7 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
           env: {
             ...process.env,
             OPENAI_API_KEY: getSettings().openaiApiKey,
-            // Réécriture des surlignages = même modèle que la rédaction du cas courant (gpt-5.4-mini
+            // Réécriture des surlignages = même modèle que la rédaction du cas courant (gpt-5.6-luna
             // sans template). Surchargeable via REWRITE_MODEL.
             MEMOIRE_MODEL: process.env.REWRITE_MODEL || this.memoireModel,
           },
