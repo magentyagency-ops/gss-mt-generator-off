@@ -36,6 +36,11 @@ const IMAGES_ENABLED = process.env.GENERATE_IMAGES !== 'false';
 // 1536 dim, peu coûteux, TPM élevée → on peut indexer toute la doc + embedder chaque requête de champ.
 const EMBED_MODEL = process.env.EMBEDDING_MODEL_MEMOIRE || 'text-embedding-3-small';
 
+// Délai maximal d'un appel OpenAI (ms). Les prompts de rédaction sont longs (DCE + doc GSS en
+// contexte) et dépassaient régulièrement la limite par défaut du SDK → « Request timed out ».
+// L'échec faisait rejouer la détection des besoins, d'où des sollicitations dupliquées.
+const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS) || 300_000;   // 5 minutes
+
 // Bucket privé où sont archivées les pièces des dossiers (cf. routes.ts /dce/upload).
 const USER_FILES_BUCKET = 'user-files';
 
@@ -1859,7 +1864,7 @@ export class MemoireGenerator {
         "dans la requête. La génération du mémoire nécessite l'accès à l'API OpenAI.",
       );
     }
-    this.openai = new OpenAI({ apiKey: key });
+    this.openai = new OpenAI({ apiKey: key, timeout: OPENAI_TIMEOUT_MS });
     const baseDir = path.resolve(__dirname, '../../../../');
     this.responseDir = path.resolve(baseDir, 'response');
     this.templateDir = path.resolve(baseDir, 'Template');

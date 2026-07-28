@@ -23,6 +23,10 @@ import { getSettings } from '../core/config';
 /** Modèle utilitaire (le petit) pour la classification — même défaut que llmExtractor.ts. */
 const CLASSIFY_MODEL = process.env.EXTRACTION_MODEL || 'gpt-5.4-mini';
 
+/** Même délai que la génération de mémoire (5 min) : un « Request timed out » ici fait rejouer la
+ *  détection des besoins et duplique les sollicitations. */
+const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS) || 300_000;
+
 /** Nature d'une information manquante (oriente vers web public ou demande interne). */
 export type MissingInfoKind = 'public' | 'internal' | 'unknown';
 
@@ -98,7 +102,7 @@ export async function classifyFieldsLLM(fields: MissingField[]): Promise<Map<str
   }
 
   try {
-    const client = new OpenAI({ apiKey: key });
+    const client = new OpenAI({ apiKey: key, timeout: OPENAI_TIMEOUT_MS });
     const userPayload = fields.map((f) => ({ id: f.id, label: f.label, context: f.context }));
     const completion = await client.chat.completions.create({
       model: CLASSIFY_MODEL,
@@ -256,7 +260,7 @@ export async function matchQuestionsToPeople(
     return result;
   }
   try {
-    const client = new OpenAI({ apiKey: key });
+    const client = new OpenAI({ apiKey: key, timeout: OPENAI_TIMEOUT_MS });
     const questions = fields.map((f) => ({ id: f.id, question: f.label, contexte: f.context }));
     const annuaire = people.map((p) => ({ id: p.id, nom: p.nom, fonction: p.fonction }));
     const completion = await client.chat.completions.create({
@@ -468,7 +472,7 @@ async function reformulateForSearch(label: string, context: string = ''): Promis
     return `Quelle est la donnée exacte concernant la société GSS (GSS Sécurité Privée en France) pour : ${label} ?`;
   }
   try {
-    const client = new OpenAI({ apiKey: key });
+    const client = new OpenAI({ apiKey: key, timeout: OPENAI_TIMEOUT_MS });
     const completion = await client.chat.completions.create({
       model: process.env.EXTRACTION_MODEL || 'gpt-5.4-mini',
       messages: [

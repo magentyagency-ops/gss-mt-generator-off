@@ -18,6 +18,9 @@ import { getSettings } from '../core/config';
 const REFINE_MODEL = process.env.RAG_REFINE_MODEL || process.env.EXTRACTION_MODEL || 'gpt-5.4-mini';
 const EMBED_MODEL = process.env.RAG_EMBEDDING_MODEL || process.env.EMBEDDING_MODEL_MEMOIRE || 'text-embedding-3-small';
 
+/** Même délai que la génération de mémoire (5 min) — évite les « Request timed out » sur l'affinage. */
+const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS) || 300_000;
+
 /** Client service_role (backend de confiance, contourne la RLS) — null si Supabase non configuré. */
 function adminClient(): SupabaseClient | null {
   const { supabaseUrl, supabaseServiceRoleKey } = getSettings();
@@ -110,7 +113,7 @@ async function learnSollicitations(opts: { dossierId?: string }): Promise<LearnR
 
   const apiKey = getSettings().openaiApiKey;
   if (!apiKey) return { ...empty, reason: 'missing_openai_key' };
-  const openai = new OpenAI({ apiKey });
+  const openai = new OpenAI({ apiKey, timeout: OPENAI_TIMEOUT_MS });
 
   // Réponses reçues (contenu non nul), filtrées sur le dossier si demandé.
   let query = admin
