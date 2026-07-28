@@ -414,9 +414,35 @@ export async function requestInfoFromTeamBulk(
   const isSingle = fields.length === 1;
   const labelText = isSingle ? fields[0].label : `Informations manquantes (${fields.length} éléments)`;
   
-  const questionText = isSingle 
-    ? `Pourriez-vous fournir l'information suivante pour compléter le mémoire technique : ${fields[0].label} ?`
+  let questionText = isSingle 
+    ? `Pourriez-vous fournir l'information suivante pour compléter le mémoire technique : ${fields[0].label} ? (Contexte : ${fields[0].context || 'Aucun'})`
     : `Pourriez-vous fournir les informations suivantes pour compléter le mémoire technique ?\n\n${fields.map(f => `- ${f.label}${f.context ? ` (Contexte: ${f.context})` : ''}`).join('\n')}`;
+
+  const key = getSettings().openaiApiKey;
+  if (key) {
+    try {
+      const client = new OpenAI({ apiKey: key, timeout: OPENAI_TIMEOUT_MS });
+      const prompt = isSingle
+        ? `Transforme ce besoin en une question claire, directe et professionnelle à poser à un collègue :\n\nBesoin : ${fields[0].label}\nContexte : ${fields[0].context || 'Aucun'}\n\nNe réponds QUE par la question, sans salutations ni guillemets. INCLUS absolument le contexte fourni (soit intégré naturellement dans la question, soit ajouté à la fin) pour aider le destinataire à bien comprendre la demande.`
+        : `Transforme cette liste de besoins en une liste de questions claires, directes et professionnelles à poser à des collègues :\n\n${fields.map(f => `- ${f.label} (Contexte: ${f.context || 'Aucun'})`).join('\n')}\n\nNe réponds QUE par la liste de questions, sans texte d'introduction, de salutations ni guillemets. Garde un format de liste à puces (-). INCLUS absolument le contexte fourni pour chaque question (par exemple entre parenthèses ou de façon naturelle) pour aider le destinataire à bien comprendre chaque demande.`;
+      
+      const completion = await client.chat.completions.create({
+        model: CLASSIFY_MODEL,
+        messages: [
+          { role: 'system', content: 'Tu es un assistant chargé de formuler des demandes par email. On te donne un ou plusieurs besoins d\'information. Reformule-les sous forme de questions professionnelles. Ne génère que les questions.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.3,
+      });
+      if (completion.choices[0].message.content) {
+        questionText = isSingle
+          ? `Pourriez-vous fournir l'information suivante pour compléter le mémoire technique ?\n\n${completion.choices[0].message.content.trim()}`
+          : `Pourriez-vous fournir les informations suivantes pour compléter le mémoire technique ?\n\n${completion.choices[0].message.content.trim()}`;
+      }
+    } catch (e) {
+      console.warn('[requestInfoFromTeamBulk] Erreur LLM reformulation questions, fallback texte brut:', e);
+    }
+  }
 
   const body = {
     ao_id: dossierId,
