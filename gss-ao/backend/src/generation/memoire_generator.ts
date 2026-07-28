@@ -3019,7 +3019,7 @@ Renvoie un JSON valide :
       // un libellé de 2-6 mots trouve toujours un passage GSS thématiquement proche. Les exigences
       // fines (garantie technique, livrable, périodicité, engagement de délai) sont, elles,
       // discriminantes. Repli sur les thèmes si l'extraction fine échoue.
-      const detailed = await this.extractDetailedRequirements(dceContext, requirements);
+      const detailed: any[] = []; // await this.extractDetailedRequirements(dceContext, requirements); // User wants more general
       console.log(`[MemoireGenerator] detectMissing DIAG : exigences détaillées=${detailed.length}${detailed.length === 0 ? ' → repli sur les thèmes généraux' : ''}`);
       const viaRag = await this.detectMissingViaRag(detailed.length > 0 ? detailed : requirements);
       console.log(`[MemoireGenerator] detectMissing DIAG : RAG=${viaRag ? `${viaRag.fields.length} manque(s)/${viaRag.total} besoin(s)` : 'INDISPONIBLE → repli ancienne méthode'}`);
