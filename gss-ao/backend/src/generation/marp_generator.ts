@@ -444,7 +444,6 @@ export class MarpGenerator {
           const illus = assignments.get(slideKeyOf(ci, si, i));
 
           if (hasSchema) {
-            // Si la section contient un schéma D2 compilé, on l'affiche (pas d'image en même temps)
             lines.push(`<div style="text-align: center; margin: 15px 0; width: 100%;">`);
             lines.push(`  <img src="./media/${section.d2SvgFileName}" alt="Schéma - ${section.title.replace(/"/g, '&quot;')}" style="width: 85%; height: auto; max-height: 440px; object-fit: contain; display: block; margin: 0 auto;" />`);
             lines.push(`</div>`);
@@ -453,9 +452,16 @@ export class MarpGenerator {
             lines.push(`⚠️ Dispositif sur-mesure : l'architecture technique et humaine présentée répond spécifiquement aux exigences de sécurité de ce chapitre.`);
             lines.push(`</div>`);
             lines.push('');
-          } else if (illus) {
+          }
+
+          if (illus) {
+            if (hasSchema) {
+              // Séparer l'image sur une nouvelle slide s'il y a déjà un schéma
+              lines.push('---');
+              lines.push(`<!-- header: "${headerTitle} (Illustration)" -->`);
+              lines.push('');
+            }
             // Illustration attribuée à CETTE slide selon son contexte.
-            // Placée EN BLOC CENTRÉ SOUS le texte.
             lines.push(`![${illus.alt}](media/${illus.fileName})`);
             lines.push('');
           }

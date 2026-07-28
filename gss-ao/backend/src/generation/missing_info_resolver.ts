@@ -425,13 +425,21 @@ export async function requestInfoFromTeamBulk(
     try {
       const client = new OpenAI({ apiKey: key, timeout: OPENAI_TIMEOUT_MS });
       const prompt = isSingle
-        ? `Transforme ce besoin en une question claire, directe et professionnelle à poser à un collègue :\n\nBesoin : ${fields[0].label}\nContexte : ${fields[0].context || 'Aucun'}\n\nNe réponds QUE par la question, sans salutations ni guillemets. INCLUS absolument le contexte fourni (soit intégré naturellement dans la question, soit ajouté à la fin) pour aider le destinataire à bien comprendre la demande.`
-        : `Transforme cette liste de besoins en une liste de questions claires, directes et professionnelles à poser à des collègues :\n\n${fields.map(f => `- ${f.label} (Contexte: ${f.context || 'Aucun'})`).join('\n')}\n\nNe réponds QUE par la liste de questions, sans texte d'introduction, de salutations ni guillemets. Garde un format de liste à puces (-). INCLUS absolument le contexte fourni pour chaque question (par exemple entre parenthèses ou de façon naturelle) pour aider le destinataire à bien comprendre chaque demande.`;
+        ? `Agis en tant que rédacteur de mémoire technique. Tu dois demander à un collègue une information manquante.
+Besoin brut : ${fields[0].label}
+Contexte : ${fields[0].context || 'Aucun'}
+
+Rédige UNE SEULE question claire, directe et compréhensible intégrant naturellement le contexte, sans aucune formule de politesse ni guillemets. La question doit permettre au collègue de comprendre exactement ce qu'on attend de lui.`
+        : `Agis en tant que rédacteur de mémoire technique. Tu dois demander à des collègues plusieurs informations manquantes.
+Voici les besoins :
+${fields.map(f => `- Besoin : ${f.label} (Contexte: ${f.context || 'Aucun'})`).join('\n')}
+
+Rédige une liste de questions claires et compréhensibles (une par besoin), intégrant le contexte pour chacune. Ne mets ni formule de politesse ni introduction. Utilise des puces (-).`;
       
       const completion = await client.chat.completions.create({
-        model: CLASSIFY_MODEL,
+        model: 'gpt-4o-mini', // Utilisation de gpt-4o-mini pour plus de rapidité et de fiabilité sur cette tâche simple
         messages: [
-          { role: 'system', content: 'Tu es un assistant chargé de formuler des demandes par email. On te donne un ou plusieurs besoins d\'information. Reformule-les sous forme de questions professionnelles. Ne génère que les questions.' },
+          { role: 'system', content: 'Tu es un assistant expert en communication professionnelle. Transforme des besoins techniques en questions claires et contextualisées.' },
           { role: 'user', content: prompt }
         ],
         temperature: 0.3,
