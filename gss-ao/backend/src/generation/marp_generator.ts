@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import type { PooledIllustration, SlideContext } from './image_service';
+import { D2Service } from './d2_service';
 
 /** Illustrations attribuées, indexées par clé de slide (unicité globale garantie amont). */
 export type SlideAssignments = Map<string, PooledIllustration>;
@@ -84,10 +85,19 @@ function slideKeyOf(chapterIdx: number, sectionIdx: number, chunkIdx: number): s
   return `${chapterIdx}_${sectionIdx}_${chunkIdx}`;
 }
 
+export interface AssembleSection {
+  title: string;
+  text: string;
+  id?: string;
+  illustration?: string;
+  d2Code?: string;
+  d2SvgFileName?: string;
+}
+
 export interface AssembleChapter {
   key: string;
   title: string;
-  sections: { title: string; text: string; id?: string; illustration?: string; d2SvgFileName?: string }[];
+  sections: AssembleSection[];
 }
 
 export interface CoverInfo {
@@ -131,24 +141,19 @@ export class MarpGenerator {
    * then render it to PDF using @marp-team/marp-cli.
    * Returns the path to the generated PDF.
    */
-  public generatePdf(
+  public async generatePdf(
     chapters: AssembleChapter[],
     cover: CoverInfo = {},
     assignments: SlideAssignments = new Map(),
-  ): { filePath: string; markdownPath: string } {
-    const markdown = this.buildMarkdown(chapters, cover, assignments);
-
+  ): Promise<{ filePath: string; markdownPath: string }> {
     // Write markdown + copy assets to a temp working directory
     const workDir = path.join(this.outputDir, `marp_work_${Date.now()}`);
     fs.mkdirSync(workDir, { recursive: true });
     
-    const mdPath = path.join(workDir, 'memoire_template.md');
     const cssPath = path.join(workDir, 'gss-theme.css');
     const logoSrc = path.join(MARP_ASSETS_DIR, 'logogss.png');
     const logoDst = path.join(workDir, 'logogss.png');
 
-    fs.writeFileSync(mdPath, markdown, 'utf-8');
-    
     // Check if css exists
     const cssSrc = path.join(MARP_ASSETS_DIR, 'gss-theme.css');
     if (fs.existsSync(cssSrc)) {
@@ -165,18 +170,16 @@ export class MarpGenerator {
     const mediaDst = path.join(workDir, 'media');
     if (fs.existsSync(mediaSrc)) {
       fs.cpSync(mediaSrc, mediaDst, { recursive: true });
+    } else {
+      fs.mkdirSync(mediaDst, { recursive: true });
     }
 
-    // Copier les schémas D2 générés (.svg) depuis le répertoire de réponse vers le workDir
-    const d2MediaSrc = path.join(this.outputDir, 'media');
-    if (fs.existsSync(d2MediaSrc)) {
-      fs.readdirSync(d2MediaSrc).forEach(file => {
-        if (file.endsWith('.svg')) {
-          fs.mkdirSync(mediaDst, { recursive: true });
-          fs.copyFileSync(path.join(d2MediaSrc, file), path.join(mediaDst, file));
-        }
-      });
-    }
+    // Traitement et compilation des schémas D2 pour chaque section (doit être fait AVANT buildMarkdown)
+    await this.processD2Diagrams(chapters, mediaDst, cover.client || 'Client');
+
+    const markdown = this.buildMarkdown(chapters, cover, assignments);
+    const mdPath = path.join(workDir, 'memoire_template.md');
+    fs.writeFileSync(mdPath, markdown, 'utf-8');
 
     // Écrit dans media/ UNIQUEMENT les images réellement attribuées (unicité déjà
     // garantie en amont) → media/<fileName> référencé par le markdown.
@@ -251,11 +254,53 @@ export class MarpGenerator {
   }
 
   /**
+   * Scanne et compile tous les schémas D2 des sections en images SVG dans le dossier media.
+   * Si la section contient un bloc ```d2 ... ```, il est extrait et compilé.
+   */
+  private async processD2Diagrams(chapters: AssembleChapter[], mediaDir: string, clientName: string): Promise<void> {
+    const promises: Promise<void>[] = [];
+    chapters.forEach((chapter, ci) => {
+      if (!chapter.sections) return;
+      chapter.sections.forEach((section, si) => {
+        let d2Code = section.d2Code || '';
+        
+        // Extrait du code D2 noyé dans le texte de la section
+        if (!d2Code && section.text && section.text.includes('```d2')) {
+          const match = section.text.match(/```d2([\s\S]*?)```/);
+          if (match) {
+            d2Code = match[1].trim();
+            section.text = section.text.replace(/```d2[\s\S]*?```/g, '').trim();
+          }
+        }
+
+        if (!d2Code) return;
+
+        const compilePromise = (async () => {
+          try {
+            const fileName = `schema_${ci}_${si}.svg`;
+            const filePath = path.join(mediaDir, fileName);
+            
+            const svgBuffer = await D2Service.compileD2ToSvg(d2Code);
+            fs.writeFileSync(filePath, svgBuffer);
+            section.d2SvgFileName = fileName;
+            console.log(`[MarpGenerator] Schéma D2 compilé avec succès: ${fileName}`);
+          } catch (e: any) {
+            console.warn(`[MarpGenerator] Échec compilation D2 pour section ${section.title}:`, e.message || e);
+          }
+        })();
+        promises.push(compilePromise);
+      });
+    });
+    await Promise.all(promises);
+  }
+
+  /**
    * Réduit (in place) les images « db_ » du dossier media à leur taille
    * d'affichage via Pillow. Étape best-effort : si Python/Pillow est absent ou
    * échoue, on conserve les images d'origine (le rendu reste possible).
    */
   private downscaleDbImages(mediaDir: string): void {
+
     try {
       const script = path.resolve(__dirname, '../../python/downscale_images.py');
       if (!fs.existsSync(script)) return;
@@ -395,11 +440,22 @@ export class MarpGenerator {
           lines.push(chunk);
           lines.push('');
 
-          // Illustration attribuée à CETTE slide selon son contexte (clé stable
-          // = même énumération qu'enumerateContentSlides). Chaque image est unique
-          // sur tout le document. Placée EN BLOC CENTRÉ SOUS le texte.
+          const hasSchema = section.d2SvgFileName && i === chunks.length - 1;
           const illus = assignments.get(slideKeyOf(ci, si, i));
-          if (illus) {
+
+          if (hasSchema) {
+            // Si la section contient un schéma D2 compilé, on l'affiche (pas d'image en même temps)
+            lines.push(`<div style="text-align: center; margin: 15px 0; width: 100%;">`);
+            lines.push(`  <img src="./media/${section.d2SvgFileName}" alt="Schéma - ${section.title.replace(/"/g, '&quot;')}" style="width: 85%; height: auto; max-height: 440px; object-fit: contain; display: block; margin: 0 auto;" />`);
+            lines.push(`</div>`);
+            lines.push('');
+            lines.push(`<div class="box" style="margin-top: 0.5rem; font-size: 0.85em; padding: 0.5rem;">`);
+            lines.push(`⚠️ Dispositif sur-mesure : l'architecture technique et humaine présentée répond spécifiquement aux exigences de sécurité de ce chapitre.`);
+            lines.push(`</div>`);
+            lines.push('');
+          } else if (illus) {
+            // Illustration attribuée à CETTE slide selon son contexte.
+            // Placée EN BLOC CENTRÉ SOUS le texte.
             lines.push(`![${illus.alt}](media/${illus.fileName})`);
             lines.push('');
           }
@@ -418,15 +474,8 @@ export class MarpGenerator {
           lines.push(`![bg contain](media/${illustrationMap[section.id]})`);
           lines.push('');
         }
-        
-        // Injection du schéma D2 (généré dynamiquement par l'IA)
-        if (section.d2SvgFileName) {
-          lines.push('---');
-          lines.push('<!-- _class: lead -->');
-          lines.push('<!-- _header: "" -->');
-          lines.push(`![bg contain](media/${section.d2SvgFileName})`);
-          lines.push('');
-        }
+
+
       });
 
       if (chapter.key === 'I' || chapter.key === '1') {

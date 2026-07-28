@@ -1,5 +1,6 @@
-import { MarpGenerator } from './marp_generator';
+import { MarpGenerator, AssembleChapter, AssembleSection } from './marp_generator';
 import { ImageLibraryService } from './image_service';
+import { D2Service } from './d2_service';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -12,21 +13,20 @@ import { DB, FichiersDB } from '../core/db';
 import { getScopedClient } from '../core/supabase';
 import { extractText, loadDocxStructure, loadDocxTemplateAnnotated } from '../ingestion/docConverter';
 import { overlaySynthesis, loadTrebuchetFont, measureZonesCapacity, RefReplacement, RefContext } from './pdf_overlay';
-import { resolveMissingInfo, classifyFieldsLLM, MissingField, generateD2SchemasForChapters } from './missing_info_resolver';
+import { resolveMissingInfo, classifyFieldsLLM, MissingField } from './missing_info_resolver';
 import { uploadTempDocx, downloadTempDocx } from '../core/temp_storage';
 import { setProgress } from '../core/progress';
-import { learnSollicitationsForDossier } from './learn_sollicitation';
 // @ts-ignore
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
 // Modèle de génération SELON LE CAS :
 //  - SANS template (mémoire GSS maître AO RNE : synthèse + réécriture des surlignages) → qualité
-//    rédactionnelle prioritaire → gpt-5.6-luna.
+//    rédactionnelle prioritaire → gpt-5.4-mini.
 //  - AVEC template client (remplissage d'un cadre imposé : extraction/insertion ciblée) → tâche plus
-//    mécanique → gpt-5.6-luna (moins cher, suffisant).
+//    mécanique → gpt-5.4-nano (moins cher, suffisant).
 // Le modèle effectif est choisi dans generate() puis porté par this.memoireModel. Surchargeable par env.
-const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.6-luna';              // cas SANS template
-const MODEL_TEMPLATE = process.env.MEMOIRE_MODEL_TEMPLATE || 'gpt-5.6-luna';    // cas AVEC template client
+const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.4-mini';              // cas SANS template
+const MODEL_TEMPLATE = process.env.MEMOIRE_MODEL_TEMPLATE || 'gpt-5.4-nano';    // cas AVEC template client
 
 // Modèle de génération d'IMAGES pour remplir les cadres « Zone d'image » du template.
 // Désactivable via GENERATE_IMAGES=false (étape coûteuse, non bloquante).
@@ -37,97 +37,8 @@ const IMAGES_ENABLED = process.env.GENERATE_IMAGES !== 'false';
 // 1536 dim, peu coûteux, TPM élevée → on peut indexer toute la doc + embedder chaque requête de champ.
 const EMBED_MODEL = process.env.EMBEDDING_MODEL_MEMOIRE || 'text-embedding-3-small';
 
-// Délai maximal d'un appel OpenAI (ms). Les prompts de rédaction sont longs (DCE + doc GSS en
-// contexte) et dépassaient régulièrement la limite par défaut du SDK → « Request timed out ».
-// L'échec faisait rejouer la détection des besoins, d'où des sollicitations dupliquées.
-const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS) || 300_000;   // 5 minutes
-
 // Bucket privé où sont archivées les pièces des dossiers (cf. routes.ts /dce/upload).
 const USER_FILES_BUCKET = 'user-files';
-
-// Mots vides : trop fréquents pour porter le SUJET d'un manque ou d'une question. Sans cette liste,
-// deux phrases quelconques d'un DCE de sécurité partagent toujours « les », « des », « sécurité »…
-const MOTS_VIDES = new Set([
-  'les', 'des', 'aux', 'une', 'unes', 'uns', 'par', 'sur', 'sous', 'pour', 'dans', 'avec', 'sans', 'cette', 'ces',
-  'son', 'ses', 'leur', 'leurs', 'votre', 'vos', 'notre', 'nos', 'que', 'qui', 'quel', 'quelle', 'quels', 'quelles',
-  'est', 'sont', 'etre', 'doit', 'doivent', 'peut', 'peuvent', 'tout', 'toute', 'tous', 'toutes', 'autre', 'autres',
-  'plus', 'moins', 'ainsi', 'donc', 'lors', 'apres', 'avant', 'entre', 'chaque', 'meme', 'selon', 'afin', 'cas',
-  'candidat', 'entreprise', 'societe', 'titulaire', 'marche', 'question', 'section', 'champ', 'total', 'france',
-  'statut', 'exact', 'officiel', 'officielle', 'adresse', 'nom', 'numero', 'date',
-]);
-
-/**
- * Mots significatifs d'un libellé : minuscules, sans accents, ≥ 3 lettres, hors mots vides.
- * Utilisé pour comparer un manque à une question déjà posée — comparaison MOT À MOT, jamais en
- * sous-chaîne (« les » ne doit pas matcher « télésurveillance », ni « prise » « entreprise »).
- */
-export function significantWords(texte: string): Set<string> {
-  const norm = texte.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  return new Set(
-    norm.split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !MOTS_VIDES.has(w)),
-  );
-}
-
-/**
- * Découpe un contexte DCE en segments d'au plus `maxLen` caractères, en coupant EN PRIORITÉ sur les
- * frontières de pièces (« \n\n--- label ---\n », posées par getDceContext) pour qu'un CCTP ne soit
- * pas scindé au milieu d'un article. Repli : coupure sur un saut de ligne, puis coupure sèche.
- * Un DCE qui tient dans `maxLen` ressort en un seul segment (cas le plus fréquent).
- */
-export function splitOnPieceBoundaries(text: string, maxLen: number): string[] {
-  if (text.length <= maxLen) return [text];
-  const re = /\n\n--- .+? ---\n/g;
-  // Bornes des pièces : [0, début pièce 2, …, fin du texte].
-  const bounds: number[] = [0];
-  for (let m = re.exec(text); m; m = re.exec(text)) if (m.index > 0) bounds.push(m.index);
-  bounds.push(text.length);
-
-  /** Tronçonne un bloc plus long que maxLen, de préférence sur un saut de ligne. */
-  const hardSplit = (block: string): string[] => {
-    const parts: string[] = [];
-    let rest = block;
-    while (rest.length > maxLen) {
-      const window = rest.slice(0, maxLen);
-      const cut = window.lastIndexOf('\n');
-      const end = cut > maxLen * 0.5 ? cut : maxLen;
-      parts.push(rest.slice(0, end));
-      rest = rest.slice(end);
-    }
-    if (rest.length > 0) parts.push(rest);
-    return parts;
-  };
-
-  const out: string[] = [];
-  let current = '';
-  for (let i = 0; i < bounds.length - 1; i++) {
-    const piece = text.slice(bounds[i], bounds[i + 1]);
-    if (piece.length > maxLen) {
-      // Pièce plus grosse que la fenêtre : on ferme le segment courant, puis on la tronçonne.
-      if (current) { out.push(current); current = ''; }
-      out.push(...hardSplit(piece));
-      continue;
-    }
-    if (current.length + piece.length <= maxLen) current += piece;
-    else { out.push(current); current = piece; }
-  }
-  if (current) out.push(current);
-  return out.filter((s) => s.trim().length > 0);
-}
-
-// Détection des manques, cas SANS CADRE : nombre maximum d'exigences détaillées confrontées à la
-// RAG. Un CCTP est souvent rédigé en listes à puces ; sans plafond, l'extraction en sort plusieurs
-// centaines (une par puce) → liste de manques inexploitable et coût inutile. Au-delà, une passe de
-// consolidation fusionne les exigences qui relèvent du même moyen.
-const MAX_DETAILED_REQUIREMENTS = Number(process.env.MAX_DETAILED_REQUIREMENTS || 80);
-
-// Version de l'algorithme de détection des manques. À INCRÉMENTER dès que la méthode change
-// (extraction, jugement, filtrage) : les dossiers analysés avec une version antérieure sont
-// automatiquement réanalysés au lieu de servir un cache obsolète (cf. detectMissingInfo).
-//   1 → thèmes généraux jugés directement face à la RAG
-//   2 → exigences détaillées + consolidation, et filtre « déjà recherché » scopé au dossier
-// Déclenche l'invalidation du cache de détection des infos manquantes sur tous les dossiers (lors
-// de changements sur les prompts ou la logique d'extraction).
-const DETECTION_VERSION = 3;
 
 /** Un manque détecté, avec sa criticité (bloquant = éliminatoire, facultatif = bonus, normal). */
 type MissingFieldDetected = { id: string; label: string; context: string; criticite: 'bloquant' | 'facultatif' | 'normal' };
@@ -141,9 +52,7 @@ function normCriticite(c: any): 'bloquant' | 'facultatif' | 'normal' {
 }
 
 /** Un passage indexable pour la recherche sémantique (Doc GSS ou DCE). */
-// 'GSS'/'DCE' = sources fichiers ; 'WEB'/'SOLLICITATION' = connaissances issues de la bdd rag_chunk
-// (recherches web validées et réponses d'équipe indexées).
-interface RetrievalChunk { source: 'GSS' | 'DCE' | 'WEB' | 'SOLLICITATION'; label: string; text: string; embedding?: number[]; }
+interface RetrievalChunk { source: 'GSS' | 'DCE'; label: string; text: string; embedding?: number[]; }
 
 /** Similarité cosinus entre deux vecteurs (0 si l'un est nul). */
 function cosine(a: number[], b: number[]): number {
@@ -1079,12 +988,6 @@ function markdownToParagraphsX(raw: string, skipTitle?: string): string {
   return out.join('');
 }
 
-export interface AssembleChapter {
-  /** Chapitre I..IV (ordre = ordre des Heading1 dans le template). */
-  key: string;
-  title: string;
-  sections: Array<{ title: string; text: string; id?: string; illustration?: string; d2SvgFileName?: string; d2Code?: string }>;
-}
 
 // ─── Mode B (réponse libre / sans cadre imposé) ───
 // Mapping miroir de frontend/lib/ai/sections-b.ts : permet de regrouper la map
@@ -1851,8 +1754,8 @@ export class MemoireGenerator {
   // Tableaux du DCE vus PAR COLONNE (par site) : pour une cellule, on n'injecte QUE la colonne du
   // site concerné → le modèle ne peut PAS piocher les données d'un autre site (anti-mélange colonnes).
   private lastDceSiteCols: SiteColumn[] = [];
-  // Modèle de rédaction effectif : gpt-5.6-luna par défaut (cas SANS template), basculé sur
-  // gpt-5.6-luna dans generate() quand un cadre client imposé est détecté (cas AVEC template).
+  // Modèle de rédaction effectif : gpt-5.4-mini par défaut (cas SANS template), basculé sur
+  // gpt-5.4-nano dans generate() quand un cadre client imposé est détecté (cas AVEC template).
   private memoireModel: string = MEMOIRE_MODEL;
 
   constructor(apiKey?: string) {
@@ -1867,7 +1770,7 @@ export class MemoireGenerator {
         "dans la requête. La génération du mémoire nécessite l'accès à l'API OpenAI.",
       );
     }
-    this.openai = new OpenAI({ apiKey: key, timeout: OPENAI_TIMEOUT_MS });
+    this.openai = new OpenAI({ apiKey: key });
     const baseDir = path.resolve(__dirname, '../../../../');
     this.responseDir = path.resolve(baseDir, 'response');
     this.templateDir = path.resolve(baseDir, 'Template');
@@ -2115,7 +2018,7 @@ export class MemoireGenerator {
           model: this.memoireModel,
           ...(jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
           messages,
-          temperature: 1,
+          temperature,
         });
         return completion.choices[0].message.content || '';
       } catch (e: any) {
@@ -2235,14 +2138,11 @@ export class MemoireGenerator {
   }
 
   /**
-   * Client Postgres vers la base RAG, ou null si non configuré / explicitement désactivé.
-   * IMPÉRATIF : la génération DOIT lire rag_chunk (doc GSS + recherches web + réponses d'équipe
-   * SOLLICITATION). La lecture en base est donc ACTIVÉE PAR DÉFAUT dès qu'une URL est configurée
-   * (RAG_DATABASE_URL, sinon DATABASE_URL). Opt-out explicite via MEMOIRE_RAG_FROM_DB=false. Sans URL,
-   * ou si la base est vide/injoignable, chaque appelant retombe proprement sur les fichiers.
+   * Client Postgres vers la base RAG, ou null si le mode bdd est désactivé / non configuré.
+   * Source : MEMOIRE_RAG_FROM_DB=true + RAG_DATABASE_URL (sinon DATABASE_URL). SSL auto pour Supabase.
    */
   private ragDbClient(): PgClient | null {
-    if (process.env.MEMOIRE_RAG_FROM_DB === 'false') return null;   // opt-out explicite uniquement
+    if (process.env.MEMOIRE_RAG_FROM_DB !== 'true') return null;
     const raw = process.env.RAG_DATABASE_URL || getSettings().databaseUrl || '';
     const url = raw.replace(/^postgresql\+psycopg:\/\//, 'postgresql://');
     if (!url) return null;
@@ -2288,12 +2188,12 @@ export class MemoireGenerator {
           cats['RECHERCHES WEB BDD'] = webRes.rows.map(r => `--- Recherche Web : ${r.query} ---\nQuestion : ${r.query}\nRéponse BDD (${r.statut}) : ${r.valeur_retenue || r.answer}`).join('\n\n');
         }
         const qRes = await client.query(
-          `select question, reponse_contenu
+          `select question, reponse
              from public.question_interne
-            where reponse_contenu is not null and reponse_contenu != ''`
+            where reponse is not null and reponse != ''`
         );
         if (qRes.rows.length > 0) {
-          cats['QUESTIONS INTERNES BDD'] = qRes.rows.map(r => `--- Question Équipe : ${r.question} ---\nQuestion : ${r.question}\nRéponse Équipe : ${r.reponse_contenu}`).join('\n\n');
+          cats['QUESTIONS INTERNES BDD'] = qRes.rows.map(r => `--- Question Équipe : ${r.question} ---\nQuestion : ${r.question}\nRéponse Équipe : ${r.reponse}`).join('\n\n');
         }
       } catch (eWeb: any) {
         console.warn(`[MemoireGenerator] Lecture recherche_web/question_interne depuis BDD ignorée : ${eWeb?.message || eWeb}`);
@@ -2539,31 +2439,22 @@ Renvoie un JSON valide :
     if (!client || !fields.length) return fields;
     try {
       await client.connect();
-      // Scopé AU DOSSIER : une recherche menée pour un autre marché ne dit rien de celui-ci
-      // (sauf pour les questions factuelles, mais l'IA juge désormais la couverture globale
-      // grâce à l'injection de la table RAG dans le contexte de détection).
-      const resWeb = await client.query(`select query from public.recherche_web where query is not null and dossier_id = $1`, [dossierId]);
-      const resQ = await client.query(`select question from public.question_interne where question is not null and reponse_contenu is not null and ao_id = $1`, [dossierId]);
+      const resWeb = await client.query(`select query from public.recherche_web where query is not null`);
+      const resQ = await client.query(`select question from public.question_interne where question is not null and reponse_contenu is not null`);
       const existingQueries = [
-        ...resWeb.rows.map(r => String(r.query || '')),
-        ...resQ.rows.map(r => String(r.question || '')),
-      ].filter((q) => q.trim() !== '');
+        ...resWeb.rows.map(r => (r.query || '').toLowerCase()),
+        ...resQ.rows.map(r => (r.question || '').toLowerCase()),
+      ];
       if (!existingQueries.length) return fields;
-      const indexed = existingQueries.map((q) => ({ texte: q, mots: significantWords(q) }));
       return fields.filter(f => {
-        // IGNORE : champs liés à la signature (ex: 'Fait à', 'Date', 'Signature', 'Cachet')
-        if (/signature|fait\s*à|le\s*(?:\d{2}\/){2}\d{4}|cachet|signataire/i.test(f.label)) return false;
-
-        const uniques = significantWords(f.label);
-        if (uniques.size === 0) return true;
-        for (const { texte, mots } of indexed) {
-          // Recouvrement de SUJET : au moins 2 mots significatifs en commun ET 60 % des mots du
-          // manque. Comparaison mot à mot (pas en sous-chaîne : « les » ne doit pas matcher
-          // « télésurveillance », ni « prise » « entreprise »).
-          const communs = [...uniques].filter((w) => mots.has(w));
-          const seuil = Math.max(2, Math.ceil(uniques.size * 0.6));
-          if (communs.length >= seuil) {
-            console.log(`[MemoireGenerator] Manque ignoré car déjà recherché/présent dans BDD : "${f.label}" (~ "${texte}")`);
+        const flab = f.label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        const words = flab.split(/[^a-z0-9]+/).filter(w => w.length >= 3 && !w.match(/^(pour|dans|avec|cette|votre|notre|leur|candidat|entreprise|societe|titulaire|marche|question|section|champ|total|france|statut)$/));
+        if (!words.length) return true;
+        for (const eq of existingQueries) {
+          const eqNorm = eq.normalize('NFD').replace(/[̀-ͯ]/g, '');
+          const matches = words.filter(w => eqNorm.includes(w));
+          if (matches.length >= Math.min(1, words.length)) {
+            console.log(`[MemoireGenerator] Manque ignoré car déjà recherché/présent dans BDD : "${f.label}" (~ "${eq}")`);
             return false;
           }
         }
@@ -2579,8 +2470,8 @@ Renvoie un JSON valide :
 
   /**
    * Extrait la LISTE des besoins à couvrir (SANS juger la couverture) :
-   *  - cadre imposé → les CHAMPS du formulaire (champs texte, cases à cocher, cellules de tableau) ;
-   *  - sans cadre   → les GRANDS BESOINS / THÈMES du CCTP (généraux et regroupés, pas ligne à ligne).
+   *  - cadre imposé → les CHAMPS du formulaire ;
+   *  - sans cadre   → les EXIGENCES du CCTP.
    */
   private async extractRequirementsList(
     templateText: string | null,
@@ -2616,8 +2507,7 @@ Renvoie un JSON valide :
               "- Relève CHAQUE champ texte à compléter, CHAQUE case à cocher à trancher, et CHAQUE cellule de tableau à renseigner (⬚).\n" +
               "- Pour une cellule de tableau, REPRENDS dans le libellé la colonne ET la ligne indiquées (ex. « Tableau moyens humains — ligne « Chef de poste », colonne « Effectif » à compléter »). Regroupe si toute une colonne est vide.\n" +
               "- Un libellé court et clair par élément ; indique son type dans `type` : \"champ\" | \"case\" | \"tableau\". Ne recopie pas le formulaire entier.\n" +
-              "- Ignore les cases DÉJÀ cochées et les zones déjà renseignées.\n" +
-              "- IGNORE ABSOLUMENT tous les champs liés à la signature, date et lieu de signature (ex: 'Fait à', 'Le', 'Signature', 'Nom et qualité du signataire', 'Cachet').",
+              "- Ignore les cases DÉJÀ cochées et les zones déjà renseignées.",
           },
           { role: 'user', content: `=== CADRE (annoté) ===\n${templateText.slice(0, 80_000)}\n\nRenvoie un JSON : {"items":[{"label":"...","type":"champ|case|tableau","criticite":"bloquant|facultatif|normal"}]}` },
         ],
@@ -2627,169 +2517,12 @@ Renvoie un JSON valide :
     }
     const content = await this.callOpenAI(
       [
-        {
-          role: 'system',
-          content:
-            "Tu extrais, à partir d'un DCE (CCTP en priorité) pour un marché de sécurité privée, la liste des GRANDS BESOINS / THÈMES auxquels GSS devra répondre dans son mémoire technique. " +
-            "OBJECTIF : des sujets GÉNÉRAUX et SYNTHÉTIQUES (niveau chapitre), PAS une check-list de détails opérationnels. " +
-            "RÈGLES STRICTES :\n" +
-            "- INTERDIT dans le libellé : toute HEURE ou horaire (ex. « rondes à 17h »), toute QUANTITÉ ou effectif chiffré, tout DÉLAI, toute référence d'article, tout nom de site précis. Ces détails NE sont PAS des besoins à relever ici — ils seront traités à la rédaction.\n" +
-            "- REGROUPE tous les points d'un même sujet en UN SEUL besoin global. Exemples de BON niveau : « Moyens humains et qualifications de l'équipe », « Organisation des rondes et de la surveillance », « Continuité de service et gestion des remplacements », « Matériel et équipements », « Formation du personnel », « Contrôle d'accès et filtrage », « Télésurveillance et levée de doute », « Pilotage, qualité et reporting ».\n" +
-            "- Exemple de CE QU'IL NE FAUT PAS FAIRE : « Rondes à 17h et 22h sur le site A », « 4 agents SSIAP 2 de nuit », « intervention sous 15 min » → à REGROUPER en « Organisation des rondes et de la surveillance » / « Moyens humains » / « Délais d'intervention ».\n" +
-            "- Un libellé COURT et GÉNÉRIQUE par thème (2 à 6 mots). Vise ENVIRON 8 à 15 besoins globaux au total (jamais 30+). N'invente rien : chaque thème doit être réellement demandé par le DCE.",
-        },
-        { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON : {"items":[{"label":"besoin général / thème","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}` },
+        { role: 'system', content: "Tu extrais la CHECK-LIST EXHAUSTIVE des EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. Un libellé PRÉCIS par exigence (avec chiffre / délai / qualification si présent). N'invente rien." },
+        { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON : {"items":[{"label":"...","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}` },
       ],
-      0.2, 'Extraction besoins CCTP (généraux)', true,
+      0.2, 'Extraction exigences CCTP', true,
     );
     return parse(content);
-  }
-
-  /**
-   * Second niveau d'extraction (cas SANS CADRE) : les exigences ATOMIQUES et VÉRIFIABLES du DCE,
-   * rattachées aux thèmes généraux d'extractRequirementsList.
-   *
-   * Pourquoi : les thèmes généraux (« Main courante et traçabilité », 2-6 mots, sans chiffre ni
-   * délai) sont trop larges pour être confrontés à la RAG — n'importe quel passage GSS vaguement
-   * proche les fait passer « couvert », et la complétude sort systématiquement à ~100 %. Ce sont les
-   * exigences fines (garanties techniques attendues, engagements de délai, procédures nommées) qui
-   * révèlent ce que la base de connaissance ne sait pas prouver. Les thèmes restent utiles pour le
-   * PLAN du mémoire ; les exigences fines servent au diagnostic de couverture.
-   *
-   * Volontairement générique : aucune règle propre à un marché ou à un type de site.
-   */
-  private async extractDetailedRequirements(
-    dceContext: string,
-    themes: Array<{ label: string; criticite: 'bloquant' | 'facultatif' | 'normal' }>,
-  ): Promise<Array<{ label: string; theme?: string; ref?: string; criticite: 'bloquant' | 'facultatif' | 'normal' }>> {
-    const themeList = themes.map((t) => `- ${t.label}`).join('\n') || '(aucun thème pré-extrait)';
-
-    // Le DCE assemblé peut dépasser la fenêtre d'un appel (getDceContext va jusqu'à 240k car ; un
-    // seul CCTP volumineux en fait déjà ~110k). Tronquer ferait silencieusement disparaître les
-    // exigences des dernières pièces (souvent CCAP, BPU et annexes). On découpe donc sur les
-    // frontières de pièces (« --- label --- », posées par getDceContext) et on extrait segment par
-    // segment. Un seul appel pour la grande majorité des DCE ; deux ou trois pour les plus gros.
-    const segments = splitOnPieceBoundaries(dceContext, 110_000);
-    if (segments.length > 1) {
-      console.log(`[MemoireGenerator] extractDetailedRequirements : DCE de ${dceContext.length} car → ${segments.length} segments.`);
-    }
-    const all: Array<{ label: string; theme?: string; ref?: string; criticite: 'bloquant' | 'facultatif' | 'normal' }> = [];
-    for (const [n, segment] of segments.entries()) {
-      all.push(...await this.extractDetailedRequirementsFromSegment(segment, themeList, n + 1, segments.length));
-    }
-
-    // Dédoublonnage sur le libellé normalisé (l'IA répète parfois une exigence d'un article à
-    // l'autre, et deux segments peuvent se recouper sur une même obligation).
-    const seen = new Set<string>();
-    const uniq = all.filter((x) => {
-      const k = x.label.toLowerCase().replace(/\s+/g, ' ').trim();
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
-    if (uniq.length <= MAX_DETAILED_REQUIREMENTS) return uniq;
-    console.log(`[MemoireGenerator] extractDetailedRequirements : ${uniq.length} exigences → consolidation (max ${MAX_DETAILED_REQUIREMENTS}).`);
-    return await this.consolidateRequirements(uniq);
-  }
-
-  /** Un appel d'extraction d'exigences sur UN segment de DCE (cf. extractDetailedRequirements). */
-  private async extractDetailedRequirementsFromSegment(
-    segment: string,
-    themeList: string,
-    numero: number,
-    total: number,
-  ): Promise<Array<{ label: string; theme?: string; ref?: string; criticite: 'bloquant' | 'facultatif' | 'normal' }>> {
-    // Quota par segment : le plafond global reste MAX_DETAILED_REQUIREMENTS (la consolidation
-    // repasse derrière), mais on évite qu'un segment à lui seul sature la liste.
-    const cible = Math.max(15, Math.round(MAX_DETAILED_REQUIREMENTS / total));
-    const content = await this.callOpenAI(
-      [
-        {
-          role: 'system',
-          content:
-            "Tu extrais, à partir d'un DCE de marché de sécurité privée, la liste des EXIGENCES PRÉCISES que le titulaire devra tenir et dont il devra faire la preuve dans son mémoire technique. " +
-            "C'est le niveau DÉTAIL (pas le niveau chapitre) : chaque ligne doit être un engagement VÉRIFIABLE, opposable au titulaire.\n" +
-            "RÈGLES :\n" +
-            "- Une exigence = UNE seule obligation ATOMIQUE. Si un article en contient plusieurs, éclate-les.\n" +
-            "- CONSERVE la donnée qui rend l'exigence vérifiable : le délai, l'effectif, la fréquence, la qualification, le format de livrable, la garantie technique attendue, la périodicité.\n" +
-            "- Formule l'exigence du point de vue de ce que le TITULAIRE doit fournir ou prouver (moyen, procédure, outil, engagement), pas du point de vue de l'acheteur.\n" +
-            "- Rattache chaque exigence à l'UN des thèmes suivants (recopie le libellé exact) :\n" + themeList + "\n" +
-            "  Si aucune ne convient, mets le thème le plus proche.\n" +
-            "- `ref` = repère de localisation dans le DCE (n° d'article, titre de section ou page), pour la traçabilité. Vide si introuvable.\n" +
-            `- Vise au moins ${cible} exigences sur CE segment. Couvre-le en ENTIER, pas seulement son début. Pas de doublon.\n` +
-            "- NE RELÈVE PAS chaque puce du DCE. Une ligne ne mérite d'être extraite que si elle engage un MOYEN, un LIVRABLE, une QUALIFICATION, un DÉLAI ou une PÉRIODICITÉ, ou une GARANTIE TECHNIQUE identifiable.\n" +
-            "- FUSIONNE dans l'exigence de moyen correspondante les formulations génériques de mission (« surveiller », « rendre compte », « être vigilant », « appliquer les consignes ») : elles ne se jugent pas séparément.\n" +
-            "- ÉCARTE le pur formalisme de dépôt (adresse de remise, nombre d'exemplaires, signature électronique).\n" +
-            "- N'invente RIEN : chaque exigence doit être réellement écrite dans le DCE.",
-        },
-        {
-          role: 'user',
-          content:
-            `=== DCE${total > 1 ? ` (segment ${numero}/${total})` : ''} ===\n${segment}\n\n` +
-            'Renvoie un JSON : {"items":[{"label":"exigence précise et vérifiable","theme":"libellé du thème","ref":"art. / section / page","criticite":"bloquant|facultatif|normal"}]}',
-        },
-      ],
-      0.2, `Extraction exigences DCE (détaillées${total > 1 ? ` ${numero}/${total}` : ''})`, true,
-    );
-    try {
-      const d = JSON.parse(content || '{}');
-      return (Array.isArray(d.items) ? d.items : [])
-        .map((c: any) => ({
-          label: String(c?.label ?? '').trim(),
-          theme: c?.theme ? String(c.theme).trim() : undefined,
-          ref: c?.ref ? String(c.ref).trim() : undefined,
-          criticite: normCriticite(c?.criticite),
-        }))
-        .filter((x: any) => x.label !== '');
-    } catch {
-      console.warn(`[MemoireGenerator] extractDetailedRequirements DIAG : JSON illisible (segment ${numero}/${total}).`);
-      return [];
-    }
-  }
-
-  /**
-   * Ramène une liste d'exigences trop granulaire sous MAX_DETAILED_REQUIREMENTS en FUSIONNANT celles
-   * qui relèvent du même moyen — sans perdre de sujet : un libellé fusionné doit couvrir l'ensemble
-   * des exigences qu'il absorbe. Repli sûr : en cas d'échec IA, troncature simple (bloquants d'abord).
-   */
-  private async consolidateRequirements(
-    items: Array<{ label: string; theme?: string; ref?: string; criticite: 'bloquant' | 'facultatif' | 'normal' }>,
-  ): Promise<Array<{ label: string; theme?: string; ref?: string; criticite: 'bloquant' | 'facultatif' | 'normal' }>> {
-    const payload = items.map((x, i) => ({ i, label: x.label, theme: x.theme || '', ref: x.ref || '', criticite: x.criticite }));
-    const content = await this.callOpenAI(
-      [
-        {
-          role: 'system',
-          content:
-            "On te donne une liste d'exigences extraites d'un DCE de sécurité privée. Elle est TROP GRANULAIRE (une entrée par puce du document). " +
-            `Consolide-la en AU PLUS ${MAX_DETAILED_REQUIREMENTS} exigences.\n` +
-            "RÈGLES :\n" +
-            "- FUSIONNE les exigences qui se tiennent par le même MOYEN (même procédure, même outil, même livrable, même qualification). Le libellé fusionné doit COUVRIR tout ce qu'il absorbe — ne perds aucun sujet.\n" +
-            "- CONSERVE les données vérifiables présentes (délais, effectifs, fréquences, périodicités, garanties techniques, formats de livrable) : elles sont ce qui rend l'exigence contrôlable.\n" +
-            "- Garde le `theme` d'origine et une `ref` représentative.\n" +
-            "- `criticite` du groupe = la plus forte des exigences fusionnées (bloquant > normal > facultatif).\n" +
-            "- N'invente aucune exigence nouvelle.",
-        },
-        { role: 'user', content: `Exigences (JSON) :\n${JSON.stringify(payload)}\n\nRenvoie un JSON : {"items":[{"label":"...","theme":"...","ref":"...","criticite":"bloquant|facultatif|normal"}]}` },
-      ],
-      0.1, 'Consolidation exigences DCE', true,
-    );
-    try {
-      const d = JSON.parse(content || '{}');
-      const out = (Array.isArray(d.items) ? d.items : [])
-        .map((c: any) => ({
-          label: String(c?.label ?? '').trim(),
-          theme: c?.theme ? String(c.theme).trim() : undefined,
-          ref: c?.ref ? String(c.ref).trim() : undefined,
-          criticite: normCriticite(c?.criticite),
-        }))
-        .filter((x: any) => x.label !== '')
-        .slice(0, MAX_DETAILED_REQUIREMENTS);
-      if (out.length > 0) return out;
-    } catch { /* repli ci-dessous */ }
-    console.warn('[MemoireGenerator] consolidateRequirements : échec IA → troncature (bloquants prioritaires).');
-    const rank = (c: string) => (c === 'bloquant' ? 0 : c === 'normal' ? 1 : 2);
-    return [...items].sort((a, b) => rank(a.criticite) - rank(b.criticite)).slice(0, MAX_DETAILED_REQUIREMENTS);
   }
 
   /**
@@ -2798,20 +2531,17 @@ Renvoie un JSON valide :
    * Renvoie null si la RAG n'est pas disponible (→ l'appelant retombe sur l'ancienne méthode).
    */
   private async detectMissingViaRag(
-    requirements: Array<{ label: string; theme?: string; ref?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal' }>,
+    requirements: Array<{ label: string; theme?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal' }>,
   ): Promise<{ fields: MissingFieldDetected[]; total: number; exigences: any[] } | null> {
     if (requirements.length === 0) return null;
     const gss = await this.loadGssChunksFromDb();
     if (!gss || gss.length === 0) return null;   // pas de RAG → repli sur l'ancienne méthode
 
-    // La requête d'embedding porte le thème EN PLUS du libellé : une exigence fine (« export des
-    // données au format PDF et Excel ») est sinon trop pauvre pour retrouver la bonne fiche GSS.
-    const queries = requirements.map((r) => (r.theme ? `${r.theme} — ${r.label}` : r.label));
-    const embs = await this.embedTexts(queries);
+    const embs = await this.embedTexts(requirements.map((r) => r.label));
     const withCtx = requirements.map((r, i) => {
-      const top = this.retrieve(embs[i] || [], gss, 6, queries[i]);
+      const top = this.retrieve(embs[i] || [], gss, 5, r.label);
       return {
-        i, label: r.label, criticite: r.criticite, theme: r.theme, ref: r.ref, kind: r.kind,
+        i, label: r.label, criticite: r.criticite, theme: r.theme, kind: r.kind,
         ctx: top.map((c) => `- [${c.label}] ${c.text.replace(/\s+/g, ' ').slice(0, 350)}`).join('\n'),
       };
     });
@@ -2821,32 +2551,11 @@ Renvoie un JSON valide :
     const BATCH = 12;
     for (let b = 0; b < withCtx.length; b += BATCH) {
       const batch = withCtx.slice(b, b + BATCH);
-      const payload = batch.map((x) => ({
-        index: x.i, element: x.label, theme: x.theme || '', type: x.kind || 'exigence',
-        passages_gss: x.ctx || '(aucun passage proche)',
-      }));
+      const payload = batch.map((x) => ({ index: x.i, exigence: x.label, passages_gss: x.ctx || '(aucun passage proche)' }));
       const content = await this.callOpenAI(
         [
-          {
-            role: 'system',
-            content:
-              "On te donne des ÉLÉMENTS à traiter dans une réponse à un appel d'offres de sécurité privée pour GSS, et pour CHACUN les passages les PLUS PROCHES de la base de connaissance GSS (documentation GSS + recherches web validées + réponses d'équipe). " +
-              "Le champ `type` indique la nature de l'élément :\n" +
-              "  • 'exigence' = un besoin du CCTP ;\n" +
-              "  • 'champ' = un champ à renseigner d'un cadre de réponse imposé (formulaire) ;\n" +
-              "  • 'case' = une case à cocher à trancher ;\n" +
-              "  • 'tableau' = une cellule/colonne de tableau à remplir.\n" +
-              "Pour CHAQUE élément, décide STRICTEMENT :\n" +
-              "  • 'couvert' = la base de connaissance GSS contient RÉELLEMENT l'information ou le moyen permettant de renseigner cet élément, et c'est PROUVÉ par les passages fournis.\n" +
-              "  • 'manquant' = les passages ne contiennent PAS cette information → l'élément est À COMPLÉTER (à demander en interne ou à rechercher).\n" +
-              "RÈGLES : n'invente RIEN. Si les passages ne prouvent pas explicitement l'information, c'est MANQUANT. En cas de doute → MANQUANT.\n" +
-              "CAS 'champ' / 'case' / 'tableau' (cadre imposé) : toute information SPÉCIFIQUE À CE MARCHÉ / CE SITE (donc absente d'une base générique GSS) est MANQUANTE.\n" +
-              "CAS 'exigence' : la question est « la base GSS décrit-elle le MOYEN (procédure, outil, organisation, qualification, matériel, engagement) qui permet de tenir cette exigence, et de l'écrire dans le mémoire ? ».\n" +
-              "  • Le chiffre du marché (délai, effectif, fréquence) vient du DCE : son absence de la base N'EST PAS un manque. Ce qui compte est le MOYEN correspondant.\n" +
-              "  • MAIS le moyen doit répondre à CE QUI EST DEMANDÉ : si l'exigence porte sur une garantie, un livrable, une périodicité ou une caractéristique technique précise et que les passages n'en parlent pas — ou décrivent un dispositif d'une AUTRE nature (organisation différente, autre type de site, autre mode d'intervention) — alors c'est MANQUANT.\n" +
-              "  • Un passage seulement THÉMATIQUEMENT proche (même sujet général, sans la réponse) ne vaut PAS couverture.",
-          },
-          { role: 'user', content: `Éléments + passages GSS (JSON) :\n${JSON.stringify(payload)}\n\nRenvoie un JSON : {"resultats":[{"index":<n>,"statut":"couvert|manquant"}]}` },
+          { role: 'system', content: "Pour CHAQUE exigence, on te donne les passages de la Documentation GSS les PLUS PROCHES (recherche sémantique dans la base de connaissance). Décide si GSS COUVRE l'exigence (le moyen/l'information est réellement présent dans ces passages) ou si elle MANQUE (rien de pertinent → à demander en interne ou à rechercher). N'invente RIEN : si les passages ne le prouvent pas, c'est MANQUANT." },
+          { role: 'user', content: `Exigences + passages GSS (JSON) :\n${JSON.stringify(payload)}\n\nRenvoie un JSON : {"resultats":[{"index":<n>,"statut":"couvert|manquant"}]}` },
         ],
         0.1, 'Jugement couverture RAG', true,
       );
@@ -2861,15 +2570,12 @@ Renvoie un JSON valide :
         const statut = map.get(x.i);
         const manquant = statut ? statut.includes('manqu') : true;   // défaut prudent : manquant
         const kindLabel = x.kind === 'case' ? 'Case à cocher du cadre' : x.kind === 'tableau' ? 'Cellule/colonne de tableau du cadre' : x.kind === 'champ' ? 'Champ à renseigner du cadre' : null;
-        exigences.push({ id: `ex-${x.i}`, theme: x.theme || '', exigence: x.label, couverture: manquant ? 'écart' : 'couvert', criticite: x.criticite, ...(x.ref ? { ref: x.ref } : {}), ...(x.kind ? { kind: x.kind } : {}) });
+        exigences.push({ id: `ex-${x.i}`, theme: x.theme || '', exigence: x.label, couverture: manquant ? 'écart' : 'couvert', criticite: x.criticite, ...(x.kind ? { kind: x.kind } : {}) });
         if (manquant) {
-          // Contexte lisible par l'humain qui devra aller chercher l'info (sollicitation interne /
-          // recherche web) : le thème situe la demande, la référence renvoie à l'article du DCE.
-          const situe = [x.theme, x.ref].filter(Boolean).join(' — ');
           missing.push({
             id: `req-${x.i}`,
             label: x.label,
-            context: `${kindLabel ? kindLabel + '. ' : ''}${situe ? `${situe}. ` : ''}Non couvert par la base de connaissance GSS (recherche sémantique RAG).`,
+            context: `${kindLabel ? kindLabel + '. ' : ''}Non couvert par la base de connaissance GSS (recherche sémantique RAG).`,
             criticite: x.criticite,
           });
         }
@@ -2877,75 +2583,6 @@ Renvoie un JSON valide :
     }
     console.log(`[MemoireGenerator] Détection RAG : ${requirements.length} exigence(s) → ${missing.length} manque(s).`);
     return { fields: missing, total: requirements.length, exigences };
-  }
-
-  /**
-   * Jugement HOLISTIQUE des champs d'un CADRE IMPOSÉ face à la base de connaissance GSS (contexte RAG
-   * complet, en texte). Reçoit la LISTE COMPLÈTE des champs déjà extraits (extractRequirementsList) et
-   * les classe TOUS en un seul passage → cohérent (mêmes cellules de tableau jugées pareil) et complet
-   * (verdict par index, pas de champ oublié). Remplace le per-champ embed+retrieve+juge, trop bruité
-   * pour un formulaire. Règle clé : une info SPÉCIFIQUE À CE MARCHÉ/CE SITE est TOUJOURS « à compléter ».
-   */
-  private async judgeTemplateFieldsVsRag(
-    requirements: Array<{ label: string; theme?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal' }>,
-    gssContext: string,
-  ): Promise<{ fields: MissingFieldDetected[]; total: number; exigences: any[] }> {
-    const total = requirements.length;
-    if (total === 0) return { fields: [], total: 0, exigences: [] };
-
-    const systemPrompt =
-      "On te donne la LISTE COMPLÈTE des champs à renseigner d'un CADRE DE RÉPONSE imposé (formulaire) pour GSS " +
-      "(sécurité privée), et le CONTEXTE de ce que GSS SAIT (Documentation GSS + réponses d'équipe + recherches web). " +
-      "Pour CHAQUE champ (par index), décide STRICTEMENT :\n" +
-      "  • 'renseignable' = l'information nécessaire est RÉELLEMENT présente dans ce que GSS SAIT — identité légale, " +
-      "certifications DÉTENUES, effectifs de l'entreprise, méthodologie/moyens habituels (rondes, logiciels, tenues, " +
-      "reporting, politique sociale, démarche RSE…) décrits dans le contexte GSS.\n" +
-      "  • 'a_completer' = (a) information SPÉCIFIQUE À CE MARCHÉ / CE SITE, décidée par le répondant : moyens ou " +
-      "effectif DÉDIÉS par site, délais d'intervention par site, taux de reprise du personnel, nombre d'intervenants " +
-      "par site, choix des lots, coordonnées de l'interlocuteur DÉDIÉ à ce marché, date/signature ; OU (b) information " +
-      "que GSS devrait avoir mais ABSENTE du contexte fourni.\n" +
-      "RÈGLES : réponds pour TOUS les index, sans exception. COHÉRENCE ABSOLUE : deux champs de même nature (ex. la " +
-      "même ligne d'un tableau répétée par site) reçoivent le MÊME verdict. En cas de doute → 'a_completer'.";
-
-    const payload = requirements.map((r, i) => ({ index: i, champ: r.label, type: r.kind || 'champ' }));
-    // Un seul passage (les cadres tiennent largement : ~60 champs). Contexte GSS plafonné pour la fenêtre.
-    const content = await this.callOpenAI(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content:
-          `=== CHAMPS DU CADRE (JSON) ===\n${JSON.stringify(payload)}\n\n` +
-          `=== CE QUE GSS SAIT (Doc GSS + réponses équipe + web) ===\n${gssContext.slice(0, 90_000)}\n\n` +
-          `Renvoie un JSON : {"resultats":[{"index":<n>,"statut":"renseignable|a_completer"}]}` },
-      ],
-      0.1, 'Jugement cadre ↔ RAG (holistique)', true,
-    );
-
-    const statut = new Map<number, string>();
-    try {
-      const d = JSON.parse(content || '{}');
-      for (const r of (Array.isArray(d.resultats) ? d.resultats : [])) {
-        if (typeof r?.index === 'number') statut.set(r.index, String(r?.statut ?? '').toLowerCase());
-      }
-    } catch { /* réponse illisible → tout considéré à compléter (prudence) */ }
-
-    const fields: MissingFieldDetected[] = [];
-    const exigences: any[] = [];
-    requirements.forEach((r, i) => {
-      const s = statut.get(i);
-      const aCompleter = s ? s.includes('complet') || s.includes('manqu') : true;   // défaut prudent
-      const kindLabel = r.kind === 'case' ? 'Case à cocher du cadre' : r.kind === 'tableau' ? 'Cellule/colonne de tableau du cadre' : 'Champ à renseigner du cadre';
-      exigences.push({ id: `ex-${i}`, theme: r.theme || '', exigence: r.label, couverture: aCompleter ? 'écart' : 'couvert', criticite: r.criticite, ...(r.kind ? { kind: r.kind } : {}) });
-      if (aCompleter) {
-        fields.push({
-          id: `req-${i}`,
-          label: r.label,
-          context: `${kindLabel}. À compléter : information non disponible dans la base de connaissance GSS (spécifique à ce marché, ou absente).`,
-          criticite: r.criticite,
-        });
-      }
-    });
-    console.log(`[MemoireGenerator] Jugement cadre holistique : ${total} champs → ${fields.length} à compléter.`);
-    return { fields, total, exigences };
   }
 
   /**
@@ -2961,18 +2598,12 @@ Renvoie un JSON valide :
     // Idempotence : la détection ne se fait QU'UNE FOIS. Si elle a déjà tourné pour ce dossier
     // (missingDetectedAt présent), on renvoie la liste en cache — sûr d'appeler depuis plusieurs
     // endroits (upload + repli fiche dossier). `force:true` permet de la relancer explicitement.
-    // Le cache est INVALIDÉ quand l'algorithme change (DETECTION_VERSION) : sans cela, un dossier
-    // analysé avec une version antérieure garde indéfiniment son ancien résultat, et le front —
-    // qui n'envoie jamais `force` — continue d'afficher une liste obsolète.
     if (!opts.force) {
       const existing = await DB.getDossier(dossierId);
       const st: any = existing?.memoire_cadre_state;
       if (st && st.missingDetectedAt && Array.isArray(st.missingFields)) {
-        if (st.detectionVersion === DETECTION_VERSION) {
-          console.log(`[MemoireGenerator] Détection déjà faite (${st.missingFields.length}) — cache renvoyé.`);
-          return { missingFields: st.missingFields, completude: st.completude ?? null, contradictions: st.contradictions ?? [], cached: true };
-        }
-        console.log(`[MemoireGenerator] Cache de détection obsolète (v${st.detectionVersion ?? '?'} ≠ v${DETECTION_VERSION}) → relance.`);
+        console.log(`[MemoireGenerator] Détection déjà faite (${st.missingFields.length}) — cache renvoyé.`);
+        return { missingFields: st.missingFields, completude: st.completude ?? null, contradictions: st.contradictions ?? [], cached: true };
       }
     }
 
@@ -2980,19 +2611,7 @@ Renvoie un JSON valide :
     const gssDocs = await this.getGssDocumentation();
     // Contexte GSS LARGE (≈120k car au lieu de 24k) : sinon l'IA ne voit qu'une tranche de la Doc
     // GSS et sur-signale des « écarts » sur des points en réalité couverts.
-    let gssContext = this.buildFullGssContext(gssDocs, 12_000, 120_000);
-    
-    // Intégrer également les connaissances RAG (WEB et équipe) pour que l'évaluation du template
-    // ou des exigences sache ce qui a déjà été trouvé (ex: PME, réponses aux mails). On les met au
-    // DÉBUT du contexte pour être sûr qu'elles ne soient pas tronquées par le slice(0, 80000).
-    const dbChunks = await this.loadGssChunksFromDb();
-    if (dbChunks) {
-      const extraCtx = dbChunks
-        .filter(c => c.source === 'WEB' || c.source === 'SOLLICITATION')
-        .map(c => `[${c.source} - ${c.label}] ${c.text}`)
-        .join('\n\n');
-      if (extraCtx) gssContext = `--- RECHERCHES WEB ET SOLLICITATIONS ---\n${extraCtx}\n\n--- DOCUMENTATION GSS ---\n${gssContext}`;
-    }
+    const gssContext = this.buildFullGssContext(gssDocs, 12_000, 120_000);
 
     // Deux systèmes de détection, tous deux APRÈS l'upload :
     //  • CADRE IMPOSÉ (« Mémoire (cadre) ») → basé sur le TEMPLATE : champs du formulaire non
@@ -3003,55 +2622,15 @@ Renvoie un JSON valide :
     // 2) Comparer CHACUN à la base de connaissance RAG (recherche sémantique) → couvert / manquant.
     // Repli sur l'ancienne méthode (contexte GSS complet) si la RAG n'est pas disponible.
     const requirements = await this.extractRequirementsList(templateText, dceContext);
-    console.log(`[MemoireGenerator] detectMissing DIAG : template=${templateText ? `${templateText.length} car` : 'NON TROUVÉ'}, dceContext=${dceContext.length} car, éléments extraits=${requirements.length}`);
-    let detected: { fields: MissingFieldDetected[]; total: number; exigences?: any[] };
-    if (templateText) {
-      const viaRag = await this.detectMissingViaRag(requirements);
-      detected = viaRag ?? await this.judgeTemplateFieldsVsRag(requirements, gssContext);
-      console.log(`[MemoireGenerator] detectMissing DIAG : cadre RAG -> ${detected.fields.length} à compléter / ${detected.total} champs.`);
-    } else {
-      // SANS CADRE → détection en DEUX NIVEAUX :
-      //   1. thèmes généraux (`requirements`, déjà extraits) → structure / plan du mémoire ;
-      //   2. exigences ATOMIQUES rattachées à ces thèmes → ce qui est réellement confronté à la RAG.
-      // Juger la couverture sur les thèmes seuls sortait ~100 % de complétude sur tous les DCE :
-      // un libellé de 2-6 mots trouve toujours un passage GSS thématiquement proche. Les exigences
-      // fines (garantie technique, livrable, périodicité, engagement de délai) sont, elles,
-      // discriminantes. Repli sur les thèmes si l'extraction fine échoue.
-      const detailed: any[] = []; // await this.extractDetailedRequirements(dceContext, requirements); // User wants more general
-      console.log(`[MemoireGenerator] detectMissing DIAG : exigences détaillées=${detailed.length}${detailed.length === 0 ? ' → repli sur les thèmes généraux' : ''}`);
-      const viaRag = await this.detectMissingViaRag(detailed.length > 0 ? detailed : requirements);
-      console.log(`[MemoireGenerator] detectMissing DIAG : RAG=${viaRag ? `${viaRag.fields.length} manque(s)/${viaRag.total} besoin(s)` : 'INDISPONIBLE → repli ancienne méthode'}`);
-      detected = viaRag ?? await this.detectMissingFromRequirements(dceContext, gssContext);
-    }
+    console.log(`[MemoireGenerator] detectMissing DIAG : template=${templateText ? `${templateText.length} car` : 'NON TROUVÉ'}, dceContext=${dceContext.length} car, exigences extraites=${requirements.length}`);
+    const viaRag = await this.detectMissingViaRag(requirements);
+    console.log(`[MemoireGenerator] detectMissing DIAG : RAG=${viaRag ? `${viaRag.fields.length} manque(s)/${viaRag.total} exigence(s)` : 'INDISPONIBLE → repli ancienne méthode'}`);
+    const detected =
+      viaRag ??
+      (templateText
+        ? await this.detectMissingFromTemplate(templateText, dceContext, gssContext)
+        : await this.detectMissingFromRequirements(dceContext, gssContext));
     const rawFields = detected.fields;
-
-    // PRESERVE IDs FROM PREVIOUS RUNS
-    const dossier = await DB.getDossier(dossierId);
-    const prevState = (dossier?.memoire_cadre_state && typeof dossier.memoire_cadre_state === 'object')
-      ? dossier.memoire_cadre_state : {};
-    
-    const prevFields = (Array.isArray(prevState.missingFields) ? prevState.missingFields : []) as any[];
-    const prevMap = new Map<string, string>();
-    let maxPrevNum = -1;
-    for (const pf of prevFields) {
-      if (pf.label) prevMap.set(normTitle(pf.label), pf.id);
-      const match = String(pf.id).match(/\d+/);
-      if (match) {
-        const n = parseInt(match[0], 10);
-        if (!isNaN(n) && n > maxPrevNum) maxPrevNum = n;
-      }
-    }
-    
-    let nextIdNum = maxPrevNum + 1;
-    for (const f of rawFields) {
-      const nt = normTitle(f.label);
-      if (prevMap.has(nt)) {
-        f.id = prevMap.get(nt)!;
-      } else {
-        f.id = `req-${nextIdNum++}`;
-      }
-    }
-
     const filteredIdentite = rawFields.filter((m) => {
       if (identiteCandidatForLabel(m.label) !== '') {
         console.log(`[MemoireGenerator] Manque ignoré (identité légale GSS connue) : "${m.label}"`);
@@ -3079,6 +2658,9 @@ Renvoie un JSON valide :
     }));
 
     // Persistance : on fusionne avec l'éventuel memoire_cadre_state existant (sans l'écraser).
+    const dossier = await DB.getDossier(dossierId);
+    const prevState = (dossier?.memoire_cadre_state && typeof dossier.memoire_cadre_state === 'object')
+      ? dossier.memoire_cadre_state : {};
     await DB.saveDossier(dossierId, {
       memoire_cadre_state: {
         ...prevState,
@@ -3086,7 +2668,6 @@ Renvoie un JSON valide :
         completude,
         contradictions,
         ...(exigences ? { exigences } : {}),
-        detectionVersion: DETECTION_VERSION,
         missingDetectedAt: new Date().toISOString(),
       },
     });
@@ -3129,34 +2710,13 @@ Renvoie un JSON valide :
     const reqs = await this.analyzeRequirements(dceContext, gssContext);
     const norm = (c: string) => (c || '').toLowerCase();
     const gaps = reqs.filter((r) => norm(r.couverture).includes('écart') || norm(r.couverture).includes('ecart'));
-
-    // La liste des MANQUES doit rester GLOBALE (pas « rondes à 17h »…). On REGROUPE les écarts par
-    // thème → un seul manque général par thème, avec un libellé lisible. La matrice détaillée
-    // (exigences, ci-dessous) reste, elle, complète et inchangée.
-    const themeLabel = (t: string): string => {
-      switch ((t || '').trim().toUpperCase()) {
-        case 'I': return 'Présentation société et conformité légale';
-        case 'II': return 'Moyens humains et qualifications';
-        case 'III': return 'Moyens opérationnels et matériels';
-        case 'IV': return 'Organisation, qualité et continuité de service';
-        default: return 'Autres besoins du CCTP';
-      }
-    };
-    const critRank = (c: string) => (c === 'bloquant' ? 2 : c === 'normal' ? 1 : 0);
-    const groups = new Map<string, { theme: string; count: number; crit: 'bloquant' | 'facultatif' | 'normal' }>();
-    for (const r of gaps) {
-      const key = (r.theme || '').trim().toUpperCase() || '?';
-      const crit = normCriticite(r.criticite);
-      const g = groups.get(key);
-      if (!g) groups.set(key, { theme: r.theme || '', count: 1, crit });
-      else { g.count++; if (critRank(crit) > critRank(g.crit)) g.crit = crit; }
-    }
-    const fields = [...groups.entries()].map(([key, g], i) => ({
+    const fields = gaps.map((r, i) => ({
       id: `req-${i}`,
-      label: themeLabel(g.theme || key),
-      context: `${g.count} exigence(s) de ce thème non couverte(s) par la documentation GSS — à obtenir de façon globale.`,
-      criticite: g.crit,
-    }));
+      label: r.exigence || '',
+      context: `[${r.couverture || 'écart'}] ${r.theme ? `Chapitre ${r.theme} — ` : ''}${r.reponseGss ? `Réponse GSS actuelle : ${r.reponseGss}` : 'Non couvert par la Documentation GSS'
+        }`,
+      criticite: normCriticite(r.criticite),
+    })).filter((m) => m.label.trim() !== '');
     // Exigences persistées (fiches réutilisables) : toute la matrice, avec un id + statut.
     const exigences = reqs
       .filter((r: any) => (r.exigence || '').trim() !== '')
@@ -3366,8 +2926,8 @@ Renvoie un JSON valide :
 
     console.log(`[MemoireGenerator] Using template: ${templatePath} (${isClientTemplate ? 'cadre client' : 'mémoire GSS maître'})`);
 
-    // Choix du modèle selon le cas : cadre client imposé → gpt-5.6-luna (tâche mécanique, moins cher) ;
-    // mémoire GSS maître (sans template) → gpt-5.6-luna (qualité rédactionnelle). Porté par callOpenAI.
+    // Choix du modèle selon le cas : cadre client imposé → gpt-5.4-nano (tâche mécanique, moins cher) ;
+    // mémoire GSS maître (sans template) → gpt-5.4-mini (qualité rédactionnelle). Porté par callOpenAI.
     this.memoireModel = isClientTemplate ? MODEL_TEMPLATE : MEMOIRE_MODEL;
     console.log(`[MemoireGenerator] Modèle de rédaction : ${this.memoireModel} (${isClientTemplate ? 'cas template' : 'cas sans template'}).`);
 
@@ -3758,20 +3318,12 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const dbGss = await this.loadGssChunksFromDb();
     if (dbGss && dbGss.length) {
       const dceChunks = retrievalChunks.filter(c => c.source === 'DCE');
-      await this.embedChunks(dceChunks);              // le DCE (propre au marché) est embeddé en direct
-      // Si la base fournit la doc GSS, on l'utilise (et on abandonne les fichiers pour éviter les
-      // doublons). Sinon (base ne contenant que WEB/SOLLICITATION), on CONSERVE la doc GSS fichiers
-      // pour ne rien perdre — tout en AJOUTANT les chunks base (recherches web + réponses d'équipe).
-      const dbHasGss = dbGss.some(c => c.source === 'GSS');
-      const fileGss = dbHasGss ? [] : retrievalChunks.filter(c => c.source === 'GSS');
-      if (fileGss.length) await this.embedChunks(fileGss);
+      await this.embedChunks(dceChunks);              // seul le DCE est embeddé en direct
       retrievalChunks.length = 0;
-      retrievalChunks.push(...dbGss, ...fileGss, ...dceChunks);
-      const solN = dbGss.filter(c => c.source === 'SOLLICITATION').length;
-      const webN = dbGss.filter(c => c.source === 'WEB').length;
-      console.log(`[MemoireGenerator] Index depuis la bdd : ${dbGss.length} chunks (dont ${solN} réponses équipe, ${webN} web)${fileGss.length ? ` + ${fileGss.length} chunks GSS fichiers` : ''}.`);
+      retrievalChunks.push(...dbGss, ...dceChunks);    // GSS depuis la bdd + DCE frais
+      console.log(`[MemoireGenerator] Doc GSS chargée depuis la bdd (${dbGss.length} chunks pré-embeddés).`);
     } else {
-      await this.embedChunks(retrievalChunks);         // repli complet fichiers (aucune base configurée)
+      await this.embedChunks(retrievalChunks);         // comportement historique (repli)
     }
     const gssN = retrievalChunks.filter(c => c.source === 'GSS' && c.embedding).length;
     const dceN = retrievalChunks.filter(c => c.source === 'DCE' && c.embedding).length;
@@ -3812,7 +3364,7 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const answerField = async (f: FieldDesc): Promise<void> => {
       const qEmb = queryEmbById.get(f.id);
       const top = qEmb ? this.retrieve(qEmb, retrievalChunks, 12, this.buildFieldQuery(f)) : [];
-      const gssPassages = top.filter(c => c.source === 'GSS' || c.source === 'WEB' || c.source === 'SOLLICITATION');
+      const gssPassages = top.filter(c => c.source === 'GSS');
       const dcePassages = top.filter(c => c.source === 'DCE');
       const fmtBlock = (title: string, cs: RetrievalChunk[]) => cs.length
         ? `\n--- ${title} ---\n` + cs.map((c, i) => `[${c.label} #${i + 1}]\n${c.text}`).join('\n\n') + '\n' : '';
@@ -4019,7 +3571,7 @@ ${analysisJson}
 
 --- CONTEXTE STRATÉGIQUE GSS ---
 ${strategicCtx}
-${fmtBlock("EXTRAITS PERTINENTS DU DCE (exigences de l'acheteur)", top.filter(c => c.source === 'DCE'))}${fmtBlock('DOCUMENTATION GSS PERTINENTE (sources internes — appuie ta réponse dessus)', top.filter(c => c.source !== 'DCE'))}${isRef && referentsContext ? `\n--- RÉFÉRENTS GSS (« Personnes ») ---\n${referentsContext}\n` : ''}
+${fmtBlock("EXTRAITS PERTINENTS DU DCE (exigences de l'acheteur)", top.filter(c => c.source === 'DCE'))}${fmtBlock('DOCUMENTATION GSS PERTINENTE (sources internes — appuie ta réponse dessus)', top.filter(c => c.source === 'GSS'))}${isRef && referentsContext ? `\n--- RÉFÉRENTS GSS (« Personnes ») ---\n${referentsContext}\n` : ''}
 LIBELLÉ / QUESTION À TRAITER : « ${zone.label} »
 Sous ce libellé, il y a ${N} ligne(s) à remplir. Donne jusqu'à ${N} éléments de réponse COURTS, DISTINCTS et COMPLÉMENTAIRES (un par ligne), du plus important au moins important, fondés UNIQUEMENT sur les extraits ci-dessus, en restant sur le sujet du libellé. AUCUNE répétition entre les éléments.
 RÈGLE DE FIABILITÉ (PRIORITAIRE) : donne TOUS les éléments que les extraits justifient DIRECTEMENT (ne laisse pas de côté une info réellement présente) ; mais ne donne un élément QUE s'il est fondé sur les extraits. N'invente, ne déduis ni n'extrapole aucune donnée (nom, date, SIRET/SIREN, CNAPS, agrément, adresse, téléphone, email, effectif, taux, montant) absente des sources. NE DÉTOURNE PAS une donnée d'entreprise/générale pour une question spécifique (dédié au marché / par site / par département). NE RECOPIE PAS l'intitulé ni les options des cases. Si tu n'as de quoi remplir que k < ${N} lignes (voire 0), ne donne QUE k éléments — ne meuble JAMAIS, mieux vaut vide que non fiable.
@@ -5181,7 +4733,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
         beatExtracts = beats.map((_, i) => {
           const top = this.retrieve(beatEmbs[i], retrievalChunks, 7);
           const dce = fmtChunks(top.filter((c) => c.source === 'DCE').slice(0, 5));
-          const gss = fmtChunks(top.filter((c) => c.source !== 'DCE').slice(0, 3));
+          const gss = fmtChunks(top.filter((c) => c.source === 'GSS').slice(0, 3));
           return `${dce ? `EXIGENCES DU DCE À TRAITER ICI :\n${dce}\n` : ''}${gss ? `ATOUTS GSS MOBILISABLES :\n${gss}\n` : ''}`;
         });
       } catch (e) {
@@ -5327,9 +4879,9 @@ RÈGLES DE FORME (rendu Marp) :
       const chapterReqs = reqsByTheme[section.chapter] || [];
       const reqBlock = chapterReqs.length
         ? '\n\nEXIGENCES DU CCTP À TRAITER DANS CETTE SECTION (réponds à chacune avec ce que fait GSS ; signale les écarts via [CONSULTATION REQUISE : …]) :\n' +
-          chapterReqs
-            .map((r) => `- Le CCTP demande : ${r.exigence}\n  Réponse GSS connue : ${r.reponseGss || '(non documentée)'}${r.couverture && r.couverture.toLowerCase() !== 'couvert' ? `  → couverture : ${r.couverture}` : ''}`)
-            .join('\n')
+        chapterReqs
+          .map((r) => `- Le CCTP demande : ${r.exigence}\n  Réponse GSS connue : ${r.reponseGss || '(non documentée)'}${r.couverture && r.couverture.toLowerCase() !== 'couvert' ? `  → couverture : ${r.couverture}` : ''}`)
+          .join('\n')
         : '';
 
       const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}${reqBlock}\n\nRédige le contenu de cette partie de manière experte.`;
@@ -5599,12 +5151,14 @@ RÈGLES DE FORME (rendu Marp) :
       title: CHAPTER_TITLES_B[ch],
       sections: AI_SECTIONS_B
         .filter((s) => s.chapter === ch && sectionsMap[s.id]?.trim())
-        .map((s) => ({
+        .map((s): AssembleSection => ({
           title: s.title,
           text: sectionsMap[s.id],
           id: s.id,
-          illustration: undefined
+          illustration: undefined,
+          d2Code: undefined,
         })),
+
     }));
 
     if (chapters.every((c) => c.sections.length === 0)) {
@@ -5613,12 +5167,44 @@ RÈGLES DE FORME (rendu Marp) :
 
     const cover = await this.getCoverInfo(dossierId);
 
+    // Génération automatique des schémas d'architecture D2 pour les sections les plus pertinentes (~15)
+    onProgress?.(91, 'Génération des schémas d’architecture D2…');
+    const D2_ELIGIBLE_SECTIONS = [
+      'b_implantation', 'b_moyens_humains', 'b_encadrement',
+      'b_recrutement_formation', 'b_dispositif_absence',
+      'b_moyens_materiels', 'b_rondes', 'b_controle_acces', 'b_telesurveillance',
+      'b_gestion_alarmes', 'b_organisation', 'b_planning',
+      'b_suivi_qualite', 'b_procedures', 'b_amelioration'
+    ];
+
+    const d2Promises: Promise<void>[] = [];
+    for (const chapter of chapters) {
+      for (const sec of chapter.sections) {
+        if (!sec.d2Code && sec.text && sec.text.length > 100 && sec.id && D2_ELIGIBLE_SECTIONS.includes(sec.id)) {
+          d2Promises.push((async () => {
+            try {
+              const d2Code = await D2Service.generateD2Code(sec.title, sec.text, cover.client);
+              console.log("===== D2 GENERATED =====");
+              console.log("Section :", sec.title);
+              console.log(d2Code);
+              console.log("========================");
+
+              if (d2Code) sec.d2Code = d2Code;
+            } catch (e: any) {
+              console.warn(`[MemoireGenerator] Génération D2 ignorée pour ${sec.title}:`, e.message || e);
+            }
+          })());
+        }
+      }
+    }
+    
+    if (d2Promises.length > 0) {
+      await Promise.all(d2Promises);
+    }
+
     // Bibliothèque d'images (base de données) : on charge le pool, puis on attribue
     // AU PLUS une image par slide selon le CONTEXTE du texte, chaque image utilisée
     // une seule fois sur tout le document (unicité stricte, compréhension par LLM).
-    // Génération automatique des schémas d'architecture D2 via missing_info_resolver (centralisation IA)
-    await generateD2SchemasForChapters(chapters, cover.client, path.join(this.responseDir, 'media'), onProgress);
-
     onProgress?.(92, 'Chargement des images de la bibliothèque…');
     const imageService = new ImageLibraryService();
     const imagePool = await imageService.loadPool();
@@ -5631,7 +5217,7 @@ RÈGLES DE FORME (rendu Marp) :
     // mémoire illustré : on signale l'étape pour que la barre ne semble pas figée.
     onProgress?.(95, `Rendu du PDF (${assignments.size} illustration(s))…`);
     const generator = new MarpGenerator(this.responseDir);
-    const result = generator.generatePdf(chapters, cover, assignments);
+    const result = await generator.generatePdf(chapters, cover, assignments);
 
     return { filePath: result.filePath, generatedData: {} };
   }
@@ -5731,9 +5317,9 @@ FORMAT DE SORTIE (JSON EXACT) :
     if (!openAiKey) throw new Error("Clé OpenAI manquante");
 
     const payload = {
-      model: 'gpt-5.6-luna',
+      model: 'gpt-5.4-mini',
       messages: [{ role: 'system', content: prompt }],
-      temperature: 1,
+      temperature: 0.2,
       response_format: { type: "json_object" }
     };
 
