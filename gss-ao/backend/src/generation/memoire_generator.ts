@@ -12,7 +12,7 @@ import { DB, FichiersDB } from '../core/db';
 import { getScopedClient } from '../core/supabase';
 import { extractText, loadDocxStructure, loadDocxTemplateAnnotated } from '../ingestion/docConverter';
 import { overlaySynthesis, loadTrebuchetFont, measureZonesCapacity, RefReplacement, RefContext } from './pdf_overlay';
-import { resolveMissingInfo, classifyFieldsLLM, MissingField } from './missing_info_resolver';
+import { resolveMissingInfo, classifyFieldsLLM, MissingField, generateD2SchemasForChapters } from './missing_info_resolver';
 import { uploadTempDocx, downloadTempDocx } from '../core/temp_storage';
 import { setProgress } from '../core/progress';
 import { learnSollicitationsForDossier } from './learn_sollicitation';
@@ -1083,7 +1083,7 @@ export interface AssembleChapter {
   /** Chapitre I..IV (ordre = ordre des Heading1 dans le template). */
   key: string;
   title: string;
-  sections: Array<{ title: string; text: string; id?: string; illustration?: string }>;
+  sections: Array<{ title: string; text: string; id?: string; illustration?: string; d2SvgFileName?: string; d2Code?: string }>;
 }
 
 // ─── Mode B (réponse libre / sans cadre imposé) ───
@@ -5616,6 +5616,9 @@ RÈGLES DE FORME (rendu Marp) :
     // Bibliothèque d'images (base de données) : on charge le pool, puis on attribue
     // AU PLUS une image par slide selon le CONTEXTE du texte, chaque image utilisée
     // une seule fois sur tout le document (unicité stricte, compréhension par LLM).
+    // Génération automatique des schémas d'architecture D2 via missing_info_resolver (centralisation IA)
+    await generateD2SchemasForChapters(chapters, cover.client, path.join(this.responseDir, 'media'), onProgress);
+
     onProgress?.(92, 'Chargement des images de la bibliothèque…');
     const imageService = new ImageLibraryService();
     const imagePool = await imageService.loadPool();

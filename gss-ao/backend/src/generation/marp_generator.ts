@@ -87,7 +87,7 @@ function slideKeyOf(chapterIdx: number, sectionIdx: number, chunkIdx: number): s
 export interface AssembleChapter {
   key: string;
   title: string;
-  sections: { title: string; text: string; id?: string; illustration?: string }[];
+  sections: { title: string; text: string; id?: string; illustration?: string; d2SvgFileName?: string }[];
 }
 
 export interface CoverInfo {
@@ -165,6 +165,17 @@ export class MarpGenerator {
     const mediaDst = path.join(workDir, 'media');
     if (fs.existsSync(mediaSrc)) {
       fs.cpSync(mediaSrc, mediaDst, { recursive: true });
+    }
+
+    // Copier les schémas D2 générés (.svg) depuis le répertoire de réponse vers le workDir
+    const d2MediaSrc = path.join(this.outputDir, 'media');
+    if (fs.existsSync(d2MediaSrc)) {
+      fs.readdirSync(d2MediaSrc).forEach(file => {
+        if (file.endsWith('.svg')) {
+          fs.mkdirSync(mediaDst, { recursive: true });
+          fs.copyFileSync(path.join(d2MediaSrc, file), path.join(mediaDst, file));
+        }
+      });
     }
 
     // Écrit dans media/ UNIQUEMENT les images réellement attribuées (unicité déjà
@@ -405,6 +416,15 @@ export class MarpGenerator {
           lines.push('<!-- _class: lead -->');
           lines.push('<!-- _header: "" -->');
           lines.push(`![bg contain](media/${illustrationMap[section.id]})`);
+          lines.push('');
+        }
+        
+        // Injection du schéma D2 (généré dynamiquement par l'IA)
+        if (section.d2SvgFileName) {
+          lines.push('---');
+          lines.push('<!-- _class: lead -->');
+          lines.push('<!-- _header: "" -->');
+          lines.push(`![bg contain](media/${section.d2SvgFileName})`);
           lines.push('');
         }
       });
