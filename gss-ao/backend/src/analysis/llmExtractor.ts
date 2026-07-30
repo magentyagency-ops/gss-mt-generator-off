@@ -144,9 +144,12 @@ FORMAT JSON ATTENDU :
     "plateforme": "nom/URL de la plateforme de dépôt ou null",
     "signature_formats": ["XAdES", "CAdES", "PAdES" ...],
     "date_limite": { "libelle": "Date limite de dépôt des offres", "valeur": "AAAA-MM-JJ ou null", "texte_brut": "texte d'origine ou null" }
-  }
+  },
+  "analyse_risques": [
+    { "titre": "titre de l'alerte/risque (ex: Pénalités atypiques)", "detail": "description", "type": "warning | destructive | primary" }
+  ]
 }
-Si la consultation n'est pas allotie, renvoie allotissement: []. Si pas de barème, criteres: null.`;
+Si la consultation n'est pas allotie, renvoie allotissement: []. Si pas de barème, criteres: null. S'il n'y a pas de risque majeur, analyse_risques: [].`;
 
 function normPieces(raw: any, type: TypePiece): PieceAFournir[] {
   return asArray(raw)
@@ -261,6 +264,7 @@ export async function extractRcWithLLM(filePath: string): Promise<RCDocument> {
       pieces_offre: piecesOffre,
       criteres,
       modalites_remise: normModalites(data.modalites_remise),
+      analyse_risques: asArray(data.analyse_risques),
       source: {
         fichier: basename(filePath),
         methode_extraction: ExtractionMethod.DOCX_NATIVE,
@@ -292,7 +296,10 @@ FORMAT JSON ATTENDU :
     { "categorie": "qualification | equipement | tenue | comportement | vehicule | autre", "libelle": "intitulé de l'exigence", "valeur": "détail ou null" }
   ],
   "contraintes_site": ["contrainte d'accès/zone (ZRR, filtrage, badge, etc.)"],
-  "reprise_personnel": true/false/null
+  "reprise_personnel": true/false/null,
+  "synthese_projet": [
+    { "titre": "Titre du point fort", "description": "Résumé descriptif (ex: objet, volume, horaires)" }
+  ]
 }
 Pour 'type' : 'base' = prestation principale permanente, 'supplementaire' = à la demande/optionnelle,
 'telesecurite' = télésurveillance/levée de doute à distance.`;
@@ -369,6 +376,7 @@ export async function extractCctpWithLLM(filePath: string): Promise<CCTPDocument
         data.reprise_personnel === null || data.reprise_personnel === undefined
           ? null
           : asBool(data.reprise_personnel),
+      synthese_projet: asArray(data.synthese_projet),
       source: {
         fichier: basename(filePath),
         methode_extraction: ExtractionMethod.DOCX_NATIVE,

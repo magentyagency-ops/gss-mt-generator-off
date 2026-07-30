@@ -149,7 +149,7 @@ export class MarpGenerator {
     // Write markdown + copy assets to a temp working directory
     const workDir = path.join(this.outputDir, `marp_work_${Date.now()}`);
     fs.mkdirSync(workDir, { recursive: true });
-    
+
     const cssPath = path.join(workDir, 'gss-theme.css');
     const logoSrc = path.join(MARP_ASSETS_DIR, 'logogss.png');
     const logoDst = path.join(workDir, 'logogss.png');
@@ -157,9 +157,9 @@ export class MarpGenerator {
     // Check if css exists
     const cssSrc = path.join(MARP_ASSETS_DIR, 'gss-theme.css');
     if (fs.existsSync(cssSrc)) {
-        fs.copyFileSync(cssSrc, cssPath);
+      fs.copyFileSync(cssSrc, cssPath);
     } else {
-        console.warn(`[MarpGenerator] Warning: CSS file not found at ${cssSrc}`);
+      console.warn(`[MarpGenerator] Warning: CSS file not found at ${cssSrc}`);
     }
 
     if (fs.existsSync(logoSrc)) {
@@ -199,7 +199,7 @@ export class MarpGenerator {
     // Render to PDF via marp-cli
     const pdfName = `Mémoire_Technique_GSS_Template_${Date.now()}.pdf`;
     const pdfPath = path.join(this.outputDir, pdfName);
-    
+
     console.log(`[MarpGenerator] Rendering PDF with Template: ${mdPath} → ${pdfPath}`);
 
     // Sous Windows, npx est « npx.cmd » : spawnSync('npx') échoue en ENOENT, et le spawn direct
@@ -237,7 +237,7 @@ export class MarpGenerator {
       console.error('[MarpGenerator] marp-cli spawn error:', result.error);
       throw new Error(`Marp CLI failed to start: ${result.error.message}`);
     }
-    
+
     if (result.status !== 0) {
       console.error('[MarpGenerator] marp-cli stderr:', result.stderr);
       throw new Error(`Marp CLI exited with code ${result.status}: ${result.stderr?.slice(0, 500)}`);
@@ -263,7 +263,7 @@ export class MarpGenerator {
       if (!chapter.sections) return;
       chapter.sections.forEach((section, si) => {
         let d2Code = section.d2Code || '';
-        
+
         // Extrait du code D2 noyé dans le texte de la section
         if (!d2Code && section.text && section.text.includes('```d2')) {
           const match = section.text.match(/```d2([\s\S]*?)```/);
@@ -279,7 +279,7 @@ export class MarpGenerator {
           try {
             const fileName = `schema_${ci}_${si}.svg`;
             const filePath = path.join(mediaDir, fileName);
-            
+
             const svgBuffer = await D2Service.compileD2ToSvg(d2Code);
             fs.writeFileSync(filePath, svgBuffer);
             section.d2SvgFileName = fileName;
@@ -355,7 +355,7 @@ export class MarpGenerator {
     } else {
       lines.push('#### SÉCURITÉ INCENDIE & SÛRETÉ');
     }
-    
+
     if (cover.client) {
       lines.push('');
       lines.push(`##### ${cover.client.toUpperCase()}`);
@@ -374,7 +374,7 @@ export class MarpGenerator {
 
     for (const chapter of chapters) {
       if (!chapter.sections || chapter.sections.length === 0) continue;
-      
+
       const chapterLine = `${this.romanToNumber(chapter.key)}. __${chapter.title.toUpperCase()}__`;
       tocPages[tocPages.length - 1].push(chapterLine);
       tocItemCount++;
@@ -502,17 +502,17 @@ export class MarpGenerator {
       const slides = content.replace(/\r\n/g, '\n').split('\n---');
       const refSlides: string[] = [];
       let inRef = false;
-      
+
       for (const slide of slides) {
         const cleanSlide = slide.trim();
         const norm = cleanSlide.toUpperCase();
-        
+
         if (norm.includes('ILS NOUS ONT FAIT CONFIANCEZONE D’IMAGE') || norm.includes('ILS NOUS ONT FAIT CONFIANCEZONE D\'IMAGE')) {
           inRef = true;
         } else if (norm.includes('LES MOYENS HUMAINS')) {
           inRef = false;
         }
-        
+
         if (inRef) {
           refSlides.push(cleanSlide);
         }

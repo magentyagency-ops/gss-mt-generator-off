@@ -291,30 +291,16 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
             </CardHeader>
             <CardContent>
               <div className="text-sm leading-relaxed text-foreground/90 space-y-4">
-                <div>
-                  <strong className="text-primary">1. Objet et périmètre du marché</strong>
-                  <p className="mt-1">
-                    {dossierInfo.acheteur} lance une consultation (Appel d'Offres Ouvert) pour le renouvellement complet de ses prestations de sécurité, de sûreté et de gardiennage. Le marché couvre l'ensemble du patrimoine immobilier universitaire, divisé géographiquement : la Seine-Maritime pour le Lot 1 (campus principaux), l'Eure pour le Lot 2 (Évreux), et un Lot 3 transversal dédié exclusivement à la télésurveillance et aux levées de doute.
-                  </p>
-                </div>
-                <div>
-                  <strong className="text-primary">2. Volume et durée</strong>
-                  <p className="mt-1">
-                    Le marché est conclu pour une période initiale de 1 an, reconductible expressément 3 fois (durée maximale de 4 ans). Le démarrage des prestations est impérativement fixé au 5 juillet 2026, imposant une phase de transition et de reprise du personnel (Article L1224-1) extrêmement courte qu'il faudra détailler dans notre méthodologie.
-                  </p>
-                </div>
-                <div>
-                  <strong className="text-primary">3. Exigences opérationnelles majeures</strong>
-                  <p className="mt-1">
-                    Le CCTP impose une présence humaine continue (24h/24 et 7j/7) sur les sites majeurs, avec des profils qualifiés SSIAP 1 et SSIAP 2. Le niveau de posture Vigipirate exige des contrôles d'accès renforcés (inspection visuelle des sacs). L'utilisation d'outils de traçabilité électronique en temps réel (mains courantes informatisées, PTI/DATI) est un prérequis éliminatoire. Une clause d'insertion sociale impose 5% des heures travaillées à un public éloigné de l'emploi.
-                  </p>
-                </div>
-                <div>
-                  <strong className="text-primary">4. Stratégie de réponse (Analyse de la notation)</strong>
-                  <p className="mt-1">
-                    La valeur technique est le facteur clé de succès (60% de la note). L'acheteur est particulièrement exigeant sur la méthodologie de déploiement (Moyens humains et matériels évalués à 40 points). Le Mémoire Technique devra démontrer une capacité de mobilisation immédiate, inclure un Plan d'Assurance Qualité (PAQ) robuste, et prouver notre engagement RSE (ex: flotte de véhicules électriques pour les rondes).
-                  </p>
-                </div>
+                {dossierInfo.synthese_projet && dossierInfo.synthese_projet.length > 0 ? (
+                  dossierInfo.synthese_projet.map((item, i) => (
+                    <div key={i}>
+                      <strong className="text-primary">{i + 1}. {item.titre}</strong>
+                      <p className="mt-1">{item.description}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-muted-foreground italic">En attente de l'analyse du CCTP par l'IA...</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -332,41 +318,28 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
             </CardHeader>
             <CardContent>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-destructive/20 bg-background/50 px-4 py-3">
-                  <div className="mb-1 flex items-center gap-2 font-semibold text-destructive">
-                    <Scale className="h-4 w-4" /> Pénalités atypiques
+                {dossierInfo.analyse_risques && dossierInfo.analyse_risques.length > 0 ? (
+                  dossierInfo.analyse_risques.map((risque, i) => {
+                    const type = risque.type || "warning";
+                    const isDestructive = type === "destructive";
+                    const isPrimary = type === "primary";
+                    return (
+                      <div key={i} className={cn("rounded-lg border bg-background/50 px-4 py-3", 
+                        isDestructive ? "border-destructive/20" : isPrimary ? "border-border" : "border-warning/30")}>
+                        <div className={cn("mb-1 flex items-center gap-2 font-semibold", 
+                          isDestructive ? "text-destructive" : isPrimary ? "text-primary" : "text-warning")}>
+                          {isDestructive ? <Scale className="h-4 w-4" /> : isPrimary ? <Banknote className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />}
+                          {risque.titre}
+                        </div>
+                        <p className="text-sm text-muted-foreground">{risque.detail}</p>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="col-span-1 sm:col-span-2">
+                    <p className="text-muted-foreground italic text-sm">En attente de l'analyse du RC par l'IA...</p>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Le CCAP (Art. 14.1) prévoit des pénalités de retard <strong className="text-foreground">déplafonnées</strong>. Très rare et risqué pour ce type de marché.
-                  </p>
-                </div>
-                
-                <div className="rounded-lg border border-warning/30 bg-background/50 px-4 py-3">
-                  <div className="mb-1 flex items-center gap-2 font-semibold text-warning">
-                    <ShieldAlert className="h-4 w-4" /> Certifications sous-traitants
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Exigence stricte de la certification <strong className="text-foreground">ISO 27001</strong> pour les éventuels sous-traitants (Lot 3).
-                  </p>
-                </div>
-
-                <div className="rounded-lg border border-warning/30 bg-background/50 px-4 py-3">
-                  <div className="mb-1 flex items-center gap-2 font-semibold text-warning">
-                    <Clock className="h-4 w-4" /> Délais d'exécution serrés
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Délai de mise en place initial fixé à <strong className="text-foreground">15 jours</strong> après notification (très court vu les effectifs demandés).
-                  </p>
-                </div>
-
-                <div className="rounded-lg border border-border bg-background/50 px-4 py-3">
-                  <div className="mb-1 flex items-center gap-2 font-semibold text-primary">
-                    <Banknote className="h-4 w-4" /> Conditions financières
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Paiement à 30 jours (standard). Aucune avance n'est prévue au CCAP. Révision des prix annuelle.
-                  </p>
-                </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -408,17 +381,6 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
                       Complétude {completude}%
                     </Badge>
                   )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2"
-                    disabled={detectingMissing}
-                    onClick={handleRelaunchDetection}
-                    title="Relancer l'analyse des manques"
-                  >
-                    <RefreshCw className={cn("h-4 w-4", detectingMissing && "animate-spin", !detectingMissing && "mr-1")} />
-                    {!detectingMissing && <span className="text-xs">Relancer</span>}
-                  </Button>
                 </div>
               </CardTitle>
               <p className="text-xs text-muted-foreground">

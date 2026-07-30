@@ -52,4 +52,5 @@ export interface RCDocument {
   criteres: CriteresNotation | null;
   modalites_remise: ModalitesRemise;
   source: SourceMeta;
+  analyse_risques?: { titre: string; detail: string; type: "warning" | "destructive" | "primary" }[];
 }

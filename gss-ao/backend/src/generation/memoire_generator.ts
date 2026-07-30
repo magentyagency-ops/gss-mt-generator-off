@@ -2126,7 +2126,9 @@ export class MemoireGenerator {
         let emb: number[] | undefined;
         try { emb = JSON.parse(r.embedding); } catch { emb = undefined; }
         if (!emb || !emb.length) continue;
-        chunks.push({ source: r.source || 'GSS', label: r.categorie || 'GSS', text: r.text, embedding: emb });
+        const isRagSrc = r.source === 'WEB' || r.source === 'SOLLICITATION';
+        const label = isRagSrc ? 'RECHERCHES ET SOLLICITATIONS (RAG)' : (r.categorie || 'GSS');
+        chunks.push({ source: r.source || 'GSS', label, text: r.text, embedding: emb });
       }
       return chunks.length ? chunks : null;
     } catch (e: any) {
@@ -2170,7 +2172,9 @@ export class MemoireGenerator {
       const cats: Record<string, string> = {};
       let lastKey = '';
       for (const r of res.rows) {
-        const cat = r.categorie || 'GSS';
+        // Regrouper WEB et SOLLICITATION dans une catégorie prioritaire bien identifiée
+        const isRagSrc = r.source === 'WEB' || r.source === 'SOLLICITATION';
+        const cat = isRagSrc ? 'RECHERCHES ET SOLLICITATIONS (RAG)' : (r.categorie || 'GSS');
         const key = `${cat}|${r.source_file}`;
         if (!cats[cat]) cats[cat] = '';
         if (key !== lastKey) { cats[cat] += `\n--- ${r.source_file} ---\n`; lastKey = key; }
@@ -3310,7 +3314,7 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     } else {
       await this.embedChunks(retrievalChunks);         // comportement historique (repli)
     }
-    const gssN = retrievalChunks.filter(c => c.source === 'GSS' && c.embedding).length;
+    const gssN = retrievalChunks.filter(c => ['GSS', 'WEB', 'SOLLICITATION'].includes(c.source) && c.embedding).length;
     const dceN = retrievalChunks.filter(c => c.source === 'DCE' && c.embedding).length;
     console.log(`[MemoireGenerator] Index sémantique : ${gssN} chunks Doc GSS + ${dceN} chunks DCE.`);
     setProgress(dossierId, { phase: 'preparation', pct: 24, label: 'Indexation des sources (DCE + Doc GSS)…' });
@@ -3349,7 +3353,7 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const answerField = async (f: FieldDesc): Promise<void> => {
       const qEmb = queryEmbById.get(f.id);
       const top = qEmb ? this.retrieve(qEmb, retrievalChunks, 12, this.buildFieldQuery(f)) : [];
-      const gssPassages = top.filter(c => c.source === 'GSS');
+      const gssPassages = top.filter(c => ['GSS', 'WEB', 'SOLLICITATION'].includes(c.source));
       const dcePassages = top.filter(c => c.source === 'DCE');
       const fmtBlock = (title: string, cs: RetrievalChunk[]) => cs.length
         ? `\n--- ${title} ---\n` + cs.map((c, i) => `[${c.label} #${i + 1}]\n${c.text}`).join('\n\n') + '\n' : '';
@@ -3556,7 +3560,7 @@ ${analysisJson}
 
 --- CONTEXTE STRATÉGIQUE GSS ---
 ${strategicCtx}
-${fmtBlock("EXTRAITS PERTINENTS DU DCE (exigences de l'acheteur)", top.filter(c => c.source === 'DCE'))}${fmtBlock('DOCUMENTATION GSS PERTINENTE (sources internes — appuie ta réponse dessus)', top.filter(c => c.source === 'GSS'))}${isRef && referentsContext ? `\n--- RÉFÉRENTS GSS (« Personnes ») ---\n${referentsContext}\n` : ''}
+${fmtBlock("EXTRAITS PERTINENTS DU DCE (exigences de l'acheteur)", top.filter(c => c.source === 'DCE'))}${fmtBlock('DOCUMENTATION GSS PERTINENTE (sources internes — appuie ta réponse dessus)', top.filter(c => ['GSS', 'WEB', 'SOLLICITATION'].includes(c.source)))}${isRef && referentsContext ? `\n--- RÉFÉRENTS GSS (« Personnes ») ---\n${referentsContext}\n` : ''}
 LIBELLÉ / QUESTION À TRAITER : « ${zone.label} »
 Sous ce libellé, il y a ${N} ligne(s) à remplir. Donne jusqu'à ${N} éléments de réponse COURTS, DISTINCTS et COMPLÉMENTAIRES (un par ligne), du plus important au moins important, fondés UNIQUEMENT sur les extraits ci-dessus, en restant sur le sujet du libellé. AUCUNE répétition entre les éléments.
 RÈGLE DE FIABILITÉ (PRIORITAIRE) : donne TOUS les éléments que les extraits justifient DIRECTEMENT (ne laisse pas de côté une info réellement présente) ; mais ne donne un élément QUE s'il est fondé sur les extraits. N'invente, ne déduis ni n'extrapole aucune donnée (nom, date, SIRET/SIREN, CNAPS, agrément, adresse, téléphone, email, effectif, taux, montant) absente des sources. NE DÉTOURNE PAS une donnée d'entreprise/générale pour une question spécifique (dédié au marché / par site / par département). NE RECOPIE PAS l'intitulé ni les options des cases. Si tu n'as de quoi remplir que k < ${N} lignes (voire 0), ne donne QUE k éléments — ne meuble JAMAIS, mieux vaut vide que non fiable.
@@ -3886,6 +3890,11 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
         const v = (valById.get(d.id) ?? '').trim();
         if (!v) continue;
         if (isPureBlank(v)) {
+          if (d.kind === 'table') {
+            valById.set(d.id, '');
+            console.log(`[MemoireGenerator] [À COMPLÉTER] retiré pour cellule de tableau (CHAMP_${d.id})`);
+            continue;
+          }
           const ls = lineSig(d.context);
           if (blankLines.has(ls)) { valById.set(d.id, ''); console.log(`[MemoireGenerator] [À COMPLÉTER] en trop vidé: CHAMP_${d.id} (même ligne)`); }
           else blankLines.add(ls);
@@ -4581,7 +4590,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     // ── 2. Chargement de la Documentation GSS (Limité pour la synthèse) ──
     const gssDocs = await this.getGssDocumentation();
     let gssContext = '';
-    const priorityCats = ['MANAGEMENT', 'INTERLOCUTEUR UNIQUE', 'MISE EN PLACE', 'VALEURS', 'SUIVI QUALITE ET CONTROLES'];
+    const priorityCats = ['RECHERCHES ET SOLLICITATIONS (RAG)', 'MANAGEMENT', 'INTERLOCUTEUR UNIQUE', 'MISE EN PLACE', 'VALEURS', 'SUIVI QUALITE ET CONTROLES'];
     for (const cat of priorityCats) {
       if (gssDocs[cat]) {
         gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 5000)}`;
@@ -4718,7 +4727,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
         beatExtracts = beats.map((_, i) => {
           const top = this.retrieve(beatEmbs[i], retrievalChunks, 7);
           const dce = fmtChunks(top.filter((c) => c.source === 'DCE').slice(0, 5));
-          const gss = fmtChunks(top.filter((c) => c.source === 'GSS').slice(0, 3));
+          const gss = fmtChunks(top.filter((c) => ['GSS', 'WEB', 'SOLLICITATION'].includes(c.source)).slice(0, 3));
           return `${dce ? `EXIGENCES DU DCE À TRAITER ICI :\n${dce}\n` : ''}${gss ? `ATOUTS GSS MOBILISABLES :\n${gss}\n` : ''}`;
         });
       } catch (e) {
@@ -5159,7 +5168,7 @@ RÈGLES DE FORME (rendu Marp) :
       'b_recrutement_formation', 'b_dispositif_absence',
       'b_moyens_materiels', 'b_rondes', 'b_controle_acces', 'b_telesurveillance',
       'b_gestion_alarmes', 'b_organisation', 'b_planning',
-      'b_suivi_qualite', 'b_procedures', 'b_amelioration'
+      'b_suivi_qualite', 'b_procedures'
     ];
 
     const d2Promises: Promise<void>[] = [];
@@ -5195,7 +5204,9 @@ RÈGLES DE FORME (rendu Marp) :
     const imagePool = await imageService.loadPool();
 
     onProgress?.(93, 'Attribution contextuelle des illustrations…');
-    const slides = MarpGenerator.enumerateContentSlides(chapters);
+    const allSlides = MarpGenerator.enumerateContentSlides(chapters);
+    // Exclure les slides du bilan pour ne pas leur attribuer d'image
+    const slides = allSlides.filter(s => !(s.title?.toLowerCase() || '').includes('bilan'));
     const assignments = await imageService.assignImages(slides, imagePool);
 
     // Le rendu Marp/Chromium est bloquant et peut durer plusieurs minutes sur un

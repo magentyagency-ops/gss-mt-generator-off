@@ -46,4 +46,5 @@ export interface CCTPDocument {
   contraintes_site: string[];
   reprise_personnel: boolean | null;
   source: SourceMeta;
+  synthese_projet?: { titre: string; description: string }[];
 }

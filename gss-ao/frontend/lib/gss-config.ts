@@ -26,6 +26,8 @@ export interface DossierRow {
   criteres?: any;
   pieces_candidature?: any[];
   pieces_offre?: any[];
+  synthese_projet?: { titre: string; description: string }[];
+  analyse_risques?: { titre: string; detail: string; type: "warning" | "destructive" | "primary" }[];
 }
 
 export interface SousCritere {
