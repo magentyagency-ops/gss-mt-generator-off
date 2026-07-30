@@ -1,0 +1,1 @@
+import { DB } from './src/core/db'; DB.getDossier('896df502-6e35-4e52-b519-0e7233188f97').then(d => { console.log(JSON.stringify(d?.memoire_cadre_state, null, 2)); process.exit(0); }).catch(console.error);

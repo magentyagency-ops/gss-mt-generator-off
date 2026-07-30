@@ -79,8 +79,11 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   const [isAskingTeam, setIsAskingTeam] = useState(false);
   const [askTeamError, setAskTeamError] = useState<string | null>(null);
   const [askTeamNotice, setAskTeamNotice] = useState<string | null>(null);
-  // Change à chaque génération → force le badge crédits à se recharger.
   const [creditKey, setCreditKey] = useState(0);
+
+  // Modal de bypass
+  const [showBypassModal, setShowBypassModal] = useState(false);
+  const [bypassActive, setBypassActive] = useState(false);
 
   // States for Prerequisite System (Required System)
   const [crFourni, setCrFourni] = useState(false);
@@ -120,7 +123,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     : Array.isArray(dossierInfo?.memoire_cadre_state?.missingFields)
       ? dossierInfo.memoire_cadre_state.missingFields.length : 0;
   const questionsRestantes = gate ? gate.unresolved.length : nbManques;
-  const canGenerate = isPrerequisOk && questionsRestantes === 0;
+  const canGenerate = isPrerequisOk && (questionsRestantes === 0 || bypassActive);
 
   // Blocage : accès au mémoire technique interdit tant que l'analyse des infos manquantes n'est pas faite.
   const hasDce = Array.isArray(dossierInfo?.dce_files) && dossierInfo.dce_files.length > 0;
@@ -181,7 +184,8 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     }, 1000);
 
     try {
-      const res = await apiFetch(`/api/dce/${id}/memoire`, { method: "POST" });
+      const forceQuery = bypassActive ? "?force=1" : "";
+      const res = await apiFetch(`/api/dce/${id}/memoire${forceQuery}`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erreur lors de la génération");
 
@@ -253,7 +257,9 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   }
 
   // ── Blocage tant que l'analyse des infos manquantes n'est pas terminée ──────────────────
-  if (!analyseDone) {
+  const isLocked = !analyseDone && !bypassActive;
+
+  if (isLocked) {
     return (
       <div className="flex h-full flex-col">
         <header className="border-b border-border bg-card px-6 py-3">
@@ -287,8 +293,49 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 Retour à la fiche de synthèse
               </Button>
             </Link>
+
+            <div className="mt-8 pt-6 border-t border-border w-full flex flex-col items-center">
+              <p className="text-xs text-muted-foreground mb-3">Besoin du document immédiatement ?</p>
+              <Button variant="outline" size="sm" onClick={() => setShowBypassModal(true)} className="border-warning/50 text-warning hover:bg-warning/10">
+                Ignorer l'attente et forcer l'accès
+              </Button>
+            </div>
           </div>
         </div>
+
+        {showBypassModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-card w-full max-w-md rounded-xl shadow-lg border border-warning/30 overflow-hidden m-auto">
+              <div className="p-6">
+                <div className="flex items-center gap-3 text-warning mb-4">
+                  <AlertTriangle className="h-6 w-6" />
+                  <h3 className="text-lg font-bold">Attention : Informations manquantes</h3>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Vous êtes sur le point de forcer la génération du mémoire alors que l'analyse n'est pas terminée ou qu'il manque des informations requises.
+                  L'IA risque de laisser des trous [À COMPLÉTER] ou d'être imprécise sur ces points.
+                </p>
+                <p className="text-sm font-semibold text-foreground mb-6">
+                  Êtes-vous sûr de vouloir continuer ?
+                </p>
+                <div className="flex items-center justify-end gap-3">
+                  <Button variant="outline" onClick={() => setShowBypassModal(false)}>
+                    Annuler
+                  </Button>
+                  <Button 
+                    className="bg-warning hover:bg-warning/90 text-warning-foreground"
+                    onClick={() => {
+                      setShowBypassModal(false);
+                      setBypassActive(true);
+                    }}
+                  >
+                    Confirmer et débloquer
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -382,6 +429,13 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                       ))}
                       {gate.unresolved.length > 8 && <li>… et {gate.unresolved.length - 8} autre(s)</li>}
                     </ul>
+                  )}
+                  {!bypassActive && (
+                    <div className="mt-4">
+                      <Button variant="outline" size="sm" onClick={() => setShowBypassModal(true)} className="border-warning/50 text-warning hover:bg-warning/10">
+                        Ignorer et forcer la génération
+                      </Button>
+                    </div>
                   )}
                 </div>
               )}
@@ -497,6 +551,40 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
           )}
         </div>
       </div>
+
+      {showBypassModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-card w-full max-w-md rounded-xl shadow-lg border border-warning/30 overflow-hidden m-auto">
+            <div className="p-6">
+              <div className="flex items-center gap-3 text-warning mb-4">
+                <AlertTriangle className="h-6 w-6" />
+                <h3 className="text-lg font-bold">Attention : Informations manquantes</h3>
+              </div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Vous êtes sur le point de forcer la génération du mémoire alors qu'il manque encore <strong className="text-foreground">{questionsRestantes} information(s) requise(s)</strong>.
+                L'IA risque de laisser des trous [À COMPLÉTER] ou d'être imprécise sur ces points.
+              </p>
+              <p className="text-sm font-semibold text-foreground mb-6">
+                Êtes-vous sûr de vouloir continuer ?
+              </p>
+              <div className="flex items-center justify-end gap-3">
+                <Button variant="outline" onClick={() => setShowBypassModal(false)}>
+                  Annuler
+                </Button>
+                <Button 
+                  className="bg-warning hover:bg-warning/90 text-warning-foreground"
+                  onClick={() => {
+                    setShowBypassModal(false);
+                    setBypassActive(true);
+                  }}
+                >
+                  Confirmer et débloquer
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

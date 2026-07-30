@@ -294,14 +294,19 @@ export default function DossiersPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col items-start gap-1">
-                        <Badge variant={STATUT_VARIANT[d.statut]}>{d.statut}</Badge>
                         {(() => {
                           const n = enAttenteByDossier.get(d.id) ?? 0;
-                          return n > 0 ? (
-                            <Badge variant="warning" className="font-normal whitespace-nowrap">
-                              {n} en attente de réponse{n > 1 ? "s" : ""}
-                            </Badge>
-                          ) : null;
+                          if (n > 0) {
+                            return (
+                              <Badge variant="warning" className="font-normal whitespace-nowrap">
+                                {n} en attente de réponse{n > 1 ? "s" : ""}
+                              </Badge>
+                            );
+                          }
+                          if (d.statut === "À valider") {
+                            return <Badge variant="success">Terminé</Badge>;
+                          }
+                          return <Badge variant={STATUT_VARIANT[d.statut]}>{d.statut}</Badge>;
                         })()}
                       </div>
                     </TableCell>

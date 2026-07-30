@@ -17,6 +17,7 @@ import {
   Clock,
   Banknote,
   Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import {
   Badge,
@@ -118,6 +119,23 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
       .catch(() => {})
       .finally(() => setDetectingMissing(false));
   }, [dossierInfo, id, refreshDossier]);
+
+  const handleRelaunchDetection = async () => {
+    if (detectingMissing) return;
+    setDetectingMissing(true);
+    try {
+      const res = await apiFetch(`/api/dossiers/${id}/detect-missing?force=true`, { method: "POST" });
+      const data = await res.json();
+      if (Array.isArray(data.missingFields)) setMissingFields(data.missingFields);
+      if (typeof data.completude === "number") setCompletude(data.completude);
+      if (Array.isArray(data.contradictions)) setContradictions(data.contradictions);
+      refreshDossier();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setDetectingMissing(false);
+    }
+  };
 
   // ── Sollicitations du dossier (requête Supabase front SÉPARÉE, indépendante de l'apiFetch) ─
   // Filtrée sur ao_id = id du dossier courant ; la RLS scope déjà à l'utilisateur (pas de user_id).
@@ -384,11 +402,24 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
                 {missingFields && (
                   <span className="text-sm font-normal text-muted-foreground">({missingFields.length})</span>
                 )}
-                {typeof completude === "number" && (
-                  <Badge variant={completude >= 80 ? "default" : completude >= 50 ? "secondary" : "outline"} className="ml-auto">
-                    Complétude {completude}%
-                  </Badge>
-                )}
+                <div className="ml-auto flex items-center gap-2">
+                  {typeof completude === "number" && (
+                    <Badge variant={completude >= 80 ? "default" : completude >= 50 ? "secondary" : "outline"}>
+                      Complétude {completude}%
+                    </Badge>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2"
+                    disabled={detectingMissing}
+                    onClick={handleRelaunchDetection}
+                    title="Relancer l'analyse des manques"
+                  >
+                    <RefreshCw className={cn("h-4 w-4", detectingMissing && "animate-spin", !detectingMissing && "mr-1")} />
+                    {!detectingMissing && <span className="text-xs">Relancer</span>}
+                  </Button>
+                </div>
               </CardTitle>
               <p className="text-xs text-muted-foreground">
                 Exigences du DCE non couvertes par la documentation GSS — à obtenir avant la génération.

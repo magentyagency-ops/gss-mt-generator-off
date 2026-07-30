@@ -473,6 +473,7 @@ router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
           filePath: result.filePath,
           mode: 'cadre',
         });
+        await DB.saveDossier(dossierId, { statut: 'À valider' });
       } catch (e: any) {
         console.error('Sauvegarde du contenu du mémoire échouée:', e.message || e);
       }
@@ -818,6 +819,7 @@ router.post('/dossiers/:id/memoire-from-sections', async (req: Request, res: Res
           filePath: result.filePath,
           mode: 'sections',
         });
+        await DB.saveDossier(req.params.id, { statut: 'À valider' });
       } catch (e: any) {
         console.error('Sauvegarde du contenu du mémoire échouée:', e.message || e);
       }

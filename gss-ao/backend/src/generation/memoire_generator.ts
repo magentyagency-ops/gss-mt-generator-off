@@ -25,8 +25,8 @@ import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 //  - AVEC template client (remplissage d'un cadre imposé : extraction/insertion ciblée) → tâche plus
 //    mécanique → gpt-5.4-nano (moins cher, suffisant).
 // Le modèle effectif est choisi dans generate() puis porté par this.memoireModel. Surchargeable par env.
-const MEMOIRE_MODEL = process.env.MEMOIRE_MODEL || 'gpt-5.4-mini';              // cas SANS template
-const MODEL_TEMPLATE = process.env.MEMOIRE_MODEL_TEMPLATE || 'gpt-5.4-nano';    // cas AVEC template client
+const MEMOIRE_MODEL = 'gpt-5.6-luna'; // Modèle luna demandé par l'utilisateur
+const MODEL_TEMPLATE = 'gpt-5.6-luna'; // Modèle luna demandé par l'utilisateur
 
 // Modèle de génération d'IMAGES pour remplir les cadres « Zone d'image » du template.
 // Désactivable via GENERATE_IMAGES=false (étape coûteuse, non bloquante).
@@ -2018,7 +2018,7 @@ export class MemoireGenerator {
           model: this.memoireModel,
           ...(jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
           messages,
-          temperature,
+          ...(/luna|o1/i.test(this.memoireModel) ? {} : { temperature }),
         });
         return completion.choices[0].message.content || '';
       } catch (e: any) {
@@ -2435,37 +2435,10 @@ Renvoie un JSON valide :
    * ou d'une question interne en BDD (recherche_web / question_interne), même en attente de validation.
    */
   private async filterAlreadyKnownInDb(fields: MissingFieldDetected[], dossierId: string): Promise<MissingFieldDetected[]> {
-    const client = this.ragDbClient();
-    if (!client || !fields.length) return fields;
-    try {
-      await client.connect();
-      const resWeb = await client.query(`select query from public.recherche_web where query is not null`);
-      const resQ = await client.query(`select question from public.question_interne where question is not null and reponse_contenu is not null`);
-      const existingQueries = [
-        ...resWeb.rows.map(r => (r.query || '').toLowerCase()),
-        ...resQ.rows.map(r => (r.question || '').toLowerCase()),
-      ];
-      if (!existingQueries.length) return fields;
-      return fields.filter(f => {
-        const flab = f.label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-        const words = flab.split(/[^a-z0-9]+/).filter(w => w.length >= 3 && !w.match(/^(pour|dans|avec|cette|votre|notre|leur|candidat|entreprise|societe|titulaire|marche|question|section|champ|total|france|statut)$/));
-        if (!words.length) return true;
-        for (const eq of existingQueries) {
-          const eqNorm = eq.normalize('NFD').replace(/[̀-ͯ]/g, '');
-          const matches = words.filter(w => eqNorm.includes(w));
-          if (matches.length >= Math.min(1, words.length)) {
-            console.log(`[MemoireGenerator] Manque ignoré car déjà recherché/présent dans BDD : "${f.label}" (~ "${eq}")`);
-            return false;
-          }
-        }
-        return true;
-      });
-    } catch (e: any) {
-      console.warn(`[MemoireGenerator] Erreur filtrage BDD dans detectMissingInfo : ${e?.message || e}`);
-      return fields;
-    } finally {
-      try { await client.end(); } catch { /* ignore */ }
-    }
+    // We bypass this filter because it hides missing information from the user interface.
+    // If an info is missing for THIS dossier, it must be displayed, even if a similar question
+    // was asked in the past or for another dossier.
+    return fields;
   }
 
   /**
@@ -2486,7 +2459,7 @@ Renvoie un JSON valide :
           return s === 'case' || s === 'tableau' || s === 'champ' ? s as any : undefined;
         };
         const items = (Array.isArray(d.items) ? d.items : [])
-          .map((c: any) => ({ label: String(c?.label ?? '').trim(), theme: c?.theme, kind: normKind(c?.type), criticite: normCriticite(c?.criticite) }))
+          .map((c: any) => ({ label: String(c?.label ?? '').trim(), theme: c?.theme, kind: normKind(c?.type), criticite: normCriticite(c?.criticite), context: String(c?.context ?? '').trim() }))
           .filter((x: any) => x.label !== '');
         if (items.length === 0) console.warn(`[MemoireGenerator] extractRequirements DIAG : 0 item extrait. Réponse IA (200c) = ${(content || '').slice(0, 200)}`);
         return items;
@@ -2507,9 +2480,10 @@ Renvoie un JSON valide :
               "- Relève CHAQUE champ texte à compléter, CHAQUE case à cocher à trancher, et CHAQUE cellule de tableau à renseigner (⬚).\n" +
               "- Pour une cellule de tableau, REPRENDS dans le libellé la colonne ET la ligne indiquées (ex. « Tableau moyens humains — ligne « Chef de poste », colonne « Effectif » à compléter »). Regroupe si toute une colonne est vide.\n" +
               "- Un libellé court et clair par élément ; indique son type dans `type` : \"champ\" | \"case\" | \"tableau\". Ne recopie pas le formulaire entier.\n" +
+              "- Fournis aussi dans `context` une ou deux phrases courtes expliquant la section ou l'intitulé parent pour donner du sens à l'élément.\n" +
               "- Ignore les cases DÉJÀ cochées et les zones déjà renseignées.",
           },
-          { role: 'user', content: `=== CADRE (annoté) ===\n${templateText.slice(0, 80_000)}\n\nRenvoie un JSON : {"items":[{"label":"...","type":"champ|case|tableau","criticite":"bloquant|facultatif|normal"}]}` },
+          { role: 'user', content: `=== CADRE (annoté) ===\n${templateText.slice(0, 80_000)}\n\nRenvoie un JSON : {"items":[{"label":"...","type":"champ|case|tableau","criticite":"bloquant|facultatif|normal","context":"..."}]}` },
         ],
         0.1, 'Extraction champs template', true,
       );
@@ -2517,7 +2491,7 @@ Renvoie un JSON valide :
     }
     const content = await this.callOpenAI(
       [
-        { role: 'system', content: "Tu extrais la CHECK-LIST EXHAUSTIVE des EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. Un libellé PRÉCIS par exigence (avec chiffre / délai / qualification si présent). N'invente rien." },
+        { role: 'system', content: "Tu extrais la CHECK-LIST des grandes EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. Reste au niveau des thématiques principales ou des besoins globaux (moyens humains, astreinte, RSE, etc.) sans descendre dans un niveau de détail trop fin. Sois concis et général. N'invente rien." },
         { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON : {"items":[{"label":"...","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}` },
       ],
       0.2, 'Extraction exigences CCTP', true,
@@ -2531,7 +2505,7 @@ Renvoie un JSON valide :
    * Renvoie null si la RAG n'est pas disponible (→ l'appelant retombe sur l'ancienne méthode).
    */
   private async detectMissingViaRag(
-    requirements: Array<{ label: string; theme?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal' }>,
+    requirements: Array<{ label: string; theme?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal'; context?: string }>,
   ): Promise<{ fields: MissingFieldDetected[]; total: number; exigences: any[] } | null> {
     if (requirements.length === 0) return null;
     const gss = await this.loadGssChunksFromDb();
@@ -2541,7 +2515,7 @@ Renvoie un JSON valide :
     const withCtx = requirements.map((r, i) => {
       const top = this.retrieve(embs[i] || [], gss, 5, r.label);
       return {
-        i, label: r.label, criticite: r.criticite, theme: r.theme, kind: r.kind,
+        i, label: r.label, criticite: r.criticite, theme: r.theme, kind: r.kind, reqContext: r.context,
         ctx: top.map((c) => `- [${c.label}] ${c.text.replace(/\s+/g, ' ').slice(0, 350)}`).join('\n'),
       };
     });
@@ -2569,13 +2543,15 @@ Renvoie un JSON valide :
       for (const x of batch) {
         const statut = map.get(x.i);
         const manquant = statut ? statut.includes('manqu') : true;   // défaut prudent : manquant
-        const kindLabel = x.kind === 'case' ? 'Case à cocher du cadre' : x.kind === 'tableau' ? 'Cellule/colonne de tableau du cadre' : x.kind === 'champ' ? 'Champ à renseigner du cadre' : null;
+        const kindLabel = x.kind === 'case' ? 'Case à cocher' : x.kind === 'tableau' ? 'Tableau' : x.kind === 'champ' ? 'Champ' : null;
         exigences.push({ id: `ex-${x.i}`, theme: x.theme || '', exigence: x.label, couverture: manquant ? 'écart' : 'couvert', criticite: x.criticite, ...(x.kind ? { kind: x.kind } : {}) });
         if (manquant) {
+          const suffix = "(Absent de la base de connaissance GSS)";
+          const ctxText = x.reqContext ? `${x.reqContext} ${suffix}` : `${kindLabel ? kindLabel + ' du cadre. ' : ''}${suffix}`;
           missing.push({
             id: `req-${x.i}`,
             label: x.label,
-            context: `${kindLabel ? kindLabel + '. ' : ''}Non couvert par la base de connaissance GSS (recherche sémantique RAG).`,
+            context: ctxText,
             criticite: x.criticite,
           });
         }
@@ -2634,6 +2610,11 @@ Renvoie un JSON valide :
     const filteredIdentite = rawFields.filter((m) => {
       if (identiteCandidatForLabel(m.label) !== '') {
         console.log(`[MemoireGenerator] Manque ignoré (identité légale GSS connue) : "${m.label}"`);
+        return false;
+      }
+      const n = m.label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      if (/signature|cachet|fait [aà]|le \d{2}|date (de signature|du jour)|nom et qualite du signataire/.test(n)) {
+        console.log(`[MemoireGenerator] Manque ignoré (signature/formalité) : "${m.label}"`);
         return false;
       }
       return true;
@@ -2788,10 +2769,14 @@ Renvoie un JSON valide :
     gssContext: string,
   ): Promise<{ fields: MissingFieldDetected[]; total: number }> {
     const systemPrompt = `Tu analyses un CADRE DE RÉPONSE imposé par un acheteur public (formulaire de mémoire technique à remplir) pour GSS (sécurité privée).
-Mission : repérer les CHAMPS À RENSEIGNER du cadre (lignes à compléter, questions, tableaux, rubriques attendant une valeur) et déterminer, pour chacun, s'il est renseignable À PARTIR des sources fournies (le DCE et la Documentation GSS).
+Le texte est ANNOTÉ :
+  • « [CHAMP À REMPLIR] … » = zone de saisie texte à compléter
+  • « [CASE ☐ vide] libellé » = case à cocher NON cochée (choix à trancher)
+  • « [TABLEAU] … [/TABLEAU] » avec cellules vides marquées par « ⬚ (à remplir — colonne: « X », ligne: « Y ») »
+Mission : repérer TOUS LES ÉLÉMENTS À RENSEIGNER du cadre (champs textes, cases à cocher vides, cellules de tableaux vides) et déterminer, pour chacun, s'il est renseignable À PARTIR des sources fournies (le DCE et la Documentation GSS).
 RÈGLES :
-- Compte le NOMBRE TOTAL de champs à renseigner du cadre (total_champs).
-- Ne liste QUE les champs qui NE PEUVENT PAS être renseignés depuis les sources (information réellement absente du DCE ET de la Doc GSS). Ignore ce qui est déjà renseignable.
+- Compte le NOMBRE TOTAL d'éléments à renseigner du cadre (total_champs) incluant les cases vides.
+- Ne liste QUE les éléments qui NE PEUVENT PAS être renseignés depuis les sources (information réellement absente du DCE ET de la Doc GSS). Ignore ce qui est déjà renseignable.
 - Sois exhaustif et rigoureux : si une information demandée par le cadre n'est pas clairement et explicitement écrite dans le DCE ou la Documentation GSS, liste-la comme champ manquant.
 - Formule un libellé court et clair de l'information manquante (pas de recopie du formulaire entier).
 - Indique la criticité de chaque champ manquant : "bloquant" (champ obligatoire/éliminatoire), "facultatif" (bonus/confort) ou "normal".`;

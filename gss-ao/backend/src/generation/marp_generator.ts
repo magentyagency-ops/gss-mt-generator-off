@@ -454,14 +454,8 @@ export class MarpGenerator {
             lines.push('');
           }
 
-          if (illus) {
-            if (hasSchema) {
-              // Séparer l'image sur une nouvelle slide s'il y a déjà un schéma
-              lines.push('---');
-              lines.push(`<!-- header: "${headerTitle} (Illustration)" -->`);
-              lines.push('');
-            }
-            // Illustration attribuée à CETTE slide selon son contexte.
+          if (illus && !hasSchema) {
+            // Illustration attribuée à CETTE slide selon son contexte (ignorée s'il y a déjà un schéma D2).
             lines.push(`![${illus.alt}](media/${illus.fileName})`);
             lines.push('');
           }
@@ -473,7 +467,7 @@ export class MarpGenerator {
           // More illustrations will be added here pas à pas
         };
 
-        if (section.id && illustrationMap[section.id]) {
+        if (section.id && illustrationMap[section.id] && !section.d2SvgFileName) {
           lines.push('---');
           lines.push('<!-- _class: lead -->');
           lines.push('<!-- _header: "" -->');
