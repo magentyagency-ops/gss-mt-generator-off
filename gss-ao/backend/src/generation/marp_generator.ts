@@ -208,6 +208,16 @@ export class MarpGenerator {
     // guillemète les chemins (susceptibles de contenir des espaces).
     const isWin = process.platform === 'win32';
     const q = (p: string) => (isWin ? `"${p}"` : p);
+
+    let linuxChromePath: string | undefined;
+    if (!isWin) {
+      try {
+        linuxChromePath = require('child_process').execSync('which chromium || which chromium-browser || which google-chrome').toString().trim();
+      } catch (e) {
+        console.warn('[MarpGenerator] Impossible de localiser Chromium avec which');
+      }
+    }
+
     const result = spawnSync(
       'npx',
       [
@@ -232,7 +242,7 @@ export class MarpGenerator {
         env: { 
           ...process.env, 
           PUPPETEER_TIMEOUT: '280000',
-          CHROME_PATH: process.env.CHROME_PATH || (isWin ? undefined : '/usr/bin/chromium')
+          CHROME_PATH: process.env.CHROME_PATH || linuxChromePath
         },
       }
     );
