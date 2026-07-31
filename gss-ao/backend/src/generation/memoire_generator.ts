@@ -2909,7 +2909,12 @@ Renvoie un JSON valide :
       templatePath = path.join(this.templateDir, 'Mémoire technique', 'AO RNE.docx');
       isClientTemplate = false; // mémoire GSS maître, pas un cadre acheteur
       if (!fs.existsSync(templatePath)) {
-        throw new Error(`Aucun template trouvé ni dans le DCE ni dans ${templatePath}`);
+        const fallbackPath = path.resolve(__dirname, '../../../AO RNE.docx');
+        if (fs.existsSync(fallbackPath)) {
+          templatePath = fallbackPath;
+        } else {
+          throw new Error(`Aucun template trouvé ni dans le DCE ni dans ${templatePath}`);
+        }
       }
     }
 
