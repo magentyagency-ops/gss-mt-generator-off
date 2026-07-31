@@ -551,16 +551,16 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   </div>
                   <p className="text-sm text-muted-foreground mb-4">Voici le rendu interactif du fichier tel qu'il a été généré, avec le formatage d'origine conservé.</p>
                   
-                  {docxResult.data.file_path.toLowerCase().endsWith('.pdf') ? (
+                  {docxResult.data?.file_path?.toLowerCase()?.endsWith('.pdf') ? (
                     <div className="relative w-full rounded-md border border-border bg-muted mt-6 shadow-inner h-[800px]">
                       <iframe 
-                        src={`${apiBase}/api/download?file=${encodeURIComponent(docxResult.data.file_path)}`}
+                        src={`${apiBase}/api/download?file=${encodeURIComponent(docxResult.data?.file_path || '')}`}
                         className="w-full h-full rounded-md"
                         title="Prévisualisation PDF"
                       />
                     </div>
                   ) : (
-                    <DocxPreviewViewer fileUrl={`${apiBase}/api/download?file=${encodeURIComponent(docxResult.data.file_path)}`} />
+                    <DocxPreviewViewer fileUrl={`${apiBase}/api/download?file=${encodeURIComponent(docxResult.data?.file_path || '')}`} />
                   )}
                 </div>
               </div>
