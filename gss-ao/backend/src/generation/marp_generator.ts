@@ -247,17 +247,17 @@ export class MarpGenerator {
       args,
       {
         cwd: workDir,
-        timeout: 300_000, // 5 minutes max (les gros mémoires ~120 pages dépassent 2 min de rendu)
+        timeout: 900_000, // 15 minutes max
         stdio: 'pipe',
         encoding: 'utf-8',
         shell: isWin,
         // Marp/Puppeteer abandonne la conversion après 30 s par défaut : insuffisant
         // pour un mémoire volumineux illustré d'images (base de données). On aligne
-        // ce délai interne sur le timeout du process (cause du « Timed out after 30000ms »).
+        // ce délai interne sur le timeout du process.
         env: { 
           ...process.env, 
-          PUPPETEER_TIMEOUT: '300000',
-          PUPPETEER_PROTOCOL_TIMEOUT: '300000',
+          PUPPETEER_TIMEOUT: '900000',
+          PUPPETEER_PROTOCOL_TIMEOUT: '900000',
           CHROME_PATH: chromePath || '',
           PUPPETEER_EXTRA_LAUNCH_ARGS: '--no-sandbox --disable-setuid-sandbox --disable-gpu --disable-dev-shm-usage',
         },
@@ -266,6 +266,8 @@ export class MarpGenerator {
 
     if (result.error) {
       console.error('[MarpGenerator] marp-cli spawn error:', result.error);
+      if (result.stdout) console.error('[MarpGenerator] stdout:', result.stdout);
+      if (result.stderr) console.error('[MarpGenerator] stderr:', result.stderr);
       throw new Error(`Marp CLI failed to start: ${result.error.message}`);
     }
 
