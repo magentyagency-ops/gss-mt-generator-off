@@ -1835,16 +1835,17 @@ export class MemoireGenerator {
    * Renvoie le chemin temporaire, ou null si aucune pièce en base → l'appelant retombe alors sur
    * l'ancien emplacement disque (data/output/dce_<id>), pour les dossiers créés avant la migration.
    */
-  private async materializeDceFromStorage(dossierId: string): Promise<string | null> {
+  private async materializeDceFromStorage(dossierId: string): Promise<string> {
     let fichiers;
     try {
       fichiers = await FichiersDB.listByDossier(dossierId);
     } catch (e: any) {
-      console.warn(`[MemoireGenerator] Table fichiers illisible (${e?.message || e}) — repli sur le disque.`);
-      return null;
+      throw new Error(`[MemoireGenerator] Impossible de lire la table fichiers : ${e?.message || e}`);
     }
     const dce = fichiers.filter((f) => f.storage_path && /\/dce\//.test(f.storage_path));
-    if (!dce.length) return null;
+    if (!dce.length) {
+      throw new Error(`[MemoireGenerator] Aucun fichier DCE trouvé en base pour le dossier ${dossierId}.`);
+    }
 
     const supabase = getScopedClient();
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `dce_${dossierId}_`));
@@ -1867,7 +1868,11 @@ export class MemoireGenerator {
         console.warn(`[MemoireGenerator] DCE Storage: échec téléchargement ${f.nom} — ${e?.message || e}`);
       }
     }
-    if (!got) { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ } return null; }
+    }
+    if (!got) {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      throw new Error(`[MemoireGenerator] Échec du téléchargement de tous les fichiers DCE depuis le Storage pour le dossier ${dossierId}.`);
+    }
     console.log(`[MemoireGenerator] ${got} pièce(s) DCE téléchargée(s) depuis Storage (dossier temporaire, nettoyé après).`);
     return tmpDir;
   }
@@ -1878,7 +1883,7 @@ export class MemoireGenerator {
     this.lastDceSiteCols = [];
 
     // Source des pièces DCE : Supabase Storage (via table fichiers) matérialisé en /tmp transitoire.
-    // Repli sur l'ancien emplacement disque pour les dossiers antérieurs à la migration Storage.
+    // Plus de repli sur l'ancien emplacement disque.
     const materializedDir = await this.materializeDceFromStorage(dossierId);
 
     // Budget global et plafond par fichier (en caractères ; ~4 car/token)
@@ -1910,9 +1915,8 @@ export class MemoireGenerator {
     // On ne scanne QUE le dossier réellement uploadé pour CE dossier : scanner en plus des corpus
     // de référence (Rouen…) ralentissait fortement le démarrage (chaque .doc = conversion LibreOffice)
     // ET polluait le contexte avec les données d'un autre client → faux pour « n'importe quel client ».
-    const dceDirs = [
-      materializedDir || path.resolve(baseDir, `../data/output/dce_${dossierId}`),
-    ];
+    // On ne scanne QUE le dossier téléchargé depuis la base.
+    const dceDirs = [materializedDir];
     // Nettoyage du dossier temporaire (rien ne reste sur le disque de l'app après la génération).
     const cleanupTmp = () => {
       if (materializedDir) { try { fs.rmSync(materializedDir, { recursive: true, force: true }); } catch { /* ignore */ } }
@@ -2726,20 +2730,8 @@ Renvoie un JSON valide :
    * génération. Matérialise le DCE depuis Storage (ou repli disque), extrait le texte, nettoie.
    */
   private async getClientTemplateText(dossierId: string): Promise<string | null> {
-    // Détection ALIGNÉE sur la génération (cf. generate(), plus bas) : on ne se fie PAS au champ
-    // `dce_files[].type === 'Mémoire (cadre)'` — il n'est jamais peuplé à l'upload, donc s'y fier
-    // rendait CE chemin toujours « sans cadre » (bug : les champs du template ne ressortaient jamais).
-    // On scanne DIRECTEMENT les pièces réellement uploadées du dossier via findDceTemplate (nom du
-    // fichier « …mémoire… .docx »), exactement comme le fait la génération.
-    const baseDir = path.resolve(__dirname, '../../');
-    const uploadedDceDir = path.resolve(baseDir, `../data/output/dce_${dossierId}`);
-    // Priorité au dossier disque s'il existe (moins coûteux) ; sinon on matérialise depuis Storage.
-    let searchDir = uploadedDceDir;
-    let tmpDir: string | null = null;
-    if (!fs.existsSync(uploadedDceDir)) {
-      tmpDir = await this.materializeDceFromStorage(dossierId);
-      if (tmpDir) searchDir = tmpDir;
-    }
+    const searchDir = await this.materializeDceFromStorage(dossierId);
+    let tmpDir: string | null = searchDir;
     try {
       const tpl = this.findDceTemplate(searchDir);
       if (!tpl) return null;
@@ -2876,7 +2868,6 @@ Renvoie un JSON valide :
   }> {
     const settings = getSettings();
     const baseDir = path.resolve(__dirname, '../../');
-    const uploadedDceDir = path.resolve(baseDir, `../data/output/dce_${dossierId}`);
 
     // 1. Find template. isClientTemplate=true → cadre imposé par l'acheteur (on remplit tel quel).
     // isClientTemplate=false → mémoire GSS maître réutilisé (on adapte d'abord client/sites).
@@ -2888,14 +2879,10 @@ Renvoie un JSON valide :
     // jamais dans les corpus de référence (Cas-Univ-Rouen, corpusDce…), sinon chaque dossier
     // hériterait à tort du mémoire de référence comme « cadre client » → faux « cas template ».
     const dossier = await DB.getDossier(dossierId);
-    // Nouveaux dossiers : les pièces vivent dans Storage, pas dans uploadedDceDir. On matérialise
+    // Nouveaux dossiers : les pièces vivent dans Storage. On matérialise
     // pour y chercher un éventuel cadre imposé, puis on nettoie dès le template chargé en mémoire.
-    let templateSearchDir = uploadedDceDir;
-    let templateTmpDir: string | null = null;
-    if (!fs.existsSync(uploadedDceDir)) {
-      templateTmpDir = await this.materializeDceFromStorage(dossierId);
-      if (templateTmpDir) templateSearchDir = templateTmpDir;
-    }
+    let templateTmpDir: string | null = await this.materializeDceFromStorage(dossierId);
+    let templateSearchDir = templateTmpDir;
     if (dossier && dossier.dce_files) {
       const templateFile = dossier.dce_files.find((f: any) => f.type === 'Mémoire (cadre)');
       if (templateFile && templateFile.nom) {
