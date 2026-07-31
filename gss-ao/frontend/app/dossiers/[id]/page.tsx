@@ -486,7 +486,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
                   <p className="text-sm text-muted-foreground">Aucune sollicitation pour ce dossier.</p>
                 ) : (
                   sollicitations.map((q) => (
-                    <QuestionCard key={q.id} q={q} onValider={() => validerSollicitation(q)} />
+                    <QuestionCard key={q.id} q={q} />
                   ))
                 )}
               </CardContent>
