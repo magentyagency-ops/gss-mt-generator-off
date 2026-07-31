@@ -1775,7 +1775,7 @@ export class MemoireGenerator {
       );
     }
     this.openai = new OpenAI({ apiKey: key });
-    const baseDir = path.resolve(__dirname, '../../../../');
+    const baseDir = path.resolve(__dirname, '../../');
     this.responseDir = path.resolve(baseDir, 'response');
     this.templateDir = path.resolve(baseDir, 'Template');
     if (!fs.existsSync(this.responseDir)) fs.mkdirSync(this.responseDir, { recursive: true });
@@ -1873,7 +1873,7 @@ export class MemoireGenerator {
   }
 
   private async getDceContext(dossierId: string): Promise<string> {
-    const baseDir = path.resolve(__dirname, '../../../../');
+    const baseDir = path.resolve(__dirname, '../../');
     this.lastDceTables = '';   // réinitialisé à chaque analyse de DCE
     this.lastDceSiteCols = [];
 
@@ -1901,8 +1901,8 @@ export class MemoireGenerator {
     const pieces: DcePiece[] = [];
 
     // 1. Sorties JSON pré-analysées (synthèses concises, très utiles) — priorité maximale
-    const rcPath = path.join(baseDir, `gss-ao/data/output/rc_${dossierId}.json`);
-    const cctpPath = path.join(baseDir, `gss-ao/data/output/cctp_${dossierId}.json`);
+    const rcPath = path.resolve(baseDir, `../data/output/rc_${dossierId}.json`);
+    const cctpPath = path.resolve(baseDir, `../data/output/cctp_${dossierId}.json`);
     if (fs.existsSync(cctpPath)) pieces.push({ label: 'CCTP (analysé)', text: fs.readFileSync(cctpPath, 'utf8'), priority: 120 });
     if (fs.existsSync(rcPath)) pieces.push({ label: 'RC (analysé)', text: fs.readFileSync(rcPath, 'utf8'), priority: 115 });
 
@@ -1911,7 +1911,7 @@ export class MemoireGenerator {
     // de référence (Rouen…) ralentissait fortement le démarrage (chaque .doc = conversion LibreOffice)
     // ET polluait le contexte avec les données d'un autre client → faux pour « n'importe quel client ».
     const dceDirs = [
-      materializedDir || path.resolve(baseDir, `gss-ao/data/output/dce_${dossierId}`),
+      materializedDir || path.resolve(baseDir, `../data/output/dce_${dossierId}`),
     ];
     // Nettoyage du dossier temporaire (rien ne reste sur le disque de l'app après la génération).
     const cleanupTmp = () => {
@@ -2732,8 +2732,8 @@ Renvoie un JSON valide :
     // rendait CE chemin toujours « sans cadre » (bug : les champs du template ne ressortaient jamais).
     // On scanne DIRECTEMENT les pièces réellement uploadées du dossier via findDceTemplate (nom du
     // fichier « …mémoire… .docx »), exactement comme le fait la génération.
-    const baseDir = path.resolve(__dirname, '../../../../');
-    const uploadedDceDir = path.resolve(baseDir, `gss-ao/data/output/dce_${dossierId}`);
+    const baseDir = path.resolve(__dirname, '../../');
+    const uploadedDceDir = path.resolve(baseDir, `../data/output/dce_${dossierId}`);
     // Priorité au dossier disque s'il existe (moins coûteux) ; sinon on matérialise depuis Storage.
     let searchDir = uploadedDceDir;
     let tmpDir: string | null = null;
@@ -2876,8 +2876,8 @@ Renvoie un JSON valide :
     consultations?: string[];
   }> {
     const settings = getSettings();
-    const baseDir = path.resolve(__dirname, '../../../../');
-    const uploadedDceDir = path.resolve(baseDir, `gss-ao/data/output/dce_${dossierId}`);
+    const baseDir = path.resolve(__dirname, '../../');
+    const uploadedDceDir = path.resolve(baseDir, `../data/output/dce_${dossierId}`);
 
     // 1. Find template. isClientTemplate=true → cadre imposé par l'acheteur (on remplit tel quel).
     // isClientTemplate=false → mémoire GSS maître réutilisé (on adapte d'abord client/sites).
@@ -4971,8 +4971,8 @@ RÈGLES DE FORME (rendu Marp) :
    * d'échec, le PDF d'origine est conservé (balises intactes).
    */
   private replacePlaceholdersPython(pdfPath: string, analysisData: any): { replaced: number } {
-    const baseDir = path.resolve(__dirname, '../../../../');
-    const scriptPath = path.resolve(baseDir, 'gss-ao/backend/python/replace_placeholders.py');
+    const baseDir = path.resolve(__dirname, '../../');
+    const scriptPath = path.resolve(baseDir, 'python/replace_placeholders.py');
     if (!fs.existsSync(scriptPath)) {
       console.warn(`[MemoireGenerator] Script Python introuvable: ${scriptPath} → balises non remplacées.`);
       return { replaced: 0 };
@@ -5017,8 +5017,8 @@ RÈGLES DE FORME (rendu Marp) :
   private rewriteHighlightsPython(
     inputPdf: string, outputPdf: string, analysisData: any, gssContext: string, sites: string[],
   ): { regions: number; filled: number } {
-    const baseDir = path.resolve(__dirname, '../../../../');
-    const scriptPath = path.resolve(baseDir, 'gss-ao/backend/python/rewrite_highlights.py');
+    const baseDir = path.resolve(__dirname, '../../');
+    const scriptPath = path.resolve(baseDir, 'python/rewrite_highlights.py');
     const fallback = () => { try { fs.copyFileSync(inputPdf, outputPdf); } catch { /* ignore */ } return { regions: 0, filled: 0 }; };
     if (!fs.existsSync(scriptPath)) {
       console.warn(`[MemoireGenerator] Script Python introuvable: ${scriptPath} → surlignages non traités.`);
@@ -5073,8 +5073,8 @@ RÈGLES DE FORME (rendu Marp) :
   private fillImageZonesPython(
     pdfPath: string, analysisData: any, gssContext: string, sites: string[],
   ): { zones: number; filled: number } {
-    const baseDir = path.resolve(__dirname, '../../../../');
-    const scriptPath = path.resolve(baseDir, 'gss-ao/backend/python/fill_image_zones.py');
+    const baseDir = path.resolve(__dirname, '../../');
+    const scriptPath = path.resolve(baseDir, 'python/fill_image_zones.py');
     if (!fs.existsSync(scriptPath)) {
       console.warn(`[MemoireGenerator] Script Python introuvable: ${scriptPath} → cadres image non remplis.`);
       return { zones: 0, filled: 0 };
