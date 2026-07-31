@@ -4839,34 +4839,31 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
     const totalSections = AI_SECTIONS_B.length;
     let completed = 0;
 
-    for (let i = 0; i < totalSections; i++) {
-      const section = AI_SECTIONS_B[i];
-      if (onProgress) {
-        onProgress(15 + Math.round((completed / totalSections) * 70), `Génération section ${i + 1}/${totalSections}: ${section.title}...`);
-      }
-
-      const matchedCats = this.matchGssCategories(section.title, availableCategories);
-      if (availableCategories.includes('RECHERCHES ET SOLLICITATIONS (RAG)') && !matchedCats.includes('RECHERCHES ET SOLLICITATIONS (RAG)')) {
-        matchedCats.unshift('RECHERCHES ET SOLLICITATIONS (RAG)');
-      }
-      if (availableCategories.includes('RECHERCHES WEB BDD') && !matchedCats.includes('RECHERCHES WEB BDD')) {
-        matchedCats.unshift('RECHERCHES WEB BDD');
-      }
-      if (availableCategories.includes('QUESTIONS INTERNES BDD') && !matchedCats.includes('QUESTIONS INTERNES BDD')) {
-        matchedCats.unshift('QUESTIONS INTERNES BDD');
-      }
-      let gssContext = '';
-      for (const cat of matchedCats) {
-        gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 4000)}`;
-      }
-      if (!gssContext) {
-        // Fallback si pas de correspondance
-        for (const cat of ['MANAGEMENT', 'INTERLOCUTEUR UNIQUE', 'MISE EN PLACE', 'VALEURS', 'SUIVI QUALITE ET CONTROLES']) {
-          if (gssDocs[cat]) gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 3000)}`;
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < totalSections; i += BATCH_SIZE) {
+      const batch = AI_SECTIONS_B.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(async (section, idx) => {
+        const matchedCats = this.matchGssCategories(section.title, availableCategories);
+        if (availableCategories.includes('RECHERCHES ET SOLLICITATIONS (RAG)') && !matchedCats.includes('RECHERCHES ET SOLLICITATIONS (RAG)')) {
+          matchedCats.unshift('RECHERCHES ET SOLLICITATIONS (RAG)');
         }
-      }
+        if (availableCategories.includes('RECHERCHES WEB BDD') && !matchedCats.includes('RECHERCHES WEB BDD')) {
+          matchedCats.unshift('RECHERCHES WEB BDD');
+        }
+        if (availableCategories.includes('QUESTIONS INTERNES BDD') && !matchedCats.includes('QUESTIONS INTERNES BDD')) {
+          matchedCats.unshift('QUESTIONS INTERNES BDD');
+        }
+        let gssContext = '';
+        for (const cat of matchedCats) {
+          gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 4000)}`;
+        }
+        if (!gssContext) {
+          for (const cat of ['MANAGEMENT', 'INTERLOCUTEUR UNIQUE', 'MISE EN PLACE', 'VALEURS', 'SUIVI QUALITE ET CONTROLES']) {
+            if (gssDocs[cat]) gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 3000)}`;
+          }
+        }
 
-      const systemPrompt = `Tu es un expert en sécurité privée chez GSS qui rédige un mémoire technique GAGNANT pour répondre à l'appel d'offres du client ${clientName}. Tu rédiges la partie intitulée "${section.title}".
+        const systemPrompt = `Tu es un expert en sécurité privée chez GSS qui rédige un mémoire technique GAGNANT pour répondre à l'appel d'offres du client ${clientName}. Tu rédiges la partie intitulée "${section.title}".
 
 OBJECTIF : un contenu SUR-MESURE, directement branché sur les exigences réelles du marché — surtout pas un texte générique interchangeable.
 
@@ -4886,22 +4883,26 @@ RÈGLES DE FORME (rendu Marp) :
 - Développe la section EN PROFONDEUR : vise 600 à 800 mots, répartis en 3 à 5 sous-parties (chacune introduite par un "## Sous-titre"), pour couvrir le sujet de façon complète et convaincante.
 - Traite EXPLICITEMENT chaque exigence du CCTP listée ci-dessous en montrant la réponse concrète de GSS. Si — et SEULEMENT si — GSS n'a aucune réponse spécifique à une exigence (aucun élément dans les atouts GSS), n'invente RIEN : insère à cet endroit, sur sa propre ligne, exactement \`[CONSULTATION REQUISE : <information précise à obtenir auprès de GSS>]\` en décrivant l'information manquante.`;
 
-      const chapterReqs = reqsByTheme[section.chapter] || [];
-      const reqBlock = chapterReqs.length
-        ? '\n\nEXIGENCES DU CCTP À TRAITER DANS CETTE SECTION (réponds à chacune avec ce que fait GSS ; signale les écarts via [CONSULTATION REQUISE : …]) :\n' +
-        chapterReqs
-          .map((r) => `- Le CCTP demande : ${r.exigence}\n  Réponse GSS connue : ${r.reponseGss || '(non documentée)'}${r.couverture && r.couverture.toLowerCase() !== 'couvert' ? `  → couverture : ${r.couverture}` : ''}`)
-          .join('\n')
-        : '';
+        const chapterReqs = reqsByTheme[section.chapter] || [];
+        const reqBlock = chapterReqs.length
+          ? '\n\nEXIGENCES DU CCTP À TRAITER DANS CETTE SECTION (réponds à chacune avec ce que fait GSS ; signale les écarts via [CONSULTATION REQUISE : …]) :\n' +
+          chapterReqs
+            .map((r) => `- Le CCTP demande : ${r.exigence}\n  Réponse GSS connue : ${r.reponseGss || '(non documentée)'}${r.couverture && r.couverture.toLowerCase() !== 'couvert' ? `  → couverture : ${r.couverture}` : ''}`)
+            .join('\n')
+          : '';
 
-      const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}${reqBlock}\n\nRédige le contenu de cette partie de manière experte.`;
+        const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}${reqBlock}\n\nRédige le contenu de cette partie de manière experte.`;
 
-      const text = await this.callOpenAI(
-        [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-        0.5, `Génération ${section.id}`, false
-      );
-      sectionsMap[section.id] = text || 'Contenu non généré.';
-      completed++;
+        const text = await this.callOpenAI(
+          [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+          0.5, `Génération ${section.id}`, false
+        );
+        sectionsMap[section.id] = text || 'Contenu non généré.';
+        completed++;
+        if (onProgress) {
+          onProgress(15 + Math.round((completed / totalSections) * 70), `Génération section ${completed}/${totalSections}: ${section.title}...`);
+        }
+      }));
     }
 
     // ── Consultations requises : exigences que GSS ne couvre pas et qui doivent être précisées ──
