@@ -456,46 +456,61 @@ router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
     }
     setDossierProgress(dossierId, { status: 'running', progress: 5, message: 'Démarrage de la génération du mémoire...' });
     const generator = new MemoireGenerator();
-    const result = await generator.generate(dossierId, (progress, message) => {
+    
+    // Processus de génération asynchrone (détaché de la requête HTTP)
+    generator.generate(dossierId, (progress, message) => {
       setDossierProgress(dossierId, { status: 'running', progress, message });
+    }).then(async (result) => {
+      if (result.status === 'incomplete') {
+        setDossierProgress(dossierId, { 
+          status: 'incomplete', 
+          progress: 95, 
+          message: 'En attente d\'informations complémentaires.',
+          data: { missingFields: result.missingFields }
+        });
+        return;
+      }
+
+      if (memoireId) {
+        try {
+          await MemoiresDB.finish(memoireId, {
+            generatedData: result.generatedData,
+            filePath: result.filePath,
+            mode: 'cadre',
+          });
+          await DB.saveDossier(dossierId, { statut: 'À valider' });
+        } catch (e: any) {
+          console.error('Sauvegarde du contenu du mémoire échouée:', e.message || e);
+        }
+      }
+
+      const consultations = result.consultations || [];
+      const doneMessage = consultations.length
+        ? `Génération terminée. ⚠ ${consultations.length} information(s) à compléter.`
+        : 'Génération terminée avec succès !';
+        
+      setDossierProgress(dossierId, { 
+        status: 'completed', 
+        progress: 100, 
+        message: doneMessage,
+        data: {
+          file_path: result.filePath,
+          data_generee_par_ia: result.generatedData,
+          consultations,
+        }
+      });
+    }).catch((error) => {
+      console.error('Erreur lors de la génération du mémoire asynchrone:', error);
+      setDossierProgress(dossierId, { status: 'error', message: `Erreur: ${error.message || error}` });
     });
 
-    if (result.status === 'incomplete') {
-      setDossierProgress(dossierId, { status: 'incomplete', progress: 95, message: 'En attente d\'informations complémentaires.' });
-      return res.json({
-        status: 'incomplete',
-        message: 'Des informations sont manquantes.',
-        missingFields: result.missingFields
-      });
-    }
-
-    if (memoireId) {
-      try {
-        await MemoiresDB.finish(memoireId, {
-          generatedData: result.generatedData,
-          filePath: result.filePath,
-          mode: 'cadre',
-        });
-        await DB.saveDossier(dossierId, { statut: 'À valider' });
-      } catch (e: any) {
-        console.error('Sauvegarde du contenu du mémoire échouée:', e.message || e);
-      }
-    }
-
-    const consultations = result.consultations || [];
-    const doneMessage = consultations.length
-      ? `Génération terminée. ⚠ ${consultations.length} information(s) à compléter.`
-      : 'Génération terminée avec succès !';
-    setDossierProgress(dossierId, { status: 'completed', progress: 100, message: doneMessage, consultations });
-    res.json({
-      status: 'completed',
-      message: 'Mémoire technique traité',
-      file_path: result.filePath,
-      data_generee_par_ia: result.generatedData,
-      consultations,
+    // Retour immédiat 202 Accepted au frontend (qui va commencer le polling)
+    res.status(202).json({
+      status: 'started',
+      message: 'Génération lancée en arrière-plan',
     });
   } catch (error: any) {
-    console.error('Erreur lors de la génération du mémoire:', error);
+    console.error('Erreur lors du lancement de la génération:', error);
     setDossierProgress(dossierId, { status: 'error', message: `Erreur: ${error.message || error}` });
     res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
   }
