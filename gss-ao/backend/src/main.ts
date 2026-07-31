@@ -16,8 +16,8 @@ app.use('/api', routes);
 // So /api/health was under router with prefix /api, meaning the full path is /api/health.
 // App.use('/api', routes) maps routes like router.get('/health') to /api/health. Perfect!
 
-const server = app.listen(port, () => {
-  console.log(`GSS-AO Backend server listening at http://localhost:${port}`);
+const server = app.listen(port as number, '0.0.0.0', () => {
+  console.log(`GSS-AO Backend server listening at http://0.0.0.0:${port}`);
   // Rattrapage des réponses de sollicitation reçues par e-mail → RAG, sans dépendre de l'app.
   startSollicitationWatcher();
 });
