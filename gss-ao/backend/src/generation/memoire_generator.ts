@@ -4858,6 +4858,12 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
       if (availableCategories.includes('RECHERCHES ET SOLLICITATIONS (RAG)') && !matchedCats.includes('RECHERCHES ET SOLLICITATIONS (RAG)')) {
         matchedCats.unshift('RECHERCHES ET SOLLICITATIONS (RAG)');
       }
+      if (availableCategories.includes('RECHERCHES WEB BDD') && !matchedCats.includes('RECHERCHES WEB BDD')) {
+        matchedCats.unshift('RECHERCHES WEB BDD');
+      }
+      if (availableCategories.includes('QUESTIONS INTERNES BDD') && !matchedCats.includes('QUESTIONS INTERNES BDD')) {
+        matchedCats.unshift('QUESTIONS INTERNES BDD');
+      }
       let gssContext = '';
       for (const cat of matchedCats) {
         gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 4000)}`;
