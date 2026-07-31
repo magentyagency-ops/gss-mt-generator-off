@@ -214,7 +214,8 @@ export class MarpGenerator {
       try {
         linuxChromePath = require('child_process').execSync('which chromium || which chromium-browser || which google-chrome').toString().trim();
       } catch (e) {
-        console.warn('[MarpGenerator] Impossible de localiser Chromium avec which');
+        console.warn('[MarpGenerator] Impossible de localiser Chromium avec which, fallback sur /usr/bin/chromium');
+        linuxChromePath = '/usr/bin/chromium';
       }
     }
 
