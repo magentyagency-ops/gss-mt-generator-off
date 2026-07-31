@@ -209,28 +209,38 @@ export class MarpGenerator {
     const isWin = process.platform === 'win32';
     const q = (p: string) => (isWin ? `"${p}"` : p);
 
-    let linuxChromePath: string | undefined;
-    if (!isWin) {
+    let chromePath: string | undefined = process.env.CHROME_PATH;
+    if (!chromePath) {
+      // Utilise le Chromium embarqué par puppeteer (installé via npm install)
       try {
-        linuxChromePath = require('child_process').execSync('which chromium || which chromium-browser || which google-chrome').toString().trim();
+        const puppeteer = require('puppeteer');
+        chromePath = puppeteer.executablePath();
+        console.log(`[MarpGenerator] Chromium trouvé via puppeteer: ${chromePath}`);
       } catch (e) {
-        console.warn('[MarpGenerator] Impossible de localiser Chromium avec which, fallback sur /usr/bin/chromium');
-        linuxChromePath = '/usr/bin/chromium';
+        console.warn('[MarpGenerator] puppeteer non disponible, recherche système…');
       }
     }
+    if (!chromePath) {
+      // Fallback : chercher dans le système
+      try {
+        chromePath = require('child_process').execSync('which chromium || which chromium-browser || which google-chrome').toString().trim();
+      } catch (e) {
+        console.warn('[MarpGenerator] Aucun navigateur trouvé sur le système.');
+      }
+    }
+    console.log(`[MarpGenerator] CHROME_PATH final: ${chromePath || 'NON DÉFINI'}`);
+
+    // Utilise le binaire marp-cli installé localement (en dependencies) au lieu de npx
+    const marpBin = path.resolve(__dirname, '../../node_modules/.bin/marp');
+    const useMarpBin = !isWin && fs.existsSync(marpBin);
+    const cmd = useMarpBin ? marpBin : 'npx';
+    const args = useMarpBin
+      ? [q(mdPath), '--theme', q(cssPath), '--pdf', '-o', q(pdfPath), '--allow-local-files', '--html', '--no-stdin']
+      : ['-y', '@marp-team/marp-cli@latest', q(mdPath), '--theme', q(cssPath), '--pdf', '-o', q(pdfPath), '--allow-local-files', '--html', '--no-stdin'];
 
     const result = spawnSync(
-      'npx',
-      [
-        '-y', '@marp-team/marp-cli@latest',
-        q(mdPath),
-        '--theme', q(cssPath),
-        '--pdf',
-        '-o', q(pdfPath),
-        '--allow-local-files',
-        '--html',
-        '--no-stdin',
-      ],
+      cmd,
+      args,
       {
         cwd: workDir,
         timeout: 300_000, // 5 minutes max (les gros mémoires ~120 pages dépassent 2 min de rendu)
@@ -243,7 +253,7 @@ export class MarpGenerator {
         env: { 
           ...process.env, 
           PUPPETEER_TIMEOUT: '280000',
-          CHROME_PATH: process.env.CHROME_PATH || linuxChromePath
+          CHROME_PATH: chromePath || '',
         },
       }
     );
