@@ -229,7 +229,11 @@ export class MarpGenerator {
         // Marp/Puppeteer abandonne la conversion après 30 s par défaut : insuffisant
         // pour un mémoire volumineux illustré d'images (base de données). On aligne
         // ce délai interne sur le timeout du process (cause du « Timed out after 30000ms »).
-        env: { ...process.env, PUPPETEER_TIMEOUT: '280000' },
+        env: { 
+          ...process.env, 
+          PUPPETEER_TIMEOUT: '280000',
+          CHROME_PATH: process.env.CHROME_PATH || (isWin ? undefined : '/usr/bin/chromium')
+        },
       }
     );
 
