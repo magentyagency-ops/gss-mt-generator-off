@@ -1654,6 +1654,8 @@ export function identiteCandidatForLabel(label: string, identite = GSS_IDENTITE)
 function renderTablePaired(rows: string[][]): string {
   const data = rows.filter((r) => r.some((c) => (c || '').trim()));
   if (data.length < 2) return '';
+  // La première case (ligne et colonne) doit être vide pour un tableau à double entrée valide
+  if ((data[0][0] || '').trim() !== '') return '';
   const headers = data[0].map((h) => (h || '').trim());
   const out: string[] = [];
   for (let i = 1; i < data.length; i++) {
@@ -1689,6 +1691,8 @@ interface SiteColumn { header: string; tokens: string[]; block: string; rows: Ar
 function renderTableByColumn(rows: string[][]): SiteColumn[] {
   const data = rows.filter((r) => r.some((c) => (c || '').trim()));
   if (data.length < 2) return [];
+  // La première case (ligne et colonne) doit être vide pour un tableau à double entrée valide
+  if ((data[0][0] || '').trim() !== '') return [];
   const headers = data[0].map((h) => (h || '').replace(/\s+/g, ' ').trim());
   const cols: SiteColumn[] = [];
   const nbCols = Math.max(...data.map((r) => r.length));
