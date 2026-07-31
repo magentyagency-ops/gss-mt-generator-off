@@ -62,6 +62,7 @@ export function setDossierProgress(id: string, update: Partial<ProgressInfo>) {
   if (update.logs !== undefined) {
     progressStore[id].logs.push(...update.logs);
   }
+  if (update.data !== undefined) progressStore[id].data = update.data;
   if (update.consultations !== undefined) progressStore[id].consultations = update.consultations;
 }
 
