@@ -234,9 +234,14 @@ export class MarpGenerator {
     const marpBin = path.resolve(__dirname, '../../node_modules/.bin/marp');
     const useMarpBin = !isWin && fs.existsSync(marpBin);
     const cmd = useMarpBin ? marpBin : 'npx';
+    const baseArgs = [
+      q(mdPath), '--theme', q(cssPath), '--pdf', '-o', q(pdfPath),
+      '--allow-local-files', '--html', '--no-stdin',
+      '--puppeteer-launch-args', '--no-sandbox --disable-setuid-sandbox --disable-gpu --disable-dev-shm-usage',
+    ];
     const args = useMarpBin
-      ? [q(mdPath), '--theme', q(cssPath), '--pdf', '-o', q(pdfPath), '--allow-local-files', '--html', '--no-stdin']
-      : ['-y', '@marp-team/marp-cli@latest', q(mdPath), '--theme', q(cssPath), '--pdf', '-o', q(pdfPath), '--allow-local-files', '--html', '--no-stdin'];
+      ? baseArgs
+      : ['-y', '@marp-team/marp-cli@latest', ...baseArgs];
 
     const result = spawnSync(
       cmd,
@@ -252,7 +257,8 @@ export class MarpGenerator {
         // ce délai interne sur le timeout du process (cause du « Timed out after 30000ms »).
         env: { 
           ...process.env, 
-          PUPPETEER_TIMEOUT: '280000',
+          PUPPETEER_TIMEOUT: '300000',
+          PUPPETEER_PROTOCOL_TIMEOUT: '300000',
           CHROME_PATH: chromePath || '',
         },
       }
