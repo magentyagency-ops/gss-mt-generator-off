@@ -38,7 +38,7 @@ import { apiFetch } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
 import { QuestionCard } from "@/components/question-card";
 import { type QuestionInterne } from "@/lib/sollicitations";
-import { useDossier } from "./dossier-context";
+import { useDossier } from "./context";
 
 function StatPill({
   icon: Icon,

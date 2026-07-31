@@ -44,7 +44,7 @@ import { cn } from "@/lib/utils";
 import { apiFetch, apiBase } from "@/lib/api";
 import { CreditsBadge } from "@/components/credits-badge";
 import { use } from "react";
-import { useDossier } from "../dossier-context";
+import { useDossier } from "../context";
 
 interface GenEntry {
   text: string;

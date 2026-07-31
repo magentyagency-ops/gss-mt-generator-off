@@ -1,6 +1,6 @@
 "use client";
 
-import { DossierProvider } from "./dossier-context";
+import { DossierProvider } from "./context";
 import { use } from "react";
 
 /** Layout partagé de tous les onglets d'un dossier (/synthese, /memoire, /conformite…).
