@@ -236,7 +236,7 @@ export default function VeillePage() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-semibold text-xs text-foreground truncate">
-                      {email.acheteur || "Nukema"}
+                      {(email as any).acheteur || "Nukema"}
                     </span>
                     <span className="text-[10px] text-muted-foreground shrink-0 flex items-center gap-0.5">
                       <Clock className="h-2.5 w-2.5" />
