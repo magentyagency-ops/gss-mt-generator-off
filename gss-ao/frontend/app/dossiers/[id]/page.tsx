@@ -292,7 +292,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
             <CardContent>
               <div className="text-sm leading-relaxed text-foreground/90 space-y-4">
                 {dossierInfo.synthese_projet && dossierInfo.synthese_projet.length > 0 ? (
-                  dossierInfo.synthese_projet.map((item, i) => (
+                  dossierInfo.synthese_projet.map((item: any, i: number) => (
                     <div key={i}>
                       <strong className="text-primary">{i + 1}. {item.titre}</strong>
                       <p className="mt-1">{item.description}</p>
@@ -319,7 +319,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
             <CardContent>
               <div className="grid gap-3 sm:grid-cols-2">
                 {dossierInfo.analyse_risques && dossierInfo.analyse_risques.length > 0 ? (
-                  dossierInfo.analyse_risques.map((risque, i) => {
+                  dossierInfo.analyse_risques.map((risque: any, i: number) => {
                     const type = risque.type || "warning";
                     const isDestructive = type === "destructive";
                     const isPrimary = type === "primary";
