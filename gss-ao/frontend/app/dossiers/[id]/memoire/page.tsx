@@ -170,32 +170,55 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     setDocxResult(null);
     setProgressInfo({ status: 'idle', progress: 0, message: 'Démarrage...', logs: [] });
 
-    // Start progress polling
-    const interval = setInterval(async () => {
-      try {
-        const res = await apiFetch(`/api/dossiers/${id}/progress`);
-        if (res.ok) {
-          const data = await res.json();
-          setProgressInfo(data);
-        }
-      } catch (e) {
-        console.error("Error polling progress:", e);
-      }
-    }, 1000);
-
     try {
       const forceQuery = bypassActive ? "?force=1" : "";
+      // Send the request but don't await the final result
       const res = await apiFetch(`/api/dce/${id}/memoire${forceQuery}`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erreur lors de la génération");
+      const initData = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(initData.error || initData.message || "Erreur lors du lancement de la génération");
+      }
 
-      setDocxResult({ type: "success", data });
-      setCreditKey((k) => k + 1); // recharge le badge crédits
-      if (data.file_path) localStorage.setItem(`generated_docx_${id}`, data.file_path);
+      if (initData.status === 'incomplete') {
+        // Handle immediate block from generation gate
+        setDocxResult({ type: "success", data: initData });
+        setIsGeneratingDocx(false);
+        return;
+      }
+
+      // Start progress polling for the background job
+      const interval = setInterval(async () => {
+        try {
+          const progRes = await apiFetch(`/api/dossiers/${id}/progress`);
+          if (progRes.ok) {
+            const data = await progRes.json();
+            setProgressInfo(data);
+            
+            if (data.status === 'completed') {
+              clearInterval(interval);
+              setIsGeneratingDocx(false);
+              setDocxResult({ type: "success", data: data.data });
+              setCreditKey((k) => k + 1); // recharge le badge crédits
+              if (data.data?.file_path) {
+                localStorage.setItem(`generated_docx_${id}`, data.data.file_path);
+              }
+            } else if (data.status === 'error' || data.status === 'incomplete') {
+              clearInterval(interval);
+              setIsGeneratingDocx(false);
+              if (data.status === 'error') {
+                setDocxResult({ type: "error", message: data.message });
+              } else {
+                setDocxResult({ type: "success", data: data.data || data }); // Keep incomplete UI
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Error polling progress:", e);
+        }
+      }, 2000); // Check every 2 seconds
     } catch (e: any) {
       setDocxResult({ type: "error", message: e.message });
-    } finally {
-      clearInterval(interval);
       setIsGeneratingDocx(false);
     }
   }

@@ -42,6 +42,7 @@ interface ProgressInfo {
   progress: number;
   message: string;
   logs: string[];
+  data?: any; // Added for async payload returning
   /** Informations que GSS ne possède pas et qui doivent être obtenues (notif « consultation requise »). */
   consultations?: string[];
 }
