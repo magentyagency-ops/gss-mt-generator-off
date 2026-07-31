@@ -4456,9 +4456,15 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     if (gssDocs['RECHERCHES ET SOLLICITATIONS (RAG)']) {
       ctx += `\n\n=== Doc GSS : RECHERCHES ET SOLLICITATIONS (RAG) ===\n${gssDocs['RECHERCHES ET SOLLICITATIONS (RAG)'].slice(0, Math.min(perCatCap * 2, totalCap))}`;
     }
+    if (gssDocs['RECHERCHES WEB BDD']) {
+      ctx += `\n\n=== Doc GSS : RECHERCHES WEB BDD ===\n${gssDocs['RECHERCHES WEB BDD'].slice(0, Math.min(perCatCap * 2, totalCap))}`;
+    }
+    if (gssDocs['QUESTIONS INTERNES BDD']) {
+      ctx += `\n\n=== Doc GSS : QUESTIONS INTERNES BDD ===\n${gssDocs['QUESTIONS INTERNES BDD'].slice(0, Math.min(perCatCap * 2, totalCap))}`;
+    }
 
     for (const [cat, text] of Object.entries(gssDocs)) {
-      if (cat === 'RECHERCHES ET SOLLICITATIONS (RAG)') continue;
+      if (cat === 'RECHERCHES ET SOLLICITATIONS (RAG)' || cat === 'RECHERCHES WEB BDD' || cat === 'QUESTIONS INTERNES BDD') continue;
       if (ctx.length >= totalCap) break;
       ctx += `\n\n=== Doc GSS : ${cat} ===\n${text.slice(0, perCatCap)}`;
     }
