@@ -69,3 +69,5 @@ dist/
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+.vscode/
