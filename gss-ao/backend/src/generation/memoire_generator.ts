@@ -1868,7 +1868,6 @@ export class MemoireGenerator {
         console.warn(`[MemoireGenerator] DCE Storage: échec téléchargement ${f.nom} — ${e?.message || e}`);
       }
     }
-    }
     if (!got) {
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
       throw new Error(`[MemoireGenerator] Échec du téléchargement de tous les fichiers DCE depuis le Storage pour le dossier ${dossierId}.`);
