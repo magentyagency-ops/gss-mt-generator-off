@@ -4447,7 +4447,14 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
    */
   private buildFullGssContext(gssDocs: Record<string, string>, perCatCap = 2500, totalCap = 24_000): string {
     let ctx = '';
+    
+    // Toujours inclure les recherches web et sollicitations en priorité absolue
+    if (gssDocs['RECHERCHES ET SOLLICITATIONS (RAG)']) {
+      ctx += `\n\n=== Doc GSS : RECHERCHES ET SOLLICITATIONS (RAG) ===\n${gssDocs['RECHERCHES ET SOLLICITATIONS (RAG)'].slice(0, Math.min(perCatCap * 2, totalCap))}`;
+    }
+
     for (const [cat, text] of Object.entries(gssDocs)) {
+      if (cat === 'RECHERCHES ET SOLLICITATIONS (RAG)') continue;
       if (ctx.length >= totalCap) break;
       ctx += `\n\n=== Doc GSS : ${cat} ===\n${text.slice(0, perCatCap)}`;
     }
@@ -4844,6 +4851,9 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
       }
 
       const matchedCats = this.matchGssCategories(section.title, availableCategories);
+      if (availableCategories.includes('RECHERCHES ET SOLLICITATIONS (RAG)') && !matchedCats.includes('RECHERCHES ET SOLLICITATIONS (RAG)')) {
+        matchedCats.unshift('RECHERCHES ET SOLLICITATIONS (RAG)');
+      }
       let gssContext = '';
       for (const cat of matchedCats) {
         gssContext += `\n\n=== Doc GSS : ${cat} ===\n${gssDocs[cat].slice(0, 4000)}`;
