@@ -2499,7 +2499,7 @@ Renvoie un JSON valide :
     }
     const content = await this.callOpenAI(
       [
-        { role: 'system', content: "Tu extrais la CHECK-LIST des grandes EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. Reste au niveau des thématiques principales ou des besoins globaux (moyens humains, astreinte, RSE, etc.) sans descendre dans un niveau de détail trop fin. Sois concis et général. N'invente rien." },
+        { role: 'system', content: "Tu extrais la CHECK-LIST des GRANDES EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. ATTENTION: Reste UNIQUEMENT au niveau des grandes thématiques (ex: Dispositif humain global, Matériel et technologies, Astreinte, Politique RSE, Démarche qualité) et ne liste SURTOUT PAS les sous-détails précis (ne liste pas les modèles de radio, les types d'EPI, les plannings précis, etc.). Limite-toi à une quinzaine d'exigences globales maximum. Le but est d'avoir une vue d'ensemble, sois très général et concis. N'invente rien." },
         { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON : {"items":[{"label":"...","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}` },
       ],
       0.2, 'Extraction exigences CCTP', true,
