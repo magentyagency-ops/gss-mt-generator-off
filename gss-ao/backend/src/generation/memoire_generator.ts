@@ -2913,7 +2913,7 @@ Renvoie un JSON valide :
         if (fs.existsSync(fallbackPath)) {
           templatePath = fallbackPath;
         } else {
-          throw new Error(`Aucun template trouvé ni dans le DCE ni dans ${templatePath}`);
+          console.warn(`[MemoireGenerator] Aucun template trouvé ni dans le DCE ni dans ${templatePath} (ou fallback). On continue sans template (Marp)`);
         }
       }
     }
