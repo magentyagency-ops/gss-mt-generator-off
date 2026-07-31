@@ -237,7 +237,6 @@ export class MarpGenerator {
     const baseArgs = [
       q(mdPath), '--theme', q(cssPath), '--pdf', '-o', q(pdfPath),
       '--allow-local-files', '--html', '--no-stdin',
-      '--puppeteer-launch-args', '--no-sandbox --disable-setuid-sandbox --disable-gpu --disable-dev-shm-usage',
     ];
     const args = useMarpBin
       ? baseArgs
@@ -260,6 +259,7 @@ export class MarpGenerator {
           PUPPETEER_TIMEOUT: '300000',
           PUPPETEER_PROTOCOL_TIMEOUT: '300000',
           CHROME_PATH: chromePath || '',
+          PUPPETEER_EXTRA_LAUNCH_ARGS: '--no-sandbox --disable-setuid-sandbox --disable-gpu --disable-dev-shm-usage',
         },
       }
     );
