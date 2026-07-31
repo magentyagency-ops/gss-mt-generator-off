@@ -2390,18 +2390,17 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     gssContext: string,
   ): Promise<Array<{ theme: string; exigence: string; reponseGss: string; couverture: string; criticite?: string }>> {
     const systemPrompt = `Tu es responsable de l'analyse des appels d'offres de sécurité privée chez GSS.
-Mission : dépouiller le DCE — le CCTP EN PRIORITÉ (c'est lui qui porte les BESOINS), complété par le RC et les annexes — pour en extraire une CHECK-LIST EXHAUSTIVE des EXIGENCES du donneur d'ordre (ce qui est écrit, imposé ou attendu). Pour CHAQUE exigence, pose-toi la question « Le CCTP demande X — qu'est-ce que GSS propose CONCRÈTEMENT en réponse, et reste-t-il un écart ? » et confronte-la à CE QUE GSS A / FAIT d'après la Documentation GSS fournie.
+Mission : dépouiller le DCE — le CCTP EN PRIORITÉ — pour en extraire une CHECK-LIST des GRANDES EXIGENCES du donneur d'ordre, puis confronter chacune à ce que GSS a / fait d'après la Documentation GSS fournie.
 RÈGLES :
-- EXHAUSTIVITÉ : passe le CCTP en revue section par section et n'OMETS AUCUN besoin structurant. Descends au niveau du DÉTAIL utile : effectifs/ETP PAR SITE et PAR POSTE, amplitudes/horaires (jour, nuit, week-end, jours fériés), qualifications exigées (CQP APS, SSIAP 1/2/3, H0B0, SST), délais d'intervention, matériel imposé (rondes/pointeaux par site, PTI/DATI, tenues, véhicules, moyens de transmission), procédures (levée de doute, gestion d'alarme, incendie), reprise du personnel, contrôles/reporting, et obligations légales (CNAPS, agréments).
-- Quand une exigence est propre à un site/poste, garde cette précision dans le libellé (ne globalise pas).
-- Cite l'exigence telle qu'écrite dans le CCTP ; n'invente rien côté DCE.
+- NIVEAU DE DÉTAIL : reste au niveau des GRANDES THÉMATIQUES (ex: "Dispositif humain et qualifications", "Moyens matériels et technologiques", "Gestion des alarmes et interventions", "Politique RSE"). Ne descends PAS au niveau des sous-détails par site, par poste ou par modèle d'équipement. Regroupe les exigences similaires.
+- Vise 15 à 25 exigences GLOBALES maximum, pas une liste de 50+ micro-détails.
+- Cite l'exigence de façon synthétique ; n'invente rien côté DCE.
 - La réponse GSS s'appuie UNIQUEMENT sur la Documentation GSS ; n'invente AUCUN moyen absent.
 - CLASSE la couverture STRICTEMENT ainsi :
     • "couvert"  = GSS a le moyen/la capacité ET c'est présent dans la Doc GSS.
-    • "partiel"  = GSS a bien un moyen approchant, mais un DÉTAIL précis (chiffre, délai, preuve) manque. NE PAS classer "écart" dans ce cas.
-    • "écart"    = GSS N'A PAS ce moyen / ne fournit PAS cette prestation / RIEN dans la Doc GSS ne s'en approche. C'est une vraie information à OBTENIR (certification, attestation, capacité chiffrée réellement absente…).
-  Dans le doute entre "partiel" et "écart", choisis "partiel". Réserve "écart" aux manques FRANCS.
-- Vise une couverture COMPLÈTE des besoins (typiquement 30 à 60 exigences pour un CCTP fourni), pas un simple survol. Écarte seulement le pur détail administratif (formalités de dépôt, etc.).`;
+    • "partiel"  = GSS a bien un moyen approchant, mais un DÉTAIL précis manque. NE PAS classer "écart" dans ce cas.
+    • "écart"    = GSS N'A PAS ce moyen / ne fournit PAS cette prestation / RIEN dans la Doc GSS ne s'en approche.
+  Dans le doute entre "partiel" et "écart", choisis "partiel". Réserve "écart" aux manques FRANCS.`;
 
     const userPrompt = `=== EXIGENCES DU MARCHÉ (CCTP EN PRIORITÉ, puis RC / annexes) ===
 ${dceContext.slice(0, 120_000)}
