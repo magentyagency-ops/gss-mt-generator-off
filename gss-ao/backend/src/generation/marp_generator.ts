@@ -237,6 +237,7 @@ export class MarpGenerator {
     const baseArgs = [
       q(mdPath), '--theme', q(cssPath), '--pdf', '-o', q(pdfPath),
       '--allow-local-files', '--html', '--no-stdin',
+      '--browser-timeout', '0',   // Désactive le timeout par défaut (30s) trop court pour un gros PDF
     ];
     const args = useMarpBin
       ? baseArgs
@@ -251,15 +252,16 @@ export class MarpGenerator {
         stdio: 'pipe',
         encoding: 'utf-8',
         shell: isWin,
-        // Marp/Puppeteer abandonne la conversion après 30 s par défaut : insuffisant
-        // pour un mémoire volumineux illustré d'images (base de données). On aligne
-        // ce délai interne sur le timeout du process.
         env: { 
           ...process.env, 
           PUPPETEER_TIMEOUT: '900000',
           PUPPETEER_PROTOCOL_TIMEOUT: '900000',
           CHROME_PATH: chromePath || '',
-          PUPPETEER_EXTRA_LAUNCH_ARGS: '--no-sandbox --disable-setuid-sandbox --disable-gpu --disable-dev-shm-usage',
+          // Variables lues par marp-cli (PUPPETEER_EXTRA_LAUNCH_ARGS est ignoré)
+          CHROME_NO_SANDBOX: '1',
+          CHROME_DISABLE_GPU: '1',
+          // Puppeteer passe cette variable aux args Chrome
+          PUPPETEER_CHROMIUM_REVISION: process.env.PUPPETEER_CHROMIUM_REVISION || '',
         },
       }
     );

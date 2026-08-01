@@ -7,7 +7,8 @@
     "dev": "nodemon --watch src --ext ts --exec ts-node src/main.ts",
     "build": "tsc",
     "start": "node dist/main.js",
-    "test": "vitest"
+    "test": "vitest",
+    "postinstall": "node scripts/patch-marp.js"
   },
   "dependencies": {
     "@marp-team/marp-cli": "^4.4.0",
