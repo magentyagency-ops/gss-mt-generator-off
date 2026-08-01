@@ -193,7 +193,7 @@ export class MarpGenerator {
       }
       // Réduit les images « db_ » à leur taille d'affichage : les images pleine
       // résolution ralentissent énormément (voire bloquent) le rendu Chromium.
-      this.downscaleDbImages(mediaDst);
+      await this.downscaleDbImages(mediaDst);
     }
 
     // Render to PDF via marp-cli
@@ -329,61 +329,47 @@ export class MarpGenerator {
 
   /**
    * Réduit (in place) les images « db_ » du dossier media à leur taille
-   * d'affichage via Pillow. Étape best-effort : si Python/Pillow est absent ou
-   * échoue, on conserve les images d'origine (le rendu reste possible).
+   * d'affichage via sharp (Node.js natif). Les images pleine résolution
+   * ralentissent énormément le rendu Chromium/Marp.
+   * Étape best-effort : si sharp échoue, on conserve les images d'origine.
    */
-  private downscaleDbImages(mediaDir: string): void {
+  private async downscaleDbImages(mediaDir: string): Promise<void> {
+    const MAX_DIM = 1000;
+    const PREFIX = 'db_';
 
     try {
-      const script = path.resolve(__dirname, '../../python/downscale_images.py');
-      if (!fs.existsSync(script)) return;
-      const pythonBin = this.findPythonBin();
-      if (!pythonBin) {
-        console.warn('[MarpGenerator] Redimensionnement images ignoré (aucun interpréteur Python trouvé).');
-        return;
+      const sharp = require('sharp');
+      const files = fs.readdirSync(mediaDir).filter(f => f.startsWith(PREFIX));
+      if (files.length === 0) return;
+
+      let processed = 0;
+      let resized = 0;
+
+      for (const name of files) {
+        const filePath = path.join(mediaDir, name);
+        if (!fs.statSync(filePath).isFile()) continue;
+        try {
+          const image = sharp(filePath);
+          const meta = await image.metadata();
+          processed++;
+          const w = meta.width || 0;
+          const h = meta.height || 0;
+          if (Math.max(w, h) <= MAX_DIM) continue;
+
+          const buf = await image
+            .resize({ width: MAX_DIM, height: MAX_DIM, fit: 'inside', withoutEnlargement: true })
+            .toBuffer();
+          fs.writeFileSync(filePath, buf);
+          resized++;
+        } catch (e: any) {
+          console.warn(`[MarpGenerator] downscale ${name}: ${e.message || e}`);
+        }
       }
-      const isWin = process.platform === 'win32';
-      const q = (p: string) => (isWin ? `"${p}"` : p);
-      const proc = spawnSync(
-        pythonBin,
-        [q(script), '--dir', q(mediaDir), '--max', '1000', '--prefix', 'db_'],
-        { encoding: 'utf-8', timeout: 120_000, shell: isWin },
-      );
-      if (proc.status === 0 && proc.stdout) {
-        console.log(`[MarpGenerator] Redimensionnement images: ${proc.stdout.trim()}`);
-      } else if (proc.error || proc.status !== 0) {
-        console.warn(
-          `[MarpGenerator] Redimensionnement images ignoré (${proc.error?.message || 'status ' + proc.status}).`,
-        );
-      }
+
+      console.log(`[MarpGenerator] Redimensionnement images: {"processed":${processed},"resized":${resized}}`);
     } catch (err: any) {
       console.warn(`[MarpGenerator] Redimensionnement images ignoré: ${err.message || err}`);
     }
-  }
-
-  /**
-   * Détecte le binaire Python disponible sur le système.
-   * Priorité : variable d'env PYTHON_BIN, puis py / python / python3.
-   */
-  private findPythonBin(): string | null {
-    if (process.env.PYTHON_BIN) return process.env.PYTHON_BIN;
-    const isWin = process.platform === 'win32';
-    const candidates = isWin ? ['py', 'python', 'python3'] : ['python3', 'python', 'py'];
-    for (const bin of candidates) {
-      try {
-        const check = spawnSync(bin, ['--version'], {
-          encoding: 'utf-8',
-          timeout: 5_000,
-          shell: isWin,
-          stdio: 'pipe',
-        });
-        if (!check.error && check.status === 0) {
-          console.log(`[MarpGenerator] Python trouvé: ${bin} → ${(check.stdout || '').trim()}`);
-          return bin;
-        }
-      } catch { /* essai suivant */ }
-    }
-    return null;
   }
 
   /**
