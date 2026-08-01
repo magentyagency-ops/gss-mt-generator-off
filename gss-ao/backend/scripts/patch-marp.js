@@ -32,12 +32,10 @@ for (const file of files) {
   if (content.includes(marker)) {
     const extraFlags = [
       '--disable-dev-shm-usage',
-      '--single-process',
       '--disable-extensions',
       '--disable-background-networking',
       '--disable-default-apps',
       '--no-first-run',
-      '--js-flags=--max-old-space-size=512',
     ].map(f => `t.add("${f}")`).join(',');
 
     content = content.replace(marker, marker + ',' + extraFlags);

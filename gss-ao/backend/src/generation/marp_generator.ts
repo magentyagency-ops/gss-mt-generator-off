@@ -196,7 +196,7 @@ export class MarpGenerator {
       await this.downscaleDbImages(mediaDst);
     }
 
-    // Render to PDF via marp-cli
+    // Render to PDF via marp-cli (en lots pour éviter l'OOM sur Railway)
     const pdfName = `Mémoire_Technique_GSS_Template_${Date.now()}.pdf`;
     const pdfPath = path.join(this.outputDir, pdfName);
 
@@ -230,52 +230,43 @@ export class MarpGenerator {
     }
     console.log(`[MarpGenerator] CHROME_PATH final: ${chromePath || 'NON DÉFINI'}`);
 
-    // Utilise le binaire marp-cli installé localement (en dependencies) au lieu de npx
-    const marpBin = path.resolve(__dirname, '../../node_modules/.bin/marp');
-    const useMarpBin = !isWin && fs.existsSync(marpBin);
-    const cmd = useMarpBin ? marpBin : 'npx';
-    const baseArgs = [
-      q(mdPath), '--theme', q(cssPath), '--pdf', '-o', q(pdfPath),
-      '--allow-local-files', '--html', '--no-stdin',
-      '--browser-timeout', '0',   // Désactive le timeout par défaut (30s) trop court pour un gros PDF
-    ];
-    const args = useMarpBin
-      ? baseArgs
-      : ['-y', '@marp-team/marp-cli@latest', ...baseArgs];
+    // ── Split-Render-Merge : découpe le markdown en lots de N slides ──
+    // Chromium se fait OOM-kill sur Railway pour les gros documents.
+    // On rend chaque lot séparément puis on fusionne avec pdf-lib.
+    const BATCH_SIZE = 10;
+    const rawSlides = markdown.split('\n---\n');
+    // Le premier élément contient le frontmatter YAML
+    const frontmatter = rawSlides[0];
+    const slides = rawSlides.slice(1);
 
-    const result = spawnSync(
-      cmd,
-      args,
-      {
-        cwd: workDir,
-        timeout: 900_000, // 15 minutes max
-        stdio: 'pipe',
-        encoding: 'utf-8',
-        shell: isWin,
-        env: { 
-          ...process.env, 
-          PUPPETEER_TIMEOUT: '900000',
-          PUPPETEER_PROTOCOL_TIMEOUT: '900000',
-          CHROME_PATH: chromePath || '',
-          // Variables lues par marp-cli (PUPPETEER_EXTRA_LAUNCH_ARGS est ignoré)
-          CHROME_NO_SANDBOX: '1',
-          CHROME_DISABLE_GPU: '1',
-          // Puppeteer passe cette variable aux args Chrome
-          PUPPETEER_CHROMIUM_REVISION: process.env.PUPPETEER_CHROMIUM_REVISION || '',
-        },
+    const needsBatching = slides.length > BATCH_SIZE;
+    console.log(`[MarpGenerator] ${slides.length} slides, batch size ${BATCH_SIZE}, batching: ${needsBatching}`);
+
+    if (needsBatching) {
+      // Découpe en lots
+      const batches: string[][] = [];
+      for (let i = 0; i < slides.length; i += BATCH_SIZE) {
+        batches.push(slides.slice(i, i + BATCH_SIZE));
       }
-    );
 
-    if (result.error) {
-      console.error('[MarpGenerator] marp-cli spawn error:', result.error);
-      if (result.stdout) console.error('[MarpGenerator] stdout:', result.stdout);
-      if (result.stderr) console.error('[MarpGenerator] stderr:', result.stderr);
-      throw new Error(`Marp CLI failed to start: ${result.error.message}`);
-    }
+      const partialPdfs: string[] = [];
+      for (let b = 0; b < batches.length; b++) {
+        const batchMd = frontmatter + '\n---\n' + batches[b].join('\n---\n');
+        const batchMdPath = path.join(workDir, `batch_${b}.md`);
+        const batchPdfPath = path.join(workDir, `batch_${b}.pdf`);
+        fs.writeFileSync(batchMdPath, batchMd, 'utf-8');
 
-    if (result.status !== 0) {
-      console.error('[MarpGenerator] marp-cli stderr:', result.stderr);
-      throw new Error(`Marp CLI exited with code ${result.status}: ${result.stderr?.slice(0, 500)}`);
+        console.log(`[MarpGenerator] Rendering batch ${b + 1}/${batches.length} (${batches[b].length} slides)…`);
+        this.runMarpCli(batchMdPath, cssPath, batchPdfPath, workDir, chromePath || '', isWin, q);
+        partialPdfs.push(batchPdfPath);
+      }
+
+      // Fusionne tous les PDF partiels avec pdf-lib
+      console.log(`[MarpGenerator] Merging ${partialPdfs.length} partial PDFs…`);
+      await this.mergePdfs(partialPdfs, pdfPath);
+    } else {
+      // Document assez petit : rendu direct
+      this.runMarpCli(mdPath, cssPath, pdfPath, workDir, chromePath || '', isWin, q);
     }
 
     console.log(`[MarpGenerator] PDF generated successfully: ${pdfPath}`);
@@ -286,6 +277,76 @@ export class MarpGenerator {
     } catch { /* ignore cleanup errors */ }
 
     return { filePath: pdfPath, markdownPath: mdPath };
+  }
+
+  /**
+   * Exécute marp-cli en une seule passe pour un fichier markdown donné.
+   */
+  private runMarpCli(
+    mdPath: string, cssPath: string, pdfPath: string,
+    workDir: string, chromePath: string,
+    isWin: boolean, q: (p: string) => string,
+  ): void {
+    const marpBin = path.resolve(__dirname, '../../node_modules/.bin/marp');
+    const useMarpBin = !isWin && fs.existsSync(marpBin);
+    const cmd = useMarpBin ? marpBin : 'npx';
+    const baseArgs = [
+      q(mdPath), '--theme', q(cssPath), '--pdf', '-o', q(pdfPath),
+      '--allow-local-files', '--html', '--no-stdin',
+      '--browser-timeout', '0',
+    ];
+    const args = useMarpBin
+      ? baseArgs
+      : ['-y', '@marp-team/marp-cli@latest', ...baseArgs];
+
+    const result = spawnSync(
+      cmd,
+      args,
+      {
+        cwd: workDir,
+        timeout: 300_000, // 5 min par lot
+        stdio: 'pipe',
+        encoding: 'utf-8',
+        shell: isWin,
+        env: {
+          ...process.env,
+          PUPPETEER_TIMEOUT: '300000',
+          PUPPETEER_PROTOCOL_TIMEOUT: '300000',
+          CHROME_PATH: chromePath,
+          CHROME_NO_SANDBOX: '1',
+          CHROME_DISABLE_GPU: '1',
+        },
+      }
+    );
+
+    if (result.error) {
+      console.error('[MarpGenerator] marp-cli spawn error:', result.error);
+      throw new Error(`Marp CLI failed to start: ${result.error.message}`);
+    }
+    if (result.status !== 0) {
+      console.error('[MarpGenerator] marp-cli stderr:', result.stderr);
+      throw new Error(`Marp CLI exited with code ${result.status}: ${result.stderr?.slice(0, 500)}`);
+    }
+  }
+
+  /**
+   * Fusionne plusieurs PDF en un seul via pdf-lib.
+   */
+  private async mergePdfs(inputPaths: string[], outputPath: string): Promise<void> {
+    const { PDFDocument } = require('pdf-lib');
+    const merged = await PDFDocument.create();
+
+    for (const p of inputPaths) {
+      const bytes = fs.readFileSync(p);
+      const doc = await PDFDocument.load(bytes);
+      const pages = await merged.copyPages(doc, doc.getPageIndices());
+      for (const page of pages) {
+        merged.addPage(page);
+      }
+    }
+
+    const mergedBytes = await merged.save();
+    fs.writeFileSync(outputPath, mergedBytes);
   }
 
   /**
