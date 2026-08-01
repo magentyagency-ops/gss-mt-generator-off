@@ -27,15 +27,22 @@ for (const file of files) {
     continue;
   }
 
-  // Pattern : après "--no-sandbox", on insère "--disable-dev-shm-usage"
+  // Pattern : après "--no-sandbox", on insère les flags critiques pour Railway
   const marker = 't.add("--no-sandbox")';
   if (content.includes(marker)) {
-    content = content.replace(
-      marker,
-      marker + ',t.add("--disable-dev-shm-usage")'
-    );
+    const extraFlags = [
+      '--disable-dev-shm-usage',
+      '--single-process',
+      '--disable-extensions',
+      '--disable-background-networking',
+      '--disable-default-apps',
+      '--no-first-run',
+      '--js-flags=--max-old-space-size=512',
+    ].map(f => `t.add("${f}")`).join(',');
+
+    content = content.replace(marker, marker + ',' + extraFlags);
     fs.writeFileSync(filePath, content, 'utf-8');
-    console.log(`[patch-marp] ${file}: injected --disable-dev-shm-usage ✓`);
+    console.log(`[patch-marp] ${file}: injected Railway Chrome flags ✓`);
     patched = true;
   }
 }
