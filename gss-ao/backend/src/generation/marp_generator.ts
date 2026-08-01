@@ -233,7 +233,7 @@ export class MarpGenerator {
     // ── Split-Render-Merge : découpe le markdown en lots de N slides ──
     // Chromium se fait OOM-kill sur Railway pour les gros documents.
     // On rend chaque lot séparément puis on fusionne avec pdf-lib.
-    const BATCH_SIZE = 10;
+    const BATCH_SIZE = 3;
     const rawSlides = markdown.split('\n---\n');
     // Le premier élément contient le frontmatter YAML
     const frontmatter = rawSlides[0];
@@ -403,6 +403,7 @@ export class MarpGenerator {
 
     try {
       const sharp = require('sharp');
+      sharp.cache(false); // Disable sharp cache to save memory
       const files = fs.readdirSync(mediaDir).filter(f => IMG_EXTS.has(path.extname(f).toLowerCase()));
       if (files.length === 0) return;
 
