@@ -337,7 +337,11 @@ export class MarpGenerator {
     try {
       const script = path.resolve(__dirname, '../../python/downscale_images.py');
       if (!fs.existsSync(script)) return;
-      const pythonBin = process.env.PYTHON_BIN || 'py';
+      const pythonBin = this.findPythonBin();
+      if (!pythonBin) {
+        console.warn('[MarpGenerator] Redimensionnement images ignoré (aucun interpréteur Python trouvé).');
+        return;
+      }
       const isWin = process.platform === 'win32';
       const q = (p: string) => (isWin ? `"${p}"` : p);
       const proc = spawnSync(
@@ -355,6 +359,31 @@ export class MarpGenerator {
     } catch (err: any) {
       console.warn(`[MarpGenerator] Redimensionnement images ignoré: ${err.message || err}`);
     }
+  }
+
+  /**
+   * Détecte le binaire Python disponible sur le système.
+   * Priorité : variable d'env PYTHON_BIN, puis py / python / python3.
+   */
+  private findPythonBin(): string | null {
+    if (process.env.PYTHON_BIN) return process.env.PYTHON_BIN;
+    const isWin = process.platform === 'win32';
+    const candidates = isWin ? ['py', 'python', 'python3'] : ['python3', 'python', 'py'];
+    for (const bin of candidates) {
+      try {
+        const check = spawnSync(bin, ['--version'], {
+          encoding: 'utf-8',
+          timeout: 5_000,
+          shell: isWin,
+          stdio: 'pipe',
+        });
+        if (!check.error && check.status === 0) {
+          console.log(`[MarpGenerator] Python trouvé: ${bin} → ${(check.stdout || '').trim()}`);
+          return bin;
+        }
+      } catch { /* essai suivant */ }
+    }
+    return null;
   }
 
   /**
