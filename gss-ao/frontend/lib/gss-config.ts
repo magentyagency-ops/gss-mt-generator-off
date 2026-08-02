@@ -1,4 +1,4 @@
-export type Statut = "Brouillon" | "En cours" | "À valider" | "Envoyé";
+export type Statut = "En cours" | "En attente" | "À valider";
 
 export interface Lot {
   numero: number;
@@ -70,10 +70,9 @@ export interface DceFile {
 }
 
 export const STATUT_VARIANT: Record<Statut, "secondary" | "default" | "warning" | "success"> = {
-  Brouillon: "secondary",
   "En cours": "default",
+  "En attente": "secondary",
   "À valider": "warning",
-  Envoyé: "success",
 };
 
 export function joursRestants(iso: string): number {

@@ -25,7 +25,7 @@ import { useIntro } from "@/components/intro-provider";
 import { apiFetch } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
 
-const STATUTS: (Statut | "Tous")[] = ["Tous", "Brouillon", "En cours", "À valider", "Envoyé"];
+const STATUTS: (Statut | "Tous")[] = ["Tous", "En cours", "En attente", "À valider"];
 
 export default function DossiersPage() {
   const { introFinished } = useIntro();
@@ -232,7 +232,7 @@ export default function DossiersPage() {
             <TableBody>
               {lignes.map((d, index) => {
                 const jours = joursRestants(d.dateLimite);
-                const urgent = jours <= 14 && d.statut !== "Envoyé";
+                const urgent = jours <= 14;
                 const isSelected = selectedIds.has(d.id);
                 return (
                   <TableRow
@@ -275,7 +275,7 @@ export default function DossiersPage() {
                     <TableCell>
                       <div className="flex flex-col">
                         <span>{formatDate(d.dateLimite)}</span>
-                        {d.statut !== "Envoyé" && (
+                        {true && (
                           <span
                             className={cn(
                               "flex items-center gap-1 text-xs",

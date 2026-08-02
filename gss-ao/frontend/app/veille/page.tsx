@@ -168,7 +168,7 @@ export default function VeillePage() {
           objet: selectedDemo.parsed.objet,
           dateLimite: selectedDemo.parsed.dateLimite,
           departement: selectedDemo.parsed.departement,
-          statut: "Brouillon",
+          statut: "En cours",
           responsable: "Sacha",
           emailSummary: selectedDemo.parsed.emailSummary,
           suggestionSections: selectedDemo.parsed.suggestionSections,
@@ -422,7 +422,7 @@ export default function VeillePage() {
                         onClick={() => handleConfirmDossier(preview.id)}
                         className="gap-2 w-full sm:w-auto bg-primary hover:bg-primary/95 text-primary-foreground font-medium shadow"
                       >
-                        {simulatedDceStatus === "ready" ? "Lancer la génération du mémoire technique" : "Créer le brouillon de dossier"}
+                        {simulatedDceStatus === "ready" ? "Lancer la génération du mémoire technique" : "Créer le dossier"}
                         <ArrowRight className="h-4 w-4" />
                       </Button>
                     </CardFooter>
