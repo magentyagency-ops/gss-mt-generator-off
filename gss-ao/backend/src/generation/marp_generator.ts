@@ -233,7 +233,7 @@ export class MarpGenerator {
     // ── Split-Render-Merge : découpe le markdown en lots de N slides ──
     // Chromium se fait OOM-kill sur Railway pour les gros documents.
     // On rend chaque lot séparément puis on fusionne avec pdf-lib.
-    const BATCH_SIZE = 3;
+    const BATCH_SIZE = 10;
     const rawSlides = markdown.split('\n---\n');
     // Le premier élément contient le frontmatter YAML
     const frontmatter = rawSlides[0];
@@ -391,19 +391,17 @@ export class MarpGenerator {
   }
 
   /**
-   * Réduit (in place) TOUTES les images du dossier media pour que Chromium
-   * puisse les rendre sans exploser en mémoire (Railway = RAM limitée).
-   * - Max 600px de côté
-   * - Conversion en JPEG (qualité 75) pour les images > 100 Ko
+   * Réduit (in place) les images du dossier media à 1000px max de côté
+   * via sharp (Node.js natif). Les images pleine résolution ralentissent
+   * le rendu Chromium/Marp.
    * Étape best-effort : si sharp échoue, on conserve les images d'origine.
    */
   private async downscaleDbImages(mediaDir: string): Promise<void> {
-    const MAX_DIM = 600;
+    const MAX_DIM = 1000;
     const IMG_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.tiff']);
 
     try {
       const sharp = require('sharp');
-      sharp.cache(false); // Disable sharp cache to save memory
       const files = fs.readdirSync(mediaDir).filter(f => IMG_EXTS.has(path.extname(f).toLowerCase()));
       if (files.length === 0) return;
 
@@ -418,28 +416,12 @@ export class MarpGenerator {
           processed++;
           const w = meta.width || 0;
           const h = meta.height || 0;
-          const needsResize = Math.max(w, h) > MAX_DIM;
-          const fileSize = fs.statSync(filePath).size;
-          // Convertit les gros PNG en JPEG pour économiser la mémoire Chromium
-          const isPng = path.extname(name).toLowerCase() === '.png';
-          const convertToJpeg = isPng && fileSize > 100_000;
+          if (Math.max(w, h) <= MAX_DIM) continue;
 
-          if (!needsResize && !convertToJpeg) continue;
-
-          let pipeline = sharp(filePath);
-          if (needsResize) {
-            pipeline = pipeline.resize({ width: MAX_DIM, height: MAX_DIM, fit: 'inside', withoutEnlargement: true });
-          }
-
-          if (convertToJpeg) {
-            const jpegPath = filePath.replace(/\.png$/i, '.jpg');
-            const buf = await pipeline.jpeg({ quality: 75 }).toBuffer();
-            fs.writeFileSync(jpegPath, buf);
-            if (jpegPath !== filePath) fs.unlinkSync(filePath);
-          } else {
-            const buf = await pipeline.toBuffer();
-            fs.writeFileSync(filePath, buf);
-          }
+          const buf = await sharp(filePath)
+            .resize({ width: MAX_DIM, height: MAX_DIM, fit: 'inside', withoutEnlargement: true })
+            .toBuffer();
+          fs.writeFileSync(filePath, buf);
           resized++;
         } catch (e: any) {
           console.warn(`[MarpGenerator] downscale ${name}: ${e.message || e}`);
