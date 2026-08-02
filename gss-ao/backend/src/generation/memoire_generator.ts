@@ -2155,8 +2155,17 @@ export class MemoireGenerator {
     const raw = process.env.RAG_DATABASE_URL || getSettings().databaseUrl || '';
     const url = raw.replace(/^postgresql\+psycopg:\/\//, 'postgresql://');
     if (!url) return null;
+    // Log masqué pour diagnostiquer les erreurs de connexion
+    try {
+      const parsed = new URL(url);
+      console.log(`[MemoireGenerator] RAG DB: ${parsed.hostname}:${parsed.port || 5432}/${parsed.pathname.slice(1)} (SSL: ${/supabase\.(co|com)/.test(url) || process.env.RAG_DB_SSL === 'true'})`);
+    } catch { console.log('[MemoireGenerator] RAG DB: URL non parsable'); }
     const needsSsl = /supabase\.(co|com)/.test(url) || process.env.RAG_DB_SSL === 'true';
-    return new PgClient({ connectionString: url, ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}) });
+    return new PgClient({
+      connectionString: url,
+      connectionTimeoutMillis: 10_000,
+      ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+    });
   }
 
   /**
