@@ -66,3 +66,17 @@ export function getCurrentUserId(): string {
   if (!ctx) throw new Error('getCurrentUserId() hors contexte de requête.');
   return ctx.userId;
 }
+
+/**
+ * Client Supabase "Admin" (utilise la clé Service Role).
+ * À n'utiliser QUE pour les tâches de fond (génération longue) où le JWT de 
+ * l'utilisateur risque d'expirer avant la fin de la tâche.
+ */
+export function getAdminClient(): SupabaseClient {
+  if (!settings.supabaseServiceRoleKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY manquante, impossible de créer le client Admin.');
+  }
+  return createClient(settings.supabaseUrl, settings.supabaseServiceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+}

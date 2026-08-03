@@ -1,4 +1,4 @@
-import { getScopedClient, getCurrentUserId } from './supabase';
+import { getScopedClient, getCurrentUserId, getAdminClient } from './supabase';
 
 // Champs portés par des colonnes dédiées de public.dossiers.
 // Tout le reste du dossier "riche" est stocké dans la colonne jsonb `contenu`.
@@ -113,9 +113,17 @@ export class DB {
       contenu: merged,
     };
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('dossiers')
       .upsert(row, { onConflict: 'id' });
+      
+    if (error && error.message.includes('JWT expired')) {
+      console.warn('[DB] JWT expiré lors de saveDossier, repli sur le client Admin.');
+      const admin = getAdminClient();
+      const retry = await admin.from('dossiers').upsert(row, { onConflict: 'id' });
+      error = retry.error;
+    }
+    
     if (error) throw new Error(error.message);
   }
 
@@ -260,18 +268,28 @@ export class MemoiresDB {
     meta: { titre?: string; aiModel?: string } = {},
   ): Promise<void> {
     const supabase = getScopedClient();
-    const { error } = await supabase
+    const payload = {
+      contenu: {
+        ...contenu,
+        generatedAt: contenu.generatedAt || new Date().toISOString(),
+      },
+      statut: 'completed',
+      titre: meta.titre ?? null,
+      ai_model: meta.aiModel ?? null,
+    };
+    
+    let { error } = await supabase
       .from('memoires_techniques')
-      .update({
-        contenu: {
-          ...contenu,
-          generatedAt: contenu.generatedAt || new Date().toISOString(),
-        },
-        statut: 'completed',
-        titre: meta.titre ?? null,
-        ai_model: meta.aiModel ?? null,
-      })
+      .update(payload)
       .eq('id', memoireId);
+      
+    if (error && error.message.includes('JWT expired')) {
+      console.warn('[MemoiresDB] JWT expiré lors de finish, repli sur le client Admin.');
+      const admin = getAdminClient();
+      const retry = await admin.from('memoires_techniques').update(payload).eq('id', memoireId);
+      error = retry.error;
+    }
+    
     if (error) throw new Error(error.message);
   }
 
@@ -309,7 +327,7 @@ export class MemoiresDB {
     // Régénération : on met à jour (pas de nouveau crédit consommé — le trigger
     // quota n'agit qu'à l'INSERT).
     if (existing) {
-      const { error } = await supabase
+      let { error } = await supabase
         .from('memoires_techniques')
         .update({
           contenu: payload,
@@ -318,13 +336,26 @@ export class MemoiresDB {
           ai_model: meta.aiModel ?? null,
         })
         .eq('id', existing.id);
+        
+      if (error && error.message.includes('JWT expired')) {
+        console.warn('[MemoiresDB] JWT expiré lors de save (update), repli sur le client Admin.');
+        const admin = getAdminClient();
+        const retry = await admin.from('memoires_techniques').update({
+          contenu: payload,
+          titre,
+          statut: 'completed',
+          ai_model: meta.aiModel ?? null,
+        }).eq('id', existing.id);
+        error = retry.error;
+      }
+      
       if (error) throw new Error(error.message);
       return existing.id;
     }
 
     // 1ʳᵉ création : le trigger enforce_generation_quota vérifie l'email confirmé
     // + le quota et consomme 1 crédit. On traduit ses erreurs pour l'UI.
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('memoires_techniques')
       .insert({
         dossier_id: dossierId,
@@ -336,6 +367,22 @@ export class MemoiresDB {
       })
       .select('id')
       .single();
+      
+    if (error && error.message.includes('JWT expired')) {
+      console.warn('[MemoiresDB] JWT expiré lors de save (insert), repli sur le client Admin.');
+      const admin = getAdminClient();
+      const retry = await admin.from('memoires_techniques').insert({
+        dossier_id: dossierId,
+        user_id: getCurrentUserId(),
+        titre,
+        statut: 'completed',
+        ai_model: meta.aiModel ?? null,
+        contenu: payload,
+      }).select('id').single();
+      error = retry.error;
+      data = retry.data;
+    }
+    
     if (error) {
       if (/quota/i.test(error.message)) {
         throw new QuotaError(error.message);
