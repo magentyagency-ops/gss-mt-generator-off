@@ -12,7 +12,7 @@ import { getSettings } from '../core/config';
  */
 
 const D2_SYSTEM_PROMPT = `Tu es un expert en conception de diagrammes D2 et schémas d'architecture pour le mémoire technique de GSS Sécurité.
-Tu dois générer du code D2 valide, lisible et avec un design "SaaS / Tech" ultra-moderne (Glassmorphism, Dark Mode, formes arrondies, contrastes forts).
+Tu dois générer du code D2 valide, lisible et avec un design "Corporate / Vibrant" très coloré et professionnel (fonds clairs, couleurs vives pour différencier les éléments, ombres portées douces).
 
 Règles de rendu et de syntaxe STRICTES (CONFORMITÉ D2) :
 1. GLOBAL : Déclare "direction: right" ou "direction: down" au début.
@@ -24,39 +24,64 @@ Règles de rendu et de syntaxe STRICTES (CONFORMITÉ D2) :
 7. LISIBILITÉ DES FLÈCHES : Ne mets RIEN sur les flèches (laisser le texte vide) ou 1 mot max. 
 8. Ne renvoie AUCUN texte d'introduction ni d'explication. Renvoie UNIQUEMENT le bloc de code D2 valide.
 
-Exemple de structure D2 attendue (Design Ultra-Moderne avec Classes) :
+Exemple de structure D2 attendue (Design Coloré et Pro avec Classes) :
 \`\`\`d2
 direction: right
 
 classes: {
   root: {
     style: {
-      fill: "#1e293b"
-      font-color: "#ffffff"
+      fill: "#ffffff"
+      font-color: "#0f172a"
       font-size: 32
       bold: true
       shadow: true
-      border-radius: 16
-      stroke: "#dc2626"
-      stroke-width: 4
+      border-radius: 12
+      stroke: "#cbd5e1"
+      stroke-width: 2
     }
   }
   category: {
     style: {
-      fill: "#334155"
+      fill: "#f8fafc"
+      font-color: "#1e3a8a"
+      stroke: "#94a3b8"
+      stroke-width: 2
       stroke-dash: 5
       shadow: true
-      border-radius: 16
+      border-radius: 12
     }
   }
-  item: {
+  item_blue: {
     style: {
-      fill: "#0f172a"
-      font-color: "#f8fafc"
+      fill: "#eff6ff"
+      font-color: "#1d4ed8"
       font-size: 24
-      border-radius: 12
+      border-radius: 8
       shadow: true
-      stroke: "#475569"
+      stroke: "#bfdbfe"
+      stroke-width: 2
+    }
+  }
+  item_red: {
+    style: {
+      fill: "#fef2f2"
+      font-color: "#b91c1c"
+      font-size: 24
+      border-radius: 8
+      shadow: true
+      stroke: "#fecaca"
+      stroke-width: 2
+    }
+  }
+  item_green: {
+    style: {
+      fill: "#ecfdf5"
+      font-color: "#047857"
+      font-size: 24
+      border-radius: 8
+      shadow: true
+      stroke: "#a7f3d0"
       stroke-width: 2
     }
   }
@@ -68,12 +93,12 @@ niveau1: "DISPOSITIF DE PROTECTION" {
   class: category
   
   col1: "PRÉVENTION & CONTRÔLE\\n- Agent de sécurité\\n- Contrôle d'accès" { 
-    class: item 
+    class: item_blue 
     shape: step
   }
   
   col2: "INTERVENTION & DÉTECTION\\n- Télésurveillance 24/7\\n- Ronde mobile" { 
-    class: item 
+    class: item_red 
     shape: package
   }
 }
