@@ -389,7 +389,7 @@ export class MemoiresDB {
       }
       throw new Error(error.message);
     }
-    return data.id;
+    return data!.id;
   }
 
   /** Dernier mémoire enregistré pour un dossier (ou null). */
