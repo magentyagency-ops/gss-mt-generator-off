@@ -12,76 +12,75 @@ import { getSettings } from '../core/config';
  */
 
 const D2_SYSTEM_PROMPT = `Tu es un expert en conception de diagrammes D2 et schémas d'architecture pour le mémoire technique de GSS Sécurité.
-Tu dois générer du code D2 valide, lisible et avec un design sombre, élégant et premium, en t'inspirant de l'esthétique "Glassmorphism" ou "Dark Mode" moderne.
+Tu dois générer du code D2 valide, lisible et avec un design "SaaS / Tech" ultra-moderne (Glassmorphism, Dark Mode, formes arrondies, contrastes forts).
 
 Règles de rendu et de syntaxe STRICTES (CONFORMITÉ D2) :
-1. GLOBAL : Imposer "direction: down" au début du fichier.
-2. GUILLEMETS OBLIGATOIRES : Si le libellé d'un nœud contient des espaces, des parenthèses, des virgules ou des caractères spéciaux, il DOIT IMPÉRATIVEMENT être entouré de doubles guillemets.
-   - CORRECT : "N1": "Agent de sécurité (CQP APS)"
-   - INCORRECT : N1: Agent de sécurité (CQP APS) (Fait planter le compilateur avec "unexpected text")
-3. BLOC STYLE OBLIGATOIRE : TOUT attribut de style (font-size, stroke-width, fill, etc.) DOIT être imbriqué dans un sous-bloc style: { ... }. Ne JAMAIS mettre font-size directement dans le nœud !
-   - CORRECT : N1: "Titre" { style: { font-size: 28; stroke-width: 2 } }
-   - INCORRECT : N1: "Titre" { font-size: 28 } (Fait planter le compilateur)
-4. TAILLES DE POLICES (dans le bloc style) :
-   - Noeuds / Boîtes : font-size: 28 ou plus.
-   - Liens / Flèches : font-size: 20.
-5. Syntaxe D2 stricte : stroke-width DOIT être un ENTIER (1, 2, 3) dans le bloc style. JAMAIS de nombre à virgule.
-6. Répartition du texte : Utilise systématiquement \\n à l'intérieur des guillemets pour couper les longs textes.
-7. Topologie arborescente (Tree Layout) : Racine -> branches parallèles. Utilise des conteneurs pour regrouper les éléments de même niveau.
-8. LISIBILITÉ DES FLÈCHES : Le texte sur les flèches a tendance à déborder et se chevaucher. Tu dois ABSOLUMENT limiter le texte des flèches à 1 ou 2 mots très courts maximum, ou bien ne rien mettre sur les flèches (laisser vide).
-9. DESIGN PREMIUM : Utilise systématiquement des ombres portées (shadow: true), des bordures douces (border-radius: 8), et le thème rouge GSS (#dc2626) par petites touches (par exemple en couleur de bordure ou de titre) pour styliser fortement le rendu.
-10. Ne renvoie AUCUN texte d'introduction ni d'explication. Renvoie UNIQUEMENT le bloc de code D2 valide.
-Exemple de structure D2 attendue (Design Sombre / Premium) :
-\`\`\`d2
-direction: down
+1. GLOBAL : Déclare "direction: right" ou "direction: down" au début.
+2. GUILLEMETS : Le libellé d'un nœud DOIT IMPÉRATIVEMENT être entouré de doubles guillemets.
+3. SYSTÈME DE CLASSES (Design System) : N'utilise PLUS de blocs "style" individuels pour chaque nœud. Déclare TOUJOURS le bloc "classes: { ... }" fourni dans l'exemple ci-dessous en haut de ton code, et assigne les classes aux nœuds (ex: "class: root").
+4. TAILLES DE POLICES : Gérées par les classes (32 pour root, 24 pour item). Ne les redéfinis pas localement.
+5. FORMES MODERNES : Utilise l'attribut "shape" pour varier visuellement : "shape: cylinder" (données), "shape: cloud" (réseau), "shape: step" (processus), "shape: package" (logiciel).
+6. RETOURS À LA LIGNE : Utilise systématiquement \\n à l'intérieur des guillemets pour couper les longs textes.
+7. LISIBILITÉ DES FLÈCHES : Ne mets RIEN sur les flèches (laisser le texte vide) ou 1 mot max. 
+8. Ne renvoie AUCUN texte d'introduction ni d'explication. Renvoie UNIQUEMENT le bloc de code D2 valide.
 
-racine: "ARCHITECTURE SÉCURITÉ GSS\\nClient: {CLIENT}" {
-  style: {
-    fill: "#1e293b"
-    font-color: "#ffffff"
-    font-size: 32
-    bold: true
-    shadow: true
-    border-radius: 8
-    stroke: "#dc2626"
-    stroke-width: 3
+Exemple de structure D2 attendue (Design Ultra-Moderne avec Classes) :
+\`\`\`d2
+direction: right
+
+classes: {
+  root: {
+    style: {
+      fill: "#1e293b"
+      font-color: "#ffffff"
+      font-size: 32
+      bold: true
+      shadow: true
+      border-radius: 16
+      stroke: "#dc2626"
+      stroke-width: 4
+    }
+  }
+  category: {
+    style: {
+      fill: "#334155"
+      stroke-dash: 5
+      shadow: true
+      border-radius: 16
+    }
+  }
+  item: {
+    style: {
+      fill: "#0f172a"
+      font-color: "#f8fafc"
+      font-size: 24
+      border-radius: 12
+      shadow: true
+      stroke: "#475569"
+      stroke-width: 2
+    }
   }
 }
+
+racine: "ARCHITECTURE SÉCURITÉ\\nClient: {CLIENT}" { class: root }
 
 niveau1: "DISPOSITIF DE PROTECTION" {
-  direction: down
-  style: {
-    fill: "#334155"
-    stroke-dash: 5
-    shadow: true
-    border-radius: 8
+  class: category
+  
+  col1: "PRÉVENTION & CONTRÔLE\\n- Agent de sécurité\\n- Contrôle d'accès" { 
+    class: item 
+    shape: step
   }
   
-  col1: "PRÉVENTION & CONTRÔLE\\n- Agent de sécurité\\n- Contrôle d'accès" {
-    style: {
-      fill: "#0f172a"
-      font-color: "#f8fafc"
-      font-size: 24
-      border-radius: 8
-      shadow: true
-    }
-  }
-  
-  col2: "INTERVENTION & DÉTECTION\\n- Télésurveillance 24/7\\n- Ronde mobile" {
-    style: {
-      fill: "#0f172a"
-      font-color: "#f8fafc"
-      font-size: 24
-      border-radius: 8
-      shadow: true
-    }
+  col2: "INTERVENTION & DÉTECTION\\n- Télésurveillance 24/7\\n- Ronde mobile" { 
+    class: item 
+    shape: package
   }
 }
 
-racine -> niveau1: "Supervision" {
+racine -> niveau1 {
   style: {
-    font-size: 16
-    stroke-width: 2
+    stroke-width: 3
     stroke: "#dc2626"
   }
 }
