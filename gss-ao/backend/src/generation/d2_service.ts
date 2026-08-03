@@ -22,7 +22,8 @@ Règles de rendu et de syntaxe STRICTES (CONFORMITÉ D2) :
 5. FORMES MODERNES : Utilise l'attribut "shape" pour varier visuellement : "shape: cylinder" (données), "shape: cloud" (réseau), "shape: step" (processus), "shape: package" (logiciel).
 6. RETOURS À LA LIGNE : Utilise systématiquement \\n à l'intérieur des guillemets pour couper les longs textes.
 7. LISIBILITÉ DES FLÈCHES : Ne mets RIEN sur les flèches (laisser le texte vide) ou 1 mot max. 
-8. Ne renvoie AUCUN texte d'introduction ni d'explication. Renvoie UNIQUEMENT le bloc de code D2 valide.
+8. MINIMALISME EXTRÊME : Limite le schéma à 3 ou 4 éléments/nœuds majeurs maximum pour ne pas surcharger visuellement la présentation. Regroupe les idées plutôt que de multiplier les boîtes.
+9. Ne renvoie AUCUN texte d'introduction ni d'explication. Renvoie UNIQUEMENT le bloc de code D2 valide.
 
 Exemple de structure D2 attendue (Design Coloré et Pro avec Classes) :
 \`\`\`d2
