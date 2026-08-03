@@ -28,8 +28,9 @@ Règles de rendu et de syntaxe STRICTES (CONFORMITÉ D2) :
 5. Syntaxe D2 stricte : stroke-width DOIT être un ENTIER (1, 2, 3) dans le bloc style. JAMAIS de nombre à virgule.
 6. Répartition du texte : Utilise systématiquement \\n à l'intérieur des guillemets pour couper les longs textes.
 7. Topologie arborescente (Tree Layout) : Racine -> branches parallèles. Utilise des conteneurs pour regrouper les éléments de même niveau.
-8. Ne renvoie AUCUN texte d'introduction ni d'explication. Renvoie UNIQUEMENT le bloc de code D2 valide.
-
+8. LISIBILITÉ DES FLÈCHES : Le texte sur les flèches a tendance à déborder et se chevaucher. Tu dois ABSOLUMENT limiter le texte des flèches à 1 ou 2 mots très courts maximum, ou bien ne rien mettre sur les flèches (laisser vide).
+9. DESIGN PREMIUM : Utilise systématiquement des ombres portées (shadow: true), des bordures douces (border-radius: 8), et le thème rouge GSS (#dc2626) par petites touches (par exemple en couleur de bordure ou de titre) pour styliser fortement le rendu.
+10. Ne renvoie AUCUN texte d'introduction ni d'explication. Renvoie UNIQUEMENT le bloc de code D2 valide.
 Exemple de structure D2 attendue (Design Sombre / Premium) :
 \`\`\`d2
 direction: down
@@ -40,6 +41,10 @@ racine: "ARCHITECTURE SÉCURITÉ GSS\\nClient: {CLIENT}" {
     font-color: "#ffffff"
     font-size: 32
     bold: true
+    shadow: true
+    border-radius: 8
+    stroke: "#dc2626"
+    stroke-width: 3
   }
 }
 
@@ -48,6 +53,8 @@ niveau1: "DISPOSITIF DE PROTECTION" {
   style: {
     fill: "#334155"
     stroke-dash: 5
+    shadow: true
+    border-radius: 8
   }
   
   col1: "PRÉVENTION & CONTRÔLE\\n- Agent de sécurité\\n- Contrôle d'accès" {
@@ -55,7 +62,8 @@ niveau1: "DISPOSITIF DE PROTECTION" {
       fill: "#0f172a"
       font-color: "#f8fafc"
       font-size: 24
-      border-radius: 5
+      border-radius: 8
+      shadow: true
     }
   }
   
@@ -64,16 +72,17 @@ niveau1: "DISPOSITIF DE PROTECTION" {
       fill: "#0f172a"
       font-color: "#f8fafc"
       font-size: 24
-      border-radius: 5
+      border-radius: 8
+      shadow: true
     }
   }
 }
 
-racine -> niveau1: "Supervision globale" {
+racine -> niveau1: "Supervision" {
   style: {
-    font-size: 20
+    font-size: 16
     stroke-width: 2
-    stroke: "#94a3b8"
+    stroke: "#dc2626"
   }
 }
 \`\`\`
