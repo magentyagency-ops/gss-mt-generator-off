@@ -269,6 +269,10 @@ export class MarpGenerator {
       this.runMarpCli(mdPath, cssPath, pdfPath, workDir, chromePath || '', isWin, q);
     }
 
+    // Ajoute la pagination globale (Page X / Y) sur le PDF final
+    console.log(`[MarpGenerator] Adding global pagination to ${pdfPath}…`);
+    await this.addGlobalPagination(pdfPath);
+
     console.log(`[MarpGenerator] PDF generated successfully: ${pdfPath}`);
 
     // Cleanup work directory (keep only the PDF)
@@ -347,6 +351,37 @@ export class MarpGenerator {
 
     const mergedBytes = await merged.save();
     fs.writeFileSync(outputPath, mergedBytes);
+  }
+
+  /**
+   * Ajoute la pagination (Page X / Y) en bas à droite de chaque page du PDF.
+   */
+  private async addGlobalPagination(pdfPath: string): Promise<void> {
+    const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
+    const bytes = fs.readFileSync(pdfPath);
+    const doc = await PDFDocument.load(bytes);
+    const totalPages = doc.getPageCount();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const pages = doc.getPages();
+
+    for (let i = 0; i < pages.length; i++) {
+      const page = pages[i];
+      const text = `Page ${i + 1} / ${totalPages}`;
+      const size = 10;
+      const textWidth = font.widthOfTextAtSize(text, size);
+      
+      // Bottom 15mm (~42.5 points), Right 20mm (~56.7 points)
+      page.drawText(text, {
+        x: page.getWidth() - 56.7 - textWidth,
+        y: 42.5,
+        size,
+        font,
+        color: rgb(75 / 255, 85 / 255, 99 / 255), // #4b5563
+      });
+    }
+
+    const modifiedBytes = await doc.save();
+    fs.writeFileSync(pdfPath, modifiedBytes);
   }
 
   /**
@@ -449,7 +484,7 @@ export class MarpGenerator {
     lines.push('marp: true');
     lines.push('theme: gss');
     lines.push('size: a4');
-    lines.push('paginate: true');
+    lines.push('paginate: false');
     lines.push("header: 'GLOBAL SECURITY SERVICES'");
     lines.push('---');
     lines.push('');

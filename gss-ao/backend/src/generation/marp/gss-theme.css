@@ -193,16 +193,7 @@ img[alt="class:illustration-block"] {
   border: 1px solid #e5e7eb;
 }
 
-/* Page numbers in footer */
-section::after {
-  content: "Page " attr(data-marpit-pagination) " / " attr(data-marpit-pagination-total);
-  position: absolute;
-  bottom: 15mm;
-  right: 20mm;
-  font-size: 0.8em;
-  color: #4b5563; /* Darker page number for readability on #d9d9d9 */
-  font-family: 'Inter', sans-serif;
-}
+/* Page numbers in footer handled by pdf-lib to support global counting */
 
 /* Hide default section::before logo since we have it in the banner */
 section::before {
