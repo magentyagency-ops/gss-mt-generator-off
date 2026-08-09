@@ -2570,8 +2570,7 @@ Renvoie un JSON valide :
         const kindLabel = x.kind === 'case' ? 'Case à cocher' : x.kind === 'tableau' ? 'Tableau' : x.kind === 'champ' ? 'Champ' : null;
         exigences.push({ id: `ex-${x.i}`, theme: x.theme || '', exigence: x.label, couverture: manquant ? 'écart' : 'couvert', criticite: x.criticite, ...(x.kind ? { kind: x.kind } : {}) });
         if (manquant) {
-          const suffix = "(Absent de la base de connaissance GSS)";
-          const ctxText = x.reqContext ? `${x.reqContext} ${suffix}` : `${kindLabel ? kindLabel + ' du cadre. ' : ''}${suffix}`;
+          const ctxText = x.reqContext ? x.reqContext : (kindLabel ? `${kindLabel} du cadre.` : '');
           missing.push({
             id: `req-${x.i}`,
             label: x.label,
