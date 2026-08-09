@@ -2474,7 +2474,7 @@ Renvoie un JSON valide :
   private async extractRequirementsList(
     templateText: string | null,
     dceContext: string,
-  ): Promise<Array<{ label: string; theme?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal' }>> {
+  ): Promise<Array<{ label: string; theme?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal'; context?: string }>> {
     const parse = (content: string | null) => {
       if (content === null) console.warn('[MemoireGenerator] extractRequirements DIAG : callOpenAI a renvoyé NULL (échec IA/rate-limit).');
       try {
@@ -2516,8 +2516,8 @@ Renvoie un JSON valide :
     }
     const content = await this.callOpenAI(
       [
-        { role: 'system', content: "Tu extrais la CHECK-LIST des GRANDES EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. ATTENTION: Reste UNIQUEMENT au niveau des grandes thématiques (ex: Dispositif humain global, Matériel et technologies, Astreinte, Politique RSE, Démarche qualité) et ne liste SURTOUT PAS les sous-détails précis (ne liste pas les modèles de radio, les types d'EPI, les plannings précis, etc.). Limite-toi à une quinzaine d'exigences globales maximum.\nFORMULATION : chaque exigence DOIT être formulée sous forme de QUESTION claire et contextualisée. Exemples :\n- Au lieu de 'Dispositif palliatif d'absence' → 'Quel dispositif de remplacement est prévu en cas d'absence imprévue d'un agent ?'\n- Au lieu de 'Matériel de communication' → 'Quels équipements de communication (radio, PTI) sont fournis aux agents ?'\n- Au lieu de 'Politique RSE' → 'Quelle démarche RSE et environnementale le prestataire met-il en œuvre ?'\nLa question doit être concrète, inclure le contexte, et se comprendre SANS avoir lu le DCE. N'invente rien." },
-        { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON : {"items":[{"label":"La question contextualisée (formulée en question)","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}` },
+        { role: 'system', content: "Tu extrais la CHECK-LIST des GRANDES EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. ATTENTION: Reste UNIQUEMENT au niveau des grandes thématiques (ex: Dispositif humain global, Matériel et technologies, Astreinte, Politique RSE, Démarche qualité) et ne liste SURTOUT PAS les sous-détails précis (ne liste pas les modèles de radio, les types d'EPI, les plannings précis, etc.). Limite-toi à une quinzaine d'exigences globales maximum.\nFORMULATION : chaque exigence DOIT être formulée sous forme de QUESTION claire et contextualisée. Exemples :\n- Au lieu de 'Dispositif palliatif d'absence' → 'Quel dispositif de remplacement est prévu en cas d'absence imprévue d'un agent ?'\n- Au lieu de 'Matériel de communication' → 'Quels équipements de communication (radio, PTI) sont fournis aux agents ?'\n- Au lieu de 'Politique RSE' → 'Quelle démarche RSE et environnementale le prestataire met-il en œuvre ?'\nLa question doit être concrète, inclure le contexte, et se comprendre SANS avoir lu le DCE. N'invente rien.\nSOURCE CCTP : pour chaque exigence, fournis dans `context` la RÉFÉRENCE PRÉCISE dans le CCTP ou le document du DCE d'où elle est tirée. Cite l'article, la section ou le paragraphe exact (ex. 'CCTP art. 4.2.1 — Dispositif humain', 'CCTP §5.3 Matériels', 'RC article 3.5'). Cela permet de retrouver l'information dans le document source." },
+        { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON : {"items":[{"label":"La question contextualisée","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal","context":"Réf. CCTP exacte (ex: CCTP art. 5.3 — Titre de la section)"}]}` },
       ],
       0.2, 'Extraction exigences CCTP', true,
     );
