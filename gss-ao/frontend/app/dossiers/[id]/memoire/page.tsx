@@ -445,14 +445,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                     Génération bloquée : {questionsRestantes} information{questionsRestantes > 1 ? "s" : ""} manquante{questionsRestantes > 1 ? "s" : ""} sans réponse
                     {" "}(sur {nbManques} détectée{nbManques > 1 ? "s" : ""}). Obtenez les réponses (équipe / recherche web) avant de générer.
                   </p>
-                  {gate && gate.unresolved.length > 0 && (
-                    <ul className="mx-auto mt-2 max-w-md list-disc space-y-0.5 text-left">
-                      {gate.unresolved.slice(0, 8).map((f) => (
-                        <li key={f.id} className="truncate">{f.label}</li>
-                      ))}
-                      {gate.unresolved.length > 8 && <li>… et {gate.unresolved.length - 8} autre(s)</li>}
-                    </ul>
-                  )}
+
                   {!bypassActive && (
                     <div className="mt-4">
                       <Button variant="outline" size="sm" onClick={() => setShowBypassModal(true)} className="border-warning/50 text-warning hover:bg-warning/10">
