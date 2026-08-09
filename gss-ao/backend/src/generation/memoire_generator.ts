@@ -2406,7 +2406,12 @@ Mission : dépouiller le DCE — le CCTP EN PRIORITÉ — pour en extraire une C
 RÈGLES :
 - NIVEAU DE DÉTAIL : reste au niveau des GRANDES THÉMATIQUES (ex: "Dispositif humain et qualifications", "Moyens matériels et technologiques", "Gestion des alarmes et interventions", "Politique RSE"). Ne descends PAS au niveau des sous-détails par site, par poste ou par modèle d'équipement. Regroupe les exigences similaires.
 - Vise 15 à 25 exigences GLOBALES maximum, pas une liste de 50+ micro-détails.
-- Cite l'exigence de façon synthétique ; n'invente rien côté DCE.
+- FORMULATION EN QUESTION : chaque exigence DOIT être formulée sous forme de QUESTION claire et contextualisée qui aide à comprendre ce que le DCE attend. Exemples :
+    • Au lieu de "Dispositif palliatif d'absence" → "Quel dispositif de remplacement est prévu en cas d'absence imprévue d'un agent ?"
+    • Au lieu de "Qualifications des agents" → "Quelles qualifications et certifications (SSIAP, CQP APS, CNAPS) sont exigées pour les agents affectés au site ?"
+    • Au lieu de "Politique RSE" → "Quelle est la démarche RSE et environnementale mise en œuvre par le prestataire ?"
+  La question doit être concrète, précise et permettre de comprendre le contexte SANS avoir lu le DCE.
+- N'invente rien côté DCE.
 - La réponse GSS s'appuie UNIQUEMENT sur la Documentation GSS ; n'invente AUCUN moyen absent.
 - CLASSE la couverture STRICTEMENT ainsi :
     • "couvert"  = GSS a le moyen/la capacité ET c'est présent dans la Doc GSS.
@@ -2425,7 +2430,7 @@ Renvoie un JSON valide :
   "requirements": [
     {
       "theme": "I | II | III | IV  (I=présentation société & conformité légale ; II=moyens humains ; III=moyens opérationnels & matériels ; IV=organisation, qualité, continuité)",
-      "exigence": "Ce que demande le DCE, précis (avec chiffre / délai / qualification si présent)",
+      "exigence": "Question contextualisée décrivant l'exigence du DCE (formulée en question, ex: 'Quels sont les moyens humains prévus pour assurer la continuité de service ?')",
       "reponseGss": "Ce que GSS propose concrètement en réponse (moyen / méthode / chiffre tiré de la Doc GSS)",
       "couverture": "couvert | partiel | écart",
       "criticite": "bloquant | facultatif | normal  (bloquant = éliminatoire/obligatoire, sans quoi l'offre est irrecevable ou fortement pénalisée ; facultatif = confort/bonus ; normal = attendu mais non éliminatoire)"
@@ -2510,8 +2515,8 @@ Renvoie un JSON valide :
     }
     const content = await this.callOpenAI(
       [
-        { role: 'system', content: "Tu extrais la CHECK-LIST des GRANDES EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. ATTENTION: Reste UNIQUEMENT au niveau des grandes thématiques (ex: Dispositif humain global, Matériel et technologies, Astreinte, Politique RSE, Démarche qualité) et ne liste SURTOUT PAS les sous-détails précis (ne liste pas les modèles de radio, les types d'EPI, les plannings précis, etc.). Limite-toi à une quinzaine d'exigences globales maximum. Le but est d'avoir une vue d'ensemble, sois très général et concis. N'invente rien." },
-        { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON : {"items":[{"label":"...","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}` },
+        { role: 'system', content: "Tu extrais la CHECK-LIST des GRANDES EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. ATTENTION: Reste UNIQUEMENT au niveau des grandes thématiques (ex: Dispositif humain global, Matériel et technologies, Astreinte, Politique RSE, Démarche qualité) et ne liste SURTOUT PAS les sous-détails précis (ne liste pas les modèles de radio, les types d'EPI, les plannings précis, etc.). Limite-toi à une quinzaine d'exigences globales maximum.\nFORMULATION : chaque exigence DOIT être formulée sous forme de QUESTION claire et contextualisée. Exemples :\n- Au lieu de 'Dispositif palliatif d'absence' → 'Quel dispositif de remplacement est prévu en cas d'absence imprévue d'un agent ?'\n- Au lieu de 'Matériel de communication' → 'Quels équipements de communication (radio, PTI) sont fournis aux agents ?'\n- Au lieu de 'Politique RSE' → 'Quelle démarche RSE et environnementale le prestataire met-il en œuvre ?'\nLa question doit être concrète, inclure le contexte, et se comprendre SANS avoir lu le DCE. N'invente rien." },
+        { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON : {"items":[{"label":"La question contextualisée (formulée en question)","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}` },
       ],
       0.2, 'Extraction exigences CCTP', true,
     );
