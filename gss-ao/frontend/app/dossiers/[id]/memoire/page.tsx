@@ -445,26 +445,9 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                     Génération bloquée : {questionsRestantes} information{questionsRestantes > 1 ? "s" : ""} manquante{questionsRestantes > 1 ? "s" : ""} sans réponse
                     {" "}(sur {nbManques} détectée{nbManques > 1 ? "s" : ""}).
                   </p>
-
-                  {gate && gate.unresolved.length > 0 && (
-                    <ul className="mt-2 space-y-2 text-left max-w-md mx-auto">
-                      {gate.unresolved.map((u) => (
-                        <li key={u.id} className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2">
-                          <div className="font-medium text-foreground text-sm">{u.label}</div>
-                          {u.context && (
-                            <div className="mt-0.5 text-[11px] text-muted-foreground italic">
-                              Source : {u.context}
-                            </div>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-
-                  <p className="mt-2 text-muted-foreground">
+                  <p className="text-muted-foreground">
                     Obtenez les réponses (équipe / recherche web) avant de générer.
                   </p>
-
                   {!bypassActive && (
                     <div className="mt-4">
                       <Button variant="outline" size="sm" onClick={() => setShowBypassModal(true)} className="border-warning/50 text-warning hover:bg-warning/10">
@@ -474,6 +457,59 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   )}
                 </div>
               )}
+
+              {/* Listing complet des infos manquantes détectées (toujours visible si des missingFields existent) */}
+              {(() => {
+                const allMissing: Array<{ id: string; label: string; context?: string; criticite?: string; demande?: string }> = Array.isArray(dossierInfo?.memoire_cadre_state?.missingFields) ? dossierInfo.memoire_cadre_state.missingFields : [];
+                const unresolvedIds = new Set((gate?.unresolved ?? []).map((u: { id: string }) => u.id));
+                if (allMissing.length === 0) return null;
+                return (
+                  <div className="mt-5 text-left w-full max-w-lg mx-auto">
+                    <h3 className="text-sm font-semibold text-foreground mb-2">
+                      Exigences détectées ({allMissing.length})
+                    </h3>
+                    <ul className="space-y-2">
+                      {allMissing.map((m) => {
+                        const resolved = !unresolvedIds.has(m.id);
+                        return (
+                          <li
+                            key={m.id}
+                            className={cn(
+                              "rounded-md border px-3 py-2 text-sm",
+                              resolved
+                                ? "border-success/30 bg-success/5 opacity-70"
+                                : m.criticite === "bloquant"
+                                  ? "border-destructive/40 bg-destructive/5"
+                                  : "border-warning/30 bg-warning/5",
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-start gap-2">
+                                {resolved && <CheckCircle2 className="h-4 w-4 text-success shrink-0 mt-0.5" />}
+                                <span className={cn("font-medium", resolved && "line-through")}>{m.label}</span>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-1.5">
+                                {m.criticite === "bloquant" && !resolved && <Badge variant="destructive">Bloquant</Badge>}
+                                {m.criticite === "facultatif" && <Badge variant="outline">Facultatif</Badge>}
+                                {m.demande === "web" ? (
+                                  <Badge variant="secondary" className="gap-1"><Globe className="h-3 w-3" /> Web</Badge>
+                                ) : m.demande === "equipe" ? (
+                                  <Badge variant="outline" className="gap-1"><Users className="h-3 w-3" /> Équipe</Badge>
+                                ) : null}
+                              </div>
+                            </div>
+                            {m.context && (
+                              <div className="mt-1 text-[11px] text-muted-foreground italic">
+                                📄 {m.context}
+                              </div>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                );
+              })()}
 
               <div className="mt-4 flex items-center justify-center gap-3">
                 <Button variant="outline" className="gap-2" disabled={isSearching} onClick={handleFindOnInternet}>
