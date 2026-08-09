@@ -93,7 +93,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   // La résolution est calculée CHAMP PAR CHAMP par le backend (/generation-gate) : c'est la même
   // source de vérité que le refus serveur (409) sur la génération — l'ancien calcul local
   // (nbManques − nbRéponses) pouvait ouvrir le bouton alors que des champs restaient sans réponse.
-  const [gate, setGate] = useState<{ canGenerate: boolean; total: number; resolved: number; unresolved: Array<{ id: string; label: string }> } | null>(null);
+  const [gate, setGate] = useState<{ canGenerate: boolean; total: number; resolved: number; unresolved: Array<{ id: string; label: string; context?: string }> } | null>(null);
 
   const loadGate = async () => {
     try {
@@ -440,10 +440,29 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
               </Button>
               {!isPrerequisOk && <p className="mt-2 text-xs text-warning">Prérequis manquants (CR Visite)</p>}
               {isPrerequisOk && questionsRestantes > 0 && (
-                <div className="mt-2 text-xs text-warning">
-                  <p>
+                <div className="mt-3 text-xs text-warning">
+                  <p className="font-medium mb-2">
                     Génération bloquée : {questionsRestantes} information{questionsRestantes > 1 ? "s" : ""} manquante{questionsRestantes > 1 ? "s" : ""} sans réponse
-                    {" "}(sur {nbManques} détectée{nbManques > 1 ? "s" : ""}). Obtenez les réponses (équipe / recherche web) avant de générer.
+                    {" "}(sur {nbManques} détectée{nbManques > 1 ? "s" : ""}).
+                  </p>
+
+                  {gate && gate.unresolved.length > 0 && (
+                    <ul className="mt-2 space-y-2 text-left max-w-md mx-auto">
+                      {gate.unresolved.map((u) => (
+                        <li key={u.id} className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2">
+                          <div className="font-medium text-foreground text-sm">{u.label}</div>
+                          {u.context && (
+                            <div className="mt-0.5 text-[11px] text-muted-foreground italic">
+                              Source : {u.context}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <p className="mt-2 text-muted-foreground">
+                    Obtenez les réponses (équipe / recherche web) avant de générer.
                   </p>
 
                   {!bypassActive && (
