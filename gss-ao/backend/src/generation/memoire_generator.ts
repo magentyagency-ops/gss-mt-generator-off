@@ -2417,7 +2417,8 @@ RÈGLES :
     • "couvert"  = GSS a le moyen/la capacité ET c'est présent dans la Doc GSS.
     • "partiel"  = GSS a bien un moyen approchant, mais un DÉTAIL précis manque. NE PAS classer "écart" dans ce cas.
     • "écart"    = GSS N'A PAS ce moyen / ne fournit PAS cette prestation / RIEN dans la Doc GSS ne s'en approche.
-  Dans le doute entre "partiel" et "écart", choisis "partiel". Réserve "écart" aux manques FRANCS.`;
+  Dans le doute entre "partiel" et "écart", choisis "partiel". Réserve "écart" aux manques FRANCS.
+- SOIS TOLÉRANT : GSS est une entreprise de sécurité complète. Les sujets classiques (qualifications, cartes pro, SSIAP, recrutement, remplacements, tenues, RSE, contrôles) sont généralement couverts par la documentation. Si un passage s'en rapproche, marque-le 'couvert'. Ne marque 'écart' que si c'est vraiment très spécifique et totalement absent.`;
 
     const userPrompt = `=== EXIGENCES DU MARCHÉ (CCTP EN PRIORITÉ, puis RC / annexes) ===
 ${dceContext.slice(0, 120_000)}
@@ -2552,7 +2553,7 @@ Renvoie un JSON valide :
       const payload = batch.map((x) => ({ index: x.i, exigence: x.label, passages_gss: x.ctx || '(aucun passage proche)' }));
       const content = await this.callOpenAI(
         [
-          { role: 'system', content: "Pour CHAQUE exigence, on te donne les passages de la Documentation GSS les PLUS PROCHES (recherche sémantique dans la base de connaissance). Décide si GSS COUVRE l'exigence (le moyen/l'information est réellement présent dans ces passages) ou si elle MANQUE (rien de pertinent → à demander en interne ou à rechercher). N'invente RIEN : si les passages ne le prouvent pas, c'est MANQUANT." },
+          { role: 'system', content: "Pour CHAQUE exigence (souvent formulée en question), on te donne les passages de la Documentation GSS les PLUS PROCHES. Décide si GSS COUVRE l'exigence (les passages abordent le sujet, les moyens, ou les méthodes) ou si elle MANQUE (sujet introuvable). SOIS TOLÉRANT : GSS est une entreprise de sécurité complète. Les sujets classiques (qualifications, cartes pro, SSIAP, recrutement, remplacements, tenues, RSE, contrôles) sont généralement couverts par la documentation. Si un passage s'en rapproche, marque-le 'couvert'. Ne marque 'manquant' que si c'est vraiment très spécifique et totalement absent." },
           { role: 'user', content: `Exigences + passages GSS (JSON) :\n${JSON.stringify(payload)}\n\nRenvoie un JSON : {"resultats":[{"index":<n>,"statut":"couvert|manquant"}]}` },
         ],
         0.1, 'Jugement couverture RAG', true,
