@@ -10,7 +10,7 @@
 // de l'AO = responsable §11.8, la RLS réserve la mise à jour au propriétaire/admin).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Send, RefreshCw, Mail, Inbox } from "lucide-react";
+import { Send, RefreshCw, Mail, Inbox, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -301,6 +301,16 @@ interface SendForm {
   date_limite?: string;
 }
 
+/** Une personne proposée par l'IA pour répondre à la question (retours GSS, points 2 et 3). */
+interface Suggestion {
+  id: string;
+  nom: string;
+  fonction: string;
+  email: string;
+  raison: string;
+  recommande: boolean;
+}
+
 function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; initial?: Partial<SendForm> }) {
   const [f, setF] = useState<SendForm>({
     destinataire_email: "", destinataire_nom: "", critere_concerne: "",
@@ -321,6 +331,49 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
         .filter((d) => d.toLowerCase() !== adresse.toLowerCase())
         .join(", "),
     }));
+  }
+
+  // ── Suggestion des destinataires par l'IA (points 2 et 3 des retours GSS) ─────────────
+  const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
+  const [suggEnCours, setSuggEnCours] = useState(false);
+  const [suggMotif, setSuggMotif] = useState<string | null>(null);
+
+  /** Coche ou décoche une personne : son adresse est simplement ajoutée ou retirée du champ
+   *  destinataires, qui reste la seule source de vérité. Les pastilles suivent d'elles-mêmes. */
+  function basculerDestinataire(adresse: string, coche: boolean) {
+    setF((p) => {
+      const sans = parseDestinataires(p.destinataire_email).filter(
+        (d) => d.toLowerCase() !== adresse.toLowerCase(),
+      );
+      return { ...p, destinataire_email: (coche ? [...sans, adresse] : sans).join(", ") };
+    });
+  }
+
+  async function chercherDestinataires() {
+    setSuggEnCours(true);
+    setSuggMotif(null);
+    try {
+      const res = await apiFetch("/api/sollicitations/suggest-destinataires", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: f.question, critere_concerne: f.critere_concerne }),
+      });
+      const data = await res.json();
+      const liste: Suggestion[] = Array.isArray(data?.suggestions) ? data.suggestions : [];
+      setSuggestions(liste);
+      setSuggMotif(data?.motif ?? null);
+      // La plus pertinente est pré-cochée, mais SEULEMENT si l'utilisateur n'a encore rien saisi :
+      // on ne touche jamais à un choix déjà fait.
+      const recommandee = liste.find((x) => x.recommande);
+      if (recommandee && parseDestinataires(f.destinataire_email).length === 0) {
+        basculerDestinataire(recommandee.email, true);
+      }
+    } catch {
+      setSuggestions([]);
+      setSuggMotif("suggestion_indisponible");
+    } finally {
+      setSuggEnCours(false);
+    }
   }
   return (
     <Card>
@@ -362,6 +415,59 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
         </select>
         <input className="input sm:col-span-2" type="date" value={f.date_limite} onChange={set("date_limite")} />
         <textarea className="input sm:col-span-2" rows={3} placeholder="Question *" value={f.question} onChange={set("question")} />
+
+        {/* Suggestion des destinataires (points 2 et 3 des retours GSS). L'IA propose, l'utilisateur
+            dispose : cocher ou décocher met simplement à jour le champ destinataires ci-dessus. */}
+        <div className="sm:col-span-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!f.question.trim() || suggEnCours}
+            onClick={chercherDestinataires}
+          >
+            <Sparkles className="size-4" /> {suggEnCours ? "Recherche…" : "Qui peut répondre ?"}
+          </Button>
+          {!f.question.trim() && (
+            <span className="ml-2 text-xs text-muted-foreground">Écrivez d'abord la question.</span>
+          )}
+
+          {suggestions && suggestions.length > 0 && (
+            <ul className="mt-3 space-y-2">
+              {suggestions.map((sug) => {
+                const coche = destinataires.some((d) => d.toLowerCase() === sug.email.toLowerCase());
+                return (
+                  <li key={sug.id}>
+                    <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-input p-2.5 transition-colors hover:bg-accent/40">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={coche}
+                        onChange={(e) => basculerDestinataire(sug.email, e.target.checked)}
+                      />
+                      <span className="min-w-0">
+                        <span className="text-sm font-medium">{sug.nom}</span>
+                        <span className="text-sm text-muted-foreground"> — {sug.fonction}</span>
+                        {sug.raison && (
+                          <span className="block text-xs text-muted-foreground">{sug.raison}</span>
+                        )}
+                        <span className="block text-xs text-muted-foreground">{sug.email}</span>
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {suggestions && suggestions.length === 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {suggMotif === "annuaire_vide"
+                ? "L'annuaire des collaborateurs est vide : ajoutez-y des personnes depuis Administration pour activer les suggestions."
+                : "Aucune suggestion pour le moment. Saisissez les adresses à la main, comme d'habitude."}
+            </p>
+          )}
+        </div>
         <div className="sm:col-span-2">
           <Button disabled={disabled} onClick={() => onSubmit(f)}>
             <Send />{" "}

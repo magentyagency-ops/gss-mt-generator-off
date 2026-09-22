@@ -240,6 +240,95 @@ export async function searchPublicInfo(
   }
 }
 
+/** Une suggestion de destinataire, avec la raison du choix — affichée telle quelle à l'utilisateur. */
+export interface SuggestionDestinataire {
+  id: string;
+  nom: string;
+  fonction: string;
+  email: string;
+  raison: string;
+  recommande: boolean;
+}
+
+/**
+ * Propose les personnes les plus à même de répondre à UNE question (retours GSS, points 2 et 3).
+ *
+ * Distinct de matchQuestionsToPeople, qui affecte UNE personne par question pour l'envoi
+ * AUTOMATIQUE : ici c'est l'utilisateur qui tranche, donc on renvoie PLUSIEURS candidats classés,
+ * chacun avec la raison du choix, qu'il pourra cocher ou décocher.
+ *
+ * Ne lève jamais : sans clé OpenAI ou en cas d'échec, renvoie une liste vide et l'utilisateur
+ * saisit les adresses à la main, exactement comme avant.
+ */
+export async function suggestPeopleForQuestion(
+  question: string,
+  critereConcerne: string,
+  people: Personne[],
+  maxSuggestions = 3,
+): Promise<SuggestionDestinataire[]> {
+  if (!question.trim() || people.length === 0) return [];
+
+  const key = getSettings().openaiApiKey;
+  if (!key) {
+    console.warn('[suggestPeopleForQuestion] OPENAI_API_KEY absente → aucune suggestion.');
+    return [];
+  }
+
+  try {
+    const client = new OpenAI({ apiKey: key, timeout: OPENAI_TIMEOUT_MS });
+    const annuaire = people.map((p) => ({ id: p.id, nom: p.nom, fonction: p.fonction }));
+    const completion = await client.chat.completions.create({
+      model: CLASSIFY_MODEL,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            "Tu aides une entreprise de sécurité privée (GSS) à orienter une question interne. " +
+            "On te donne l'ANNUAIRE des collaborateurs avec leur fonction, et UNE question. " +
+            `Classe les ${maxSuggestions} personnes les plus pertinentes, la plus pertinente en premier, ` +
+            "en te fondant sur leur FONCTION. Pour chacune, donne une raison COURTE — une phrase de " +
+            "12 mots maximum, compréhensible par un non-technicien. N'invente aucun id.",
+        },
+        {
+          role: 'user',
+          content:
+            'ANNUAIRE (JSON) :\n' + JSON.stringify(annuaire) +
+            (critereConcerne ? `\n\nCRITÈRE CONCERNÉ : ${critereConcerne}` : '') +
+            `\n\nQUESTION : ${question}` +
+            '\n\nRéponds UNIQUEMENT par un objet JSON : ' +
+            '{"suggestions":[{"personne_id":<string>,"raison":<string>}]}.',
+        },
+      ],
+      temperature: 1,
+    });
+
+    const data = JSON.parse(completion.choices[0].message.content || '{}');
+    const parId = new Map(people.map((p) => [p.id, p]));
+    const dejaVus = new Set<string>();
+    const suggestions: SuggestionDestinataire[] = [];
+
+    for (const s of Array.isArray(data?.suggestions) ? data.suggestions : []) {
+      const personne = typeof s?.personne_id === 'string' ? parId.get(s.personne_id) : undefined;
+      if (!personne || dejaVus.has(personne.id)) continue;   // id inventé ou doublon → ignoré
+      dejaVus.add(personne.id);
+      suggestions.push({
+        id: personne.id,
+        nom: personne.nom,
+        fonction: personne.fonction,
+        email: personne.email,
+        raison: typeof s?.raison === 'string' ? s.raison.trim() : '',
+        recommande: suggestions.length === 0,   // la première est pré-cochée
+      });
+      if (suggestions.length >= maxSuggestions) break;
+    }
+    return suggestions;
+  } catch (e) {
+    console.warn(`[suggestPeopleForQuestion] échec LLM (${(e as Error)?.message}) → aucune suggestion.`);
+    return [];
+  }
+}
+
 /** Une personne de l'annuaire (pour le routage des questions internes). */
 export interface Personne { id: string; nom: string; fonction: string; email: string; }
 

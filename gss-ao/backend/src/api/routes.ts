@@ -9,7 +9,7 @@ import { initProgress, finishProgress } from '../core/progress';
 import { extractRcWithLLM, extractCctpWithLLM } from '../analysis/llmExtractor';
 import { pickBestPieces } from '../ingestion/dceClassifier';
 import { requireAuth } from './authMiddleware';
-import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeamBulk, matchQuestionsToPeople, Personne, MissingField } from '../generation/missing_info_resolver';
+import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeamBulk, matchQuestionsToPeople, suggestPeopleForQuestion, Personne, MissingField } from '../generation/missing_info_resolver';
 import { injectValidatedRecherches } from '../generation/inject_recherches';
 import { learnSollicitationsForDossier, learnPendingSollicitations } from '../generation/learn_sollicitation';
 import { getGenerationGate } from '../generation/generation_gate';
@@ -665,6 +665,39 @@ router.post('/dossiers/:id/recherches/inject', async (req: Request, res: Respons
   } catch (error: any) {
     console.error('Erreur lors de l\'injection des recherches validées:', error);
     res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
+  }
+});
+
+// Retours GSS, points 2 et 3 : proposer les personnes les plus à même de répondre à une question,
+// que l'utilisateur pourra ensuite cocher ou décocher avant d'envoyer.
+// LECTURE SEULE : rien n'est créé ni envoyé ici — l'envoi reste entièrement à sa main.
+router.post('/sollicitations/suggest-destinataires', async (req: Request, res: Response) => {
+  try {
+    const question = String(req.body?.question ?? '').trim();
+    const critereConcerne = String(req.body?.critere_concerne ?? '').trim();
+    if (!question) {
+      return res.status(400).json({ error: 'Question manquante' });
+    }
+
+    const { data: peopleRows } = await getScopedClient()
+      .from('personne')
+      .select('id, nom, fonction, email')
+      .eq('actif', true);
+    const people: Personne[] = (peopleRows as Personne[]) || [];
+
+    if (people.length === 0) {
+      // Annuaire vide : on le dit explicitement pour que l'interface oriente vers Administration
+      // plutôt que d'afficher « aucune suggestion », qui laisserait croire à une panne.
+      return res.json({ suggestions: [], motif: 'annuaire_vide' });
+    }
+
+    const suggestions = await suggestPeopleForQuestion(question, critereConcerne, people);
+    res.json({
+      suggestions,
+      motif: suggestions.length === 0 ? 'suggestion_indisponible' : null,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 
