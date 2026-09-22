@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, ListChecks, PenLine, Download, FileStack, Globe } from "lucide-react";
+import { FileText, ListChecks, PenLine, Download, FileStack, Globe, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getMode } from "@/lib/ai/mode";
 import { createClient } from "@/lib/supabase/client";
@@ -76,6 +76,17 @@ export function DossierNav({ id }: { id: string }) {
           </Link>
         );
       })}
+
+      {/* Historique des questions envoyées à l'équipe et des réponses reçues pour CE dossier.
+          Hors séquence : ce n'est pas une étape du parcours, donc ni numéro ni renumérotation
+          des onglets existants. `?ao=` est déjà géré par la page /sollicitations. */}
+      <Link
+        href={`/sollicitations?ao=${id}`}
+        className="ml-auto flex items-center gap-2 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <Mail className="h-4 w-4" />
+        Sollicitations
+      </Link>
     </nav>
   );
 }
