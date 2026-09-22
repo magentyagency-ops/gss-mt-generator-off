@@ -272,6 +272,20 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
         : null;
   const visiteLieu = visite?.lieu || dossierInfo.lieuVisite || null;
 
+  // ── Contact à joindre ──────────────────────────────────────────────────────────────────
+  // Un RC peut ne donner qu'une adresse générique : on affiche le premier élément identifiant
+  // disponible, et les coordonnées restantes en précision.
+  const contact = dossierInfo.contact;
+  const contactValeur = contact?.nom || contact?.fonction || contact?.email || null;
+  const contactPrecision =
+    [
+      contact?.nom && contact?.fonction ? contact.fonction : null,
+      contactValeur !== contact?.email ? contact?.email : null,
+      contact?.telephone,
+    ]
+      .filter(Boolean)
+      .join(" · ") || null;
+
   return (
     <div className="flex h-full flex-col">
       {/* En-tête identité */}
@@ -375,6 +389,12 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
                   precision={visitePrecision}
                 />
                 <InfoCle icon={MapPin} label="Lieu de la visite" value={visiteLieu} />
+                <InfoCle
+                  icon={Mail}
+                  label="Contact à joindre"
+                  value={contactValeur}
+                  precision={contactPrecision}
+                />
               </div>
             </CardContent>
           </Card>

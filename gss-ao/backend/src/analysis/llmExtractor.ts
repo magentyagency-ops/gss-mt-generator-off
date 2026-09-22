@@ -8,6 +8,7 @@ import {
   PieceAFournir,
   CriteresNotation,
   Visite,
+  Contact,
   ModalitesRemise,
 } from '../schemas/rc';
 import {
@@ -129,6 +130,13 @@ FORMAT JSON ATTENDU :
     "lieu": "lieu de RDV ou null",
     "ref_texte": "extrait pertinent ou null"
   },
+  "contact": {
+    "nom": "nom de la personne à joindre pour cette consultation, ou null",
+    "fonction": "fonction ou service de cette personne, ou null",
+    "email": "adresse e-mail de contact, ou null",
+    "telephone": "numéro de téléphone, ou null",
+    "ref_texte": "extrait pertinent ou null"
+  },
   "pieces_candidature": [
     { "nom": "intitulé de la pièce", "obligatoire": true/false, "alternative": "ex 'Remplace DC1+DC2' ou null", "ref_texte": "extrait ou null" }
   ],
@@ -149,7 +157,22 @@ FORMAT JSON ATTENDU :
     { "titre": "titre de l'alerte/risque (ex: Pénalités atypiques)", "detail": "description", "type": "warning | destructive | primary" }
   ]
 }
-Si la consultation n'est pas allotie, renvoie allotissement: []. Si pas de barème, criteres: null. S'il n'y a pas de risque majeur, analyse_risques: [].`;
+Si la consultation n'est pas allotie, renvoie allotissement: []. Si pas de barème, criteres: null. S'il n'y a pas de risque majeur, analyse_risques: []. Si aucun interlocuteur n'est indiqué, contact: null.`;
+
+/** Contact à joindre. Renvoie null si rien d'exploitable n'a été trouvé, pour que l'affichage
+ *  distingue « aucun interlocuteur indiqué » d'un objet vide. */
+function normContact(raw: any): Contact | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const contact: Contact = {
+    nom: asString(raw.nom),
+    fonction: asString(raw.fonction),
+    email: asString(raw.email),
+    telephone: asString(raw.telephone),
+    ref_texte: asString(raw.ref_texte),
+  };
+  const exploitable = contact.nom || contact.fonction || contact.email || contact.telephone;
+  return exploitable ? contact : null;
+}
 
 function normPieces(raw: any, type: TypePiece): PieceAFournir[] {
   return asArray(raw)
@@ -260,6 +283,7 @@ export async function extractRcWithLLM(filePath: string): Promise<RCDocument> {
       duree: asString(data.duree),
       allotissement: normAllotissement(data.allotissement),
       visite: normVisite(data.visite),
+      contact: normContact(data.contact),
       pieces_candidature: piecesCand,
       pieces_offre: piecesOffre,
       criteres,

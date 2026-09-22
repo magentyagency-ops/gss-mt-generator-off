@@ -337,6 +337,7 @@ router.post('/dce/upload', upload.array('files'), async (req: Request, res: Resp
       // (llmExtractor : prevue / obligatoire / dates / lieu) mais elle n'était jamais persistée.
       // On conserve l'objet complet — `texte_brut` porte souvent l'HEURE, absente de `valeur` —
       // et on renseigne aussi les champs à plat déjà déclarés côté front (DossierRow).
+      if (rcData.contact) dossierUpdate.contact = rcData.contact;
       if (rcData.visite) {
         dossierUpdate.visite = rcData.visite;
         const premiereDate = Array.isArray(rcData.visite.dates) ? rcData.visite.dates[0] : null;

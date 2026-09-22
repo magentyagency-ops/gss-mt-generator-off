@@ -22,6 +22,14 @@ export interface DossierRow {
   dateVisite?: string;
   visiteObligatoire?: boolean;
   lieuVisite?: string;
+  /** Personne à joindre pour la consultation, extraite du RC. */
+  contact?: {
+    nom?: string | null;
+    fonction?: string | null;
+    email?: string | null;
+    telephone?: string | null;
+    ref_texte?: string | null;
+  } | null;
   /** Visite des lieux telle qu'extraite du RC. `texte_brut` conserve la formulation d'origine,
    *  qui porte souvent l'HEURE — absente de `valeur`, limitée à la date. */
   visite?: {
