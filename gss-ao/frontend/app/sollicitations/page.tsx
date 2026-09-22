@@ -462,7 +462,7 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
                         <span className="text-sm text-muted-foreground"> — {sug.fonction}</span>
                         {sug.recommande && (
                           <span className="ml-2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
-                            Le plus indiqué
+                            Recommandé
                           </span>
                         )}
                         {sug.raison && (
