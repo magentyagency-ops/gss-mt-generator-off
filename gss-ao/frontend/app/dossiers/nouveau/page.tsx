@@ -375,9 +375,9 @@ export default function NouveauDossierPage() {
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-primary">
               <UploadCloud className="h-6 w-6" />
             </div>
-            <div className="text-sm font-medium">Glissez-déposez le dossier DCE complet ici</div>
+            <div className="text-sm font-medium">Glissez-déposez le dossier DCE complet, des fichiers ou une archive ZIP</div>
             <div className="mt-1 text-xs text-muted-foreground">
-              ou cliquez sur le bouton pour sélectionner votre dossier
+              ou utilisez les boutons ci-dessous — les archives ZIP sont ouvertes automatiquement
             </div>
             <input 
               type="file" 
