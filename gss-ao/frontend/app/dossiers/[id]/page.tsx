@@ -69,6 +69,47 @@ function StatPill({
   );
 }
 
+/** Une information clé de la synthèse : libellé, valeur, et précision facultative.
+ *  Affiche « Non précisé » au lieu de disparaître : l'absence d'information EST une information
+ *  quand on prépare une réponse à un appel d'offres. */
+function InfoCle({
+  icon: Icon,
+  label,
+  value,
+  precision,
+  urgent,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value?: string | null;
+  precision?: string | null;
+  urgent?: boolean;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <div
+        className={cn(
+          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+          urgent ? "bg-destructive/10 text-destructive" : "bg-accent text-primary",
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+        <div className={cn("text-sm font-medium", value ? "text-foreground" : "text-muted-foreground")}>
+          {value || "Non précisé"}
+        </div>
+        {precision && (
+          <p className={cn("mt-0.5 text-xs", urgent ? "text-destructive" : "text-muted-foreground")}>
+            {precision}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function SynthesePage({ params }: { params: { id: string } }) {
   const id = params.id;
   const { dossier: dossierInfo, refresh: refreshDossier } = useDossier();
@@ -209,6 +250,28 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
 
   const jours = joursRestants(dossierInfo.dateLimite);
 
+  // ── Visite des lieux ───────────────────────────────────────────────────────────────────
+  // On privilégie `texte_brut`, la formulation d'origine du RC, car elle porte l'HEURE
+  // (« le 5 juillet 2026 à 14h ») que `valeur` — une date seule — ne peut pas représenter.
+  const visite = dossierInfo.visite;
+  const premiereVisite = visite?.dates?.find(
+    (d: { valeur?: string | null; texte_brut?: string | null }) => d?.texte_brut || d?.valeur,
+  );
+  const visiteValeur =
+    premiereVisite?.texte_brut ||
+    (premiereVisite?.valeur ? formatDate(premiereVisite.valeur) : null) ||
+    (dossierInfo.dateVisite ? formatDate(dossierInfo.dateVisite) : null);
+  const visiteObligatoire = visite?.obligatoire ?? dossierInfo.visiteObligatoire;
+  const visitePrecision =
+    visite?.prevue === false
+      ? "Aucune visite prévue au RC"
+      : typeof visiteObligatoire === "boolean"
+        ? visiteObligatoire
+          ? "Visite obligatoire"
+          : "Visite facultative"
+        : null;
+  const visiteLieu = visite?.lieu || dossierInfo.lieuVisite || null;
+
   return (
     <div className="flex h-full flex-col">
       {/* En-tête identité */}
@@ -281,6 +344,41 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
       {/* Corps */}
       <div className="grid flex-1 grid-cols-1 gap-6 overflow-y-auto p-6">
         <div className="space-y-6">
+          {/* Informations clés (point 6 des retours GSS) : les repères que l'équipe cherche en
+              premier — échéance, visite, lieu — sans rouvrir les pièces du DCE. La visite provient
+              du RC via `visite` ; les champs à plat (dateVisite / lieuVisite) servent de repli. */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CalendarClock className="h-5 w-5 text-primary" /> Informations clés
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+                <InfoCle
+                  icon={Clock}
+                  label="Remise des offres"
+                  value={dossierInfo.dateLimite ? formatDate(dossierInfo.dateLimite) : null}
+                  precision={
+                    dossierInfo.dateLimite
+                      ? jours >= 0
+                        ? `${jours} jour${jours > 1 ? "s" : ""} restant${jours > 1 ? "s" : ""}`
+                        : "Échéance dépassée"
+                      : null
+                  }
+                  urgent={!!dossierInfo.dateLimite && jours <= 14}
+                />
+                <InfoCle
+                  icon={CalendarClock}
+                  label="Visite des lieux"
+                  value={visiteValeur}
+                  precision={visitePrecision}
+                />
+                <InfoCle icon={MapPin} label="Lieu de la visite" value={visiteLieu} />
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Résumé Exécutif IA */}
           <Card className="border-primary/20 bg-primary/5 shadow-sm">
             <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">

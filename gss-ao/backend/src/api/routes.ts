@@ -333,6 +333,19 @@ router.post('/dce/upload', upload.array('files'), async (req: Request, res: Resp
       if (rcData.pieces_candidature) dossierUpdate.pieces_candidature = rcData.pieces_candidature;
       if (rcData.pieces_offre) dossierUpdate.pieces_offre = rcData.pieces_offre;
       if (rcData.analyse_risques) dossierUpdate.analyse_risques = rcData.analyse_risques;
+      // Visite des lieux (point 6 des retours GSS). L'extraction LLM la produit déjà
+      // (llmExtractor : prevue / obligatoire / dates / lieu) mais elle n'était jamais persistée.
+      // On conserve l'objet complet — `texte_brut` porte souvent l'HEURE, absente de `valeur` —
+      // et on renseigne aussi les champs à plat déjà déclarés côté front (DossierRow).
+      if (rcData.visite) {
+        dossierUpdate.visite = rcData.visite;
+        const premiereDate = Array.isArray(rcData.visite.dates) ? rcData.visite.dates[0] : null;
+        if (premiereDate?.valeur) dossierUpdate.dateVisite = premiereDate.valeur;
+        if (rcData.visite.lieu) dossierUpdate.lieuVisite = rcData.visite.lieu;
+        if (typeof rcData.visite.obligatoire === 'boolean') {
+          dossierUpdate.visiteObligatoire = rcData.visite.obligatoire;
+        }
+      }
       if (rcData.modalites_remise?.date_limite?.valeur) {
         dossierUpdate.dateLimite = new Date(rcData.modalites_remise.date_limite.valeur).toISOString();
       }

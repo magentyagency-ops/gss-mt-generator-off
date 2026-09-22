@@ -22,6 +22,15 @@ export interface DossierRow {
   dateVisite?: string;
   visiteObligatoire?: boolean;
   lieuVisite?: string;
+  /** Visite des lieux telle qu'extraite du RC. `texte_brut` conserve la formulation d'origine,
+   *  qui porte souvent l'HEURE — absente de `valeur`, limitée à la date. */
+  visite?: {
+    prevue?: boolean;
+    obligatoire?: boolean | null;
+    dates?: { libelle?: string; valeur?: string | null; texte_brut?: string | null }[];
+    lieu?: string | null;
+    ref_texte?: string | null;
+  };
   duree?: string;
   criteres?: any;
   pieces_candidature?: any[];
