@@ -77,6 +77,10 @@ export default function NouveauDossierPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const isAppendingRef = useRef(false);
+  // Identifiant du dossier en cours de création, créé UNE SEULE FOIS et réutilisé par
+  // l'enregistrement automatique en brouillon puis par le lancement (le backend fait un upsert).
+  // Sans cela, chaque sauvegarde créerait un dossier supplémentaire.
+  const dossierIdRef = useRef<string | null>(null);
   const [showQuitModal, setShowQuitModal] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
 
@@ -243,7 +247,8 @@ export default function NouveauDossierPage() {
   }
 
   async function saveDossier(isBrouillon: boolean): Promise<string> {
-    const dossierId = crypto.randomUUID();
+    if (!dossierIdRef.current) dossierIdRef.current = crypto.randomUUID();
+    const dossierId = dossierIdRef.current;
 
     // Extraire le nom du dossier DCE depuis les chemins des fichiers uploadés
     let dossierName = "";
@@ -297,9 +302,30 @@ export default function NouveauDossierPage() {
     isQuittingRef.current = true;
     if (save) {
       await saveDossier(true);
+    } else if (dossierIdRef.current) {
+      // Le brouillon a pu être enregistré automatiquement entre-temps : « Non » doit réellement
+      // l'annuler, sinon la question posée à l'utilisateur n'aurait plus de sens.
+      try {
+        await apiFetch(`/api/dossiers/${dossierIdRef.current}`, { method: "DELETE" });
+      } catch {
+        /* Sans gravité : le brouillon restera dans la liste et reste supprimable à la main. */
+      }
     }
     router.push("/");
   }
+
+  // ── Enregistrement automatique en brouillon (point 5 des retours GSS) ─────────────────
+  // Dès qu'une pièce est déposée, le dossier est enregistré comme « Brouillon » et tenu à jour
+  // à chaque changement. Il survit donc à la fermeture de l'onglet ou à un plantage, ce que la
+  // fenêtre de confirmation ne permettait pas (0 brouillon sur 101 dossiers en production).
+  // Au lancement, le même identifiant est réutilisé : le brouillon devient « En cours ».
+  useEffect(() => {
+    if (files.length === 0) return;                    // rien à enregistrer
+    if (isLaunching || isQuittingRef.current) return;  // le lancement / la sortie s'en charge
+    const timer = setTimeout(() => { void saveDossier(true); }, 1500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, isLaunching]);
 
   async function handleLaunch() {
     if (isLaunching) return;
