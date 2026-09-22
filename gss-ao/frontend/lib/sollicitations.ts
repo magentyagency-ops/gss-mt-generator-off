@@ -98,3 +98,25 @@ export async function learnReponsesRecues(
     }
   }
 }
+
+/**
+ * Découpe une saisie libre de destinataires en adresses uniques (point 7 des retours GSS).
+ * Accepte la virgule, le point-virgule, l'espace et le retour à la ligne, et tolère le
+ * copier-coller depuis un client mail (« Marie Vattier <marie@gss.fr> » → « marie@gss.fr »).
+ *
+ * Une seule adresse en entrée renvoie un tableau d'un élément : le comportement existant,
+ * validé par le client, est donc strictement préservé.
+ */
+export function parseDestinataires(saisie: string): string[] {
+  const vus = new Set<string>();
+  return (saisie || "")
+    .split(/[,;\s]+/)
+    .map((brut) => brut.trim().replace(/^[<"']+/, "").replace(/[>"',;.]+$/, ""))
+    .filter((adresse) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(adresse))
+    .filter((adresse) => {
+      const cle = adresse.toLowerCase();
+      if (vus.has(cle)) return false;
+      vus.add(cle);
+      return true;
+    });
+}

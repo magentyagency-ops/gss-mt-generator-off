@@ -16,7 +16,7 @@ import Link from "next/link";
 import { Send, Plus, Trash2, ArrowLeft, Mail, CheckCircle2, XCircle, Download } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
-import { type Dossier } from "@/lib/sollicitations";
+import { type Dossier, parseDestinataires } from "@/lib/sollicitations";
 
 // Une ligne de question saisie dans le formulaire (avant envoi).
 interface QuestionLine {
@@ -35,6 +35,7 @@ interface MissingField {
 // Résultat d'envoi d'une ligne (rapporté à l'utilisateur).
 interface LineResult {
   index: number;
+  destinataire: string;
   ok: boolean;
   detail: string; // question_id / reply-to si OK, message d'erreur sinon
 }
@@ -136,7 +137,19 @@ export default function NouvelleSollicitationPage() {
 
   // Validité : dossier + email + au moins une ligne complète, et toute ligne saisie complète.
   const linesValid = lines.every((l) => l.critere_concerne.trim() && l.question.trim());
-  const canSend = !!aoId && !!destinataireEmail.trim() && lines.length > 0 && linesValid && !sending;
+  // Adresses comprises par le champ (point 7 des retours GSS). Une seule adresse => comportement
+  // identique à l'existant. Chaque couple question × destinataire part avec son propre question_id.
+  const destinataires = useMemo(() => parseDestinataires(destinataireEmail), [destinataireEmail]);
+  const nbEnvois = lines.length * destinataires.length;
+  const canSend = !!aoId && destinataires.length > 0 && lines.length > 0 && linesValid && !sending;
+
+  function retirerDestinataire(adresse: string) {
+    setDestinataireEmail(
+      parseDestinataires(destinataireEmail)
+        .filter((d) => d.toLowerCase() !== adresse.toLowerCase())
+        .join(", "),
+    );
+  }
 
   // ── Envoi séquentiel : 1 ligne = 1 invoke send-question = 1 question_id ──────────
   async function handleSend() {
@@ -148,33 +161,39 @@ export default function NouvelleSollicitationPage() {
     const acc: LineResult[] = [];
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i];
-      // Contrat EXACT de SendFormCard (app/sollicitations/page.tsx) : invoke send-question.
-      const { data, error } = await supabase.functions.invoke("send-question", {
-        body: {
-          ao_id: aoId,
-          destinataire_email: destinataireEmail.trim(),
-          destinataire_nom: destinataireNom.trim() || undefined,
-          critere_concerne: l.critere_concerne.trim(),
-          question: l.question.trim(),
-        },
-      });
-
-      if (error) {
-        // Ne PAS masquer l'erreur : on remonte le message brut du fournisseur/fonction.
-        acc.push({ index: i, ok: false, detail: error.message || "Échec de l'envoi" });
-      } else if ((data as any)?.error) {
-        acc.push({ index: i, ok: false, detail: String((data as any).error) });
-      } else {
-        const replyTo = (data as any)?.email?.replyTo;
-        const qid = (data as any)?.question?.question_id;
-        const send = (data as any)?.send;
-        acc.push({
-          index: i,
-          ok: true,
-          detail: `${send?.dryRun ? "DRY-RUN" : `envoyée via ${send?.provider}`} · ${qid ?? ""}${replyTo ? ` · ${replyTo}` : ""}`,
+      // Chaque couple question × destinataire = 1 invoke = 1 question_id. Indispensable : c'est
+      // le question_id qui rattache une réponse, donc deux personnes ne peuvent pas le partager
+      // sans que la seconde réponse écrase la première.
+      for (const destinataire of destinataires) {
+        // Contrat EXACT de SendFormCard (app/sollicitations/page.tsx) : invoke send-question.
+        const { data, error } = await supabase.functions.invoke("send-question", {
+          body: {
+            ao_id: aoId,
+            destinataire_email: destinataire,
+            destinataire_nom: destinataireNom.trim() || undefined,
+            critere_concerne: l.critere_concerne.trim(),
+            question: l.question.trim(),
+          },
         });
+
+        if (error) {
+          // Ne PAS masquer l'erreur : on remonte le message brut du fournisseur/fonction.
+          acc.push({ index: i, destinataire, ok: false, detail: error.message || "Échec de l'envoi" });
+        } else if ((data as any)?.error) {
+          acc.push({ index: i, destinataire, ok: false, detail: String((data as any).error) });
+        } else {
+          const replyTo = (data as any)?.email?.replyTo;
+          const qid = (data as any)?.question?.question_id;
+          const send = (data as any)?.send;
+          acc.push({
+            index: i,
+            destinataire,
+            ok: true,
+            detail: `${send?.dryRun ? "DRY-RUN" : `envoyée via ${send?.provider}`} · ${qid ?? ""}${replyTo ? ` · ${replyTo}` : ""}`,
+          });
+        }
+        setResults([...acc]); // MAJ progressive : l'utilisateur voit l'avancement.
       }
-      setResults([...acc]); // MAJ progressive : l'utilisateur voit l'avancement.
     }
 
     setSending(false);
@@ -221,13 +240,40 @@ export default function NouvelleSollicitationPage() {
             )}
           </div>
           <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Destinataire — email *</label>
-            <input className="input" placeholder="prenom.nom@exemple.fr" value={destinataireEmail} onChange={(e) => setDestinataireEmail(e.target.value)} />
+            <label className="mb-1 block text-xs text-muted-foreground">Destinataires — emails *</label>
+            <input className="input" placeholder="prenom.nom@exemple.fr, autre@exemple.fr" value={destinataireEmail} onChange={(e) => setDestinataireEmail(e.target.value)} />
           </div>
           <div>
             <label className="mb-1 block text-xs text-muted-foreground">Destinataire — nom</label>
             <input className="input" placeholder="(optionnel)" value={destinataireNom} onChange={(e) => setDestinataireNom(e.target.value)} />
           </div>
+          {destinataires.length > 0 && (
+            <div className="sm:col-span-2">
+              <div className="flex flex-wrap gap-1.5">
+                {destinataires.map((d) => (
+                  <span
+                    key={d}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-input bg-background px-2.5 py-1 text-xs"
+                  >
+                    {d}
+                    <button
+                      type="button"
+                      aria-label={`Retirer ${d}`}
+                      className="leading-none text-muted-foreground transition-colors hover:text-destructive"
+                      onClick={() => retirerDestinataire(d)}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                {destinataires.length === 1
+                  ? "1 destinataire."
+                  : `${destinataires.length} destinataires · chacun recevra le même message et pourra répondre de son côté.`}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -291,12 +337,12 @@ export default function NouvelleSollicitationPage() {
           <CardHeader><CardTitle className="text-base">Résultat de l'envoi</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {results.map((r) => (
-              <div key={r.index} className="flex items-start gap-2 text-sm">
+              <div key={`${r.index}-${r.destinataire}`} className="flex items-start gap-2 text-sm">
                 {r.ok
                   ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
                   : <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />}
                 <span>
-                  <span className="font-medium">Question {r.index + 1} : </span>
+                  <span className="font-medium">Question {r.index + 1} → {r.destinataire} : </span>
                   <span className={r.ok ? "text-muted-foreground" : "text-destructive"}>{r.detail}</span>
                 </span>
               </div>
@@ -312,8 +358,19 @@ export default function NouvelleSollicitationPage() {
 
       <div className="flex items-center gap-2">
         <Button disabled={!canSend} onClick={handleSend}>
-          <Send /> {sending ? "Envoi en cours…" : "Envoyer"}
+          <Send />{" "}
+          {sending
+            ? "Envoi en cours…"
+            : nbEnvois > 1
+              ? `Envoyer (${nbEnvois} e-mails)`
+              : "Envoyer"}
         </Button>
+        {!sending && nbEnvois > 1 && (
+          <span className="text-xs text-muted-foreground">
+            {lines.length} question{lines.length > 1 ? "s" : ""} × {destinataires.length} destinataire
+            {destinataires.length > 1 ? "s" : ""}
+          </span>
+        )}
         <Link href="/inbox"><Button variant="ghost">Annuler</Button></Link>
       </div>
 

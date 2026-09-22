@@ -18,7 +18,7 @@ import {
 } from "@/components/ui";
 import { QuestionCard } from "@/components/question-card";
 import {
-  CRITICITE_LABEL, CRITICITE_OPTIONS, learnReponsesRecues,
+  CRITICITE_LABEL, CRITICITE_OPTIONS, learnReponsesRecues, parseDestinataires,
   type QuestionInterne, type Dossier,
 } from "@/lib/sollicitations";
 import { apiFetch } from "@/lib/api";
@@ -143,21 +143,48 @@ export default function SollicitationsPage() {
   async function sendTest(form: SendForm) {
     if (!aoId) return;
     setErr(null); setMsg(null);
-    const { data, error } = await supabase.functions.invoke("send-question", {
-      body: { ao_id: aoId, ...form },
-    });
-    if (error) { 
-      console.error("sendTest error:", error);
-      setErr(error.message || "Erreur inconnue lors de l'appel à l'Edge Function."); 
-      return; 
+
+    // Un envoi PAR destinataire (point 7 des retours GSS). Chacun obtient ainsi son propre
+    // question_id, donc sa réponse se rattache à SA ligne et n'écrase pas celle d'un collègue.
+    // Même motif que /sollicitations/nouveau : 1 invoke = 1 question_id.
+    const destinataires = parseDestinataires(form.destinataire_email);
+    if (destinataires.length === 0) {
+      setErr("Aucune adresse de destinataire valide.");
+      return;
     }
-    const send = (data as any)?.send;
-    const replyTo = (data as any)?.email?.replyTo;
-    setMsg(
-      send?.dryRun
-        ? `Question créée. Envoi en DRY-RUN (aucun fournisseur e-mail configuré). Reply-To : ${replyTo}`
-        : `Question envoyée via ${send?.provider}. Reply-To : ${replyTo}`,
-    );
+
+    const echecs: string[] = [];
+    let provider: string | undefined;
+    let replyTo: string | undefined;
+    let dryRun = false;
+
+    for (const destinataire of destinataires) {
+      const { data, error } = await supabase.functions.invoke("send-question", {
+        body: { ao_id: aoId, ...form, destinataire_email: destinataire },
+      });
+      if (error || (data as any)?.error) {
+        console.error("sendTest error:", destinataire, error ?? (data as any)?.error);
+        echecs.push(`${destinataire} (${error?.message ?? String((data as any)?.error)})`);
+        continue;
+      }
+      provider = (data as any)?.send?.provider;
+      replyTo = (data as any)?.email?.replyTo;
+      dryRun = !!(data as any)?.send?.dryRun;
+    }
+
+    const envoyees = destinataires.length - echecs.length;
+    if (echecs.length > 0) {
+      setErr(`Échec pour ${echecs.length} destinataire(s) : ${echecs.join(" ; ")}`);
+    }
+    if (envoyees > 0) {
+      const cible = envoyees === 1 ? destinataires[0] : `${envoyees} destinataires`;
+      setMsg(
+        dryRun
+          ? `Question créée pour ${cible}. Envoi en DRY-RUN (aucun fournisseur e-mail configuré).`
+          : `Question envoyée à ${cible} via ${provider}.` +
+            (envoyees === 1 && replyTo ? ` Reply-To : ${replyTo}` : ""),
+      );
+    }
     await loadQuestions();
   }
 
@@ -282,13 +309,52 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
   });
   const set = (k: keyof SendForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setF((p) => ({ ...p, [k]: e.target.value }));
-  const disabled = !f.destinataire_email || !f.critere_concerne || !f.question;
+  // Adresses comprises par le champ : affichées en pastilles pour que l'utilisateur VOIE qui
+  // va recevoir avant d'envoyer. Une seule adresse => comportement identique à l'existant.
+  const destinataires = useMemo(() => parseDestinataires(f.destinataire_email), [f.destinataire_email]);
+  const disabled = destinataires.length === 0 || !f.critere_concerne || !f.question;
+
+  function retirerDestinataire(adresse: string) {
+    setF((p) => ({
+      ...p,
+      destinataire_email: parseDestinataires(p.destinataire_email)
+        .filter((d) => d.toLowerCase() !== adresse.toLowerCase())
+        .join(", "),
+    }));
+  }
   return (
     <Card>
       <CardHeader><CardTitle className="text-base">Envoyer une question de test</CardTitle></CardHeader>
       <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <input className="input" placeholder="Destinataire (email) *" value={f.destinataire_email} onChange={set("destinataire_email")} />
+        <input className="input" placeholder="Destinataires (emails séparés par une virgule) *" value={f.destinataire_email} onChange={set("destinataire_email")} />
         <input className="input" placeholder="Destinataire (nom)" value={f.destinataire_nom} onChange={set("destinataire_nom")} />
+        {destinataires.length > 0 && (
+          <div className="sm:col-span-2">
+            <div className="flex flex-wrap gap-1.5">
+              {destinataires.map((d) => (
+                <span
+                  key={d}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-input bg-background px-2.5 py-1 text-xs"
+                >
+                  {d}
+                  <button
+                    type="button"
+                    aria-label={`Retirer ${d}`}
+                    className="leading-none text-muted-foreground transition-colors hover:text-destructive"
+                    onClick={() => retirerDestinataire(d)}
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {destinataires.length === 1
+                ? "1 destinataire."
+                : `${destinataires.length} destinataires · chacun recevra le même message et pourra répondre de son côté.`}
+            </p>
+          </div>
+        )}
         <input className="input sm:col-span-2" placeholder="Critère concerné *" value={f.critere_concerne} onChange={set("critere_concerne")} />
         <input className="input" placeholder="Catégorie" value={f.categorie} onChange={set("categorie")} />
         <select className="input" value={f.niveau_criticite} onChange={set("niveau_criticite")}>
@@ -297,7 +363,12 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
         <input className="input sm:col-span-2" type="date" value={f.date_limite} onChange={set("date_limite")} />
         <textarea className="input sm:col-span-2" rows={3} placeholder="Question *" value={f.question} onChange={set("question")} />
         <div className="sm:col-span-2">
-          <Button disabled={disabled} onClick={() => onSubmit(f)}><Send /> Envoyer la question</Button>
+          <Button disabled={disabled} onClick={() => onSubmit(f)}>
+            <Send />{" "}
+            {destinataires.length > 1
+              ? `Envoyer la question à ${destinataires.length} personnes`
+              : "Envoyer la question"}
+          </Button>
         </div>
       </CardContent>
       <style jsx>{`
