@@ -189,7 +189,7 @@ export default function NouvelleSollicitationPage() {
             index: i,
             destinataire,
             ok: true,
-            detail: `${send?.dryRun ? "DRY-RUN" : `envoyée via ${send?.provider}`} · ${qid ?? ""}${replyTo ? ` · ${replyTo}` : ""}`,
+            detail: `${send?.dryRun ? "DRY-RUN" : "envoyée"} · ${qid ?? ""}${replyTo ? ` · ${replyTo}` : ""}`,
           });
         }
         setResults([...acc]); // MAJ progressive : l'utilisateur voit l'avancement.
