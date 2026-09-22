@@ -154,7 +154,6 @@ export default function SollicitationsPage() {
     }
 
     const echecs: string[] = [];
-    let provider: string | undefined;
     let replyTo: string | undefined;
     let dryRun = false;
 
@@ -167,7 +166,6 @@ export default function SollicitationsPage() {
         echecs.push(`${destinataire} (${error?.message ?? String((data as any)?.error)})`);
         continue;
       }
-      provider = (data as any)?.send?.provider;
       replyTo = (data as any)?.email?.replyTo;
       dryRun = !!(data as any)?.send?.dryRun;
     }
@@ -178,10 +176,12 @@ export default function SollicitationsPage() {
     }
     if (envoyees > 0) {
       const cible = envoyees === 1 ? destinataires[0] : `${envoyees} destinataires`;
+      // Le nom du fournisseur d'e-mail est de la plomberie : il n'apprend rien au salarié.
+      // Le cas DRY-RUN garde sa mention explicite, c'est la seule distinction qui compte.
       setMsg(
         dryRun
           ? `Question créée pour ${cible}. Envoi en DRY-RUN (aucun fournisseur e-mail configuré).`
-          : `Question envoyée à ${cible} via ${provider}.` +
+          : `Question envoyée à ${cible}.` +
             (envoyees === 1 && replyTo ? ` Reply-To : ${replyTo}` : ""),
       );
     }
