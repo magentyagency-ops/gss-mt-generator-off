@@ -26,6 +26,47 @@ import { classifyDceFile, TYPE_LABELS } from "@/lib/dce-detect";
 // Ordre de la liste déroulante « type détecté » (l'utilisateur peut toujours corriger).
 const TYPES = ["RC", "CCAP", "CCTP", "BPU / DPGF", "Mémoire (cadre)", "Acte d'Engagement", "Compte Rendu", "Annexe", "Inconnu"];
 
+/** Archives ouvertes au dépôt (point 1 des retours GSS). */
+const ZIP_EXT = /\.zip$/i;
+
+/**
+ * Ouvre les .zip déposés et renvoie leur contenu comme des pièces ordinaires ; tout le reste
+ * passe inchangé. Le chemin interne est conservé sous la forme « archive/sous-dossier/piece.pdf »
+ * via `customPath`, exactement comme pour un dossier déposé : classifyDceFile et le backend
+ * continuent donc de fonctionner sans modification.
+ */
+async function expandZips(entries: File[]): Promise<File[]> {
+  if (!entries.some((f) => ZIP_EXT.test(f.name))) return entries;
+
+  const mod: any = await import("jszip");
+  const JSZip = mod.default ?? mod;
+  const out: File[] = [];
+
+  for (const entry of entries) {
+    if (!ZIP_EXT.test(entry.name)) {
+      out.push(entry);
+      continue;
+    }
+    try {
+      const zip = await JSZip.loadAsync(entry);
+      const base = entry.name.replace(ZIP_EXT, "");
+      for (const item of Object.values<any>(zip.files)) {
+        if (item.dir) continue;
+        // Résidus d'archives créées sous macOS : jamais des pièces du DCE.
+        if (item.name.startsWith("__MACOSX/") || item.name.endsWith(".DS_Store")) continue;
+        const blob: Blob = await item.async("blob");
+        const extracted = new File([blob], item.name.split("/").pop() || item.name, { type: blob.type });
+        (extracted as any).customPath = `${base}/${item.name}`;
+        out.push(extracted);
+      }
+    } catch {
+      // Archive illisible ou protégée : on la garde telle quelle plutôt que de perdre la pièce.
+      out.push(entry);
+    }
+  }
+  return out;
+}
+
 /** Fichier en cours de dépôt : DceFile + le File brut + le score de confiance du classement. */
 type StagedFile = DceFile & { file?: File; score?: number };
 
@@ -55,10 +96,11 @@ export default function NouveauDossierPage() {
     }
   }, [files]);
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files) {
+      const incoming = await expandZips(Array.from(e.target.files));
       let isDceFolder = false;
-      const newFiles = Array.from(e.target.files).map(file => {
+      const newFiles = incoming.map(file => {
         // file.webkitRelativePath might look like "DCE/mon_fichier.pdf"
         const relativePath = (file as any).customPath || file.webkitRelativePath || file.name;
         if (relativePath.includes("/")) {
@@ -356,11 +398,9 @@ export default function NouveauDossierPage() {
               onChange={handleFileChange} 
             />
             <div className="flex gap-3 mt-4">
-              {files.length > 0 && (
-                <Button variant="outline" size="sm" onClick={() => { isAppendingRef.current = true; fileInputRef.current?.click(); }}>
-                  Ajouter des fichiers
-                </Button>
-              )}
+              <Button variant="outline" size="sm" onClick={() => { isAppendingRef.current = true; fileInputRef.current?.click(); }}>
+                Fichier
+              </Button>
               <Button variant="default" size="sm" onClick={() => { isAppendingRef.current = false; folderInputRef.current?.click(); }}>
                 Déposer un dossier "DCE"
               </Button>
