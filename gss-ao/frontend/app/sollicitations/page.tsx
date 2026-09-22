@@ -10,7 +10,7 @@
 // de l'AO = responsable §11.8, la RLS réserve la mise à jour au propriétaire/admin).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Send, RefreshCw, Mail, Inbox, Sparkles } from "lucide-react";
+import { Send, RefreshCw, Mail, Inbox, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -337,6 +337,16 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [suggEnCours, setSuggEnCours] = useState(false);
   const [suggMotif, setSuggMotif] = useState<string | null>(null);
+  const [suggOuvert, setSuggOuvert] = useState(false);
+  const [voirPlus, setVoirPlus] = useState(false);
+
+  // Si la question change, les suggestions ne la concernent plus : on les efface plutôt que
+  // d'afficher des propositions calculées pour un autre texte.
+  useEffect(() => {
+    setSuggestions(null);
+    setSuggOuvert(false);
+    setVoirPlus(false);
+  }, [f.question]);
 
   /** Coche ou décoche une personne : son adresse est simplement ajoutée ou retirée du champ
    *  destinataires, qui reste la seule source de vérité. Les pastilles suivent d'elles-mêmes. */
@@ -362,12 +372,9 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
       const liste: Suggestion[] = Array.isArray(data?.suggestions) ? data.suggestions : [];
       setSuggestions(liste);
       setSuggMotif(data?.motif ?? null);
-      // La plus pertinente est pré-cochée, mais SEULEMENT si l'utilisateur n'a encore rien saisi :
-      // on ne touche jamais à un choix déjà fait.
-      const recommandee = liste.find((x) => x.recommande);
-      if (recommandee && parseDestinataires(f.destinataire_email).length === 0) {
-        basculerDestinataire(recommandee.email, true);
-      }
+      setSuggOuvert(true);
+      setVoirPlus(false);
+      // Aucune case n'est cochée d'avance : le choix du destinataire reste un acte délibéré.
     } catch {
       setSuggestions([]);
       setSuggMotif("suggestion_indisponible");
@@ -424,17 +431,22 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
             variant="outline"
             size="sm"
             disabled={!f.question.trim() || suggEnCours}
-            onClick={chercherDestinataires}
+            onClick={() => (suggestions ? setSuggOuvert((o) => !o) : chercherDestinataires())}
           >
-            <Sparkles className="size-4" /> {suggEnCours ? "Recherche…" : "Qui peut répondre ?"}
+            {suggestions ? (
+              suggOuvert ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />
+            ) : (
+              <Sparkles className="size-4" />
+            )}{" "}
+            {suggEnCours ? "Recherche…" : "Qui peut répondre ?"}
           </Button>
           {!f.question.trim() && (
             <span className="ml-2 text-xs text-muted-foreground">Écrivez d'abord la question.</span>
           )}
 
-          {suggestions && suggestions.length > 0 && (
+          {suggOuvert && suggestions && suggestions.length > 0 && (
             <ul className="mt-3 space-y-2">
-              {suggestions.map((sug) => {
+              {(voirPlus ? suggestions : suggestions.slice(0, 3)).map((sug) => {
                 const coche = destinataires.some((d) => d.toLowerCase() === sug.email.toLowerCase());
                 return (
                   <li key={sug.id}>
@@ -448,6 +460,11 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
                       <span className="min-w-0">
                         <span className="text-sm font-medium">{sug.nom}</span>
                         <span className="text-sm text-muted-foreground"> — {sug.fonction}</span>
+                        {sug.recommande && (
+                          <span className="ml-2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+                            Le plus indiqué
+                          </span>
+                        )}
                         {sug.raison && (
                           <span className="block text-xs text-muted-foreground">{sug.raison}</span>
                         )}
@@ -460,7 +477,24 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
             </ul>
           )}
 
-          {suggestions && suggestions.length === 0 && (
+          {/* Les personnes suivantes restent pertinentes, mais moins directement concernées.
+              Le moteur ne complète jamais la liste pour atteindre un quota : s'il n'a trouvé que
+              deux personnes utiles, ce bouton n'apparaît pas. */}
+          {suggOuvert && suggestions && suggestions.length > 3 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-2"
+              onClick={() => setVoirPlus((v) => !v)}
+            >
+              {voirPlus
+                ? "Voir moins"
+                : `Voir ${suggestions.length - 3} autre${suggestions.length - 3 > 1 ? "s" : ""} personne${suggestions.length - 3 > 1 ? "s" : ""}`}
+            </Button>
+          )}
+
+          {suggOuvert && suggestions && suggestions.length === 0 && (
             <p className="mt-2 text-xs text-muted-foreground">
               {suggMotif === "annuaire_vide"
                 ? "L'annuaire des collaborateurs est vide : ajoutez-y des personnes depuis Administration pour activer les suggestions."

@@ -264,7 +264,7 @@ export async function suggestPeopleForQuestion(
   question: string,
   critereConcerne: string,
   people: Personne[],
-  maxSuggestions = 3,
+  maxSuggestions = 6,
 ): Promise<SuggestionDestinataire[]> {
   if (!question.trim() || people.length === 0) return [];
 
@@ -286,9 +286,15 @@ export async function suggestPeopleForQuestion(
           content:
             "Tu aides une entreprise de sécurité privée (GSS) à orienter une question interne. " +
             "On te donne l'ANNUAIRE des collaborateurs avec leur fonction, et UNE question. " +
-            `Classe les ${maxSuggestions} personnes les plus pertinentes, la plus pertinente en premier, ` +
-            "en te fondant sur leur FONCTION. Pour chacune, donne une raison COURTE — une phrase de " +
-            "12 mots maximum, compréhensible par un non-technicien. N'invente aucun id.",
+            "Classe les personnes de la PLUS qualifiée pour répondre à la MOINS qualifiée, en te " +
+            "fondant sur leur FONCTION. L'ordre est strict : la première doit être celle qui peut " +
+            "répondre le plus directement.\n" +
+            `N'en propose JAMAIS plus de ${maxSuggestions}, et surtout : ne retiens QUE les personnes ` +
+            "réellement susceptibles d'apporter une réponse utile. Si une seule convient, n'en " +
+            "renvoie qu'une ; si aucune ne convient, renvoie une liste vide. Ne complète jamais la " +
+            "liste avec des personnes hors sujet pour atteindre un quota.\n" +
+            "Pour chacune, donne une raison COURTE — une phrase de 12 mots maximum, compréhensible " +
+            "par un non-technicien. N'invente aucun id.",
         },
         {
           role: 'user',
@@ -318,7 +324,9 @@ export async function suggestPeopleForQuestion(
         fonction: personne.fonction,
         email: personne.email,
         raison: typeof s?.raison === 'string' ? s.raison.trim() : '',
-        recommande: suggestions.length === 0,   // la première est pré-cochée
+        // Rang de tête : sert UNIQUEMENT à signaler la personne la plus indiquée à l'écran.
+        // Aucune case n'est cochée d'avance : le choix reste entièrement à l'utilisateur.
+        recommande: suggestions.length === 0,
       });
       if (suggestions.length >= maxSuggestions) break;
     }
