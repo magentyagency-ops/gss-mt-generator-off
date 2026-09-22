@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Send, RefreshCw, Mail, Inbox } from "lucide-react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   Button, Card, CardContent, CardHeader, CardTitle,
@@ -188,6 +189,10 @@ export default function SollicitationsPage() {
           <CardTitle className="text-base">Dossier (appel d'offres)</CardTitle>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={loadQuestions}><RefreshCw /> Rafraîchir</Button>
+            {/* Accès à l'historique complet, filtré sur le dossier courant. */}
+            <Link href={aoId ? `/inbox?ao=${aoId}` : "/inbox"}>
+              <Button variant="outline" size="sm"><Inbox className="size-4" /> Historique</Button>
+            </Link>
             <Button variant="outline" size="sm" onClick={createTestDossier}>+ Dossier de test</Button>
           </div>
         </CardHeader>

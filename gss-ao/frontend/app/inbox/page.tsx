@@ -24,6 +24,14 @@ export default function InboxPage() {
   const [questions, setQuestions] = useState<QuestionInterne[]>([]);
   const [dossiers, setDossiers] = useState<Dossier[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  // Filtre par dossier. "" = tous. Alimenté par ?ao=<id> pour arriver directement sur les
+  // échanges d'un appel d'offres depuis son onglet « Sollicitations ».
+  const [filtreAo, setFiltreAo] = useState<string>("");
+
+  useEffect(() => {
+    const ao = new URLSearchParams(window.location.search).get("ao");
+    if (ao) setFiltreAo(ao);
+  }, []);
 
   // ── Session ────────────────────────────────────────────────────────────────────
   const loadSession = useCallback(async () => {
@@ -93,6 +101,15 @@ export default function InboxPage() {
     return groups;
   }, [questions]);
 
+  const groupesAffiches = useMemo(
+    () => (filtreAo ? groupes.filter((g) => g.aoId === filtreAo) : groupes),
+    [groupes, filtreAo],
+  );
+  const nbAffichees = useMemo(
+    () => groupesAffiches.reduce((n, g) => n + g.items.length, 0),
+    [groupesAffiches],
+  );
+
   // ── Realtime : statut en temps réel (§12), sur toutes MES questions ──────────────
   useEffect(() => {
     if (!userEmail) return;
@@ -137,18 +154,57 @@ export default function InboxPage() {
         </div>
       </div>
 
+      {/* Filtre par dossier : consulter les échanges d'un seul appel d'offres sans perdre
+          la vue globale. Alimenté par ?ao= depuis l'onglet « Sollicitations » d'un dossier. */}
+      {groupes.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <label htmlFor="filtre-dossier" className="text-sm text-muted-foreground">
+            Filtrer par dossier
+          </label>
+          <select
+            id="filtre-dossier"
+            className="min-w-[16rem] flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+            value={filtreAo}
+            onChange={(e) => setFiltreAo(e.target.value)}
+          >
+            <option value="">Tous les dossiers ({questions.length})</option>
+            {groupes.map((g) => (
+              <option key={g.aoId} value={g.aoId}>
+                {dossierNomById.get(g.aoId) ?? "Dossier inconnu"} ({g.items.length})
+              </option>
+            ))}
+          </select>
+          {filtreAo && (
+            <Button variant="ghost" size="sm" onClick={() => setFiltreAo("")}>
+              Voir tous les dossiers
+            </Button>
+          )}
+        </div>
+      )}
+
       {err && (
         <div className="mb-3 rounded-md border border-destructive bg-destructive/10 p-3 text-sm">{err}</div>
       )}
 
       <div className="space-y-6">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-          <Inbox className="size-4" /> Toutes mes sollicitations ({questions.length})
+          <Inbox className="size-4" />
+          {filtreAo
+            ? `${dossierNomById.get(filtreAo) ?? "Dossier"} — ${nbAffichees} sollicitation${nbAffichees > 1 ? "s" : ""}`
+            : `Toutes mes sollicitations (${questions.length})`}
         </h2>
         {questions.length === 0 && (
           <p className="text-sm text-muted-foreground">Aucune sollicitation pour le moment.</p>
         )}
-        {groupes.map((g) => {
+        {questions.length > 0 && groupesAffiches.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            Aucune sollicitation pour ce dossier.{" "}
+            <button type="button" className="underline" onClick={() => setFiltreAo("")}>
+              Voir tous les dossiers
+            </button>
+          </p>
+        )}
+        {groupesAffiches.map((g) => {
           const nom = dossierNomById.get(g.aoId) ?? "Dossier inconnu";
           return (
             <section key={g.aoId} className="space-y-3">

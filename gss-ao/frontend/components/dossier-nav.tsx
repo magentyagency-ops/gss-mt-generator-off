@@ -79,9 +79,9 @@ export function DossierNav({ id }: { id: string }) {
 
       {/* Historique des questions envoyées à l'équipe et des réponses reçues pour CE dossier.
           Hors séquence : ce n'est pas une étape du parcours, donc ni numéro ni renumérotation
-          des onglets existants. `?ao=` est déjà géré par la page /sollicitations. */}
+          des onglets existants. `?ao=` filtre l'historique sur ce dossier. */}
       <Link
-        href={`/sollicitations?ao=${id}`}
+        href={`/inbox?ao=${id}`}
         className="ml-auto flex items-center gap-2 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <Mail className="h-4 w-4" />
