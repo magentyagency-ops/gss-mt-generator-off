@@ -15,6 +15,8 @@ import { learnSollicitationsForDossier, learnPendingSollicitations } from '../ge
 import { getGenerationGate } from '../generation/generation_gate';
 import { getSettings } from '../core/config';
 import { getScopedClient, requestContext } from '../core/supabase';
+import { createClient } from '@supabase/supabase-js';
+import { analyserAlerteVeille } from '../analysis/veille_parser';
 
 // Bucket privé où sont archivées les pièces des dossiers (DCE). Chemin : <userId>/dce/<dossierId>/<nom>
 // (le préfixe <userId> est imposé par la RLS Storage, cf. infra/supabase/001_schema.sql).
@@ -971,6 +973,86 @@ router.post('/export-docx', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Erreur export-docx:', error);
     res.status(500).json({ error: error.message || 'Erreur interne du serveur' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════════════
+// VEILLE — alertes d'appels d'offres reçues par e-mail
+// ════════════════════════════════════════════════════════════════════════════════════════
+// Bloc AUTONOME : il ne lit et n'écrit que dans `veille_alerte`, et ne touche à aucune autre
+// fonctionnalité. L'écriture passe par le service_role, la table n'ayant volontairement
+// aucune policy d'UPDATE (cf. migration 20260923100000_veille_alerte.sql).
+
+/** Client de confiance pour écrire dans veille_alerte. null si la configuration manque. */
+function clientVeilleAdmin() {
+  const { supabaseUrl, supabaseServiceRoleKey } = getSettings();
+  if (!supabaseUrl || !supabaseServiceRoleKey) return null;
+  return createClient(supabaseUrl, supabaseServiceRoleKey, { auth: { persistSession: false } });
+}
+
+// Liste des alertes reçues, la plus récente en premier.
+router.get('/veille/alertes', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await getScopedClient()
+      .from('veille_alerte')
+      .select('id, expediteur, expediteur_nom, sujet, corps, recu_at, statut, parsed, dossier_id')
+      .order('recu_at', { ascending: false })
+      .limit(100);
+    if (error) throw new Error(error.message);
+    res.json(data ?? []);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Analyse d'UNE alerte, à la demande. Le résultat est mis en cache dans `parsed` : une alerte
+// n'est jamais payée deux fois, et celles que personne n'ouvre ne coûtent rien.
+router.post('/veille/alertes/:id/analyser', async (req: Request, res: Response) => {
+  try {
+    const { data: alerte, error } = await getScopedClient()
+      .from('veille_alerte')
+      .select('id, sujet, corps, parsed')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!alerte) return res.status(404).json({ error: 'Alerte introuvable' });
+
+    if (alerte.parsed) return res.json({ parsed: alerte.parsed, cache: true });
+
+    const parsed = await analyserAlerteVeille(alerte.sujet ?? '', alerte.corps ?? '');
+    if (!parsed) return res.status(502).json({ error: "L'analyse de cette alerte n'a pas abouti." });
+
+    const admin = clientVeilleAdmin();
+    if (admin) {
+      await admin
+        .from('veille_alerte')
+        .update({ parsed, analysee_at: new Date().toISOString(), statut: 'analysee' })
+        .eq('id', alerte.id);
+    }
+    res.json({ parsed, cache: false });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Rattache le dossier créé depuis une alerte, pour qu'on voie qu'elle a déjà été traitée
+// et qu'un collègue ne recrée pas le même dossier.
+router.post('/veille/alertes/:id/lier-dossier', async (req: Request, res: Response) => {
+  try {
+    const dossierId = String(req.body?.dossier_id ?? '').trim();
+    if (!dossierId) return res.status(400).json({ error: 'dossier_id manquant' });
+
+    const admin = clientVeilleAdmin();
+    if (!admin) return res.status(503).json({ error: 'Configuration Supabase incomplète.' });
+
+    const { error } = await admin
+      .from('veille_alerte')
+      .update({ dossier_id: dossierId, statut: 'traitee' })
+      .eq('id', req.params.id);
+    if (error) throw new Error(error.message);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

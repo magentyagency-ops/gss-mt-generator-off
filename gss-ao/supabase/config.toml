@@ -422,3 +422,10 @@ verify_jwt = false
 # send-question exige un utilisateur authentifié (JWT) → RLS appliquée.
 [functions.send-question]
 verify_jwt = true
+
+# ── Veille — réception des alertes d'appels d'offres ───────────────────────────
+# inbound-veille est un webhook PUBLIC, comme inbound-email, mais TOTALEMENT SÉPARÉ :
+# adresse entrante distincte, secret distinct (VEILLE_WEBHOOK_SECRET), table distincte.
+# Les deux flux ne se croisent jamais — cf. l'en-tête de la fonction.
+[functions.inbound-veille]
+verify_jwt = false
