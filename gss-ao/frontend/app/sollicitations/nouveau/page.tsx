@@ -197,10 +197,9 @@ export default function NouvelleSollicitationPage() {
     }
 
     setSending(false);
-    // Tout OK → retour à la boîte de réception.
-    if (acc.every((r) => r.ok)) {
-      router.push("/inbox");
-    }
+    // On NE redirige plus vers la boîte de réception quand tout réussit : la redirection
+    // emportait l'utilisateur avant qu'il ait pu lire le compte rendu de son envoi. Il reste
+    // donc sur la page et voit à qui chaque question est partie.
   }
 
   // ── Rendu ────────────────────────────────────────────────────────────────────
