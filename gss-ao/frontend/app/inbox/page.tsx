@@ -133,7 +133,7 @@ export default function InboxPage() {
         <Card>
           <CardHeader><CardTitle>Connexion requise</CardTitle></CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Connectez-vous pour accéder à votre boîte de réception (auth du ticket #2).
+            Connectez-vous pour accéder à votre boîte de réception.
           </CardContent>
         </Card>
       </Shell>

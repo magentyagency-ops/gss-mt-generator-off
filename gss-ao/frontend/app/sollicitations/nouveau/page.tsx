@@ -212,7 +212,7 @@ export default function NouvelleSollicitationPage() {
         <Card>
           <CardHeader><CardTitle>Connexion requise</CardTitle></CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Connectez-vous pour rédiger une sollicitation (auth du ticket #2).
+            Connectez-vous pour rédiger une sollicitation.
           </CardContent>
         </Card>
       </Shell>

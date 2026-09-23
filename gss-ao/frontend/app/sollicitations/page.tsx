@@ -197,7 +197,7 @@ export default function SollicitationsPage() {
         <Card>
           <CardHeader><CardTitle>Connexion requise</CardTitle></CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Connectez-vous pour accéder aux sollicitations (auth du ticket #2).
+            Connectez-vous pour accéder aux sollicitations.
           </CardContent>
         </Card>
       </Shell>
