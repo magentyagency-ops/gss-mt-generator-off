@@ -435,7 +435,7 @@ export default function NouveauDossierPage() {
 
           {/* Required Slots */}
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold">Prérequis de l'IA (Required)</h2>
+            <h2 className="text-lg font-semibold">Prérequis de l'IA</h2>
             <div className="grid gap-3">
               {[
                 { type: "CCTP", label: "CCTP / CCP (Exigences techniques)", icon: Shield, missingBadge: "REQUIS", missingColor: "destructive" },

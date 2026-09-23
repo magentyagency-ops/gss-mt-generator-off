@@ -196,7 +196,7 @@ export default function VeillePage() {
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white">
               <Radar className="h-4 w-4 shrink-0" />
             </div>
-            <h1 className="text-xl font-semibold">Boîte de Réception Veille (Nukema)</h1>
+            <h1 className="text-xl font-semibold">Boîte de Réception Veille</h1>
           </div>
           <p className="text-sm text-muted-foreground">
             Alertes reçues automatiquement. Sélectionnez un e-mail pour extraire le DCE et initier le mémoire.

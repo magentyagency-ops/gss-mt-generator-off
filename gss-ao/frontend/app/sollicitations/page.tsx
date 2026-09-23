@@ -276,7 +276,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <Mail className="size-5" /> Sollicitation interne
       </h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        Envoi d'une question interne par e-mail et rattachement automatique de la réponse au dossier (spike, une question).
+        Posez une question à vos collègues par e-mail. Leur réponse est automatiquement rattachée au dossier.
       </p>
       {children}
     </div>
@@ -384,7 +384,7 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
   }
   return (
     <Card>
-      <CardHeader><CardTitle className="text-base">Envoyer une question de test</CardTitle></CardHeader>
+      <CardHeader><CardTitle className="text-base">Envoyer une question à l'équipe</CardTitle></CardHeader>
       <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <input className="input" placeholder="Destinataires (emails séparés par une virgule) *" value={f.destinataire_email} onChange={set("destinataire_email")} />
         <input className="input" placeholder="Destinataire (nom)" value={f.destinataire_nom} onChange={set("destinataire_nom")} />
