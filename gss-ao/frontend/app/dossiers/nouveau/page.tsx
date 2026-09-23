@@ -101,8 +101,10 @@ export default function NouveauDossierPage() {
   }, [files]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (e.target.files) {
-      const incoming = await expandZips(Array.from(e.target.files));
+    // L'élément est capturé AVANT l'await : ensuite, on en a encore besoin pour le réinitialiser.
+    const input = e.target;
+    if (input.files) {
+      const incoming = await expandZips(Array.from(input.files));
       let isDceFolder = false;
       const newFiles = incoming.map(file => {
         // file.webkitRelativePath might look like "DCE/mon_fichier.pdf"
@@ -134,6 +136,12 @@ export default function NouveauDossierPage() {
         setFiles(newFiles);
       }
       isAppendingRef.current = false; // Reset after use
+
+      // Un <input type="file"> ne déclenche onChange que si sa VALEUR change. Sans cette remise
+      // à zéro, re-sélectionner le MÊME dossier ou le même fichier ne produit aucun effet :
+      // l'utilisateur clique, choisit, et rien ne s'affiche. On la fait ici, après avoir lu les
+      // fichiers. Le glisser-déposer passe un objet simulé sans `value` : le test l'exclut.
+      if (typeof input.value === "string") input.value = "";
     }
   }
 
