@@ -11,7 +11,6 @@
 // invoke de send-question uniquement (même contrat que SendFormCard de app/sollicitations/page.tsx).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Send, Plus, Trash2, ArrowLeft, Mail, CheckCircle2, XCircle, Download } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -42,7 +41,6 @@ interface LineResult {
 
 export default function NouvelleSollicitationPage() {
   const supabase = useMemo(() => createClient(), []);
-  const router = useRouter();
 
   const [ready, setReady] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
