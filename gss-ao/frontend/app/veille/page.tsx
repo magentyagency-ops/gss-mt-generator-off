@@ -43,106 +43,98 @@ interface ParsedOpportunity {
   dceStatut?: "en_attente" | "extrait" | "non_dispo";
 }
 
-const DEMO_EMAILS = [
-  {
-    id: "demo-1",
-    sujet: "[Nukema] Alerte opportunité - Mairie de Port-Jérôme-sur-Seine",
-    expediteur: "Alerte Nukema <alerte@nukema.com>",
-    date: "Aujourd'hui, 14:15",
-    dpt: "76",
-    importance: "Haute",
-    contenu: `Bonjour Clarence,
+/** Alerte telle que renvoyée par le backend (table veille_alerte). */
+interface AlerteVeille {
+  id: string;
+  expediteur: string;
+  expediteur_nom: string | null;
+  sujet: string;
+  corps: string;
+  recu_at: string;
+  statut: "recue" | "analysee" | "traitee" | "ignoree";
+  parsed: ParsedOpportunity | null;
+  dossier_id: string | null;
+}
 
-Une nouvelle opportunité a été détectée sur votre zone géographique (76) :
-
-Acheteur : Mairie de Port-Jérôme-sur-Seine (76330)
-Objet : Prestations de surveillance physique des bâtiments communaux, du cinéma, de la salle de spectacles et sécurité événementielle.
-Date limite de réponse : 25 Juillet 2026 à 12:00
-Lots associés : Lot 1 (Gardiennage fixe), Lot 2 (Sécurité événementielle)
-
-Description sommaire :
-La commune recherche un prestataire qualifié pour assurer la surveillance de ses locaux administratifs et culturels. Présence d'agents SSIAP requise lors des représentations. Visite sur site recommandée le 5 Juillet 2026.
-
-Lien de l'appel d'offres : https://marches-publics.nukema.com/opportunities/d-982734`,
-    parsed: {
-      id: "demo-dossier-1",
-      acheteur: "Mairie de Port-Jérôme-sur-Seine",
-      objet: "Surveillance physique des bâtiments communaux et sécurité événementielle",
-      dateLimite: "2026-07-25",
-      departement: "76",
-      emailSummary: "Prestations de gardiennage et surveillance humaine des locaux communaux, cinéma, et salles de spectacle de la ville de Port-Jérôme. Le prestataire devra également fournir des agents de sécurité évènementielle pour les festivités locales et des agents SSIAP qualifiés.",
-      suggestionSections: [
-        "Section I : Moyens humains affectés spécifiquement au marché",
-        "Section II : Organisation des rondes de surveillance dans le cinéma",
-        "Section III : Dispositif de sécurité événementielle et gestion des foules",
-        "Section IV : Plan de continuité d'activité et palliatif des absences"
-      ],
-      lienUnique: "https://marches-publics.nukema.com/opportunities/d-982734",
-      dceStatut: "extrait" as const
-    }
-  },
-  {
-    id: "demo-2",
-    sujet: "[Nukema] Alerte opportunité - Métropole Rouen Normandie",
-    expediteur: "Alerte Nukema <alerte@nukema.com>",
-    date: "Hier, 09:30",
-    dpt: "76",
-    importance: "Moyenne",
-    contenu: `Bonjour Clarence,
-
-Une opportunité de marché public correspond à votre profil d'activité :
-
-Acheteur : Métropole Rouen Normandie
-Objet : Sécurité incendie et gardiennage des parkings relais et bâtiments techniques de la métropole.
-Date limite de réponse : 18 Août 2026
-Lots associés : Lot unique (Sécurité et Incendie)
-Département : Seine-Maritime (76)
-
-Description sommaire :
-Surveillance préventive contre le vandalisme et les intrusions sur les parkings P+R. Rondes mobiles régulières avec véhicule sérigraphié requis. Gestion des alarmes techniques.
-
-Lien : https://marches-publics.nukema.com/opportunities/d-1192304`,
-    parsed: {
-      id: "demo-dossier-2",
-      acheteur: "Métropole Rouen Normandie",
-      objet: "Sécurité incendie et gardiennage des parkings relais",
-      dateLimite: "2026-08-18",
-      departement: "76",
-      emailSummary: "Prestations de surveillance, gardiennage et sécurité incendie sur les différents parkings relais (P+R) et sites techniques gérés par la métropole de Rouen. Exigence forte sur la mise en place de rondes véhiculées régulières et d'une réactivité sur alarme technique.",
-      suggestionSections: [
-        "Section I : Moyens opérationnels et véhicules sérigraphiés",
-        "Section II : Protocoles de rondes et contrôle des parkings relais",
-        "Section III : Télésurveillance et levée de doute sur alarme",
-        "Section IV : Qualité des prestations et reporting métrique"
-      ],
-      lienUnique: "https://marches-publics.nukema.com/opportunities/d-1192304",
-      dceStatut: "en_attente" as const
-    }
-  }
-];
+/** Horodatage court pour la liste : « 14:15 » aujourd'hui, « 22/09 » sinon. */
+function heureCourte(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const aujourdhui = new Date();
+  const memeJour =
+    d.getDate() === aujourdhui.getDate() &&
+    d.getMonth() === aujourdhui.getMonth() &&
+    d.getFullYear() === aujourdhui.getFullYear();
+  return memeJour
+    ? d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+}
 
 export default function VeillePage() {
-  const [selectedEmailId, setSelectedEmailId] = useState<string>("demo-1");
+  const [alertes, setAlertes] = useState<AlerteVeille[]>([]);
+  const [chargementListe, setChargementListe] = useState(true);
+  const [erreurListe, setErreurListe] = useState<string | null>(null);
+  const [selectedEmailId, setSelectedEmailId] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<ParsedOpportunity | null>(null);
   const [simulatedDceStatus, setSimulatedDceStatus] = useState<"none" | "uploading" | "ready">("none");
 
-  // Get active email object
-  const activeEmail = DEMO_EMAILS.find(e => e.id === selectedEmailId) || DEMO_EMAILS[0];
-
-  // Instantly load parsed preview of active email (or mock processing)
+  // Alertes réellement reçues (table veille_alerte), la plus récente en premier.
   useEffect(() => {
+    let annule = false;
+    (async () => {
+      try {
+        const res = await apiFetch("/api/veille/alertes");
+        const data = await res.json();
+        if (annule) return;
+        const liste: AlerteVeille[] = Array.isArray(data) ? data : [];
+        setAlertes(liste);
+        if (liste.length > 0) setSelectedEmailId((id) => id || liste[0].id);
+      } catch {
+        if (!annule) setErreurListe("Impossible de charger les alertes de veille.");
+      } finally {
+        if (!annule) setChargementListe(false);
+      }
+    })();
+    return () => { annule = true; };
+  }, []);
+
+  const activeEmail = alertes.find((e) => e.id === selectedEmailId) ?? null;
+
+  // Analyse de l'alerte sélectionnée. Déclenchée à la demande et mise en cache côté base :
+  // une alerte déjà analysée ne redéclenche aucun appel au modèle.
+  useEffect(() => {
+    if (!activeEmail) { setPreview(null); return; }
+    let annule = false;
     setLoading(true);
     setPreview(null);
     setSimulatedDceStatus("none");
 
-    const timer = setTimeout(() => {
-      setPreview(activeEmail.parsed);
-      setLoading(false);
-    }, 400);
+    (async () => {
+      try {
+        if (activeEmail.parsed) {
+          if (!annule) setPreview(activeEmail.parsed);
+          return;
+        }
+        const res = await apiFetch(`/api/veille/alertes/${activeEmail.id}/analyser`, { method: "POST" });
+        const data = await res.json();
+        if (annule) return;
+        if (data?.parsed) {
+          setPreview(data.parsed as ParsedOpportunity);
+          // Mémorise le résultat dans la liste : re-sélectionner l'alerte ne relancera rien.
+          setAlertes((prev) => prev.map((a) => (a.id === activeEmail.id ? { ...a, parsed: data.parsed } : a)));
+        } else {
+          setPreview(null);
+        }
+      } catch {
+        if (!annule) setPreview(null);
+      } finally {
+        if (!annule) setLoading(false);
+      }
+    })();
 
-    return () => clearTimeout(timer);
-  }, [selectedEmailId]);
+    return () => { annule = true; };
+  }, [selectedEmailId, activeEmail]);
 
   const handleSimulateDceUpload = () => {
     setSimulatedDceStatus("uploading");
@@ -151,40 +143,50 @@ export default function VeillePage() {
     }, 1800);
   };
 
-  const handleConfirmDossier = (dossierId: string) => {
-    const selectedDemo = DEMO_EMAILS.find(d => d.parsed.id === dossierId);
-    if (selectedDemo) {
-      // Identifiant réel (UUID) attendu par la table Supabase dossiers.
-      const newId = crypto.randomUUID();
-      // Save the dossier in real DB so it gets persisted on dashboard
-      apiFetch("/api/dossiers", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: newId,
-          acheteur: selectedDemo.parsed.acheteur,
-          objet: selectedDemo.parsed.objet,
-          dateLimite: selectedDemo.parsed.dateLimite,
-          departement: selectedDemo.parsed.departement,
-          statut: "Brouillon",
-          responsable: "Sacha",
-          emailSummary: selectedDemo.parsed.emailSummary,
-          suggestionSections: selectedDemo.parsed.suggestionSections,
-          importedFromEmail: true,
-          dce_files: simulatedDceStatus === "ready" ? [
-            { nom: `CCTP_Gardiennage_${selectedDemo.parsed.acheteur.replace(/\s+/g, "_")}.pdf`, type: "pdf", taille: "3.8 Mo", statut: "ok" },
-            { nom: `RC_${selectedDemo.parsed.acheteur.replace(/\s+/g, "_")}_2026.pdf`, type: "pdf", taille: "1.5 Mo", statut: "ok" }
-          ] : []
-        })
-      }).then(() => {
-        window.location.href = `/dossiers/${newId}`;
-      }).catch(err => {
-        console.error("Error creating demo dossier:", err);
-        window.location.href = "/";
-      });
-    }
+  const handleConfirmDossier = () => {
+    if (!preview || !activeEmail) return;
+    // Identifiant réel (UUID) attendu par la table Supabase dossiers.
+    const newId = crypto.randomUUID();
+    const alerteId = activeEmail.id;
+    // Le chemin de création du dossier est INCHANGÉ : seules les données qui l'alimentent
+    // viennent désormais d'une alerte réellement reçue, et non d'un exemple codé en dur.
+    apiFetch("/api/dossiers", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: newId,
+        acheteur: preview.acheteur,
+        objet: preview.objet,
+        dateLimite: preview.dateLimite,
+        departement: preview.departement,
+        statut: "Brouillon",
+        responsable: "Sacha",
+        emailSummary: preview.emailSummary,
+        suggestionSections: preview.suggestionSections,
+        importedFromEmail: true,
+        dce_files: simulatedDceStatus === "ready" ? [
+          { nom: `CCTP_Gardiennage_${preview.acheteur.replace(/\s+/g, "_")}.pdf`, type: "pdf", taille: "3.8 Mo", statut: "ok" },
+          { nom: `RC_${preview.acheteur.replace(/\s+/g, "_")}_2026.pdf`, type: "pdf", taille: "1.5 Mo", statut: "ok" }
+        ] : []
+      })
+    }).then(async () => {
+      // Trace le dossier issu de cette alerte : un collègue verra qu'elle est déjà traitée.
+      try {
+        await apiFetch(`/api/veille/alertes/${alerteId}/lier-dossier`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dossier_id: newId }),
+        });
+      } catch {
+        /* Le dossier est créé, c'est l'essentiel : le rattachement est un confort. */
+      }
+      window.location.href = `/dossiers/${newId}`;
+    }).catch(err => {
+      console.error("Erreur lors de la création du dossier depuis une alerte :", err);
+      window.location.href = "/";
+    });
   };
 
   return (
@@ -203,8 +205,8 @@ export default function VeillePage() {
           </p>
         </div>
         <div>
-          <Badge variant="outline" className="bg-white/10 text-white border-white/20 animate-pulse font-medium">
-            🔴 Simulateur d'alertes actif
+          <Badge variant="outline" className="bg-white/10 text-white border-white/20 font-medium">
+            {alertes.length} alerte{alertes.length > 1 ? "s" : ""} reçue{alertes.length > 1 ? "s" : ""}
           </Badge>
         </div>
       </header>
@@ -217,11 +219,22 @@ export default function VeillePage() {
           <div className="p-3 border-b border-border/60 bg-muted/20">
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
               <Inbox className="h-3.5 w-3.5" />
-              Courriers entrants ({DEMO_EMAILS.length})
+              Courriers entrants ({alertes.length})
             </div>
           </div>
           <div className="divide-y divide-border/40">
-            {DEMO_EMAILS.map((email) => {
+            {chargementListe && (
+              <p className="p-4 text-xs text-muted-foreground">Chargement des alertes…</p>
+            )}
+            {!chargementListe && erreurListe && (
+              <p className="p-4 text-xs text-destructive">{erreurListe}</p>
+            )}
+            {!chargementListe && !erreurListe && alertes.length === 0 && (
+              <p className="p-4 text-xs text-muted-foreground">
+                Aucune alerte reçue pour le moment. Les alertes arrivent par e-mail et s'affichent ici automatiquement.
+              </p>
+            )}
+            {alertes.map((email) => {
               const active = selectedEmailId === email.id;
               return (
                 <div
@@ -236,23 +249,30 @@ export default function VeillePage() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-semibold text-xs text-foreground truncate">
-                      {(email as any).acheteur || "Nukema"}
+                      {email.parsed?.acheteur || email.expediteur_nom || email.expediteur}
                     </span>
                     <span className="text-[10px] text-muted-foreground shrink-0 flex items-center gap-0.5">
                       <Clock className="h-2.5 w-2.5" />
-                      {email.date.split(", ")[1] || email.date}
+                      {heureCourte(email.recu_at)}
                     </span>
                   </div>
                   <div className="text-xs font-medium text-foreground/90 truncate">
                     {email.sujet}
                   </div>
                   <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
-                    {email.contenu.replace(/Bonjour Clarence,/, "").trim()}
+                    {email.corps.trim()}
                   </p>
                   <div className="flex items-center gap-1.5 mt-1">
-                    <Badge variant="outline" className="text-[9px] py-0.5 px-1 bg-background font-normal border-border/80">
-                      Dpt {email.dpt}
-                    </Badge>
+                    {email.parsed?.departement && (
+                      <Badge variant="outline" className="text-[9px] py-0.5 px-1 bg-background font-normal border-border/80">
+                        Dpt {email.parsed.departement}
+                      </Badge>
+                    )}
+                    {email.dossier_id && (
+                      <Badge variant="outline" className="text-[9px] py-0.5 px-1 bg-success/10 text-success border-success/20 font-normal">
+                        Dossier créé
+                      </Badge>
+                    )}
                     <Badge variant="outline" className="text-[9px] py-0.5 px-1 bg-primary/5 text-primary border-primary/20 font-normal">
                       Nukema Alert
                     </Badge>
@@ -271,6 +291,13 @@ export default function VeillePage() {
               <Loader2 className="h-8 w-8 text-primary animate-spin mb-3" />
               <p className="text-sm text-muted-foreground">Chargement de l'alerte email...</p>
             </div>
+          ) : !activeEmail ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center">
+              <Inbox className="h-8 w-8 text-muted-foreground mb-3" />
+              <p className="text-sm text-muted-foreground">
+                Aucune alerte sélectionnée. Les alertes reçues par e-mail apparaissent dans la colonne de gauche.
+              </p>
+            </div>
           ) : (
             <div className="space-y-6 max-w-4xl mx-auto w-full">
               
@@ -284,17 +311,14 @@ export default function VeillePage() {
                       </CardTitle>
                       <div className="flex flex-col gap-1 text-xs text-muted-foreground">
                         <div>De : <span className="font-medium text-foreground">{activeEmail.expediteur}</span></div>
-                        <div>Date : <span className="font-medium text-foreground">{activeEmail.date}</span></div>
+                        <div>Date : <span className="font-medium text-foreground">{new Date(activeEmail.recu_at).toLocaleString("fr-FR")}</span></div>
                       </div>
                     </div>
-                    <Badge variant="outline" className="bg-background border-border text-muted-foreground shrink-0 font-normal">
-                      Priorité {activeEmail.importance}
-                    </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-5 pb-5">
                   <div className="whitespace-pre-line text-xs font-mono leading-relaxed text-foreground/90 bg-background/40 rounded-lg p-4 border border-border/30">
-                    {activeEmail.contenu}
+                    {activeEmail.corps}
                   </div>
                 </CardContent>
               </Card>
@@ -419,7 +443,7 @@ export default function VeillePage() {
                     </CardContent>
                     <CardFooter className="flex justify-end border-t border-border/40 pt-4 bg-muted/10">
                       <Button 
-                        onClick={() => handleConfirmDossier(preview.id)}
+                        onClick={handleConfirmDossier}
                         className="gap-2 w-full sm:w-auto bg-primary hover:bg-primary/95 text-primary-foreground font-medium shadow"
                       >
                         {simulatedDceStatus === "ready" ? "Lancer la génération du mémoire technique" : "Créer le brouillon de dossier"}
