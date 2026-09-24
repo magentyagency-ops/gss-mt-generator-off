@@ -108,38 +108,6 @@ export default function SollicitationsPage() {
   }, [supabase, aoId, loadQuestions]);
 
   // ── Actions ────────────────────────────────────────────────────────────────────
-  async function createTestDossier() {
-    setErr(null);
-    const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
-    const ref = `AO-TEST-${String(Date.now()).slice(-5)}`;
-    
-    // On génère un dossier "riche" correspondant aux attendus du projet GSS (Gardiennage, Sécurité)
-    // avec des champs manquants pour pouvoir tester la boucle "Demander à l'équipe".
-    const { error } = await supabase.from("dossiers").insert({
-      nom: `Marché de test GSS (${stamp})`,
-      contenu: { 
-        reference: ref, 
-        objet: `Prestations de gardiennage et de sécurité - Test (${stamp})`,
-        acheteur: "Mairie de Démonstration",
-        statut: "En cours",
-        responsable: "Sacha",
-        dateLimite: new Date(Date.now() + 15 * 24 * 3600 * 1000).toISOString(),
-        lots: [
-          { intitule: "Lot 1 - Sécurité des bâtiments administratifs" },
-          { intitule: "Lot 2 - Gardiennage événementiel" }
-        ],
-        memoire_cadre_state: {
-          missingFields: [
-            { id: "missing-1", label: "Nom du dirigeant", context: "Organigramme de la société GSS" },
-            { id: "missing-2", label: "Numéro d'agrément CNAPS", context: "Autorisation légale d'exercer" },
-            { id: "missing-3", label: "Certifications RSE et ISO", context: "Engagements de l'entreprise" }
-          ]
-        }
-      },
-    });
-    if (error) setErr(error.message); else await loadDossiers();
-  }
-
   async function sendTest(form: SendForm) {
     if (!aoId) return;
     setErr(null); setMsg(null);
@@ -220,12 +188,11 @@ export default function SollicitationsPage() {
             <Link href={aoId ? `/inbox?ao=${aoId}` : "/inbox"}>
               <Button variant="outline" size="sm"><Inbox className="size-4" /> Historique</Button>
             </Link>
-            <Button variant="outline" size="sm" onClick={createTestDossier}>+ Dossier de test</Button>
           </div>
         </CardHeader>
         <CardContent>
           {dossiers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Aucun dossier. Créez-en un de test ci-dessus.</p>
+            <p className="text-sm text-muted-foreground">Aucun dossier. Créez-en un depuis l'onglet Dossiers.</p>
           ) : (
             <select
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"

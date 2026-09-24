@@ -273,9 +273,6 @@ export default function VeillePage() {
                         Dossier créé
                       </Badge>
                     )}
-                    <Badge variant="outline" className="text-[9px] py-0.5 px-1 bg-primary/5 text-primary border-primary/20 font-normal">
-                      Nukema Alert
-                    </Badge>
                   </div>
                 </div>
               );
@@ -348,7 +345,7 @@ export default function VeillePage() {
                         <div className="flex flex-col items-center justify-center p-6 border border-dashed border-border rounded-lg bg-background/25 hover:bg-background/40 transition-colors">
                           <Download className="h-7 w-7 text-muted-foreground/60 mb-2" />
                           <p className="text-xs text-muted-foreground mb-3 text-center">
-                            Extraire le DCE (CCTP, Règlement) directement depuis le lien Nukema contenu dans ce mail.
+                            Extraire le DCE (CCTP, Règlement) directement depuis le lien contenu dans ce mail.
                           </p>
                           <Button size="sm" onClick={handleSimulateDceUpload} className="gap-1.5 text-xs font-medium">
                             <Sparkles className="h-3.5 w-3.5" />
