@@ -70,6 +70,18 @@ function heureCourte(iso: string): string {
     : d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
 }
 
+/**
+ * Masquage temporaire de la liste des alertes Nukema — demande de Clarence, le temps de
+ * vérifier la faisabilité de la veille.
+ *
+ * RIEN N'EST SUPPRIMÉ. La page, la table, l'Edge Function de réception et les endpoints
+ * restent en place et continuent de fonctionner : les alertes reçues sont toujours
+ * enregistrées en base, elles ne sont simplement plus affichées.
+ *
+ * POUR RÉTABLIR : passer cette constante à false. Rien d'autre à faire.
+ */
+const ALERTES_MASQUEES = true;
+
 export default function VeillePage() {
   const [alertes, setAlertes] = useState<AlerteVeille[]>([]);
   const [chargementListe, setChargementListe] = useState(true);
@@ -81,6 +93,8 @@ export default function VeillePage() {
 
   // Alertes réellement reçues (table veille_alerte), la plus récente en premier.
   useEffect(() => {
+    // Masquage temporaire : on n'interroge même pas le serveur, la liste reste vide.
+    if (ALERTES_MASQUEES) { setChargementListe(false); return; }
     let annule = false;
     (async () => {
       try {
