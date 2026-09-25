@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(396.7,330.0) rotate(0.0) scale(1.3)"/>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(797.3,330.0) rotate(0.0) scale(1.3)"/>
+<rect x="40.0" y="185.0" width="310.7" height="290.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb78"><rect x="40.0" y="185.0" width="310.7" height="290.0" rx="22"/></clipPath><rect x="40.0" y="185.0" width="310.7" height="87.0" fill="#6298C0" clip-path="url(#cb78)"/>
+<circle cx="195.3" cy="272.0" r="32.0" fill="#FBFAF4"/><circle cx="195.3" cy="272.0" r="26.0" fill="#1D49A7"/><g transform="translate(195.3,272.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-15" y="-10" width="30" height="20" rx="3"/><circle cx="-7" cy="-1" r="4"/><path d="M-12,7 C-12,3 -2,3 -2,7 M3,-4 L11,-4 M3,1 L11,1 M3,6 L8,6"/></g>
+<text x="58.0" y="211.0" font-size="15" font-weight="700" fill="#1D49A7" text-anchor="start" letter-spacing="1">01</text>
+<text x="195.3" y="359.9" font-size="25" font-weight="700" fill="#463A2F" text-anchor="middle">Au recrutement</text>
+<text x="195.3" y="400.0" font-size="20" font-weight="400" fill="#463A2F" text-anchor="middle">Vérification des diplômes et</text>
+<text x="195.3" y="427.2" font-size="20" font-weight="400" fill="#463A2F" text-anchor="middle">des cartes professionnelles</text>
+<rect x="440.7" y="185.0" width="310.7" height="290.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb79"><rect x="440.7" y="185.0" width="310.7" height="290.0" rx="22"/></clipPath><rect x="440.7" y="185.0" width="310.7" height="87.0" fill="#6298C0" clip-path="url(#cb79)"/>
+<circle cx="596.0" cy="272.0" r="32.0" fill="#FBFAF4"/><circle cx="596.0" cy="272.0" r="26.0" fill="#1D49A7"/><g transform="translate(596.0,272.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-14" y="-11" width="28" height="25" rx="3"/><path d="M-14,-3 L14,-3 M-7,-15 L-7,-8 M7,-15 L7,-8 M-6,4 L-2,4 M3,4 L7,4 M-6,9 L-2,9"/></g>
+<text x="458.7" y="211.0" font-size="15" font-weight="700" fill="#1D49A7" text-anchor="start" letter-spacing="1">02</text>
+<text x="596.0" y="344.9" font-size="25" font-weight="700" fill="#463A2F" text-anchor="middle">Le jour J d'un</text>
+<text x="596.0" y="374.9" font-size="25" font-weight="700" fill="#463A2F" text-anchor="middle">événement</text>
+<text x="596.0" y="415.0" font-size="20" font-weight="400" fill="#463A2F" text-anchor="middle">Carte professionnelle à jour</text>
+<text x="596.0" y="442.2" font-size="20" font-weight="400" fill="#463A2F" text-anchor="middle">et bien visible</text>
+<rect x="841.3" y="185.0" width="310.7" height="290.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb80"><rect x="841.3" y="185.0" width="310.7" height="290.0" rx="22"/></clipPath><rect x="841.3" y="185.0" width="310.7" height="87.0" fill="#6298C0" clip-path="url(#cb80)"/>
+<circle cx="996.7" cy="272.0" r="32.0" fill="#FBFAF4"/><circle cx="996.7" cy="272.0" r="26.0" fill="#1D49A7"/><g transform="translate(996.7,272.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-13" y="-13" width="26" height="26" rx="5"/><path d="M-6,0 L-1,5 L7,-5"/></g>
+<text x="859.3" y="211.0" font-size="15" font-weight="700" fill="#1D49A7" text-anchor="start" letter-spacing="1">03</text>
+<text x="996.7" y="345.8" font-size="24.5" font-weight="700" fill="#463A2F" text-anchor="middle">À chaque contrôle</text>
+<text x="996.7" y="375.2" font-size="24.5" font-weight="700" fill="#463A2F" text-anchor="middle">technique</text>
+<text x="996.7" y="414.4" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="middle">Possession du badge et de la</text>
+<text x="996.7" y="440.9" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="middle">carte professionnelle à jour</text>
+</svg>

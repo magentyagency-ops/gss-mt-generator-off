@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<path d="M515.0,242.4 L404.0,128.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M478.0,330.0 L404.0,330.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M515.0,417.6 L404.0,532.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M684.1,241.6 L792.0,128.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M722.0,330.0 L792.0,330.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M684.1,418.4 L792.0,532.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<circle cx="600.0" cy="330.0" r="118" fill="#E5CA97" filter="url(#od)"/>
+<text x="600.0" y="284.0" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">SSIAP 1</text>
+<text x="600.0" y="319.1" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Service de sécurité</text>
+<text x="600.0" y="342.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">incendie et</text>
+<text x="600.0" y="366.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">d'assistance à</text>
+<text x="600.0" y="390.5" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">personnes</text>
+<rect x="40.0" y="62.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb11"><rect x="40.0" y="62.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="40.0" y="62.0" width="72.0" height="132.0" fill="#ECDEC2" clip-path="url(#cb11)"/>
+<circle cx="76.0" cy="128.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="128.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,128.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,15 C-10,15 -12,6 -9,0 C-7,-5 -3,-7 -3,-13 C3,-10 6,-5 5,1 C7,-1 8,-3 8,-5 C12,1 11,15 0,15 z"/></g>
+<text x="128.0" y="106.3" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Le feu</text>
+<text x="128.0" y="140.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Propagation, classes de feu,</text>
+<text x="128.0" y="163.5" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">fumées</text>
+<rect x="40.0" y="264.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb12"><rect x="40.0" y="264.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="40.0" y="264.0" width="72.0" height="132.0" fill="#ECDEC2" clip-path="url(#cb12)"/>
+<circle cx="76.0" cy="330.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="330.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,330.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-12,15 L-12,-14 L6,-14 L6,15 M6,-4 L13,-4 L13,15 M-16,15 L16,15"/><path d="M-7,-8 L-3,-8 M1,-8 L1,-8 M-7,-2 L-3,-2 M-7,4 L-3,4 M-4,15 L-4,9"/></g>
+<text x="128.0" y="308.3" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Sécurité incendie</text>
+<text x="128.0" y="342.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">ERP, IGH, desserte,</text>
+<text x="128.0" y="365.5" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">évacuation</text>
+<rect x="40.0" y="466.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb13"><rect x="40.0" y="466.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="40.0" y="466.0" width="72.0" height="132.0" fill="#ECDEC2" clip-path="url(#cb13)"/>
+<circle cx="76.0" cy="532.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="532.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,532.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-6" y="-8" width="12" height="23" rx="4"/><path d="M-3,-8 L-3,-12 L3,-12 L3,-8 M0,-12 L0,-15 L9,-15 L12,-10"/></g>
+<text x="128.0" y="510.3" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Moyens de secours</text>
+<text x="128.0" y="544.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Extinction, aide aux</text>
+<text x="128.0" y="567.5" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">pompiers, alerte</text>
+<rect x="802.0" y="62.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb14"><rect x="802.0" y="62.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="802.0" y="62.0" width="72.0" height="132.0" fill="#6298C0" clip-path="url(#cb14)"/>
+<circle cx="838.0" cy="128.0" r="28.0" fill="#FBFAF4"/><circle cx="838.0" cy="128.0" r="22.0" fill="#1D49A7"/><g transform="translate(838.0,128.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,10 L-10,-2 C-10,-9 10,-9 10,-2 L10,10 z M-14,10 L14,10 M0,-12 L0,-16 M-11,-10 L-14,-13 M11,-10 L14,-13"/></g>
+<text x="890.0" y="94.7" font-size="20.5" font-weight="700" fill="#463A2F" text-anchor="start">Système de sécurité</text>
+<text x="890.0" y="119.3" font-size="20.5" font-weight="700" fill="#463A2F" text-anchor="start">incendie</text>
+<text x="890.0" y="152.4" font-size="16.5" font-weight="400" fill="#463A2F" text-anchor="start">Détection, mise en sécurité,</text>
+<text x="890.0" y="174.8" font-size="16.5" font-weight="400" fill="#463A2F" text-anchor="start">zones</text>
+<rect x="802.0" y="264.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb15"><rect x="802.0" y="264.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="802.0" y="264.0" width="72.0" height="132.0" fill="#ECDEC2" clip-path="url(#cb15)"/>
+<circle cx="838.0" cy="330.0" r="28.0" fill="#FBFAF4"/><circle cx="838.0" cy="330.0" r="22.0" fill="#8A7550"/><g transform="translate(838.0,330.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M3,-15 L-9,2 L0,2 L-3,15 L9,-2 L0,-2 z"/></g>
+<text x="890.0" y="296.7" font-size="20.5" font-weight="700" fill="#463A2F" text-anchor="start">Installations</text>
+<text x="890.0" y="321.3" font-size="20.5" font-weight="700" fill="#463A2F" text-anchor="start">techniques</text>
+<text x="890.0" y="354.4" font-size="16.5" font-weight="400" fill="#463A2F" text-anchor="start">Électricité, ascenseurs,</text>
+<text x="890.0" y="376.8" font-size="16.5" font-weight="400" fill="#463A2F" text-anchor="start">colonnes</text>
+<rect x="802.0" y="466.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb16"><rect x="802.0" y="466.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="802.0" y="466.0" width="72.0" height="132.0" fill="#F0D3A3" clip-path="url(#cb16)"/>
+<circle cx="838.0" cy="532.0" r="28.0" fill="#FBFAF4"/><circle cx="838.0" cy="532.0" r="22.0" fill="#E99842"/><g transform="translate(838.0,532.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,-15 L5,-15 L11,-9 L11,15 L-10,15 z"/><path d="M-5,-4 L6,-4 M-5,2 L6,2 M-5,8 L2,8"/></g>
+<text x="890.0" y="510.3" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Rôle et missions</text>
+<text x="890.0" y="544.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Main courante, registre,</text>
+<text x="890.0" y="567.5" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">rondes, secours</text>
+</svg>

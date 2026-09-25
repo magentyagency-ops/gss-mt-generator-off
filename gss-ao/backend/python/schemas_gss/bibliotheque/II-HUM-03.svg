@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="159.2" width="521.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb9"><rect x="40.0" y="159.2" width="521.0" height="104.0" rx="22"/></clipPath><rect x="40.0" y="159.2" width="72.0" height="104.0" fill="#6298C0" clip-path="url(#cb9)"/>
+<circle cx="76.0" cy="211.2" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="211.2" r="22.0" fill="#1D49A7"/><g transform="translate(76.0,211.2) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-16,0 C-9,-11 9,-11 16,0 C9,11 -9,11 -16,0 z"/><circle cx="0" cy="0" r="4.5"/></g>
+<text x="128.0" y="217.8" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Contrôle des effets personnels</text>
+<rect x="40.0" y="287.2" width="521.0" height="205.7" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<circle cx="74.4" cy="368.2" r="4.8" fill="#463A2F"/>
+<text x="92.4" y="376.3" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Une vérification visuelle uniquement</text>
+<circle cx="74.4" cy="409.2" r="4.8" fill="#463A2F"/>
+<text x="92.4" y="417.4" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Sacs à main, sacs à dos…</text>
+<rect x="631.0" y="159.2" width="521.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb10"><rect x="631.0" y="159.2" width="521.0" height="104.0" rx="22"/></clipPath><rect x="631.0" y="159.2" width="72.0" height="104.0" fill="#6298C0" clip-path="url(#cb10)"/>
+<circle cx="667.0" cy="211.2" r="28.0" fill="#FBFAF4"/><circle cx="667.0" cy="211.2" r="22.0" fill="#1D49A7"/><g transform="translate(667.0,211.2) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-8,14 L-11,2 C-12,-1 -8,-2 -7,1 L-6,4 L-6,-10 C-6,-13 -2,-13 -2,-10 L-2,-1 L-2,-13 C-2,-16 2,-16 2,-13 L2,-1 L2,-11 C2,-14 6,-14 6,-11 L6,0 L6,-7 C6,-10 10,-10 10,-7 L10,6 C10,11 7,14 3,14 z"/></g>
+<text x="719.0" y="217.8" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Palpation de sécurité</text>
+<rect x="631.0" y="287.2" width="521.0" height="205.7" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<circle cx="665.4" cy="331.3" r="4.8" fill="#463A2F"/>
+<text x="683.4" y="339.5" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Les mains par-dessus les vêtements</text>
+<text x="683.4" y="372.1" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">et les accessoires</text>
+<circle cx="665.4" cy="405.0" r="4.8" fill="#463A2F"/>
+<text x="683.4" y="413.2" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Pour déceler tout objet dangereux</text>
+<circle cx="665.4" cy="446.1" r="4.8" fill="#463A2F"/>
+<text x="683.4" y="454.2" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Par une personne du même sexe</text>
+<circle cx="596.0" cy="390.0" r="30" fill="#484545" filter="url(#od)"/>
+<text x="596.0" y="397.0" font-size="17" font-weight="800" fill="#F5F5DE" text-anchor="middle">OU</text>
+</svg>

@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="50.4" width="348.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb22"><rect x="40.0" y="50.4" width="348.0" height="104.0" rx="22"/></clipPath><rect x="40.0" y="50.4" width="72.0" height="104.0" fill="#F0D3A3" clip-path="url(#cb22)"/>
+<circle cx="76.0" cy="102.4" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="102.4" r="22.0" fill="#E99842"/><g transform="translate(76.0,102.4) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-6" y="-8" width="12" height="23" rx="4"/><path d="M-3,-8 L-3,-12 L3,-12 L3,-8 M0,-12 L0,-15 L9,-15 L12,-10"/></g>
+<text x="128.0" y="97.0" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Équipier de première</text>
+<text x="128.0" y="121.0" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">intervention</text>
+<rect x="40.0" y="178.4" width="348.0" height="423.1" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<circle cx="74.4" cy="266.1" r="4.8" fill="#463A2F"/>
+<text x="92.4" y="274.2" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Intervenir en sécurité</text>
+<text x="92.4" y="306.9" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">face à un départ de</text>
+<text x="92.4" y="339.5" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">feu</text>
+<circle cx="74.4" cy="372.4" r="4.8" fill="#463A2F"/>
+<text x="92.4" y="380.5" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Une intervention</text>
+<text x="92.4" y="413.2" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">rapide et</text>
+<text x="92.4" y="445.8" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">proportionnée</text>
+<circle cx="74.4" cy="478.7" r="4.8" fill="#463A2F"/>
+<text x="92.4" y="486.9" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Maintenir et actualiser</text>
+<text x="92.4" y="519.5" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">les compétences</text>
+<rect x="422.0" y="50.4" width="348.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb23"><rect x="422.0" y="50.4" width="348.0" height="104.0" rx="22"/></clipPath><rect x="422.0" y="50.4" width="72.0" height="104.0" fill="#F0D3A3" clip-path="url(#cb23)"/>
+<circle cx="458.0" cy="102.4" r="28.0" fill="#FBFAF4"/><circle cx="458.0" cy="102.4" r="22.0" fill="#E99842"/><g transform="translate(458.0,102.4) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><circle cx="-7" cy="-6" r="5"/><circle cx="8" cy="-6" r="5"/><path d="M-16,12 C-16,3 2,3 2,12"/><path d="M0,12 C0,3 17,3 17,12"/></g>
+<text x="510.0" y="97.0" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Équipier de seconde</text>
+<text x="510.0" y="121.0" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">intervention</text>
+<rect x="422.0" y="178.4" width="348.0" height="423.1" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<circle cx="455.7" cy="227.5" r="4.4" fill="#463A2F"/>
+<text x="472.2" y="235.0" font-size="22" font-weight="400" fill="#463A2F" text-anchor="start">Garder un niveau de</text>
+<text x="472.2" y="264.9" font-size="22" font-weight="400" fill="#463A2F" text-anchor="start">compétence</text>
+<text x="472.2" y="294.9" font-size="22" font-weight="400" fill="#463A2F" text-anchor="start">opérationnel</text>
+<circle cx="455.7" cy="325.0" r="4.4" fill="#463A2F"/>
+<text x="472.2" y="332.5" font-size="22" font-weight="400" fill="#463A2F" text-anchor="start">Procédures de protection</text>
+<text x="472.2" y="362.4" font-size="22" font-weight="400" fill="#463A2F" text-anchor="start">des personnes et des</text>
+<text x="472.2" y="392.3" font-size="22" font-weight="400" fill="#463A2F" text-anchor="start">installations</text>
+<circle cx="455.7" cy="422.5" r="4.4" fill="#463A2F"/>
+<text x="472.2" y="429.9" font-size="22" font-weight="400" fill="#463A2F" text-anchor="start">Personnalisable selon</text>
+<text x="472.2" y="459.9" font-size="22" font-weight="400" fill="#463A2F" text-anchor="start">vos procédures</text>
+<circle cx="455.7" cy="490.0" r="4.4" fill="#463A2F"/>
+<text x="472.2" y="497.5" font-size="22" font-weight="400" fill="#463A2F" text-anchor="start">Animateurs issus du</text>
+<text x="472.2" y="527.4" font-size="22" font-weight="400" fill="#463A2F" text-anchor="start">cycle de formation du</text>
+<text x="472.2" y="557.3" font-size="22" font-weight="400" fill="#463A2F" text-anchor="start">CNPP</text>
+<rect x="804.0" y="50.4" width="348.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb24"><rect x="804.0" y="50.4" width="348.0" height="104.0" rx="22"/></clipPath><rect x="804.0" y="50.4" width="72.0" height="104.0" fill="#F0D3A3" clip-path="url(#cb24)"/>
+<circle cx="840.0" cy="102.4" r="28.0" fill="#FBFAF4"/><circle cx="840.0" cy="102.4" r="22.0" fill="#E99842"/><g transform="translate(840.0,102.4) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-5,-14 L5,-14 L5,-5 L14,-5 L14,5 L5,5 L5,14 L-5,14 L-5,5 L-14,5 L-14,-5 L-5,-5 z"/></g>
+<text x="892.0" y="97.0" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Sauveteur secouriste</text>
+<text x="892.0" y="121.0" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">du travail</text>
+<rect x="804.0" y="178.4" width="348.0" height="423.1" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<circle cx="838.4" cy="266.1" r="4.8" fill="#463A2F"/>
+<text x="856.4" y="274.2" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Pour les personnes</text>
+<text x="856.4" y="306.9" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">qualifiées SST ou PSC1</text>
+<circle cx="838.4" cy="339.7" r="4.8" fill="#463A2F"/>
+<text x="856.4" y="347.9" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Une compétence</text>
+<text x="856.4" y="380.5" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">opérationnelle accrue</text>
+<circle cx="838.4" cy="413.4" r="4.8" fill="#463A2F"/>
+<text x="856.4" y="421.6" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Mises en situation</text>
+<text x="856.4" y="454.2" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">ciblées selon vos</text>
+<text x="856.4" y="486.9" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">risques et votre</text>
+<text x="856.4" y="519.5" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">activité</text>
+</svg>

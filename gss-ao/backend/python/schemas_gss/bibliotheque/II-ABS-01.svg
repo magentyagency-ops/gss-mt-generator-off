@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+
+<path d="M178.1,322.6 A212,212 0 0 1 601.9,322.6 L523.9,325.3 A134,134 0 0 0 256.1,325.3 Z" fill="#ECDEC2" stroke="#FBFAF4" stroke-width="4" stroke-linejoin="round" filter="url(#op)"/>
+<path d="M601.9,337.4 A212,212 0 0 1 178.1,337.4 L256.1,334.7 A134,134 0 0 0 523.9,334.7 Z" fill="#484545" stroke="#FBFAF4" stroke-width="4" stroke-linejoin="round" filter="url(#op)"/>
+<text x="390.0" y="159.0" font-size="15" font-weight="800" fill="#463A2F" text-anchor="middle">VACATION</text>
+<text x="390.0" y="178.0" font-size="15" font-weight="800" fill="#463A2F" text-anchor="middle">DE JOUR</text>
+<text x="390.0" y="495.0" font-size="15" font-weight="800" fill="#F5F5DE" text-anchor="middle">VACATION</text>
+<text x="390.0" y="514.0" font-size="15" font-weight="800" fill="#F5F5DE" text-anchor="middle">DE NUIT</text>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(501.2,197.5) rotate(40.0) scale(1.1)"/>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#F5F5DE" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(501.2,462.5) rotate(140.0) scale(1.1)"/>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#F5F5DE" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(278.8,462.5) rotate(220.0) scale(1.1)"/>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(278.8,197.5) rotate(320.0) scale(1.1)"/>
+<circle cx="606.0" cy="330.0" r="15" fill="#F0D3A3" stroke="#484545" stroke-width="3"/>
+<text x="632.0" y="327.0" font-size="13" font-weight="800" fill="#463A2F" text-anchor="start">PRISE DE</text>
+<text x="632.0" y="343.0" font-size="13" font-weight="800" fill="#463A2F" text-anchor="start">SERVICE</text>
+<circle cx="174.0" cy="330.0" r="15" fill="#F0D3A3" stroke="#484545" stroke-width="3"/>
+<text x="148.0" y="327.0" font-size="13" font-weight="800" fill="#463A2F" text-anchor="end">PRISE DE</text>
+<text x="148.0" y="343.0" font-size="13" font-weight="800" fill="#463A2F" text-anchor="end">SERVICE</text>
+<circle cx="390" cy="330" r="104" fill="#FBFAF4" filter="url(#od)"/>
+<text x="390.0" y="344.0" font-size="48" font-weight="800" fill="#463A2F" text-anchor="middle">24/7</text>
+<text x="390.0" y="372.0" font-size="14" font-weight="500" fill="#463A2F" text-anchor="middle">sans poste vide</text>
+<rect x="770.0" y="96.0" width="380.0" height="130.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb137"><rect x="770.0" y="96.0" width="380.0" height="130.0" rx="22"/></clipPath><rect x="770.0" y="96.0" width="72.0" height="130.0" fill="#ECDEC2" clip-path="url(#cb137)"/>
+<circle cx="806.0" cy="161.0" r="28.0" fill="#FBFAF4"/><circle cx="806.0" cy="161.0" r="22.0" fill="#8A7550"/><g transform="translate(806.0,161.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="0" r="14"/><path d="M0,-8 L0,0 L6,4"/></g>
+<text x="858.0" y="138.8" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Prise de service</text>
+<text x="858.0" y="173.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">15 minutes avant la vacation,</text>
+<text x="858.0" y="197.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">auprès du responsable de site</text>
+<rect x="770.0" y="262.0" width="380.0" height="130.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb138"><rect x="770.0" y="262.0" width="380.0" height="130.0" rx="22"/></clipPath><rect x="770.0" y="262.0" width="72.0" height="130.0" fill="#E78E83" clip-path="url(#cb138)"/>
+<circle cx="806.0" cy="327.0" r="28.0" fill="#FBFAF4"/><circle cx="806.0" cy="327.0" r="22.0" fill="#DD4E49"/><g transform="translate(806.0,327.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-14 L15,12 L-15,12 z"/><path d="M0,-4 L0,4 M0,8 L0,8.5"/></g>
+<text x="858.0" y="304.8" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Pas de prise de service</text>
+<text x="858.0" y="339.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">10 minutes avant : l'agent</text>
+<text x="858.0" y="363.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">d'astreinte est mobilisé</text>
+<rect x="770.0" y="428.0" width="380.0" height="130.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb139"><rect x="770.0" y="428.0" width="380.0" height="130.0" rx="22"/></clipPath><rect x="770.0" y="428.0" width="72.0" height="130.0" fill="#F0D3A3" clip-path="url(#cb139)"/>
+<circle cx="806.0" cy="493.0" r="28.0" fill="#FBFAF4"/><circle cx="806.0" cy="493.0" r="22.0" fill="#E99842"/><g transform="translate(806.0,493.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-15,4 L-15,-1 L-10,-8 L10,-8 L15,-1 L15,4 z"/><circle cx="-8" cy="6" r="3.5"/><circle cx="8" cy="6" r="3.5"/></g>
+<text x="858.0" y="470.8" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Agent d'astreinte</text>
+<text x="858.0" y="505.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Sur site en 60 minutes</text>
+<text x="858.0" y="529.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">maximum</text>
+</svg>

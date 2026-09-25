@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<path d="M600.0,266.0 L600.0,290.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M215.3,290.0 L976.7,290.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<line x1="215.3" y1="290.0" x2="215.3" y2="315.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<line x1="596.0" y1="290.0" x2="596.0" y2="315.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<line x1="976.7" y1="290.0" x2="976.7" y2="315.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<rect x="389.6" y="148.0" width="420.8" height="110.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb85"><rect x="389.6" y="148.0" width="420.8" height="110.0" rx="8"/></clipPath><rect x="389.6" y="148.0" width="72.0" height="110.0" fill="#E5CA97" clip-path="url(#cb85)"/>
+<circle cx="425.6" cy="203.0" r="28.0" fill="#FBFAF4"/><circle cx="425.6" cy="203.0" r="22.0" fill="#8A7550"/><g transform="translate(425.6,203.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-15 L13,-10 L13,0 C13,8 7,13 0,16 C-7,13 -13,8 -13,0 L-13,-10 z"/><path d="M-5,0 L-1,4 L6,-4"/></g>
+<text x="477.6" y="193.5" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Filtrage du site</text>
+<text x="477.6" y="225.6" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">Gestion des moyens d'accès</text>
+<rect x="40.0" y="322.0" width="350.7" height="190.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb86"><rect x="40.0" y="322.0" width="350.7" height="190.0" rx="8"/></clipPath><rect x="40.0" y="322.0" width="72.0" height="190.0" fill="#6298C0" clip-path="url(#cb86)"/>
+<circle cx="76.0" cy="417.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="417.0" r="22.0" fill="#1D49A7"/><g transform="translate(76.0,417.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,15 L-10,-15 L10,-15 L10,15 M-14,15 L14,15"/><circle cx="5" cy="1" r="1.6"/></g>
+<text x="128.0" y="405.8" font-size="24" font-weight="700" fill="#463A2F" text-anchor="start">Entrées et sorties</text>
+<text x="128.0" y="444.0" font-size="19" font-weight="400" fill="#463A2F" text-anchor="start">Filtrage des personnes</text>
+<rect x="420.7" y="322.0" width="350.7" height="190.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb87"><rect x="420.7" y="322.0" width="350.7" height="190.0" rx="8"/></clipPath><rect x="420.7" y="322.0" width="72.0" height="190.0" fill="#6298C0" clip-path="url(#cb87)"/>
+<circle cx="456.7" cy="417.0" r="28.0" fill="#FBFAF4"/><circle cx="456.7" cy="417.0" r="22.0" fill="#1D49A7"/><g transform="translate(456.7,417.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-16,7 L-16,-8 L4,-8 L4,7 M4,-3 L11,-3 L15,2 L15,7 L4,7"/><circle cx="-9" cy="9" r="3"/><circle cx="9" cy="9" r="3"/></g>
+<text x="508.7" y="392.9" font-size="24" font-weight="700" fill="#463A2F" text-anchor="start">Livraisons</text>
+<text x="508.7" y="431.1" font-size="19" font-weight="400" fill="#463A2F" text-anchor="start">Gestion des accès</text>
+<text x="508.7" y="457.0" font-size="19" font-weight="400" fill="#463A2F" text-anchor="start">livraison</text>
+<rect x="801.3" y="322.0" width="350.7" height="190.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb88"><rect x="801.3" y="322.0" width="350.7" height="190.0" rx="8"/></clipPath><rect x="801.3" y="322.0" width="72.0" height="190.0" fill="#6298C0" clip-path="url(#cb88)"/>
+<circle cx="837.3" cy="417.0" r="28.0" fill="#FBFAF4"/><circle cx="837.3" cy="417.0" r="22.0" fill="#1D49A7"/><g transform="translate(837.3,417.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-14,6 C-14,-8 -6,-13 0,-13 C6,-13 14,-8 14,6 z M-16,6 L16,6 M0,-13 L0,-3"/></g>
+<text x="889.3" y="378.5" font-size="24" font-weight="700" fill="#463A2F" text-anchor="start">Entreprises</text>
+<text x="889.3" y="407.3" font-size="24" font-weight="700" fill="#463A2F" text-anchor="start">extérieures</text>
+<text x="889.3" y="445.5" font-size="19" font-weight="400" fill="#463A2F" text-anchor="start">Gestion des accès des</text>
+<text x="889.3" y="471.4" font-size="19" font-weight="400" fill="#463A2F" text-anchor="start">entreprises intervenantes</text>
+</svg>

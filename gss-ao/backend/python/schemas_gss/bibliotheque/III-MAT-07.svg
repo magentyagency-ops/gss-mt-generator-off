@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<path d="M515.0,242.4 L404.0,128.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M478.0,330.0 L404.0,330.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M515.0,417.6 L404.0,532.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M684.1,241.6 L792.0,128.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M722.0,330.0 L792.0,330.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M684.1,418.4 L792.0,532.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<circle cx="600.0" cy="330.0" r="118" fill="#E5CA97" filter="url(#od)"/>
+<text x="600.0" y="319.7" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Nos outils</text>
+<text x="600.0" y="354.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Au service du suivi</text>
+<rect x="40.0" y="62.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb30"><rect x="40.0" y="62.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="40.0" y="62.0" width="72.0" height="132.0" fill="#ECDEC2" clip-path="url(#cb30)"/>
+<circle cx="76.0" cy="128.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="128.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,128.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-12" y="-15" width="24" height="30" rx="3"/><path d="M-6,-7 L6,-7 M-6,-1 L6,-1 M-6,5 L2,5"/></g>
+<text x="128.0" y="105.2" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Main courante</text>
+<text x="128.0" y="130.4" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">électronique</text>
+<text x="128.0" y="164.5" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Rapports et prises de service</text>
+<rect x="40.0" y="264.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb31"><rect x="40.0" y="264.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="40.0" y="264.0" width="72.0" height="132.0" fill="#ECDEC2" clip-path="url(#cb31)"/>
+<circle cx="76.0" cy="330.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="330.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,330.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-14" y="-11" width="28" height="25" rx="3"/><path d="M-14,-3 L14,-3 M-7,-15 L-7,-8 M7,-15 L7,-8 M-6,4 L-2,4 M3,4 L7,4 M-6,9 L-2,9"/></g>
+<text x="128.0" y="319.8" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Comète</text>
+<text x="128.0" y="353.9" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Planification des agents</text>
+<rect x="40.0" y="466.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb32"><rect x="40.0" y="466.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="40.0" y="466.0" width="72.0" height="132.0" fill="#F0D3A3" clip-path="url(#cb32)"/>
+<circle cx="76.0" cy="532.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="532.0" r="22.0" fill="#E99842"/><g transform="translate(76.0,532.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-13,-5 L11,-5 M5,-11 L11,-5 L5,1 M13,5 L-11,5 M-5,-1 L-11,5 L-5,11"/></g>
+<text x="128.0" y="510.3" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Comète link</text>
+<text x="128.0" y="544.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Consignes envoyées en</text>
+<text x="128.0" y="567.5" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">temps réel</text>
+<rect x="802.0" y="62.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb33"><rect x="802.0" y="62.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="802.0" y="62.0" width="72.0" height="132.0" fill="#6298C0" clip-path="url(#cb33)"/>
+<circle cx="838.0" cy="128.0" r="28.0" fill="#FBFAF4"/><circle cx="838.0" cy="128.0" r="22.0" fill="#1D49A7"/><g transform="translate(838.0,128.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-13" y="-13" width="26" height="26" rx="5"/><path d="M-6,0 L-1,5 L7,-5"/></g>
+<text x="890.0" y="117.8" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">ControlMaster</text>
+<text x="890.0" y="151.9" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Contrôle des prestations</text>
+<rect x="802.0" y="264.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb34"><rect x="802.0" y="264.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="802.0" y="264.0" width="72.0" height="132.0" fill="#F0D3A3" clip-path="url(#cb34)"/>
+<circle cx="838.0" cy="330.0" r="28.0" fill="#FBFAF4"/><circle cx="838.0" cy="330.0" r="22.0" fill="#E99842"/><g transform="translate(838.0,330.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-14 L15,12 L-15,12 z"/><path d="M0,-4 L0,4 M0,8 L0,8.5"/></g>
+<text x="890.0" y="319.8" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Beepiz</text>
+<text x="890.0" y="353.9" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Protection du travailleur isolé</text>
+<rect x="802.0" y="466.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb35"><rect x="802.0" y="466.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="802.0" y="466.0" width="72.0" height="132.0" fill="#B8CCB1" clip-path="url(#cb35)"/>
+<circle cx="838.0" cy="532.0" r="28.0" fill="#FBFAF4"/><circle cx="838.0" cy="532.0" r="22.0" fill="#377E3F"/><g transform="translate(838.0,532.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-8,15 L-3,-15 M8,15 L3,-15 M0,11 L0,6 M0,1 L0,-3 M0,-8 L0,-11"/></g>
+<text x="890.0" y="521.8" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Mapo</text>
+<text x="890.0" y="555.9" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Itinéraires optimisés</text>
+</svg>

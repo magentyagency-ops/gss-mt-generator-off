@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<path d="M600.0,264.0 L600.0,146.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M492.2,328.8 L404.0,282.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M495.0,448.1 L404.0,502.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M707.3,327.9 L792.0,282.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M704.4,449.1 L792.0,502.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<circle cx="600.0" cy="386.0" r="118" fill="#E5CA97" filter="url(#od)"/>
+<text x="600.0" y="380.1" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Management de</text>
+<text x="600.0" y="406.5" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">proximité</text>
+<rect x="390.0" y="28.0" width="420.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb80"><rect x="390.0" y="28.0" width="420.0" height="104.0" rx="22"/></clipPath><rect x="390.0" y="28.0" width="72.0" height="104.0" fill="#ECDEC2" clip-path="url(#cb80)"/>
+<circle cx="426.0" cy="80.0" r="28.0" fill="#FBFAF4"/><circle cx="426.0" cy="80.0" r="22.0" fill="#8A7550"/><g transform="translate(426.0,80.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><circle cx="1" cy="-12" r="3.5"/><path d="M1,-7 L-1,4 L-6,14 M-1,4 L5,14 M-7,-2 L0,-6 L6,-1"/></g>
+<text x="478.0" y="59.6" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Présence terrain</text>
+<text x="478.0" y="91.8" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">Les encadrants rencontrent</text>
+<text x="478.0" y="113.5" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">régulièrement les agents</text>
+<rect x="40.0" y="207.0" width="350.0" height="150.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb81"><rect x="40.0" y="207.0" width="350.0" height="150.0" rx="22"/></clipPath><rect x="40.0" y="207.0" width="72.0" height="150.0" fill="#ECDEC2" clip-path="url(#cb81)"/>
+<circle cx="76.0" cy="282.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="282.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,282.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-14" y="-11" width="28" height="25" rx="3"/><path d="M-14,-3 L14,-3 M-7,-15 L-7,-8 M7,-15 L7,-8 M-6,4 L-2,4 M3,4 L7,4 M-6,9 L-2,9"/></g>
+<text x="128.0" y="260.3" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Planification</text>
+<text x="128.0" y="294.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Selon les impératifs</text>
+<text x="128.0" y="317.5" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">familiaux des agents</text>
+<rect x="40.0" y="427.0" width="350.0" height="150.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb82"><rect x="40.0" y="427.0" width="350.0" height="150.0" rx="22"/></clipPath><rect x="40.0" y="427.0" width="72.0" height="150.0" fill="#ECDEC2" clip-path="url(#cb82)"/>
+<circle cx="76.0" cy="502.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="502.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,502.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M10,-11 C3,-17 -10,-12 -10,0 C-10,12 3,17 10,11 M-15,-4 L4,-4 M-15,4 L4,4"/></g>
+<text x="128.0" y="480.3" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Avances sur salaire</text>
+<text x="128.0" y="514.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Facilitées à la demande de</text>
+<text x="128.0" y="537.5" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">l'agent</text>
+<rect x="802.0" y="207.0" width="350.0" height="150.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb83"><rect x="802.0" y="207.0" width="350.0" height="150.0" rx="22"/></clipPath><rect x="802.0" y="207.0" width="72.0" height="150.0" fill="#ECDEC2" clip-path="url(#cb83)"/>
+<circle cx="838.0" cy="282.0" r="28.0" fill="#FBFAF4"/><circle cx="838.0" cy="282.0" r="22.0" fill="#8A7550"/><g transform="translate(838.0,282.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-13" y="-4" width="26" height="18" rx="2"/><path d="M-15,-9 L15,-9 L15,-4 L-15,-4 z M0,-9 L0,14 M0,-9 C-3,-15 -10,-15 -8,-10 M0,-9 C3,-15 10,-15 8,-10"/></g>
+<text x="890.0" y="260.3" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Attentions</text>
+<text x="890.0" y="294.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Cadeaux de naissance et de</text>
+<text x="890.0" y="317.5" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">fin d'année</text>
+<rect x="802.0" y="427.0" width="350.0" height="150.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb84"><rect x="802.0" y="427.0" width="350.0" height="150.0" rx="22"/></clipPath><rect x="802.0" y="427.0" width="72.0" height="150.0" fill="#B8CCB1" clip-path="url(#cb84)"/>
+<circle cx="838.0" cy="502.0" r="28.0" fill="#FBFAF4"/><circle cx="838.0" cy="502.0" r="22.0" fill="#377E3F"/><g transform="translate(838.0,502.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,13 C-16,2 -14,-12 -6,-12 C-2,-12 0,-8 0,-8 C0,-8 2,-12 6,-12 C14,-12 16,2 0,13 z"/></g>
+<text x="890.0" y="480.3" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Culture d'entreprise</text>
+<text x="890.0" y="514.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Vie professionnelle et vie</text>
+<text x="890.0" y="537.5" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">personnelle conciliées</text>
+</svg>

@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="110.3" width="348.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb17"><rect x="40.0" y="110.3" width="348.0" height="104.0" rx="22"/></clipPath><rect x="40.0" y="110.3" width="72.0" height="104.0" fill="#ECDEC2" clip-path="url(#cb17)"/>
+<circle cx="76.0" cy="162.3" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="162.3" r="22.0" fill="#8A7550"/><g transform="translate(76.0,162.3) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-15,-8 C-15,6 -8,14 0,14 C8,14 15,6 15,-8 C8,-12 -8,-12 -15,-8 z"/><path d="M-8,-2 L-3,-2 M3,-2 L8,-2 M-5,7 C-2,9 2,9 5,7"/></g>
+<text x="128.0" y="168.9" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Cinéma et spectacles</text>
+<rect x="40.0" y="238.3" width="348.0" height="303.4" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<circle cx="74.4" cy="315.0" r="4.8" fill="#463A2F"/>
+<text x="92.4" y="323.2" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Filtrer les entrées</text>
+<circle cx="74.4" cy="356.1" r="4.8" fill="#463A2F"/>
+<text x="92.4" y="364.2" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Rondes de surveillance</text>
+<text x="92.4" y="396.9" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">pendant les séances</text>
+<circle cx="74.4" cy="429.7" r="4.8" fill="#463A2F"/>
+<text x="92.4" y="437.9" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Rondes de surveillance</text>
+<text x="92.4" y="470.5" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">incendie</text>
+<rect x="422.0" y="110.3" width="348.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb18"><rect x="422.0" y="110.3" width="348.0" height="104.0" rx="22"/></clipPath><rect x="422.0" y="110.3" width="72.0" height="104.0" fill="#ECDEC2" clip-path="url(#cb18)"/>
+<circle cx="458.0" cy="162.3" r="28.0" fill="#FBFAF4"/><circle cx="458.0" cy="162.3" r="22.0" fill="#8A7550"/><g transform="translate(458.0,162.3) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="0" r="14"/><path d="M0,-6 L6,-2 L4,5 L-4,5 L-6,-2 z M0,-6 L0,-14 M6,-2 L13,-5 M4,5 L8,12 M-4,5 L-8,12 M-6,-2 L-13,-5"/></g>
+<text x="510.0" y="168.9" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Événementiel</text>
+<rect x="422.0" y="238.3" width="348.0" height="303.4" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<circle cx="455.9" cy="285.1" r="4.5" fill="#463A2F"/>
+<text x="472.8" y="292.7" font-size="22.5" font-weight="400" fill="#463A2F" text-anchor="start">Filtrer et compter les</text>
+<text x="472.8" y="323.3" font-size="22.5" font-weight="400" fill="#463A2F" text-anchor="start">entrées et sorties</text>
+<circle cx="455.9" cy="354.2" r="4.5" fill="#463A2F"/>
+<text x="472.8" y="361.8" font-size="22.5" font-weight="400" fill="#463A2F" text-anchor="start">Organiser la surveillance</text>
+<circle cx="455.9" cy="392.6" r="4.5" fill="#463A2F"/>
+<text x="472.8" y="400.3" font-size="22.5" font-weight="400" fill="#463A2F" text-anchor="start">Rondes des installations</text>
+<text x="472.8" y="430.9" font-size="22.5" font-weight="400" fill="#463A2F" text-anchor="start">incendie</text>
+<circle cx="455.9" cy="461.7" r="4.5" fill="#463A2F"/>
+<text x="472.8" y="469.4" font-size="22.5" font-weight="400" fill="#463A2F" text-anchor="start">Surveillance à la</text>
+<text x="472.8" y="500.0" font-size="22.5" font-weight="400" fill="#463A2F" text-anchor="start">fermeture au public</text>
+<rect x="804.0" y="110.3" width="348.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb19"><rect x="804.0" y="110.3" width="348.0" height="104.0" rx="22"/></clipPath><rect x="804.0" y="110.3" width="72.0" height="104.0" fill="#ECDEC2" clip-path="url(#cb19)"/>
+<circle cx="840.0" cy="162.3" r="28.0" fill="#FBFAF4"/><circle cx="840.0" cy="162.3" r="22.0" fill="#8A7550"/><g transform="translate(840.0,162.3) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-12,15 L-12,-14 L6,-14 L6,15 M6,-4 L13,-4 L13,15 M-16,15 L16,15"/><path d="M-7,-8 L-3,-8 M1,-8 L1,-8 M-7,-2 L-3,-2 M-7,4 L-3,4 M-4,15 L-4,9"/></g>
+<text x="892.0" y="168.9" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Bâtiments municipaux</text>
+<rect x="804.0" y="238.3" width="348.0" height="303.4" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<circle cx="838.4" cy="319.2" r="4.8" fill="#463A2F"/>
+<text x="856.4" y="327.4" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Interventions sur</text>
+<text x="856.4" y="360.0" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">alarme</text>
+<circle cx="838.4" cy="392.9" r="4.8" fill="#463A2F"/>
+<text x="856.4" y="401.1" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Rondes de vérification</text>
+<text x="856.4" y="433.7" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">du matériel incendie et</text>
+<text x="856.4" y="466.3" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">d'alerte</text>
+</svg>

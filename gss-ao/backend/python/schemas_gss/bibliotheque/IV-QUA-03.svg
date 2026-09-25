@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<path d="M600.0,142.0 L600.0,166.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M215.3,166.0 L976.7,166.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<line x1="215.3" y1="166.0" x2="215.3" y2="191.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<line x1="596.0" y1="166.0" x2="596.0" y2="191.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<line x1="976.7" y1="166.0" x2="976.7" y2="191.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<rect x="389.6" y="34.0" width="420.8" height="100.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb36"><rect x="389.6" y="34.0" width="420.8" height="100.0" rx="8"/></clipPath><rect x="389.6" y="34.0" width="72.0" height="100.0" fill="#E5CA97" clip-path="url(#cb36)"/>
+<circle cx="425.6" cy="84.0" r="28.0" fill="#FBFAF4"/><circle cx="425.6" cy="84.0" r="22.0" fill="#8A7550"/><g transform="translate(425.6,84.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,-15 L5,-15 L11,-9 L11,15 L-10,15 z"/><path d="M-5,-4 L6,-4 M-5,2 L6,2 M-5,8 L2,8"/></g>
+<text x="477.6" y="74.5" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Dossier bilan trimestriel</text>
+<text x="477.6" y="106.6" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">Produit par GSS pour la réunion qualité</text>
+<rect x="40.0" y="198.0" width="350.7" height="80.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb37"><rect x="40.0" y="198.0" width="350.7" height="80.0" rx="8"/></clipPath><rect x="40.0" y="198.0" width="350.7" height="12.0" fill="#6298C0" clip-path="url(#cb37)"/>
+<text x="215.3" y="250.0" font-size="21" font-weight="700" fill="#463A2F" text-anchor="middle">Les équipes</text>
+<path d="M62.0,286.0 L62.0,527.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(72.0,343.0) rotate(0.0) scale(1.3)"/>
+<rect x="86.0" y="304.0" width="304.7" height="78.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<text x="238.3" y="348.7" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">Récapitulatif des équipes</text>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(72.0,435.0) rotate(0.0) scale(1.3)"/>
+<rect x="86.0" y="396.0" width="304.7" height="78.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<text x="238.3" y="429.3" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">Analyse et bilan des</text>
+<text x="238.3" y="452.1" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">contrôles</text>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(72.0,527.0) rotate(0.0) scale(1.3)"/>
+<rect x="86.0" y="488.0" width="304.7" height="78.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<text x="238.3" y="532.7" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">Retour du client</text>
+<rect x="420.7" y="198.0" width="350.7" height="80.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb38"><rect x="420.7" y="198.0" width="350.7" height="80.0" rx="8"/></clipPath><rect x="420.7" y="198.0" width="350.7" height="12.0" fill="#6298C0" clip-path="url(#cb38)"/>
+<text x="596.0" y="250.0" font-size="21" font-weight="700" fill="#463A2F" text-anchor="middle">Les missions</text>
+<path d="M442.7,286.0 L442.7,584.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(452.7,338.0) rotate(0.0) scale(1.3)"/>
+<rect x="466.7" y="304.0" width="304.7" height="68.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<text x="619.0" y="343.7" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">Récapitulatif des missions</text>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(452.7,420.0) rotate(0.0) scale(1.3)"/>
+<rect x="466.7" y="386.0" width="304.7" height="68.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<text x="619.0" y="414.3" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">Indicateurs : rondes,</text>
+<text x="619.0" y="437.1" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">anomalies…</text>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(452.7,502.0) rotate(0.0) scale(1.3)"/>
+<rect x="466.7" y="468.0" width="304.7" height="68.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<text x="619.0" y="507.7" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">Évolution des consignes</text>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(452.7,584.0) rotate(0.0) scale(1.3)"/>
+<rect x="466.7" y="550.0" width="304.7" height="68.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<text x="619.0" y="589.7" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">Retour du client</text>
+<rect x="801.3" y="198.0" width="350.7" height="80.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb39"><rect x="801.3" y="198.0" width="350.7" height="80.0" rx="8"/></clipPath><rect x="801.3" y="198.0" width="350.7" height="12.0" fill="#F0D3A3" clip-path="url(#cb39)"/>
+<text x="976.7" y="250.0" font-size="21" font-weight="700" fill="#463A2F" text-anchor="middle">Les suites</text>
+<path d="M823.3,286.0 L823.3,435.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(833.3,343.0) rotate(0.0) scale(1.3)"/>
+<rect x="847.3" y="304.0" width="304.7" height="78.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<text x="999.7" y="337.3" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">Dossier bilan envoyé après</text>
+<text x="999.7" y="360.1" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">la réunion</text>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(833.3,435.0) rotate(0.0) scale(1.3)"/>
+<rect x="847.3" y="396.0" width="304.7" height="78.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<text x="999.7" y="429.3" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">Actions correctives</text>
+<text x="999.7" y="452.1" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">proposées</text>
+</svg>

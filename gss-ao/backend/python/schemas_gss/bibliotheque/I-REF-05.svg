@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="34.0" width="360.0" height="206.0" rx="24.0" fill="#E5CA97" filter="url(#od)"/>
+<circle cx="92.0" cy="90.0" r="36.0" fill="#FBFAF4"/><circle cx="92.0" cy="90.0" r="30.0" fill="#8A7550"/><g transform="translate(92.0,90.0) scale(1.034)" fill="none" stroke="#FFFFFF" stroke-width="2.32" stroke-linecap="round" stroke-linejoin="round"><path d="M-15,14 L-15,-2 L-6,-8 L-6,-2 L3,-8 L3,-2 L15,-8 L15,14 z M9,-8 L9,-15 L13,-15 L13,-6"/><path d="M-9,6 L-5,6 M1,6 L5,6"/></g>
+<text x="136.0" y="94.8" font-size="14" font-weight="400" fill="#463A2F" text-anchor="start">INDUSTRIE</text>
+<text x="64.0" y="167.7" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Schneider Electric</text>
+<text x="64.0" y="202.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Beaumont-le-Roger, 27170</text>
+<rect x="40.0" y="270.0" width="360.0" height="116.0" rx="20.0" fill="#FBFAF4" filter="url(#od)"/>
+<text x="64.0" y="339.9" font-size="34" font-weight="800" fill="#463A2F" text-anchor="start">8</text>
+<text x="102.8" y="334.1" font-size="18" font-weight="400" fill="#463A2F" text-anchor="start">agents</text>
+<rect x="40.0" y="408.0" width="360.0" height="116.0" rx="20.0" fill="#FBFAF4" filter="url(#od)"/>
+<text x="64.0" y="477.9" font-size="34" font-weight="800" fill="#463A2F" text-anchor="start">24/7</text>
+<text x="163.8" y="472.1" font-size="18" font-weight="400" fill="#463A2F" text-anchor="start">24 h / 24, 7 j / 7</text>
+<rect x="440.0" y="34.0" width="712.0" height="584.0" rx="24.0" fill="#FBFAF4" filter="url(#od)"/>
+<text x="470.0" y="84.0" font-size="20" font-weight="800" fill="#463A2F" text-anchor="start">NOS MISSIONS</text>
+<rect x="470" y="98" width="56" height="5" rx="2.5" fill="#E99842"/>
+<circle cx="479.0" cy="171.7" r="5" fill="#377E3F"/>
+<text x="496.0" y="179.4" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Sécurisation du site</text>
+<circle cx="479.0" cy="218.7" r="5" fill="#377E3F"/>
+<text x="496.0" y="226.4" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Rondes de surveillance</text>
+<circle cx="479.0" cy="265.8" r="5" fill="#377E3F"/>
+<text x="496.0" y="273.4" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Filtrage des entrées et</text>
+<text x="496.0" y="305.6" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">sorties</text>
+<circle cx="479.0" cy="345.0" r="5" fill="#377E3F"/>
+<text x="496.0" y="352.6" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Gestion des moyens</text>
+<text x="496.0" y="384.8" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">d'accès</text>
+<circle cx="479.0" cy="424.2" r="5" fill="#377E3F"/>
+<text x="496.0" y="431.8" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Gestion des accès</text>
+<text x="496.0" y="464.0" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">livraison</text>
+<circle cx="819.0" cy="171.7" r="5" fill="#377E3F"/>
+<text x="836.0" y="179.4" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Gestion des accès des</text>
+<text x="836.0" y="211.5" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">entreprises extérieures</text>
+<text x="836.0" y="243.7" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">intervenantes</text>
+<circle cx="819.0" cy="283.0" r="5" fill="#377E3F"/>
+<text x="836.0" y="290.7" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Intervention sur alarme</text>
+<circle cx="819.0" cy="330.1" r="5" fill="#377E3F"/>
+<text x="836.0" y="337.8" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Vérification des</text>
+<text x="836.0" y="369.9" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">installations électriques</text>
+<circle cx="819.0" cy="409.3" r="5" fill="#377E3F"/>
+<text x="836.0" y="417.0" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Mission de prévention</text>
+<text x="836.0" y="449.1" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">des risques</text>
+<circle cx="819.0" cy="488.5" r="5" fill="#377E3F"/>
+<text x="836.0" y="496.2" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Formation SST et</text>
+<text x="836.0" y="528.3" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">pompier auprès des</text>
+<text x="836.0" y="560.5" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">salariés du site</text>
+</svg>

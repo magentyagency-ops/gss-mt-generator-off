@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="200.0" width="348.0" height="260.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb65"><rect x="40.0" y="200.0" width="348.0" height="260.0" rx="22"/></clipPath><rect x="40.0" y="200.0" width="348.0" height="58.0" fill="#ECDEC2" clip-path="url(#cb65)"/>
+<circle cx="214.0" cy="258.0" r="30.0" fill="#FBFAF4"/><circle cx="214.0" cy="258.0" r="24.0" fill="#8A7550"/><g transform="translate(214.0,258.0) scale(0.828)" fill="none" stroke="#FFFFFF" stroke-width="2.90" stroke-linecap="round" stroke-linejoin="round"><circle cx="-7" cy="-6" r="5"/><circle cx="8" cy="-6" r="5"/><path d="M-16,12 C-16,3 2,3 2,12"/><path d="M0,12 C0,3 17,3 17,12"/></g>
+<text x="214.0" y="347.0" font-size="64" font-weight="800" fill="#463A2F" text-anchor="middle">500</text>
+<text x="214.0" y="399.2" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">agents validés dans notre vivier</text>
+<text x="214.0" y="422.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">événementiel</text>
+<rect x="422.0" y="200.0" width="348.0" height="260.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb66"><rect x="422.0" y="200.0" width="348.0" height="260.0" rx="22"/></clipPath><rect x="422.0" y="200.0" width="348.0" height="58.0" fill="#F0D3A3" clip-path="url(#cb66)"/>
+<circle cx="596.0" cy="258.0" r="30.0" fill="#FBFAF4"/><circle cx="596.0" cy="258.0" r="24.0" fill="#E99842"/><g transform="translate(596.0,258.0) scale(0.828)" fill="none" stroke="#FFFFFF" stroke-width="2.90" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="0" r="14"/><path d="M0,-8 L0,0 L6,4"/></g>
+<text x="596.0" y="347.0" font-size="64" font-weight="800" fill="#463A2F" text-anchor="middle">100</text>
+<text x="596.0" y="410.8" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">agents mobilisables en 48 heures</text>
+<rect x="804.0" y="200.0" width="348.0" height="260.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb67"><rect x="804.0" y="200.0" width="348.0" height="260.0" rx="22"/></clipPath><rect x="804.0" y="200.0" width="348.0" height="58.0" fill="#B8CCB1" clip-path="url(#cb67)"/>
+<circle cx="978.0" cy="258.0" r="30.0" fill="#FBFAF4"/><circle cx="978.0" cy="258.0" r="24.0" fill="#377E3F"/><g transform="translate(978.0,258.0) scale(0.828)" fill="none" stroke="#FFFFFF" stroke-width="2.90" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="0" r="14"/><path d="M0,-6 L6,-2 L4,5 L-4,5 L-6,-2 z M0,-6 L0,-14 M6,-2 L13,-5 M4,5 L8,12 M-4,5 L-8,12 M-6,-2 L-13,-5"/></g>
+<text x="978.0" y="324.7" font-size="38" font-weight="800" fill="#463A2F" text-anchor="middle">1 000 à 50 000</text>
+<text x="978.0" y="386.2" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">participants par jour sur les</text>
+<text x="978.0" y="409.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">événements sécurisés</text>
+</svg>

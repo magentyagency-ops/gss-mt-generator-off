@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<g transform="translate(0,0)"><path d="M548,560 L556,372 L644,372 L652,560 L612,560 L600,420 L588,560 z" fill="#56524F" stroke="#2E2B2B" stroke-width="1.5" stroke-linejoin="round"/><path d="M540,588 L540,566 L590,566 L596,588 z M604,588 L610,566 L660,566 L660,588 z" fill="#2E2B2B" stroke="#2E2B2B" stroke-width="1.5" stroke-linejoin="round"/><path d="M560,190 L640,190 L676,210 L700,370 L676,380 L660,272 L652,380 L548,380 L540,272 L524,380 L500,370 L524,210 z" fill="#4A4746" stroke="#2E2B2B" stroke-width="1.5" stroke-linejoin="round"/><circle cx="600" cy="130" r="44" fill="#E5CA97" stroke="#2E2B2B" stroke-width="1.5" stroke-linejoin="round"/><path d="M556,128 C554,78 646,78 644,128 C632,110 568,110 556,128 z" fill="#3A3736" stroke="#484545" stroke-width="3"/><path d="M586,172 L614,172 L612,194 L588,194 z" fill="#E5CA97" stroke="#2E2B2B" stroke-width="1.5" stroke-linejoin="round"/></g>
+<rect x="608" y="214" width="42" height="13" rx="1.5" fill="#FFFFFF" stroke="#111" stroke-width="1.2"/><text x="629.0" y="224.5" font-size="7.5" font-weight="700" fill="#111" text-anchor="middle">N° CNAPS</text><rect x="617" y="233" width="24" height="24" rx="2" fill="#ECDEC2" stroke="#111" stroke-width="1.2"/><text x="629.0" y="249.0" font-size="8" font-weight="800" fill="#B9423C" text-anchor="middle">GSS</text>
+<path d="M428.0,255.0 L528.5,255.0 L629.0,220.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="629" cy="220" r="7" fill="#E99842" stroke="#FBFAF4" stroke-width="3"/>
+<rect x="40.0" y="191.0" width="380.0" height="128.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<text x="62.0" y="244.4" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Couleurs</text>
+<text x="62.0" y="276.5" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">Noir sur fond blanc, ou blanc sur fond noir</text>
+<path d="M428.0,405.0 L528.5,405.0 L629.0,245.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="629" cy="245" r="7" fill="#E99842" stroke="#FBFAF4" stroke-width="3"/>
+<rect x="40.0" y="341.0" width="380.0" height="128.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb154"><rect x="40.0" y="341.0" width="380.0" height="128.0" rx="22"/></clipPath><rect x="40.0" y="341.0" width="380.0" height="12.0" fill="#6298C0" clip-path="url(#cb154)"/>
+<text x="62.0" y="400.4" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Insigne de l'entreprise</text>
+<text x="62.0" y="432.5" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">Sous le numéro · au moins 50 × 50 mm</text>
+<path d="M766.0,255.0 L697.5,255.0 L629.0,220.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="629" cy="220" r="7" fill="#E99842" stroke="#FBFAF4" stroke-width="3"/>
+<rect x="772.0" y="191.0" width="380.0" height="128.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb155"><rect x="772.0" y="191.0" width="380.0" height="128.0" rx="22"/></clipPath><rect x="772.0" y="191.0" width="380.0" height="12.0" fill="#6298C0" clip-path="url(#cb155)"/>
+<text x="794.0" y="239.5" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Numéro d'identification</text>
+<text x="794.0" y="271.7" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">Poitrine, en haut à gauche · 54 × 15 mm ·</text>
+<text x="794.0" y="293.4" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">Arial 36</text>
+<path d="M766.0,405.0 L697.5,405.0 L629.0,220.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="629" cy="220" r="7" fill="#E99842" stroke="#FBFAF4" stroke-width="3"/>
+<rect x="772.0" y="341.0" width="380.0" height="128.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<text x="794.0" y="383.5" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Sept derniers chiffres</text>
+<text x="794.0" y="415.7" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">Du numéro de la carte professionnelle</text>
+<text x="794.0" y="437.4" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">CNAPS</text>
+</svg>

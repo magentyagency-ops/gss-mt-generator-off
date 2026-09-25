@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(396.7,201.0) rotate(0.0) scale(1.3)"/>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(797.3,201.0) rotate(0.0) scale(1.3)"/>
+<rect x="40.0" y="106.0" width="310.7" height="190.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb65"><rect x="40.0" y="106.0" width="310.7" height="190.0" rx="22"/></clipPath><rect x="40.0" y="106.0" width="310.7" height="57.0" fill="#E78E83" clip-path="url(#cb65)"/>
+<circle cx="195.3" cy="163.0" r="32.0" fill="#FBFAF4"/><circle cx="195.3" cy="163.0" r="26.0" fill="#DD4E49"/><g transform="translate(195.3,163.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-14 L15,12 L-15,12 z"/><path d="M0,-4 L0,4 M0,8 L0,8.5"/></g>
+<text x="58.0" y="132.0" font-size="15" font-weight="700" fill="#DD4E49" text-anchor="start" letter-spacing="1">01</text>
+<text x="195.3" y="229.5" font-size="25" font-weight="700" fill="#463A2F" text-anchor="middle">Incident géré</text>
+<text x="195.3" y="269.6" font-size="20" font-weight="400" fill="#463A2F" text-anchor="middle">Selon la procédure adaptée</text>
+<rect x="440.7" y="106.0" width="310.7" height="190.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb66"><rect x="440.7" y="106.0" width="310.7" height="190.0" rx="22"/></clipPath><rect x="440.7" y="106.0" width="310.7" height="57.0" fill="#F0D3A3" clip-path="url(#cb66)"/>
+<circle cx="596.0" cy="163.0" r="32.0" fill="#FBFAF4"/><circle cx="596.0" cy="163.0" r="26.0" fill="#E99842"/><g transform="translate(596.0,163.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-12" y="-15" width="24" height="30" rx="3"/><path d="M-6,-7 L6,-7 M-6,-1 L6,-1 M-6,5 L2,5"/></g>
+<text x="458.7" y="132.0" font-size="15" font-weight="700" fill="#E99842" text-anchor="start" letter-spacing="1">02</text>
+<text x="596.0" y="229.5" font-size="25" font-weight="700" fill="#463A2F" text-anchor="middle">Main courante</text>
+<text x="596.0" y="269.6" font-size="20" font-weight="400" fill="#463A2F" text-anchor="middle">Rapport d'incident</text>
+<rect x="841.3" y="106.0" width="310.7" height="190.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb67"><rect x="841.3" y="106.0" width="310.7" height="190.0" rx="22"/></clipPath><rect x="841.3" y="106.0" width="310.7" height="57.0" fill="#B8CCB1" clip-path="url(#cb67)"/>
+<circle cx="996.7" cy="163.0" r="32.0" fill="#FBFAF4"/><circle cx="996.7" cy="163.0" r="26.0" fill="#377E3F"/><g transform="translate(996.7,163.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-15" y="-10" width="30" height="21" rx="3"/><path d="M-14,-8 L0,3 L14,-8"/></g>
+<text x="859.3" y="132.0" font-size="15" font-weight="700" fill="#377E3F" text-anchor="start" letter-spacing="1">03</text>
+<text x="996.7" y="230.3" font-size="23" font-weight="700" fill="#463A2F" text-anchor="middle">Client</text>
+<text x="996.7" y="267.4" font-size="18.5" font-weight="400" fill="#463A2F" text-anchor="middle">Rapport écrit envoyé par mail</text>
+<line x1="596.0" y1="310.0" x2="596.0" y2="406.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<rect x="637.6" y="329.0" width="166.8" height="52.0" rx="16.0" fill="#6298C0" filter="url(#op)"/>
+<text x="721.0" y="350.9" font-size="15" font-weight="700" fill="#463A2F" text-anchor="middle" letter-spacing="0.6">ALARME</text>
+<text x="721.0" y="368.9" font-size="15" font-weight="700" fill="#463A2F" text-anchor="middle" letter-spacing="0.6">TÉLÉSURVEILLÉE</text>
+<rect x="440.7" y="414.0" width="310.7" height="140.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb68"><rect x="440.7" y="414.0" width="310.7" height="140.0" rx="22"/></clipPath><rect x="440.7" y="414.0" width="310.7" height="12.0" fill="#B8CCB1" clip-path="url(#cb68)"/>
+<text x="596.0" y="478.8" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Télésurveillance</text>
+<text x="596.0" y="513.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Rapport transmis à la station</text>
+</svg>

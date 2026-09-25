@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<circle cx="600.0" cy="336.0" r="272.0" fill="#E6E3E1" stroke="#9A928E" stroke-width="2" stroke-dasharray="8 8"/>
+<rect x="558.4" y="47.6" width="83.2" height="32.8" rx="16.0" fill="#6298C0" filter="url(#op)"/>
+<text x="600.0" y="68.6" font-size="14" font-weight="700" fill="#463A2F" text-anchor="middle" letter-spacing="0.6">60 MIN</text>
+<circle cx="600.0" cy="336.0" r="136.0" fill="#EDEAE7" stroke="#9A928E" stroke-width="2" stroke-dasharray="8 8"/>
+<rect x="558.4" y="183.6" width="83.2" height="32.8" rx="16.0" fill="#6298C0" filter="url(#op)"/>
+<text x="600.0" y="204.6" font-size="14" font-weight="700" fill="#463A2F" text-anchor="middle" letter-spacing="0.6">45 MIN</text>
+<path d="M600.0,336.0 L548.3,210.2" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="548.3373867484595" cy="210.19469648690577" r="12" fill="#6298C0" filter="url(#od)"/>
+<rect x="339.1" y="192.2" width="189.2" height="36.0" rx="12.0" fill="#FBFAF4" filter="url(#op)"/>
+<text x="354.1" y="215.2" font-size="16" font-weight="800" fill="#463A2F" text-anchor="start">Mont-Saint-Aignan</text>
+<path d="M600.0,336.0 L732.3,304.7" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="732.3457438789736" cy="304.6854015334521" r="12" fill="#6298C0" filter="url(#od)"/>
+<rect x="752.3" y="286.7" width="189.2" height="36.0" rx="12.0" fill="#FBFAF4" filter="url(#op)"/>
+<text x="767.3" y="309.7" font-size="16" font-weight="800" fill="#463A2F" text-anchor="start">Rouen Martainville</text>
+<path d="M600.0,336.0 L471.4,380.2" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="471.38115062445195" cy="380.1949271445273" r="12" fill="#6298C0" filter="url(#od)"/>
+<rect x="299.9" y="362.2" width="151.5" height="36.0" rx="12.0" fill="#FBFAF4" filter="url(#op)"/>
+<text x="314.9" y="385.2" font-size="16" font-weight="800" fill="#463A2F" text-anchor="start">Rouen Pasteur</text>
+<path d="M600.0,336.0 L674.0,450.1" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="673.9978647821945" cy="450.1065993169372" r="12" fill="#6298C0" filter="url(#od)"/>
+<rect x="694.0" y="432.1" width="250.5" height="36.0" rx="12.0" fill="#FBFAF4" filter="url(#op)"/>
+<text x="709.0" y="455.1" font-size="16" font-weight="800" fill="#463A2F" text-anchor="start">Saint-Étienne-du-Rouvray</text>
+<path d="M600.0,336.0 L555.6,464.6" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="555.6404072835145" cy="464.5621504721647" r="12" fill="#6298C0" filter="url(#od)"/>
+<rect x="452.9" y="446.6" width="82.8" height="36.0" rx="12.0" fill="#FBFAF4" filter="url(#op)"/>
+<text x="467.9" y="469.6" font-size="16" font-weight="800" fill="#463A2F" text-anchor="start">Elbeuf</text>
+<path d="M600.0,336.0 L622.0,607.1" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="622.0342867717275" cy="607.1060497415381" r="12" fill="#6298C0" filter="url(#od)"/>
+<rect x="642.0" y="589.1" width="88.2" height="36.0" rx="12.0" fill="#FBFAF4" filter="url(#op)"/>
+<text x="657.0" y="612.1" font-size="16" font-weight="800" fill="#463A2F" text-anchor="start">Évreux</text>
+<circle cx="600.0" cy="336.0" r="30" fill="#E5CA97" filter="url(#od)"/>
+<g transform="translate(600.0,336.0) scale(0.850)" fill="none" stroke="#463A2F" stroke-width="2.82" stroke-linecap="round" stroke-linejoin="round"><path d="M-12,15 L-12,-14 L6,-14 L6,15 M6,-4 L13,-4 L13,15 M-16,15 L16,15"/><path d="M-7,-8 L-3,-8 M1,-8 L1,-8 M-7,-2 L-3,-2 M-7,4 L-3,4 M-4,15 L-4,9"/></g>
+<rect x="40.0" y="34.0" width="300.0" height="92.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb71"><rect x="40.0" y="34.0" width="300.0" height="92.0" rx="22"/></clipPath><rect x="40.0" y="34.0" width="72.0" height="92.0" fill="#E5CA97" clip-path="url(#cb71)"/>
+<circle cx="76.0" cy="80.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="80.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,80.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-12,15 L-12,-14 L6,-14 L6,15 M6,-4 L13,-4 L13,15 M-16,15 L16,15"/><path d="M-7,-8 L-3,-8 M1,-8 L1,-8 M-7,-2 L-3,-2 M-7,4 L-3,4 M-4,15 L-4,9"/></g>
+<text x="128.0" y="64.7" font-size="15" font-weight="700" fill="#463A2F" text-anchor="start">Agence de Rouen</text>
+<text x="128.0" y="88.8" font-size="12" font-weight="400" fill="#463A2F" text-anchor="start">Délais maximums · marché</text>
+<text x="128.0" y="105.1" font-size="12" font-weight="400" fill="#463A2F" text-anchor="start">Université de Rouen Normandie</text>
+</svg>

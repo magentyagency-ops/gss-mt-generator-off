@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<text x="340.0" y="99.1" font-size="21" font-weight="400" fill="#463A2F" text-anchor="end">Agents de sécurité · CQP</text>
+<rect x="360.0" y="61.0" width="690.0" height="62.0" rx="12.0" fill="#ECDEC2" filter="url(#op)"/>
+<text x="1066.0" y="101.0" font-size="24" font-weight="800" fill="#463A2F" text-anchor="start">423</text>
+<text x="340.0" y="185.1" font-size="21" font-weight="400" fill="#463A2F" text-anchor="end">SSIAP 1</text>
+<rect x="360.0" y="147.0" width="301.8" height="62.0" rx="12.0" fill="#ECDEC2" filter="url(#op)"/>
+<text x="677.8" y="187.0" font-size="24" font-weight="800" fill="#463A2F" text-anchor="start">185</text>
+<text x="340.0" y="271.1" font-size="21" font-weight="400" fill="#463A2F" text-anchor="end">Contrôleurs</text>
+<rect x="360.0" y="233.0" width="57.1" height="62.0" rx="12.0" fill="#6298C0" filter="url(#op)"/>
+<text x="433.1" y="273.0" font-size="24" font-weight="800" fill="#463A2F" text-anchor="start">35</text>
+<text x="340.0" y="357.1" font-size="21" font-weight="400" fill="#463A2F" text-anchor="end">SSIAP 2</text>
+<rect x="360.0" y="319.0" width="45.7" height="62.0" rx="12.0" fill="#ECDEC2" filter="url(#op)"/>
+<text x="421.7" y="359.0" font-size="24" font-weight="800" fill="#463A2F" text-anchor="start">28</text>
+<text x="340.0" y="443.1" font-size="21" font-weight="400" fill="#463A2F" text-anchor="end">Agents cynophiles</text>
+<rect x="360.0" y="405.0" width="44.0" height="62.0" rx="12.0" fill="#ECDEC2" filter="url(#op)"/>
+<text x="420.0" y="445.0" font-size="24" font-weight="800" fill="#463A2F" text-anchor="start">27</text>
+<text x="340.0" y="529.1" font-size="21" font-weight="400" fill="#463A2F" text-anchor="end">SSIAP 3</text>
+<rect x="360.0" y="491.0" width="12.0" height="62.0" rx="6.0" fill="#ECDEC2" filter="url(#op)"/>
+<text x="388.0" y="531.0" font-size="24" font-weight="800" fill="#463A2F" text-anchor="start">2</text>
+<rect x="360.0" y="596.0" width="24.0" height="24.0" rx="6.0" fill="#ECDEC2" filter="url(#op)"/>
+<text x="394.0" y="614.0" font-size="15" font-weight="600" fill="#463A2F" text-anchor="start">Agents terrain</text>
+<rect x="535.5" y="596.0" width="24.0" height="24.0" rx="6.0" fill="#6298C0" filter="url(#op)"/>
+<text x="569.5" y="614.0" font-size="15" font-weight="600" fill="#463A2F" text-anchor="start">Contrôle</text>
+</svg>

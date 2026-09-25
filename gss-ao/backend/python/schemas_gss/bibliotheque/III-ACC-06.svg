@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="176.0" width="254.0" height="300.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb98"><rect x="40.0" y="176.0" width="254.0" height="300.0" rx="22"/></clipPath><rect x="40.0" y="176.0" width="254.0" height="90.0" fill="#ECDEC2" clip-path="url(#cb98)"/>
+<circle cx="167.0" cy="266.0" r="32.0" fill="#FBFAF4"/><circle cx="167.0" cy="266.0" r="26.0" fill="#8A7550"/><g transform="translate(167.0,266.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="-7" r="6.5"/><path d="M-12,14 C-12,3 12,3 12,14"/></g>
+<text x="167.0" y="360.6" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Accueil</text>
+<text x="167.0" y="395.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Étudiants, intervenants</text>
+<text x="167.0" y="419.5" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">externes, entreprises</text>
+<rect x="326.0" y="176.0" width="254.0" height="300.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb99"><rect x="326.0" y="176.0" width="254.0" height="300.0" rx="22"/></clipPath><rect x="326.0" y="176.0" width="254.0" height="90.0" fill="#ECDEC2" clip-path="url(#cb99)"/>
+<circle cx="453.0" cy="266.0" r="32.0" fill="#FBFAF4"/><circle cx="453.0" cy="266.0" r="26.0" fill="#8A7550"/><g transform="translate(453.0,266.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M0,15 C-13,0 -12,-14 0,-14 C12,-14 13,0 0,15 z"/><circle cx="0" cy="-4" r="4.5"/></g>
+<text x="453.0" y="360.6" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Orientation</text>
+<text x="453.0" y="395.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Renseigner et orienter les</text>
+<text x="453.0" y="419.5" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">intervenants</text>
+<rect x="612.0" y="176.0" width="254.0" height="300.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb100"><rect x="612.0" y="176.0" width="254.0" height="300.0" rx="22"/></clipPath><rect x="612.0" y="176.0" width="254.0" height="90.0" fill="#ECDEC2" clip-path="url(#cb100)"/>
+<circle cx="739.0" cy="266.0" r="32.0" fill="#FBFAF4"/><circle cx="739.0" cy="266.0" r="26.0" fill="#8A7550"/><g transform="translate(739.0,266.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-15" y="-10" width="30" height="21" rx="3"/><path d="M-14,-8 L0,3 L14,-8"/></g>
+<text x="739.0" y="360.6" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Courrier</text>
+<text x="739.0" y="395.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Gestion du courrier et</text>
+<text x="739.0" y="419.5" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">des colis à l'accueil</text>
+<rect x="898.0" y="176.0" width="254.0" height="300.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb101"><rect x="898.0" y="176.0" width="254.0" height="300.0" rx="22"/></clipPath><rect x="898.0" y="176.0" width="254.0" height="90.0" fill="#ECDEC2" clip-path="url(#cb101)"/>
+<circle cx="1025.0" cy="266.0" r="32.0" fill="#FBFAF4"/><circle cx="1025.0" cy="266.0" r="26.0" fill="#8A7550"/><g transform="translate(1025.0,266.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M-16,7 L-16,-8 L4,-8 L4,7 M4,-3 L11,-3 L15,2 L15,7 L4,7"/><circle cx="-9" cy="9" r="3"/><circle cx="9" cy="9" r="3"/></g>
+<text x="1025.0" y="348.7" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Commandes</text>
+<text x="1025.0" y="383.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Réception des</text>
+<text x="1025.0" y="407.6" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">commandes des</text>
+<text x="1025.0" y="431.4" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">entreprises</text>
+</svg>

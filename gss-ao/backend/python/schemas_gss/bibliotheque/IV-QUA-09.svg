@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="176.0" width="349.3" height="300.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb57"><rect x="40.0" y="176.0" width="349.3" height="300.0" rx="22"/></clipPath><rect x="40.0" y="176.0" width="349.3" height="90.0" fill="#B8CCB1" clip-path="url(#cb57)"/>
+<circle cx="214.7" cy="266.0" r="32.0" fill="#FBFAF4"/><circle cx="214.7" cy="266.0" r="26.0" fill="#377E3F"/><g transform="translate(214.7,266.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><circle cx="-7" cy="-6" r="5"/><circle cx="8" cy="-6" r="5"/><path d="M-16,12 C-16,3 2,3 2,12"/><path d="M0,12 C0,3 17,3 17,12"/></g>
+<text x="214.7" y="372.5" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Les équipes</text>
+<text x="214.7" y="407.6" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Retour du client sur les équipes</text>
+<rect x="421.3" y="176.0" width="349.3" height="300.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb58"><rect x="421.3" y="176.0" width="349.3" height="300.0" rx="22"/></clipPath><rect x="421.3" y="176.0" width="349.3" height="90.0" fill="#B8CCB1" clip-path="url(#cb58)"/>
+<circle cx="596.0" cy="266.0" r="32.0" fill="#FBFAF4"/><circle cx="596.0" cy="266.0" r="26.0" fill="#377E3F"/><g transform="translate(596.0,266.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,-15 L5,-15 L11,-9 L11,15 L-10,15 z"/><path d="M-5,-4 L6,-4 M-5,2 L6,2 M-5,8 L2,8"/></g>
+<text x="596.0" y="360.6" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Les missions</text>
+<text x="596.0" y="395.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Retour du client sur le suivi des</text>
+<text x="596.0" y="419.5" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">missions</text>
+<rect x="802.7" y="176.0" width="349.3" height="300.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb59"><rect x="802.7" y="176.0" width="349.3" height="300.0" rx="22"/></clipPath><rect x="802.7" y="176.0" width="349.3" height="90.0" fill="#B8CCB1" clip-path="url(#cb59)"/>
+<circle cx="977.3" cy="266.0" r="32.0" fill="#FBFAF4"/><circle cx="977.3" cy="266.0" r="26.0" fill="#377E3F"/><g transform="translate(977.3,266.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-15 L4.5,-5 L15,-4.5 L7,3 L9.5,14 L0,8 L-9.5,14 L-7,3 L-15,-4.5 L-4.5,-5 z"/></g>
+<text x="977.3" y="360.6" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">La prime</text>
+<text x="977.3" y="395.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">L'appréciation du client, critère de la</text>
+<text x="977.3" y="419.5" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">prime des agents</text>
+</svg>

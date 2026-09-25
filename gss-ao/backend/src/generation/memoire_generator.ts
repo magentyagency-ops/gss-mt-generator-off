@@ -1,6 +1,7 @@
 import { MarpGenerator, AssembleChapter, AssembleSection } from './marp_generator';
 import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
+import { SchemaService, PageSchema } from './schema_service';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -5191,59 +5192,20 @@ RÈGLES DE FORME (rendu Marp) :
 
     const cover = await this.getCoverInfo(dossierId);
 
-    // Génération automatique des schémas d'architecture D2 pour les sections les plus pertinentes (~15)
-    onProgress?.(91, 'Génération des schémas d’architecture D2…');
-    const D2_ELIGIBLE_SECTIONS = [
-      'b_implantation', 'b_moyens_humains', 'b_encadrement',
-      'b_recrutement_formation', 'b_dispositif_absence',
-      'b_moyens_materiels', 'b_rondes', 'b_controle_acces', 'b_telesurveillance',
-      'b_gestion_alarmes', 'b_organisation', 'b_planning',
-      'b_suivi_qualite', 'b_procedures'
-    ];
+    // Un schéma GSS par page de contenu (demande GSS / Clarence) : construit d'après le sujet de la
+    // section et le texte exact de la page, dessiné par le moteur de la planche validée. Remplace les
+    // photos de la bibliothèque d'images et les schémas D2 de ce rendu.
+    onProgress?.(91, 'Construction des schémas GSS (un par page)…');
+    const pages: PageSchema[] = MarpGenerator.enumerateContentSlides(chapters).map((sl) => {
+      const [ci, si] = sl.key.split('_').map(Number);
+      return { key: sl.key, sectionId: chapters[ci]?.sections[si]?.id, sectionTitle: sl.title, text: sl.text };
+    });
+    const schemas = await new SchemaService().construirePourPages(pages, (msg) => onProgress?.(93, msg));
 
-    const d2Promises: Promise<void>[] = [];
-    for (const chapter of chapters) {
-      for (const sec of chapter.sections) {
-        if (!sec.d2Code && sec.text && sec.text.length > 100 && sec.id && D2_ELIGIBLE_SECTIONS.includes(sec.id)) {
-          d2Promises.push((async () => {
-            try {
-              const d2Code = await D2Service.generateD2Code(sec.title, sec.text, cover.client);
-              console.log("===== D2 GENERATED =====");
-              console.log("Section :", sec.title);
-              console.log(d2Code);
-              console.log("========================");
-
-              if (d2Code) sec.d2Code = d2Code;
-            } catch (e: any) {
-              console.warn(`[MemoireGenerator] Génération D2 ignorée pour ${sec.title}:`, e.message || e);
-            }
-          })());
-        }
-      }
-    }
-    
-    if (d2Promises.length > 0) {
-      await Promise.all(d2Promises);
-    }
-
-    // Bibliothèque d'images (base de données) : on charge le pool, puis on attribue
-    // AU PLUS une image par slide selon le CONTEXTE du texte, chaque image utilisée
-    // une seule fois sur tout le document (unicité stricte, compréhension par LLM).
-    onProgress?.(92, 'Chargement des images de la bibliothèque…');
-    const imageService = new ImageLibraryService();
-    const imagePool = await imageService.loadPool();
-
-    onProgress?.(93, 'Attribution contextuelle des illustrations…');
-    const allSlides = MarpGenerator.enumerateContentSlides(chapters);
-    // Exclure les slides du bilan pour ne pas leur attribuer d'image
-    const slides = allSlides.filter(s => !(s.title?.toLowerCase() || '').includes('bilan'));
-    const assignments = await imageService.assignImages(slides, imagePool);
-
-    // Le rendu Marp/Chromium est bloquant et peut durer plusieurs minutes sur un
-    // mémoire illustré : on signale l'étape pour que la barre ne semble pas figée.
-    onProgress?.(95, `Rendu du PDF (${assignments.size} illustration(s))…`);
+    // Le rendu Marp/Chromium est bloquant et peut durer plusieurs minutes : on signale l'étape.
+    onProgress?.(95, `Rendu du PDF (${schemas.size} schéma(s))…`);
     const generator = new MarpGenerator(this.responseDir);
-    const result = await generator.generatePdf(chapters, cover, assignments);
+    const result = await generator.generatePdf(chapters, cover, new Map(), schemas);
 
     return { filePath: result.filePath, generatedData: {} };
   }

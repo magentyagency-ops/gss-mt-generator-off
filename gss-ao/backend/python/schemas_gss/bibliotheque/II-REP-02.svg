@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="175.0" width="348.0" height="260.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb106"><rect x="40.0" y="175.0" width="348.0" height="260.0" rx="22"/></clipPath><rect x="40.0" y="175.0" width="348.0" height="58.0" fill="#B8CCB1" clip-path="url(#cb106)"/>
+<circle cx="214.0" cy="233.0" r="30.0" fill="#FBFAF4"/><circle cx="214.0" cy="233.0" r="24.0" fill="#377E3F"/><g transform="translate(214.0,233.0) scale(0.828)" fill="none" stroke="#FFFFFF" stroke-width="2.90" stroke-linecap="round" stroke-linejoin="round"><circle cx="-7" cy="-6" r="5"/><circle cx="8" cy="-6" r="5"/><path d="M-16,12 C-16,3 2,3 2,12"/><path d="M0,12 C0,3 17,3 17,12"/></g>
+<text x="214.0" y="322.0" font-size="64" font-weight="800" fill="#463A2F" text-anchor="middle">100 %</text>
+<text x="214.0" y="385.8" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">du personnel en place repris</text>
+<rect x="422.0" y="175.0" width="348.0" height="260.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb107"><rect x="422.0" y="175.0" width="348.0" height="260.0" rx="22"/></clipPath><rect x="422.0" y="175.0" width="348.0" height="58.0" fill="#ECDEC2" clip-path="url(#cb107)"/>
+<circle cx="596.0" cy="233.0" r="30.0" fill="#FBFAF4"/><circle cx="596.0" cy="233.0" r="24.0" fill="#8A7550"/><g transform="translate(596.0,233.0) scale(0.828)" fill="none" stroke="#FFFFFF" stroke-width="2.90" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="-7" r="6.5"/><path d="M-12,14 C-12,3 12,3 12,14"/></g>
+<text x="596.0" y="322.0" font-size="64" font-weight="800" fill="#463A2F" text-anchor="middle">18</text>
+<text x="596.0" y="374.2" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">agents titulaires CQP APS + SSIAP</text>
+<text x="596.0" y="397.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">dédiés en ETP</text>
+<rect x="804.0" y="175.0" width="348.0" height="260.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb108"><rect x="804.0" y="175.0" width="348.0" height="260.0" rx="22"/></clipPath><rect x="804.0" y="175.0" width="348.0" height="58.0" fill="#F0D3A3" clip-path="url(#cb108)"/>
+<circle cx="978.0" cy="233.0" r="30.0" fill="#FBFAF4"/><circle cx="978.0" cy="233.0" r="24.0" fill="#E99842"/><g transform="translate(978.0,233.0) scale(0.828)" fill="none" stroke="#FFFFFF" stroke-width="2.90" stroke-linecap="round" stroke-linejoin="round"><path d="M-16,-6 L0,-13 L16,-6 L0,1 z"/><path d="M-9,-2 L-9,6 C-4,10 4,10 9,6 L9,-2 M16,-6 L16,4"/></g>
+<text x="978.0" y="322.0" font-size="64" font-weight="800" fill="#463A2F" text-anchor="middle">14</text>
+<text x="978.0" y="385.8" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">agents formés en support</text>
+<text x="600.0" y="608.8" font-size="14" font-weight="400" fill="#463A2F" text-anchor="middle">Exemple : marché de l'Université de Rouen Normandie</text>
+</svg>

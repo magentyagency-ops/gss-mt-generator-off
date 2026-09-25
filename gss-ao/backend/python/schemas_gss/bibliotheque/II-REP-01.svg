@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<line x1="521.0" y1="236.0" x2="669.0" y2="236.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<rect x="40.0" y="141.0" width="476.0" height="190.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb103"><rect x="40.0" y="141.0" width="476.0" height="190.0" rx="22"/></clipPath><rect x="40.0" y="141.0" width="476.0" height="57.0" fill="#6298C0" clip-path="url(#cb103)"/>
+<circle cx="278.0" cy="198.0" r="32.0" fill="#FBFAF4"/><circle cx="278.0" cy="198.0" r="26.0" fill="#1D49A7"/><g transform="translate(278.0,198.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><circle cx="-9" cy="-8" r="4"/><circle cx="9" cy="-8" r="4"/><circle cx="0" cy="-11" r="4"/><path d="M-15,6 L15,6 L15,10 L-15,10 z M-12,10 L-12,15 M12,10 L12,15"/></g>
+<text x="58.0" y="167.0" font-size="15" font-weight="700" fill="#1D49A7" text-anchor="start" letter-spacing="1">01</text>
+<text x="278.0" y="265.1" font-size="24" font-weight="700" fill="#463A2F" text-anchor="middle">Réunion avec le client</text>
+<text x="278.0" y="303.3" font-size="19" font-weight="400" fill="#463A2F" text-anchor="middle">La reprise figure dans les conditions du marché</text>
+<rect x="676.0" y="141.0" width="476.0" height="190.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb104"><rect x="676.0" y="141.0" width="476.0" height="190.0" rx="22"/></clipPath><rect x="676.0" y="141.0" width="476.0" height="57.0" fill="#B8CCB1" clip-path="url(#cb104)"/>
+<circle cx="914.0" cy="198.0" r="32.0" fill="#FBFAF4"/><circle cx="914.0" cy="198.0" r="26.0" fill="#377E3F"/><g transform="translate(914.0,198.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-13" y="-13" width="26" height="26" rx="5"/><path d="M-6,0 L-1,5 L7,-5"/></g>
+<text x="694.0" y="167.0" font-size="15" font-weight="700" fill="#377E3F" text-anchor="start" letter-spacing="1">02</text>
+<text x="914.0" y="265.3" font-size="23" font-weight="700" fill="#463A2F" text-anchor="middle">Reprise sur le même site</text>
+<text x="914.0" y="302.4" font-size="18.5" font-weight="400" fill="#463A2F" text-anchor="middle">Et procédure d'intégration d'un nouveau marché</text>
+<path d="M596.0,97.0 L596.0,230.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="495.1" y="58.0" width="201.8" height="34.0" rx="16.0" fill="#B8CCB1" filter="url(#op)"/>
+<text x="596.0" y="80.0" font-size="15" font-weight="700" fill="#463A2F" text-anchor="middle" letter-spacing="0.6">MAINTIEN SOUHAITÉ</text>
+<line x1="278.0" y1="345.0" x2="278.0" y2="441.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<rect x="294.4" y="373.0" width="154.2" height="34.0" rx="16.0" fill="#E78E83" filter="url(#op)"/>
+<text x="371.5" y="394.9" font-size="15" font-weight="700" fill="#463A2F" text-anchor="middle" letter-spacing="0.6">NON SOUHAITÉ</text>
+<rect x="40.0" y="449.0" width="476.0" height="140.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb105"><rect x="40.0" y="449.0" width="476.0" height="140.0" rx="22"/></clipPath><rect x="40.0" y="449.0" width="476.0" height="12.0" fill="#F0D3A3" clip-path="url(#cb105)"/>
+<text x="278.0" y="513.8" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Affectation sur un autre site</text>
+<text x="278.0" y="548.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Reprise dans le respect des obligations légales</text>
+</svg>

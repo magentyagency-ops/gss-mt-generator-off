@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="52.0" width="254.0" height="160.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb34"><rect x="40.0" y="52.0" width="254.0" height="160.0" rx="22"/></clipPath><rect x="40.0" y="52.0" width="72.0" height="160.0" fill="#ECDEC2" clip-path="url(#cb34)"/>
+<circle cx="76.0" cy="132.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="132.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,132.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-16,-11 L-11,-11 L-7,6 L11,6 L14,-6 L-9,-6"/><circle cx="-5" cy="12" r="2.5"/><circle cx="9" cy="12" r="2.5"/></g>
+<text x="128.0" y="86.0" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Distribution</text>
+<text x="128.0" y="121.1" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Carrefour,</text>
+<text x="128.0" y="144.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Leclerc,</text>
+<text x="128.0" y="168.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Intermarché,</text>
+<text x="128.0" y="192.5" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Intersport…</text>
+<rect x="326.0" y="52.0" width="254.0" height="160.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb35"><rect x="326.0" y="52.0" width="254.0" height="160.0" rx="22"/></clipPath><rect x="326.0" y="52.0" width="72.0" height="160.0" fill="#ECDEC2" clip-path="url(#cb35)"/>
+<circle cx="362.0" cy="132.0" r="28.0" fill="#FBFAF4"/><circle cx="362.0" cy="132.0" r="22.0" fill="#8A7550"/><g transform="translate(362.0,132.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-12,15 L-12,-14 L6,-14 L6,15 M6,-4 L13,-4 L13,15 M-16,15 L16,15"/><path d="M-7,-8 L-3,-8 M1,-8 L1,-8 M-7,-2 L-3,-2 M-7,4 L-3,4 M-4,15 L-4,9"/></g>
+<text x="414.0" y="124.4" font-size="16.5" font-weight="700" fill="#463A2F" text-anchor="start">Mairies</text>
+<text x="414.0" y="150.5" font-size="13" font-weight="400" fill="#463A2F" text-anchor="start">Port-Jérôme-sur-Seine</text>
+<rect x="612.0" y="52.0" width="254.0" height="160.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb36"><rect x="612.0" y="52.0" width="254.0" height="160.0" rx="22"/></clipPath><rect x="612.0" y="52.0" width="72.0" height="160.0" fill="#ECDEC2" clip-path="url(#cb36)"/>
+<circle cx="648.0" cy="132.0" r="28.0" fill="#FBFAF4"/><circle cx="648.0" cy="132.0" r="22.0" fill="#8A7550"/><g transform="translate(648.0,132.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-15,14 L-15,-2 L-6,-8 L-6,-2 L3,-8 L3,-2 L15,-8 L15,14 z M9,-8 L9,-15 L13,-15 L13,-6"/><path d="M-9,6 L-5,6 M1,6 L5,6"/></g>
+<text x="700.0" y="109.8" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Industrie</text>
+<text x="700.0" y="144.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Schneider</text>
+<text x="700.0" y="168.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Electric</text>
+<rect x="898.0" y="52.0" width="254.0" height="160.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb37"><rect x="898.0" y="52.0" width="254.0" height="160.0" rx="22"/></clipPath><rect x="898.0" y="52.0" width="72.0" height="160.0" fill="#ECDEC2" clip-path="url(#cb37)"/>
+<circle cx="934.0" cy="132.0" r="28.0" fill="#FBFAF4"/><circle cx="934.0" cy="132.0" r="22.0" fill="#8A7550"/><g transform="translate(934.0,132.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-16,-3 L0,-12 L16,-3 L0,6 z"/><path d="M-9,1 L-9,9 C-4,13 4,13 9,9 L9,1 M16,-3 L16,7"/></g>
+<text x="986.0" y="99.7" font-size="20.5" font-weight="700" fill="#463A2F" text-anchor="start">Enseignement</text>
+<text x="986.0" y="132.8" font-size="16.5" font-weight="400" fill="#463A2F" text-anchor="start">CESI, NEOMA,</text>
+<text x="986.0" y="155.3" font-size="16.5" font-weight="400" fill="#463A2F" text-anchor="start">Université de</text>
+<text x="986.0" y="177.7" font-size="16.5" font-weight="400" fill="#463A2F" text-anchor="start">Rouen</text>
+<rect x="40.0" y="246.0" width="254.0" height="160.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb38"><rect x="40.0" y="246.0" width="254.0" height="160.0" rx="22"/></clipPath><rect x="40.0" y="246.0" width="72.0" height="160.0" fill="#ECDEC2" clip-path="url(#cb38)"/>
+<circle cx="76.0" cy="326.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="326.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,326.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-15,-5 L0,-14 L15,-5 z M-15,14 L15,14 M-11,-2 L-11,10 M-4,-2 L-4,10 M4,-2 L4,10 M11,-2 L11,10"/></g>
+<text x="128.0" y="315.7" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Banques</text>
+<text x="128.0" y="350.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">CIC</text>
+<rect x="326.0" y="246.0" width="254.0" height="160.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb39"><rect x="326.0" y="246.0" width="254.0" height="160.0" rx="22"/></clipPath><rect x="326.0" y="246.0" width="72.0" height="160.0" fill="#ECDEC2" clip-path="url(#cb39)"/>
+<circle cx="362.0" cy="326.0" r="28.0" fill="#FBFAF4"/><circle cx="362.0" cy="326.0" r="22.0" fill="#8A7550"/><g transform="translate(362.0,326.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-12,15 L-12,-14 L6,-14 L6,15 M6,-4 L13,-4 L13,15 M-16,15 L16,15"/><path d="M-7,-8 L-3,-8 M1,-8 L1,-8 M-7,-2 L-3,-2 M-7,4 L-3,4 M-4,15 L-4,9"/></g>
+<text x="414.0" y="295.8" font-size="19.5" font-weight="700" fill="#463A2F" text-anchor="start">Institutionnels</text>
+<text x="414.0" y="326.9" font-size="15.5" font-weight="400" fill="#463A2F" text-anchor="start">CAF, Chambre des</text>
+<text x="414.0" y="348.0" font-size="15.5" font-weight="400" fill="#463A2F" text-anchor="start">métiers, Région</text>
+<text x="414.0" y="369.1" font-size="15.5" font-weight="400" fill="#463A2F" text-anchor="start">Normandie</text>
+<rect x="612.0" y="246.0" width="254.0" height="160.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb40"><rect x="612.0" y="246.0" width="254.0" height="160.0" rx="22"/></clipPath><rect x="612.0" y="246.0" width="72.0" height="160.0" fill="#ECDEC2" clip-path="url(#cb40)"/>
+<circle cx="648.0" cy="326.0" r="28.0" fill="#FBFAF4"/><circle cx="648.0" cy="326.0" r="22.0" fill="#8A7550"/><g transform="translate(648.0,326.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="0" r="14"/><path d="M0,-6 L6,-2 L4,5 L-4,5 L-6,-2 z M0,-6 L0,-14 M6,-2 L13,-5 M4,5 L8,12 M-4,5 L-8,12 M-6,-2 L-13,-5"/></g>
+<text x="700.0" y="291.9" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Sport</text>
+<text x="700.0" y="327.0" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">QRM, Marathon</text>
+<text x="700.0" y="350.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">76, Tour de</text>
+<text x="700.0" y="374.6" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">France</text>
+<rect x="898.0" y="246.0" width="254.0" height="160.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb41"><rect x="898.0" y="246.0" width="254.0" height="160.0" rx="22"/></clipPath><rect x="898.0" y="246.0" width="72.0" height="160.0" fill="#ECDEC2" clip-path="url(#cb41)"/>
+<circle cx="934.0" cy="326.0" r="28.0" fill="#FBFAF4"/><circle cx="934.0" cy="326.0" r="22.0" fill="#8A7550"/><g transform="translate(934.0,326.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-15,-8 C-15,6 -8,14 0,14 C8,14 15,6 15,-8 C8,-12 -8,-12 -15,-8 z"/><path d="M-8,-2 L-3,-2 M3,-2 L8,-2 M-5,7 C-2,9 2,9 5,7"/></g>
+<text x="986.0" y="315.7" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Culture</text>
+<text x="986.0" y="350.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Panorama XXL</text>
+<rect x="183.0" y="440.0" width="254.0" height="160.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb42"><rect x="183.0" y="440.0" width="254.0" height="160.0" rx="22"/></clipPath><rect x="183.0" y="440.0" width="72.0" height="160.0" fill="#ECDEC2" clip-path="url(#cb42)"/>
+<circle cx="219.0" cy="520.0" r="28.0" fill="#FBFAF4"/><circle cx="219.0" cy="520.0" r="22.0" fill="#8A7550"/><g transform="translate(219.0,520.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-13" y="-13" width="26" height="26" rx="4"/><path d="M0,-7 L0,7 M-7,0 L7,0"/></g>
+<text x="271.0" y="485.9" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Santé</text>
+<text x="271.0" y="521.0" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Centre</text>
+<text x="271.0" y="544.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">hospitalier du</text>
+<text x="271.0" y="568.6" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Rouvray</text>
+<rect x="469.0" y="440.0" width="254.0" height="160.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb43"><rect x="469.0" y="440.0" width="254.0" height="160.0" rx="22"/></clipPath><rect x="469.0" y="440.0" width="72.0" height="160.0" fill="#ECDEC2" clip-path="url(#cb43)"/>
+<circle cx="505.0" cy="520.0" r="28.0" fill="#FBFAF4"/><circle cx="505.0" cy="520.0" r="22.0" fill="#8A7550"/><g transform="translate(505.0,520.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-16,7 L-16,-8 L4,-8 L4,7 M4,-3 L11,-3 L15,2 L15,7 L4,7"/><circle cx="-9" cy="9" r="3"/><circle cx="9" cy="9" r="3"/></g>
+<text x="557.0" y="509.7" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Logistique</text>
+<text x="557.0" y="544.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">FM Logistic</text>
+<rect x="755.0" y="440.0" width="254.0" height="160.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb44"><rect x="755.0" y="440.0" width="254.0" height="160.0" rx="22"/></clipPath><rect x="755.0" y="440.0" width="72.0" height="160.0" fill="#ECDEC2" clip-path="url(#cb44)"/>
+<circle cx="791.0" cy="520.0" r="28.0" fill="#FBFAF4"/><circle cx="791.0" cy="520.0" r="22.0" fill="#8A7550"/><g transform="translate(791.0,520.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-16,10 L-16,-8 M-16,4 L16,4 L16,10 M-16,-1 L16,-1 L16,4"/><circle cx="-9" cy="-5" r="3"/></g>
+<text x="843.0" y="509.8" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Hébergement</text>
+<text x="843.0" y="543.9" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Hôtel B&amp;B</text>
+</svg>

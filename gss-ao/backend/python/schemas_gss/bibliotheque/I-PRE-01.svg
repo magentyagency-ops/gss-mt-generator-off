@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="59.0" width="254.0" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb1"><rect x="40.0" y="59.0" width="254.0" height="250.0" rx="22"/></clipPath><rect x="40.0" y="59.0" width="254.0" height="75.0" fill="#ECDEC2" clip-path="url(#cb1)"/>
+<circle cx="167.0" cy="134.0" r="32.0" fill="#FBFAF4"/><circle cx="167.0" cy="134.0" r="26.0" fill="#8A7550"/><g transform="translate(167.0,134.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-15 L13,-10 L13,0 C13,8 7,13 0,16 C-7,13 -13,8 -13,0 L-13,-10 z"/><path d="M-5,0 L-1,4 L6,-4"/></g>
+<text x="167.0" y="199.2" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Agents de sûreté</text>
+<text x="167.0" y="234.3" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Rondes, contrôle d'accès,</text>
+<text x="167.0" y="258.1" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">intervention, selon vos</text>
+<text x="167.0" y="281.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">consignes</text>
+<rect x="326.0" y="59.0" width="254.0" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb2"><rect x="326.0" y="59.0" width="254.0" height="250.0" rx="22"/></clipPath><rect x="326.0" y="59.0" width="254.0" height="75.0" fill="#ECDEC2" clip-path="url(#cb2)"/>
+<circle cx="453.0" cy="134.0" r="32.0" fill="#FBFAF4"/><circle cx="453.0" cy="134.0" r="26.0" fill="#8A7550"/><g transform="translate(453.0,134.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M0,15 C-10,15 -12,6 -9,0 C-7,-5 -3,-7 -3,-13 C3,-10 6,-5 5,1 C7,-1 8,-3 8,-5 C12,1 11,15 0,15 z"/></g>
+<text x="453.0" y="201.9" font-size="19.5" font-weight="700" fill="#463A2F" text-anchor="middle">Agents incendie</text>
+<text x="453.0" y="225.3" font-size="19.5" font-weight="700" fill="#463A2F" text-anchor="middle">SSIAP</text>
+<text x="453.0" y="256.5" font-size="15.5" font-weight="400" fill="#463A2F" text-anchor="middle">Prévention, mise en sécurité</text>
+<text x="453.0" y="277.5" font-size="15.5" font-weight="400" fill="#463A2F" text-anchor="middle">du bâtiment, intervention</text>
+<rect x="612.0" y="59.0" width="254.0" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb3"><rect x="612.0" y="59.0" width="254.0" height="250.0" rx="22"/></clipPath><rect x="612.0" y="59.0" width="254.0" height="75.0" fill="#ECDEC2" clip-path="url(#cb3)"/>
+<circle cx="739.0" cy="134.0" r="32.0" fill="#FBFAF4"/><circle cx="739.0" cy="134.0" r="26.0" fill="#8A7550"/><g transform="translate(739.0,134.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M-12,4 L-12,-4 L-6,-8 L-6,-13 L-2,-9 L6,-9 L10,-5 L13,-5 L13,-1 L8,1 L8,12 M-12,4 L-12,12 M-12,4 L4,4 L4,12"/></g>
+<text x="739.0" y="199.2" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Agents cynophiles</text>
+<text x="739.0" y="234.3" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">En tandem avec leur</text>
+<text x="739.0" y="258.1" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">chien : présence, rondes,</text>
+<text x="739.0" y="281.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">filtrage</text>
+<rect x="898.0" y="59.0" width="254.0" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb4"><rect x="898.0" y="59.0" width="254.0" height="250.0" rx="22"/></clipPath><rect x="898.0" y="59.0" width="254.0" height="75.0" fill="#ECDEC2" clip-path="url(#cb4)"/>
+<circle cx="1025.0" cy="134.0" r="32.0" fill="#FBFAF4"/><circle cx="1025.0" cy="134.0" r="26.0" fill="#8A7550"/><g transform="translate(1025.0,134.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M-15,4 L-15,-1 L-10,-8 L10,-8 L15,-1 L15,4 z"/><circle cx="-8" cy="6" r="3.5"/><circle cx="8" cy="6" r="3.5"/></g>
+<text x="1025.0" y="191.4" font-size="19.5" font-weight="700" fill="#463A2F" text-anchor="middle">Rondiers</text>
+<text x="1025.0" y="214.8" font-size="19.5" font-weight="700" fill="#463A2F" text-anchor="middle">intervenants</text>
+<text x="1025.0" y="245.9" font-size="15.5" font-weight="400" fill="#463A2F" text-anchor="middle">Rondes de surveillance et de</text>
+<text x="1025.0" y="267.0" font-size="15.5" font-weight="400" fill="#463A2F" text-anchor="middle">contrôle, interventions sur</text>
+<text x="1025.0" y="288.1" font-size="15.5" font-weight="400" fill="#463A2F" text-anchor="middle">alarme</text>
+<rect x="40.0" y="343.0" width="254.0" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb5"><rect x="40.0" y="343.0" width="254.0" height="250.0" rx="22"/></clipPath><rect x="40.0" y="343.0" width="254.0" height="75.0" fill="#ECDEC2" clip-path="url(#cb5)"/>
+<circle cx="167.0" cy="418.0" r="32.0" fill="#FBFAF4"/><circle cx="167.0" cy="418.0" r="26.0" fill="#8A7550"/><g transform="translate(167.0,418.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="-7" r="6.5"/><path d="M-12,14 C-12,3 12,3 12,14"/></g>
+<text x="167.0" y="483.2" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Agents d'accueil</text>
+<text x="167.0" y="518.3" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Premier contact :</text>
+<text x="167.0" y="542.1" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">accueillir, orienter,</text>
+<text x="167.0" y="565.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">tâches administratives</text>
+<rect x="326.0" y="343.0" width="254.0" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb6"><rect x="326.0" y="343.0" width="254.0" height="250.0" rx="22"/></clipPath><rect x="326.0" y="343.0" width="254.0" height="75.0" fill="#ECDEC2" clip-path="url(#cb6)"/>
+<circle cx="453.0" cy="418.0" r="32.0" fill="#FBFAF4"/><circle cx="453.0" cy="418.0" r="26.0" fill="#8A7550"/><g transform="translate(453.0,418.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><circle cx="-3" cy="-3" r="10"/><path d="M4,4 L14,14"/></g>
+<text x="453.0" y="483.2" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Experts qualité</text>
+<text x="453.0" y="518.3" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Diagnostic de vos</text>
+<text x="453.0" y="542.1" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">besoins, contrôle des</text>
+<text x="453.0" y="565.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">prestations</text>
+<rect x="612.0" y="343.0" width="254.0" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb7"><rect x="612.0" y="343.0" width="254.0" height="250.0" rx="22"/></clipPath><rect x="612.0" y="343.0" width="254.0" height="75.0" fill="#ECDEC2" clip-path="url(#cb7)"/>
+<circle cx="739.0" cy="418.0" r="32.0" fill="#FBFAF4"/><circle cx="739.0" cy="418.0" r="26.0" fill="#8A7550"/><g transform="translate(739.0,418.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,-15 L5,-15 L11,-9 L11,15 L-10,15 z"/><path d="M-5,-4 L6,-4 M-5,2 L6,2 M-5,8 L2,8"/></g>
+<text x="739.0" y="483.2" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Préventeurs</text>
+<text x="739.0" y="518.3" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Analyse des risques,</text>
+<text x="739.0" y="542.1" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">veille réglementaire, suivi</text>
+<text x="739.0" y="565.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">de chantier</text>
+<rect x="898.0" y="343.0" width="254.0" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb8"><rect x="898.0" y="343.0" width="254.0" height="250.0" rx="22"/></clipPath><rect x="898.0" y="343.0" width="254.0" height="75.0" fill="#ECDEC2" clip-path="url(#cb8)"/>
+<circle cx="1025.0" cy="418.0" r="32.0" fill="#FBFAF4"/><circle cx="1025.0" cy="418.0" r="26.0" fill="#8A7550"/><g transform="translate(1025.0,418.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><circle cx="-7" cy="-6" r="5"/><circle cx="8" cy="-6" r="5"/><path d="M-16,12 C-16,3 2,3 2,12"/><path d="M0,12 C0,3 17,3 17,12"/></g>
+<text x="1025.0" y="507.0" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Animations</text>
+<text x="1025.0" y="542.1" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Exercices EPI, ESI, SST</text>
+</svg>

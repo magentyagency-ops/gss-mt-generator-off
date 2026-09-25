@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="50" y="40" width="700" height="580" rx="26" fill="#E6E3E1" stroke="#484545" stroke-width="3" stroke-dasharray="12 8"/>
+<rect x="80.0" y="70.0" width="300.0" height="170.0" rx="12.0" fill="#ECDEC2" filter="url(#od)"/>
+<text x="230.0" y="161.0" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">BÂTIMENT A</text>
+<rect x="460.0" y="70.0" width="250.0" height="130.0" rx="12.0" fill="#ECDEC2" filter="url(#od)"/>
+<text x="585.0" y="141.0" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">BÂTIMENT B</text>
+<rect x="80.0" y="340.0" width="220.0" height="190.0" rx="12.0" fill="#ECDEC2" filter="url(#od)"/>
+<text x="190.0" y="441.0" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">PARKING</text>
+<rect x="390.0" y="300.0" width="320.0" height="230.0" rx="12.0" fill="#ECDEC2" filter="url(#od)"/>
+<text x="550.0" y="421.0" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">BÂTIMENT C</text>
+<path d="M735.0,600.0 L735.0,262.0 L400.0,262.0 L400.0,55.0 L65.0,55.0 L65.0,290.0 L330.0,290.0 L330.0,600.0 L735.0,600.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="8 7"/>
+<circle cx="735" cy="430" r="18" fill="#6298C0" filter="url(#od)"/>
+<text x="735.0" y="436.0" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">1</text>
+<circle cx="570" cy="262" r="18" fill="#6298C0" filter="url(#od)"/>
+<text x="570.0" y="268.0" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">2</text>
+<circle cx="400" cy="150" r="18" fill="#6298C0" filter="url(#od)"/>
+<text x="400.0" y="156.0" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">3</text>
+<circle cx="230" cy="55" r="18" fill="#6298C0" filter="url(#od)"/>
+<text x="230.0" y="61.0" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">4</text>
+<circle cx="65" cy="180" r="18" fill="#6298C0" filter="url(#od)"/>
+<text x="65.0" y="186.0" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">5</text>
+<circle cx="200" cy="290" r="18" fill="#6298C0" filter="url(#od)"/>
+<text x="200.0" y="296.0" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">6</text>
+<circle cx="330" cy="450" r="18" fill="#6298C0" filter="url(#od)"/>
+<text x="330.0" y="456.0" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">7</text>
+<circle cx="530" cy="600" r="18" fill="#6298C0" filter="url(#od)"/>
+<text x="530.0" y="606.0" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">8</text>
+<circle cx="735" cy="600" r="20" fill="#484545" filter="url(#od)"/>
+<g transform="translate(735.0,600.0) scale(0.620)" fill="none" stroke="#F5F5DE" stroke-width="3.87" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="-7" r="6.5"/><path d="M-12,14 C-12,3 12,3 12,14"/></g>
+<rect x="800.0" y="34.0" width="352.0" height="131.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb52"><rect x="800.0" y="34.0" width="352.0" height="131.0" rx="22"/></clipPath><rect x="800.0" y="34.0" width="72.0" height="131.0" fill="#484545" clip-path="url(#cb52)"/>
+<circle cx="836.0" cy="99.5" r="28.0" fill="#FBFAF4"/><circle cx="836.0" cy="99.5" r="22.0" fill="#484545"/><g transform="translate(836.0,99.5) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="-7" r="6.5"/><path d="M-12,14 C-12,3 12,3 12,14"/></g>
+<text x="888.0" y="91.5" font-size="17" font-weight="700" fill="#463A2F" text-anchor="start">Départ du poste</text>
+<text x="888.0" y="118.7" font-size="13.5" font-weight="400" fill="#463A2F" text-anchor="start">Avec un moyen de communication</text>
+<rect x="800.0" y="185.0" width="352.0" height="131.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb53"><rect x="800.0" y="185.0" width="352.0" height="131.0" rx="22"/></clipPath><rect x="800.0" y="185.0" width="72.0" height="131.0" fill="#6298C0" clip-path="url(#cb53)"/>
+<circle cx="836.0" cy="250.5" r="28.0" fill="#FBFAF4"/><circle cx="836.0" cy="250.5" r="22.0" fill="#1D49A7"/><g transform="translate(836.0,250.5) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,15 C-13,0 -12,-14 0,-14 C12,-14 13,0 0,15 z"/><circle cx="0" cy="-4" r="4.5"/></g>
+<text x="888.0" y="242.5" font-size="17" font-weight="700" fill="#463A2F" text-anchor="start">Pointeaux</text>
+<text x="888.0" y="269.7" font-size="13.5" font-weight="400" fill="#463A2F" text-anchor="start">Disposés aux endroits clés</text>
+<rect x="800.0" y="336.0" width="352.0" height="131.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb54"><rect x="800.0" y="336.0" width="352.0" height="131.0" rx="22"/></clipPath><rect x="800.0" y="336.0" width="72.0" height="131.0" fill="#ECDEC2" clip-path="url(#cb54)"/>
+<circle cx="836.0" cy="401.5" r="28.0" fill="#FBFAF4"/><circle cx="836.0" cy="401.5" r="22.0" fill="#8A7550"/><g transform="translate(836.0,401.5) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-8,15 L-3,-15 M8,15 L3,-15 M0,11 L0,6 M0,1 L0,-3 M0,-8 L0,-11"/></g>
+<text x="888.0" y="393.5" font-size="17" font-weight="700" fill="#463A2F" text-anchor="start">Circuit convenu</text>
+<text x="888.0" y="420.7" font-size="13.5" font-weight="400" fill="#463A2F" text-anchor="start">Avec le client</text>
+<rect x="800.0" y="487.0" width="352.0" height="131.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb55"><rect x="800.0" y="487.0" width="352.0" height="131.0" rx="22"/></clipPath><rect x="800.0" y="487.0" width="72.0" height="131.0" fill="#B8CCB1" clip-path="url(#cb55)"/>
+<circle cx="836.0" cy="552.5" r="28.0" fill="#FBFAF4"/><circle cx="836.0" cy="552.5" r="22.0" fill="#377E3F"/><g transform="translate(836.0,552.5) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-13" y="-13" width="26" height="26" rx="5"/><path d="M-6,0 L-1,5 L7,-5"/></g>
+<text x="888.0" y="544.5" font-size="17" font-weight="700" fill="#463A2F" text-anchor="start">Ronde vérifiée</text>
+<text x="888.0" y="571.7" font-size="13.5" font-weight="400" fill="#463A2F" text-anchor="start">Effectuée dans son intégralité</text>
+</svg>

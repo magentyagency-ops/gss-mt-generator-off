@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<path d="M600.0,264.0 L600.0,146.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M506.0,308.3 L404.0,224.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M478.1,389.7 L404.0,392.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M508.8,467.0 L404.0,560.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M693.2,307.3 L792.0,224.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M721.9,389.8 L792.0,392.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M690.4,467.9 L792.0,560.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<circle cx="600.0" cy="386.0" r="118" fill="#E5CA97" filter="url(#od)"/>
+<text x="600.0" y="362.5" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Agent de</text>
+<text x="600.0" y="388.9" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">sécurité</text>
+<text x="600.0" y="424.0" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">CQP APS</text>
+<rect x="390.0" y="28.0" width="420.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb1"><rect x="390.0" y="28.0" width="420.0" height="104.0" rx="22"/></clipPath><rect x="390.0" y="28.0" width="72.0" height="104.0" fill="#6298C0" clip-path="url(#cb1)"/>
+<circle cx="426.0" cy="80.0" r="28.0" fill="#FBFAF4"/><circle cx="426.0" cy="80.0" r="22.0" fill="#1D49A7"/><g transform="translate(426.0,80.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-13" y="-10" width="26" height="20" rx="3"/><circle cx="-5" cy="-1" r="3.5"/><path d="M-10,7 C-10,3 0,3 0,7 M4,-3 L9,-3 M4,2 L9,2"/></g>
+<text x="478.0" y="59.6" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Accueil et contrôle d'accès</text>
+<text x="478.0" y="91.8" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">Parkings, sites publics et privés, filtrage</text>
+<text x="478.0" y="113.5" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">des véhicules</text>
+<rect x="40.0" y="158.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb2"><rect x="40.0" y="158.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="40.0" y="158.0" width="72.0" height="132.0" fill="#ECDEC2" clip-path="url(#cb2)"/>
+<circle cx="76.0" cy="224.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="224.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,224.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-15 L13,-10 L13,0 C13,8 7,13 0,16 C-7,13 -13,8 -13,0 L-13,-10 z"/><path d="M-5,0 L-1,4 L6,-4"/></g>
+<text x="128.0" y="202.3" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Armement</text>
+<text x="128.0" y="236.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Classification, port,</text>
+<text x="128.0" y="259.5" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">transport, détention</text>
+<rect x="40.0" y="326.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb3"><rect x="40.0" y="326.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="40.0" y="326.0" width="72.0" height="132.0" fill="#ECDEC2" clip-path="url(#cb3)"/>
+<circle cx="76.0" cy="392.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="392.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,392.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-8,14 L-11,2 C-12,-1 -8,-2 -7,1 L-6,4 L-6,-10 C-6,-13 -2,-13 -2,-10 L-2,-1 L-2,-13 C-2,-16 2,-16 2,-13 L2,-1 L2,-11 C2,-14 6,-14 6,-11 L6,0 L6,-7 C6,-10 10,-10 10,-7 L10,6 C10,11 7,14 3,14 z"/></g>
+<text x="128.0" y="370.3" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Palpation de sécurité</text>
+<text x="128.0" y="404.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Formation complémentaire</text>
+<text x="128.0" y="427.5" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">au CQP</text>
+<rect x="40.0" y="494.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb4"><rect x="40.0" y="494.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="40.0" y="494.0" width="72.0" height="132.0" fill="#6298C0" clip-path="url(#cb4)"/>
+<circle cx="76.0" cy="560.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="560.0" r="22.0" fill="#1D49A7"/><g transform="translate(76.0,560.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-16,0 C-9,-11 9,-11 16,0 C9,11 -9,11 -16,0 z"/><circle cx="0" cy="0" r="4.5"/></g>
+<text x="128.0" y="549.8" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Effets personnels</text>
+<text x="128.0" y="583.9" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Vérification visuelle des sacs</text>
+<rect x="802.0" y="158.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb5"><rect x="802.0" y="158.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="802.0" y="158.0" width="72.0" height="132.0" fill="#F0D3A3" clip-path="url(#cb5)"/>
+<circle cx="838.0" cy="224.0" r="28.0" fill="#FBFAF4"/><circle cx="838.0" cy="224.0" r="22.0" fill="#E99842"/><g transform="translate(838.0,224.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-13,-5 L11,-5 M5,-11 L11,-5 L5,1 M13,5 L-11,5 M-5,-1 L-11,5 L-5,11"/></g>
+<text x="890.0" y="213.8" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Gestion des conflits</text>
+<text x="890.0" y="247.9" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Analyser, résoudre, prévenir</text>
+<rect x="802.0" y="326.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb6"><rect x="802.0" y="326.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="802.0" y="326.0" width="72.0" height="132.0" fill="#ECDEC2" clip-path="url(#cb6)"/>
+<circle cx="838.0" cy="392.0" r="28.0" fill="#FBFAF4"/><circle cx="838.0" cy="392.0" r="22.0" fill="#8A7550"/><g transform="translate(838.0,392.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,15 C-10,15 -12,6 -9,0 C-7,-5 -3,-7 -3,-13 C3,-10 6,-5 5,1 C7,-1 8,-3 8,-5 C12,1 11,15 0,15 z"/></g>
+<text x="890.0" y="370.3" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Incendie</text>
+<text x="890.0" y="404.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Feu, détection, extinction,</text>
+<text x="890.0" y="427.5" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">acquittement</text>
+<rect x="802.0" y="494.0" width="350.0" height="132.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb7"><rect x="802.0" y="494.0" width="350.0" height="132.0" rx="22"/></clipPath><rect x="802.0" y="494.0" width="72.0" height="132.0" fill="#ECDEC2" clip-path="url(#cb7)"/>
+<circle cx="838.0" cy="560.0" r="28.0" fill="#FBFAF4"/><circle cx="838.0" cy="560.0" r="22.0" fill="#8A7550"/><g transform="translate(838.0,560.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-5,-14 L5,-14 L5,-5 L14,-5 L14,5 L5,5 L5,14 L-5,14 L-5,5 L-14,5 L-14,-5 L-5,-5 z"/></g>
+<text x="890.0" y="538.3" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Secourisme</text>
+<text x="890.0" y="572.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Protéger, examiner, alerter,</text>
+<text x="890.0" y="595.5" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">secourir</text>
+</svg>

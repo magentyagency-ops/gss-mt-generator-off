@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="59.0" width="349.3" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb128"><rect x="40.0" y="59.0" width="349.3" height="250.0" rx="22"/></clipPath><rect x="40.0" y="59.0" width="349.3" height="75.0" fill="#F0D3A3" clip-path="url(#cb128)"/>
+<circle cx="214.7" cy="134.0" r="32.0" fill="#FBFAF4"/><circle cx="214.7" cy="134.0" r="26.0" fill="#E99842"/><g transform="translate(214.7,134.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,-15 L5,-15 L11,-9 L11,15 L-10,15 z"/><path d="M-5,-4 L6,-4 M-5,2 L6,2 M-5,8 L2,8"/></g>
+<text x="214.7" y="240.6" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Word</text>
+<rect x="421.3" y="59.0" width="349.3" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb129"><rect x="421.3" y="59.0" width="349.3" height="250.0" rx="22"/></clipPath><rect x="421.3" y="59.0" width="349.3" height="75.0" fill="#F0D3A3" clip-path="url(#cb129)"/>
+<circle cx="596.0" cy="134.0" r="32.0" fill="#FBFAF4"/><circle cx="596.0" cy="134.0" r="26.0" fill="#E99842"/><g transform="translate(596.0,134.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M-14,14 L-14,-14 M-14,14 L15,14"/><path d="M-8,8 L-8,2 M-1,8 L-1,-6 M6,8 L6,-2 M13,8 L13,-10"/></g>
+<text x="596.0" y="240.6" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Excel</text>
+<rect x="802.7" y="59.0" width="349.3" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb130"><rect x="802.7" y="59.0" width="349.3" height="250.0" rx="22"/></clipPath><rect x="802.7" y="59.0" width="349.3" height="75.0" fill="#F0D3A3" clip-path="url(#cb130)"/>
+<circle cx="977.3" cy="134.0" r="32.0" fill="#FBFAF4"/><circle cx="977.3" cy="134.0" r="26.0" fill="#E99842"/><g transform="translate(977.3,134.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="0" r="14"/><path d="M-14,0 L14,0 M0,-14 C-7,-6 -7,6 0,14 C7,6 7,-6 0,-14"/></g>
+<text x="977.3" y="240.6" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Navigation internet</text>
+<rect x="230.7" y="343.0" width="349.3" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb131"><rect x="230.7" y="343.0" width="349.3" height="250.0" rx="22"/></clipPath><rect x="230.7" y="343.0" width="349.3" height="75.0" fill="#F0D3A3" clip-path="url(#cb131)"/>
+<circle cx="405.3" cy="418.0" r="32.0" fill="#FBFAF4"/><circle cx="405.3" cy="418.0" r="26.0" fill="#E99842"/><g transform="translate(405.3,418.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-15" y="-10" width="30" height="21" rx="3"/><path d="M-14,-8 L0,3 L14,-8"/></g>
+<text x="405.3" y="524.6" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Messagerie</text>
+<rect x="612.0" y="343.0" width="349.3" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb132"><rect x="612.0" y="343.0" width="349.3" height="250.0" rx="22"/></clipPath><rect x="612.0" y="343.0" width="349.3" height="75.0" fill="#F0D3A3" clip-path="url(#cb132)"/>
+<circle cx="786.7" cy="418.0" r="32.0" fill="#FBFAF4"/><circle cx="786.7" cy="418.0" r="26.0" fill="#E99842"/><g transform="translate(786.7,418.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-13" y="-10" width="26" height="20" rx="3"/><circle cx="-5" cy="-1" r="3.5"/><path d="M-10,7 C-10,3 0,3 0,7 M4,-3 L9,-3 M4,2 L9,2"/></g>
+<text x="786.7" y="524.6" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Logiciels de badgeuses</text>
+</svg>

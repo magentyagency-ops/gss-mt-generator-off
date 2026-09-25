@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="144.2" width="521.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb134"><rect x="40.0" y="144.2" width="521.0" height="104.0" rx="22"/></clipPath><rect x="40.0" y="144.2" width="72.0" height="104.0" fill="#ECDEC2" clip-path="url(#cb134)"/>
+<circle cx="76.0" cy="196.2" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="196.2" r="22.0" fill="#8A7550"/><g transform="translate(76.0,196.2) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-15 C6,-5 11,1 11,5 C11,11 6,15 0,15 C-6,15 -11,11 -11,5 C-11,1 -6,-5 0,-15 z"/></g>
+<text x="128.0" y="202.8" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Colonne sèche</text>
+<rect x="40.0" y="272.2" width="521.0" height="235.6" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<circle cx="73.9" cy="304.3" r="4.5" fill="#463A2F"/>
+<text x="90.8" y="312.0" font-size="22.5" font-weight="400" fill="#463A2F" text-anchor="start">Alimentée par les sapeurs-pompiers à</text>
+<text x="90.8" y="342.6" font-size="22.5" font-weight="400" fill="#463A2F" text-anchor="start">leur arrivée</text>
+<circle cx="73.9" cy="373.4" r="4.5" fill="#463A2F"/>
+<text x="90.8" y="381.1" font-size="22.5" font-weight="400" fill="#463A2F" text-anchor="start">Bouchons d'alimentation à chaque</text>
+<text x="90.8" y="411.7" font-size="22.5" font-weight="400" fill="#463A2F" text-anchor="start">étage</text>
+<circle cx="73.9" cy="442.5" r="4.5" fill="#463A2F"/>
+<text x="90.8" y="450.1" font-size="22.5" font-weight="400" fill="#463A2F" text-anchor="start">Vérification visuelle par nos agents</text>
+<text x="90.8" y="480.7" font-size="22.5" font-weight="400" fill="#463A2F" text-anchor="start">SSIAP 1</text>
+<rect x="631.0" y="144.2" width="521.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb135"><rect x="631.0" y="144.2" width="521.0" height="104.0" rx="22"/></clipPath><rect x="631.0" y="144.2" width="72.0" height="104.0" fill="#6298C0" clip-path="url(#cb135)"/>
+<circle cx="667.0" cy="196.2" r="28.0" fill="#FBFAF4"/><circle cx="667.0" cy="196.2" r="22.0" fill="#1D49A7"/><g transform="translate(667.0,196.2) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-15 C6,-5 11,1 11,5 C11,11 6,15 0,15 C-6,15 -11,11 -11,5 C-11,1 -6,-5 0,-15 z"/></g>
+<text x="719.0" y="202.8" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Colonne humide</text>
+<rect x="631.0" y="272.2" width="521.0" height="235.6" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<circle cx="665.4" cy="351.9" r="4.8" fill="#463A2F"/>
+<text x="683.4" y="360.0" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">En permanence chargée en eau</text>
+<circle cx="665.4" cy="392.9" r="4.8" fill="#463A2F"/>
+<text x="683.4" y="401.1" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Dans certains ERP particuliers et</text>
+<text x="683.4" y="433.7" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">dans les IGH</text>
+<circle cx="596.0" cy="390.0" r="30" fill="#484545" filter="url(#od)"/>
+<text x="596.0" y="397.0" font-size="17" font-weight="800" fill="#F5F5DE" text-anchor="middle">OU</text>
+</svg>

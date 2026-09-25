@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<path d="M600.0,264.0 L600.0,146.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M492.2,328.8 L404.0,282.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M495.0,448.1 L404.0,502.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M707.3,327.9 L792.0,282.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M704.4,449.1 L792.0,502.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<circle cx="600.0" cy="386.0" r="118" fill="#E5CA97" filter="url(#od)"/>
+<text x="600.0" y="375.7" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Recrutement</text>
+<text x="600.0" y="410.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Des profils de qualité</text>
+<rect x="390.0" y="28.0" width="420.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb112"><rect x="390.0" y="28.0" width="420.0" height="104.0" rx="22"/></clipPath><rect x="390.0" y="28.0" width="72.0" height="104.0" fill="#ECDEC2" clip-path="url(#cb112)"/>
+<circle cx="426.0" cy="80.0" r="28.0" fill="#FBFAF4"/><circle cx="426.0" cy="80.0" r="22.0" fill="#8A7550"/><g transform="translate(426.0,80.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><circle cx="-7" cy="-6" r="5"/><circle cx="8" cy="-6" r="5"/><path d="M-16,12 C-16,3 2,3 2,12"/><path d="M0,12 C0,3 17,3 17,12"/></g>
+<text x="478.0" y="86.9" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Vivier interne</text>
+<rect x="40.0" y="207.0" width="350.0" height="150.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb113"><rect x="40.0" y="207.0" width="350.0" height="150.0" rx="22"/></clipPath><rect x="40.0" y="207.0" width="72.0" height="150.0" fill="#ECDEC2" clip-path="url(#cb113)"/>
+<circle cx="76.0" cy="282.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="282.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,282.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-12,15 L-12,-14 L6,-14 L6,15 M6,-4 L13,-4 L13,15 M-16,15 L16,15"/><path d="M-7,-8 L-3,-8 M1,-8 L1,-8 M-7,-2 L-3,-2 M-7,4 L-3,4 M-4,15 L-4,9"/></g>
+<text x="128.0" y="271.8" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">France Travail</text>
+<text x="128.0" y="305.9" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Ex-Pôle emploi</text>
+<rect x="40.0" y="427.0" width="350.0" height="150.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb114"><rect x="40.0" y="427.0" width="350.0" height="150.0" rx="22"/></clipPath><rect x="40.0" y="427.0" width="72.0" height="150.0" fill="#ECDEC2" clip-path="url(#cb114)"/>
+<circle cx="76.0" cy="502.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="502.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,502.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,15 C-13,0 -12,-14 0,-14 C12,-14 13,0 0,15 z"/><circle cx="0" cy="-4" r="4.5"/></g>
+<text x="128.0" y="508.9" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Mission locale</text>
+<rect x="802.0" y="207.0" width="350.0" height="150.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb115"><rect x="802.0" y="207.0" width="350.0" height="150.0" rx="22"/></clipPath><rect x="802.0" y="207.0" width="72.0" height="150.0" fill="#ECDEC2" clip-path="url(#cb115)"/>
+<circle cx="838.0" cy="282.0" r="28.0" fill="#FBFAF4"/><circle cx="838.0" cy="282.0" r="22.0" fill="#8A7550"/><g transform="translate(838.0,282.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><circle cx="-9" cy="-8" r="4"/><circle cx="9" cy="-8" r="4"/><circle cx="0" cy="-11" r="4"/><path d="M-15,6 L15,6 L15,10 L-15,10 z M-12,10 L-12,15 M12,10 L12,15"/></g>
+<text x="890.0" y="288.9" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">CEPIC</text>
+<rect x="802.0" y="427.0" width="350.0" height="150.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb116"><rect x="802.0" y="427.0" width="350.0" height="150.0" rx="22"/></clipPath><rect x="802.0" y="427.0" width="72.0" height="150.0" fill="#ECDEC2" clip-path="url(#cb116)"/>
+<circle cx="838.0" cy="502.0" r="28.0" fill="#FBFAF4"/><circle cx="838.0" cy="502.0" r="22.0" fill="#8A7550"/><g transform="translate(838.0,502.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-16,-6 L0,-13 L16,-6 L0,1 z"/><path d="M-9,-2 L-9,6 C-4,10 4,10 9,6 L9,-2 M16,-6 L16,4"/></g>
+<text x="890.0" y="491.8" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">IFESSU</text>
+<text x="890.0" y="525.9" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Centre de formation</text>
+</svg>

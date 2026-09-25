@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<text x="1152.0" y="614.0" font-size="14" font-weight="500" fill="#5B5451" text-anchor="end">45 et 60 minutes : délais du marché de l'Université de Rouen Normandie</text>
+<rect x="70.0" y="312.0" width="1060.0" height="36.0" rx="18.0" fill="#ECDEC2" filter="url(#od)"/>
+<line x1="90.0" y1="322" x2="90.0" y2="338" stroke="#484545" stroke-width="2.5"/>
+<text x="90.0" y="374.0" font-size="13" font-weight="600" fill="#5B5451" text-anchor="middle">0 min</text>
+<line x1="345.0" y1="322" x2="345.0" y2="338" stroke="#484545" stroke-width="2.5"/>
+<text x="345.0" y="374.0" font-size="13" font-weight="600" fill="#5B5451" text-anchor="middle">15 min</text>
+<line x1="600.0" y1="322" x2="600.0" y2="338" stroke="#484545" stroke-width="2.5"/>
+<line x1="855.0" y1="322" x2="855.0" y2="338" stroke="#484545" stroke-width="2.5"/>
+<line x1="1110.0" y1="322" x2="1110.0" y2="338" stroke="#484545" stroke-width="2.5"/>
+<path d="M600.0,278.0 L600.0,308.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="600.0" cy="330" r="15" fill="#F0D3A3" filter="url(#od)"/>
+<rect x="450.0" y="144.0" width="300.0" height="128.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb110"><rect x="450.0" y="144.0" width="300.0" height="128.0" rx="22"/></clipPath><rect x="450.0" y="144.0" width="300.0" height="12.0" fill="#F0D3A3" clip-path="url(#cb110)"/>
+<text x="600.0" y="192.9" font-size="20" font-weight="700" fill="#463A2F" text-anchor="middle">30 minutes</text>
+<text x="600.0" y="225.1" font-size="16" font-weight="400" fill="#463A2F" text-anchor="middle">Rondier d'astreinte sur site après</text>
+<text x="600.0" y="246.8" font-size="16" font-weight="400" fill="#463A2F" text-anchor="middle">un signal de télésurveillance</text>
+<path d="M855.0,352.0 L855.0,398.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="855.0" cy="330" r="15" fill="#6298C0" filter="url(#od)"/>
+<rect x="695.0" y="400.0" width="320.0" height="128.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb111"><rect x="695.0" y="400.0" width="320.0" height="128.0" rx="22"/></clipPath><rect x="695.0" y="400.0" width="320.0" height="12.0" fill="#6298C0" clip-path="url(#cb111)"/>
+<text x="855.0" y="448.9" font-size="20" font-weight="700" fill="#463A2F" text-anchor="middle">45 minutes</text>
+<text x="855.0" y="481.1" font-size="16" font-weight="400" fill="#463A2F" text-anchor="middle">Elbeuf, Saint-Étienne-du-Rouvray,</text>
+<text x="855.0" y="502.8" font-size="16" font-weight="400" fill="#463A2F" text-anchor="middle">Mont-Saint-Aignan, Rouen</text>
+<path d="M1110.0,278.0 L1110.0,308.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="1110.0" cy="330" r="15" fill="#6298C0" filter="url(#od)"/>
+<rect x="938.0" y="162.0" width="240.0" height="110.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb112"><rect x="938.0" y="162.0" width="240.0" height="110.0" rx="22"/></clipPath><rect x="938.0" y="162.0" width="240.0" height="12.0" fill="#6298C0" clip-path="url(#cb112)"/>
+<text x="1058.0" y="212.8" font-size="20" font-weight="700" fill="#463A2F" text-anchor="middle">60 minutes</text>
+<text x="1058.0" y="244.9" font-size="16" font-weight="400" fill="#463A2F" text-anchor="middle">Évreux</text>
+</svg>

@@ -7,6 +7,12 @@ import { D2Service } from './d2_service';
 /** Illustrations attribuées, indexées par clé de slide (unicité globale garantie amont). */
 export type SlideAssignments = Map<string, PooledIllustration>;
 
+/** Schémas GSS (SVG sur une ligne, identifiants uniques), indexés par clé de slide : un par page. */
+export type SlideSchemas = Map<string, string>;
+
+/** Police Lexend des schémas GSS, embarquée une fois dans le document (mesure du texte identique). */
+const LEXEND_PATH = path.resolve(__dirname, '../../python/schemas_gss/polices/Lexend.ttf');
+
 // ─── Constants ───
 /** Maximum words per slide body before splitting to a new slide.
  *  Abaissé (vs 220) pour réserver l'espace de l'illustration placée sous le texte. */
@@ -145,6 +151,7 @@ export class MarpGenerator {
     chapters: AssembleChapter[],
     cover: CoverInfo = {},
     assignments: SlideAssignments = new Map(),
+    schemas: SlideSchemas = new Map(),
   ): Promise<{ filePath: string; markdownPath: string }> {
     // Write markdown + copy assets to a temp working directory
     const workDir = path.join(this.outputDir, `marp_work_${Date.now()}`);
@@ -177,7 +184,7 @@ export class MarpGenerator {
     // Traitement et compilation des schémas D2 pour chaque section (doit être fait AVANT buildMarkdown)
     await this.processD2Diagrams(chapters, mediaDst, cover.client || 'Client');
 
-    const markdown = this.buildMarkdown(chapters, cover, assignments);
+    const markdown = this.buildMarkdown(chapters, cover, assignments, schemas);
     const mdPath = path.join(workDir, 'memoire_template.md');
     fs.writeFileSync(mdPath, markdown, 'utf-8');
 
@@ -391,6 +398,7 @@ export class MarpGenerator {
     chapters: AssembleChapter[],
     cover: CoverInfo = {},
     assignments: SlideAssignments = new Map(),
+    schemas: SlideSchemas = new Map(),
   ): string {
     const lines: string[] = [];
 
@@ -403,6 +411,12 @@ export class MarpGenerator {
     lines.push("header: 'GLOBAL SECURITY SERVICES'");
     lines.push('---');
     lines.push('');
+    if (schemas.size > 0 && fs.existsSync(LEXEND_PATH)) {
+      // Police des schémas GSS : embarquée une seule fois pour tout le document.
+      const b64 = fs.readFileSync(LEXEND_PATH).toString('base64');
+      lines.push(`<style>@font-face{font-family:'Lexend';src:url(data:font/ttf;base64,${b64}) format('truetype');font-weight:100 900;}</style>`);
+      lines.push('');
+    }
 
     // ── Cover page (lead) ──
     lines.push('<!-- _class: lead -->');
@@ -499,6 +513,16 @@ export class MarpGenerator {
           lines.push('');
           lines.push(chunk);
           lines.push('');
+
+          const schemaGss = schemas.get(slideKeyOf(ci, si, i));
+          if (schemaGss) {
+            // Un schéma GSS par page, à l'emplacement réservé à l'illustration (sous le texte).
+            lines.push(`<div class="schema-gss" style="width: 85%; margin: 15px auto 0;">`);
+            lines.push(schemaGss.replace('<svg ', '<svg style="display: block; width: 100%; height: auto; max-height: 440px; margin: 0 auto;" '));
+            lines.push(`</div>`);
+            lines.push('');
+            continue;
+          }
 
           const hasSchema = section.d2SvgFileName && i === chunks.length - 1;
           const illus = assignments.get(slideKeyOf(ci, si, i));

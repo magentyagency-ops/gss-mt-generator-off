@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="91.3" width="521.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb41"><rect x="40.0" y="91.3" width="521.0" height="104.0" rx="22"/></clipPath><rect x="40.0" y="91.3" width="72.0" height="104.0" fill="#B8CCB1" clip-path="url(#cb41)"/>
+<circle cx="76.0" cy="143.3" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="143.3" r="22.0" fill="#377E3F"/><g transform="translate(76.0,143.3) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-5,-14 L5,-14 L5,-5 L14,-5 L14,5 L5,5 L5,14 L-5,14 L-5,5 L-14,5 L-14,-5 L-5,-5 z"/></g>
+<text x="128.0" y="133.8" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">SST</text>
+<text x="128.0" y="166.0" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">Sauveteur secouriste du travail</text>
+<rect x="40.0" y="219.3" width="521.0" height="341.4" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<circle cx="74.2" cy="260.4" r="4.7" fill="#463A2F"/>
+<text x="91.8" y="268.4" font-size="23.5" font-weight="400" fill="#463A2F" text-anchor="start">Intervenir lors d'un accident du travail</text>
+<circle cx="74.2" cy="300.6" r="4.7" fill="#463A2F"/>
+<text x="91.8" y="308.6" font-size="23.5" font-weight="400" fill="#463A2F" text-anchor="start">Connaître les principes de base de la</text>
+<text x="91.8" y="340.5" font-size="23.5" font-weight="400" fill="#463A2F" text-anchor="start">prévention</text>
+<circle cx="74.2" cy="372.7" r="4.7" fill="#463A2F"/>
+<text x="91.8" y="380.7" font-size="23.5" font-weight="400" fill="#463A2F" text-anchor="start">Identifier les dangers et les personnes</text>
+<text x="91.8" y="412.7" font-size="23.5" font-weight="400" fill="#463A2F" text-anchor="start">exposées</text>
+<circle cx="74.2" cy="444.9" r="4.7" fill="#463A2F"/>
+<text x="91.8" y="452.9" font-size="23.5" font-weight="400" fill="#463A2F" text-anchor="start">Informer sa hiérarchie</text>
+<circle cx="74.2" cy="485.1" r="4.7" fill="#463A2F"/>
+<text x="91.8" y="493.0" font-size="23.5" font-weight="400" fill="#463A2F" text-anchor="start">Effectuer les gestes adaptés à l'état</text>
+<text x="91.8" y="525.0" font-size="23.5" font-weight="400" fill="#463A2F" text-anchor="start">de la victime</text>
+<rect x="631.0" y="91.3" width="521.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb42"><rect x="631.0" y="91.3" width="521.0" height="104.0" rx="22"/></clipPath><rect x="631.0" y="91.3" width="72.0" height="104.0" fill="#B8CCB1" clip-path="url(#cb42)"/>
+<circle cx="667.0" cy="143.3" r="28.0" fill="#FBFAF4"/><circle cx="667.0" cy="143.3" r="22.0" fill="#377E3F"/><g transform="translate(667.0,143.3) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,13 C-16,2 -14,-12 -6,-12 C-2,-12 0,-8 0,-8 C0,-8 2,-12 6,-12 C14,-12 16,2 0,13 z"/></g>
+<text x="719.0" y="133.8" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">PSC1</text>
+<text x="719.0" y="166.0" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">Prévention et secours civiques de niveau 1</text>
+<rect x="631.0" y="219.3" width="521.0" height="341.4" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<circle cx="665.4" cy="269.8" r="4.8" fill="#463A2F"/>
+<text x="683.4" y="277.9" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Malaise et alerte</text>
+<circle cx="665.4" cy="310.8" r="4.8" fill="#463A2F"/>
+<text x="683.4" y="319.0" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Plaies, brûlures, traumatismes</text>
+<circle cx="665.4" cy="351.9" r="4.8" fill="#463A2F"/>
+<text x="683.4" y="360.0" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Hémorragies</text>
+<circle cx="665.4" cy="392.9" r="4.8" fill="#463A2F"/>
+<text x="683.4" y="401.1" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Obstruction des voies aériennes</text>
+<circle cx="665.4" cy="433.9" r="4.8" fill="#463A2F"/>
+<text x="683.4" y="442.1" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Perte de connaissance, arrêt</text>
+<text x="683.4" y="474.7" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">cardiaque</text>
+<circle cx="665.4" cy="507.6" r="4.8" fill="#463A2F"/>
+<text x="683.4" y="515.8" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Alerte aux populations</text>
+<circle cx="596.0" cy="390.0" r="30" fill="#484545" filter="url(#od)"/>
+<text x="596.0" y="397.0" font-size="17" font-weight="800" fill="#F5F5DE" text-anchor="middle">OU</text>
+</svg>

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(597.0,330.0) rotate(0.0) scale(1.3)"/>
+<rect x="40.0" y="180.0" width="511.0" height="300.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb92"><rect x="40.0" y="180.0" width="511.0" height="300.0" rx="22"/></clipPath><rect x="40.0" y="180.0" width="511.0" height="90.0" fill="#E78E83" clip-path="url(#cb92)"/>
+<circle cx="295.5" cy="270.0" r="32.0" fill="#FBFAF4"/><circle cx="295.5" cy="270.0" r="26.0" fill="#DD4E49"/><g transform="translate(295.5,270.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-11" y="-3" width="22" height="17" rx="3"/><path d="M-6,-3 L-6,-8 C-6,-16 6,-16 6,-8 L6,-3 M0,4 L0,8"/></g>
+<text x="58.0" y="206.0" font-size="15" font-weight="700" fill="#DD4E49" text-anchor="start" letter-spacing="1">01</text>
+<text x="295.5" y="361.4" font-size="25" font-weight="700" fill="#463A2F" text-anchor="middle">Constat</text>
+<text x="295.5" y="401.5" font-size="20" font-weight="400" fill="#463A2F" text-anchor="middle">Barillet changé sans information, serrure</text>
+<text x="295.5" y="428.7" font-size="20" font-weight="400" fill="#463A2F" text-anchor="middle">abîmée…</text>
+<rect x="641.0" y="180.0" width="511.0" height="300.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb93"><rect x="641.0" y="180.0" width="511.0" height="300.0" rx="22"/></clipPath><rect x="641.0" y="180.0" width="511.0" height="90.0" fill="#F0D3A3" clip-path="url(#cb93)"/>
+<circle cx="896.5" cy="270.0" r="32.0" fill="#FBFAF4"/><circle cx="896.5" cy="270.0" r="26.0" fill="#E99842"/><g transform="translate(896.5,270.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-12" y="-15" width="24" height="30" rx="3"/><path d="M-6,-7 L6,-7 M-6,-1 L6,-1 M-6,5 L2,5"/></g>
+<text x="659.0" y="206.0" font-size="15" font-weight="700" fill="#E99842" text-anchor="start" letter-spacing="1">02</text>
+<text x="896.5" y="361.4" font-size="25" font-weight="700" fill="#463A2F" text-anchor="middle">Notification</text>
+<text x="896.5" y="401.5" font-size="20" font-weight="400" fill="#463A2F" text-anchor="middle">Dans la main courante interne consacrée aux</text>
+<text x="896.5" y="428.7" font-size="20" font-weight="400" fill="#463A2F" text-anchor="middle">moyens d'accès</text>
+</svg>

@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="34.0" width="349.3" height="172.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb1"><rect x="40.0" y="34.0" width="349.3" height="172.0" rx="22"/></clipPath><rect x="40.0" y="34.0" width="72.0" height="172.0" fill="#ECDEC2" clip-path="url(#cb1)"/>
+<circle cx="76.0" cy="120.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="120.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,120.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-8" y="-8" width="16" height="23" rx="3"/><path d="M-4,-8 L-4,-16 M-4,-2 L4,-2 M-4,3 L4,3"/></g>
+<text x="128.0" y="97.8" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Talkie-walkie</text>
+<text x="128.0" y="132.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Coordonner les actions sur</text>
+<text x="128.0" y="156.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">le site</text>
+<rect x="421.3" y="34.0" width="349.3" height="172.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb2"><rect x="421.3" y="34.0" width="349.3" height="172.0" rx="22"/></clipPath><rect x="421.3" y="34.0" width="72.0" height="172.0" fill="#ECDEC2" clip-path="url(#cb2)"/>
+<circle cx="457.3" cy="120.0" r="28.0" fill="#FBFAF4"/><circle cx="457.3" cy="120.0" r="22.0" fill="#8A7550"/><g transform="translate(457.3,120.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-6,12 C-2,12 0,9 1,6 C2,3 8,1 8,-5 C8,-12 3,-15 -2,-15 C-8,-15 -11,-10 -11,-5"/><path d="M-4,-4 C-4,-8 3,-8 3,-3 C3,1 -2,1 -2,4"/></g>
+<text x="509.3" y="109.7" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Oreillette</text>
+<text x="509.3" y="144.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">La discrétion</text>
+<rect x="802.7" y="34.0" width="349.3" height="172.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb3"><rect x="802.7" y="34.0" width="349.3" height="172.0" rx="22"/></clipPath><rect x="802.7" y="34.0" width="72.0" height="172.0" fill="#ECDEC2" clip-path="url(#cb3)"/>
+<circle cx="838.7" cy="120.0" r="28.0" fill="#FBFAF4"/><circle cx="838.7" cy="120.0" r="22.0" fill="#8A7550"/><g transform="translate(838.7,120.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-12" y="-15" width="24" height="30" rx="3"/><path d="M-6,-7 L6,-7 M-6,-1 L6,-1 M-6,5 L2,5"/></g>
+<text x="890.7" y="109.7" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Tablette</text>
+<text x="890.7" y="144.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Main courante électronique</text>
+<rect x="40.0" y="240.0" width="349.3" height="172.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb4"><rect x="40.0" y="240.0" width="349.3" height="172.0" rx="22"/></clipPath><rect x="40.0" y="240.0" width="72.0" height="172.0" fill="#ECDEC2" clip-path="url(#cb4)"/>
+<circle cx="76.0" cy="326.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="326.0" r="22.0" fill="#8A7550"/><g transform="translate(76.0,326.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-9" y="-15" width="18" height="30" rx="4"/><line x1="-3" y1="10" x2="3" y2="10"/></g>
+<text x="128.0" y="303.8" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Téléphone</text>
+<text x="128.0" y="338.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Ligne d'astreinte dédiée au</text>
+<text x="128.0" y="362.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">site</text>
+<rect x="421.3" y="240.0" width="349.3" height="172.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb5"><rect x="421.3" y="240.0" width="349.3" height="172.0" rx="22"/></clipPath><rect x="421.3" y="240.0" width="72.0" height="172.0" fill="#ECDEC2" clip-path="url(#cb5)"/>
+<circle cx="457.3" cy="326.0" r="28.0" fill="#FBFAF4"/><circle cx="457.3" cy="326.0" r="22.0" fill="#8A7550"/><g transform="translate(457.3,326.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-14 L15,12 L-15,12 z"/><path d="M0,-4 L0,4 M0,8 L0,8.5"/></g>
+<text x="509.3" y="303.8" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">PTI</text>
+<text x="509.3" y="338.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Protection du travailleur</text>
+<text x="509.3" y="362.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">isolé</text>
+<rect x="802.7" y="240.0" width="349.3" height="172.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb6"><rect x="802.7" y="240.0" width="349.3" height="172.0" rx="22"/></clipPath><rect x="802.7" y="240.0" width="72.0" height="172.0" fill="#ECDEC2" clip-path="url(#cb6)"/>
+<circle cx="838.7" cy="326.0" r="28.0" fill="#FBFAF4"/><circle cx="838.7" cy="326.0" r="22.0" fill="#8A7550"/><g transform="translate(838.7,326.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-5,-15 L5,-15 L5,-5 L3,0 L3,14 L-3,14 L-3,0 L-5,-5 z"/><path d="M-9,-19 L-6,-17 M9,-19 L6,-17 M0,-21 L0,-18"/></g>
+<text x="890.7" y="315.7" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Lampe torche</text>
+<text x="890.7" y="350.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Vacations de nuit</text>
+<rect x="40.0" y="446.0" width="349.3" height="172.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb7"><rect x="40.0" y="446.0" width="349.3" height="172.0" rx="22"/></clipPath><rect x="40.0" y="446.0" width="72.0" height="172.0" fill="#6298C0" clip-path="url(#cb7)"/>
+<circle cx="76.0" cy="532.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="532.0" r="22.0" fill="#1D49A7"/><g transform="translate(76.0,532.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-4" y="-15" width="8" height="18" rx="4"/><path d="M0,3 L0,15 M-3,15 L3,15"/><path d="M-9,-11 C-12,-7 -12,-3 -9,1 M9,-11 C12,-7 12,-3 9,1"/></g>
+<text x="128.0" y="521.7" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Détecteur de métaux</text>
+<text x="128.0" y="556.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Sécuriser les entrées</text>
+<rect x="421.3" y="446.0" width="349.3" height="172.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb8"><rect x="421.3" y="446.0" width="349.3" height="172.0" rx="22"/></clipPath><rect x="421.3" y="446.0" width="72.0" height="172.0" fill="#6298C0" clip-path="url(#cb8)"/>
+<circle cx="457.3" cy="532.0" r="28.0" fill="#FBFAF4"/><circle cx="457.3" cy="532.0" r="22.0" fill="#1D49A7"/><g transform="translate(457.3,532.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-12" y="-14" width="24" height="28" rx="6"/><rect x="-7" y="-8" width="14" height="8" rx="1"/><circle cx="0" cy="7" r="3"/></g>
+<text x="509.3" y="521.7" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Compteur à main</text>
+<text x="509.3" y="556.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Respecter les jauges</text>
+<rect x="802.7" y="446.0" width="349.3" height="172.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb9"><rect x="802.7" y="446.0" width="349.3" height="172.0" rx="22"/></clipPath><rect x="802.7" y="446.0" width="72.0" height="172.0" fill="#ECDEC2" clip-path="url(#cb9)"/>
+<circle cx="838.7" cy="532.0" r="28.0" fill="#FBFAF4"/><circle cx="838.7" cy="532.0" r="22.0" fill="#8A7550"/><g transform="translate(838.7,532.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-6,-14 L-13,-9 L-13,14 L13,14 L13,-9 L6,-14 L3,-8 L-3,-8 z M0,-8 L0,14"/></g>
+<text x="890.7" y="521.7" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Gilet pare-lame</text>
+<text x="890.7" y="556.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Sites sensibles</text>
+</svg>

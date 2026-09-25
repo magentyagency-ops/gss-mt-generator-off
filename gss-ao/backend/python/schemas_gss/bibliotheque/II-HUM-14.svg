@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<text x="340.0" y="142.1" font-size="21" font-weight="400" fill="#463A2F" text-anchor="end">Mont-Saint-Aignan + INSPE</text>
+<rect x="360.0" y="104.0" width="342.9" height="62.0" rx="12.0" fill="#ECDEC2" filter="url(#op)"/>
+<text x="531.4" y="141.0" font-size="15" font-weight="800" fill="#463A2F" text-anchor="middle">8</text>
+<rect x="702.9" y="104.0" width="257.1" height="62.0" rx="12.0" fill="#F0D3A3" filter="url(#op)"/>
+<text x="831.4" y="141.0" font-size="15" font-weight="800" fill="#463A2F" text-anchor="middle">6</text>
+<text x="976.0" y="144.0" font-size="24" font-weight="800" fill="#463A2F" text-anchor="start">8 + 6 agents</text>
+<text x="340.0" y="228.1" font-size="21" font-weight="400" fill="#463A2F" text-anchor="end">Martainville · UFR Santé</text>
+<rect x="360.0" y="190.0" width="128.6" height="62.0" rx="12.0" fill="#ECDEC2" filter="url(#op)"/>
+<text x="424.3" y="227.0" font-size="15" font-weight="800" fill="#463A2F" text-anchor="middle">3</text>
+<rect x="488.6" y="190.0" width="85.7" height="62.0" rx="12.0" fill="#F0D3A3" filter="url(#op)"/>
+<text x="531.4" y="227.0" font-size="15" font-weight="800" fill="#463A2F" text-anchor="middle">2</text>
+<text x="590.3" y="230.0" font-size="24" font-weight="800" fill="#463A2F" text-anchor="start">3 + 2 agents</text>
+<text x="340.0" y="314.1" font-size="21" font-weight="400" fill="#463A2F" text-anchor="end">Pasteur · UFR DESP</text>
+<rect x="360.0" y="276.0" width="171.4" height="62.0" rx="12.0" fill="#ECDEC2" filter="url(#op)"/>
+<text x="445.7" y="313.0" font-size="15" font-weight="800" fill="#463A2F" text-anchor="middle">4</text>
+<rect x="531.4" y="276.0" width="85.7" height="62.0" rx="12.0" fill="#F0D3A3" filter="url(#op)"/>
+<text x="574.3" y="313.0" font-size="15" font-weight="800" fill="#463A2F" text-anchor="middle">2</text>
+<text x="633.1" y="316.0" font-size="24" font-weight="800" fill="#463A2F" text-anchor="start">4 + 2 agents</text>
+<text x="340.0" y="400.1" font-size="21" font-weight="400" fill="#463A2F" text-anchor="end">Madrillet</text>
+<rect x="360.0" y="362.0" width="85.7" height="62.0" rx="12.0" fill="#ECDEC2" filter="url(#op)"/>
+<text x="402.9" y="399.0" font-size="15" font-weight="800" fill="#463A2F" text-anchor="middle">2</text>
+<rect x="445.7" y="362.0" width="85.7" height="62.0" rx="12.0" fill="#F0D3A3" filter="url(#op)"/>
+<text x="488.6" y="399.0" font-size="15" font-weight="800" fill="#463A2F" text-anchor="middle">2</text>
+<text x="547.4" y="402.0" font-size="24" font-weight="800" fill="#463A2F" text-anchor="start">2 + 2 agents</text>
+<text x="340.0" y="486.1" font-size="21" font-weight="400" fill="#463A2F" text-anchor="end">Évreux Tilly-Navarre</text>
+<rect x="360.0" y="448.0" width="64.3" height="62.0" rx="12.0" fill="#ECDEC2" filter="url(#op)"/>
+<text x="392.1" y="485.0" font-size="15" font-weight="800" fill="#463A2F" text-anchor="middle">1,5</text>
+<rect x="424.3" y="448.0" width="85.7" height="62.0" rx="12.0" fill="#F0D3A3" filter="url(#op)"/>
+<text x="467.1" y="485.0" font-size="15" font-weight="800" fill="#463A2F" text-anchor="middle">2</text>
+<text x="526.0" y="488.0" font-size="24" font-weight="800" fill="#463A2F" text-anchor="start">1,5 + 2 agents</text>
+<text x="1152.0" y="614.0" font-size="14" font-weight="500" fill="#5B5451" text-anchor="end">Exemple : Université de Rouen Normandie</text>
+<rect x="360.0" y="596.0" width="24.0" height="24.0" rx="6.0" fill="#ECDEC2" filter="url(#op)"/>
+<text x="394.0" y="614.0" font-size="15" font-weight="600" fill="#463A2F" text-anchor="start">Titulaires</text>
+<rect x="498.5" y="596.0" width="24.0" height="24.0" rx="6.0" fill="#F0D3A3" filter="url(#op)"/>
+<text x="532.5" y="614.0" font-size="15" font-weight="600" fill="#463A2F" text-anchor="start">Agents formés en renfort</text>
+</svg>

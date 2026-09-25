@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="69.0" width="540.0" height="240.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb106"><rect x="40.0" y="69.0" width="540.0" height="240.0" rx="22"/></clipPath><rect x="40.0" y="69.0" width="540.0" height="72.0" fill="#B8CCB1" clip-path="url(#cb106)"/>
+<circle cx="310.0" cy="141.0" r="32.0" fill="#FBFAF4"/><circle cx="310.0" cy="141.0" r="26.0" fill="#377E3F"/><g transform="translate(310.0,141.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M-12,12 C-14,-6 0,-14 14,-14 C14,2 6,14 -12,12 z"/><path d="M-12,12 L4,-4"/></g>
+<text x="310.0" y="226.5" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Ecosia</text>
+<text x="310.0" y="261.6" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Un arbre planté toutes les 45 recherches</text>
+<rect x="612.0" y="69.0" width="540.0" height="240.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb107"><rect x="612.0" y="69.0" width="540.0" height="240.0" rx="22"/></clipPath><rect x="612.0" y="69.0" width="540.0" height="72.0" fill="#B8CCB1" clip-path="url(#cb107)"/>
+<circle cx="882.0" cy="141.0" r="32.0" fill="#FBFAF4"/><circle cx="882.0" cy="141.0" r="26.0" fill="#377E3F"/><g transform="translate(882.0,141.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-12" y="-15" width="24" height="30" rx="3"/><path d="M-6,-7 L6,-7 M-6,-1 L6,-1 M-6,5 L2,5"/></g>
+<text x="882.0" y="226.5" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Zéro papier</text>
+<text x="882.0" y="261.6" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Mains courantes papier remplacées par l'électronique</text>
+<rect x="40.0" y="343.0" width="540.0" height="240.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb108"><rect x="40.0" y="343.0" width="540.0" height="240.0" rx="22"/></clipPath><rect x="40.0" y="343.0" width="540.0" height="72.0" fill="#B8CCB1" clip-path="url(#cb108)"/>
+<circle cx="310.0" cy="415.0" r="32.0" fill="#FBFAF4"/><circle cx="310.0" cy="415.0" r="26.0" fill="#377E3F"/><g transform="translate(310.0,415.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-15" y="-10" width="30" height="21" rx="3"/><path d="M-14,-8 L0,3 L14,-8"/></g>
+<text x="310.0" y="500.5" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Échanges dématérialisés</text>
+<text x="310.0" y="535.6" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Mail et Dropbox en interne, plus d'impressions</text>
+<rect x="612.0" y="343.0" width="540.0" height="240.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb109"><rect x="612.0" y="343.0" width="540.0" height="240.0" rx="22"/></clipPath><rect x="612.0" y="343.0" width="540.0" height="72.0" fill="#B8CCB1" clip-path="url(#cb109)"/>
+<circle cx="882.0" cy="415.0" r="32.0" fill="#FBFAF4"/><circle cx="882.0" cy="415.0" r="26.0" fill="#377E3F"/><g transform="translate(882.0,415.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,-8 L-8,14 L8,14 L10,-8 M-13,-8 L13,-8 M-4,-8 L-4,-13 L4,-13 L4,-8 M-3,-3 L-3,9 M3,-3 L3,9"/></g>
+<text x="882.0" y="500.5" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Boîtes mail triées</text>
+<text x="882.0" y="535.6" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Nous ne gardons que ce qui est nécessaire</text>
+</svg>

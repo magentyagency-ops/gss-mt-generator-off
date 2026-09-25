@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="176.0" width="349.3" height="300.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb102"><rect x="40.0" y="176.0" width="349.3" height="300.0" rx="22"/></clipPath><rect x="40.0" y="176.0" width="349.3" height="90.0" fill="#6298C0" clip-path="url(#cb102)"/>
+<circle cx="214.7" cy="266.0" r="32.0" fill="#FBFAF4"/><circle cx="214.7" cy="266.0" r="26.0" fill="#1D49A7"/><g transform="translate(214.7,266.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><circle cx="-7" cy="-6" r="5"/><circle cx="8" cy="-6" r="5"/><path d="M-16,12 C-16,3 2,3 2,12"/><path d="M0,12 C0,3 17,3 17,12"/></g>
+<text x="214.7" y="360.6" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Flux de public</text>
+<text x="214.7" y="395.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Gérés dans le contexte du plan</text>
+<text x="214.7" y="419.5" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Vigipirate renforcé</text>
+<rect x="421.3" y="176.0" width="349.3" height="300.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb103"><rect x="421.3" y="176.0" width="349.3" height="300.0" rx="22"/></clipPath><rect x="421.3" y="176.0" width="349.3" height="90.0" fill="#6298C0" clip-path="url(#cb103)"/>
+<circle cx="596.0" cy="266.0" r="32.0" fill="#FBFAF4"/><circle cx="596.0" cy="266.0" r="26.0" fill="#1D49A7"/><g transform="translate(596.0,266.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-4" y="-15" width="8" height="18" rx="4"/><path d="M0,3 L0,15 M-3,15 L3,15"/><path d="M-9,-11 C-12,-7 -12,-3 -9,1 M9,-11 C12,-7 12,-3 9,1"/></g>
+<text x="596.0" y="372.5" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Détecteurs de métaux</text>
+<text x="596.0" y="407.6" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Pour sécuriser les entrées</text>
+<rect x="802.7" y="176.0" width="349.3" height="300.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb104"><rect x="802.7" y="176.0" width="349.3" height="300.0" rx="22"/></clipPath><rect x="802.7" y="176.0" width="349.3" height="90.0" fill="#6298C0" clip-path="url(#cb104)"/>
+<circle cx="977.3" cy="266.0" r="32.0" fill="#FBFAF4"/><circle cx="977.3" cy="266.0" r="26.0" fill="#1D49A7"/><g transform="translate(977.3,266.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M-16,0 C-9,-11 9,-11 16,0 C9,11 -9,11 -16,0 z"/><circle cx="0" cy="0" r="4.5"/></g>
+<text x="977.3" y="372.5" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Effets personnels</text>
+<text x="977.3" y="407.6" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">Contrôle visuel des sacs</text>
+</svg>

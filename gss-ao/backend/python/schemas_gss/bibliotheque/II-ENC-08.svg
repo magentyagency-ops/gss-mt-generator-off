@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+
+
+
+<path d="M340.1,98.2 A232,232 0 0 1 561.8,319.9 L451.9,324.7 A122,122 0 0 0 335.3,208.1 Z" fill="#ECDEC2" stroke="#FBFAF4" stroke-width="4" stroke-linejoin="round" filter="url(#op)"/>
+<path d="M561.8,340.1 A232,232 0 0 1 340.1,561.8 L335.3,451.9 A122,122 0 0 0 451.9,335.3 Z" fill="#F0D3A3" stroke="#FBFAF4" stroke-width="4" stroke-linejoin="round" filter="url(#op)"/>
+<path d="M319.9,561.8 A232,232 0 0 1 98.2,340.1 L208.1,335.3 A122,122 0 0 0 324.7,451.9 Z" fill="#B8CCB1" stroke="#FBFAF4" stroke-width="4" stroke-linejoin="round" filter="url(#op)"/>
+<path d="M98.2,319.9 A232,232 0 0 1 319.9,98.2 L324.7,208.1 A122,122 0 0 0 208.1,324.7 Z" fill="#6298C0" stroke="#FBFAF4" stroke-width="4" stroke-linejoin="round" filter="url(#op)"/>
+<text x="455.2" y="210.8" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">RESPECT</text>
+<circle cx="496.9" cy="163.1" r="16" fill="#484545" stroke="#FBFAF4" stroke-width="3"/><text x="496.9" y="168.6" font-size="14" font-weight="700" fill="#F5F5DE" text-anchor="middle">1</text>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(330.0,153.0) rotate(0.0) scale(1.1)"/>
+<text x="455.2" y="461.2" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">IMPLICATION</text>
+<circle cx="496.9" cy="496.9" r="16" fill="#484545" stroke="#FBFAF4" stroke-width="3"/><text x="496.9" y="502.4" font-size="14" font-weight="700" fill="#F5F5DE" text-anchor="middle">2</text>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(507.0,330.0) rotate(90.0) scale(1.1)"/>
+<text x="204.8" y="461.2" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">STABILITÉ</text>
+<circle cx="163.1" cy="496.9" r="16" fill="#484545" stroke="#FBFAF4" stroke-width="3"/><text x="163.1" y="502.4" font-size="14" font-weight="700" fill="#F5F5DE" text-anchor="middle">3</text>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(330.0,507.0) rotate(180.0) scale(1.1)"/>
+<text x="204.8" y="210.8" font-size="16" font-weight="800" fill="#463A2F" text-anchor="middle">QUALITÉ</text>
+<circle cx="163.1" cy="163.1" r="16" fill="#484545" stroke="#FBFAF4" stroke-width="3"/><text x="163.1" y="168.6" font-size="14" font-weight="700" fill="#F5F5DE" text-anchor="middle">4</text>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(153.0,330.0) rotate(270.0) scale(1.1)"/>
+<circle cx="330" cy="330.0" r="100" fill="#FBFAF4" filter="url(#od)"/>
+<text x="330.0" y="321.4" font-size="18" font-weight="700" fill="#463A2F" text-anchor="middle">Des équipes</text>
+<text x="330.0" y="350.4" font-size="14.5" font-weight="400" fill="#463A2F" text-anchor="middle">stables</text>
+<rect x="632.0" y="48.0" width="520.0" height="126.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb92"><rect x="632.0" y="48.0" width="520.0" height="126.0" rx="22"/></clipPath><rect x="632.0" y="48.0" width="520.0" height="34.0" fill="#ECDEC2" clip-path="url(#cb92)"/>
+<text x="650.0" y="72.0" font-size="15" font-weight="700" fill="#8A7550" text-anchor="start" letter-spacing="1">01</text>
+<text x="658.0" y="116.9" font-size="20.5" font-weight="700" fill="#463A2F" text-anchor="start">Respect et communication</text>
+<text x="658.0" y="150.0" font-size="16.5" font-weight="400" fill="#463A2F" text-anchor="start">Un management de proximité</text>
+<rect x="632.0" y="194.0" width="520.0" height="126.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb93"><rect x="632.0" y="194.0" width="520.0" height="126.0" rx="22"/></clipPath><rect x="632.0" y="194.0" width="520.0" height="34.0" fill="#F0D3A3" clip-path="url(#cb93)"/>
+<text x="650.0" y="218.0" font-size="15" font-weight="700" fill="#E99842" text-anchor="start" letter-spacing="1">02</text>
+<text x="658.0" y="262.9" font-size="20.5" font-weight="700" fill="#463A2F" text-anchor="start">Implication</text>
+<text x="658.0" y="296.0" font-size="16.5" font-weight="400" fill="#463A2F" text-anchor="start">Des agents investis dans leurs missions</text>
+<rect x="632.0" y="340.0" width="520.0" height="126.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb94"><rect x="632.0" y="340.0" width="520.0" height="126.0" rx="22"/></clipPath><rect x="632.0" y="340.0" width="520.0" height="34.0" fill="#B8CCB1" clip-path="url(#cb94)"/>
+<text x="650.0" y="364.0" font-size="15" font-weight="700" fill="#377E3F" text-anchor="start" letter-spacing="1">03</text>
+<text x="658.0" y="408.9" font-size="20.5" font-weight="700" fill="#463A2F" text-anchor="start">Turn-over limité</text>
+<text x="658.0" y="442.0" font-size="16.5" font-weight="400" fill="#463A2F" text-anchor="start">Des équipes stables et épanouies</text>
+<rect x="632.0" y="486.0" width="520.0" height="126.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb95"><rect x="632.0" y="486.0" width="520.0" height="126.0" rx="22"/></clipPath><rect x="632.0" y="486.0" width="520.0" height="34.0" fill="#6298C0" clip-path="url(#cb95)"/>
+<text x="650.0" y="510.0" font-size="15" font-weight="700" fill="#1D49A7" text-anchor="start" letter-spacing="1">04</text>
+<text x="658.0" y="554.9" font-size="20.5" font-weight="700" fill="#463A2F" text-anchor="start">Qualité de service</text>
+<text x="658.0" y="588.0" font-size="16.5" font-weight="400" fill="#463A2F" text-anchor="start">Au cœur de notre démarche</text>
+</svg>

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="30" y="312" width="1100" height="36" fill="#B8CCB1"/><path d="M1128,290 L1172,330.0 L1128,370 z" fill="#B8CCB1"/>
+<path d="M110.0,292.0 L110.0,312.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="22.0" y="116.0" width="340.0" height="170.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb157"><rect x="22.0" y="116.0" width="340.0" height="170.0" rx="22"/></clipPath><rect x="22.0" y="116.0" width="340.0" height="12.0" fill="#ECDEC2" clip-path="url(#cb157)"/>
+<text x="192.0" y="187.2" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">L'arrêté</text>
+<text x="192.0" y="217.4" font-size="15" font-weight="400" fill="#463A2F" text-anchor="middle">Identification claire des agents,</text>
+<text x="192.0" y="237.8" font-size="15" font-weight="400" fill="#463A2F" text-anchor="middle">marquage officiel des tenues</text>
+<text x="110.0" y="337.0" font-size="19" font-weight="800" fill="#B9423C" text-anchor="middle">18 juillet 2023</text>
+<path d="M595.0,348.0 L595.0,372.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="425.0" y="374.0" width="340.0" height="170.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb158"><rect x="425.0" y="374.0" width="340.0" height="170.0" rx="22"/></clipPath><rect x="425.0" y="374.0" width="340.0" height="12.0" fill="#B8CCB1" clip-path="url(#cb158)"/>
+<text x="595.0" y="445.2" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">GSS anticipe</text>
+<text x="595.0" y="475.4" font-size="15" font-weight="400" fill="#463A2F" text-anchor="middle">Nos nouveaux sites sont dotés de tenues</text>
+<text x="595.0" y="495.8" font-size="15" font-weight="400" fill="#463A2F" text-anchor="middle">déjà réglementaires</text>
+<text x="595.0" y="337.0" font-size="19" font-weight="800" fill="#B9423C" text-anchor="middle">Dès l'annonce</text>
+<path d="M1080.0,292.0 L1080.0,312.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="838.0" y="116.0" width="340.0" height="170.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb159"><rect x="838.0" y="116.0" width="340.0" height="170.0" rx="22"/></clipPath><rect x="838.0" y="116.0" width="340.0" height="12.0" fill="#F0D3A3" clip-path="url(#cb159)"/>
+<text x="1008.0" y="187.2" font-size="19" font-weight="700" fill="#463A2F" text-anchor="middle">L'obligation</text>
+<text x="1008.0" y="217.4" font-size="15" font-weight="400" fill="#463A2F" text-anchor="middle">Pour toutes les entreprises de sécurité</text>
+<text x="1008.0" y="237.8" font-size="15" font-weight="400" fill="#463A2F" text-anchor="middle">privée</text>
+<text x="1080.0" y="337.0" font-size="19" font-weight="800" fill="#B9423C" text-anchor="middle">1er octobre 2024</text>
+</svg>

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<path d="M493.6,270.3 L404.0,220.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M493.6,389.7 L404.0,440.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M705.9,269.4 L792.0,220.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<path d="M705.9,390.6 L792.0,440.0" fill="none" stroke="#7A726F" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#f)"/>
+<circle cx="600.0" cy="330.0" r="118" fill="#E5CA97" filter="url(#od)"/>
+<text x="600.0" y="324.1" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">La voix du</text>
+<text x="600.0" y="350.5" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">client</text>
+<rect x="40.0" y="145.0" width="350.0" height="150.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb96"><rect x="40.0" y="145.0" width="350.0" height="150.0" rx="22"/></clipPath><rect x="40.0" y="145.0" width="72.0" height="150.0" fill="#B8CCB1" clip-path="url(#cb96)"/>
+<circle cx="76.0" cy="220.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="220.0" r="22.0" fill="#377E3F"/><g transform="translate(76.0,220.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><circle cx="-7" cy="-6" r="5"/><circle cx="8" cy="-6" r="5"/><path d="M-16,12 C-16,3 2,3 2,12"/><path d="M0,12 C0,3 17,3 17,12"/></g>
+<text x="128.0" y="226.9" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Retour sur les équipes</text>
+<rect x="40.0" y="365.0" width="350.0" height="150.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb97"><rect x="40.0" y="365.0" width="350.0" height="150.0" rx="22"/></clipPath><rect x="40.0" y="365.0" width="72.0" height="150.0" fill="#B8CCB1" clip-path="url(#cb97)"/>
+<circle cx="76.0" cy="440.0" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="440.0" r="22.0" fill="#377E3F"/><g transform="translate(76.0,440.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,-15 L5,-15 L11,-9 L11,15 L-10,15 z"/><path d="M-5,-4 L6,-4 M-5,2 L6,2 M-5,8 L2,8"/></g>
+<text x="128.0" y="434.3" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Retour sur les</text>
+<text x="128.0" y="459.5" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">missions</text>
+<rect x="802.0" y="145.0" width="350.0" height="150.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb98"><rect x="802.0" y="145.0" width="350.0" height="150.0" rx="22"/></clipPath><rect x="802.0" y="145.0" width="72.0" height="150.0" fill="#B8CCB1" clip-path="url(#cb98)"/>
+<circle cx="838.0" cy="220.0" r="28.0" fill="#FBFAF4"/><circle cx="838.0" cy="220.0" r="22.0" fill="#377E3F"/><g transform="translate(838.0,220.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-15 L4.5,-5 L15,-4.5 L7,3 L9.5,14 L0,8 L-9.5,14 L-7,3 L-15,-4.5 L-4.5,-5 z"/></g>
+<text x="890.0" y="209.8" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Critère de la prime</text>
+<text x="890.0" y="243.9" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">L'appréciation du client</text>
+<rect x="802.0" y="365.0" width="350.0" height="150.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb99"><rect x="802.0" y="365.0" width="350.0" height="150.0" rx="22"/></clipPath><rect x="802.0" y="365.0" width="72.0" height="150.0" fill="#B8CCB1" clip-path="url(#cb99)"/>
+<circle cx="838.0" cy="440.0" r="28.0" fill="#FBFAF4"/><circle cx="838.0" cy="440.0" r="22.0" fill="#377E3F"/><g transform="translate(838.0,440.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><circle cx="-9" cy="-8" r="4"/><circle cx="9" cy="-8" r="4"/><circle cx="0" cy="-11" r="4"/><path d="M-15,6 L15,6 L15,10 L-15,10 z M-12,10 L-12,15 M12,10 L12,15"/></g>
+<text x="890.0" y="418.3" font-size="21" font-weight="700" fill="#463A2F" text-anchor="start">Réunions de suivi</text>
+<text x="890.0" y="452.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">Un trait d'union entre le site</text>
+<text x="890.0" y="475.5" font-size="17" font-weight="400" fill="#463A2F" text-anchor="start">et nos agents</text>
+</svg>

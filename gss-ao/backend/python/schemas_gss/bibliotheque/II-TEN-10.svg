@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="155.2" width="1112.0" height="96.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb167"><rect x="40.0" y="155.2" width="1112.0" height="96.0" rx="22"/></clipPath><rect x="40.0" y="155.2" width="72.0" height="96.0" fill="#6298C0" clip-path="url(#cb167)"/>
+<circle cx="76.0" cy="203.2" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="203.2" r="22.0" fill="#1D49A7"/><g transform="translate(76.0,203.2) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><rect x="-13" y="-13" width="26" height="26" rx="5"/><path d="M-6,0 L-1,5 L7,-5"/></g>
+<text x="128.0" y="192.9" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Contrôle de la tenue</text>
+<text x="128.0" y="228.1" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Deuxième niveau de contrôle, par nos contrôleurs</text>
+<rect x="40.0" y="273.2" width="1112.0" height="223.5" rx="24.0" fill="#FBFAF4" filter="url(#od)"/>
+<rect x="68.0" y="316.56" width="26" height="26" rx="13.0" fill="#377E3F"/><path d="M73.5,329.56 L80.0,336.56 L89.0,322.56" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="112.0" y="337.7" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Tenue complète, entretenue et présentable</text>
+<rect x="68.0" y="372.0" width="26" height="26" rx="13.0" fill="#377E3F"/><path d="M73.5,385.0 L80.0,392.0 L89.0,378.0" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="112.0" y="393.2" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Badge et carte professionnelle à jour</text>
+<rect x="68.0" y="427.44" width="26" height="26" rx="13.0" fill="#377E3F"/><path d="M73.5,440.44 L80.0,447.44 L89.0,433.44" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="112.0" y="448.6" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Bonne tenue de l'agent : aspect physique, hygiène, présentation générale</text>
+</svg>

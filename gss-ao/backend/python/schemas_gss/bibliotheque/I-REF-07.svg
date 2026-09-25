@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="34.0" width="360.0" height="206.0" rx="24.0" fill="#E5CA97" filter="url(#od)"/>
+<circle cx="92.0" cy="90.0" r="36.0" fill="#FBFAF4"/><circle cx="92.0" cy="90.0" r="30.0" fill="#8A7550"/><g transform="translate(92.0,90.0) scale(1.034)" fill="none" stroke="#FFFFFF" stroke-width="2.32" stroke-linecap="round" stroke-linejoin="round"><path d="M-15,-5 L0,-14 L15,-5 z M-15,14 L15,14 M-11,-2 L-11,10 M-4,-2 L-4,10 M4,-2 L4,10 M11,-2 L11,10"/></g>
+<text x="136.0" y="94.8" font-size="14" font-weight="400" fill="#463A2F" text-anchor="start">BANQUE</text>
+<text x="64.0" y="167.7" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">Agence CIC</text>
+<text x="64.0" y="202.8" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Amiens, 80000</text>
+<rect x="40.0" y="270.0" width="360.0" height="116.0" rx="20.0" fill="#FBFAF4" filter="url(#od)"/>
+<text x="64.0" y="339.9" font-size="34" font-weight="800" fill="#463A2F" text-anchor="start">2</text>
+<text x="100.8" y="334.1" font-size="18" font-weight="400" fill="#463A2F" text-anchor="start">agents</text>
+<rect x="40.0" y="408.0" width="360.0" height="116.0" rx="20.0" fill="#FBFAF4" filter="url(#od)"/>
+<text x="64.0" y="475.8" font-size="28" font-weight="800" fill="#463A2F" text-anchor="start">8 h – 17 h</text>
+<text x="223.5" y="459.9" font-size="18" font-weight="400" fill="#463A2F" text-anchor="start">amplitude</text>
+<text x="223.5" y="484.4" font-size="18" font-weight="400" fill="#463A2F" text-anchor="start">horaire</text>
+<rect x="440.0" y="34.0" width="712.0" height="584.0" rx="24.0" fill="#FBFAF4" filter="url(#od)"/>
+<text x="470.0" y="84.0" font-size="20" font-weight="800" fill="#463A2F" text-anchor="start">NOS MISSIONS</text>
+<rect x="470" y="98" width="56" height="5" rx="2.5" fill="#E99842"/>
+<circle cx="479.0" cy="252.1" r="5" fill="#377E3F"/>
+<text x="496.0" y="259.8" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Sécurisation de l'agence</text>
+<circle cx="479.0" cy="299.1" r="5" fill="#377E3F"/>
+<text x="496.0" y="306.8" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Accueil des entreprises intervenantes pendant les</text>
+<text x="496.0" y="339.0" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">travaux</text>
+<circle cx="479.0" cy="378.3" r="5" fill="#377E3F"/>
+<text x="496.0" y="386.0" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Intervention sur alarme</text>
+<circle cx="479.0" cy="425.4" r="5" fill="#377E3F"/>
+<text x="496.0" y="433.0" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Rondes de vérification du matériel incendie</text>
+<circle cx="479.0" cy="472.4" r="5" fill="#377E3F"/>
+<text x="496.0" y="480.1" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Vérification du respect des gestes barrières</text>
+</svg>

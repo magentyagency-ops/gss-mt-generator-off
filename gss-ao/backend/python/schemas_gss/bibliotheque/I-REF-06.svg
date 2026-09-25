@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="34.0" width="360.0" height="206.0" rx="24.0" fill="#E5CA97" filter="url(#od)"/>
+<circle cx="92.0" cy="90.0" r="36.0" fill="#FBFAF4"/><circle cx="92.0" cy="90.0" r="30.0" fill="#8A7550"/><g transform="translate(92.0,90.0) scale(1.034)" fill="none" stroke="#FFFFFF" stroke-width="2.32" stroke-linecap="round" stroke-linejoin="round"><path d="M-16,-3 L0,-12 L16,-3 L0,6 z"/><path d="M-9,1 L-9,9 C-4,13 4,13 9,9 L9,1 M16,-3 L16,7"/></g>
+<text x="136.0" y="94.8" font-size="14" font-weight="400" fill="#463A2F" text-anchor="start">ENSEIGNEMENT</text>
+<text x="64.0" y="155.8" font-size="22" font-weight="700" fill="#463A2F" text-anchor="start">CESI</text>
+<text x="64.0" y="190.9" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Campus d'enseignement supérieur ·</text>
+<text x="64.0" y="214.7" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="start">Rouen, Caen, Lille</text>
+<rect x="40.0" y="270.0" width="360.0" height="116.0" rx="20.0" fill="#FBFAF4" filter="url(#od)"/>
+<text x="64.0" y="339.9" font-size="34" font-weight="800" fill="#463A2F" text-anchor="start">5 à 15</text>
+<text x="189.2" y="334.1" font-size="18" font-weight="400" fill="#463A2F" text-anchor="start">agents</text>
+<rect x="40.0" y="408.0" width="360.0" height="116.0" rx="20.0" fill="#FBFAF4" filter="url(#od)"/>
+<text x="64.0" y="473.7" font-size="22" font-weight="800" fill="#463A2F" text-anchor="start">7 h 30 – 20 h</text>
+<text x="230.8" y="459.9" font-size="18" font-weight="400" fill="#463A2F" text-anchor="start">amplitude</text>
+<text x="230.8" y="484.4" font-size="18" font-weight="400" fill="#463A2F" text-anchor="start">horaire</text>
+<rect x="440.0" y="34.0" width="712.0" height="584.0" rx="24.0" fill="#FBFAF4" filter="url(#od)"/>
+<text x="470.0" y="84.0" font-size="20" font-weight="800" fill="#463A2F" text-anchor="start">NOS MISSIONS</text>
+<rect x="470" y="98" width="56" height="5" rx="2.5" fill="#E99842"/>
+<circle cx="479.0" cy="143.0" r="5" fill="#377E3F"/>
+<text x="496.0" y="149.3" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">Accueil des étudiants et des</text>
+<text x="496.0" y="175.4" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">intervenants externes</text>
+<circle cx="479.0" cy="207.4" r="5" fill="#377E3F"/>
+<text x="496.0" y="213.6" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">Accueil des entreprises et</text>
+<text x="496.0" y="239.7" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">réception de commandes</text>
+<circle cx="479.0" cy="271.7" r="5" fill="#377E3F"/>
+<text x="496.0" y="278.0" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">Gestion du pôle accueil</text>
+<circle cx="479.0" cy="309.9" r="5" fill="#377E3F"/>
+<text x="496.0" y="316.2" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">Mise en place des badges et</text>
+<text x="496.0" y="342.3" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">création des accès</text>
+<circle cx="479.0" cy="374.3" r="5" fill="#377E3F"/>
+<text x="496.0" y="380.5" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">Prêt de matériel</text>
+<text x="496.0" y="406.7" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">informatique aux étudiants</text>
+<circle cx="479.0" cy="438.6" r="5" fill="#377E3F"/>
+<text x="496.0" y="444.9" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">Circulation sur la zone</text>
+<text x="496.0" y="471.0" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">parking</text>
+<circle cx="479.0" cy="503.0" r="5" fill="#377E3F"/>
+<text x="496.0" y="509.2" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">Courrier et colis à l'accueil</text>
+<circle cx="819.0" cy="143.0" r="5" fill="#377E3F"/>
+<text x="836.0" y="149.3" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">Ronde de respect du</text>
+<text x="836.0" y="175.4" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">règlement intérieur</text>
+<circle cx="819.0" cy="207.4" r="5" fill="#377E3F"/>
+<text x="836.0" y="213.6" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">Accompagnement des</text>
+<text x="836.0" y="239.7" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">exercices d'évacuation</text>
+<text x="836.0" y="265.9" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">incendie</text>
+<circle cx="819.0" cy="297.8" r="5" fill="#377E3F"/>
+<text x="836.0" y="304.1" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">Formation du personnel aux</text>
+<text x="836.0" y="330.2" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">bonnes pratiques de sécurité</text>
+<circle cx="819.0" cy="362.2" r="5" fill="#377E3F"/>
+<text x="836.0" y="368.4" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">Rondes de vérification du</text>
+<text x="836.0" y="394.6" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">matériel incendie</text>
+<circle cx="819.0" cy="426.5" r="5" fill="#377E3F"/>
+<text x="836.0" y="432.8" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">Événements du campus</text>
+<text x="836.0" y="458.9" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">(portes ouvertes, remises de</text>
+<text x="836.0" y="485.0" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">diplômes…)</text>
+<circle cx="819.0" cy="517.0" r="5" fill="#377E3F"/>
+<text x="836.0" y="523.3" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">Participation à l'amélioration</text>
+<text x="836.0" y="549.4" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">de la sécurité</text>
+<circle cx="819.0" cy="581.4" r="5" fill="#377E3F"/>
+<text x="836.0" y="587.6" font-size="19.5" font-weight="400" fill="#463A2F" text-anchor="start">Intervention sur alarme</text>
+</svg>

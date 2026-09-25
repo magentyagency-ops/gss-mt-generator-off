@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<path d="M600.0,263.0 L600.0,287.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M167.8,287.0 L1024.2,287.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<line x1="167.8" y1="287.0" x2="167.8" y2="312.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<line x1="453.2" y1="287.0" x2="453.2" y2="312.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<line x1="738.8" y1="287.0" x2="738.8" y2="312.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<line x1="1024.2" y1="287.0" x2="1024.2" y2="312.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<rect x="440.0" y="151.0" width="320.0" height="104.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb1"><rect x="440.0" y="151.0" width="320.0" height="104.0" rx="8"/></clipPath><rect x="440.0" y="151.0" width="72.0" height="104.0" fill="#E5CA97" clip-path="url(#cb1)"/>
+<circle cx="476.0" cy="203.0" r="28.0" fill="#FBFAF4"/><circle cx="476.0" cy="203.0" r="22.0" fill="#8A7550"/><g transform="translate(476.0,203.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,-15 L5,-15 L11,-9 L11,15 L-10,15 z"/><path d="M-5,-4 L6,-4 M-5,2 L6,2 M-5,8 L2,8"/></g>
+<text x="528.0" y="182.6" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Le LMC</text>
+<text x="528.0" y="214.8" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">Un classeur dédié à</text>
+<text x="528.0" y="236.5" font-size="16" font-weight="400" fill="#463A2F" text-anchor="start">chaque site</text>
+<rect x="40.0" y="319.0" width="255.5" height="190.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb2"><rect x="40.0" y="319.0" width="255.5" height="190.0" rx="8"/></clipPath><rect x="40.0" y="319.0" width="255.5" height="12.0" fill="#ECDEC2" clip-path="url(#cb2)"/>
+<text x="167.8" y="395.0" font-size="24" font-weight="700" fill="#463A2F" text-anchor="middle">Tronc commun</text>
+<text x="167.8" y="433.2" font-size="19" font-weight="400" fill="#463A2F" text-anchor="middle">Les procédures à</text>
+<text x="167.8" y="459.1" font-size="19" font-weight="400" fill="#463A2F" text-anchor="middle">suivre par l'agent</text>
+<rect x="325.5" y="319.0" width="255.5" height="190.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb3"><rect x="325.5" y="319.0" width="255.5" height="190.0" rx="8"/></clipPath><rect x="325.5" y="319.0" width="255.5" height="12.0" fill="#ECDEC2" clip-path="url(#cb3)"/>
+<text x="453.2" y="380.6" font-size="24" font-weight="700" fill="#463A2F" text-anchor="middle">Procédures du</text>
+<text x="453.2" y="409.4" font-size="24" font-weight="700" fill="#463A2F" text-anchor="middle">site</text>
+<text x="453.2" y="447.6" font-size="19" font-weight="400" fill="#463A2F" text-anchor="middle">Selon les particularités</text>
+<text x="453.2" y="473.5" font-size="19" font-weight="400" fill="#463A2F" text-anchor="middle">qu'il présente</text>
+<rect x="611.0" y="319.0" width="255.5" height="190.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb4"><rect x="611.0" y="319.0" width="255.5" height="190.0" rx="8"/></clipPath><rect x="611.0" y="319.0" width="255.5" height="12.0" fill="#ECDEC2" clip-path="url(#cb4)"/>
+<text x="738.8" y="380.6" font-size="24" font-weight="700" fill="#463A2F" text-anchor="middle">Numéros</text>
+<text x="738.8" y="409.4" font-size="24" font-weight="700" fill="#463A2F" text-anchor="middle">d'urgence</text>
+<text x="738.8" y="447.6" font-size="19" font-weight="400" fill="#463A2F" text-anchor="middle">À la disposition des</text>
+<text x="738.8" y="473.5" font-size="19" font-weight="400" fill="#463A2F" text-anchor="middle">agents sur place</text>
+<rect x="896.5" y="319.0" width="255.5" height="190.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb5"><rect x="896.5" y="319.0" width="255.5" height="190.0" rx="8"/></clipPath><rect x="896.5" y="319.0" width="255.5" height="12.0" fill="#6298C0" clip-path="url(#cb5)"/>
+<text x="1024.2" y="395.0" font-size="24" font-weight="700" fill="#463A2F" text-anchor="middle">Validation</text>
+<text x="1024.2" y="433.2" font-size="19" font-weight="400" fill="#463A2F" text-anchor="middle">Par le chef de site et le</text>
+<text x="1024.2" y="459.1" font-size="19" font-weight="400" fill="#463A2F" text-anchor="middle">client</text>
+</svg>

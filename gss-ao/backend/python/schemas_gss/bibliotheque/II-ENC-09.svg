@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="40.0" y="110.3" width="348.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb96"><rect x="40.0" y="110.3" width="348.0" height="104.0" rx="22"/></clipPath><rect x="40.0" y="110.3" width="72.0" height="104.0" fill="#ECDEC2" clip-path="url(#cb96)"/>
+<circle cx="76.0" cy="162.3" r="28.0" fill="#FBFAF4"/><circle cx="76.0" cy="162.3" r="22.0" fill="#8A7550"/><g transform="translate(76.0,162.3) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M-16,-6 L0,-13 L16,-6 L0,1 z"/><path d="M-9,-2 L-9,6 C-4,10 4,10 9,6 L9,-2 M16,-6 L16,4"/></g>
+<text x="128.0" y="168.9" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Qualifications</text>
+<rect x="40.0" y="238.3" width="348.0" height="303.4" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<circle cx="74.4" cy="294.5" r="4.8" fill="#463A2F"/>
+<text x="92.4" y="302.7" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">SST</text>
+<circle cx="74.4" cy="335.5" r="4.8" fill="#463A2F"/>
+<text x="92.4" y="343.7" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">HOB0 · habilitation</text>
+<text x="92.4" y="376.3" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">électrique</text>
+<circle cx="74.4" cy="409.2" r="4.8" fill="#463A2F"/>
+<text x="92.4" y="417.4" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">APR 1 · agent de</text>
+<text x="92.4" y="450.0" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">protection rapprochée</text>
+<circle cx="74.4" cy="482.9" r="4.8" fill="#463A2F"/>
+<text x="92.4" y="491.1" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">CQP</text>
+<rect x="422.0" y="110.3" width="348.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb97"><rect x="422.0" y="110.3" width="348.0" height="104.0" rx="22"/></clipPath><rect x="422.0" y="110.3" width="72.0" height="104.0" fill="#ECDEC2" clip-path="url(#cb97)"/>
+<circle cx="458.0" cy="162.3" r="28.0" fill="#FBFAF4"/><circle cx="458.0" cy="162.3" r="22.0" fill="#8A7550"/><g transform="translate(458.0,162.3) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-15 L4.5,-5 L15,-4.5 L7,3 L9.5,14 L0,8 L-9.5,14 L-7,3 L-15,-4.5 L-4.5,-5 z"/></g>
+<text x="510.0" y="168.9" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Savoir-faire</text>
+<rect x="422.0" y="238.3" width="348.0" height="303.4" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<circle cx="456.4" cy="286.1" r="4.8" fill="#463A2F"/>
+<text x="474.4" y="294.3" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Travail en autonomie</text>
+<circle cx="456.4" cy="327.1" r="4.8" fill="#463A2F"/>
+<text x="474.4" y="335.3" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Capacité de décision</text>
+<circle cx="456.4" cy="368.2" r="4.8" fill="#463A2F"/>
+<text x="474.4" y="376.3" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Gestion du stress</text>
+<circle cx="456.4" cy="409.2" r="4.8" fill="#463A2F"/>
+<text x="474.4" y="417.4" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Sens de l'organisation</text>
+<circle cx="456.4" cy="450.3" r="4.8" fill="#463A2F"/>
+<text x="474.4" y="458.4" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Gestion du conflit</text>
+<circle cx="456.4" cy="491.3" r="4.8" fill="#463A2F"/>
+<text x="474.4" y="499.5" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Rigueur</text>
+<rect x="804.0" y="110.3" width="348.0" height="104.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb98"><rect x="804.0" y="110.3" width="348.0" height="104.0" rx="22"/></clipPath><rect x="804.0" y="110.3" width="72.0" height="104.0" fill="#ECDEC2" clip-path="url(#cb98)"/>
+<circle cx="840.0" cy="162.3" r="28.0" fill="#FBFAF4"/><circle cx="840.0" cy="162.3" r="22.0" fill="#8A7550"/><g transform="translate(840.0,162.3) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-15 L13,-10 L13,0 C13,8 7,13 0,16 C-7,13 -13,8 -13,0 L-13,-10 z"/><path d="M-5,0 L-1,4 L6,-4"/></g>
+<text x="892.0" y="168.9" font-size="20" font-weight="700" fill="#463A2F" text-anchor="start">Expériences</text>
+<rect x="804.0" y="238.3" width="348.0" height="303.4" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<circle cx="838.4" cy="278.2" r="4.8" fill="#463A2F"/>
+<text x="856.4" y="286.3" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Agent de sécurité</text>
+<text x="856.4" y="319.0" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">industriel</text>
+<circle cx="838.4" cy="351.9" r="4.8" fill="#463A2F"/>
+<text x="856.4" y="360.0" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Agent cynophile</text>
+<circle cx="838.4" cy="392.9" r="4.8" fill="#463A2F"/>
+<text x="856.4" y="401.1" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Convoyeur de fonds,</text>
+<text x="856.4" y="433.7" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">opérateur de valeurs</text>
+<circle cx="838.4" cy="466.6" r="4.8" fill="#463A2F"/>
+<text x="856.4" y="474.7" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">Sous-officier de</text>
+<text x="856.4" y="507.4" font-size="24" font-weight="400" fill="#463A2F" text-anchor="start">réserve, gendarmerie</text>
+</svg>

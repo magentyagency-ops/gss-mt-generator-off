@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(303.0,330.0) rotate(0.0) scale(1.3)"/>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(597.0,330.0) rotate(0.0) scale(1.3)"/>
+<path d="M-5,-8 L4,0 L-5,8" fill="none" stroke="#7A726F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(891.0,330.0) rotate(0.0) scale(1.3)"/>
+<rect x="40.0" y="205.0" width="230.0" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb44"><rect x="40.0" y="205.0" width="230.0" height="250.0" rx="22"/></clipPath><rect x="40.0" y="205.0" width="230.0" height="75.0" fill="#ECDEC2" clip-path="url(#cb44)"/>
+<circle cx="155.0" cy="280.0" r="32.0" fill="#FBFAF4"/><circle cx="155.0" cy="280.0" r="26.0" fill="#8A7550"/><g transform="translate(155.0,280.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M-8,15 L-3,-15 M8,15 L3,-15 M0,11 L0,6 M0,1 L0,-3 M0,-8 L0,-11"/></g>
+<text x="58.0" y="231.0" font-size="15" font-weight="700" fill="#8A7550" text-anchor="start" letter-spacing="1">01</text>
+<text x="155.0" y="343.1" font-size="23" font-weight="700" fill="#463A2F" text-anchor="middle">Itinéraire</text>
+<text x="155.0" y="380.2" font-size="18.5" font-weight="400" fill="#463A2F" text-anchor="middle">Déterminé à l'avance</text>
+<text x="155.0" y="405.4" font-size="18.5" font-weight="400" fill="#463A2F" text-anchor="middle">dans l'enceinte de</text>
+<text x="155.0" y="430.6" font-size="18.5" font-weight="400" fill="#463A2F" text-anchor="middle">l'établissement</text>
+<rect x="334.0" y="205.0" width="230.0" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb45"><rect x="334.0" y="205.0" width="230.0" height="250.0" rx="22"/></clipPath><rect x="334.0" y="205.0" width="230.0" height="75.0" fill="#6298C0" clip-path="url(#cb45)"/>
+<circle cx="449.0" cy="280.0" r="32.0" fill="#FBFAF4"/><circle cx="449.0" cy="280.0" r="26.0" fill="#1D49A7"/><g transform="translate(449.0,280.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="0" r="14"/><circle cx="0" cy="0" r="8"/><circle cx="0" cy="0" r="2.5"/></g>
+<text x="352.0" y="231.0" font-size="15" font-weight="700" fill="#1D49A7" text-anchor="start" letter-spacing="1">02</text>
+<text x="449.0" y="340.8" font-size="24" font-weight="700" fill="#463A2F" text-anchor="middle">Points</text>
+<text x="449.0" y="369.6" font-size="24" font-weight="700" fill="#463A2F" text-anchor="middle">névralgiques</text>
+<text x="449.0" y="407.8" font-size="19" font-weight="400" fill="#463A2F" text-anchor="middle">Pris en compte dans</text>
+<text x="449.0" y="433.7" font-size="19" font-weight="400" fill="#463A2F" text-anchor="middle">le parcours</text>
+<rect x="628.0" y="205.0" width="230.0" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb46"><rect x="628.0" y="205.0" width="230.0" height="250.0" rx="22"/></clipPath><rect x="628.0" y="205.0" width="230.0" height="75.0" fill="#ECDEC2" clip-path="url(#cb46)"/>
+<circle cx="743.0" cy="280.0" r="32.0" fill="#FBFAF4"/><circle cx="743.0" cy="280.0" r="26.0" fill="#8A7550"/><g transform="translate(743.0,280.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-8" y="-8" width="16" height="23" rx="3"/><path d="M-4,-8 L-4,-16 M-4,-2 L4,-2 M-4,3 L4,3"/></g>
+<text x="646.0" y="231.0" font-size="15" font-weight="700" fill="#8A7550" text-anchor="start" letter-spacing="1">03</text>
+<text x="743.0" y="342.3" font-size="24" font-weight="700" fill="#463A2F" text-anchor="middle">Communication</text>
+<text x="743.0" y="380.5" font-size="19" font-weight="400" fill="#463A2F" text-anchor="middle">L'agent se munit</text>
+<text x="743.0" y="406.3" font-size="19" font-weight="400" fill="#463A2F" text-anchor="middle">d'un moyen de</text>
+<text x="743.0" y="432.2" font-size="19" font-weight="400" fill="#463A2F" text-anchor="middle">communication</text>
+<rect x="922.0" y="205.0" width="230.0" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb47"><rect x="922.0" y="205.0" width="230.0" height="250.0" rx="22"/></clipPath><rect x="922.0" y="205.0" width="230.0" height="75.0" fill="#F0D3A3" clip-path="url(#cb47)"/>
+<circle cx="1037.0" cy="280.0" r="32.0" fill="#FBFAF4"/><circle cx="1037.0" cy="280.0" r="26.0" fill="#E99842"/><g transform="translate(1037.0,280.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><rect x="-12" y="-15" width="24" height="30" rx="3"/><path d="M-6,-7 L6,-7 M-6,-1 L6,-1 M-6,5 L2,5"/></g>
+<text x="940.0" y="231.0" font-size="15" font-weight="700" fill="#E99842" text-anchor="start" letter-spacing="1">04</text>
+<text x="1037.0" y="353.9" font-size="25" font-weight="700" fill="#463A2F" text-anchor="middle">Anomalie</text>
+<text x="1037.0" y="394.0" font-size="20" font-weight="400" fill="#463A2F" text-anchor="middle">Consignée dans la</text>
+<text x="1037.0" y="421.2" font-size="20" font-weight="400" fill="#463A2F" text-anchor="middle">main courante</text>
+</svg>
