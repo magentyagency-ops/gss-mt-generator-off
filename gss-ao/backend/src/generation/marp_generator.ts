@@ -12,11 +12,31 @@ export type SlideSchemas = Map<string, string>;
 
 /** Police Lexend des schémas GSS, embarquée une fois dans le document (mesure du texte identique). */
 const LEXEND_PATH = path.resolve(__dirname, '../../python/schemas_gss/polices/Lexend.ttf');
+const ORGANIGRAMME_GSS_PATH = path.resolve(__dirname, '../../python/schemas_gss/organigramme_gss.svg');
+
+/** Organigramme GSS en SVG sur une ligne, identifiants préfixés (null si absent). */
+function lireOrganigrammeGss(): string | null {
+  try {
+    return fs.readFileSync(ORGANIGRAMME_GSS_PATH, 'utf-8')
+      .replace(/id="([^"]+)"/g, (_m, id) => `id="org-${id}"`)
+      .replace(/url\(#([^)]+)\)/g, (_m, id) => `url(#org-${id})`)
+      .replace('width="1200" height="660"', 'width="100%" preserveAspectRatio="xMidYMid meet"')
+      .replace(/\s*\n\s*/g, ' ')
+      .trim();
+  } catch {
+    return null;
+  }
+}
 
 // ─── Constants ───
 /** Maximum words per slide body before splitting to a new slide.
  *  Abaissé (vs 220) pour réserver l'espace de l'illustration placée sous le texte. */
 const MAX_WORDS_PER_SLIDE = 170;
+/** Hauteur de texte maximale par slide, en lignes estimées (≈ 90 caractères par ligne, un
+ *  intervalle entre paragraphes compte pour 0,7 ligne). Au-delà, le schéma GSS placé sous le
+ *  texte serait repoussé hors de la page : on coupe avant. */
+const MAX_LINES_PER_SLIDE = 19;
+const CHARS_PER_LINE = 90;
 /** Path to Marp assets (CSS + logo) bundled with the backend. */
 const MARP_ASSETS_DIR = path.resolve(__dirname, 'marp');
 
@@ -50,15 +70,36 @@ function splitIntoSlideChunks(text: string): string[] {
 
   const isHeading = (p: string) => /^#{1,6}\s/.test(p);
   const wordCount = (p: string) => p.split(/\s+/).length;
+  // Lignes occupées par un paragraphe (chaque retour à la ligne interne compte) + intervalle.
+  const lineCount = (p: string) =>
+    p.split('\n').reduce((n, l) => n + Math.max(1, Math.ceil(l.length / CHARS_PER_LINE)), 0) * (isHeading(p) ? 1.5 : 1) + 0.7;
+
+  // Un bloc plus haut qu'une slide (longue liste sans ligne vide) est scindé par groupes de lignes.
+  for (let i = 0; i < paragraphs.length; i++) {
+    const lignes = paragraphs[i].split('\n');
+    if (lignes.length > 1 && lineCount(paragraphs[i]) > MAX_LINES_PER_SLIDE) {
+      const groupes: string[] = [];
+      let g: string[] = [];
+      for (const l of lignes) {
+        if (g.length && lineCount([...g, l].join('\n')) > MAX_LINES_PER_SLIDE) { groupes.push(g.join('\n')); g = []; }
+        g.push(l);
+      }
+      if (g.length) groupes.push(g.join('\n'));
+      paragraphs.splice(i, 1, ...groupes);
+      i += groupes.length - 1;
+    }
+  }
 
   const chunks: string[] = [];
   let current = '';
   let currentWords = 0;
+  let currentLines = 0;
 
   const flush = () => {
     if (current.trim()) chunks.push(current.trim());
     current = '';
     currentWords = 0;
+    currentLines = 0;
   };
 
   for (let i = 0; i < paragraphs.length; i++) {
@@ -71,15 +112,17 @@ function splitIntoSlideChunks(text: string): string[] {
       // on coupe AVANT le titre pour qu'il ouvre la slide suivante avec son contenu.
       const next = paragraphs[i + 1];
       const blockWords = paraWords + (next && !isHeading(next) ? wordCount(next) : 0);
-      if (currentWords + blockWords > MAX_WORDS_PER_SLIDE) {
+      const blockLines = lineCount(para) + (next && !isHeading(next) ? lineCount(next) : 0);
+      if (currentWords + blockWords > MAX_WORDS_PER_SLIDE || currentLines + blockLines > MAX_LINES_PER_SLIDE) {
         flush();
       }
-    } else if (currentWords + paraWords > MAX_WORDS_PER_SLIDE && current.trim()) {
+    } else if ((currentWords + paraWords > MAX_WORDS_PER_SLIDE || currentLines + lineCount(para) > MAX_LINES_PER_SLIDE) && current.trim()) {
       flush();
     }
 
     current += (current ? '\n\n' : '') + para;
     currentWords += paraWords;
+    currentLines += lineCount(para);
   }
   flush();
 
@@ -411,7 +454,7 @@ export class MarpGenerator {
     lines.push("header: 'GLOBAL SECURITY SERVICES'");
     lines.push('---');
     lines.push('');
-    if (schemas.size > 0 && fs.existsSync(LEXEND_PATH)) {
+    if (fs.existsSync(LEXEND_PATH)) {
       // Police des schémas GSS : embarquée une seule fois pour tout le document.
       const b64 = fs.readFileSync(LEXEND_PATH).toString('base64');
       lines.push(`<style>@font-face{font-family:'Lexend';src:url(data:font/ttf;base64,${b64}) format('truetype');font-weight:100 900;}</style>`);
@@ -545,9 +588,21 @@ export class MarpGenerator {
           }
         }
 
+        // Organigramme GSS (section encadrement) : dessiné dans le design validé des schémas GSS,
+        // contenu identique à l'ancienne image organigramme.png. Intégré dans la page (police Lexend).
+        const organigramme = section.id === 'b_encadrement' ? lireOrganigrammeGss() : null;
+        if (organigramme) {
+          lines.push('---');
+          lines.push(`<!-- header: "${headerTitle}" -->`);
+          lines.push('');
+          lines.push(`<div class="schema-gss" style="width: 100%; margin: 40px auto 0;">`);
+          lines.push(organigramme.replace('<svg ', '<svg style="display: block; width: 100%; height: auto; margin: 0 auto;" '));
+          lines.push(`</div>`);
+          lines.push('');
+        }
+
         // Dynamic illustrations mapping based on section id
         const illustrationMap: Record<string, string> = {
-          'b_encadrement': 'organigramme.png',
           // More illustrations will be added here pas à pas
         };
 

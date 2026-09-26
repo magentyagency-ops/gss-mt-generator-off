@@ -15,10 +15,12 @@ Entrée (stdin, JSON) :
 Sortie (stdout, JSON) :
   {"resultats": [{"id", "ok", "svg" | "erreurs", "bibliotheque_id"?}]}
 """
+import gzip
 import json
 import os
 import re
 import sys
+import unicodedata
 
 ICI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ICI)
@@ -33,6 +35,9 @@ NOMBRES = re.compile(r"\d+(?:[.,]\d+)?")
 VOCAB = set()
 for _m in json.load(open(os.path.join(ICI, "vocabulaire_valide.json"), encoding="utf-8")):
     VOCAB.update(w.lower() for w in MOTS.findall(_m))
+# Dictionnaire français (orthographe) : liste Gutenberg, formes NFC en minuscules.
+with gzip.open(os.path.join(ICI, "dictionnaire_fr.txt.gz"), "rt", encoding="utf-8") as _f:
+    DICO = set(_f.read().split("\n"))
 # Clés numériques de mise en page (jamais affichées comme donnée)
 CLES_MISE_EN_PAGE = {"maxi", "pas_grad", "cols", "apres_etape", "sous_etape"}
 
@@ -71,18 +76,61 @@ def _chaines(p, cle=None):
             yield from _chaines(v, cle)
 
 
+def _derive_de_la_page(lw, mots_source):
+    """Mot correctement orthographié (dictionnaire) ET de la même famille qu'un mot de la page
+    (même racine de 5 lettres) : « Sélection » ← « sélectionnons », « Contrôle » ← « contrôler ».
+    Un mot sans lien avec la page (« garanti », « délai ») reste refusé : aucune invention."""
+    if lw not in DICO:
+        return False
+    racine = lw[:5] if len(lw) >= 6 else lw[:4]
+    return any(m.startswith(racine) for m in mots_source)
+
+
+def _distance1(a, b):
+    """Vrai si a et b diffèrent d'une seule lettre (ajout, suppression ou substitution)."""
+    if abs(len(a) - len(b)) > 1 or a == b:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b)) == 1
+    if len(a) > len(b):
+        a, b = b, a
+    return any(b[:i] + b[i + 1:] == a for i in range(len(b)))
+
+
+def _orthographe_page(w, mots_minuscules):
+    """Mot repris de la page mais absent du dictionnaire et du vocabulaire validé : nom propre
+    ou sigle accepté, sauf s'il ressemble à une lettre près à un mot validé GSS (faute probable)."""
+    lw = w.lower()
+    if lw in DICO or lw in VOCAB:
+        return None
+    proche = next((v for v in VOCAB if len(v) >= 4 and _distance1(lw, v)), None)
+    if proche:
+        return f"« {w} » semble mal orthographié : l'orthographe validée GSS est « {proche.upper() if w.isupper() else proche} »."
+    if w[0].islower() or lw in mots_minuscules:
+        return f"« {w} » n'est pas un mot français reconnu (faute probable dans la page) : utilise un autre mot de la page."
+    return None
+
+
 def controler_fond(params, source, titre_section):
     erreurs = []
+    source = unicodedata.normalize("NFC", source)
+    titre_section = unicodedata.normalize("NFC", titre_section)
     nombres_source = _norm_nombres(source + " " + titre_section)
     mots_source = _mots(source + " " + titre_section)
+    mots_minuscules = {w for w in MOTS.findall(source) if w[0].islower()}
     for cle, t in _chaines(params):
+        t = unicodedata.normalize("NFC", t)
         for n in _norm_nombres(t):
             if n not in nombres_source:
                 erreurs.append(f"Le nombre « {n} » (dans « {t} ») n'apparaît pas dans le texte de la page : "
                                "n'utilise que des chiffres écrits dans la page.")
         for w in MOTS.findall(t):
             lw = w.lower()
-            if len(lw) >= 4 and lw not in mots_source and lw not in VOCAB:
+            if len(lw) >= 4 and lw in mots_source:
+                probleme = _orthographe_page(w, mots_minuscules)
+                if probleme:
+                    erreurs.append(probleme)
+            if len(lw) >= 4 and lw not in mots_source and lw not in VOCAB and not _derive_de_la_page(lw, mots_source):
                 erreurs.append(f"Le mot « {w} » (dans « {t} ») ne figure ni dans la page ni dans le vocabulaire "
                                "GSS validé : reprends les mots exacts du texte de la page.")
             if w[0] in "EAIOUC" and not w.isupper() and ({"E": "é", "A": "à", "I": "î", "O": "ô", "U": "ù", "C": "ç"}[w[0]] + lw[1:]) in (mots_source | VOCAB):

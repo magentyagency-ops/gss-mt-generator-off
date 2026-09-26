@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="Lexend, 'Arial Rounded MT Bold', Arial, sans-serif">
+<rect width="1200" height="660" fill="#D9D9D9"/>
+<defs><filter id="od" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#2B2826" flood-opacity="0.14"/></filter><filter id="op" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#2B2826" flood-opacity="0.14"/></filter><marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#7A726F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="fb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M2,1.5 L8,5 L2,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="420.0" y="24.0" width="360.0" height="96.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb1"><rect x="420.0" y="24.0" width="360.0" height="96.0" rx="8"/></clipPath><rect x="420.0" y="24.0" width="72.0" height="96.0" fill="#E5CA97" clip-path="url(#cb1)"/>
+<circle cx="456.0" cy="72.0" r="28.0" fill="#FBFAF4"/><circle cx="456.0" cy="72.0" r="22.0" fill="#8A7550"/><g transform="translate(456.0,72.0) scale(0.759)" fill="none" stroke="#FFFFFF" stroke-width="3.16" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="-7" r="6.5"/><path d="M-12,14 C-12,3 12,3 12,14"/></g>
+<text x="508.0" y="53.5" font-size="18" font-weight="700" fill="#463A2F" text-anchor="start">MARCHANI Adil</text>
+<text x="508.0" y="82.6" font-size="14.5" font-weight="400" fill="#463A2F" text-anchor="start">Directeur d'agence</text>
+<text x="508.0" y="102.3" font-size="14.5" font-weight="400" fill="#463A2F" text-anchor="start">Responsable de marché</text>
+<path d="M600.0,128.0 L600.0,150.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M178.5,150.0 L1021.5,150.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<line x1="178.5" y1="150.0" x2="178.5" y2="170.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<line x1="459.5" y1="150.0" x2="459.5" y2="170.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<line x1="740.5" y1="150.0" x2="740.5" y2="170.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<line x1="1021.5" y1="150.0" x2="1021.5" y2="170.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<rect x="51.0" y="176.0" width="255.0" height="84.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb2"><rect x="51.0" y="176.0" width="255.0" height="84.0" rx="8"/></clipPath><rect x="51.0" y="176.0" width="255.0" height="12.0" fill="#ECDEC2" clip-path="url(#cb2)"/>
+<text x="178.5" y="215.1" font-size="17" font-weight="700" fill="#463A2F" text-anchor="middle">KANTE Rokia</text>
+<text x="178.5" y="242.3" font-size="13.5" font-weight="400" fill="#463A2F" text-anchor="middle">Responsable RH</text>
+<rect x="332.0" y="176.0" width="255.0" height="84.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb3"><rect x="332.0" y="176.0" width="255.0" height="84.0" rx="8"/></clipPath><rect x="332.0" y="176.0" width="255.0" height="12.0" fill="#ECDEC2" clip-path="url(#cb3)"/>
+<text x="459.5" y="215.1" font-size="17" font-weight="700" fill="#463A2F" text-anchor="middle">PORCHAIRE Laurent</text>
+<text x="459.5" y="242.3" font-size="13.5" font-weight="400" fill="#463A2F" text-anchor="middle">Responsable d'exploitation</text>
+<rect x="613.0" y="176.0" width="255.0" height="84.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb4"><rect x="613.0" y="176.0" width="255.0" height="84.0" rx="8"/></clipPath><rect x="613.0" y="176.0" width="255.0" height="12.0" fill="#ECDEC2" clip-path="url(#cb4)"/>
+<text x="740.5" y="215.1" font-size="17" font-weight="700" fill="#463A2F" text-anchor="middle">DA SILVA Luis</text>
+<text x="740.5" y="242.3" font-size="13.5" font-weight="400" fill="#463A2F" text-anchor="middle">Responsable d'exploitation</text>
+<rect x="894.0" y="176.0" width="255.0" height="84.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb5"><rect x="894.0" y="176.0" width="255.0" height="84.0" rx="8"/></clipPath><rect x="894.0" y="176.0" width="255.0" height="12.0" fill="#ECDEC2" clip-path="url(#cb5)"/>
+<text x="1021.5" y="215.1" font-size="17" font-weight="700" fill="#463A2F" text-anchor="middle">VATTIER Marie</text>
+<text x="1021.5" y="242.3" font-size="13.5" font-weight="400" fill="#463A2F" text-anchor="middle">Responsable Qualité</text>
+<path d="M459.5,268.0 L459.5,306.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M740.5,268.0 L740.5,306.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M260.0,306.0 L940.0,306.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<line x1="260.0" y1="306.0" x2="260.0" y2="328.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<line x1="600.0" y1="306.0" x2="600.0" y2="328.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<line x1="940.0" y1="306.0" x2="940.0" y2="328.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<rect x="110.0" y="334.0" width="300.0" height="84.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb6"><rect x="110.0" y="334.0" width="300.0" height="84.0" rx="8"/></clipPath><rect x="110.0" y="334.0" width="300.0" height="12.0" fill="#ECDEC2" clip-path="url(#cb6)"/>
+<text x="260.0" y="373.1" font-size="17" font-weight="700" fill="#463A2F" text-anchor="middle">ALAMAT Ramzi</text>
+<text x="260.0" y="400.3" font-size="13.5" font-weight="400" fill="#463A2F" text-anchor="middle">Responsable Unité mobile</text>
+<rect x="450.0" y="334.0" width="300.0" height="84.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb7"><rect x="450.0" y="334.0" width="300.0" height="84.0" rx="8"/></clipPath><rect x="450.0" y="334.0" width="300.0" height="12.0" fill="#ECDEC2" clip-path="url(#cb7)"/>
+<text x="600.0" y="373.1" font-size="17" font-weight="700" fill="#463A2F" text-anchor="middle">PODKOLZIN Sergeï</text>
+<text x="600.0" y="400.3" font-size="13.5" font-weight="400" fill="#463A2F" text-anchor="middle">Responsable Cynophile</text>
+<rect x="790.0" y="334.0" width="300.0" height="84.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb8"><rect x="790.0" y="334.0" width="300.0" height="84.0" rx="8"/></clipPath><rect x="790.0" y="334.0" width="300.0" height="12.0" fill="#ECDEC2" clip-path="url(#cb8)"/>
+<text x="940.0" y="373.1" font-size="17" font-weight="700" fill="#463A2F" text-anchor="middle">ATTOU NESRINE</text>
+<text x="940.0" y="400.3" font-size="13.5" font-weight="400" fill="#463A2F" text-anchor="middle">Responsable Incendie</text>
+<line x1="260.0" y1="426.0" x2="260.0" y2="468.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<rect x="130.0" y="474.0" width="260.0" height="150.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb9"><rect x="130.0" y="474.0" width="260.0" height="150.0" rx="8"/></clipPath><rect x="130.0" y="474.0" width="260.0" height="50.0" fill="#ECE9E2" clip-path="url(#cb9)"/>
+<circle cx="260.0" cy="524.0" r="32.0" fill="#FBFAF4"/><circle cx="260.0" cy="524.0" r="26.0" fill="#8A817C"/><g transform="translate(260.0,524.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><circle cx="-7" cy="-6" r="5"/><circle cx="8" cy="-6" r="5"/><path d="M-16,12 C-16,3 2,3 2,12"/><path d="M0,12 C0,3 17,3 17,12"/></g>
+<text x="260.0" y="577.8" font-size="17" font-weight="700" fill="#463A2F" text-anchor="middle">Équipe</text>
+<text x="260.0" y="605.0" font-size="13.5" font-weight="400" fill="#463A2F" text-anchor="middle">Agents contrôleurs, rondiers</text>
+<line x1="600.0" y1="426.0" x2="600.0" y2="468.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<rect x="470.0" y="474.0" width="260.0" height="150.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb10"><rect x="470.0" y="474.0" width="260.0" height="150.0" rx="8"/></clipPath><rect x="470.0" y="474.0" width="260.0" height="50.0" fill="#ECE9E2" clip-path="url(#cb10)"/>
+<circle cx="600.0" cy="524.0" r="32.0" fill="#FBFAF4"/><circle cx="600.0" cy="524.0" r="26.0" fill="#8A817C"/><g transform="translate(600.0,524.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><circle cx="-7" cy="-6" r="5"/><circle cx="8" cy="-6" r="5"/><path d="M-16,12 C-16,3 2,3 2,12"/><path d="M0,12 C0,3 17,3 17,12"/></g>
+<text x="600.0" y="577.8" font-size="17" font-weight="700" fill="#463A2F" text-anchor="middle">Équipe</text>
+<text x="600.0" y="605.0" font-size="13.5" font-weight="400" fill="#463A2F" text-anchor="middle">Agents AMC, ADS</text>
+<line x1="940.0" y1="426.0" x2="940.0" y2="468.0" stroke="#7A726F" stroke-width="2.6" stroke-linecap="round" marker-end="url(#f)"/>
+<rect x="810.0" y="474.0" width="260.0" height="150.0" rx="8" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb11"><rect x="810.0" y="474.0" width="260.0" height="150.0" rx="8"/></clipPath><rect x="810.0" y="474.0" width="260.0" height="50.0" fill="#ECE9E2" clip-path="url(#cb11)"/>
+<circle cx="940.0" cy="524.0" r="32.0" fill="#FBFAF4"/><circle cx="940.0" cy="524.0" r="26.0" fill="#8A817C"/><g transform="translate(940.0,524.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><circle cx="-7" cy="-6" r="5"/><circle cx="8" cy="-6" r="5"/><path d="M-16,12 C-16,3 2,3 2,12"/><path d="M0,12 C0,3 17,3 17,12"/></g>
+<text x="940.0" y="577.8" font-size="17" font-weight="700" fill="#463A2F" text-anchor="middle">Équipe</text>
+<text x="940.0" y="605.0" font-size="13.5" font-weight="400" fill="#463A2F" text-anchor="middle">Agents SSIAP</text>
+</svg>

@@ -20,7 +20,8 @@ import { getSettings } from '../core/config';
  */
 
 const SCHEMA_MODEL = process.env.SCHEMA_MODEL || 'gpt-5.6-luna';
-const MAX_ESSAIS = 4;
+const ESSAIS_LIBRES = 4;      // choix libre du gabarit, corrections guidées par les erreurs
+const ESSAIS_SIMPLIFIES = 3;  // puis gabarits simples, contenu recopié de la page
 const CONCURRENCE = 6;
 const OPENAI_TIMEOUT_MS = 120_000;
 const MOTEUR_DIR = path.resolve(__dirname, '../../python/schemas_gss');
@@ -37,7 +38,15 @@ export interface PageSchema {
 interface Resultat { id: string; ok: boolean; svg?: string; erreurs?: string[]; bibliotheque_id?: string }
 
 const SYSTEM_PROMPT = `Tu conçois le schéma d'UNE page du mémoire technique de GSS (Global Security Services, sécurité privée).
-Tu reçois le titre de la section et le texte EXACT de la page. Tu choisis le gabarit le plus adapté au propos de la page et tu en extrais le contenu.
+Tu reçois le titre de la section et le texte EXACT de la page.
+
+DÉMARCHE (consigne de GSS) : réfléchis d'abord à ce qui est pertinent à illustrer sur cette page, puis construis le schéma en conséquence.
+1. Identifie le SUJET PRINCIPAL de la page : ce que le lecteur doit retenir (champ "sujet", une phrase courte).
+2. Le schéma montre directement CE sujet, avec les éléments que la page en donne. Exemples :
+   - une page qui parle des effectifs de GSS → un schéma qui montre les effectifs de GSS ;
+   - une page qui parle des méthodes de protection → un schéma qui montre les méthodes de protection de GSS.
+   Jamais un détail secondaire, jamais un schéma décoratif ou générique.
+3. Choisis le gabarit qui rend ce sujet le plus lisible (suite d'étapes → flux ; composantes → étoile ou grille ; chiffres → chiffres ou barres ; hiérarchie → arbre ou pyramide ; comparaison → comparatif ; exigences → checklist ; chronologie → frise).
 
 RÈGLES DE FOND (impératives, contrôlées automatiquement) :
 - Reprends UNIQUEMENT des informations écrites dans la page. N'invente rien : ni étape, ni chiffre, ni délai, ni nom.
@@ -79,7 +88,7 @@ GABARITS (champ "gabarit") et format de "params" :
 
 PICTOGRAMMES : n'utilise QUE ces noms exacts (champ "icone", facultatif) : __ICONES__.
 
-Varie les formats d'une page à l'autre. Réponds UNIQUEMENT par un objet JSON {"gabarit": "...", "params": {...}}.`;
+Varie les formats d'une page à l'autre. Réponds UNIQUEMENT par un objet JSON {"sujet": "...", "gabarit": "...", "params": {...}}.`;
 
 const ICONES = ['alerte', 'ampoule', 'ascenseur', 'badge', 'ballon', 'banque', 'batiment', 'bouclier', 'caddie', 'cadeau', 'cadenas',
   'calendrier', 'camera', 'camion', 'carte_pro', 'casque', 'chaussure', 'check', 'chien', 'cible', 'cle', 'coeur', 'compteur', 'croix',
@@ -232,22 +241,39 @@ export class SchemaService {
           `\nTexte de la page :\n"""\n${page.text}\n"""`,
       },
     ];
-    for (let essai = 1; essai <= MAX_ESSAIS; essai++) {
-      let spec: any;
-      try {
-        const c = await this.openai.chat.completions.create({
-          model: SCHEMA_MODEL,
-          response_format: { type: 'json_object' },
-          messages,
+    for (let essai = 1; essai <= ESSAIS_LIBRES + ESSAIS_SIMPLIFIES; essai++) {
+      if (essai === ESSAIS_LIBRES + 1) {
+        // Rattrapage : gabarits simples et robustes, contenu recopié mot pour mot, toujours sur le sujet de la page.
+        messages.push({
+          role: 'user',
+          content: 'Reprends le schéma de cette page avec un gabarit simple parmi "grille", "checklist", "chevrons" ou "etoile", ' +
+            'toujours centré sur le sujet principal de la page. Pour chaque élément, recopie MOT POUR MOT un court passage de la page ' +
+            '(titres de 1 à 3 mots, textes de 12 mots maximum), sans chiffre absent de la page, sans pictogramme hors liste. Renvoie l\'objet JSON complet.',
         });
-        const brut = c.choices[0]?.message?.content || '{}';
-        messages.push({ role: 'assistant', content: brut });
-        spec = JSON.parse(brut);
-      } catch (e: any) {
-        console.warn(`[SchemaService] ${page.key} essai ${essai} : appel IA en échec (${e?.message || e}).`);
-        if (e?.status === 429) await new Promise((r) => setTimeout(r, 15_000 * essai));
-        continue;
       }
+      let spec: any = null;
+      // Les erreurs d'API (limite de débit 429, réseau) sont réessayées sans consommer d'essai de schéma.
+      for (let appel = 1; appel <= 5 && spec === null; appel++) {
+        try {
+          const c = await this.openai.chat.completions.create({
+            model: SCHEMA_MODEL,
+            response_format: { type: 'json_object' },
+            messages,
+          });
+          const brut = c.choices[0]?.message?.content || '{}';
+          try {
+            spec = JSON.parse(brut);
+            messages.push({ role: 'assistant', content: brut });
+          } catch {
+            console.warn(`[SchemaService] ${page.key} : réponse IA non JSON, nouvel appel.`);
+          }
+        } catch (e: any) {
+          const attente = (e?.status === 429 ? 15_000 : 5_000) * appel;
+          console.warn(`[SchemaService] ${page.key} : appel IA en échec (${e?.status || ''} ${e?.message || e}), nouvel essai dans ${attente / 1000} s.`);
+          await new Promise((r) => setTimeout(r, attente));
+        }
+      }
+      if (spec === null) return null;
       let r: Resultat | undefined;
       try {
         [r] = await appelMoteur(this.python, {
@@ -258,7 +284,10 @@ export class SchemaService {
         console.error(`[SchemaService] ${page.key} : moteur de schémas en échec (${e?.message || e}).`);
         return null;
       }
-      if (r?.ok && r.svg) return { svg: r.svg, gabarit: String(spec.gabarit) };
+      if (r?.ok && r.svg) {
+        console.log(`[SchemaService] ${page.key} (${spec.gabarit}, essai ${essai}) : ${String(spec?.sujet || '').slice(0, 100)}`);
+        return { svg: r.svg, gabarit: String(spec.gabarit) };
+      }
       const erreurs = r?.erreurs || ['Spécification refusée.'];
       console.warn(`[SchemaService] ${page.key} essai ${essai} refusé : ${erreurs.slice(0, 3).join(' | ')}`);
       messages.push({ role: 'user', content: `Ce schéma est refusé :\n- ${erreurs.join('\n- ')}\nCorrige-le (ou change de gabarit) et renvoie l'objet JSON complet.` });
