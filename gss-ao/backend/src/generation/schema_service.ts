@@ -46,7 +46,16 @@ DÉMARCHE (consigne de GSS) : réfléchis d'abord à ce qui est pertinent à ill
    - une page qui parle des effectifs de GSS → un schéma qui montre les effectifs de GSS ;
    - une page qui parle des méthodes de protection → un schéma qui montre les méthodes de protection de GSS.
    Jamais un détail secondaire, jamais un schéma décoratif ou générique.
-3. Choisis le gabarit qui rend ce sujet le plus lisible (suite d'étapes → flux ; composantes → étoile ou grille ; chiffres → chiffres ou barres ; hiérarchie → arbre ou pyramide ; comparaison → comparatif ; exigences → checklist ; chronologie → frise).
+3. Choisis le gabarit qui rend ce sujet le plus lisible (suite d'étapes → flux ; composantes → étoile ou grille ; hiérarchie → arbre ou pyramide ; comparaison → comparatif ; exigences → checklist ; chronologie → frise ; données chiffrées → voir la règle des graphiques).
+
+RÈGLE DES GRAPHIQUES (histogramme, courbe, barres, camembert, taux, chiffres, jauge) : n'en utilise un QUE si la page contient réellement les données qu'il représente, écrites en chiffres, et que le graphique est la meilleure façon de montrer le sujet. Aucun quota : sur un mémoire, il peut y en avoir aucun, un ou plusieurs selon les pages.
+Inversement, quand le sujet principal de la page EST un ensemble de quantités écrites dans la page (effectifs par catégorie, volumes, délais, taux), un graphique est le format attendu : c'est lui qui montre le mieux ce sujet.
+- "colonnes" (histogramme) : comparer des quantités entre 2 à 7 catégories (effectifs par qualification, agents par site…).
+- "courbe" : une évolution dans le temps, avec au moins 3 périodes datées ET une valeur écrite pour chacune. Jamais de période ou de valeur déduite.
+- "barres" : même usage que "colonnes" quand les libellés sont longs.
+- "camembert" : la répartition d'un total écrit dans la page.
+- "pourcentages" : 1 à 4 taux écrits en % dans la page (taux de reprise, part…), chacun avec ce qu'il mesure. Jamais un objectif présenté comme un résultat.
+- "chiffres" : quelques chiffres clés isolés ; "jauge" : des délais ou seuils sur une même échelle.
 
 RÈGLES DE FOND (impératives, contrôlées automatiquement) :
 - Reprends UNIQUEMENT des informations écrites dans la page. N'invente rien : ni étape, ni chiffre, ni délai, ni nom.
@@ -82,6 +91,9 @@ GABARITS (champ "gabarit") et format de "params" :
 - "chiffres" : chiffres clés écrits dans la page. {"chiffres":[{"valeur":"texte court","libelle","role","icone"}] (2 à 6), "note"}
 - "barres" : comparaison de valeurs chiffrées de la page. {"barres":[{"libelle","valeur":nombre,"role"}] (2 à 8), "unite", "note"}
 - "camembert" : répartition d'un TOTAL écrit dans la page. {"parts":[{"libelle","valeur":nombre,"role"}], "total":nombre (écrit dans la page, égal à la somme), "libelle_total"}
+- "colonnes" : histogramme. {"colonnes":[{"libelle","valeur":nombre,"role"}] (2 à 7), "unite" (ex. "agents", en minuscules), "note"}
+- "courbe" : évolution dans le temps. {"periodes":["…"] (3 à 8, dans l'ordre), "series":[{"libelle","role","valeurs":[un nombre par période]}] (1 ou 2), "unite", "note"}
+- "pourcentages" : taux en anneaux. {"taux":[{"titre","texte","valeur":nombre entre 0 et 100,"role"}] (1 à 4), "note"}
 - "jauge" : délais ou seuils sur une échelle. {"reperes":[{"valeur":nombre,"titre","texte","role"}] (2 à 4), "unite", "note"}
 - "fiche" : référence client. {"nom","lieu","secteur","icone","chiffres":[{"valeur","libelle"}],"missions":["…"]}
 - "silhouette" : tenue d'agent annotée. {"tenue":"costume"|"intervention"|"ssiap","reperes":[{"titre","texte","role","zone"}]} zones : tete, col, torse, poitrine, bras, taille, jambes, pieds, epaules, main.

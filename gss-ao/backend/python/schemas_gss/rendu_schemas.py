@@ -138,7 +138,7 @@ def controler_fond(params, source, titre_section):
         if t.count("(") != t.count(")") or t.count("«") != t.count("»") or t.count("“") != t.count("”"):
             erreurs.append(f"« {t} » : parenthèse ou guillemet non fermé (phrase coupée) ; reprends une phrase complète de la page.")
         premier = t.lstrip(" «“\"'(")[:1]
-        if premier.isalpha() and premier.islower():
+        if premier.isalpha() and premier.islower() and cle not in ("unite",):
             erreurs.append(f"« {t} » doit commencer par une majuscule.")
         mots_maj = [w for w in MOTS.findall(t) if len(w) > 1]
         if len(mots_maj) >= 3 and all(w.isupper() for w in mots_maj):
@@ -362,15 +362,72 @@ def construire(gabarit, p):
             _exiger(isinstance(v, (int, float)) and v >= 0, "« barres.valeur » doit être un nombre.")
             se.append({"label": _txt(d.get("libelle"), "barres.libelle", 40), "valeur": v, "role": _role(d.get("role"), "sable")})
         return G.barres(se, unite=_txt(p.get("unite"), "unite", 12, False) or "", note=_txt(p.get("note"), "note", 100, False))
+    if gabarit == "colonnes":
+        se = []
+        for d in _liste(p.get("colonnes"), "colonnes", 2, 7):
+            v = d.get("valeur")
+            _exiger(isinstance(v, (int, float)) and v >= 0, "« colonnes.valeur » doit être un nombre.")
+            se.append({"label": _txt(d.get("libelle"), "colonnes.libelle", 30), "valeur": v, "role": _role(d.get("role"), "sable")})
+        return G.colonnes(se, unite=_txt(p.get("unite"), "unite", 14, False) or "", note=_txt(p.get("note"), "note", 100, False))
+    if gabarit == "courbe":
+        et = [_txt(x, "periodes", 16) for x in _liste(p.get("periodes"), "periodes", 3, 8)]
+        se = []
+        for d in _liste(p.get("series"), "series", 1, 2):
+            vals = _liste(d.get("valeurs"), "series.valeurs", len(et), len(et))
+            _exiger(all(isinstance(v, (int, float)) and v >= 0 for v in vals), "« series.valeurs » : un nombre par période.")
+            se.append({"libelle": _txt(d.get("libelle"), "series.libelle", 30), "role": _role(d.get("role"), "bleu"), "valeurs": vals})
+        return G.courbe(et, se, unite=_txt(p.get("unite"), "unite", 14, False) or "", note=_txt(p.get("note"), "note", 100, False))
+    if gabarit == "pourcentages":
+        t = []
+        for d in _liste(p.get("taux"), "taux", 1, 4):
+            v = d.get("valeur")
+            _exiger(isinstance(v, (int, float)) and 0 <= v <= 100, "« taux.valeur » doit être un pourcentage entre 0 et 100.")
+            c = _carte(d, "taux", 36, 80, icone=False)
+            c.update(valeur=v, libelle=c.pop("titre"))
+            t.append(c)
+        return G.pourcentages(t, note=_txt(p.get("note"), "note", 100, False))
     raise Invalide(f"Gabarit inconnu « {gabarit} ».")
 
 
 # ── Sortie : SVG sur une ligne, identifiants préfixés (plusieurs SVG par document) ──
+def _recadrer(svg, marge=28):
+    """Recadre la hauteur du dessin sur son contenu (largeur 1200 inchangée : centrage horizontal
+    et marges latérales identiques). Évite qu'un espace vide au-dessus ou au-dessous occupe la page."""
+    corps = svg.split("</defs>", 1)[-1]
+    # Pictogrammes et chevrons : coordonnées locales (transform), toujours contenus dans leur carte.
+    corps = re.sub(r'<g transform="[^"]*"[^>]*>.*?</g>', "", corps, flags=re.S)
+    corps = re.sub(r'<[^>]*\stransform="[^"]*"[^>]*/>', "", corps)
+    ys = []
+    for m in re.finditer(r'<rect [^>]*?y="([\d.-]+)"[^>]*?height="([\d.]+)"', corps):
+        if 'width="1200"' in m.group(0) and 'height="660"' in m.group(0):
+            continue  # fond
+        ys += [float(m.group(1)), float(m.group(1)) + float(m.group(2))]
+    for m in re.finditer(r'<circle [^>]*?cy="([\d.-]+)"[^>]*?r="([\d.]+)"', corps):
+        ys += [float(m.group(1)) - float(m.group(2)), float(m.group(1)) + float(m.group(2))]
+    for m in re.finditer(r'<text [^>]*?y="([\d.-]+)"[^>]*?font-size="([\d.]+)"', corps):
+        ys += [float(m.group(1)) - float(m.group(2)), float(m.group(1)) + float(m.group(2)) * 0.3]
+    for m in re.finditer(r'<line [^>]*?y1="([\d.-]+)"[^>]*?y2="([\d.-]+)"', corps):
+        ys += [float(m.group(1)), float(m.group(2))]
+    for m in re.finditer(r' d="([^"]+)"', corps):
+        ys += [float(y) for y in re.findall(r"[-\d.]+,([-\d.]+)", m.group(1))]
+    if not ys:
+        return svg
+    y0 = max(0.0, min(ys) - marge)
+    y1 = min(660.0, max(ys) + marge)
+    h = y1 - y0
+    if h >= 600:
+        return svg
+    svg = svg.replace('viewBox="0 0 1200 660" width="1200" height="660"',
+                      f'viewBox="0 {y0:.0f} 1200 {h:.0f}" width="1200" height="{h:.0f}"', 1)
+    return svg.replace('<rect width="1200" height="660"', f'<rect y="{y0:.0f}" width="1200" height="{h:.0f}"', 1)
+
+
 def finaliser(svg, prefixe):
+    svg = _recadrer(svg)
     p = re.sub(r"[^a-zA-Z0-9]", "", prefixe)
     svg = re.sub(r'id="([^"]+)"', lambda m: f'id="{p}-{m.group(1)}"', svg)
     svg = re.sub(r'url\(#([^)]+)\)', lambda m: f'url(#{p}-{m.group(1)})', svg)
-    svg = svg.replace('width="1200" height="660"', 'width="100%" preserveAspectRatio="xMidYMid meet"', 1)
+    svg = re.sub(r'width="1200" height="\d+"', 'width="100%" preserveAspectRatio="xMidYMid meet"', svg, count=1)
     return re.sub(r"\s*\n\s*", " ", svg).strip()
 
 

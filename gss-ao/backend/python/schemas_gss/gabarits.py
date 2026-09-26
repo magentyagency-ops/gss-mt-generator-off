@@ -920,3 +920,135 @@ def carte_reelle(points, bbox, fond="regions", en_avant=(), noms_zones=None, zon
         else:
             s.add(disque(x, y, r, p.get("role_point", "bleu"), 3))
     return s
+
+
+# ── Histogramme (colonnes verticales) ────────────────────────────────────────
+def _axe_valeurs(maxi):
+    """Graduation « ronde » couvrant maxi (4 à 5 intervalles)."""
+    brut = maxi / 4
+    mag = 10 ** math.floor(math.log10(brut)) if brut > 0 else 1
+    pas = next(m * mag for m in (1, 2, 2.5, 5, 10) if m * mag >= brut)
+    return pas, pas * math.ceil(maxi / pas)
+
+
+def colonnes(series, unite="", note=None, legende=None):
+    """series : dicts label, valeur, role — ou label, valeurs [(v, role)] pour des colonnes groupées."""
+    s = Svg()
+    n = len(series)
+    h_bas = 64 + (40 if (note or legende) else 0)
+    x0, x1 = MX + 70, W - MX - 20
+    y_haut, y_bas = MY + 40, H - MY - h_bas
+    groupes = [se.get("valeurs") or [(se["valeur"], se.get("role", "bleu"))] for se in series]
+    maxi = max(v for g in groupes for v, _ in g)
+    pas, top = _axe_valeurs(maxi)
+    Y = lambda v: y_bas - (y_bas - y_haut) * v / top
+    v = 0
+    while v <= top + 1e-9:
+        s.add(f'<line x1="{x0}" y1="{Y(v):.1f}" x2="{x1}" y2="{Y(v):.1f}" stroke="#C9C4C1" stroke-width="{2 if v == 0 else 1}"'
+              + ('/>' if v == 0 else ' stroke-dasharray="4 6"/>'))
+        s.add(texte(x0 - 14, Y(v) + 5, f"{v:g}".replace(".", ","), 17, 500, "#5B5451", "end"))
+        v += pas
+    if unite:
+        s.add(texte(x0 - 14, y_haut - 18, unite, 17, 600, "#5B5451", "end"))
+    larg_grp = (x1 - x0) / n
+    for i, (se, g) in enumerate(zip(series, groupes)):
+        k = len(g)
+        wc = min(110 if k == 1 else 70, larg_grp * 0.62 / k)
+        gx = x0 + i * larg_grp + (larg_grp - k * wc - (k - 1) * 10) / 2
+        for j, (val, role) in enumerate(g):
+            x = gx + j * (wc + 10)
+            h = max(y_bas - Y(val), 6)
+            s.add(forme(x, y_bas - h, wc, h, role, min(12, wc / 2, h / 2), 6))
+            s.add(texte(x + wc / 2, y_bas - h - 12, f"{val:g}".replace(".", ","), 20 if k == 1 else 16, 800, TEXTE))
+        s.add(bloc_texte(x0 + i * larg_grp + 6, y_bas + 12, larg_grp - 12, 50, None, [se["label"]], t_max=20,
+                         b_ratio=1, b_min=11))
+    if legende:
+        xl = x0
+        for lab, role in legende:
+            s.add(forme(xl, H - MY - 30, 24, 24, role, 6, 3, 2),
+                  texte(xl + 34, H - MY - 12, lab, 15, 600, TEXTE, "start"))
+            xl += 34 + largeur(lab, 15, 600) + 34
+    if note:
+        s.add(texte(W - MX - 8, H - MY - 12, note, 14, 500, "#5B5451", "end"))
+    return s
+
+
+# ── Courbe (évolution dans le temps) ─────────────────────────────────────────
+def courbe(etiquettes, series, unite="", note=None):
+    """etiquettes : périodes dans l'ordre ; series : dicts libelle, role, valeurs (une par période)."""
+    s = Svg()
+    n = len(etiquettes)
+    h_bas = 64 + (40 if (note or len(series) > 1) else 0)
+    x0, x1 = MX + 90, W - MX - 60
+    y_haut, y_bas = MY + 50, H - MY - h_bas
+    maxi = max(v for se in series for v in se["valeurs"])
+    pas, top = _axe_valeurs(maxi)
+    X = lambda i: x0 + (x1 - x0) * i / (n - 1)
+    Y = lambda v: y_bas - (y_bas - y_haut) * v / top
+    v = 0
+    while v <= top + 1e-9:
+        s.add(f'<line x1="{x0 - 20}" y1="{Y(v):.1f}" x2="{x1 + 20}" y2="{Y(v):.1f}" stroke="#C9C4C1" stroke-width="{2 if v == 0 else 1}"'
+              + ('/>' if v == 0 else ' stroke-dasharray="4 6"/>'))
+        s.add(texte(x0 - 34, Y(v) + 5, f"{v:g}".replace(".", ","), 17, 500, "#5B5451", "end"))
+        v += pas
+    if unite:
+        s.add(texte(x0 - 34, y_haut - 22, unite, 17, 600, "#5B5451", "end"))
+    for i, e in enumerate(etiquettes):
+        s.add(bloc_texte(X(i) - 80, y_bas + 12, 160, 46, None, [e], t_max=20, b_ratio=1, b_min=11))
+    for se in series:
+        role = se.get("role", "bleu")
+        pts = [(X(i), Y(val)) for i, val in enumerate(se["valeurs"])]
+        aire = f"M{pts[0][0]:.1f},{y_bas} " + " ".join(f"L{x:.1f},{y:.1f}" for x, y in pts) + f" L{pts[-1][0]:.1f},{y_bas} Z"
+        if len(series) == 1:
+            s.add(f'<path d="{aire}" fill="{ROLES[role][0]}" opacity="0.55"/>')
+        s.add(f'<path d="M' + " L".join(f"{x:.1f},{y:.1f}" for x, y in pts) +
+              f'" fill="none" stroke="{FONCE[role]}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" filter="url(#op)"/>')
+        for (x, y), val in zip(pts, se["valeurs"]):
+            s.add(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="9" fill="{FONCE[role]}" stroke="{SURF}" stroke-width="3"/>')
+            s.add(texte(x, y - 20, f"{val:g}".replace(".", ","), 19, 800, TEXTE))
+    if len(series) > 1:
+        xl = x0
+        for se in series:
+            lab, role = se["libelle"], se.get("role", "bleu")
+            s.add(f'<rect x="{xl}" y="{H - MY - 24}" width="26" height="6" rx="3" fill="{FONCE[role]}"/>',
+                  texte(xl + 36, H - MY - 14, lab, 15, 600, TEXTE, "start"))
+            xl += 36 + largeur(lab, 15, 600) + 34
+    if note:
+        s.add(texte(W - MX - 8, H - MY - 12, note, 14, 500, "#5B5451", "end"))
+    return s
+
+
+# ── Taux (anneaux de progression) ────────────────────────────────────────────
+def pourcentages(taux, note=None):
+    """taux : dicts valeur (0 à 100), libelle, texte, role. Un anneau par taux, dans une carte."""
+    s = Svg()
+    n = len(taux)
+    gx = 34
+    w = (W - 2 * MX - (n - 1) * gx - 8) / n
+    h = min(380, H - 2 * MY - (50 if note else 0))
+    y = (H - h - (50 if note else 0)) / 2
+    for i, t in enumerate(taux):
+        x = MX + i * (w + gx)
+        role = t.get("role", "vert")
+        s.add(surface(x, y, w, h, 22))
+        r = min(w * 0.3, 92)
+        cx, cy = x + w / 2, y + 40 + r
+        s.add(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r:.1f}" fill="none" stroke="#E9E5DE" stroke-width="22"/>')
+        v = max(0.0, min(100.0, t["valeur"]))
+        if v >= 99.999:
+            s.add(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r:.1f}" fill="none" stroke="{FONCE[role]}" stroke-width="22"/>')
+        elif v > 0:
+            ax, ay = pt(cx, cy, r, 360 * v / 100)
+            large = 1 if v > 50 else 0
+            s.add(f'<path d="M{cx:.1f},{cy - r:.1f} A{r:.1f},{r:.1f} 0 {large} 1 {ax:.1f},{ay:.1f}" fill="none" '
+                  f'stroke="{FONCE[role]}" stroke-width="22" stroke-linecap="round"/>')
+        val = f"{t['valeur']:g}".replace(".", ",") + " %"
+        tv = 40
+        while largeur(val, tv, 800) > r * 1.5:
+            tv -= 2
+        s.add(texte(cx, cy + tv * 0.35, val, tv, 800, TEXTE))
+        s.add(bloc_texte(x + 20, cy + r + 30, w - 40, y + h - (cy + r + 30) - 18, t["libelle"],
+                         [t["texte"]] if t.get("texte") else (), t_max=20, maj=False))
+    if note:
+        s.add(bloc_texte(MX, H - MY - 40, W - 2 * MX, 36, None, [note], t_max=15, b_ratio=0.95, b_min=12))
+    return s

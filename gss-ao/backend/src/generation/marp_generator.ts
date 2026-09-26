@@ -560,7 +560,8 @@ export class MarpGenerator {
           const schemaGss = schemas.get(slideKeyOf(ci, si, i));
           if (schemaGss) {
             // Un schéma GSS par page, à l'emplacement réservé à l'illustration (sous le texte).
-            lines.push(`<div class="schema-gss" style="width: 85%; margin: 15px auto 0;">`);
+            // Largeur du texte (plus grand qu'avant, centrage et marges latérales symétriques conservés).
+            lines.push(`<div class="schema-gss" style="width: 100%; margin: 15px auto 0;">`);
             lines.push(schemaGss.replace('<svg ', '<svg style="display: block; width: 100%; height: auto; max-height: 440px; margin: 0 auto;" '));
             lines.push(`</div>`);
             lines.push('');
