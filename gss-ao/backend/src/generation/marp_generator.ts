@@ -653,7 +653,14 @@ export class MarpGenerator {
         }
 
         if (inRef) {
-          refSlides.push(cleanSlide);
+          // Le repère « Zone d’image » du modèle sert à détecter les pages de références ; il ne doit
+          // jamais apparaître dans le PDF : la ligne titre devient l'en-tête de page.
+          refSlides.push(
+            cleanSlide
+              .replace(/^ILS NOUS ONT FAIT CONFIANCE\s*Zone d[’']image\s*$/m, '<!-- header: "ILS NOUS ONT FAIT CONFIANCE" -->\n')
+              .replace(/Zone d[’']image/g, '')
+              .trim(),
+          );
         }
       }
       return refSlides;
