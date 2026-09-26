@@ -409,7 +409,13 @@ def _recadrer(svg, marge=28):
     for m in re.finditer(r'<line [^>]*?y1="([\d.-]+)"[^>]*?y2="([\d.-]+)"', corps):
         ys += [float(m.group(1)), float(m.group(2))]
     for m in re.finditer(r' d="([^"]+)"', corps):
-        ys += [float(y) for y in re.findall(r"[-\d.]+,([-\d.]+)", m.group(1))]
+        d = m.group(1)
+        pts = [float(y) for y in re.findall(r"[-\d.]+,([-\d.]+)", d)]
+        ys += pts
+        # Arcs (anneaux, camemberts, cycles) : le bombé dépasse les extrémités → marge du rayon.
+        for r in re.findall(r"A([\d.]+),[\d.]+", d):
+            if pts:
+                ys += [min(pts) - float(r), max(pts) + float(r)]
     if not ys:
         return svg
     y0 = max(0.0, min(ys) - marge)
