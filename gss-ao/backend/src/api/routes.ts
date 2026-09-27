@@ -13,7 +13,7 @@ import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeamBulk, matchQu
 import { injectValidatedRecherches } from '../generation/inject_recherches';
 import { learnSollicitationsForDossier, learnPendingSollicitations } from '../generation/learn_sollicitation';
 import { getGenerationGate } from '../generation/generation_gate';
-import { lireEtat, vueEtat, remplirSaisie, capitaliser, integrerReponse } from '../generation/completion';
+import { lireEtat, vueEtat, remplirSaisie, capitaliser, integrerReponse, memePole, personnesConnuesDuRole } from '../generation/completion';
 import { getSettings } from '../core/config';
 import { getScopedClient, requestContext } from '../core/supabase';
 import { createClient } from '@supabase/supabase-js';
@@ -601,65 +601,89 @@ router.post('/dossiers/:id/completion', async (req: Request, res: Response) => {
   }
 });
 
-// « Demander à l'équipe » depuis le document généré : envoie les emplacements encore à compléter
-// (hors questions pour l'acheteur) à la bonne personne de l'annuaire. Les réponses reçues par e-mail
-// sont ensuite insérées automatiquement dans le document (surveillance de completion.ts).
+// « Demander à l'équipe » depuis le document généré, en deux temps :
+//  1. /preparer : une question par donnée manquante, avec les personnes PROPOSÉES — la plus adaptée de
+//     l'annuaire et tout son pôle (un rôle peut être tenu par plusieurs personnes, ex. l'exploitation),
+//     cochées par défaut ; l'utilisateur ajuste avant l'envoi ;
+//  2. /demander : envoi à la sélection. Les réponses reçues par e-mail sont ensuite insérées
+//     automatiquement dans le document (surveillance de completion.ts).
+function questionsOuvertes(etat: NonNullable<ReturnType<typeof lireEtat>>): MissingField[] {
+  const groupes = new Map<string, typeof etat.elements>();
+  for (const e of etat.elements.filter((x) => x.statut === 'ouvert' && !x.pourAcheteur)) {
+    const g = e.groupe || e.cle;
+    (groupes.get(g) ?? groupes.set(g, []).get(g)!).push(e);
+  }
+  // Clés « GSS_AC_1+GSS_AC_6 » : elles voyagent avec l'e-mail pour placer la réponse à tous ces endroits.
+  return [...groupes.values()].map((els) => ({ id: els.map((e) => e.cle).join('+'), label: els[0].question, context: els[0].contexte }));
+}
+
+router.post('/dossiers/:id/completion/preparer', async (req: Request, res: Response) => {
+  try {
+    const etat = lireEtat(req.params.id);
+    if (!etat) return res.status(404).json({ error: 'Aucun document généré à compléter.' });
+    const questions = questionsOuvertes(etat);
+    const { data: peopleRows } = await getScopedClient().from('personne').select('id, nom, fonction, email').eq('actif', true);
+    const people: Personne[] = (peopleRows as Personne[]) || [];
+    const affectations = people.length ? await matchQuestionsToPeople(questions, people) : new Map<string, string>();
+    const annuaireNorm = people.map((p) => p.nom.toLowerCase());
+    res.json({
+      annuaire: people.map((p) => ({ id: p.id, nom: p.nom, fonction: p.fonction, email: p.email })),
+      questions: questions.map((q) => {
+        const principal = people.find((p) => p.id === affectations.get(q.id));
+        const pole = principal ? people.filter((p) => p.id === principal.id || memePole(p.fonction, principal.fonction)) : [];
+        const absents = principal
+          ? personnesConnuesDuRole(principal.fonction).filter((n) => !n.toLowerCase().split(/\s+/).filter((w) => w.length >= 3).some((w) => annuaireNorm.some((a) => a.includes(w))))
+          : [];
+        return { id: q.id, question: q.label, contexte: q.context, proposes: pole.map((p) => p.id), absentsAnnuaire: absents };
+      }),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/dossiers/:id/completion/demander', async (req: Request, res: Response) => {
   const dossierId = req.params.id;
   try {
     const etat = lireEtat(dossierId);
     if (!etat) return res.status(404).json({ error: 'Aucun document généré à compléter.' });
-    // Une question par DONNÉE : les emplacements d'un même groupe partagent la question, et leurs clés
-    // (« GSS_AC_1+GSS_AC_6 ») voyagent avec l'e-mail pour placer la réponse à tous ces endroits.
-    const groupes = new Map<string, typeof etat.elements>();
-    for (const e of etat.elements.filter((x) => x.statut === 'ouvert' && !x.pourAcheteur)) {
-      const g = e.groupe || e.cle;
-      (groupes.get(g) ?? groupes.set(g, []).get(g)!).push(e);
-    }
-    const internals: MissingField[] = [...groupes.values()].map((els) => ({
-      id: els.map((e) => e.cle).join('+'), label: els[0].question, context: els[0].contexte,
-    }));
-    if (!internals.length) return res.json({ status: 'ok', triggered: 0, sent: 0, results: [], message: 'Aucune information à demander.' });
+    const questions = questionsOuvertes(etat);
+    if (!questions.length) return res.json({ status: 'ok', triggered: 0, sent: 0, results: [], message: 'Aucune information à demander.' });
     const { data: peopleRows } = await getScopedClient().from('personne').select('id, nom, fonction, email').eq('actif', true);
     const people: Personne[] = (peopleRows as Personne[]) || [];
-    if (dossierId.startsWith('demo-')) {
-      // Démonstration : même routage vers l'annuaire que pour un vrai envoi, mais aucun e-mail ne part.
-      // Le front affiche chaque e-mail préparé et permet d'y répondre à la place du destinataire.
-      const envois: Array<{ personne: string; fonction?: string; email: string; questions: Array<{ cle: string; question: string }> }> = [];
-      if (people.length > 0) {
-        const affectations = await matchQuestionsToPeople(internals, people);
-        const byId = new Map(people.map((p) => [p.id, p]));
-        for (const f of internals) {
-          const p = byId.get(affectations.get(f.id) || people[0].id)!;
-          let env = envois.find((e) => e.email === p.email);
-          if (!env) { env = { personne: p.nom, fonction: (p as any).fonction, email: p.email, questions: [] }; envois.push(env); }
-          env.questions.push({ cle: f.id, question: f.label });
-        }
-      } else {
-        envois.push({ personne: 'Destinataire par défaut', email: process.env.DEFAULT_TEAM_EMAIL || '(non configuré)', questions: internals.map((f) => ({ cle: f.id, question: f.label })) });
-      }
-      return res.json({ status: 'ok', demo: true, triggered: internals.length, sent: 0, envois });
+    const byId = new Map(people.map((p) => [p.id, p]));
+
+    // Sélection faite par l'utilisateur ({ question id: [personne ids] }) ; à défaut, routage automatique.
+    const selection: Record<string, string[]> = req.body?.selection && typeof req.body.selection === 'object' ? req.body.selection : {};
+    const auto = Object.keys(selection).length ? new Map<string, string>() : await matchQuestionsToPeople(questions, people);
+    const parPersonne = new Map<string, MissingField[]>();
+    for (const q of questions) {
+      const ids = (selection[q.id] || [auto.get(q.id) || people[0]?.id]).filter((id) => id && byId.has(id));
+      for (const id of ids) (parPersonne.get(id) ?? parPersonne.set(id, []).get(id)!).push(q);
     }
+
+    if (dossierId.startsWith('demo-')) {
+      // Démonstration : aucun e-mail ne part ; le front affiche chaque e-mail et permet d'y répondre.
+      const envois = [...parPersonne.entries()].map(([id, qs]) => {
+        const p = byId.get(id)!;
+        return { personne: p.nom, fonction: p.fonction, email: p.email, questions: qs.map((q) => ({ cle: q.id, question: q.label })) };
+      });
+      return res.json({ status: 'ok', demo: true, triggered: questions.length, sent: 0, envois });
+    }
+
     const results: Array<{ id: string; label: string; personne?: string; email?: string; sent: boolean }> = [];
     let sent = 0;
-    if (people.length > 0) {
-      const affectations = await matchQuestionsToPeople(internals, people);
-      const byId = new Map(people.map((p) => [p.id, p]));
-      const groups = new Map<string, MissingField[]>();
-      for (const f of internals) {
-        const pid = affectations.get(f.id) || people[0].id;
-        (groups.get(pid) ?? groups.set(pid, []).get(pid)!).push(f);
-      }
-      for (const [pid, qs] of groups) {
-        const p = byId.get(pid)!;
+    if (parPersonne.size) {
+      for (const [id, qs] of parPersonne) {
+        const p = byId.get(id)!;
         const r = await requestInfoFromTeamBulk(qs, dossierId, p.email, req.headers.authorization);
         for (const f of qs) { results.push({ id: f.id, label: f.label, personne: p.nom, email: p.email, sent: !!r.sent }); if (r.sent) sent++; }
       }
     } else {
-      const r = await requestInfoFromTeamBulk(internals, dossierId, undefined, req.headers.authorization);
-      for (const f of internals) { results.push({ id: f.id, label: f.label, sent: !!r.sent }); if (r.sent) sent++; }
+      const r = await requestInfoFromTeamBulk(questions, dossierId, undefined, req.headers.authorization);
+      for (const f of questions) { results.push({ id: f.id, label: f.label, sent: !!r.sent }); if (r.sent) sent++; }
     }
-    res.json({ status: 'ok', triggered: internals.length, sent, results });
+    res.json({ status: 'ok', triggered: questions.length, sent, results });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

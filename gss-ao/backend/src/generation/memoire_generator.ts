@@ -3,7 +3,7 @@ import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema } from './schema_service';
 import { poserSignets, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter } from './completion';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -3573,7 +3573,13 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     /** Si le libellé mentionne un RÔLE connu d'un référent → « NOM — Rôle », sinon ''. */
     const referentForLabel = (label: string): string => {
       const n = normCtx(label);
-      for (const { name, role, roleNorm } of referentRoles) if (n.includes(roleNorm)) return `${name} — ${role}`;
+      for (const { name, role, roleNorm } of referentRoles) {
+        if (!n.includes(roleNorm)) continue;
+        // Pôle tenu par plusieurs personnes (référents + mémoires GSS récents) : on les cite toutes.
+        const nomsNorm = normCtx(name).replace(/[^a-z]+/g, ' ');
+        const autres = personnesDuRole(role).filter((p) => !normCtx(p).split(/[^a-z]+/).filter((w) => w.length >= 3).every((w) => nomsNorm.includes(w)));
+        return autres.length ? `${[name, ...autres].join(', ')} — ${role}` : `${name} — ${role}`;
+      }
       return '';
     };
 

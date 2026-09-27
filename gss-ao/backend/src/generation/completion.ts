@@ -22,6 +22,7 @@ import OpenAI from 'openai';
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getSettings } from '../core/config';
+import { personnesDuRole } from './base_memoires';
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const RESPONSE_DIR = path.resolve(__dirname, '../../response');
@@ -513,4 +514,34 @@ export async function capitaliser(dossierId: string, el: ElementACompleter): Pro
     actif: true,
   }], { onConflict: 'chunk_id' });
   if (error) console.warn('[completion] capitalisation impossible :', error.message);
+}
+
+// ─── Destinataires proposés (« Demander à l'équipe ») ─────────────────────────────────────
+
+const MOTS_NEUTRES = new Set(['responsable', 'responsables', 'service', 'services', 'agent', 'agents', 'chef', 'charge', 'de', 'du', 'des', 'la', 'le', 'les', 'et']);
+const normMots = (t: string) => (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .split(/[^a-z]+/).map((w) => w.replace(/s$/, '')).filter((w) => w.length >= 3 && !MOTS_NEUTRES.has(w) && !MOTS_NEUTRES.has(`${w}s`));
+
+/** Vrai si deux fonctions relèvent du même pôle (ex. « Responsable d'exploitation » / « Services Exploitations »). */
+export function memePole(f1: string, f2: string): boolean {
+  const a = new Set(normMots(f1));
+  return normMots(f2).some((w) => a.has(w));
+}
+
+/**
+ * Personnes connues de GSS pour un rôle (référents « Personnes » + mémoires récents), pour signaler
+ * celles qui ne sont pas encore dans l'annuaire (sans adresse e-mail, on ne peut pas leur écrire).
+ */
+export function personnesConnuesDuRole(fonction: string): string[] {
+  const noms = new Set<string>(personnesDuRole(fonction));
+  try {
+    const f = path.resolve(__dirname, '../../Template/Documentation GSS/Personnes');
+    if (fs.existsSync(f) && fs.statSync(f).isFile()) {
+      for (const ligne of fs.readFileSync(f, 'utf-8').split(/\r?\n/)) {
+        const m = ligne.match(/^\s*(.+?)\s+[—–-]\s+(.+?)\s*$/);
+        if (m && m[2].split('/').some((r) => memePole(r, fonction))) noms.add(m[1].trim());
+      }
+    }
+  } catch { /* fichier facultatif */ }
+  return [...noms];
 }
