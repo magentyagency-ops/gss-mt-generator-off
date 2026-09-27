@@ -2,6 +2,7 @@ import { MarpGenerator, AssembleChapter, AssembleSection } from './marp_generato
 import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema } from './schema_service';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -3293,6 +3294,14 @@ ${(() => {
 - Mentionne la possibilité de co-construction du dispositif avec le client.`;
       })()}
 
+══════════════════════════════════════
+RÈGLE N°5 — CAPITALISER SUR LES MÉMOIRES DÉJÀ RÉDIGÉS PAR GSS
+══════════════════════════════════════
+${REGLES_REUTILISATION}
+- Réponds précisément à la QUESTION du champ : n'utilise un extrait de mémoire que s'il répond à CETTE question.
+- Champ court, d'identité ou de contact : une valeur présente dans le REGISTRE DES INFORMATIONS GSS ou dans un extrait de mémoire GSS EST une source valable → donne-la (ne réponds pas « [À COMPLÉTER] » si elle y figure).
+- Une certification indiquée « en cours » n'est PAS obtenue : ne la présente jamais comme acquise.${blocRegistre()}
+
 FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "value": "..."} ]}`;
 
     // Valeurs renvoyées par l'IA (une par champ [CHAMP_n]).
@@ -3364,6 +3373,8 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
       const top = qEmb ? this.retrieve(qEmb, retrievalChunks, 12, this.buildFieldQuery(f)) : [];
       const gssPassages = top.filter(c => ['GSS', 'WEB', 'SOLLICITATION'].includes(c.source));
       const dcePassages = top.filter(c => c.source === 'DCE');
+      // Réponses déjà rédigées par GSS sur cette question dans ses mémoires précédents.
+      const memoiresChamp = qEmb ? blocMemoires(rechercherMemoires(qEmb, 5, this.buildFieldQuery(f))) : '';
       const fmtBlock = (title: string, cs: RetrievalChunk[]) => cs.length
         ? `\n--- ${title} ---\n` + cs.map((c, i) => `[${c.label} #${i + 1}]\n${c.text}`).join('\n\n') + '\n' : '';
       // Champ qui demande EXPLICITEMENT une personne/contact. On se base sur la QUESTION du champ,
@@ -3504,7 +3515,7 @@ ${analysisJson}
 
 --- CONTEXTE STRATÉGIQUE GSS ---
 ${strategicCtx}
-${fmtBlock("EXTRAITS PERTINENTS DU DCE (exigences de l'acheteur)", dcePassages)}${fmtBlock('DOCUMENTATION GSS PERTINENTE (sources internes — appuie ta réponse dessus)', gssPassages)}${isReferent && referentsContext ? `\n--- RÉFÉRENTS GSS (« Personnes ») ---\n${referentsContext}\nLIS BIEN LE LIBELLÉ : s'il demande UNE personne (singulier : « la personne », « l'interlocuteur », « le contact ») → donne EXACTEMENT UN référent, le plus pertinent au regard du libellé (le rôle nommé s'il y en a un ; sinon l'interlocuteur principal du marché). NE recopie PAS toute la liste. Il ne faut PLUSIEURS personnes QUE si le libellé le demande explicitement (« les personnes », « liste », « organigramme »).\n` : ''}
+${fmtBlock("EXTRAITS PERTINENTS DU DCE (exigences de l'acheteur)", dcePassages)}${fmtBlock('DOCUMENTATION GSS PERTINENTE (sources internes — appuie ta réponse dessus)', gssPassages)}${memoiresChamp}${isReferent && referentsContext ? `\n--- RÉFÉRENTS GSS (« Personnes ») ---\n${referentsContext}\nLIS BIEN LE LIBELLÉ : s'il demande UNE personne (singulier : « la personne », « l'interlocuteur », « le contact ») → donne EXACTEMENT UN référent, le plus pertinent au regard du libellé (le rôle nommé s'il y en a un ; sinon l'interlocuteur principal du marché). NE recopie PAS toute la liste. Il ne faut PLUSIEURS personnes QUE si le libellé le demande explicitement (« les personnes », « liste », « organigramme »).\n` : ''}
 CHAMP UNIQUE À RÉDIGER :
 ${hint}
 
@@ -3569,7 +3580,7 @@ ${analysisJson}
 
 --- CONTEXTE STRATÉGIQUE GSS ---
 ${strategicCtx}
-${fmtBlock("EXTRAITS PERTINENTS DU DCE (exigences de l'acheteur)", top.filter(c => c.source === 'DCE'))}${fmtBlock('DOCUMENTATION GSS PERTINENTE (sources internes — appuie ta réponse dessus)', top.filter(c => ['GSS', 'WEB', 'SOLLICITATION'].includes(c.source)))}${isRef && referentsContext ? `\n--- RÉFÉRENTS GSS (« Personnes ») ---\n${referentsContext}\n` : ''}
+${fmtBlock("EXTRAITS PERTINENTS DU DCE (exigences de l'acheteur)", top.filter(c => c.source === 'DCE'))}${fmtBlock('DOCUMENTATION GSS PERTINENTE (sources internes — appuie ta réponse dessus)', top.filter(c => ['GSS', 'WEB', 'SOLLICITATION'].includes(c.source)))}${qEmb ? blocMemoires(rechercherMemoires(qEmb, 5, this.buildFieldQuery(primary))) : ''}${isRef && referentsContext ? `\n--- RÉFÉRENTS GSS (« Personnes ») ---\n${referentsContext}\n` : ''}
 LIBELLÉ / QUESTION À TRAITER : « ${zone.label} »
 Sous ce libellé, il y a ${N} ligne(s) à remplir. Donne jusqu'à ${N} éléments de réponse COURTS, DISTINCTS et COMPLÉMENTAIRES (un par ligne), du plus important au moins important, fondés UNIQUEMENT sur les extraits ci-dessus, en restant sur le sujet du libellé. AUCUNE répétition entre les éléments.
 RÈGLE DE FIABILITÉ (PRIORITAIRE) : donne TOUS les éléments que les extraits justifient DIRECTEMENT (ne laisse pas de côté une info réellement présente) ; mais ne donne un élément QUE s'il est fondé sur les extraits. N'invente, ne déduis ni n'extrapole aucune donnée (nom, date, SIRET/SIREN, CNAPS, agrément, adresse, téléphone, email, effectif, taux, montant) absente des sources. NE DÉTOURNE PAS une donnée d'entreprise/générale pour une question spécifique (dédié au marché / par site / par département). NE RECOPIE PAS l'intitulé ni les options des cases. Si tu n'as de quoi remplir que k < ${N} lignes (voire 0), ne donne QUE k éléments — ne meuble JAMAIS, mieux vaut vide que non fiable.
@@ -3616,6 +3627,16 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     });
     await runPool(tracked, 2);
 
+    // Informations variables à confirmer par GSS (registre) : le marqueur ne doit JAMAIS apparaître dans le
+    // document remis à l'acheteur → retiré de la valeur, remonté dans les consultations.
+    const confirmationsGss = new Set<string>();
+    const retirerConfirmations = () => {
+      for (const r of replacements) {
+        const { texte, confirmations } = extraireConfirmations(String(r.value ?? ''));
+        if (confirmations.length) { confirmations.forEach((c) => confirmationsGss.add(c)); r.value = texte || '[À COMPLÉTER]'; }
+      }
+    };
+
     // Passe de complétion : rattrape les champs sans valeur (appel ayant échoué).
     const answeredIds = new Set(replacements.map(r => r.id));
     const missing = descriptors.filter(d => !answeredIds.has(d.id));
@@ -3624,6 +3645,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       await runPool(missing.map(d => () => answerField(d)), 2);
     }
 
+    retirerConfirmations();
     console.log(`[MemoireGenerator] GPT a renvoyé ${replacements.length} valeurs au total.`);
     setProgress(dossierId, { phase: 'finalisation', pct: 94, label: 'Application des réponses au cadre…' });
     if (onProgress) onProgress(94, 'Application des réponses au cadre…');
@@ -3642,7 +3664,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     // Le total d'effectif calculé (somme de chiffres réels) est une donnée « sourcée » → on l'ajoute
     // aux sources pour que les garde-fous ne le considèrent pas comme un chiffre inventé.
     const effectifText = effectifTotal ? ` ${effectifTotal.total} ` : '';
-    const sourceTextNorm = normCtx(identiteText + effectifText + ' ' + analysisJson + ' ' + dceContext + ' ' + gssDocContext + ' ' + referentsContext);
+    const sourceTextNorm = normCtx(identiteText + effectifText + ' ' + analysisJson + ' ' + dceContext + ' ' + gssDocContext + ' ' + referentsContext + ' ' + texteSourcesMemoires());
     const sourceDigits = sourceTextNorm.replace(/\D/g, '');
     const EMAIL_RE = /[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}/g;
     const PHONE_RE = /\+?\d(?:[\d ().\-]{7,})\d/g;     // n° téléphone (≥9 chiffres espacés/groupés)
@@ -3677,7 +3699,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     // n'est PAS une preuve que GSS la détient → on ne se fie donc PAS aux sources DCE pour ces champs,
     // seulement à la Doc GSS. Si la certification citée n'y figure pas → [À COMPLÉTER] (anti-invention).
     // (Les qualifications d'AGENTS — CQP, SSIAP, SST, HOBO — ne sont pas concernées par ce filtre.)
-    const gssDocCompact = normCtx(gssDocContext).replace(/\s+/g, '');
+    const gssDocCompact = normCtx(gssDocContext + ' ' + texteSourcesMemoires()).replace(/\s+/g, '');
     const SERVICE_CERT_RE = /ISO\s*\d{4,5}|APSAD(?:\s*R?\s*\d+)?|\bR\s?31\b/gi;
     const guardServiceCert = (val: string, _ctx: string): string => {
       // On scanne la VALEUR (pas le contexte) : si elle CITE une certification de service et que la
@@ -4100,7 +4122,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
           remplacement: r.value
         })))
       },
-      consultations: aCompleter,
+      consultations: [...aCompleter, ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))],
     };
   }
 
@@ -4854,6 +4876,19 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
     const totalSections = AI_SECTIONS_B.length;
     let completed = 0;
 
+    // Base de mémoires GSS : pour chaque rubrique, les réponses que GSS a déjà rédigées sur le même sujet
+    // (recherche sémantique sur l'intitulé de la rubrique et le contexte du marché), + le registre des
+    // informations variables. Une seule requête d'embeddings pour les 20 rubriques.
+    const marcheCtx = [analysisData?.clientName, analysisData?.objet, analysisData?.secteur].filter(Boolean).join(' — ');
+    let rubriqueEmbs: number[][] = [];
+    try {
+      rubriqueEmbs = await this.embedTexts(AI_SECTIONS_B.map((s) => `${s.title}. ${marcheCtx}`.slice(0, 1000)));
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Recherche dans les mémoires GSS indisponible (${e?.message || e}).`);
+    }
+    const registreGss = blocRegistre();
+    const secoursMemoires: Record<string, string> = {};
+
     for (let i = 0; i < totalSections; i++) {
       const section = AI_SECTIONS_B[i];
       if (onProgress) {
@@ -4891,6 +4926,11 @@ RÈGLES DE PERTINENCE (le plus important) :
 - Personnalise FORTEMENT pour ${clientName} et son secteur d'activité : ancre le propos dans le contexte réel du marché, pas dans des généralités.
 - N'invente JAMAIS une information absente à la fois du DCE et des atouts GSS ; reste factuel.
 
+PERTINENCE À L'INTITULÉ (impératif) : chaque sous-partie traite directement « ${section.title} ». N'introduis aucun contenu d'un autre thème, même s'il figure dans les extraits.
+
+${REGLES_REUTILISATION}
+- Tableaux : un tableau Markdown est autorisé quand il reprend un tableau de GSS (effectifs, qualifications, fréquences…).
+
 RÈGLES DE FORME (rendu Marp) :
 - NE répète PAS le titre principal "${section.title}" (il est ajouté automatiquement).
 - Structure le texte avec des sous-titres en Markdown : "## Sous-titre" (et "### " pour un niveau plus fin). Ces titres seront affichés en rouge et en grande police, utilise-les pour rythmer la lecture.
@@ -4909,13 +4949,33 @@ RÈGLES DE FORME (rendu Marp) :
           .join('\n')
         : '';
 
-      const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}${reqBlock}\n\nRédige le contenu de cette partie de manière experte.`;
+      const passagesMemoires = rubriqueEmbs[i] ? rechercherMemoires(rubriqueEmbs[i], 8, section.title, 3) : [];
+      const memoiresBlock = blocMemoires(passagesMemoires);
+      const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}${memoiresBlock}${registreGss}${reqBlock}\n\nRédige le contenu de cette partie de manière experte.`;
 
-      const text = await this.callOpenAI(
-        [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-        0.5, `Génération ${section.id}`, false
-      );
-      sectionsMap[section.id] = text || 'Contenu non généré.';
+      // Une rubrique ne doit JAMAIS sortir vide (« page quasi vide » signalée par GSS) : nouvel essai si
+      // l'appel échoue ou si le texte est manifestement tronqué.
+      const assezLong = (t: string | null) => !!t && t.split(/\s+/).length >= 150;
+      let text: string | null = null;
+      for (let essai = 1; essai <= 3 && !assezLong(text); essai++) {
+        const t = await this.callOpenAI(
+          [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+          0.5, `Génération ${section.id}${essai > 1 ? ` (essai ${essai})` : ''}`, false
+        );
+        if (t && (!text || t.length > text.length)) text = t;
+      }
+      if (!assezLong(text) && passagesMemoires.length) {
+        // Dernier recours : la rubrique reprend les réponses GSS existantes plutôt que de rester vide.
+        const repris = passagesMemoires.filter((p) => p.score >= 0.3).slice(0, 3)
+          .map((p) => `## ${p.rubrique.split(' — ').pop() || section.title}\n\n${p.texte}`).join('\n\n');
+        if (repris) {
+          text = repris;
+          secoursMemoires[section.id] = section.title;
+          console.warn(`[MemoireGenerator] Rubrique « ${section.title} » : rédaction IA indisponible → contenu repris des mémoires GSS.`);
+        }
+      }
+      sectionsMap[section.id] = text || '';
+      if (!text) console.error(`[MemoireGenerator] Rubrique « ${section.title} » non rédigée (IA indisponible, aucune réponse GSS à reprendre).`);
       completed++;
     }
 
@@ -4932,6 +4992,9 @@ RÈGLES DE FORME (rendu Marp) :
     for (const txt of Object.values(sectionsMap)) {
       let m: RegExpExecArray | null;
       while ((m = markerRe.exec(txt)) !== null) consultations.add(m[1].trim());
+    }
+    for (const titre of Object.values(secoursMemoires)) {
+      consultations.add(`Rubrique « ${titre} » : contenu repris tel quel des mémoires GSS (rédaction automatique indisponible), à relire et adapter au client.`);
     }
     const consultationList = [...consultations].filter(Boolean);
 
