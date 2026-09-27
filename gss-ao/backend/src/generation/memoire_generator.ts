@@ -2388,6 +2388,45 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
   }
 
   /**
+   * Liste des informations à obtenir, SANS DOUBLONS : chaque rubrique et la matrice CCTP signalent
+   * leurs manques indépendamment, si bien qu'un même sujet (certification, habilitation, reprise du
+   * personnel…) revenait 4 à 6 fois sous des formulations différentes. On fusionne en une question
+   * par sujet, en gardant toutes les précisions ; aucun sujet n'est ajouté ni retiré. Repli : simple
+   * dédoublonnage exact si l'appel échoue.
+   */
+  private async consoliderConsultations(liste: string[]): Promise<string[]> {
+    const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    const uniques = liste.map((c) => c.replace(/\*\*/g, '').trim()).filter(Boolean)
+      .filter((c, i, arr) => arr.findIndex((x) => norm(x) === norm(c)) === i);
+    if (uniques.length <= 3) return uniques;
+    const reponse = await this.callOpenAI([
+      {
+        role: 'system',
+        content: `Tu prépares la liste des informations à obtenir pour finaliser un mémoire technique GSS. La liste fournie a été produite rubrique par rubrique : beaucoup de demandes portent sur le MÊME sujet avec des formulations différentes.
+- Fusionne toutes les demandes d'un même sujet en UNE seule question claire, qui reprend TOUTES leurs précisions (sites, bâtiments, normes, documents, délais, « dernière valeur connue : … (source) »).
+- Ne supprime aucun sujet et n'en crée aucun ; n'ajoute aucune information absente de la liste.
+- Une demande « Confirmer … — dernière valeur connue : … » porte sur UNE information (un responsable, un effectif, un outil…) : ne la fusionne qu'avec des demandes sur cette MÊME information.
+- Une demande qui ne peut être renseignée que par l'ACHETEUR (données qu'il doit transmettre, ses préférences, ses choix) commence par « À demander à l'acheteur : ».
+- Une phrase par question, sans Markdown.
+Renvoie UNIQUEMENT un objet JSON : {"questions": ["...", "..."]}`,
+      },
+      { role: 'user', content: uniques.map((c, i) => `${i + 1}. ${c}`).join('\n') },
+    ], 0.1, 'Consolidation des consultations', true);
+    try {
+      const qs = JSON.parse(reponse || '{}').questions;
+      if (Array.isArray(qs)) {
+        const out = qs.map((q: any) => String(q ?? '').trim()).filter(Boolean);
+        if (out.length && out.length <= uniques.length) {
+          console.log(`[MemoireGenerator] Consultations : ${liste.length} demande(s) → ${out.length} question(s) après fusion des doublons.`);
+          return out;
+        }
+      }
+    } catch { /* repli ci-dessous */ }
+    console.warn('[MemoireGenerator] Consolidation des consultations indisponible → dédoublonnage exact uniquement.');
+    return uniques;
+  }
+
+  /**
    * Analyse comparative « exigences du DCE ↔ ce que GSS a / fait ». Extrait les exigences du CCTP/RC
    * comme une CHECK-LIST (ce qui est écrit et demandé), puis confronte CHAQUE exigence à la
    * Documentation GSS (moyens, formations, procédures réels). Le résultat — une matrice
@@ -3014,6 +3053,8 @@ Renvoie un JSON valide :
       context: string;
       kind: 'answer' | 'table' | 'checkbox';
       lineCount?: number;
+      /** Réponse du candidat à un critère d'une GRILLE DE NOTATION (« sous-critère | ……/10 points »). */
+      grille?: boolean;
     }
 
     let fieldCounter = 1;
@@ -3048,6 +3089,62 @@ Renvoie un JSON valide :
       return placed;
     };
 
+    // ── GRILLES DE NOTATION ──
+    // Cadre du type « Critère / Sous-critère : composantes… | ……/10 points » (ex. Mairie d'Étampes) :
+    // la colonne des points est la NOTE DE L'ACHETEUR (jamais remplie), et le candidat doit répondre à
+    // chaque composante du sous-critère DANS la cellule du critère, sous son libellé.
+    const SCORE_CELL = /^[\s_.…\-]*\/\s*\d+\s*(?:points?|pts)\b/i;
+    const isSousCritere = (t: string) => /^sous[\s-]*crit[eè]re/i.test(t.trim());
+    const childElems = (n: any, name: string): any[] => {
+      const out: any[] = [];
+      for (let i = 0; n.childNodes && i < n.childNodes.length; i++) {
+        const c = n.childNodes[i];
+        if (c.nodeType === 1 && c.localName === name) out.push(c);
+      }
+      return out;
+    };
+    const gridTables = new Set<any>();
+    let gridParent = '';   // critère parent (ex. « Cas pratique : … ») détaillé par les sous-critères suivants
+    const handleGridRow = (tr: any) => {
+      const cells = getDirectCells(tr);
+      if (!cells.length) return;
+      // Colonnes de notation (points, cases vides d'en-tête) : réservées à l'acheteur.
+      cells.slice(1).forEach((c: any) => filledCells.add(c));
+      const scoreCell = cells.slice(1).find((c: any) => SCORE_CELL.test(getElementText(c).trim()));
+      const crit = cells[0];
+      const paras = childElems(crit, 'p');
+      const lignes = paras.map((pp: any) => getElementText(pp).replace(/\s+/g, ' ').trim()).filter(Boolean);
+      if (!scoreCell || !lignes.length || /^total\b/i.test(lignes[0])) return;
+      filledCells.add(crit);
+      let next = tr.nextSibling;
+      while (next && !(next.nodeType === 1 && next.localName === 'tr')) next = next.nextSibling;
+      const nextFirst = next ? getElementText(getDirectCells(next)[0] || next).trim() : '';
+      const sous = isSousCritere(lignes[0]);
+      if (!sous && isSousCritere(nextFirst)) { gridParent = lignes.join(' ; ').replace(/"/g, "'"); return; }
+      if (!sous) gridParent = '';
+      const corps = sous ? lignes.slice(1) : lignes;
+      const net = (l: string) => l.replace(/[\s;:,.]+$/, '');
+      const question = (corps.length > 1 && /:\s*$/.test(corps[0])
+        ? `${net(corps[0])} : ${corps.slice(1).map(net).join(' ; ')}`
+        : corps.map(net).join(' ; ')).replace(/"/g, "'");
+      const bareme = getElementText(scoreCell).replace(/[_.…]+/g, ' ').replace(/\s+/g, ' ').trim();
+      const fd = addField({
+        type: 'text', kind: 'answer', lineCount: 1, grille: true,
+        context: `Section: "${currentHeading}" | Question: "${question}"${sous && gridParent ? ` | Critère: "${gridParent}"` : ''} | Barème: "${bareme}"`,
+      });
+      // Réponse écrite sous le libellé : dans le paragraphe vide final de la cellule, sinon un nouveau.
+      const last = paras[paras.length - 1];
+      let para = last && getElementText(last).trim() === '' ? last : null;
+      if (!para) { para = xmlDoc.createElementNS(WNS, 'w:p'); crit.appendChild(para); }
+      const r = xmlDoc.createElementNS(WNS, 'w:r');
+      const markRPr = findLocalNameChild(findLocalNameChild(para, 'pPr') || para, 'rPr');
+      if (markRPr) r.appendChild(markRPr.cloneNode(true));
+      const t = xmlDoc.createElementNS(WNS, 'w:t');
+      t.setAttribute('xml:space', 'preserve');
+      t.textContent = `[CHAMP_${fd.id}]`;
+      r.appendChild(t); para.appendChild(r);
+    };
+
     const walkDOM = (node: any, inDrawing: boolean) => {
       if (node.nodeType !== 1) return;
       const localName = node.localName;
@@ -3075,6 +3172,17 @@ Renvoie un JSON valide :
           }
         }
 
+        if (localName === 'tbl' && childElems(node, 'tr').some((row: any) => {
+          const c = getDirectCells(row);
+          return c.length >= 2 && getElementText(c[0]).trim() !== ''
+            && c.slice(1).some((x: any) => SCORE_CELL.test(getElementText(x).trim()));
+        })) gridTables.add(node);
+
+        // ── A0. Ligne d'une grille de notation ──
+        if (localName === 'tr' && gridTables.has(getParentWithLocalName(node, 'tbl'))) {
+          openAnswerField = null;
+          handleGridRow(node);
+        } else
         // ── A. Cellules de tableau : cellules vides dans une ligne à contenu mixte ──
         if (localName === 'tr') {
           openAnswerField = null;
@@ -3224,6 +3332,7 @@ Renvoie un JSON valide :
       const cleanCtx = f.context.replace(/FORM(CHECKBOX|TEXT|DROPDOWN)/gi, ' ').replace(/\s{2,}/g, ' ').trim();
       let hint = inferFieldHint(cleanCtx);
       if (f.kind === 'checkbox') hint = '[CASE A COCHER]';
+      if (f.grille) hint = '[PARAGRAPHE]';
       // Une zone de réponse étalée sur plusieurs lignes appelle un paragraphe développé,
       // sauf s'il s'agit clairement d'un champ d'identité court.
       if (f.kind === 'answer' && (f.lineCount || 1) >= 3 && !isIdentityCtx(cleanCtx)) hint = '[PARAGRAPHE]';
@@ -3373,6 +3482,15 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
       for (const { name, role, roleNorm } of referentRoles) if (n.includes(roleNorm)) return `${name} — ${role}`;
       return '';
     };
+
+    /** Consigne des réponses aux critères d'une GRILLE DE NOTATION (notés composante par composante). */
+    const CONSIGNE_GRILLE = `CE CHAMP EST LA RÉPONSE DE GSS À UN CRITÈRE NOTÉ PAR L'ACHETEUR (voir « Barème ») : l'acheteur attribue ses points composante par composante. Cette consigne prime sur celle du paragraphe unique :
+- Traite CHAQUE composante listée dans la question, dans l'ordre, sans en omettre aucune : pour chacune, une ligne d'intitulé courte reprenant la composante, puis 3 à 6 phrases concrètes (méthode GSS, moyens, outils, procédure, exemple réel tiré des références GSS). Sépare les composantes par une ligne vide.
+- Longueur proportionnée au barème : environ 150 à 250 mots pour 10 points, 300 à 500 mots au-delà.
+- Si un « Critère » parent est indiqué (ex. un cas pratique sur un site précis), applique la réponse à CE cas (site, surface, accès, calendrier) et non en termes généraux.
+- Donnée propre à ce marché absente des sources (nombre d'agents dimensionné pour ce site, rotations…) : n'invente rien, écris [À COMPLÉTER] à cet endroit et ajoute sur sa propre ligne : [CONSULTATION REQUISE : <information précise à obtenir de GSS>].
+- Si une composante demande de FOURNIR un document (CV, rapport type, cartes professionnelles, certificats…), décris ce que GSS fournit d'après les sources et ajoute sur sa propre ligne : [CONSULTATION REQUISE : Joindre <document> au mémoire].
+- Texte brut : pas de Markdown (ni #, ni **, ni puces « - » ; utilise « • » pour une énumération).`;
 
     /** Traite UN champ : recherche ciblée des passages pertinents + 1 appel IA dédié. */
     const answerField = async (f: FieldDesc): Promise<void> => {
@@ -3527,7 +3645,7 @@ CHAMP UNIQUE À RÉDIGER :
 ${hint}
 
 ${instruction}
-${tableGuidance ? tableGuidance + '\n' : ''}${fieldAsk && fieldAsk !== f.context ? `${qEmpty ? `Cette zone à remplir (les pointillés « … ») fait suite, dans le document, au libellé qui la PRÉCÈDE : « ${fieldAsk} ». LIS ce libellé pour comprendre ce qui est attendu et remplis la zone en conséquence.` : `RESTE SUR LE SUJET DE CETTE QUESTION : « ${fieldAsk} ».`} Ne réponds pas sur un thème VOISIN (ex. ne parle pas des moyens d'accès/clés si le sujet est le report des alarmes). Si les extraits apportent une information MÊME PARTIELLE sur CE sujet, donne une réponse (au moins partielle) fondée dessus plutôt que de laisser vide — sans rien inventer. N'écris "[À COMPLÉTER]" QUE si rien d'utile sur ce sujet n'est disponible.\n` : ''}Renvoie UNIQUEMENT un objet JSON : {"id": ${f.id}, "value": "..."}`;
+${f.grille ? CONSIGNE_GRILLE + '\n' : ''}${tableGuidance ? tableGuidance + '\n' : ''}${fieldAsk && fieldAsk !== f.context ? `${qEmpty ? `Cette zone à remplir (les pointillés « … ») fait suite, dans le document, au libellé qui la PRÉCÈDE : « ${fieldAsk} ». LIS ce libellé pour comprendre ce qui est attendu et remplis la zone en conséquence.` : `RESTE SUR LE SUJET DE CETTE QUESTION : « ${fieldAsk} ».`} Ne réponds pas sur un thème VOISIN (ex. ne parle pas des moyens d'accès/clés si le sujet est le report des alarmes). Si les extraits apportent une information MÊME PARTIELLE sur CE sujet, donne une réponse (au moins partielle) fondée dessus plutôt que de laisser vide — sans rien inventer. N'écris "[À COMPLÉTER]" QUE si rien d'utile sur ce sujet n'est disponible.\n` : ''}Renvoie UNIQUEMENT un objet JSON : {"id": ${f.id}, "value": "..."}`;
 
       // Températures basses = fidélité aux sources (priorité « 0 inventé ») : on baisse la rédaction
       // de paragraphe de 0.4 → 0.2 pour limiter les détails « brodés » non sourcés.
@@ -3637,11 +3755,23 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     // Informations variables à confirmer par GSS (registre) : le marqueur ne doit JAMAIS apparaître dans le
     // document remis à l'acheteur → retiré de la valeur, remonté dans les consultations.
     const confirmationsGss = new Set<string>();
+    const confirmationsParChamp = new Map<number, string[]>();
     const retirerConfirmations = () => {
       for (const r of replacements) {
         const { texte, confirmations } = extraireConfirmations(String(r.value ?? ''));
-        if (confirmations.length) { confirmations.forEach((c) => confirmationsGss.add(c)); r.value = texte || '[À COMPLÉTER]'; }
+        if (confirmations.length) {
+          confirmations.forEach((c) => confirmationsGss.add(c));
+          confirmationsParChamp.set(r.id, confirmations);
+          r.value = texte || '[À COMPLÉTER]';
+        }
       }
+    };
+    /** Question(s) à poser pour un critère de grille resté incomplet : les questions précises du rédacteur. */
+    const questionsGrille = (d: FieldDesc): string[] => {
+      const precises = confirmationsParChamp.get(d.id) || [];
+      if (precises.length) return precises;
+      const q = (d.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '';
+      return [`Critère « ${q.split(' : ')[0].slice(0, 140)} » : information marquée [À COMPLÉTER] à fournir`];
     };
 
     // Passe de complétion : rattrape les champs sans valeur (appel ayant échoué).
@@ -3967,7 +4097,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       .filter((r: any) => /\[À COMPLÉTER\]/.test(String(r.value)))
       .map((r: any) => {
         const d = descriptors.find((x: any) => x.id === r.id);
-        const label = (d?.context.match(/Question:\s*"([^"]*)"|option:\s*"([^"]*)"|Tableau:\s*(.+?)(?:\s*\|\s*Contexte proche:|$)/) || [])
+        const label = d?.grille ? questionsGrille(d).join(' ; ') : (d?.context.match(/Question:\s*"([^"]*)"|option:\s*"([^"]*)"|Tableau:\s*(.+?)(?:\s*\|\s*Contexte proche:|$)/) || [])
           .slice(1).find(Boolean) || d?.context || '';
         return { id: r.id, label: String(label).trim(), context: d?.context || '' };
       });
@@ -4024,6 +4154,16 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       const desc = descriptors.find(d => d.id === rep.id);
       if (!desc) return;
       let value = dedupeClientName(guardPlaceholders(guardNames(guardInventedClaims(guardServiceCert(guardFactual(String(rep.value), desc.context), desc.context), desc.context)), desc.context));
+      // Réponse développée d'une grille de notation : mêmes garde-fous, mais appliqués PHRASE par phrase
+      // (téléphones/e-mails non sourcés retirés, certifications/claims non prouvées retirées) plutôt
+      // qu'en effaçant toute la réponse ; la mise en forme en lignes est conservée.
+      if (desc.grille) {
+        value = dedupeClientName(guardInventedClaims(guardServiceCert(guardFactual(String(rep.value), 'coordonnees'), desc.context), desc.context)
+          .split('\n').map((l) => guardNames(l)).join('\n'))
+          .replace(/\*\*/g, '').replace(/^#+\s*/gm, '')
+          .replace(FAKE_VALUE_RE, '[À COMPLÉTER]').replace(/\[\s*[àa]\s*compl[ée]ter\s*\]/gi, '[À COMPLÉTER]')
+          .replace(/\n{3,}/g, '\n\n').trim() || '[À COMPLÉTER]';
+      }
       // Cellule de tableau → garde-fou déterministe : retire tout nombre ≥3 chiffres non sourcé (« 170 »…).
       if (desc.kind === 'table') value = guardTableNumbers(value);
       // Contact SINGULIER : si le LIBELLÉ demande UNE personne (« la personne », « l'interlocuteur »…)
@@ -4092,8 +4232,9 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     // → transformés en QUESTIONS à compléter, remontées comme notification (comme le no-template).
     const aCompleter: string[] = replacements
       .filter((r: any) => /\[À COMPLÉTER\]/.test(String(r.value)))
-      .map((r: any) => {
+      .flatMap((r: any) => {
         const d = descriptors.find((x: any) => x.id === r.id);
+        if (d?.grille) return questionsGrille(d);
         const ctx = d?.context || '';
         // Pour un champ de tableau, on garde COLONNE + LIGNE (pas seulement la ligne) afin que la
         // question soit sans ambiguïté. Sinon on prend la Question / l'option de case à cocher.
@@ -4129,7 +4270,10 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
           remplacement: r.value
         })))
       },
-      consultations: [...aCompleter, ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))],
+      // Grille de notation : chaque sous-critère signale ses manques → fusion des questions en doublon.
+      consultations: descriptors.some((d) => d.grille)
+        ? await this.consoliderConsultations([...aCompleter, ...confirmationsGss])
+        : [...aCompleter, ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))],
     };
   }
 
@@ -5000,10 +5144,10 @@ RÈGLES DE FORME (rendu Marp) :
       let m: RegExpExecArray | null;
       while ((m = markerRe.exec(txt)) !== null) consultations.add(m[1].trim());
     }
+    const consultationList = await this.consoliderConsultations([...consultations].filter(Boolean));
     for (const titre of Object.values(secoursMemoires)) {
-      consultations.add(`Rubrique « ${titre} » : contenu repris tel quel des mémoires GSS (rédaction automatique indisponible), à relire et adapter au client.`);
+      consultationList.push(`Rubrique « ${titre} » : contenu repris tel quel des mémoires GSS (rédaction automatique indisponible), à relire et adapter au client.`);
     }
-    const consultationList = [...consultations].filter(Boolean);
 
     // Les marqueurs sont des flags INTERNES (pour GSS) : on les retire du texte pour qu'ils
     // n'apparaissent pas dans le PDF remis au client.
