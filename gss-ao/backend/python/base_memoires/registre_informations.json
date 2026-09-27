@@ -1,0 +1,1581 @@
+{
+ "genere_le": "2026-09-27",
+ "informations": [
+  {
+   "cle": "raison_sociale",
+   "libelle": "Raison sociale",
+   "categorie": "identite",
+   "valeurs": [
+    {
+     "valeur": "GLOBAL SECURITY SERVICES",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 1,
+     "citation": "GLOBAL SECURITY SERVICES"
+    },
+    {
+     "valeur": "GLOBAL SECURITY SERVICES",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 1,
+     "citation": "GLOBAL SECURITY SERVICES"
+    },
+    {
+     "valeur": "GLOBAL SECURITY SERVICES",
+     "client": "CAF du Val-de-Marne",
+     "document": "GSS - CAF du Val-de-Marne.pdf",
+     "date": "2026-04",
+     "page": 1,
+     "citation": "GLOBAL SECURITY SERVICES"
+    },
+    {
+     "valeur": "GLOBAL SECURITY SERVICES",
+     "client": "Gardiennage des sites métropolitains (lot 1)",
+     "document": "GSS - Gardiennage des sites metropolitains - lot 1.pdf",
+     "date": "2025-12",
+     "page": 1,
+     "citation": "GLOBAL SECURITY SERVICES"
+    },
+    {
+     "valeur": "GLOBAL SECURITY SERVICES",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 1,
+     "citation": "GLOBAL\nSECURITY\nSERVICES"
+    },
+    {
+     "valeur": "GLOBAL SECURITY SERVICES",
+     "client": "Région Normandie (lot 1)",
+     "document": "GSS - Region Normandie - lot 1.pdf",
+     "date": "2024-05",
+     "page": 1,
+     "citation": "GLOBAL SECURITY SERVICES"
+    },
+    {
+     "valeur": "GLOBAL SECURITY SERVICES",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 1,
+     "citation": "GLOBAL SECURITY SERVICES"
+    },
+    {
+     "valeur": "GLOBAL SECURITY SERVICES",
+     "client": "Région Normandie (lot 3)",
+     "document": "GSS - Region Normandie - lot 3.pdf",
+     "date": "2024-05",
+     "page": 1,
+     "citation": "GLOBAL SECURITY SERVICES"
+    }
+   ],
+   "valeur_retenue": "GLOBAL SECURITY SERVICES",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "responsable_rh",
+   "libelle": "Responsable RH",
+   "categorie": "organisation",
+   "valeurs": [
+    {
+     "valeur": "KANTE Rokia",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 17,
+     "citation": "KANTE Rokia"
+    },
+    {
+     "valeur": "KANTE Rokia",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 3,
+     "citation": "KANTE Rokia"
+    }
+   ],
+   "valeur_retenue": "KANTE Rokia",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "responsable_exploitation",
+   "libelle": "Responsable(s) d'exploitation",
+   "categorie": "organisation",
+   "valeurs": [
+    {
+     "valeur": "PORCHAIRE Laurent",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 17,
+     "citation": "PORCHAIRE Laurent"
+    },
+    {
+     "valeur": "DA SILVA Luis",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 17,
+     "citation": "DA SILVA Luis"
+    },
+    {
+     "valeur": "LUIS DA SILVA SANTOS",
+     "client": "CAF du Val-de-Marne",
+     "document": "GSS - CAF du Val-de-Marne.pdf",
+     "date": "2026-04",
+     "page": 101,
+     "citation": "LUIS DA SILVA SANTOS GESTIONNAIRE D’EXPLOITATION"
+    },
+    {
+     "valeur": "Laurent Porchaire",
+     "client": "Gardiennage des sites métropolitains (lot 1)",
+     "document": "GSS - Gardiennage des sites metropolitains - lot 1.pdf",
+     "date": "2025-12",
+     "page": 32,
+     "citation": "LAURENT PORCHAIRE\nRESPONSABLE D’EXPLOITATION"
+    },
+    {
+     "valeur": "PORCHAIR Laurent",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 3,
+     "citation": "PORCHAIR Laurent"
+    },
+    {
+     "valeur": "PORCHAIRE Laurent",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 47,
+     "citation": "PORCHAIRE Laurent"
+    }
+   ],
+   "valeur_retenue": "PORCHAIRE Laurent ; DA SILVA Luis",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "responsable_qualite",
+   "libelle": "Responsable qualité",
+   "categorie": "organisation",
+   "valeurs": [
+    {
+     "valeur": "VATTIER Marie",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 17,
+     "citation": "VATTIER Marie"
+    },
+    {
+     "valeur": "MARIE VATTIER",
+     "client": "CAF du Val-de-Marne",
+     "document": "GSS - CAF du Val-de-Marne.pdf",
+     "date": "2026-04",
+     "page": 102,
+     "citation": "MARIE VATTIER RESPONSABLE QUALITÉ"
+    },
+    {
+     "valeur": "Marie Vattier",
+     "client": "Gardiennage des sites métropolitains (lot 1)",
+     "document": "GSS - Gardiennage des sites metropolitains - lot 1.pdf",
+     "date": "2025-12",
+     "page": 34,
+     "citation": "MARIE VATTIER\nRESPONSABLE QUALITÉ"
+    },
+    {
+     "valeur": "VATTIER Marie",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 3,
+     "citation": "VATTIER Marie"
+    },
+    {
+     "valeur": "VATTIER Marie",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 47,
+     "citation": "VATTIER Marie"
+    }
+   ],
+   "valeur_retenue": "VATTIER Marie",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "responsable_unite_mobile",
+   "libelle": "Responsable unité mobile",
+   "categorie": "organisation",
+   "valeurs": [
+    {
+     "valeur": "ALAMAT Ramzi",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 17,
+     "citation": "ALAMAT Ramzi"
+    },
+    {
+     "valeur": "ALAMAT Ramzi",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 3,
+     "citation": "ALAMAT Ramzi"
+    },
+    {
+     "valeur": "MENDES Ussumane",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 47,
+     "citation": "MENDES Ussumane"
+    }
+   ],
+   "valeur_retenue": "ALAMAT Ramzi",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "a_confirmer",
+   "valeurs_anterieures_differentes": [
+    "MENDES Ussumane (Région Normandie (lot 2), 2024-05)"
+   ]
+  },
+  {
+   "cle": "responsable_cynophile",
+   "libelle": "Responsable cynophile",
+   "categorie": "organisation",
+   "valeurs": [
+    {
+     "valeur": "PODKOLZIN Sergeï",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 17,
+     "citation": "PODKOLZIN Sergeï"
+    },
+    {
+     "valeur": "ALAMAT Ramzi; PODKOLZIN Sergeï",
+     "client": "CAF du Val-de-Marne",
+     "document": "GSS - CAF du Val-de-Marne.pdf",
+     "date": "2026-04",
+     "page": 9,
+     "citation": "ALAMAT Ramzi PODKOLZIN Sergeï\nResponsable Cynophile"
+    },
+    {
+     "valeur": "PODKOLZIN Sergeï",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 3,
+     "citation": "PODKOLZIN Sergeï"
+    },
+    {
+     "valeur": "PODKOLZIN Sergeï",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 47,
+     "citation": "PODKOLZIN Sergeï"
+    }
+   ],
+   "valeur_retenue": "PODKOLZIN Sergeï",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "responsable_incendie",
+   "libelle": "Responsable incendie",
+   "categorie": "organisation",
+   "valeurs": [
+    {
+     "valeur": "ATTOU NESRINE",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 17,
+     "citation": "ATTOU NESRINE"
+    },
+    {
+     "valeur": "ATTOU NESRINE",
+     "client": "CAF du Val-de-Marne",
+     "document": "GSS - CAF du Val-de-Marne.pdf",
+     "date": "2026-04",
+     "page": 9,
+     "citation": "ATTOU NESRINE\nResponsable Incendie"
+    },
+    {
+     "valeur": "OTMANI Abed",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 3,
+     "citation": "OTMANI Abed"
+    },
+    {
+     "valeur": "MEROUANI Sofiane",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 47,
+     "citation": "MEROUANI Sofiane"
+    }
+   ],
+   "valeur_retenue": "ATTOU NESRINE",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "a_confirmer",
+   "valeurs_anterieures_differentes": [
+    "OTMANI Abed (CAF (2025), 2025-10)",
+    "MEROUANI Sofiane (Région Normandie (lot 2), 2024-05)"
+   ]
+  },
+  {
+   "cle": "effectif_agents_securite",
+   "libelle": "Nombre d'agents de sécurité",
+   "categorie": "effectifs",
+   "valeurs": [
+    {
+     "valeur": "423",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 40,
+     "citation": "AGENT DE SECURITE CQP 423"
+    },
+    {
+     "valeur": "52",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 14,
+     "citation": "GSS dispose d’une équipe de 52 agents\nqualifiés, tous disposent du CQP (certificat de\nqualification professionnelle en sécurité)"
+    }
+   ],
+   "valeur_retenue": "423",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "a_confirmer",
+   "valeurs_anterieures_differentes": [
+    "52 (CAF (2025), 2025-10)"
+   ]
+  },
+  {
+   "cle": "effectif_ssiap1",
+   "libelle": "Nombre d'agents SSIAP 1",
+   "categorie": "effectifs",
+   "valeurs": [
+    {
+     "valeur": "185",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 40,
+     "citation": "SSIAP 1 SSIAP 1 185"
+    }
+   ],
+   "valeur_retenue": "185",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "effectif_ssiap2",
+   "libelle": "Nombre d'agents SSIAP 2",
+   "categorie": "effectifs",
+   "valeurs": [
+    {
+     "valeur": "28",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 40,
+     "citation": "SSIAP 2 SSIAP 1 -SSIAP 2 28"
+    }
+   ],
+   "valeur_retenue": "28",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "effectif_ssiap3",
+   "libelle": "Nombre d'agents SSIAP 3",
+   "categorie": "effectifs",
+   "valeurs": [
+    {
+     "valeur": "2",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 40,
+     "citation": "SSIAP 3 SSIAP 1 - 2 - 3 2"
+    }
+   ],
+   "valeur_retenue": "2",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "effectif_controleurs",
+   "libelle": "Nombre de contrôleurs",
+   "categorie": "effectifs",
+   "valeurs": [
+    {
+     "valeur": "35",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 40,
+     "citation": "CONTRÔLEUR MANAGER 35"
+    }
+   ],
+   "valeur_retenue": "35",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "effectif_cynophiles",
+   "libelle": "Nombre d'agents cynophiles",
+   "categorie": "effectifs",
+   "valeurs": [
+    {
+     "valeur": "27",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 40,
+     "citation": "AGENT CYNOPHILE CQP - CQP CYNO 27"
+    }
+   ],
+   "valeur_retenue": "27",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "vivier_evenementiel",
+   "libelle": "Vivier d'agents événementiels",
+   "categorie": "effectifs",
+   "valeurs": [
+    {
+     "valeur": "500 agents",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 126,
+     "citation": "Nous disposons d’un vivier total de 500 agents qui sont référencés sur une application."
+    }
+   ],
+   "valeur_retenue": "500 agents",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "agents_mobilisables_48h",
+   "libelle": "Agents mobilisables en 48 heures",
+   "categorie": "effectifs",
+   "valeurs": [
+    {
+     "valeur": "100 agents",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 126,
+     "citation": "Nous sommes en mesure de mobiliser 100 agents en 48h."
+    }
+   ],
+   "valeur_retenue": "100 agents",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "logiciel_main_courante",
+   "libelle": "Logiciel de main courante électronique",
+   "categorie": "moyens",
+   "valeurs": [
+    {
+     "valeur": "TRACKFORCE",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 60,
+     "citation": "Nous formons nos agents à l’utilisation du logiciel de main courante TRACKFORCE."
+    },
+    {
+     "valeur": "vigicom",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 83,
+     "citation": "des tablettes équipées du logiciel de main courante vigicom"
+    },
+    {
+     "valeur": "Vigicom",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 93,
+     "citation": "Nous utilisons au sein de GSS, la main courante Vigicom, que nous avons déployé sur tous nos sites."
+    },
+    {
+     "valeur": "Vigicom",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 5,
+     "citation": "Nous utilisons au sein de GSS, la main courante Vigicom, que nous avons déployé sur tous nos sites."
+    },
+    {
+     "valeur": "vigicom",
+     "client": "CAF du Val-de-Marne",
+     "document": "GSS - CAF du Val-de-Marne.pdf",
+     "date": "2026-04",
+     "page": 72,
+     "citation": "Nous mettons à disposition de nos agents des tablettes équipées du logiciel de main courante vigicom"
+    },
+    {
+     "valeur": "TRACKFORCE",
+     "client": "CAF du Val-de-Marne",
+     "document": "GSS - CAF du Val-de-Marne.pdf",
+     "date": "2026-04",
+     "page": 49,
+     "citation": "Nous formons nos agents à l’utilisation du logiciel de main courante TRACKFORCE."
+    },
+    {
+     "valeur": "Vigicom",
+     "client": "Gardiennage des sites métropolitains (lot 1)",
+     "document": "GSS - Gardiennage des sites metropolitains - lot 1.pdf",
+     "date": "2025-12",
+     "page": 21,
+     "citation": "Nous utilisons au sein de GSS, la main courante Vigicom, que nous avons déployé sur tous nos sites."
+    },
+    {
+     "valeur": "TRACKFORCE",
+     "client": "Gardiennage des sites métropolitains (lot 1)",
+     "document": "GSS - Gardiennage des sites metropolitains - lot 1.pdf",
+     "date": "2025-12",
+     "page": 13,
+     "citation": "Nous formons nos agents à l’utilisation du logiciel de main courante TRACKFORCE."
+    },
+    {
+     "valeur": "VIGICOM 6TADEL",
+     "client": "MIN de Rouen (cadre de réponse)",
+     "document": "GSS - MIN de Rouen - cadre.pdf",
+     "date": "2025-10",
+     "page": 6,
+     "citation": "Une main courante électronique VIGICOM 6TADEL qui permet la remonté instantané des informations au client avec prise de photos et archivage des données."
+    },
+    {
+     "valeur": "Trackforce",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 71,
+     "citation": "Nous pouvons compter sur un réel allié dans la réalisation de\nnos prestations: notre logiciel de main courante."
+    },
+    {
+     "valeur": "TRACKFORCE",
+     "client": "Région Normandie (lot 1)",
+     "document": "GSS - Region Normandie - lot 1.pdf",
+     "date": "2024-05",
+     "page": 26,
+     "citation": "Nous formons nos agents à l’utilisation du logiciel de main courante TRACKFORCE."
+    },
+    {
+     "valeur": "trackforce",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 100,
+     "citation": "des tablettes équipées du\nlogiciel de main courante trackforce"
+    },
+    {
+     "valeur": "TRACKFORCE",
+     "client": "Région Normandie (lot 3)",
+     "document": "GSS - Region Normandie - lot 3.pdf",
+     "date": "2024-05",
+     "page": 25,
+     "citation": "Formation utilisation logiciel trackforce"
+    }
+   ],
+   "valeur_retenue": "TRACKFORCE ; vigicom",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "a_confirmer",
+   "valeurs_anterieures_differentes": [
+    "VIGICOM 6TADEL (MIN de Rouen (cadre de réponse), 2025-10)"
+   ]
+  },
+  {
+   "cle": "logiciel_planification",
+   "libelle": "Logiciel de planification",
+   "categorie": "moyens",
+   "valeurs": [
+    {
+     "valeur": "Comète",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 61,
+     "citation": "Nos encadrants et responsables de sites sont formés au logiciel Comète de façon à pouvoir être en mesure de gérer la planification d’un site"
+    },
+    {
+     "valeur": "Comète",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 91,
+     "citation": "Nous travaillons avec le logiciel Comète, tous nos responsables de site sont formés à son utilisation, afin de gérer chacun leur planification."
+    },
+    {
+     "valeur": "Comète",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 26,
+     "citation": "Pour la planification, nous utilisons le logiciel de planification Comète"
+    },
+    {
+     "valeur": "Comète",
+     "client": "CAF du Val-de-Marne",
+     "document": "GSS - CAF du Val-de-Marne.pdf",
+     "date": "2026-04",
+     "page": 80,
+     "citation": "Nous travaillons avec le logiciel Comète, tous nos responsables de site sont formés à son utilisation"
+    },
+    {
+     "valeur": "Comète",
+     "client": "Gardiennage des sites métropolitains (lot 1)",
+     "document": "GSS - Gardiennage des sites metropolitains - lot 1.pdf",
+     "date": "2025-12",
+     "page": 14,
+     "citation": "Nos encadrants et responsables de sites sont formés au logiciel Comète de façon à pouvoir être en mesure de gérer la planification d’un site, l’affectation d’un ou plusieurs agents sur une vacation et la lecture et envoi des plannings."
+    },
+    {
+     "valeur": "Comète Link",
+     "client": "MIN de Rouen (cadre de réponse)",
+     "document": "GSS - MIN de Rouen - cadre.pdf",
+     "date": "2025-10",
+     "page": 6,
+     "citation": "Comète Link est notre logiciel de planification qui nous permet de contrôler les prises et fin de services et de réagir très vite en cas de besoin de remplacement ou de renfort."
+    },
+    {
+     "valeur": "Comète",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 33,
+     "citation": "Nous travaillons avec le logiciel Comète, tous nos\nresponsables de site sont formés à son utilisation, afin de\ngérer chacun leur planification."
+    },
+    {
+     "valeur": "Comète",
+     "client": "Région Normandie (lot 1)",
+     "document": "GSS - Region Normandie - lot 1.pdf",
+     "date": "2024-05",
+     "page": 27,
+     "citation": "Nos encadrants et responsables de sites sont formés au logiciel Comète de façon à pouvoir être en mesure de gérer la planification d’un site"
+    },
+    {
+     "valeur": "Comète",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 64,
+     "citation": "Nous travaillons avec le logiciel Comète"
+    },
+    {
+     "valeur": "Comète",
+     "client": "Région Normandie (lot 3)",
+     "document": "GSS - Region Normandie - lot 3.pdf",
+     "date": "2024-05",
+     "page": 63,
+     "citation": "Nous travaillons avec le logiciel Comète"
+    }
+   ],
+   "valeur_retenue": "Comète",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "logiciel_controle",
+   "libelle": "Logiciel de contrôle des prestations",
+   "categorie": "moyens",
+   "valeurs": [
+    {
+     "valeur": "controlmaster",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 106,
+     "citation": "il s’agit de controlmaster, un logiciel qui nous permet de contrôler nos agents durant la réalisation de la prestation."
+    },
+    {
+     "valeur": "controlmaster",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 13,
+     "citation": "il s’agit de controlmaster, un logiciel qui nous permet de contrôler nos agents durant la réalisation de la prestation."
+    },
+    {
+     "valeur": "controlmaster",
+     "client": "CAF du Val-de-Marne",
+     "document": "GSS - CAF du Val-de-Marne.pdf",
+     "date": "2026-04",
+     "page": 95,
+     "citation": "il s’agit de controlmaster, un logiciel qui nous permet de contrôler nos agents durant la réalisation de la prestation."
+    },
+    {
+     "valeur": "controlmaster",
+     "client": "Gardiennage des sites métropolitains (lot 1)",
+     "document": "GSS - Gardiennage des sites metropolitains - lot 1.pdf",
+     "date": "2025-12",
+     "page": 26,
+     "citation": "Nous utilisons également un outil qui est au cœur de notre suivi: il s’agit de controlmaster, un logiciel qui nous permet de contrôler nos agents durant la réalisation de la prestation."
+    },
+    {
+     "valeur": "Contrôle MASTER",
+     "client": "MIN de Rouen (cadre de réponse)",
+     "document": "GSS - MIN de Rouen - cadre.pdf",
+     "date": "2025-10",
+     "page": 6,
+     "citation": "Contrôle MASTER nous aide au suivi des contrôles des prestations et à l’évaluation des connaissances des agents sur site."
+    }
+   ],
+   "valeur_retenue": "controlmaster",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "application_pti",
+   "libelle": "Application PTI (travailleur isolé)",
+   "categorie": "moyens",
+   "valeurs": [
+    {
+     "valeur": "Beepiz",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 84,
+     "citation": "nous utilisons l’application Beepiz"
+    },
+    {
+     "valeur": "Beepiz",
+     "client": "CAF du Val-de-Marne",
+     "document": "GSS - CAF du Val-de-Marne.pdf",
+     "date": "2026-04",
+     "page": 73,
+     "citation": "Il s’agit de l’outil PTI, nous utilisons l’application Beepiz, dont l’agent rondier dispose sur son téléphone."
+    },
+    {
+     "valeur": "Beepiz",
+     "client": "Gardiennage des sites métropolitains (lot 1)",
+     "document": "GSS - Gardiennage des sites metropolitains - lot 1.pdf",
+     "date": "2025-12",
+     "page": 24,
+     "citation": "Il s’agit de l’outil PTI, nous utilisons l’application Beepiz, dont l’agent rondier dispose sur son téléphone."
+    },
+    {
+     "valeur": "Beepiz",
+     "client": "MIN de Rouen (cadre de réponse)",
+     "document": "GSS - MIN de Rouen - cadre.pdf",
+     "date": "2025-10",
+     "page": 6,
+     "citation": "Beepiz est notre logiciel PTI pour la protection du travailleur isolé."
+    },
+    {
+     "valeur": "Trackforce",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 71,
+     "citation": "Mais aussi un outil de sécurisation de l'agent lui même\npuisque trackforce peut faire fonction de P.T.I (système de\nprotection du travailleur isolé)"
+    },
+    {
+     "valeur": "système P.T.I",
+     "client": "Région Normandie (lot 1)",
+     "document": "GSS - Region Normandie - lot 1.pdf",
+     "date": "2024-05",
+     "page": 92,
+     "citation": "Nos agent peuvent être équipés d'un système P.T.I, il s'agit d'un système de protection du travailleur isolé."
+    },
+    {
+     "valeur": "système P.T.I",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 92,
+     "citation": "Nos agent peuvent être équipés d'un système P.T.I"
+    },
+    {
+     "valeur": "système P.T.I",
+     "client": "Région Normandie (lot 3)",
+     "document": "GSS - Region Normandie - lot 3.pdf",
+     "date": "2024-05",
+     "page": 91,
+     "citation": "Nos agent peuvent être équipés d'un système P.T.I, il s'agit d'un système de protection du travailleur isolé."
+    }
+   ],
+   "valeur_retenue": "Beepiz",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "organisme_formation",
+   "libelle": "Organismes de formation partenaires",
+   "categorie": "partenaires",
+   "valeurs": [
+    {
+     "valeur": "Pôle emploi",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 70,
+     "citation": "Pôle emploi"
+    },
+    {
+     "valeur": "La Mission locale",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 70,
+     "citation": "La Mission locale"
+    },
+    {
+     "valeur": "Le CEPIC",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 70,
+     "citation": "Le CEPIC"
+    },
+    {
+     "valeur": "Le centre de formation IFESSSU",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 70,
+     "citation": "Le centre de formation IFESSSU"
+    },
+    {
+     "valeur": "OPCALIA",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 72,
+     "citation": "En matière de formation, nous travaillons avec l’OPCALIA"
+    },
+    {
+     "valeur": "IFESSU",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 72,
+     "citation": "ainsi qu’avec l’IFESSU ( Institut de Formation et d’équipement en Sécurité Santé et Soins d’Urgence)"
+    },
+    {
+     "valeur": "OPCALIA ; IFESSU",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 19,
+     "citation": "En matière de formation, nous travaillons avec l’OPCALIA, qui est notre Organisme Prioritaire Collecteur Agrée ; ainsi qu’avec l’IFESSU ( Institut de Formation et d’équipement en Sécurité Santé et Soins d’Urgence)"
+    },
+    {
+     "valeur": "IFESSU",
+     "client": "CAF du Val-de-Marne",
+     "document": "GSS - CAF du Val-de-Marne.pdf",
+     "date": "2026-04",
+     "page": 61,
+     "citation": "ainsi qu’avec l’IFESSU ( Institut de Formation et d’équipement en Sécurité Santé et Soins d’Urgence), qui propose bon nombre de formations et recyclages de formations"
+    },
+    {
+     "valeur": "OPCALIA et IFESSU",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 77,
+     "citation": "En matière de formation, nous travaillons avec l’OPCALIA, qui est\nnotre Organisme Prioritaire Collecteur Agrée ; ainsi qu’avec l’IFESSU (\nInstitut de Formation et d’équipement en Sécurité Santé et Soins\nd’Urgence)"
+    },
+    {
+     "valeur": "OPCALIA et IFESSU",
+     "client": "Région Normandie (lot 1)",
+     "document": "GSS - Region Normandie - lot 1.pdf",
+     "date": "2024-05",
+     "page": 35,
+     "citation": "En matière de formation, nous travaillons avec l’OPCALIA, qui est notre Organisme Prioritaire Collecteur Agrée ; ainsi qu’avec l’IFESSU"
+    },
+    {
+     "valeur": "OPCALIA",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 35,
+     "citation": "En matière de formation, nous travaillons avec l’OPCALIA"
+    },
+    {
+     "valeur": "IFESSU",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 35,
+     "citation": "ainsi qu’avec l’IFESSU"
+    },
+    {
+     "valeur": "OPCALIA ; IFESSU",
+     "client": "Région Normandie (lot 3)",
+     "document": "GSS - Region Normandie - lot 3.pdf",
+     "date": "2024-05",
+     "page": 35,
+     "citation": "En matière de formation, nous travaillons avec l’OPCALIA, qui est notre Organisme Prioritaire Collecteur Agrée ; ainsi qu’avec l’IFESSU ( Institut de Formation et d’équipement en Sécurité Santé et Soins d’Urgence)"
+    }
+   ],
+   "valeur_retenue": "Pôle emploi ; La Mission locale ; Le CEPIC ; Le centre de formation IFESSSU ; OPCALIA",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "vehicules_encadrement",
+   "libelle": "Véhicules des encadrants et contrôleurs",
+   "categorie": "moyens",
+   "valeurs": [
+    {
+     "valeur": "Peugeot 3008",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 86,
+     "citation": "Nos encadrants et contrôleurs effectuent leurs contrôles et visites sur site en Peugeot 3008 aux couleurs de GSS."
+    },
+    {
+     "valeur": "Peugeot 208 aux couleurs de GSS",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 8,
+     "citation": "Nos encadrants et contrôleurs effectuent leurs contrôles et visites sur site en Peugeot 208 aux couleurs de GSS."
+    },
+    {
+     "valeur": "Peugeot 3008",
+     "client": "CAF du Val-de-Marne",
+     "document": "GSS - CAF du Val-de-Marne.pdf",
+     "date": "2026-04",
+     "page": 75,
+     "citation": "Nos encadrants et contrôleurs effectuent leurs contrôles et visites sur site en Peugeot 3008 aux couleurs de GSS."
+    },
+    {
+     "valeur": "véhicules aux couleurs de GSS",
+     "client": "Région Normandie (lot 1)",
+     "document": "GSS - Region Normandie - lot 1.pdf",
+     "date": "2024-05",
+     "page": 101,
+     "citation": "Nos encadrants et contrôleurs effectuent leurs contrôles et visites sur site en véhicules aux couleurs de GSS."
+    },
+    {
+     "valeur": "véhicules aux couleurs de GSS",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 101,
+     "citation": "Nos encadrants et contrôleurs\neffectuent leurs contrôles et\nvisites sur site en véhicules aux\ncouleurs de GSS"
+    },
+    {
+     "valeur": "véhicules aux couleurs de GSS",
+     "client": "Région Normandie (lot 3)",
+     "document": "GSS - Region Normandie - lot 3.pdf",
+     "date": "2024-05",
+     "page": 100,
+     "citation": "Nos encadrants et contrôleurs effectuent leurs contrôles et visites sur site en véhicules aux couleurs de GSS."
+    }
+   ],
+   "valeur_retenue": "Peugeot 3008",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "a_confirmer",
+   "valeurs_anterieures_differentes": [
+    "Peugeot 208 aux couleurs de GSS (Université de Rouen Normandie (cadre lots 1-2-3), 2026-04)",
+    "véhicules aux couleurs de GSS (Région Normandie (lot 3), 2024-05)"
+   ]
+  },
+  {
+   "cle": "delai_intervention_pti",
+   "libelle": "Délai d'intervention sur alarme PTI",
+   "categorie": "delais",
+   "valeurs": [
+    {
+     "valeur": "45 minutes",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 85,
+     "citation": "Délai max: 45 minutes"
+    },
+    {
+     "valeur": "moins de 20 minutes",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 60,
+     "citation": "Si l'agent ne répond pas à l'appel, le\nrondier se rend sur place en moins de 20 minutes."
+    },
+    {
+     "valeur": "moins de 30 minutes",
+     "client": "Région Normandie (lot 1)",
+     "document": "GSS - Region Normandie - lot 1.pdf",
+     "date": "2024-05",
+     "page": 92,
+     "citation": "le rondier se rend sur place en moins de 30 minutes."
+    },
+    {
+     "valeur": "moins de 30 minutes",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 92,
+     "citation": "le rondier se rend sur place en moins de 30 minutes"
+    },
+    {
+     "valeur": "moins de 30 minutes",
+     "client": "Région Normandie (lot 3)",
+     "document": "GSS - Region Normandie - lot 3.pdf",
+     "date": "2024-05",
+     "page": 91,
+     "citation": "Si l'agent ne répond pas à l'appel, le rondier se rend sur place en moins de 30 minutes."
+    }
+   ],
+   "valeur_retenue": "45 minutes",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "a_confirmer",
+   "valeurs_anterieures_differentes": [
+    "moins de 20 minutes (CAF (2025), 2025-10)",
+    "moins de 30 minutes (Région Normandie (lot 3), 2024-05)"
+   ]
+  },
+  {
+   "cle": "delai_astreinte",
+   "libelle": "Délai maximal de mobilisation de l'agent d'astreinte",
+   "categorie": "delais",
+   "valeurs": [
+    {
+     "valeur": "60 MINUTES MAXI",
+     "client": "Université de Rouen Normandie",
+     "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+     "date": "2026-06",
+     "page": 116,
+     "citation": "60 MINUTES MAXI"
+    },
+    {
+     "valeur": "60 minutes maximum",
+     "client": "CAF du Val-de-Marne",
+     "document": "GSS - CAF du Val-de-Marne.pdf",
+     "date": "2026-04",
+     "page": 105,
+     "citation": "60 MINUTES MAXI"
+    },
+    {
+     "valeur": "60 MINUTES MAXI",
+     "client": "Région Normandie (lot 1)",
+     "document": "GSS - Region Normandie - lot 1.pdf",
+     "date": "2024-05",
+     "page": 39,
+     "citation": "60 MINUTES MAXI"
+    },
+    {
+     "valeur": "60 MINUTES MAXI",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 39,
+     "citation": "60 MINUTES MAXI"
+    },
+    {
+     "valeur": "60 MINUTES MAXI",
+     "client": "Région Normandie (lot 3)",
+     "document": "GSS - Region Normandie - lot 3.pdf",
+     "date": "2024-05",
+     "page": 39,
+     "citation": "60 MINUTES MAXI"
+    }
+   ],
+   "valeur_retenue": "60 MINUTES MAXI",
+   "date_retenue": "2026-06",
+   "source_retenue": "Université de Rouen Normandie",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "siret",
+   "libelle": "Numéro SIRET",
+   "categorie": "identite",
+   "valeurs": [
+    {
+     "valeur": "80529551600019",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 1,
+     "citation": "SIRET :\n80529551600019"
+    }
+   ],
+   "valeur_retenue": "80529551600019",
+   "date_retenue": "2026-04",
+   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "adresse_siege",
+   "libelle": "Adresse du siège",
+   "categorie": "identite",
+   "valeurs": [
+    {
+     "valeur": "76 RUE D ELBEUF 76100 ROUEN",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 1,
+     "citation": "Adresse du siège de l’entreprise : …76 RUE D ELBEUF 76100 ROUEN"
+    }
+   ],
+   "valeur_retenue": "76 RUE D ELBEUF 76100 ROUEN",
+   "date_retenue": "2026-04",
+   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "autorisation_cnaps",
+   "libelle": "Numéro d'autorisation d'exercer CNAPS",
+   "categorie": "identite",
+   "valeurs": [
+    {
+     "valeur": "AUT-076-2114-02-12-20140458592",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 1,
+     "citation": "N° CNAPS d’autorisation d ‘exercer pour l’établissement exécutant le marché : .AUT-076-2114-02-12-20140458592"
+    }
+   ],
+   "valeur_retenue": "AUT-076-2114-02-12-20140458592",
+   "date_retenue": "2026-04",
+   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "date_autorisation_cnaps",
+   "libelle": "Date d'obtention de l'autorisation CNAPS",
+   "categorie": "identite",
+   "valeurs": [
+    {
+     "valeur": "12/02/2015",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 1,
+     "citation": "Date d’obtention de l’autorisation :\n...12/02/2015"
+    }
+   ],
+   "valeur_retenue": "12/02/2015",
+   "date_retenue": "2026-04",
+   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "dirigeant",
+   "libelle": "Dirigeant de l'entreprise",
+   "categorie": "organisation",
+   "valeurs": [
+    {
+     "valeur": "MARCHANI ADIL",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 1,
+     "citation": "Nom du dirigeant d’entreprise et N° agrément dirigeant CNAPS :...MARCHANI ADIL"
+    }
+   ],
+   "valeur_retenue": "MARCHANI ADIL",
+   "date_retenue": "2026-04",
+   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "agrement_dirigeant",
+   "libelle": "Agrément dirigeant CNAPS",
+   "categorie": "identite",
+   "valeurs": [
+    {
+     "valeur": "AGD-076-2114-01-28-20140458593",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 1,
+     "citation": "AGD-076-2114-01-28-20140458593"
+    }
+   ],
+   "valeur_retenue": "AGD-076-2114-01-28-20140458593",
+   "date_retenue": "2026-04",
+   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "telephone_contact",
+   "libelle": "Numéro de téléphone de contact",
+   "categorie": "coordonnees",
+   "valeurs": [
+    {
+     "valeur": "06 58 06 32 25",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 1,
+     "citation": "MR MARCHANI 06 58 06 32 25"
+    },
+    {
+     "valeur": "06.58.06.32.25 ; 02.35.89.09.92",
+     "client": "Région Normandie (lot 1)",
+     "document": "GSS - Region Normandie - lot 1.pdf",
+     "date": "2024-05",
+     "page": 49,
+     "citation": "NUMERO - 06.58.06.32.25\n02.35.89.09.92"
+    },
+    {
+     "valeur": "06.58.06.32.25 ; 02.35.89.09.92",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 49,
+     "citation": "NUMERO - 06.58.06.32.25\n02.35.89.09.92"
+    }
+   ],
+   "valeur_retenue": "06 58 06 32 25",
+   "date_retenue": "2026-04",
+   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "statut": "a_confirmer",
+   "valeurs_anterieures_differentes": [
+    "06.58.06.32.25 ; 02.35.89.09.92 (Région Normandie (lot 2), 2024-05)"
+   ]
+  },
+  {
+   "cle": "email_contact",
+   "libelle": "Adresse e-mail de contact",
+   "categorie": "coordonnees",
+   "valeurs": [
+    {
+     "valeur": "contact@gss-securite.fr",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 1,
+     "citation": "contact@gss-\nsecurite.fr"
+    },
+    {
+     "valeur": "contact@gss-securite.fr",
+     "client": "Région Normandie (lot 1)",
+     "document": "GSS - Region Normandie - lot 1.pdf",
+     "date": "2024-05",
+     "page": 49,
+     "citation": "E-MAIL - contact@gss-securite.fr"
+    },
+    {
+     "valeur": "contact@gss-securite.fr",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 49,
+     "citation": "E-MAIL - contact@gss-securite.fr"
+    }
+   ],
+   "valeur_retenue": "contact@gss-securite.fr",
+   "date_retenue": "2026-04",
+   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "effectif_total",
+   "libelle": "Effectif total de l'entreprise",
+   "categorie": "effectifs",
+   "valeurs": [
+    {
+     "valeur": "320",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 2,
+     "citation": "Effectif total de l’entreprise en FRANCE (transmis pour information) :\n320"
+    }
+   ],
+   "valeur_retenue": "320",
+   "date_retenue": "2026-04",
+   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "effectif_departement_76",
+   "libelle": "Effectif dans le département 76",
+   "categorie": "effectifs",
+   "valeurs": [
+    {
+     "valeur": "215",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 2,
+     "citation": "Effectif total de l’entreprise dans le département 76 (transmis pour information) :\n215"
+    }
+   ],
+   "valeur_retenue": "215",
+   "date_retenue": "2026-04",
+   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "effectif_departement_27",
+   "libelle": "Effectif dans le département 27",
+   "categorie": "effectifs",
+   "valeurs": [
+    {
+     "valeur": "65",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 2,
+     "citation": "Effectif total de l’entreprise dans le département 27 (transmis pour information) :\n65"
+    }
+   ],
+   "valeur_retenue": "65",
+   "date_retenue": "2026-04",
+   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "vehicules_astreinte",
+   "libelle": "Véhicules d'astreinte",
+   "categorie": "moyens",
+   "valeurs": [
+    {
+     "valeur": "5 véhicules",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 8,
+     "citation": "Nous disposons d’une astreinte de 5 véhicules pour la région Rouennaise en plus des véhicules dédiés au site."
+    }
+   ],
+   "valeur_retenue": "5 véhicules",
+   "date_retenue": "2026-04",
+   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "certification_iso",
+   "libelle": "Certification ISO",
+   "categorie": "certifications",
+   "valeurs": [
+    {
+     "valeur": "ISO 9001 en cours – prévu pour fin 2026",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 18,
+     "citation": "Certification de service ISO / APSAD : ISO 9001 en cours – prévu pour fin 2026."
+    }
+   ],
+   "valeur_retenue": "ISO 9001 en cours – prévu pour fin 2026",
+   "date_retenue": "2026-04",
+   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "envoi_plannings",
+   "libelle": "Délai d'envoi des plannings du mois suivant",
+   "categorie": "delais",
+   "valeurs": [
+    {
+     "valeur": "J-10",
+     "client": "CAF du Val-de-Marne",
+     "document": "GSS - CAF du Val-de-Marne.pdf",
+     "date": "2026-04",
+     "page": 79,
+     "citation": "ENVOI\nJ-10 DES PLANNINGS DU MOIS SUIVANT"
+    },
+    {
+     "valeur": "J-10",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 32,
+     "citation": "ENVOI\nJ-10 DES PLANNINGS DU MOIS SUIVANT"
+    },
+    {
+     "valeur": "J-15",
+     "client": "Région Normandie (lot 1)",
+     "document": "GSS - Region Normandie - lot 1.pdf",
+     "date": "2024-05",
+     "page": 63,
+     "citation": "ENVOI J-15 DES PLANNINGS DU MOIS SUIVANT"
+    },
+    {
+     "valeur": "J-15 des plannings du mois suivant",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 63,
+     "citation": "J-15 DES PLANNINGS DU MOIS SUIVANT"
+    },
+    {
+     "valeur": "J-15 des plannings du mois suivant",
+     "client": "Région Normandie (lot 3)",
+     "document": "GSS - Region Normandie - lot 3.pdf",
+     "date": "2024-05",
+     "page": 62,
+     "citation": "ENVOI J-15 DES PLANNINGS DU MOIS SUIVANT"
+    }
+   ],
+   "valeur_retenue": "J-10",
+   "date_retenue": "2026-04",
+   "source_retenue": "CAF du Val-de-Marne",
+   "statut": "a_confirmer",
+   "valeurs_anterieures_differentes": [
+    "J-15 (Région Normandie (lot 1), 2024-05)",
+    "J-15 des plannings du mois suivant (Région Normandie (lot 3), 2024-05)"
+   ]
+  },
+  {
+   "cle": "responsable_commercial",
+   "libelle": "Responsable commercial(e)",
+   "categorie": "organisation",
+   "valeurs": [
+    {
+     "valeur": "DA SILVA Luis",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 3,
+     "citation": "DA SILVA Luis"
+    },
+    {
+     "valeur": "Mr HANZAZ Abdelaziz",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 47,
+     "citation": "Mr HANZAZ Abdelaziz"
+    }
+   ],
+   "valeur_retenue": "DA SILVA Luis",
+   "date_retenue": "2025-10",
+   "source_retenue": "CAF (2025)",
+   "statut": "a_confirmer",
+   "valeurs_anterieures_differentes": [
+    "Mr HANZAZ Abdelaziz (Région Normandie (lot 2), 2024-05)"
+   ]
+  },
+  {
+   "cle": "delai_intervention_alarme",
+   "libelle": "Délai d'intervention du rondier sur alarme",
+   "categorie": "delais",
+   "valeurs": [
+    {
+     "valeur": "60 MINUTES MAXI",
+     "client": "CAF (2025)",
+     "document": "GSS - CAF 2025.pdf",
+     "date": "2025-10",
+     "page": 47,
+     "citation": "60 MINUTES MAXI"
+    },
+    {
+     "valeur": "moins de 30 minutes",
+     "client": "Région Normandie (lot 1)",
+     "document": "GSS - Region Normandie - lot 1.pdf",
+     "date": "2024-05",
+     "page": 92,
+     "citation": "le rondier se rend sur place en moins de 30 minutes."
+    }
+   ],
+   "valeur_retenue": "60 MINUTES MAXI",
+   "date_retenue": "2025-10",
+   "source_retenue": "CAF (2025)",
+   "statut": "a_confirmer",
+   "valeurs_anterieures_differentes": [
+    "moins de 30 minutes (Région Normandie (lot 1), 2024-05)"
+   ]
+  },
+  {
+   "cle": "interlocuteur_unique",
+   "libelle": "Interlocuteur unique désigné",
+   "categorie": "organisation",
+   "valeurs": [
+    {
+     "valeur": "Mr MARCHANI",
+     "client": "Région Normandie (lot 1)",
+     "document": "GSS - Region Normandie - lot 1.pdf",
+     "date": "2024-05",
+     "page": 49,
+     "citation": "INTERLOCUTEUR - Mr MARCHANI"
+    },
+    {
+     "valeur": "Mr MARCHANI",
+     "client": "Région Normandie (lot 2)",
+     "document": "GSS - Region Normandie - lot 2.pdf",
+     "date": "2024-05",
+     "page": 49,
+     "citation": "INTERLOCUTEUR - Mr MARCHANI"
+    }
+   ],
+   "valeur_retenue": "Mr MARCHANI",
+   "date_retenue": "2024-05",
+   "source_retenue": "Région Normandie (lot 1)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  }
+ ]
+}

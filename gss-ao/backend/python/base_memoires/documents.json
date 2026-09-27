@@ -1,0 +1,11 @@
+[
+ {"fichier": "GSS - Universite de Rouen Normandie - memoire.pdf", "client": "Université de Rouen Normandie", "date": "2026-06", "type": "memoire"},
+ {"fichier": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf", "client": "Université de Rouen Normandie (cadre lots 1-2-3)", "date": "2026-04", "type": "cadre"},
+ {"fichier": "GSS - CAF du Val-de-Marne.pdf", "client": "CAF du Val-de-Marne", "date": "2026-04", "type": "memoire"},
+ {"fichier": "GSS - Gardiennage des sites metropolitains - lot 1.pdf", "client": "Gardiennage des sites métropolitains (lot 1)", "date": "2025-12", "type": "memoire"},
+ {"fichier": "GSS - MIN de Rouen - cadre.pdf", "client": "MIN de Rouen (cadre de réponse)", "date": "2025-10", "type": "cadre"},
+ {"fichier": "GSS - CAF 2025.pdf", "client": "CAF (2025)", "date": "2025-10", "type": "memoire"},
+ {"fichier": "GSS - Region Normandie - lot 1.pdf", "client": "Région Normandie (lot 1)", "date": "2024-05", "type": "cadre"},
+ {"fichier": "GSS - Region Normandie - lot 2.pdf", "client": "Région Normandie (lot 2)", "date": "2024-05", "type": "cadre"},
+ {"fichier": "GSS - Region Normandie - lot 3.pdf", "client": "Région Normandie (lot 3)", "date": "2024-05", "type": "cadre"}
+]
