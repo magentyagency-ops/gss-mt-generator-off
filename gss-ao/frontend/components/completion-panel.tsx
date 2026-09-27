@@ -50,6 +50,11 @@ interface Envoi {
   questions: Array<{ cle: string; question: string }>;
 }
 
+interface Preparation {
+  annuaire: Array<{ id: string; nom: string; fonction: string; email: string }>;
+  questions: Array<{ id: string; question: string; contexte: string; proposes: string[]; absentsAnnuaire: string[] }>;
+}
+
 const PLACEHOLDER = "[À COMPLÉTER]";
 
 const SOURCE_LIBELLE: Record<NonNullable<Element["source"]>, string> = {
@@ -100,6 +105,8 @@ export function CompletionPanel({
   const [notice, setNotice] = useState<string | null>(null);
   const [envoi, setEnvoi] = useState(false);
   const [envois, setEnvois] = useState<Envoi[] | null>(null);
+  const [preparation, setPreparation] = useState<Preparation | null>(null);
+  const [choix, setChoix] = useState<Record<string, string[]>>({});
   const [reponses, setReponses] = useState<Record<string, string>>({});
   const [reponseEnCours, setReponseEnCours] = useState<string | null>(null);
   const itemsRef = useRef<Record<string, HTMLDivElement | null>>({});
@@ -231,22 +238,49 @@ export function CompletionPanel({
     }
   }
 
+  /** Étape 1 : questions à envoyer et personnes proposées (le pôle entier, coché par défaut). */
   async function demanderEquipe() {
     setEnvoi(true);
     setNotice(null);
     setEnvois(null);
     try {
-      const res = await apiFetch(`/api/dossiers/${dossierId}/completion/demander`, { method: "POST" });
+      const res = await apiFetch(`/api/dossiers/${dossierId}/completion/preparer`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Échec de la préparation.");
+      if (!data.questions?.length) { setNotice("Aucune information à demander."); return; }
+      setPreparation(data);
+      setChoix(Object.fromEntries(data.questions.map((q: any) => [q.id, q.proposes])));
+    } catch (e: any) {
+      setNotice(e.message);
+    } finally {
+      setEnvoi(false);
+    }
+  }
+
+  const basculer = (qid: string, pid: string) =>
+    setChoix((c) => ({ ...c, [qid]: (c[qid] || []).includes(pid) ? c[qid].filter((x) => x !== pid) : [...(c[qid] || []), pid] }));
+
+  /** Étape 2 : envoi aux personnes cochées. */
+  async function envoyerQuestions() {
+    setEnvoi(true);
+    setNotice(null);
+    try {
+      const res = await apiFetch(`/api/dossiers/${dossierId}/completion/demander`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selection: choix }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Échec de l'envoi.");
+      setPreparation(null);
       if (data.demo) {
         setEnvois(data.envois || []);
-        setNotice(`${data.triggered} question(s) préparée(s) pour ${data.envois?.length || 0} destinataire(s) de l'annuaire GSS. Démonstration : les e-mails ne partent pas, vous pouvez répondre à la place de chaque destinataire ci-dessous.`);
+        setNotice(`${data.triggered} question(s) préparée(s) pour ${data.envois?.length || 0} destinataire(s). Démonstration : les e-mails ne partent pas, vous pouvez répondre à la place de chaque destinataire ci-dessous.`);
       } else if (!data.triggered) {
         setNotice(data.message || "Aucune information à demander.");
       } else {
         const lignes = (data.results || []).map((r: any) => `${r.sent ? "✓" : "✗"} ${r.label}${r.personne ? ` → ${r.personne} (${r.email})` : ""}`);
-        setNotice(`${data.sent}/${data.triggered} question(s) envoyée(s) par e-mail. Chaque réponse sera placée automatiquement à son emplacement dans le document, dès sa réception.\n${lignes.join("\n")}`);
+        setNotice(`${data.sent}/${lignes.length} envoi(s) effectué(s) par e-mail. Chaque réponse sera placée automatiquement à son emplacement dans le document, dès sa réception.\n${lignes.join("\n")}`);
       }
     } catch (e: any) {
       setNotice(e.message);
@@ -335,6 +369,55 @@ export function CompletionPanel({
         </div>
       </div>
       {notice && <p className="whitespace-pre-line border-b border-border bg-muted/30 px-6 py-3 text-xs text-muted-foreground">{notice}</p>}
+
+      {preparation && (
+        <div className="space-y-3 border-b border-border bg-muted/10 px-6 py-4">
+          <p className="text-sm font-medium text-foreground">Questions à envoyer — personnes proposées (décochez ou ajoutez selon le besoin)</p>
+          {preparation.questions.map((q) => {
+            const coches = choix[q.id] || [];
+            const proposes = preparation.annuaire.filter((p) => q.proposes.includes(p.id) || coches.includes(p.id));
+            const autres = preparation.annuaire.filter((p) => !proposes.some((x) => x.id === p.id));
+            return (
+              <div key={q.id} className="space-y-2 rounded-lg border border-border bg-card p-3 text-sm">
+                <p className="font-medium text-foreground">{q.question}</p>
+                <div className="flex flex-wrap gap-2">
+                  {proposes.map((p) => (
+                    <label key={p.id} className={cn("flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1 text-xs", coches.includes(p.id) ? "border-primary bg-primary/5" : "border-border")}>
+                      <input id={`dest-${q.id}-${p.id}`} type="checkbox" checked={coches.includes(p.id)} onChange={() => basculer(q.id, p.id)} />
+                      <span className="font-medium">{p.nom}</span>
+                      <span className="text-muted-foreground">{p.fonction}</span>
+                    </label>
+                  ))}
+                  {autres.length > 0 && (
+                    <select
+                      id={`ajout-${q.id}`}
+                      value=""
+                      onChange={(ev) => ev.target.value && basculer(q.id, ev.target.value)}
+                      className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+                    >
+                      <option value="">+ Ajouter une personne…</option>
+                      {autres.map((p) => <option key={p.id} value={p.id}>{p.nom} — {p.fonction}</option>)}
+                    </select>
+                  )}
+                </div>
+                {q.absentsAnnuaire.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Également connus pour ce rôle dans les documents GSS, mais absents de l'annuaire : {q.absentsAnnuaire.join(", ")}. Ajoutez-les dans Administration → Annuaire pour pouvoir leur écrire.
+                  </p>
+                )}
+                {!coches.length && <p className="text-xs text-destructive">Aucun destinataire : cette question ne sera pas envoyée.</p>}
+              </div>
+            );
+          })}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setPreparation(null)}>Annuler</Button>
+            <Button size="sm" className="gap-1" disabled={envoi || !Object.values(choix).some((l) => l.length)} onClick={envoyerQuestions}>
+              {envoi ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Envoyer les questions
+            </Button>
+          </div>
+        </div>
+      )}
 
       {envois && envois.length > 0 && (
         <div className="grid gap-3 border-b border-border bg-muted/10 px-6 py-4 md:grid-cols-2">
