@@ -4,7 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import * as docx from "docx-preview";
 
-export function DocxPreviewViewer({ fileUrl }: { fileUrl: string }) {
+export function DocxPreviewViewer({
+  fileUrl,
+  onRendered,
+}: {
+  fileUrl: string;
+  /** Optionnel : appelé une fois le document rendu (ex. rendre cliquables les « [À COMPLÉTER] »). */
+  onRendered?: (container: HTMLDivElement) => void;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -32,6 +39,7 @@ export function DocxPreviewViewer({ fileUrl }: { fileUrl: string }) {
             breakPages: true,
             useBase64URL: true,
           });
+          if (isMounted && onRendered && containerRef.current) onRendered(containerRef.current);
         }
       } catch (err: any) {
         if (isMounted) setError(err.message || "An error occurred");

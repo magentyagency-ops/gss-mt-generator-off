@@ -43,6 +43,7 @@ import {
 import { cn } from "@/lib/utils";
 import { apiFetch, apiBase } from "@/lib/api";
 import { CreditsBadge } from "@/components/credits-badge";
+import { CompletionPanel } from "@/components/completion-panel";
 import { use } from "react";
 import { useDossier } from "../context";
 
@@ -80,6 +81,9 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   const [askTeamError, setAskTeamError] = useState<string | null>(null);
   const [askTeamNotice, setAskTeamNotice] = useState<string | null>(null);
   const [creditKey, setCreditKey] = useState(0);
+  // Document généré complétable (clic sur « [À COMPLÉTER] », réponses d'équipe intégrées) : affiché
+  // dès qu'un mémoire existe pour ce dossier, y compris après rechargement de la page.
+  const [completionDispo, setCompletionDispo] = useState(true);
 
   // Modal de bypass
   const [showBypassModal, setShowBypassModal] = useState(false);
@@ -540,7 +544,9 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   </div>
                 )}
 
-                {/* Prévisualisation Complète du DOCX ou PDF */}
+                {/* Prévisualisation Complète du DOCX ou PDF (remplacée par le panneau de complétion
+                    ci-dessous quand il est disponible) */}
+                {!completionDispo && (
                 <div className="mt-12 pt-8 border-t border-border">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-medium text-lg text-foreground">Aperçu du document final (De A à Z)</h3>
@@ -563,8 +569,19 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                     <DocxPreviewViewer fileUrl={`${apiBase}/api/download?file=${encodeURIComponent(docxResult.data?.file_path || '')}`} />
                   )}
                 </div>
+                )}
               </div>
             </Card>
+          )}
+
+          {completionDispo && !isGeneratingDocx && (
+            <div className="relative left-1/2 w-[min(1280px,calc(100vw-4rem))] -translate-x-1/2">
+              <CompletionPanel
+                key={docxResult?.data?.file_path || "dernier"}
+                dossierId={id}
+                onAbsent={() => setCompletionDispo(false)}
+              />
+            </div>
           )}
 
           {docxResult && docxResult.type === "error" && (
