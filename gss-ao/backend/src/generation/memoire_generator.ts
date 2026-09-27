@@ -2,7 +2,7 @@ import { MarpGenerator, AssembleChapter, AssembleSection } from './marp_generato
 import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema } from './schema_service';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -1602,15 +1602,22 @@ function inferFieldHint(context: string): string {
 // Historique : un n° CNAPS placeholder (« AUT-076-2122-12-15-20230456789 ») figurait en dur dans
 // frontend/lib/gss-config.ts (commit cda45a2) sans aucune source documentaire → retiré.
 // La dénomination (raison commerciale, non sensible) reste par défaut, surchargeable par env.
+// SIRET / SIREN / adresse du siège : variables d'environnement, sinon valeur des mémoires GSS (registre).
 export const GSS_IDENTITE = {
   denomination: process.env.GSS_DENOMINATION || 'GSS — Sécurité privée',
   numCnaps: process.env.GSS_CNAPS || '',
   dateAutorisation: process.env.GSS_DATE_AUTORISATION || '',
-  siret: process.env.GSS_SIRET || '905 274 635 00010',
-  siren: process.env.GSS_SIREN || '905 274 635',
-  adresse: process.env.GSS_ADRESSE || '31 boulevard Gambetta, 76000 Rouen',
-  adresseAgence: process.env.GSS_ADRESSE_AGENCE || '31 boulevard Gambetta, 76000 Rouen',
+  siret: process.env.GSS_SIRET || siretRegistre() || '905 274 635 00010',
+  siren: process.env.GSS_SIREN || siretRegistre().slice(0, 11) || '905 274 635',
+  adresse: process.env.GSS_ADRESSE || valeurRegistre('adresse_siege') || '31 boulevard Gambetta, 76000 Rouen',
+  adresseAgence: process.env.GSS_ADRESSE_AGENCE || valeurRegistre('adresse_siege') || '31 boulevard Gambetta, 76000 Rouen',
 };
+
+/** SIRET de GSS tel qu'il figure dans ses mémoires (registre), au format « 805 295 516 00019 ». */
+function siretRegistre(): string {
+  const d = valeurRegistre('siret').replace(/\D/g, '');
+  return d.length === 14 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 9)} ${d.slice(9)}` : '';
+}
 
 /**
  * Renvoie la valeur d'identité connue de GSS (le candidat) si le LIBELLÉ du champ désigne la

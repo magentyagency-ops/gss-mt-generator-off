@@ -145,6 +145,11 @@ export function blocRegistre(): string {
   return '\n\nREGISTRE DES INFORMATIONS GSS (valeur la plus récente connue de chaque information qui peut évoluer) :\n' + lignes.join('\n');
 }
 
+/** Valeur la plus récente d'une information du registre (clé du catalogue), ou '' si inconnue. */
+export function valeurRegistre(cle: string): string {
+  return charger().registre.find((e) => e.cle === cle)?.valeur_retenue || '';
+}
+
 /** Règles de réutilisation communes aux deux modes de rédaction (cadre imposé et réponse libre). */
 export const REGLES_REUTILISATION = `RÈGLES DE RÉUTILISATION DES MÉMOIRES GSS (demande explicite de GSS, prioritaires) :
 - GSS a déjà répondu à la plupart des sujets dans ses mémoires précédents : si un extrait « RÉPONSES DÉJÀ RÉDIGÉES PAR GSS » traite le sujet, REPRENDS son contenu, sa structure, ses exemples concrets et ses méthodes, en l'ADAPTANT au nouveau client (nom du client, contexte, sites, exigences du DCE). Ne réinvente pas une réponse générique quand GSS a déjà la sienne.
