@@ -12,8 +12,9 @@ export default function DemoCompletionPage() {
           <h1 className="text-lg font-semibold">Compléter un mémoire généré</h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             Exemple de mémoire déjà généré (cadre imposé en grille de notation). Cliquez sur un « [À COMPLÉTER] » surligné dans
-            le document ou dans la liste pour saisir l'information : elle est intégrée immédiatement. Le bloc « Démonstration »
-            simule la réponse d'un collègue par e-mail, intégrée automatiquement comme en conditions réelles.
+            le document ou dans la liste pour saisir l'information : elle est intégrée immédiatement à cet endroit. « Demander à
+            l'équipe » prépare les e-mails pour les bonnes personnes de l'annuaire GSS ; dans cette démonstration, aucun e-mail ne
+            part et vous pouvez répondre à la place de chaque destinataire : la réponse est placée automatiquement, comme un vrai e-mail.
           </p>
         </div>
         <CompletionPanel dossierId="demo-etampes" demo />
