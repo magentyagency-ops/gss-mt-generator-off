@@ -176,5 +176,11 @@ export function extraireConfirmations(texte: string): { texte: string; confirmat
   const confirmations: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(texte)) !== null) confirmations.push(m[1].trim());
-  return { texte: texte.replace(re, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim(), confirmations };
+  // Retrait du marqueur ET de la ponctuation qui le suivait : aucun « . » orphelin ne reste dans le texte.
+  const nettoye = texte
+    .replace(/\[CONSULTATION REQUISE\s*:\s*[^\]]+\][ \t]*[.;,]?/gi, '')
+    .replace(/^[ \t]*[.;,][ \t]*$/gm, '')
+    .replace(/([.!?])[ \t]+[.;,](?=\s|$)/g, '$1')
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  return { texte: nettoye, confirmations };
 }

@@ -46,6 +46,7 @@ export interface ElementACompleter {
   completeLe?: string;
   reperes?: number[];          // réponse libre : repères ⟦AC:n⟧ concernés
   pourAcheteur?: boolean;      // information à obtenir auprès de l'acheteur (jamais envoyée à GSS)
+  groupe?: string;             // emplacements qui attendent la MÊME donnée : une seule question, une seule réponse
 }
 
 export interface EtatCompletion {
@@ -111,8 +112,8 @@ function nouveauT(xmlDoc: any, s: string): any {
  * Isole chaque « [À COMPLÉTER] » marqué par le générateur dans son propre run, entouré d'un signet
  * GSS_AC_n. Retourne, dans l'ordre du document, le champ d'origine et le contexte de chaque emplacement.
  */
-export function poserSignets(xmlDoc: any): Array<{ cle: string; champ: number; contexte: string }> {
-  const out: Array<{ cle: string; champ: number; contexte: string }> = [];
+export function poserSignets(xmlDoc: any): Array<{ cle: string; champ: number; contexte: string; environnement: string }> {
+  const out: Array<{ cle: string; champ: number; contexte: string; environnement: string }> = [];
   let n = 0;
   let idSignet = 90000;
   for (;;) {
@@ -133,12 +134,21 @@ export function poserSignets(xmlDoc: any): Array<{ cle: string; champ: number; c
     const parcourir = (nd: any) => {
       if (nd === tEl) { avantTxt += avant; apresTxt += apres; vu = true; return; }
       if (nd.nodeType === 1 && nd.localName === 't') { if (vu) apresTxt += nd.textContent || ''; else avantTxt += nd.textContent || ''; return; }
-      if (nd.nodeType === 1 && (nd.localName === 'br' || nd.localName === 'tab')) { if (vu) apresTxt += ' '; else avantTxt += ' '; return; }
+      if (nd.nodeType === 1 && (nd.localName === 'br' || nd.localName === 'tab')) { const c = nd.localName === 'br' ? '\n' : ' '; if (vu) apresTxt += c; else avantTxt += c; return; }
       if (nd.childNodes) for (let i = 0; i < nd.childNodes.length; i++) parcourir(nd.childNodes[i]);
     };
     parcourir(para);
-    const net = (x: string) => x.replace(/\uE000\d+\uE001/g, '').replace(/\s+/g, ' ');
-    const contexte = `${net(avantTxt).slice(-220).trimStart()}${PLACEHOLDER}${net(apresTxt).slice(0, 160).trimEnd()}`.trim();
+    // Les AUTRES emplacements de la phrase sont notés « […] » : seul celui-ci reste « [À COMPLÉTER] ».
+    const net = (x: string) => x.replace(/\uE000\d+\uE001/g, '').split(PLACEHOLDER).join('[…]').replace(/[ \t]+/g, ' ');
+    const av = net(avantTxt);
+    const ap = net(apresTxt);
+    // Phrase EXACTE qui contient l'emplacement (du début de phrase au point final), sans coupure de mot.
+    const mAvant = av.match(/(?:^|[.!?]\s|\n)([^.!?\n]*)$/);
+    const phraseAvant = mAvant ? mAvant[1] : av;
+    const finM = /[.!?](?=\s|$)|\n/.exec(ap);
+    const phraseApres = finM ? ap.slice(0, finM.index + (ap[finM.index] === '\n' ? 0 : 1)) : ap;
+    const contexte = `${phraseAvant}${PLACEHOLDER}${phraseApres}`.replace(/\s+/g, ' ').trim();
+    const environnement = `${av.slice(-700)}${PLACEHOLDER}${ap.slice(0, 300)}`.replace(/\s+/g, ' ').trim();
     const rPr = run.childNodes ? Array.from({ length: run.childNodes.length }, (_, i) => run.childNodes[i]).find((c: any) => c.nodeType === 1 && c.localName === 'rPr') : null;
 
     // Run « après » : texte restant + tous les éléments qui suivaient le <w:t> dans le run.
@@ -163,9 +173,76 @@ export function poserSignets(xmlDoc: any): Array<{ cle: string; champ: number; c
     inserer(debut); inserer(runMilieu); inserer(fin);
     if (runApres.childNodes.length > (rPr ? 1 : 0)) inserer(runApres);
 
-    out.push({ cle, champ, contexte });
+    out.push({ cle, champ, contexte, environnement });
   }
   return out;
+}
+
+/**
+ * Formule, pour CHAQUE emplacement, la question exacte à poser à l'équipe : elle ne porte que sur la
+ * donnée manquante à cet endroit précis (lue dans sa phrase), pas sur le sous-critère entier.
+ */
+export async function formulerQuestions(
+  items: Array<{ cle: string; contexte: string; environnement: string; critere: string }>,
+): Promise<Map<string, { question: string; groupe: string }>> {
+  const out = new Map<string, { question: string; groupe: string }>();
+  if (!items.length) return out;
+  const systeme = `Dans un mémoire technique GSS (sécurité privée), des données manquent aux emplacements « [À COMPLÉTER] » (les autres emplacements de la même phrase sont notés « […] »). Pour CHAQUE emplacement listé, formule la question exacte à poser à un collègue de GSS pour obtenir LA donnée qui manque À CET ENDROIT PRÉCIS.
+- La question ne porte que sur cet emplacement, pas sur les « […] » ni sur le reste du paragraphe.
+- Elle est autonome et concrète : elle nomme le site ou le sujet, et indique la forme attendue (nombre d'agents, durée en minutes, nom de société, horaires…).
+- Une seule phrase interrogative, sans formule de politesse.
+- "groupe" : un libellé court de la DONNÉE attendue (ex. « nombre d'équipes affectées au site », « recours à la sous-traitance et à l'intérim »). Des emplacements qui attendent exactement la même donnée reçoivent le MÊME groupe (et la même question) : GSS n'y répondra qu'une fois.
+Renvoie {"questions": [{"cle": "...", "question": "...", "groupe": "..."}]} avec TOUS les emplacements listés.`;
+  const demander = async (lot: typeof items) => {
+    const r = await json(systeme, lot.map((i) => `### ${i.cle}\nSous-critère : ${i.critere || '—'}\nPhrase : ${i.contexte}\nTexte autour : ${i.environnement}`).join('\n\n'));
+    for (const q of Array.isArray(r.questions) ? r.questions : []) {
+      if (q?.cle && String(q.question || '').trim()) {
+        out.set(String(q.cle), { question: String(q.question).trim(), groupe: String(q.groupe || q.question).trim() });
+      }
+    }
+  };
+  await demander(items);
+  const manquants = items.filter((i) => !out.has(i.cle));
+  if (manquants.length) await demander(manquants);
+  // Regroupement : même libellé de donnée → même question (celle du premier emplacement).
+  const parGroupe = new Map<string, string>();
+  for (const i of items) {
+    const v = out.get(i.cle);
+    if (!v) continue;
+    const g = v.groupe.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    v.groupe = g;
+    if (parGroupe.has(g)) v.question = parGroupe.get(g)!; else parGroupe.set(g, v.question);
+  }
+  return out;
+}
+
+/**
+ * Adapte une même information à plusieurs phrases (emplacements d'un même groupe) : pour chacune, le
+ * fragment exact qui remplace « [À COMPLÉTER] » en gardant la phrase correcte.
+ */
+async function fragmentsPourPhrases(info: string, cibles: ElementACompleter[]): Promise<Array<{ cle: string; valeur: string }>> {
+  if (!cibles.length) return [];
+  const r = await json(
+    `Une information a été fournie pour compléter un mémoire technique. Pour chaque phrase, donne le fragment exact qui remplace « [À COMPLÉTER] » afin que la phrase reste grammaticalement correcte et naturelle. N'utilise QUE l'information fournie, sans rien ajouter. Renvoie {"remplissages": [{"cle": "...", "valeur": "..."}]}.`,
+    `Information fournie : ${info}\n\n${cibles.map((c) => `- ${c.cle} | phrase : ${c.contexte}`).join('\n')}`,
+  );
+  const ok = new Set(cibles.map((c) => c.cle));
+  return (Array.isArray(r.remplissages) ? r.remplissages : [])
+    .filter((x: any) => x && ok.has(x.cle) && String(x.valeur || '').trim())
+    .map((x: any) => ({ cle: String(x.cle), valeur: String(x.valeur).trim() }));
+}
+
+/**
+ * Saisie directe : la valeur tapée va telle quelle à l'emplacement cliqué ; les autres emplacements
+ * du même groupe (même donnée ailleurs dans le document) sont remplis avec l'information adaptée à leur phrase.
+ */
+export async function remplirSaisie(dossierId: string, cle: string, valeur: string): Promise<EtatCompletion> {
+  const etat = lireEtat(dossierId);
+  if (!etat) throw new Error('Aucun document généré à compléter pour ce dossier.');
+  const el = etat.elements.find((e) => e.cle === cle);
+  const autres = el?.groupe ? etat.elements.filter((e) => e.cle !== cle && e.statut === 'ouvert' && e.groupe === el.groupe) : [];
+  const complements = etat.mode === 'cadre' ? await fragmentsPourPhrases(valeur, autres) : [];
+  return remplir(dossierId, [{ cle, valeur }, ...complements], 'saisie');
 }
 
 /** Remplace le contenu du signet `cle` par `valeur` et enregistre une NOUVELLE version du .docx. */
@@ -215,7 +292,9 @@ async function json(system: string, user: string): Promise<any> {
     messages: [{ role: 'system', content: `${system}\nRéponds uniquement par un objet JSON.` }, { role: 'user', content: user }],
     response_format: { type: 'json_object' },
   });
-  try { return JSON.parse(r.choices?.[0]?.message?.content || '{}'); } catch { return {}; }
+  // Le modèle écrit parfois l'espace insécable sous une forme invalide (« \\u0000a0 ») : on la rétablit.
+  const brut = (r.choices?.[0]?.message?.content || '{}').replace(/\\u0000a0/gi, '\\u00a0').replace(/\\u0000/g, '');
+  try { return JSON.parse(brut); } catch { return {}; }
 }
 
 /**
@@ -302,20 +381,23 @@ export async function remplir(
 // ─── Réponse de l'équipe (e-mail) → emplacements qu'elle renseigne ───────────────────────
 
 /** Détermine, parmi les emplacements encore ouverts, ceux que renseigne une réponse, et la valeur à y mettre. */
-async function correspondances(etat: EtatCompletion, question: string, reponse: string): Promise<Array<{ cle: string; valeur: string }>> {
-  const ouverts = etat.elements.filter((e) => e.statut === 'ouvert' && !e.pourAcheteur);
+async function correspondances(etat: EtatCompletion, question: string, reponse: string, cles?: string[]): Promise<Array<{ cle: string; valeur: string }>> {
+  // Si l'e-mail portait sur des emplacements précis (envoi « Demander à l'équipe »), la réponse ne peut
+  // renseigner qu'eux ; sinon (ancienne sollicitation), tous les emplacements ouverts sont candidats.
+  const demandes = new Set((cles || []).filter((c) => etat.elements.some((e) => e.cle === c)));
+  const ouverts = etat.elements.filter((e) => e.statut === 'ouvert' && !e.pourAcheteur && (!demandes.size || demandes.has(e.cle)));
   if (!ouverts.length) return [];
   const r = await json(
     `Un membre de l'équipe GSS a répondu par e-mail à une question. Indique quels emplacements « à compléter » du mémoire cette réponse renseigne, et le texte exact à y insérer.
 - N'utilise QUE l'information présente dans la réponse ; n'invente rien.
-- Cadre imposé : la valeur remplace « [À COMPLÉTER] » dans la phrase donnée en contexte → donne uniquement le fragment qui s'insère (ex. « 3 agents », « 45 minutes »).
+- Cadre imposé : la valeur remplace « [À COMPLÉTER] » dans la phrase donnée en contexte → donne uniquement le fragment qui s'insère pour que la phrase soit correcte et naturelle (ex. « 3 », « 45 minutes », « la société X »), sans répéter les mots déjà présents autour.
 - Ignore un emplacement que la réponse ne renseigne pas clairement.
 Renvoie {"remplissages": [{"cle": "...", "valeur": "..."}]} (liste vide si aucun).`,
-    `Question posée : ${question}\nRéponse reçue : ${reponse}\n\nEmplacements ouverts :\n${ouverts.map((e) => `- ${e.cle} | information attendue : ${e.question} | contexte : ${e.contexte}`).join('\n')}`,
+    `Question posée : ${question}\nRéponse reçue : ${reponse}\n\nEmplacements ouverts (des emplacements du même groupe attendent la même donnée : remplis-les tous, chacun adapté à sa phrase) :\n${ouverts.map((e) => `- ${e.cle} | groupe : ${e.groupe || e.cle} | information attendue : ${e.question} | phrase : ${e.contexte}`).join('\n')}`,
   );
-  const cles = new Set(ouverts.map((e) => e.cle));
+  const permises = new Set(ouverts.map((e) => e.cle));
   return (Array.isArray(r.remplissages) ? r.remplissages : [])
-    .filter((x: any) => x && cles.has(x.cle) && String(x.valeur || '').trim())
+    .filter((x: any) => x && permises.has(x.cle) && String(x.valeur || '').trim())
     .map((x: any) => ({ cle: x.cle, valeur: String(x.valeur).trim() }));
 }
 
@@ -323,10 +405,10 @@ Renvoie {"remplissages": [{"cle": "...", "valeur": "..."}]} (liste vide si aucun
  * Intègre une réponse d'équipe fournie directement (démonstration : simule la réception d'un e-mail,
  * sans envoi ni lecture en base). Même traitement que pour un e-mail réel.
  */
-export async function integrerReponse(dossierId: string, question: string, reponse: string): Promise<{ etat: EtatCompletion; cles: string[] }> {
+export async function integrerReponse(dossierId: string, question: string, reponse: string, cles?: string[]): Promise<{ etat: EtatCompletion; cles: string[] }> {
   const etat = lireEtat(dossierId);
   if (!etat) throw new Error('Aucun document généré à compléter pour ce dossier.');
-  const rems = await correspondances(etat, question, reponse);
+  const rems = await correspondances(etat, question, reponse, cles);
   if (!rems.length) return { etat, cles: [] };
   return { etat: await remplir(dossierId, rems, 'equipe'), cles: rems.map((r) => r.cle) };
 }
@@ -351,7 +433,7 @@ export async function integrerReponsesEquipe(dossierId: string): Promise<number>
   if (!db) return 0;
   const { data, error } = await db
     .from('question_interne')
-    .select('id, critere_concerne, reponse_contenu')
+    .select('id, critere_concerne, question, exigence_id, reponse_contenu')
     .eq('ao_id', dossierId)
     .not('reponse_contenu', 'is', null);
   if (error || !data) return 0;
@@ -361,7 +443,8 @@ export async function integrerReponsesEquipe(dossierId: string): Promise<number>
     const cle = `${q.id}:${empreinte(rep)}`;
     if (!rep || etat.reponsesTraitees.includes(cle)) continue;
     const courant = lireEtat(dossierId)!;
-    const rems = await correspondances(courant, q.critere_concerne || '', rep);
+    const cles = String(q.exigence_id || '').split(/[,+]/).map((x: string) => x.trim()).filter(Boolean);
+    const rems = await correspondances(courant, `${q.critere_concerne || ''}\n${q.question || ''}`.trim(), rep, cles);
     let maj = courant;
     if (rems.length) {
       maj = await remplir(dossierId, rems, 'equipe');

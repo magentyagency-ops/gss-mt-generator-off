@@ -2,7 +2,7 @@ import { MarpGenerator, AssembleChapter, AssembleSection } from './marp_generato
 import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema } from './schema_service';
-import { poserSignets, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter } from './completion';
+import { poserSignets, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter } from './completion';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
@@ -3220,7 +3220,8 @@ Renvoie un JSON valide :
       // Réponse en graisse normale (le libellé du critère reste en gras) : b/bCs à 0, placés juste
       // après rFonts pour respecter l'ordre imposé par le format Word.
       const rPr = markRPr ? markRPr.cloneNode(true) : xmlDoc.createElementNS(WNS, 'w:rPr');
-      for (const tag of ['bCs', 'b']) {
+      // La réponse n'hérite ni de la couleur, ni du soulignement, ni de l'italique du libellé.
+      for (const tag of ['bCs', 'b', 'color', 'u', 'i', 'iCs', 'highlight', 'shd']) {
         const ex = findLocalNameChild(rPr, tag);
         if (ex) rPr.removeChild(ex);
       }
@@ -3583,7 +3584,10 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
 - Si un « Critère » parent est indiqué (ex. un cas pratique sur un site précis), applique la réponse à CE cas (site, surface, accès, calendrier) et non en termes généraux.
 - Donnée propre à ce marché absente des sources (nombre d'agents dimensionné pour ce site, rotations…) : n'invente rien, écris [À COMPLÉTER] à cet endroit et ajoute sur sa propre ligne : [CONSULTATION REQUISE : <information précise à obtenir de GSS>]. Ne commente jamais l'absence d'information (pas de « non précisé dans les sources », « à confirmer ») : le texte reste rédigé comme la réponse définitive de GSS, avec [À COMPLÉTER] à la place de la donnée.
 - Si une composante demande de FOURNIR un document (CV, rapport type, cartes professionnelles, certificats…), décris ce que GSS fournit d'après les sources et ajoute sur sa propre ligne : [CONSULTATION REQUISE : Joindre <document> au mémoire].
-- Texte brut : pas de Markdown (ni #, ni **, ni puces « - » ; utilise « • » pour une énumération).`;
+- Texte brut : pas de Markdown (ni #, ni **, ni puces « - » ; utilise « • » pour une énumération).
+- RÉDACTION : phrases simples, naturelles et exactes, comme les écrirait un responsable d'exploitation de GSS. Le site est déjà décrit par l'acheteur dans le cas pratique : ne recopie JAMAIS la liste de ses caractéristiques (surface, bâtiments, étages, accès, barrières, parking, clôture, quartier) et n'ouvre pas chaque composante par l'« enjeu » du site ; cite au plus UNE caractéristique, une seule fois, quand elle justifie concrètement un choix. Va directement à ce que fait GSS. Pas d'effet dramatique ni de formule creuse. La réponse ne contredit jamais une autre composante (même nombre d'équipes, mêmes responsables).
+- Un [À COMPLÉTER] prend la place de la SEULE donnée manquante. Donnée chiffrée : dans une phrase naturelle (« GSS affecte [À COMPLÉTER] agents de sécurité au site », « intervention sous [À COMPLÉTER] minutes »). Donnée qualitative ou descriptive (recours à la sous-traitance, composition nominative…) : sous la forme « Libellé : [À COMPLÉTER]. ». Jamais de tournure du type « est défini comme suit : [À COMPLÉTER] ». Interdit : « est de [À COMPLÉTER] » ou « sont de [À COMPLÉTER] » pour autre chose qu'un nombre, « est la suivante : [À COMPLÉTER] ». Une seule donnée par [À COMPLÉTER], et une même donnée n'est laissée à compléter qu'à un seul endroit de la réponse.
+- Pour réduire au minimum ce que GSS doit compléter : un engagement que GSS a déjà pris de façon générale (valeur du REGISTRE DES INFORMATIONS GSS : délai d'intervention du rondier, mobilisation de l'astreinte, délai PTI, envoi des plannings…) est repris avec sa valeur au lieu d'un [À COMPLÉTER].`;
 
     /** Traite UN champ : recherche ciblée des passages pertinents + 1 appel IA dédié. */
     const answerField = async (f: FieldDesc): Promise<void> => {
@@ -4359,6 +4363,17 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       }
       return { cle, question: question || contexte, contexte, statut: 'ouvert' };
     });
+    // Question EXACTE de chaque emplacement, lue dans sa propre phrase (et non celle du sous-critère
+    // entier) : c'est elle qui est affichée, envoyée à l'équipe et utilisée pour placer sa réponse.
+    try {
+      const precises = await formulerQuestions(signets.map(({ cle, champ, contexte, environnement }) => {
+        const d = descriptors.find((x) => x.id === champ);
+        return { cle, contexte, environnement, critere: ((d?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').slice(0, 400) };
+      }));
+      for (const el of elementsACompleter) { const q = precises.get(el.cle); if (q) { el.question = q.question; el.groupe = q.groupe; } }
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Formulation des questions par emplacement indisponible : ${e?.message || e}`);
+    }
 
     // 8. Serialize and save
     if (onProgress) onProgress(98, 'Génération du document Word…');

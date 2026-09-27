@@ -13,7 +13,7 @@ import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeamBulk, matchQu
 import { injectValidatedRecherches } from '../generation/inject_recherches';
 import { learnSollicitationsForDossier, learnPendingSollicitations } from '../generation/learn_sollicitation';
 import { getGenerationGate } from '../generation/generation_gate';
-import { lireEtat, vueEtat, remplir, capitaliser, integrerReponse } from '../generation/completion';
+import { lireEtat, vueEtat, remplirSaisie, capitaliser, integrerReponse } from '../generation/completion';
 import { getSettings } from '../core/config';
 import { getScopedClient, requestContext } from '../core/supabase';
 import { createClient } from '@supabase/supabase-js';
@@ -591,7 +591,7 @@ router.post('/dossiers/:id/completion', async (req: Request, res: Response) => {
   const valeur = String(req.body?.valeur ?? '').trim();
   if (!cle || !valeur) return res.status(400).json({ error: 'Emplacement et information requis.' });
   try {
-    const etat = await remplir(dossierId, [{ cle, valeur }], 'saisie');
+    const etat = await remplirSaisie(dossierId, cle, valeur);
     const el = etat.elements.find((e) => e.cle === cle);
     // Capitalisation : l'information saisie rejoint la base de connaissance GSS (non bloquant).
     if (el) capitaliser(dossierId, el).catch((e) => console.warn('[completion] capitalisation :', e?.message));
@@ -609,15 +609,37 @@ router.post('/dossiers/:id/completion/demander', async (req: Request, res: Respo
   try {
     const etat = lireEtat(dossierId);
     if (!etat) return res.status(404).json({ error: 'Aucun document généré à compléter.' });
-    const internals: MissingField[] = etat.elements
-      .filter((e) => e.statut === 'ouvert' && !e.pourAcheteur)
-      .map((e) => ({ id: e.cle, label: e.question, context: e.contexte }));
-    if (!internals.length) return res.json({ status: 'ok', triggered: 0, sent: 0, results: [], message: 'Aucune information à demander.' });
-    if (dossierId.startsWith('demo-')) {
-      return res.json({ status: 'ok', triggered: internals.length, sent: 0, demo: true, results: internals.map((f) => ({ id: f.id, label: f.label, sent: false })), message: "Démonstration : aucun e-mail n'est envoyé." });
+    // Une question par DONNÉE : les emplacements d'un même groupe partagent la question, et leurs clés
+    // (« GSS_AC_1+GSS_AC_6 ») voyagent avec l'e-mail pour placer la réponse à tous ces endroits.
+    const groupes = new Map<string, typeof etat.elements>();
+    for (const e of etat.elements.filter((x) => x.statut === 'ouvert' && !x.pourAcheteur)) {
+      const g = e.groupe || e.cle;
+      (groupes.get(g) ?? groupes.set(g, []).get(g)!).push(e);
     }
+    const internals: MissingField[] = [...groupes.values()].map((els) => ({
+      id: els.map((e) => e.cle).join('+'), label: els[0].question, context: els[0].contexte,
+    }));
+    if (!internals.length) return res.json({ status: 'ok', triggered: 0, sent: 0, results: [], message: 'Aucune information à demander.' });
     const { data: peopleRows } = await getScopedClient().from('personne').select('id, nom, fonction, email').eq('actif', true);
     const people: Personne[] = (peopleRows as Personne[]) || [];
+    if (dossierId.startsWith('demo-')) {
+      // Démonstration : même routage vers l'annuaire que pour un vrai envoi, mais aucun e-mail ne part.
+      // Le front affiche chaque e-mail préparé et permet d'y répondre à la place du destinataire.
+      const envois: Array<{ personne: string; fonction?: string; email: string; questions: Array<{ cle: string; question: string }> }> = [];
+      if (people.length > 0) {
+        const affectations = await matchQuestionsToPeople(internals, people);
+        const byId = new Map(people.map((p) => [p.id, p]));
+        for (const f of internals) {
+          const p = byId.get(affectations.get(f.id) || people[0].id)!;
+          let env = envois.find((e) => e.email === p.email);
+          if (!env) { env = { personne: p.nom, fonction: (p as any).fonction, email: p.email, questions: [] }; envois.push(env); }
+          env.questions.push({ cle: f.id, question: f.label });
+        }
+      } else {
+        envois.push({ personne: 'Destinataire par défaut', email: process.env.DEFAULT_TEAM_EMAIL || '(non configuré)', questions: internals.map((f) => ({ cle: f.id, question: f.label })) });
+      }
+      return res.json({ status: 'ok', demo: true, triggered: internals.length, sent: 0, envois });
+    }
     const results: Array<{ id: string; label: string; personne?: string; email?: string; sent: boolean }> = [];
     let sent = 0;
     if (people.length > 0) {
@@ -649,7 +671,8 @@ router.post('/dossiers/:id/completion/simuler-reponse', async (req: Request, res
   const dossierId = req.params.id;
   if (!dossierId.startsWith('demo-')) return res.status(403).json({ error: 'Réservé à la démonstration.' });
   try {
-    const { etat, cles } = await integrerReponse(dossierId, String(req.body?.question ?? ''), String(req.body?.reponse ?? ''));
+    const demandes = Array.isArray(req.body?.cles) ? req.body.cles.flatMap((c: any) => String(c).split('+')) : undefined;
+    const { etat, cles } = await integrerReponse(dossierId, String(req.body?.question ?? ''), String(req.body?.reponse ?? ''), demandes);
     res.json({ ...vueEtat(etat), integres: cles });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
