@@ -2468,7 +2468,7 @@ Renvoie UNIQUEMENT un objet JSON : {"questions": [{"question": "...", "sources":
 - Réponds uniquement si les extraits contiennent réellement l'information demandée, valable pour GSS en général (procédure, organisation, moyen, outil, formation, engagement).
 - Jamais un chiffre, un nom de site, un effectif ou un dispositif propre à l'ancien client ; jamais une information qui dépend du nouveau marché (effectifs dédiés, horaires, dimensionnement, délais propres au site) ; jamais une confirmation de document à joindre.
 - La réponse : 1 à 3 phrases factuelles, fidèles aux extraits, sans nommer l'ancien client ni parler de « mémoire » ou d'« extrait ».
-- Si les extraits ne répondent qu'à UNE PARTIE de la question : donne cette partie dans "reponse" et la question réduite à ce qui manque encore dans "reste".
+- Si les extraits ne répondent qu'à UNE PARTIE de la question : donne cette partie dans "reponse" et, dans "reste", la question réduite à ce qui manque encore — une vraie question adressée à GSS, AUTONOME et complète (le sujet est nommé explicitement : jamais « ces autorisations », « celle-ci »… ; jamais une constatation du type « … ne sont pas précisées »).
 - Si les extraits n'y répondent pas : "reponse": null.
 Renvoie UNIQUEMENT un objet JSON : {"reponses": [{"n": 1, "reponse": "..." | null, "reste": "..." | null}]}`,
       },
