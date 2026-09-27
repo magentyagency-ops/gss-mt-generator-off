@@ -2,6 +2,7 @@ import { MarpGenerator, AssembleChapter, AssembleSection } from './marp_generato
 import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema } from './schema_service';
+import { poserSignets, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter } from './completion';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
@@ -2395,10 +2396,21 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
    * dédoublonnage exact si l'appel échoue.
    */
   private async consoliderConsultations(liste: string[]): Promise<string[]> {
+    return (await this.consoliderAvecSources(liste)).map((q) => q.question);
+  }
+
+  /** Comme consoliderConsultations, en indiquant pour chaque question les demandes d'origine (indices de `liste`). */
+  private async consoliderAvecSources(liste: string[]): Promise<Array<{ question: string; sources: number[] }>> {
     const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
-    const uniques = liste.map((c) => c.replace(/\*\*/g, '').trim()).filter(Boolean)
-      .filter((c, i, arr) => arr.findIndex((x) => norm(x) === norm(c)) === i);
-    if (uniques.length <= 3) return uniques;
+    const uniques: Array<{ texte: string; origines: number[] }> = [];
+    liste.forEach((c, i) => {
+      const t = c.replace(/\*\*/g, '').trim();
+      if (!t) return;
+      const u = uniques.find((x) => norm(x.texte) === norm(t));
+      if (u) u.origines.push(i); else uniques.push({ texte: t, origines: [i] });
+    });
+    const brut = () => uniques.map((u) => ({ question: u.texte, sources: u.origines }));
+    if (uniques.length <= 3) return brut();
     const reponse = await this.callOpenAI([
       {
         role: 'system',
@@ -2408,14 +2420,21 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
 - Une demande « Confirmer … — dernière valeur connue : … » porte sur UNE information (un responsable, un effectif, un outil…) : ne la fusionne qu'avec des demandes sur cette MÊME information.
 - Une demande qui ne peut être renseignée que par l'ACHETEUR (données qu'il doit transmettre, ses préférences, ses choix) commence par « À demander à l'acheteur : ».
 - Une phrase par question, sans Markdown.
-Renvoie UNIQUEMENT un objet JSON : {"questions": ["...", "..."]}`,
+- Pour chaque question, indique dans "sources" les numéros des demandes qu'elle regroupe.
+Renvoie UNIQUEMENT un objet JSON : {"questions": [{"question": "...", "sources": [1, 4]}]}`,
       },
-      { role: 'user', content: uniques.map((c, i) => `${i + 1}. ${c}`).join('\n') },
+      { role: 'user', content: uniques.map((u, i) => `${i + 1}. ${u.texte}`).join('\n') },
     ], 0.1, 'Consolidation des consultations', true);
     try {
       const qs = JSON.parse(reponse || '{}').questions;
       if (Array.isArray(qs)) {
-        const out = qs.map((q: any) => String(q ?? '').trim()).filter(Boolean);
+        const out = qs
+          .map((q: any) => ({
+            question: String((typeof q === 'string' ? q : q?.question) ?? '').trim(),
+            sources: (Array.isArray(q?.sources) ? q.sources : []).map(Number)
+              .filter((n: number) => n >= 1 && n <= uniques.length).flatMap((n: number) => uniques[n - 1].origines),
+          }))
+          .filter((q: { question: string }) => q.question);
         if (out.length && out.length <= uniques.length) {
           console.log(`[MemoireGenerator] Consultations : ${liste.length} demande(s) → ${out.length} question(s) après fusion des doublons.`);
           return out;
@@ -2423,7 +2442,67 @@ Renvoie UNIQUEMENT un objet JSON : {"questions": ["...", "..."]}`,
       }
     } catch { /* repli ci-dessous */ }
     console.warn('[MemoireGenerator] Consolidation des consultations indisponible → dédoublonnage exact uniquement.');
-    return uniques;
+    return brut();
+  }
+
+  /**
+   * Règle GSS (« ne pas nous faire rechercher ce que nous avons déjà fourni ») : avant de poser une
+   * question à GSS, on vérifie si ses mémoires y répondent déjà. Si oui, la réponse est intégrée au
+   * texte à l'emplacement du manque et la question n'est pas posée. Ne concerne ni les confirmations
+   * d'informations qui évoluent, ni les questions pour l'acheteur, ni les données propres au marché.
+   */
+  private async completerParLesMemoires(elements: ElementACompleter[], sections: Record<string, string>): Promise<void> {
+    const candidats = elements.filter((e) => e.statut === 'ouvert' && !e.pourAcheteur && e.reperes?.length
+      && !/derni[èe]re valeur connue/i.test(e.question));
+    if (!candidats.length) return;
+    let embs: number[][] = [];
+    try { embs = await this.embedTexts(candidats.map((e) => e.question.slice(0, 1000))); } catch { return; }
+    const blocs = candidats
+      .map((e, i) => ({ e, extraits: rechercherMemoires(embs[i], 3, e.question, 2).filter((p) => p.score >= 0.4) }))
+      .filter((b) => b.extraits.length);
+    if (!blocs.length) return;
+    const reponse = await this.callOpenAI([
+      {
+        role: 'system',
+        content: `Pour chaque question posée à GSS, indique si les extraits de ses réponses d'appels d'offres précédentes y répondent DÉJÀ.
+- Réponds uniquement si les extraits contiennent réellement l'information demandée, valable pour GSS en général (procédure, organisation, moyen, outil, formation, engagement).
+- Jamais un chiffre, un nom de site, un effectif ou un dispositif propre à l'ancien client ; jamais une information qui dépend du nouveau marché (effectifs dédiés, horaires, dimensionnement, délais propres au site) ; jamais une confirmation de document à joindre.
+- La réponse : 1 à 3 phrases factuelles, fidèles aux extraits, sans nommer l'ancien client ni parler de « mémoire » ou d'« extrait ».
+- Si les extraits ne répondent qu'à UNE PARTIE de la question : donne cette partie dans "reponse" et la question réduite à ce qui manque encore dans "reste".
+- Si les extraits n'y répondent pas : "reponse": null.
+Renvoie UNIQUEMENT un objet JSON : {"reponses": [{"n": 1, "reponse": "..." | null, "reste": "..." | null}]}`,
+      },
+      { role: 'user', content: blocs.map((b, i) => `### ${i + 1}. ${b.e.question}\n${b.extraits.map((p) => p.texte).join('\n---\n')}`).join('\n\n') },
+    ], 0.1, 'Réponses déjà données par GSS', true);
+    let reponses: any[] = [];
+    try { reponses = JSON.parse(reponse || '{}').reponses || []; } catch { return; }
+    let n = 0;
+    let partiels = 0;
+    for (const r of reponses) {
+      const b = blocs[Number(r?.n) - 1];
+      const texte = String(r?.reponse ?? '').trim();
+      if (!b || !texte || texte === 'null') continue;
+      const reperes = b.e.reperes || [];
+      const id = Object.keys(sections).find((k) => sections[k].includes(REPERE(reperes[0])));
+      if (!id) continue;
+      const reste = String(r?.reste ?? '').trim();
+      if (reste && reste !== 'null') {
+        // Réponse partielle : ce qui est connu entre dans le texte, seul le reste est demandé à GSS
+        // (le repère est conservé juste après pour y insérer la suite).
+        const suite = '⟦SUITE⟧';
+        sections[id] = sections[id].replace(REPERE(reperes[0]), `${REPERE(reperes[0])}${suite}`);
+        sections[id] = (await integrerDansRubrique(sections[id], REPERE(reperes[0]), b.e.question, texte)).replace(suite, ` ${REPERE(reperes[0])}`);
+        b.e.question = reste;
+        partiels++;
+        continue;
+      }
+      sections[id] = await integrerDansRubrique(sections[id], REPERE(reperes[0]), b.e.question, texte);
+      for (const rp of reperes.slice(1)) for (const k of Object.keys(sections)) sections[k] = sections[k].split(REPERE(rp)).join('');
+      Object.assign(b.e, { statut: 'complete', valeur: texte, source: 'memoires', completeLe: new Date().toISOString() });
+      n++;
+    }
+    if (n) console.log(`[MemoireGenerator] ${n} question(s) non posée(s) à GSS : la réponse figurait déjà dans ses mémoires (intégrée au texte).`);
+    if (partiels) console.log(`[MemoireGenerator] ${partiels} question(s) réduite(s) à la seule partie absente des mémoires GSS.`);
   }
 
   /**
@@ -3138,7 +3217,21 @@ Renvoie un JSON valide :
       if (!para) { para = xmlDoc.createElementNS(WNS, 'w:p'); crit.appendChild(para); }
       const r = xmlDoc.createElementNS(WNS, 'w:r');
       const markRPr = findLocalNameChild(findLocalNameChild(para, 'pPr') || para, 'rPr');
-      if (markRPr) r.appendChild(markRPr.cloneNode(true));
+      // Réponse en graisse normale (le libellé du critère reste en gras) : b/bCs à 0, placés juste
+      // après rFonts pour respecter l'ordre imposé par le format Word.
+      const rPr = markRPr ? markRPr.cloneNode(true) : xmlDoc.createElementNS(WNS, 'w:rPr');
+      for (const tag of ['bCs', 'b']) {
+        const ex = findLocalNameChild(rPr, tag);
+        if (ex) rPr.removeChild(ex);
+      }
+      const rFonts = findLocalNameChild(rPr, 'rFonts');
+      const ancre = rFonts ? rFonts.nextSibling : rPr.firstChild;
+      for (const tag of ['b', 'bCs']) {
+        const e = xmlDoc.createElementNS(WNS, `w:${tag}`);
+        e.setAttribute('w:val', '0');
+        if (ancre) rPr.insertBefore(e, ancre); else rPr.appendChild(e);
+      }
+      r.appendChild(rPr);
       const t = xmlDoc.createElementNS(WNS, 'w:t');
       t.setAttribute('xml:space', 'preserve');
       t.textContent = `[CHAMP_${fd.id}]`;
@@ -3488,7 +3581,7 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
 - Traite CHAQUE composante listée dans la question, dans l'ordre, sans en omettre aucune : pour chacune, une ligne d'intitulé courte reprenant la composante, puis 3 à 6 phrases concrètes (méthode GSS, moyens, outils, procédure, exemple réel tiré des références GSS). Sépare les composantes par une ligne vide.
 - Longueur proportionnée au barème : environ 150 à 250 mots pour 10 points, 300 à 500 mots au-delà.
 - Si un « Critère » parent est indiqué (ex. un cas pratique sur un site précis), applique la réponse à CE cas (site, surface, accès, calendrier) et non en termes généraux.
-- Donnée propre à ce marché absente des sources (nombre d'agents dimensionné pour ce site, rotations…) : n'invente rien, écris [À COMPLÉTER] à cet endroit et ajoute sur sa propre ligne : [CONSULTATION REQUISE : <information précise à obtenir de GSS>].
+- Donnée propre à ce marché absente des sources (nombre d'agents dimensionné pour ce site, rotations…) : n'invente rien, écris [À COMPLÉTER] à cet endroit et ajoute sur sa propre ligne : [CONSULTATION REQUISE : <information précise à obtenir de GSS>]. Ne commente jamais l'absence d'information (pas de « non précisé dans les sources », « à confirmer ») : le texte reste rédigé comme la réponse définitive de GSS, avec [À COMPLÉTER] à la place de la donnée.
 - Si une composante demande de FOURNIR un document (CV, rapport type, cartes professionnelles, certificats…), décris ce que GSS fournit d'après les sources et ajoute sur sa propre ligne : [CONSULTATION REQUISE : Joindre <document> au mémoire].
 - Texte brut : pas de Markdown (ni #, ni **, ni puces « - » ; utilise « • » pour une énumération).`;
 
@@ -4190,7 +4283,9 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       if (desc.type === 'text') {
         // Case à cocher « texte » (☐ du gabarit) : on N'écrit JAMAIS la valeur brute du modèle
         // (qui pourrait être un libellé ou « [À COMPLÉTER] ») — uniquement ☑ (si prouvée) ou ☐.
-        const writeVal = desc.kind === 'checkbox' ? (isChecked ? '☑' : '☐') : value;
+        // Chaque « [À COMPLÉTER] » écrit porte le n° de son champ (marque interne, remplacée par un
+        // signet Word invisible avant l'enregistrement) → complétion ultérieure au bon emplacement.
+        const writeVal = desc.kind === 'checkbox' ? (isChecked ? '☑' : '☐') : value.split('[À COMPLÉTER]').join(`[À COMPLÉTER]${MARQUE_CHAMP(rep.id)}`);
         const tEls = getElementsWithLocalName(xmlDoc, 't');
         tEls.forEach((tEl: any) => replaceTextInElement(xmlDoc, tEl, `[CHAMP_${rep.id}]`, writeVal));
         applied++;
@@ -4247,6 +4342,24 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       console.warn(`[MemoireGenerator] ⚠ ${aCompleter.length} champ(s) « [À COMPLÉTER] » à faire remplir :\n- ${aCompleter.join('\n- ')}`);
     }
 
+    // 7 ter. Emplacements à compléter : un signet par « [À COMPLÉTER] », avec l'information attendue.
+    const signets = poserSignets(xmlDoc);
+    const occurrenceParChamp = new Map<number, number>();
+    const elementsACompleter: ElementACompleter[] = signets.map(({ cle, champ, contexte }) => {
+      const d = descriptors.find((x) => x.id === champ);
+      const k = occurrenceParChamp.get(champ) ?? 0;
+      occurrenceParChamp.set(champ, k + 1);
+      let question = '';
+      if (d?.grille) {
+        const qs = questionsGrille(d);
+        question = qs[k] ?? qs.join(' ; ');
+      } else if (d) {
+        const m = d.context.match(/Question:\s*"([^"]*)"|option:\s*"([^"]*)"|Tableau:\s*(.+?)(?:\s*\|\s*Contexte proche:|$)/);
+        question = ((m ? m.slice(1).find(Boolean) : '') || d.context.replace(/\s*\|\s*Contexte proche:.*$/, '')).trim();
+      }
+      return { cle, question: question || contexte, contexte, statut: 'ouvert' };
+    });
+
     // 8. Serialize and save
     if (onProgress) onProgress(98, 'Génération du document Word…');
     const serializer = new XMLSerializer();
@@ -4257,6 +4370,11 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     fs.writeFileSync(outputPath, buf);
 
     console.log(`[MemoireGenerator] Successfully generated ${outputPath}`);
+    try {
+      ecrireEtat({ dossierId, mode: 'cadre', fichier: outputPath, majLe: '', elements: elementsACompleter, reponsesTraitees: [] });
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] État de complétion non enregistré (non bloquant) : ${e?.message || e}`);
+    }
 
     return {
       status: 'completed',
@@ -5140,11 +5258,33 @@ RÈGLES DE FORME (rendu Marp) :
       }
     }
     const markerRe = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
-    for (const txt of Object.values(sectionsMap)) {
-      let m: RegExpExecArray | null;
-      while ((m = markerRe.exec(txt)) !== null) consultations.add(m[1].trim());
+    // Chaque marqueur devient un repère ⟦AC:n⟧ dans le texte conservé : il garde l'EMPLACEMENT du manque,
+    // où la réponse de l'équipe (e-mail ou saisie) sera insérée ensuite.
+    const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
+    const sectionsReperes: Record<string, string> = {};
+    let nRepere = 0;
+    for (const [id, txt] of Object.entries(sectionsMap)) {
+      sectionsReperes[id] = txt.replace(markerRe, (_m: string, q: string) => {
+        nRepere++;
+        demandes.push({ texte: String(q).trim(), repere: nRepere });
+        return REPERE(nRepere);
+      });
     }
-    const consultationList = await this.consoliderConsultations([...consultations].filter(Boolean));
+    const questionsGss = await this.consoliderAvecSources(demandes.map((d) => d.texte));
+    const elementsLibres: ElementACompleter[] = questionsGss.map((q, i) => {
+      const reperes = [...new Set(q.sources.map((k) => demandes[k]?.repere).filter((x): x is number => typeof x === 'number'))];
+      const idSection = reperes.length ? Object.keys(sectionsReperes).find((k) => sectionsReperes[k].includes(REPERE(reperes[0]))) : undefined;
+      let contexte = '';
+      if (idSection) {
+        const t = sectionsReperes[idSection];
+        const p = t.indexOf(REPERE(reperes[0]));
+        const titre = AI_SECTIONS_B.find((x) => x.id === idSection)?.title || '';
+        contexte = `${titre} — …${t.slice(Math.max(0, p - 220), p).replace(REPERE_RE, '').replace(/[#*]/g, '').replace(/\s+/g, ' ').trim()}`;
+      }
+      return { cle: `Q${i + 1}`, question: q.question, contexte, statut: 'ouvert', reperes, pourAcheteur: /^À demander à l.acheteur/i.test(q.question) };
+    });
+    await this.completerParLesMemoires(elementsLibres, sectionsReperes);
+    const consultationList = elementsLibres.filter((e) => e.statut === 'ouvert').map((e) => e.question);
     for (const titre of Object.values(secoursMemoires)) {
       consultationList.push(`Rubrique « ${titre} » : contenu repris tel quel des mémoires GSS (rédaction automatique indisponible), à relire et adapter au client.`);
     }
@@ -5152,7 +5292,7 @@ RÈGLES DE FORME (rendu Marp) :
     // Les marqueurs sont des flags INTERNES (pour GSS) : on les retire du texte pour qu'ils
     // n'apparaissent pas dans le PDF remis au client.
     for (const id of Object.keys(sectionsMap)) {
-      sectionsMap[id] = sectionsMap[id].replace(markerRe, '').replace(/\n{3,}/g, '\n\n').trim();
+      sectionsMap[id] = sectionsReperes[id].replace(REPERE_RE, '').replace(/\n{3,}/g, '\n\n').trim();
     }
 
     if (consultationList.length) {
@@ -5166,7 +5306,16 @@ RÈGLES DE FORME (rendu Marp) :
     }
 
     if (onProgress) onProgress(90, 'Assemblage final de la présentation Marp...');
-    const result = await this.exportFromSectionsMap(sectionsMap, dossierId, onProgress);
+    const rendu = await this.exportFromSectionsMap(sectionsMap, dossierId, onProgress);
+    const { schemas: schemasRendus, cover: coverRendu, ...result } = rendu;
+    try {
+      ecrireEtat({
+        dossierId, mode: 'libre', fichier: result.filePath, majLe: '', elements: elementsLibres, reponsesTraitees: [],
+        libre: { sections: sectionsReperes, schemas: Object.fromEntries(schemasRendus || []), cover: coverRendu },
+      });
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] État de complétion non enregistré (non bloquant) : ${e?.message || e}`);
+    }
 
     // On remonte les consultations dans generatedData (→ « data_generee_par_ia » côté API/front) pour
     // que l'utilisateur voie précisément quelles informations restent à obtenir auprès de GSS.
@@ -5384,7 +5533,22 @@ RÈGLES DE FORME (rendu Marp) :
     sectionsMap: Record<string, string>,
     dossierId: string = 'export',
     onProgress?: (progress: number, message: string) => void,
-  ): Promise<{ filePath: string; generatedData: Record<string, string> }> {
+  ): Promise<{ filePath: string; generatedData: Record<string, string>; schemas?: Map<string, string>; cover?: any }> {
+    const r = await this.rendreDepuisSections(sectionsMap, dossierId, { onProgress });
+    return { filePath: r.filePath, generatedData: {}, schemas: r.schemas, cover: r.cover };
+  }
+
+  /**
+   * Rendu PDF d'une réponse libre depuis le texte des rubriques. `schemas` / `cover` permettent de
+   * recomposer un mémoire déjà généré (complétion) : les schémas existants sont réutilisés et seules
+   * les pages qui n'en ont pas encore en reçoivent un.
+   */
+  public async rendreDepuisSections(
+    sectionsMap: Record<string, string>,
+    dossierId: string,
+    opts: { onProgress?: (progress: number, message: string) => void; schemas?: Map<string, string>; cover?: any } = {},
+  ): Promise<{ filePath: string; schemas: Map<string, string>; cover: any }> {
+    const onProgress = opts.onProgress;
     const chapters: AssembleChapter[] = CHAPTER_ORDER_B.map((ch) => ({
       key: ch,
       title: CHAPTER_TITLES_B[ch],
@@ -5404,7 +5568,7 @@ RÈGLES DE FORME (rendu Marp) :
       throw new Error('Aucune section générée à exporter (map vide ou ids inconnus).');
     }
 
-    const cover = await this.getCoverInfo(dossierId);
+    const cover = opts.cover ?? await this.getCoverInfo(dossierId);
 
     // Un schéma GSS par page de contenu (demande GSS / Clarence) : construit d'après le sujet de la
     // section et le texte exact de la page, dessiné par le moteur de la planche validée. Remplace les
@@ -5414,14 +5578,19 @@ RÈGLES DE FORME (rendu Marp) :
       const [ci, si] = sl.key.split('_').map(Number);
       return { key: sl.key, sectionId: chapters[ci]?.sections[si]?.id, sectionTitle: sl.title, text: sl.text };
     });
-    const schemas = await new SchemaService().construirePourPages(pages, (msg) => onProgress?.(93, msg));
+    const existants = opts.schemas;
+    const aConstruire = existants ? pages.filter((p) => !existants.has(p.key)) : pages;
+    const nouveaux = aConstruire.length
+      ? await new SchemaService().construirePourPages(aConstruire, (msg) => onProgress?.(93, msg))
+      : new Map<string, string>();
+    const schemas = new Map<string, string>([...(existants || new Map<string, string>()), ...nouveaux]);
 
     // Le rendu Marp/Chromium est bloquant et peut durer plusieurs minutes : on signale l'étape.
     onProgress?.(95, `Rendu du PDF (${schemas.size} schéma(s))…`);
     const generator = new MarpGenerator(this.responseDir);
     const result = await generator.generatePdf(chapters, cover, new Map(), schemas);
 
-    return { filePath: result.filePath, generatedData: {} };
+    return { filePath: result.filePath, schemas, cover };
   }
 
   /**

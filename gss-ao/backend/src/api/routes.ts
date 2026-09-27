@@ -13,6 +13,7 @@ import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeamBulk, matchQu
 import { injectValidatedRecherches } from '../generation/inject_recherches';
 import { learnSollicitationsForDossier, learnPendingSollicitations } from '../generation/learn_sollicitation';
 import { getGenerationGate } from '../generation/generation_gate';
+import { lireEtat, vueEtat, remplir, capitaliser, integrerReponse } from '../generation/completion';
 import { getSettings } from '../core/config';
 import { getScopedClient, requestContext } from '../core/supabase';
 import { createClient } from '@supabase/supabase-js';
@@ -576,6 +577,85 @@ router.post('/dce/:dossier_id/memoire/chat-missing-eval', async (req: Request, r
   }
 });
 
+// Complétion du mémoire généré : emplacements « [À COMPLÉTER] » restants, remplis par saisie directe
+// (clic dans l'aperçu) ou automatiquement à la réception d'une réponse d'équipe par e-mail.
+router.get('/dossiers/:id/completion', (req: Request, res: Response) => {
+  const etat = lireEtat(req.params.id);
+  if (!etat) return res.status(404).json({ error: 'Aucun document généré à compléter.' });
+  res.json(vueEtat(etat));
+});
+
+router.post('/dossiers/:id/completion', async (req: Request, res: Response) => {
+  const dossierId = req.params.id;
+  const cle = String(req.body?.cle ?? '');
+  const valeur = String(req.body?.valeur ?? '').trim();
+  if (!cle || !valeur) return res.status(400).json({ error: 'Emplacement et information requis.' });
+  try {
+    const etat = await remplir(dossierId, [{ cle, valeur }], 'saisie');
+    const el = etat.elements.find((e) => e.cle === cle);
+    // Capitalisation : l'information saisie rejoint la base de connaissance GSS (non bloquant).
+    if (el) capitaliser(dossierId, el).catch((e) => console.warn('[completion] capitalisation :', e?.message));
+    res.json(vueEtat(etat));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// « Demander à l'équipe » depuis le document généré : envoie les emplacements encore à compléter
+// (hors questions pour l'acheteur) à la bonne personne de l'annuaire. Les réponses reçues par e-mail
+// sont ensuite insérées automatiquement dans le document (surveillance de completion.ts).
+router.post('/dossiers/:id/completion/demander', async (req: Request, res: Response) => {
+  const dossierId = req.params.id;
+  try {
+    const etat = lireEtat(dossierId);
+    if (!etat) return res.status(404).json({ error: 'Aucun document généré à compléter.' });
+    const internals: MissingField[] = etat.elements
+      .filter((e) => e.statut === 'ouvert' && !e.pourAcheteur)
+      .map((e) => ({ id: e.cle, label: e.question, context: e.contexte }));
+    if (!internals.length) return res.json({ status: 'ok', triggered: 0, sent: 0, results: [], message: 'Aucune information à demander.' });
+    if (dossierId.startsWith('demo-')) {
+      return res.json({ status: 'ok', triggered: internals.length, sent: 0, demo: true, results: internals.map((f) => ({ id: f.id, label: f.label, sent: false })), message: "Démonstration : aucun e-mail n'est envoyé." });
+    }
+    const { data: peopleRows } = await getScopedClient().from('personne').select('id, nom, fonction, email').eq('actif', true);
+    const people: Personne[] = (peopleRows as Personne[]) || [];
+    const results: Array<{ id: string; label: string; personne?: string; email?: string; sent: boolean }> = [];
+    let sent = 0;
+    if (people.length > 0) {
+      const affectations = await matchQuestionsToPeople(internals, people);
+      const byId = new Map(people.map((p) => [p.id, p]));
+      const groups = new Map<string, MissingField[]>();
+      for (const f of internals) {
+        const pid = affectations.get(f.id) || people[0].id;
+        (groups.get(pid) ?? groups.set(pid, []).get(pid)!).push(f);
+      }
+      for (const [pid, qs] of groups) {
+        const p = byId.get(pid)!;
+        const r = await requestInfoFromTeamBulk(qs, dossierId, p.email, req.headers.authorization);
+        for (const f of qs) { results.push({ id: f.id, label: f.label, personne: p.nom, email: p.email, sent: !!r.sent }); if (r.sent) sent++; }
+      }
+    } else {
+      const r = await requestInfoFromTeamBulk(internals, dossierId, undefined, req.headers.authorization);
+      for (const f of internals) { results.push({ id: f.id, label: f.label, sent: !!r.sent }); if (r.sent) sent++; }
+    }
+    res.json({ status: 'ok', triggered: internals.length, sent, results });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Démonstration uniquement (dossiers « demo-… ») : simule la réception d'une réponse d'équipe par
+// e-mail, traitée exactement comme une vraie réponse.
+router.post('/dossiers/:id/completion/simuler-reponse', async (req: Request, res: Response) => {
+  const dossierId = req.params.id;
+  if (!dossierId.startsWith('demo-')) return res.status(403).json({ error: 'Réservé à la démonstration.' });
+  try {
+    const { etat, cles } = await integrerReponse(dossierId, String(req.body?.question ?? ''), String(req.body?.reponse ?? ''));
+    res.json({ ...vueEtat(etat), integres: cles });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Ticket #4 — Déclencheur à la demande de la recherche web (bouton « Trouver l'info sur internet »).
 // Relit les champs manquants déjà persistés (memoire_cadre_state.missingFields) et lance
 // resolveMissingInfo : classification interne/publique + recherche Perplexity des champs publics,
@@ -743,6 +823,9 @@ router.post('/dossiers/:id/ask-team', async (req: Request, res: Response) => {
         }
       }
     }
+
+    // Une information que seul l'ACHETEUR peut donner n'est jamais envoyée aux salariés de GSS.
+    fields = fields.filter((f) => !/^À demander à l.acheteur/i.test(f.label));
 
     if (fields.length === 0) {
       return res.json({ status: 'ok', triggered: 0, message: 'Aucun champ manquant.' });
