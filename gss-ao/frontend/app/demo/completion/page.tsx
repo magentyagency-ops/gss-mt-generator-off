@@ -14,7 +14,7 @@ export default function DemoCompletionPage() {
             Exemple de mémoire déjà généré (cadre imposé en grille de notation). Cliquez sur un « [À COMPLÉTER] » surligné dans
             le document ou dans la liste pour saisir l'information : elle est intégrée immédiatement à cet endroit. « Demander à
             l'équipe » prépare les e-mails pour les bonnes personnes de l'annuaire GSS ; dans cette démonstration, aucun e-mail ne
-            part et vous pouvez répondre à la place de chaque destinataire : la réponse est placée automatiquement, comme un vrai e-mail.
+            part et vous pouvez répondre à la place de chaque destinataire : la réponse est placée automatiquement, comme un vrai e-mail. L'onglet « Assistant » permet de demander une modification en langage naturel (refaire, corriger, développer une réponse, ajouter une page en annexe).
           </p>
         </div>
         <CompletionPanel dossierId="demo-etampes" demo />

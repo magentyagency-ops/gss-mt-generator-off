@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { CheckCircle2, Download, Loader2, Mail, PencilLine, Send, Users } from "lucide-react";
+import { CheckCircle2, Download, Loader2, Mail, MessagesSquare, PencilLine, Send, Users } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { apiFetch, apiBase } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -41,7 +41,22 @@ interface Etat {
   majLe: string;
   elements: Element[];
   restants: number;
+  conversation?: Array<{ role: "utilisateur" | "assistant"; texte: string; date: string; modifies?: string[] }>;
 }
+
+/** Exemples de demandes affichés quand la conversation avec l'assistant est vide. */
+const EXEMPLES_ASSISTANT: Record<Etat["mode"], string[]> = {
+  cadre: [
+    "Dans la réponse sur les délais d'intervention, précise que le chef de site est joignable 24h/24 le week-end.",
+    "Développe la réponse sur la stabilité des équipes avec un exemple concret.",
+    "Ajoute une page en annexe présentant notre démarche qualité.",
+  ],
+  libre: [
+    "Refais la rubrique sur les plannings en insistant sur la réactivité le week-end.",
+    "Ajoute une page sur la sensibilisation des agents à la cybersécurité dans le chapitre II.",
+    "Raccourcis la rubrique sur les tenues et supprime la partie sur les équipements de protection.",
+  ],
+};
 
 interface Envoi {
   personne: string;
@@ -109,6 +124,12 @@ export function CompletionPanel({
   const [choix, setChoix] = useState<Record<string, string[]>>({});
   const [reponses, setReponses] = useState<Record<string, string>>({});
   const [reponseEnCours, setReponseEnCours] = useState<string | null>(null);
+  const [onglet, setOnglet] = useState<"completer" | "assistant">("completer");
+  const [message, setMessage] = useState("");
+  const [enAttenteAssistant, setEnAttenteAssistant] = useState<string | null>(null);
+  const [erreurAssistant, setErreurAssistant] = useState<string | null>(null);
+  const [pageLibre, setPageLibre] = useState<number | undefined>(undefined);
+  const finConversationRef = useRef<HTMLDivElement | null>(null);
   const itemsRef = useRef<Record<string, HTMLDivElement | null>>({});
   const etatRef = useRef<Etat | null>(null);
   etatRef.current = etat;
@@ -204,6 +225,18 @@ export function CompletionPanel({
         }
       }
     }
+    // Réponses réécrites par l'assistant (signets GSS_CH_) : tout le texte de la réponse est signalé.
+    for (const cle of aSignaler.filter((c) => c.startsWith("GSS_CH_"))) {
+      const repere = container.querySelector<HTMLElement>(`[id="${cle}"]`);
+      let n = repere?.nextElementSibling as HTMLElement | null;
+      for (let i = 0; n && i < 60; i++, n = n.nextElementSibling as HTMLElement | null) {
+        if (n.id && n.id.startsWith("GSS_CH_")) break;
+        if (n.tagName === "SPAN" && (n.textContent || "").trim()) {
+          n.classList.add("gss-modif-flash");
+          if (!cible) cible = n;
+        }
+      }
+    }
     if (cible) {
       // On reste à l'endroit corrigé : l'information ajoutée est centrée dans l'aperçu.
       const c = container.getBoundingClientRect();
@@ -214,6 +247,36 @@ export function CompletionPanel({
     }
     scrollRef.current = container.scrollTop;
   }, []);
+
+  /** Assistant de modification : la demande est appliquée au document, qui est mis à jour aussitôt. */
+  async function envoyerAssistant(texte?: string) {
+    const m = (texte ?? message).trim();
+    if (!m || enAttenteAssistant) return;
+    setEnAttenteAssistant(m);
+    setErreurAssistant(null);
+    setMessage("");
+    try {
+      const res = await apiFetch(`/api/dossiers/${dossierId}/assistant`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: m }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "L'assistant n'a pas pu traiter la demande.");
+      if (data.modifies?.length) aSignalerRef.current = data.modifies;
+      if (data.page) setPageLibre(data.page);
+      appliquerEtat(data);
+    } catch (e: any) {
+      setErreurAssistant(e.message);
+      setMessage(m);
+    } finally {
+      setEnAttenteAssistant(null);
+    }
+  }
+
+  useEffect(() => {
+    finConversationRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [etat?.conversation?.length, enAttenteAssistant]);
 
   async function enregistrer() {
     if (!selection || !valeur.trim()) return;
@@ -344,6 +407,11 @@ export function CompletionPanel({
           100% { background: #DCFCE7; box-shadow: 0 0 0 0 transparent; }
         }
         .gss-complete-flash { animation: gssCompleteFlash 2.4s ease-out 1; }
+        @keyframes gssModifFlash {
+          0%, 35% { background: #BFDBFE; box-shadow: 0 0 0 3px #BFDBFE; }
+          100% { background: transparent; box-shadow: 0 0 0 0 transparent; }
+        }
+        .gss-modif-flash { animation: gssModifFlash 3s ease-out 1; border-radius: 2px; }
       `}</style>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-4">
         <div>
@@ -455,14 +523,82 @@ export function CompletionPanel({
           {etat.mode === "cadre" ? (
             <DocxPreviewViewer fileUrl={url} onRendered={onRendered} />
           ) : (
-            <iframe key={etat.fichier} src={url} className="h-[760px] w-full rounded-md border border-border" title="Aperçu du mémoire" />
+            <iframe key={`${etat.fichier}#${pageLibre || ""}`} src={pageLibre ? `${url}#page=${pageLibre}` : url} className="h-[760px] w-full rounded-md border border-border" title="Aperçu du mémoire" />
           )}
         </div>
 
         <aside className="max-h-[820px] space-y-3 overflow-y-auto border-t border-border bg-muted/10 p-4 lg:border-l lg:border-t-0">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            À compléter ({groupesOuverts.length})
-          </h4>
+          <div className="flex gap-1 rounded-lg bg-muted p-1 text-xs font-medium">
+            {([["completer", `À compléter (${groupesOuverts.length})`], ["assistant", "Assistant"]] as const).map(([k, l]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setOnglet(k)}
+                className={cn("flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 transition-colors", onglet === k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+              >
+                {k === "assistant" && <MessagesSquare className="h-3.5 w-3.5" />}
+                {l}
+              </button>
+            ))}
+          </div>
+
+          {onglet === "assistant" && (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Demandez une modification en langage naturel : refaire ou corriger une partie, la développer ou la raccourcir, ajouter des pages.
+                {etat.mode === "cadre" ? " Le texte du cadre de l'acheteur n'est jamais modifié ; les pages ajoutées vont en annexe." : ""}
+              </p>
+              {!(etat.conversation || []).length && !enAttenteAssistant && (
+                <div className="space-y-1.5">
+                  {EXEMPLES_ASSISTANT[etat.mode].map((ex) => (
+                    <button key={ex} type="button" onClick={() => setMessage(ex)} className="w-full rounded-md border border-dashed border-border bg-card px-3 py-2 text-left text-xs text-muted-foreground hover:border-primary/50 hover:text-foreground">
+                      {ex}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="space-y-2">
+                {(etat.conversation || []).map((m, i) => (
+                  <div key={i} className={cn("rounded-lg px-3 py-2 text-sm", m.role === "utilisateur" ? "ml-6 bg-primary text-primary-foreground" : "mr-6 border border-border bg-card text-foreground")}>
+                    <p className="whitespace-pre-line">{m.texte}</p>
+                    {m.role === "assistant" && !!m.modifies?.length && (
+                      <p className="mt-1 flex items-center gap-1 text-xs text-success"><CheckCircle2 className="h-3 w-3" /> Document mis à jour</p>
+                    )}
+                  </div>
+                ))}
+                {enAttenteAssistant && (
+                  <>
+                    <div className="ml-6 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground"><p className="whitespace-pre-line">{enAttenteAssistant}</p></div>
+                    <div className="mr-6 flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      {etat.mode === "libre" ? "Modification en cours, puis mise à jour du PDF…" : "Modification en cours…"}
+                    </div>
+                  </>
+                )}
+                <div ref={finConversationRef} />
+              </div>
+              {erreurAssistant && <p className="text-xs text-destructive">{erreurAssistant}</p>}
+              <div className="space-y-2">
+                <textarea
+                  id="assistant-message"
+                  value={message}
+                  onChange={(ev) => setMessage(ev.target.value)}
+                  onKeyDown={(ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); envoyerAssistant(); } }}
+                  rows={3}
+                  placeholder="Ex. : Refais la partie sur les rondes en insistant sur la traçabilité…"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <div className="flex justify-end">
+                  <Button size="sm" className="gap-1" disabled={!!enAttenteAssistant || !message.trim()} onClick={() => envoyerAssistant()}>
+                    {enAttenteAssistant ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    Envoyer
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {onglet === "completer" && (<>
           {groupesOuverts.map((membres) => {
             const e = membres[0];
             const actif = membres.some((m) => m.cle === selection);
@@ -533,6 +669,7 @@ export function CompletionPanel({
               ))}
             </>
           )}
+          </>)}
         </aside>
       </div>
     </Card>
