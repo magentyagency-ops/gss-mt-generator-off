@@ -199,7 +199,7 @@ export default function ConformitePage({ params }: { params: { id: string } }) {
       <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
         <div>
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {dossierInfo.acheteur} · {dossierInfo.reference}
+            {dossierInfo.acheteur}{dossierInfo.reference ? ` · ${dossierInfo.reference}` : ""}
           </div>
           <h1 className="text-xl font-semibold">Check-list de conformité administrative</h1>
         </div>

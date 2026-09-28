@@ -122,7 +122,7 @@ export default function SelectionSlidesPage({ params }: { params: { id: string }
       <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
         <div>
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {dossierInfo.acheteur} · {dossierInfo.reference} · Mode réponse libre
+            {dossierInfo.acheteur}{dossierInfo.reference ? ` · ${dossierInfo.reference}` : ""} · Mode réponse libre
           </div>
           <h1 className="text-xl font-semibold">Sélection des slides GSS</h1>
         </div>

@@ -80,7 +80,7 @@ export default function ExportPage({ params }: { params: { id: string } }) {
       <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
         <div>
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {dossierInfo.acheteur} · {dossierInfo.reference}
+            {dossierInfo.acheteur}{dossierInfo.reference ? ` · ${dossierInfo.reference}` : ""}
           </div>
           <h1 className="text-xl font-semibold">Export & dépôt</h1>
         </div>
@@ -137,7 +137,7 @@ export default function ExportPage({ params }: { params: { id: string } }) {
               </div>
               <h2 className="mt-2 text-2xl font-bold text-foreground">{dossierInfo.objet}</h2>
               <div className="mt-2 text-sm text-muted-foreground">
-                {dossierInfo.acheteur} · {dossierInfo.reference} · Remise le {dossierInfo.dateLimite ? formatDate(dossierInfo.dateLimite) : "N/A"}
+                {dossierInfo.acheteur}{dossierInfo.reference ? ` · ${dossierInfo.reference}` : ""} · Remise le {dossierInfo.dateLimite ? formatDate(dossierInfo.dateLimite) : "N/A"}
               </div>
               <div className="mt-4 text-sm font-medium text-muted-foreground">
                 Candidat : GSS — Sécurité privée

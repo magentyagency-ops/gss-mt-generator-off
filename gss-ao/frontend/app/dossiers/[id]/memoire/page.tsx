@@ -213,6 +213,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
               clearInterval(interval);
               setIsGeneratingDocx(false);
               setDocxResult({ type: "success", data: data.data });
+              setCompletionDispo(true);   // première génération : le panneau (complétion, assistant) s'affiche aussitôt
               setCreditKey((k) => k + 1); // recharge le badge crédits
               if (data.data?.file_path) {
                 localStorage.setItem(`generated_docx_${id}`, data.data.file_path);
@@ -303,7 +304,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                {dossierInfo.acheteur} · {dossierInfo.reference}
+                {dossierInfo.acheteur}{dossierInfo.reference ? ` · ${dossierInfo.reference}` : ""}
               </div>
               <h1 className="flex items-center gap-2 text-lg font-semibold">
                 Mémoire technique — génération IA
@@ -383,7 +384,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              {dossierInfo.acheteur} · {dossierInfo.reference}
+              {dossierInfo.acheteur}{dossierInfo.reference ? ` · ${dossierInfo.reference}` : ""}
             </div>
             <h1 className="flex items-center gap-2 text-lg font-semibold">
               Mémoire technique — génération IA
@@ -588,7 +589,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   </div>
                 ) : (
                   <div className="text-sm text-muted-foreground">
-                    La synthèse a été ajoutée. Mode: {docxResult.data.data_generee_par_ia?.mode}
+                    La synthèse a été ajoutée.{docxResult.data.data_generee_par_ia?.mode ? ` Mode: ${docxResult.data.data_generee_par_ia.mode}` : ""}
                   </div>
                 )}
 

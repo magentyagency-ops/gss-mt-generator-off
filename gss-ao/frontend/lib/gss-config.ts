@@ -97,11 +97,13 @@ export function joursRestants(iso: string): number {
   if (!iso) return 0;
   const now = new Date(); 
   const target = new Date(iso);
+  if (isNaN(target.getTime())) return 0;   // date non renseignée (« Non spécifié »…) : pas de compte à rebours NaN
   return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 export function formatDate(iso: string): string {
   if (!iso) return "";
+  if (isNaN(new Date(iso).getTime())) return iso;   // texte non daté : affiché tel quel, jamais « Invalid Date »
   return new Date(iso).toLocaleDateString("fr-FR", {
     day: "2-digit",
     month: "long",
@@ -111,6 +113,7 @@ export function formatDate(iso: string): string {
 
 export function formatDateHeure(iso: string): string {
   if (!iso) return "";
+  if (isNaN(new Date(iso).getTime())) return iso;
   return new Date(iso).toLocaleString("fr-FR", {
     day: "2-digit",
     month: "long",
