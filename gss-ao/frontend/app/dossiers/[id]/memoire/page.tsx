@@ -81,6 +81,10 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   const [askTeamError, setAskTeamError] = useState<string | null>(null);
   const [askTeamNotice, setAskTeamNotice] = useState<string | null>(null);
   const [creditKey, setCreditKey] = useState(0);
+  // « Demande particulière » (facultative) : consigne et/ou document complémentaire pris en compte
+  // pendant la génération. Sans elles, la génération est lancée exactement comme avant.
+  const [demandeParticuliere, setDemandeParticuliere] = useState("");
+  const [documentComplementaire, setDocumentComplementaire] = useState<File | null>(null);
   // Document généré complétable (clic sur « [À COMPLÉTER] », réponses d'équipe intégrées) : affiché
   // dès qu'un mémoire existe pour ce dossier, y compris après rechargement de la page.
   const [completionDispo, setCompletionDispo] = useState(true);
@@ -177,7 +181,13 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
     try {
       const forceQuery = bypassActive ? "?force=1" : "";
       // Send the request but don't await the final result
-      const res = await apiFetch(`/api/dce/${id}/memoire${forceQuery}`, { method: "POST" });
+      let body: FormData | undefined;
+      if (demandeParticuliere.trim() || documentComplementaire) {
+        body = new FormData();
+        if (demandeParticuliere.trim()) body.append("demande", demandeParticuliere.trim());
+        if (documentComplementaire) body.append("document", documentComplementaire);
+      }
+      const res = await apiFetch(`/api/dce/${id}/memoire${forceQuery}`, { method: "POST", ...(body ? { body } : {}) });
       const initData = await res.json();
       
       if (!res.ok) {
@@ -428,6 +438,44 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 ? "Ce dossier contient un cadre de réponse imposé par le marché. L'IA lit le document complet pour y insérer directement les éléments adaptés (cocher des cases, remplir des champs spécifiques)."
                 : `Aucun cadre de réponse n'est imposé. Le système va assembler un mémoire sur-mesure à partir des ${selectedSlidesCount > 0 ? selectedSlidesCount : "plusieurs"} slides pré-sélectionnées et y intégrer une synthèse personnalisée basée sur l'analyse du DCE, en gardant la charte graphique GSS intacte.`}
             </p>
+
+            <div className="mx-auto mt-6 max-w-2xl space-y-3 rounded-xl border border-border bg-card p-4 text-left">
+              <div>
+                <label htmlFor="demande-particuliere" className="text-sm font-semibold text-foreground">Demande particulière <span className="font-normal text-muted-foreground">(facultatif)</span></label>
+                <p className="text-xs text-muted-foreground">Une consigne ou un document à prendre en compte pendant la génération de ce mémoire.</p>
+              </div>
+              <textarea
+                id="demande-particuliere"
+                value={demandeParticuliere}
+                onChange={(e) => setDemandeParticuliere(e.target.value)}
+                disabled={isGeneratingDocx}
+                rows={3}
+                placeholder="Ex. : Mettre en avant notre présence cynophile de nuit ; insister sur la réactivité de l'encadrement le week-end…"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <label htmlFor="document-complementaire" className={cn("inline-flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent", isGeneratingDocx && "pointer-events-none opacity-50")}>
+                  <FileText className="h-4 w-4" />
+                  {documentComplementaire ? "Changer de document" : "Joindre un document"}
+                </label>
+                <input
+                  id="document-complementaire"
+                  type="file"
+                  accept=".pdf,.docx,.doc,.txt,.md"
+                  className="hidden"
+                  disabled={isGeneratingDocx}
+                  onChange={(e) => { setDocumentComplementaire(e.target.files?.[0] || null); e.target.value = ""; }}
+                />
+                {documentComplementaire ? (
+                  <span className="flex items-center gap-2 text-xs text-foreground">
+                    {documentComplementaire.name}
+                    <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => setDocumentComplementaire(null)} disabled={isGeneratingDocx}>Retirer</button>
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">PDF, Word ou texte</span>
+                )}
+              </div>
+            </div>
 
             <div className="mt-6">
               <Button
