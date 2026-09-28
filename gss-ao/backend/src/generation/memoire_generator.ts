@@ -2,7 +2,7 @@ import { MarpGenerator, AssembleChapter, AssembleSection } from './marp_generato
 import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema } from './schema_service';
-import { poserSignets, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter } from './completion';
+import { poserSignets, poserSignetsChamps, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter } from './completion';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
@@ -56,6 +56,9 @@ function normCriticite(c: any): 'bloquant' | 'facultatif' | 'normal' {
 
 /** Un passage indexable pour la recherche sémantique (Doc GSS ou DCE). */
 interface RetrievalChunk { source: 'GSS' | 'DCE'; label: string; text: string; embedding?: number[]; }
+
+/** Demande particulière de l'utilisateur pour UNE génération : consigne libre et/ou document complémentaire. */
+export interface DemandeParticuliere { demande?: string; documentNom?: string; documentTexte?: string; }
 
 /** Similarité cosinus entre deux vecteurs (0 si l'un est nul). */
 function cosine(a: number[], b: number[]): number {
@@ -1030,6 +1033,8 @@ const AI_SECTIONS_B: Array<{ id: string; chapter: string; title: string }> = [
 ];
 
 const CHAPTER_ORDER_B = ['I', 'II', 'III', 'IV'];
+/** Rubriques et chapitres de la réponse libre (lecture seule, pour l'assistant de modification). */
+export { AI_SECTIONS_B as SECTIONS_REPONSE_LIBRE, CHAPTER_TITLES_B as CHAPITRES_REPONSE_LIBRE };
 
 // ─── Mapping Documentation GSS → sections du mémoire ───
 // Associe chaque catégorie de la Documentation GSS (21 dossiers PDF) aux mots-clés
@@ -1771,6 +1776,8 @@ export class MemoireGenerator {
   // Modèle de rédaction effectif : gpt-5.4-mini par défaut (cas SANS template), basculé sur
   // gpt-5.4-nano dans generate() quand un cadre client imposé est détecté (cas AVEC template).
   private memoireModel: string = MEMOIRE_MODEL;
+  /** « Demande particulière » saisie juste avant la génération (consigne et/ou document complémentaire). */
+  private demandeParticuliere: DemandeParticuliere | null = null;
 
   constructor(apiKey?: string) {
     const settings = getSettings();
@@ -2058,6 +2065,36 @@ export class MemoireGenerator {
    * Le DCE est assemblé en blocs « \n\n--- label ---\n<corps> » (cf. getDceContext) : on le
    * redécoupe sur ces frontières pour étiqueter chaque chunk (CCTP, RC, annexe…).
    */
+  /** Consigne à insérer dans les prompts quand l'utilisateur a formulé une demande particulière. */
+  private blocDemande(): string {
+    const d = this.demandeParticuliere;
+    if (!d) return '';
+    let out = '\n\nDEMANDE PARTICULIÈRE DE L\'UTILISATEUR POUR CE MÉMOIRE (prioritaire) :';
+    if (d.demande) out += `\n« ${d.demande} »\nApplique-la partout où elle concerne ce que tu rédiges (points à mettre en avant, éléments à ajouter ou à éviter, ton, niveau de détail). Les informations qu'elle donne sont des données valables. Elle ne t'autorise jamais à inventer une donnée absente des sources : une donnée non fournie reste [À COMPLÉTER].`;
+    if (d.documentTexte) out += `\nL'utilisateur a aussi fourni un DOCUMENT COMPLÉMENTAIRE « ${d.documentNom || 'document'} » : ses passages pertinents figurent dans les extraits (étiquette « Document complémentaire ») ; ce sont des informations valables à exploiter en priorité quand elles concernent le sujet.`;
+    return out;
+  }
+
+  /** Passages du document complémentaire (même découpage que les autres sources). */
+  private chunksDocumentComplementaire(): RetrievalChunk[] {
+    const d = this.demandeParticuliere;
+    if (!d?.documentTexte) return [];
+    const label = `Document complémentaire — ${d.documentNom || 'document'}`;
+    const out: RetrievalChunk[] = [];
+    const clean = d.documentTexte.replace(/\r\n/g, '\n');
+    for (let i = 0; i < clean.length; i += 1050) {
+      const slice = clean.slice(i, i + 1200);
+      if (slice.trim().length >= 80) out.push({ source: 'GSS', label, text: slice });
+    }
+    return out;
+  }
+
+  /** Texte de la demande particulière pour les garde-fous : ce qu'elle apporte est une donnée sourcée. */
+  private texteDemande(): string {
+    const d = this.demandeParticuliere;
+    return d ? ` ${d.demande || ''} ${d.documentTexte || ''} ` : '';
+  }
+
   private buildRetrievalChunks(gssDocs: Record<string, string>, dceContext: string): RetrievalChunk[] {
     const chunks: RetrievalChunk[] = [];
     const CHUNK = 1200, STEP = 1050;   // ~300 tokens/chunk, léger chevauchement
@@ -2993,7 +3030,8 @@ Renvoie un JSON valide :
 
   public async generate(
     dossierId: string,
-    onProgress?: (progress: number, message: string) => void
+    onProgress?: (progress: number, message: string) => void,
+    demandeParticuliere?: DemandeParticuliere,
   ): Promise<{
     status?: 'completed' | 'incomplete';
     filePath?: string;
@@ -3004,6 +3042,13 @@ Renvoie un JSON valide :
     const settings = getSettings();
     const baseDir = path.resolve(__dirname, '../../');
     const uploadedDceDir = path.resolve(baseDir, `../data/output/dce_${dossierId}`);
+    const dp = demandeParticuliere || {};
+    this.demandeParticuliere = (dp.demande?.trim() || dp.documentTexte?.trim())
+      ? { demande: dp.demande?.trim() || '', documentNom: dp.documentNom, documentTexte: (dp.documentTexte || '').trim() }
+      : null;
+    if (this.demandeParticuliere) {
+      console.log(`[MemoireGenerator] Demande particulière : ${this.demandeParticuliere.demande ? 'consigne' : ''}${this.demandeParticuliere.demande && this.demandeParticuliere.documentTexte ? ' + ' : ''}${this.demandeParticuliere.documentTexte ? `document « ${this.demandeParticuliere.documentNom} » (${this.demandeParticuliere.documentTexte.length} car.)` : ''}.`);
+    }
 
     // 1. Find template. isClientTemplate=true → cadre imposé par l'acheteur (on remplit tel quel).
     // isClientTemplate=false → mémoire GSS maître réutilisé (on adapte d'abord client/sites).
@@ -3511,6 +3556,7 @@ ${REGLES_REUTILISATION}
 - Réponds précisément à la QUESTION du champ : n'utilise un extrait de mémoire que s'il répond à CETTE question.
 - Champ court, d'identité ou de contact : une valeur présente dans le REGISTRE DES INFORMATIONS GSS ou dans un extrait de mémoire GSS EST une source valable → donne-la (ne réponds pas « [À COMPLÉTER] » si elle y figure).
 - Une certification indiquée « en cours » n'est PAS obtenue : ne la présente jamais comme acquise.${blocRegistre()}
+${this.blocDemande()}
 
 FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "value": "..."} ]}`;
 
@@ -3541,6 +3587,13 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
       console.log(`[MemoireGenerator] Doc GSS chargée depuis la bdd (${dbGss.length} chunks pré-embeddés).`);
     } else {
       await this.embedChunks(retrievalChunks);         // comportement historique (repli)
+    }
+    // Document complémentaire de la demande particulière : indexé avec les autres sources.
+    const chunksComplement = this.chunksDocumentComplementaire();
+    if (chunksComplement.length) {
+      await this.embedChunks(chunksComplement);
+      retrievalChunks.push(...chunksComplement);
+      console.log(`[MemoireGenerator] Document complémentaire indexé (${chunksComplement.length} passage(s)).`);
     }
     const gssN = retrievalChunks.filter(c => ['GSS', 'WEB', 'SOLLICITATION'].includes(c.source) && c.embedding).length;
     const dceN = retrievalChunks.filter(c => c.source === 'DCE' && c.embedding).length;
@@ -3904,7 +3957,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     // Le total d'effectif calculé (somme de chiffres réels) est une donnée « sourcée » → on l'ajoute
     // aux sources pour que les garde-fous ne le considèrent pas comme un chiffre inventé.
     const effectifText = effectifTotal ? ` ${effectifTotal.total} ` : '';
-    const sourceTextNorm = normCtx(identiteText + effectifText + ' ' + analysisJson + ' ' + dceContext + ' ' + gssDocContext + ' ' + referentsContext + ' ' + texteSourcesMemoires());
+    const sourceTextNorm = normCtx(identiteText + effectifText + ' ' + analysisJson + ' ' + dceContext + ' ' + gssDocContext + ' ' + referentsContext + ' ' + texteSourcesMemoires() + this.texteDemande());
     const sourceDigits = sourceTextNorm.replace(/\D/g, '');
     const EMAIL_RE = /[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}/g;
     const PHONE_RE = /\+?\d(?:[\d ().\-]{7,})\d/g;     // n° téléphone (≥9 chiffres espacés/groupés)
@@ -3939,7 +3992,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     // n'est PAS une preuve que GSS la détient → on ne se fie donc PAS aux sources DCE pour ces champs,
     // seulement à la Doc GSS. Si la certification citée n'y figure pas → [À COMPLÉTER] (anti-invention).
     // (Les qualifications d'AGENTS — CQP, SSIAP, SST, HOBO — ne sont pas concernées par ce filtre.)
-    const gssDocCompact = normCtx(gssDocContext + ' ' + texteSourcesMemoires()).replace(/\s+/g, '');
+    const gssDocCompact = normCtx(gssDocContext + ' ' + texteSourcesMemoires() + this.texteDemande()).replace(/\s+/g, '');
     const SERVICE_CERT_RE = /ISO\s*\d{4,5}|APSAD(?:\s*R?\s*\d+)?|\bR\s?31\b/gi;
     const guardServiceCert = (val: string, _ctx: string): string => {
       // On scanne la VALEUR (pas le contexte) : si elle CITE une certification de service et que la
@@ -4295,7 +4348,10 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
         // (qui pourrait être un libellé ou « [À COMPLÉTER] ») — uniquement ☑ (si prouvée) ou ☐.
         // Chaque « [À COMPLÉTER] » écrit porte le n° de son champ (marque interne, remplacée par un
         // signet Word invisible avant l'enregistrement) → complétion ultérieure au bon emplacement.
-        const writeVal = desc.kind === 'checkbox' ? (isChecked ? '☑' : '☐') : value.split('[À COMPLÉTER]').join(`[À COMPLÉTER]${MARQUE_CHAMP(rep.id)}`);
+        // Chaque réponse rédigée est aussi encadrée (signet GSS_CH_n) : l'assistant de modification
+        // pourra la réécrire sans jamais toucher au texte du cadre de l'acheteur.
+        const marquee = value.split('[À COMPLÉTER]').join(`[À COMPLÉTER]${MARQUE_CHAMP(rep.id)}`);
+        const writeVal = desc.kind === 'checkbox' ? (isChecked ? '☑' : '☐') : (value.trim() ? `${DEBUT_CHAMP(rep.id)}${marquee}${FIN_CHAMP(rep.id)}` : marquee);
         const tEls = getElementsWithLocalName(xmlDoc, 't');
         tEls.forEach((tEl: any) => replaceTextInElement(xmlDoc, tEl, `[CHAMP_${rep.id}]`, writeVal));
         applied++;
@@ -4353,6 +4409,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     }
 
     // 7 ter. Emplacements à compléter : un signet par « [À COMPLÉTER] », avec l'information attendue.
+    const champsRediges = poserSignetsChamps(xmlDoc);
     const signets = poserSignets(xmlDoc);
     const occurrenceParChamp = new Map<number, number>();
     const elementsACompleter: ElementACompleter[] = signets.map(({ cle, champ, contexte }) => {
@@ -4392,7 +4449,19 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
 
     console.log(`[MemoireGenerator] Successfully generated ${outputPath}`);
     try {
-      ecrireEtat({ dossierId, mode: 'cadre', fichier: outputPath, majLe: '', elements: elementsACompleter, reponsesTraitees: [] });
+      const champsEtat = champsRediges.map((id) => {
+        const d = descriptors.find((x) => x.id === id);
+        const m = d?.context.match(/Question:\s*"([^"]*)"|Tableau:\s*(.+?)(?:\s*\|\s*Contexte proche:|$)/);
+        const section = (d?.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '';
+        const net = (x: string) => x.replace(/\[CHAMP_\d+\]/g, '').replace(/(?:[_.…]\s*){3,}/g, ' ').replace(/\s+/g, ' ').trim();
+        const sec = net(section);
+        const libelle = net((m ? m.slice(1).find(Boolean) : '') || section || '') || `Réponse ${id}`;
+        return { cle: `GSS_CH_${id}`, libelle: sec && sec !== libelle && !libelle.includes(sec) ? `${sec} — ${libelle}` : libelle };
+      });
+      ecrireEtat({
+        dossierId, mode: 'cadre', fichier: outputPath, majLe: '', elements: elementsACompleter, reponsesTraitees: [],
+        champs: champsEtat, demande: this.demandeParticuliere?.demande || undefined,
+      });
     } catch (e: any) {
       console.warn(`[MemoireGenerator] État de complétion non enregistré (non bloquant) : ${e?.message || e}`);
     }
@@ -5178,6 +5247,11 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
     }
     const registreGss = blocRegistre();
     const secoursMemoires: Record<string, string> = {};
+    // Document complémentaire de la demande particulière : ses passages les plus proches de chaque rubrique.
+    const chunksComplement = this.chunksDocumentComplementaire();
+    if (chunksComplement.length) {
+      try { await this.embedChunks(chunksComplement); } catch (e: any) { console.warn(`[MemoireGenerator] Document complémentaire non indexé : ${e?.message || e}`); }
+    }
 
     for (let i = 0; i < totalSections; i++) {
       const section = AI_SECTIONS_B[i];
@@ -5219,7 +5293,7 @@ RÈGLES DE PERTINENCE (le plus important) :
 PERTINENCE À L'INTITULÉ (impératif) : chaque sous-partie traite directement « ${section.title} ». N'introduis aucun contenu d'un autre thème, même s'il figure dans les extraits.
 
 ${REGLES_REUTILISATION}
-- Tableaux : un tableau Markdown est autorisé quand il reprend un tableau de GSS (effectifs, qualifications, fréquences…).
+- Tableaux : un tableau Markdown est autorisé quand il reprend un tableau de GSS (effectifs, qualifications, fréquences…).${this.blocDemande()}
 
 RÈGLES DE FORME (rendu Marp) :
 - NE répète PAS le titre principal "${section.title}" (il est ajouté automatiquement).
@@ -5241,7 +5315,13 @@ RÈGLES DE FORME (rendu Marp) :
 
       const passagesMemoires = rubriqueEmbs[i] ? rechercherMemoires(rubriqueEmbs[i], 8, section.title, 3) : [];
       const memoiresBlock = blocMemoires(passagesMemoires);
-      const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}${memoiresBlock}${registreGss}${reqBlock}\n\nRédige le contenu de cette partie de manière experte.`;
+      const passagesComplement = rubriqueEmbs[i]
+        ? chunksComplement.filter((c) => c.embedding).map((c) => ({ c, s: cosine(rubriqueEmbs[i], c.embedding!) })).filter((x) => x.s >= 0.3).sort((a, b) => b.s - a.s).slice(0, 3).map((x) => x.c)
+        : [];
+      const complementBlock = passagesComplement.length
+        ? `\n\nDOCUMENT COMPLÉMENTAIRE FOURNI PAR L'UTILISATEUR (passages en lien avec cette partie) :\n${passagesComplement.map((c) => c.text).join('\n---\n')}`
+        : '';
+      const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${analysisJson}\n\nATOUTS GSS (Extrait doc) :\n${gssContext}${memoiresBlock}${registreGss}${complementBlock}${reqBlock}\n\nRédige le contenu de cette partie de manière experte.`;
 
       // Une rubrique ne doit JAMAIS sortir vide (« page quasi vide » signalée par GSS) : nouvel essai si
       // l'appel échoue ou si le texte est manifestement tronqué.
@@ -5333,6 +5413,7 @@ RÈGLES DE FORME (rendu Marp) :
       ecrireEtat({
         dossierId, mode: 'libre', fichier: result.filePath, majLe: '', elements: elementsLibres, reponsesTraitees: [],
         libre: { sections: sectionsReperes, schemas: Object.fromEntries(schemasRendus || []), cover: coverRendu },
+        demande: this.demandeParticuliere?.demande || undefined,
       });
     } catch (e: any) {
       console.warn(`[MemoireGenerator] État de complétion non enregistré (non bloquant) : ${e?.message || e}`);
@@ -5567,14 +5648,29 @@ RÈGLES DE FORME (rendu Marp) :
   public async rendreDepuisSections(
     sectionsMap: Record<string, string>,
     dossierId: string,
-    opts: { onProgress?: (progress: number, message: string) => void; schemas?: Map<string, string>; cover?: any } = {},
+    opts: {
+      onProgress?: (progress: number, message: string) => void;
+      /** Schémas déjà construits, par « idRubrique#page » (réutilisés tels quels). */
+      schemas?: Map<string, string>;
+      cover?: any;
+      /** Rubriques ajoutées après la génération (assistant de modification). */
+      ajouts?: Array<{ id: string; chapter: string; title: string; apres?: string }>;
+    } = {},
   ): Promise<{ filePath: string; schemas: Map<string, string>; cover: any }> {
     const onProgress = opts.onProgress;
+    const ordreChapitre = (ch: string): Array<{ id: string; chapter: string; title: string }> => {
+      const liste: Array<{ id: string; chapter: string; title: string }> = AI_SECTIONS_B.filter((s) => s.chapter === ch);
+      for (const a of (opts.ajouts || []).filter((x) => x.chapter === ch)) {
+        const i = a.apres ? liste.findIndex((x) => x.id === a.apres) : -1;
+        if (i >= 0) liste.splice(i + 1, 0, a); else liste.push(a);
+      }
+      return liste;
+    };
     const chapters: AssembleChapter[] = CHAPTER_ORDER_B.map((ch) => ({
       key: ch,
       title: CHAPTER_TITLES_B[ch],
-      sections: AI_SECTIONS_B
-        .filter((s) => s.chapter === ch && sectionsMap[s.id]?.trim())
+      sections: ordreChapitre(ch)
+        .filter((s) => sectionsMap[s.id]?.trim())
         .map((s): AssembleSection => ({
           title: s.title,
           text: sectionsMap[s.id],
@@ -5599,19 +5695,27 @@ RÈGLES DE FORME (rendu Marp) :
       const [ci, si] = sl.key.split('_').map(Number);
       return { key: sl.key, sectionId: chapters[ci]?.sections[si]?.id, sectionTitle: sl.title, text: sl.text };
     });
+    // Clé STABLE d'un schéma : rubrique + n° de page dans la rubrique (indépendante de la position de la
+    // rubrique dans le chapitre, qui change quand une rubrique est ajoutée ou supprimée).
+    const stable = (p: PageSchema) => `${p.sectionId}#${p.key.split('_').pop()}`;
     const existants = opts.schemas;
-    const aConstruire = existants ? pages.filter((p) => !existants.has(p.key)) : pages;
+    const aConstruire = existants ? pages.filter((p) => !existants.has(stable(p))) : pages;
     const nouveaux = aConstruire.length
       ? await new SchemaService().construirePourPages(aConstruire, (msg) => onProgress?.(93, msg))
       : new Map<string, string>();
-    const schemas = new Map<string, string>([...(existants || new Map<string, string>()), ...nouveaux]);
+    const schemas = new Map<string, string>();
+    const schemasStables = new Map<string, string>();
+    for (const p of pages) {
+      const svg = existants?.get(stable(p)) ?? nouveaux.get(p.key);
+      if (svg) { schemas.set(p.key, svg); schemasStables.set(stable(p), svg); }
+    }
 
     // Le rendu Marp/Chromium est bloquant et peut durer plusieurs minutes : on signale l'étape.
     onProgress?.(95, `Rendu du PDF (${schemas.size} schéma(s))…`);
     const generator = new MarpGenerator(this.responseDir);
     const result = await generator.generatePdf(chapters, cover, new Map(), schemas);
 
-    return { filePath: result.filePath, schemas, cover };
+    return { filePath: result.filePath, schemas: schemasStables, cover };
   }
 
   /**

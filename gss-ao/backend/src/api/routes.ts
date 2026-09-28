@@ -8,12 +8,14 @@ import { DB, DossierRecord, MemoiresDB, FichiersDB, remainingGenerations, QuotaE
 import { initProgress, finishProgress } from '../core/progress';
 import { extractRcWithLLM, extractCctpWithLLM } from '../analysis/llmExtractor';
 import { pickBestPieces } from '../ingestion/dceClassifier';
+import { extractText } from '../ingestion/docConverter';
 import { requireAuth } from './authMiddleware';
 import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeamBulk, matchQuestionsToPeople, suggestPeopleForQuestion, Personne, MissingField } from '../generation/missing_info_resolver';
 import { injectValidatedRecherches } from '../generation/inject_recherches';
 import { learnSollicitationsForDossier, learnPendingSollicitations } from '../generation/learn_sollicitation';
 import { getGenerationGate } from '../generation/generation_gate';
 import { lireEtat, vueEtat, remplirSaisie, capitaliser, integrerReponse, memePole, personnesConnuesDuRole } from '../generation/completion';
+import { discuter } from '../generation/assistant_memoire';
 import { getSettings } from '../core/config';
 import { getScopedClient, requestContext } from '../core/supabase';
 import { createClient } from '@supabase/supabase-js';
@@ -439,10 +441,40 @@ router.get('/dossiers/:id/generation-gate', async (req: Request, res: Response) 
 });
 
 // Module C — génération mémoire technique.
-router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
+// « Demande particulière » (facultative, saisie juste avant de générer) : consigne libre (champ
+// `demande`) et/ou document complémentaire (fichier `document` : PDF, Word ou texte). Sans elles, la
+// requête reste une simple requête sans corps et la génération est inchangée.
+async function lireDemandeParticuliere(req: Request): Promise<{ demande?: string; documentNom?: string; documentTexte?: string } | undefined> {
+  const demande = String((req.body && req.body.demande) || '').trim();
+  const f = (req as any).file as { path: string; originalname: string } | undefined;
+  let documentTexte = '';
+  if (f) {
+    const nom = Buffer.from(f.originalname, 'latin1').toString('utf8');
+    const ext = path.extname(nom).toLowerCase();
+    const cible = `${f.path}${ext}`;
+    try {
+      fs.renameSync(f.path, cible);
+      documentTexte = ['.txt', '.md', '.csv'].includes(ext) ? fs.readFileSync(cible, 'utf-8') : await extractText(cible);
+    } finally {
+      fs.rmSync(cible, { force: true });
+      fs.rmSync(f.path, { force: true });
+    }
+    if (!documentTexte.trim()) throw new Error(`Le document « ${nom} » ne contient pas de texte exploitable.`);
+    return { demande, documentNom: nom, documentTexte };
+  }
+  return demande ? { demande } : undefined;
+}
+
+router.post('/dce/:dossier_id/memoire', upload.single('document'), async (req: Request, res: Response) => {
   const dossierId = req.params.dossier_id;
   let memoireId: string | null = null;
   try {
+    let demandeParticuliere: Awaited<ReturnType<typeof lireDemandeParticuliere>>;
+    try {
+      demandeParticuliere = await lireDemandeParticuliere(req);
+    } catch (e: any) {
+      return res.status(400).json({ error: e.message || 'Document complémentaire illisible.' });
+    }
     // VERROU : aucune génération tant qu'il reste des informations manquantes sans réponse. La
     // vérification est ici (et pas seulement dans l'UI) pour qu'un onglet resté ouvert, un
     // rechargement ou un appel direct ne puissent pas passer outre. `force=1` reste possible pour
@@ -478,7 +510,7 @@ router.post('/dce/:dossier_id/memoire', async (req: Request, res: Response) => {
     // Processus de génération asynchrone (détaché de la requête HTTP)
     generator.generate(dossierId, (progress, message) => {
       setDossierProgress(dossierId, { status: 'running', progress, message });
-    }).then(async (result) => {
+    }, demandeParticuliere).then(async (result) => {
       if (result.status === 'incomplete') {
         setDossierProgress(dossierId, { 
           status: 'incomplete', 
@@ -684,6 +716,20 @@ router.post('/dossiers/:id/completion/demander', async (req: Request, res: Respo
       for (const f of questions) { results.push({ id: f.id, label: f.label, sent: !!r.sent }); if (r.sent) sent++; }
     }
     res.json({ status: 'ok', triggered: questions.length, sent, results });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Assistant de modification du mémoire généré (demande de Clarence) : refaire, corriger, modifier ou
+// ajouter des pages en langage naturel. Renvoie l'état à jour, la réponse de l'assistant, les parties
+// modifiées et, en réponse libre, la page du PDF où voir la modification.
+router.post('/dossiers/:id/assistant', async (req: Request, res: Response) => {
+  const message = String(req.body?.message ?? '').trim();
+  if (!message) return res.status(400).json({ error: 'Message vide.' });
+  try {
+    const r = await discuter(req.params.id, message);
+    res.json({ ...vueEtat(r.etat), reponse: r.reponse, modifies: r.modifies, page: r.page });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

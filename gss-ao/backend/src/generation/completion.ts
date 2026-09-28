@@ -57,7 +57,19 @@ export interface EtatCompletion {
   majLe: string;
   elements: ElementACompleter[];
   reponsesTraitees: string[];  // question_interne.id:empreinte des réponses déjà intégrées
-  libre?: { sections: Record<string, string>; schemas: Record<string, string>; cover: any };
+  libre?: {
+    sections: Record<string, string>;
+    schemas: Record<string, string>;
+    cover: any;
+    /** Rubriques ajoutées avec l'assistant de modification. */
+    ajouts?: Array<{ id: string; chapter: string; title: string; apres?: string }>;
+  };
+  /** Cadre imposé : réponses rédigées par GSS (signets GSS_CH_n), les seules que l'assistant peut modifier. */
+  champs?: Array<{ cle: string; libelle: string }>;
+  /** Demande particulière saisie avant la génération. */
+  demande?: string;
+  /** Échanges avec l'assistant de modification. */
+  conversation?: Array<{ role: 'utilisateur' | 'assistant'; texte: string; date: string; modifies?: string[] }>;
 }
 
 // ─── État ────────────────────────────────────────────────────────────────────────────────
@@ -76,13 +88,13 @@ export function ecrireEtat(etat: EtatCompletion): void {
 
 /** Vue publique de l'état (sans le texte des rubriques ni les schémas). */
 export function vueEtat(etat: EtatCompletion) {
-  const { libre, reponsesTraitees, ...reste } = etat;
+  const { libre, reponsesTraitees, champs, ...reste } = etat;
   return { ...reste, restants: etat.elements.filter((e) => e.statut === 'ouvert').length };
 }
 
 // ─── Cadre imposé : signets autour des « [À COMPLÉTER] » ─────────────────────────────────
 
-function elements(node: any, name: string): any[] {
+export function elements(node: any, name: string): any[] {
   const out: any[] = [];
   const walk = (n: any) => {
     if (n.nodeType === 1 && n.localName === name) out.push(n);
@@ -96,13 +108,13 @@ function texte(node: any): string {
   return elements(node, 't').map((t) => t.textContent || '').join('');
 }
 
-function nouveauRun(xmlDoc: any, rPr: any): any {
+export function nouveauRun(xmlDoc: any, rPr: any): any {
   const r = xmlDoc.createElementNS(W_NS, 'w:r');
   if (rPr) r.appendChild(rPr.cloneNode(true));
   return r;
 }
 
-function nouveauT(xmlDoc: any, s: string): any {
+export function nouveauT(xmlDoc: any, s: string): any {
   const t = xmlDoc.createElementNS(W_NS, 'w:t');
   t.setAttribute('xml:space', 'preserve');
   t.textContent = s;
@@ -113,10 +125,10 @@ function nouveauT(xmlDoc: any, s: string): any {
  * Isole chaque « [À COMPLÉTER] » marqué par le générateur dans son propre run, entouré d'un signet
  * GSS_AC_n. Retourne, dans l'ordre du document, le champ d'origine et le contexte de chaque emplacement.
  */
-export function poserSignets(xmlDoc: any): Array<{ cle: string; champ: number; contexte: string; environnement: string }> {
+export function poserSignets(xmlDoc: any, depart = 0): Array<{ cle: string; champ: number; contexte: string; environnement: string }> {
   const out: Array<{ cle: string; champ: number; contexte: string; environnement: string }> = [];
-  let n = 0;
-  let idSignet = 90000;
+  let n = depart;
+  let idSignet = 90000 + depart;
   for (;;) {
     const tEl = elements(xmlDoc, 't').find((t) => MARQUE_RE.test(t.textContent || ''));
     if (!tEl) break;
@@ -140,7 +152,7 @@ export function poserSignets(xmlDoc: any): Array<{ cle: string; champ: number; c
     };
     parcourir(para);
     // Les AUTRES emplacements de la phrase sont notés « […] » : seul celui-ci reste « [À COMPLÉTER] ».
-    const net = (x: string) => x.replace(/\uE000\d+\uE001/g, '').split(PLACEHOLDER).join('[…]').replace(/[ \t]+/g, ' ');
+    const net = (x: string) => x.replace(/\uE000\d+\uE001/g, '').replace(/[\uE002\uE004]\d+[\uE003\uE005]/g, '').split(PLACEHOLDER).join('[…]').replace(/[ \t]+/g, ' ');
     const av = net(avantTxt);
     const ap = net(apresTxt);
     // Phrase EXACTE qui contient l'emplacement (du début de phrase au point final), sans coupure de mot.
@@ -177,6 +189,63 @@ export function poserSignets(xmlDoc: any): Array<{ cle: string; champ: number; c
     out.push({ cle, champ, contexte, environnement });
   }
   return out;
+}
+
+// ─── Cadre imposé : signets autour de chaque réponse rédigée (assistant de modification) ────
+
+/** Marques internes encadrant la valeur d'un champ : début <id> … fin <id>. */
+export const DEBUT_CHAMP = (id: number) => `\uE002${id}\uE003`;
+export const FIN_CHAMP = (id: number) => `\uE004${id}\uE005`;
+const DEBUT_RE = /\uE002(\d+)\uE003/;
+const FIN_RE = /\uE004(\d+)\uE005/;
+
+/** Coupe le run de `tEl` à la position `pos` (en retirant `longueur` caractères) et insère `el` à cet endroit. */
+function insererDansRun(xmlDoc: any, tEl: any, pos: number, longueur: number, el: any): void {
+  const run = tEl.parentNode;
+  const s = tEl.textContent || '';
+  const avant = s.slice(0, pos);
+  const apres = s.slice(pos + longueur);
+  const rPr = Array.from({ length: run.childNodes.length }, (_, i) => run.childNodes[i]).find((c: any) => c.nodeType === 1 && c.localName === 'rPr');
+  const runApres = nouveauRun(xmlDoc, rPr);
+  if (apres) runApres.appendChild(nouveauT(xmlDoc, apres));
+  while (tEl.nextSibling) runApres.appendChild(tEl.nextSibling);
+  tEl.textContent = avant;
+  const para = run.parentNode;
+  const suivant = run.nextSibling;
+  const inserer = (x: any) => (suivant ? para.insertBefore(x, suivant) : para.appendChild(x));
+  inserer(el);
+  if (runApres.childNodes.length > (rPr ? 1 : 0)) inserer(runApres);
+}
+
+/**
+ * Remplace les marques de début/fin de chaque réponse par un signet Word invisible GSS_CH_<champ> qui
+ * l'entoure. Le texte du cadre de l'acheteur reste hors de tout signet : l'assistant ne peut pas le toucher.
+ */
+export function poserSignetsChamps(xmlDoc: any): number[] {
+  const champs: number[] = [];
+  let idSignet = 80000;
+  for (;;) {
+    const tEl = elements(xmlDoc, 't').find((t) => DEBUT_RE.test(t.textContent || '') || FIN_RE.test(t.textContent || ''));
+    if (!tEl) break;
+    const s = tEl.textContent || '';
+    const d = DEBUT_RE.exec(s);
+    const f = FIN_RE.exec(s);
+    const m = d && (!f || d.index < f.index) ? d : f!;
+    const champ = Number(m[1]);
+    if (!tEl.parentNode || tEl.parentNode.localName !== 'r' || !tEl.parentNode.parentNode) { tEl.textContent = s.replace(m[0], ''); continue; }
+    if (m === d) {
+      const b = xmlDoc.createElementNS(W_NS, 'w:bookmarkStart');
+      b.setAttribute('w:id', String(idSignet + champ));
+      b.setAttribute('w:name', `GSS_CH_${champ}`);
+      insererDansRun(xmlDoc, tEl, m.index, m[0].length, b);
+      champs.push(champ);
+    } else {
+      const b = xmlDoc.createElementNS(W_NS, 'w:bookmarkEnd');
+      b.setAttribute('w:id', String(idSignet + champ));
+      insererDansRun(xmlDoc, tEl, m.index, m[0].length, b);
+    }
+  }
+  return champs;
 }
 
 /**
@@ -278,7 +347,7 @@ function remplirSignet(fichier: string, cle: string, valeur: string): string {
 // ─── Réponse libre : insertion au repère puis recomposition du PDF ────────────────────────
 
 let openaiClient: OpenAI | null = null;
-function openai(): OpenAI {
+export function openai(): OpenAI {
   if (!openaiClient) {
     const key = getSettings().openaiApiKey;
     if (!key) throw new Error('Clé OpenAI manquante.');
@@ -287,7 +356,7 @@ function openai(): OpenAI {
   return openaiClient;
 }
 
-async function json(system: string, user: string): Promise<any> {
+export async function json(system: string, user: string): Promise<any> {
   const r = await openai().chat.completions.create({
     model: MODELE,
     messages: [{ role: 'system', content: `${system}\nRéponds uniquement par un objet JSON.` }, { role: 'user', content: user }],
@@ -314,7 +383,7 @@ export async function integrerDansRubrique(texteRubrique: string, repere: string
 }
 
 /** Recompose le PDF d'une réponse libre depuis l'état (schémas déjà construits réutilisés). */
-async function recomposerPdf(etat: EtatCompletion): Promise<string> {
+export async function recomposerPdf(etat: EtatCompletion): Promise<string> {
   // Import différé : evite une dépendance circulaire avec le générateur.
   const { MemoireGenerator } = await import('./memoire_generator');
   const gen = new MemoireGenerator();
@@ -323,6 +392,7 @@ async function recomposerPdf(etat: EtatCompletion): Promise<string> {
   const res = await gen.rendreDepuisSections(propres, etat.dossierId, {
     cover: etat.libre!.cover,
     schemas: new Map(Object.entries(etat.libre!.schemas || {})),
+    ajouts: etat.libre!.ajouts,
   });
   etat.libre!.schemas = Object.fromEntries(res.schemas);
   return res.filePath;
