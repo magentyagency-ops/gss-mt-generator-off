@@ -14,7 +14,7 @@ import { resolveMissingInfo, classifyFieldsLLM, requestInfoFromTeamBulk, matchQu
 import { injectValidatedRecherches } from '../generation/inject_recherches';
 import { learnSollicitationsForDossier, learnPendingSollicitations } from '../generation/learn_sollicitation';
 import { getGenerationGate } from '../generation/generation_gate';
-import { lireEtat, vueEtat, remplirSaisie, capitaliser, integrerReponse, memePole, personnesConnuesDuRole } from '../generation/completion';
+import { lireEtat, vueEtat, remplirSaisie, capitaliser, integrerReponse, memePole, personnesConnuesDuRole, verrouiller } from '../generation/completion';
 import { discuter, PieceJointe } from '../generation/assistant_memoire';
 import { getSettings } from '../core/config';
 import { getScopedClient, requestContext } from '../core/supabase';
@@ -623,7 +623,7 @@ router.post('/dossiers/:id/completion', async (req: Request, res: Response) => {
   const valeur = String(req.body?.valeur ?? '').trim();
   if (!cle || !valeur) return res.status(400).json({ error: 'Emplacement et information requis.' });
   try {
-    const etat = await remplirSaisie(dossierId, cle, valeur);
+    const etat = await verrouiller(dossierId, () => remplirSaisie(dossierId, cle, valeur));
     const el = etat.elements.find((e) => e.cle === cle);
     // Capitalisation : l'information saisie rejoint la base de connaissance GSS (non bloquant).
     if (el) capitaliser(dossierId, el).catch((e) => console.warn('[completion] capitalisation :', e?.message));
@@ -690,7 +690,8 @@ router.post('/dossiers/:id/completion/demander', async (req: Request, res: Respo
     const auto = Object.keys(selection).length ? new Map<string, string>() : await matchQuestionsToPeople(questions, people);
     const parPersonne = new Map<string, MissingField[]>();
     for (const q of questions) {
-      const ids = (selection[q.id] || [auto.get(q.id) || people[0]?.id]).filter((id) => id && byId.has(id));
+      // Question absente de la sélection (regroupement modifié entre-temps) : non envoyée, plutôt qu'à une personne arbitraire.
+      const ids = (selection[q.id] ?? (Object.keys(selection).length ? [] : [auto.get(q.id) || people[0]?.id])).filter((id) => id && byId.has(id));
       for (const id of ids) (parPersonne.get(id) ?? parPersonne.set(id, []).get(id)!).push(q);
     }
 
@@ -759,7 +760,7 @@ router.post('/dossiers/:id/assistant', upload.array('fichiers', 10), async (req:
     return res.status(400).json({ error: `Pièce jointe illisible : ${err.message}` });
   }
   try {
-    const r = await discuter(dossierId, message, pieces);
+    const r = await verrouiller(dossierId, () => discuter(dossierId, message, pieces));
     res.json({ ...vueEtat(r.etat), reponse: r.reponse, modifies: r.modifies, page: r.page });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -773,7 +774,7 @@ router.post('/dossiers/:id/completion/simuler-reponse', async (req: Request, res
   if (!dossierId.startsWith('demo-')) return res.status(403).json({ error: 'Réservé à la démonstration.' });
   try {
     const demandes = Array.isArray(req.body?.cles) ? req.body.cles.flatMap((c: any) => String(c).split('+')) : undefined;
-    const { etat, cles } = await integrerReponse(dossierId, String(req.body?.question ?? ''), String(req.body?.reponse ?? ''), demandes);
+    const { etat, cles } = await verrouiller(dossierId, () => integrerReponse(dossierId, String(req.body?.question ?? ''), String(req.body?.reponse ?? ''), demandes));
     res.json({ ...vueEtat(etat), integres: cles });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

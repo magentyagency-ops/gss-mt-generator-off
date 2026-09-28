@@ -57,6 +57,27 @@ function normCriticite(c: any): 'bloquant' | 'facultatif' | 'normal' {
 /** Un passage indexable pour la recherche sémantique (Doc GSS ou DCE). */
 interface RetrievalChunk { source: 'GSS' | 'DCE'; label: string; text: string; embedding?: number[]; }
 
+/**
+ * Quand le DCE ne contient pas une information, l'analyse la remplit parfois par une MENTION
+ * (« Non communiqué dans les documents transmis », « Non déterminable… », « N/A »). Ces mentions ne
+ * sont pas des valeurs : reprises telles quelles, elles s'affichaient comme nom du client dans tout le
+ * mémoire. Elles sont vidées, pour que les replis prévus (« le client », page de garde…) s'appliquent.
+ */
+const MENTION_NON_RENSEIGNEE = /^\s*(?:non[\s-]+(?:communiqu|pr[ée]cis|d[ée]termin|renseign|disponible|identifi|mentionn|indiqu|connu|sp[ée]cifi|fourni|trouv)|inconnu|ind[ée]termin|aucune?\s+(?:information|mention|donn[ée]e)|information\s+(?:non|absente)|(?:n\s*\/\s*a|nc|n\.c\.?)(?![\w])|[-—–?]+\s*$)/i;
+function viderValeursNonRenseignees(v: any): any {
+  if (typeof v === 'string') return v.length <= 160 && MENTION_NON_RENSEIGNEE.test(v) ? '' : v;
+  if (Array.isArray(v)) {
+    return v.map(viderValeursNonRenseignees)
+      .filter((x) => x !== '' && !(x && typeof x === 'object' && !Array.isArray(x) && Object.values(x).every((y) => y === '' || y == null)));
+  }
+  if (v && typeof v === 'object') {
+    const o: any = {};
+    for (const [k, x] of Object.entries(v)) o[k] = viderValeursNonRenseignees(x);
+    return o;
+  }
+  return v;
+}
+
 /** Demande particulière de l'utilisateur pour UNE génération : consigne libre et/ou document complémentaire. */
 export interface DemandeParticuliere { demande?: string; documentNom?: string; documentTexte?: string; }
 
@@ -2405,7 +2426,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
       0.2, 'Analyse DCE', true,
     );
     try {
-      const data = JSON.parse(content || '{}');
+      const data = viderValeursNonRenseignees(JSON.parse(content || '{}'));
       // Post-traitement : enrichir / valider les champs stratégiques via détection locale
       // (le modèle peut se tromper sur public/privé ; la détection par mots-clés est plus fiable)
       const detectedType = detectMarketType(data);
@@ -5287,7 +5308,7 @@ OBJECTIF : un contenu SUR-MESURE, directement branché sur les exigences réelle
 RÈGLES DE PERTINENCE (le plus important) :
 - Reprends explicitement les exigences, contraintes et enjeux identifiés dans l'analyse du DCE (sites, horaires, risques, prestations attendues, contraintes réglementaires) et montre CONCRÈTEMENT comment GSS y répond.
 - Chaque affirmation doit être adossée à une preuve tirée des atouts GSS fournis : un moyen, un chiffre, une méthode, une certification ou un engagement concret. Bannis les formules creuses ("leader du secteur", "qualité irréprochable") sans preuve.
-- Personnalise FORTEMENT pour ${clientName} et son secteur d'activité : ancre le propos dans le contexte réel du marché, pas dans des généralités.
+- Personnalise FORTEMENT pour ${clientName} et son secteur d'activité : ancre le propos dans le contexte réel du marché, pas dans des généralités.${analysisData?.clientName ? '' : "\n- Le nom de l'acheteur n'est pas connu : désigne-le par « le client », « la collectivité » ou « l'établissement » selon le contexte, sans jamais inventer de nom ni écrire de mention du type « non communiqué »."}
 - N'invente JAMAIS une information absente à la fois du DCE et des atouts GSS ; reste factuel.
 
 PERTINENCE À L'INTITULÉ (impératif) : chaque sous-partie traite directement « ${section.title} ». N'introduis aucun contenu d'un autre thème, même s'il figure dans les extraits.
@@ -5587,22 +5608,29 @@ RÈGLES DE FORME (rendu Marp) :
 
   /** Récupère client / titre / référence pour la page de garde (base puis analyse DCE). */
   private async getCoverInfo(dossierId: string): Promise<{ client: string; title: string; ref: string }> {
-    const fallback = { client: 'GSS — Global Security Service', title: 'Mémoire technique', ref: '' };
+    // Le client affiché est l'ACHETEUR : jamais GSS. Inconnu → ligne omise sur la page de garde.
+    const fallback = { client: '', title: 'Mémoire technique', ref: '' };
+    // Mentions de remplissage (« Non spécifié », « Acheteur inconnu »…) : ce ne sont pas des valeurs.
+    const propre = (v?: string) => {
+      const t = String(v || '').trim();
+      return t && !MENTION_NON_RENSEIGNEE.test(t) && !/^(acheteur inconnu|objet non sp[ée]cifi[ée]|non sp[ée]cifi[ée])$/i.test(t) ? t : '';
+    };
     if (!dossierId || dossierId === 'export') return fallback;
     try {
       const dossier = await DB.getDossier(dossierId);
-      if (dossier && (dossier.acheteur || dossier.reference || dossier.objet)) {
+      const acheteur = propre(dossier?.acheteur), objet = propre(dossier?.objet), reference = propre(dossier?.reference);
+      if (dossier && (acheteur || reference || objet)) {
         return {
-          client: dossier.acheteur || fallback.client,
-          title: dossier.objet || fallback.title,
-          ref: dossier.reference || '',
+          client: acheteur || fallback.client,
+          title: objet || fallback.title,
+          ref: reference,
         };
       }
       const analysis = await this.analyzeDce(await this.getDceContext(dossierId));
       return {
-        client: analysis?.clientName || fallback.client,
-        title: analysis?.projectTitle || fallback.title,
-        ref: analysis?.marketRef || '',
+        client: propre(analysis?.clientName) || fallback.client,
+        title: propre(analysis?.projectTitle) || fallback.title,
+        ref: propre(analysis?.marketRef),
       };
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Infos page de garde indisponibles: ${e.message}`);

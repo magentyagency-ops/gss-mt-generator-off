@@ -76,6 +76,20 @@ export interface EtatCompletion {
 
 // ─── État ────────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Verrou par dossier : saisie, réponse d'équipe et assistant modifient le même document ; exécutés en
+ * même temps, le dernier écrivait un état qui ignorait l'autre modification (information perdue).
+ * Les opérations d'un même dossier sont donc enchaînées, l'une après l'autre.
+ */
+const fileParDossier = new Map<string, Promise<unknown>>();
+export function verrouiller<T>(dossierId: string, tache: () => Promise<T>): Promise<T> {
+  const precedente = fileParDossier.get(dossierId) || Promise.resolve();
+  const suite = precedente.catch(() => undefined).then(tache);
+  fileParDossier.set(dossierId, suite);
+  suite.finally(() => { if (fileParDossier.get(dossierId) === suite) fileParDossier.delete(dossierId); }).catch(() => undefined);
+  return suite;
+}
+
 const cheminEtat = (dossierId: string) => path.join(ETATS_DIR, `${dossierId.replace(/[^\w.-]/g, '_')}.json`);
 
 export function lireEtat(dossierId: string): EtatCompletion | null {
@@ -544,10 +558,13 @@ async function balayer(): Promise<void> {
     if (!fs.existsSync(ETATS_DIR)) return;
     for (const f of fs.readdirSync(ETATS_DIR).filter((x) => x.endsWith('.json'))) {
       const etat = lireEtat(f.replace(/\.json$/, ''));
-      if (!etat || etat.dossierId.startsWith('demo-')) continue;
-      try { await integrerReponsesEquipe(etat.dossierId); }
+      if (!etat || typeof etat.dossierId !== 'string' || etat.dossierId.startsWith('demo-')) continue;
+      try { await verrouiller(etat.dossierId, () => integrerReponsesEquipe(etat.dossierId)); }
       catch (e) { console.warn(`[completion] ${etat.dossierId} : intégration impossible —`, (e as Error)?.message); }
     }
+  } catch (e) {
+    // Ne doit jamais faire tomber le serveur (fichier d'état illisible…).
+    console.warn('[completion] balayage impossible :', (e as Error)?.message);
   } finally {
     enCours = false;
   }

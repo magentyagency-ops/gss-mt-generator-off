@@ -19,7 +19,7 @@ import PizZip from 'pizzip';
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import {
   lireEtat, ecrireEtat, EtatCompletion, ElementACompleter, elements, nouveauRun, nouveauT, json, openai,
-  recomposerPdf, poserSignets, formulerQuestions, PLACEHOLDER, MARQUE_CHAMP,
+  recomposerPdf, poserSignets, formulerQuestions, PLACEHOLDER, MARQUE_CHAMP, REPERE,
 } from './completion';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION } from './base_memoires';
 import { SECTIONS_REPONSE_LIBRE, CHAPITRES_REPONSE_LIBRE } from './memoire_generator';
@@ -460,6 +460,34 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       oublierSchemas(a.id);
       modifies.push(a.id);
     }
+  }
+
+  // Données inconnues écrites « [À COMPLÉTER] » par l'assistant : comme à la génération, chacune devient
+  // un repère suivi (question précise dans « À compléter »), jamais un texte brut imprimé dans le PDF.
+  const nouveaux: Array<{ n: number; id: string }> = [];
+  let maxRepere = Math.max(0, ...etat.elements.flatMap((e) => e.reperes || []), ...Object.values(lib.sections).flatMap((t) => [...t.matchAll(/⟦AC:(\d+)⟧/g)].map((m) => Number(m[1]))));
+  for (const id of modifies) {
+    if (!lib.sections[id]?.includes(PLACEHOLDER)) continue;
+    lib.sections[id] = lib.sections[id].split(PLACEHOLDER).map((morceau, i) => {
+      if (i === 0) return morceau;
+      nouveaux.push({ n: ++maxRepere, id });
+      return `${REPERE(maxRepere)}${morceau}`;
+    }).join('');
+  }
+  if (nouveaux.length) {
+    const phrase = (n: number, id: string) => {
+      const t = lib.sections[id];
+      const p = t.indexOf(REPERE(n));
+      return (t.slice(Math.max(0, p - 220), p).split(/[.!?\n]/).pop() || '').replace(/⟦AC:\d+⟧/g, '[…]').replace(/[#*]/g, '').trim() + ` ${PLACEHOLDER}` + (t.slice(p + REPERE(n).length).split(/[.!?\n]/)[0] || '').replace(/⟦AC:\d+⟧/g, '[…]').replace(/[#*]/g, '');
+    };
+    const qs = await formulerQuestions(nouveaux.map(({ n, id }) => ({
+      cle: `A${n}`, contexte: phrase(n, id), environnement: lib.sections[id].replace(/⟦AC:\d+⟧/g, PLACEHOLDER).slice(0, 1200), critere: titreRubrique(etat, id),
+    })));
+    const q0 = etat.elements.filter((e) => /^Q\d+$/.test(e.cle)).length;
+    nouveaux.forEach(({ n, id }, i) => {
+      const q = qs.get(`A${n}`);
+      etat.elements.push({ cle: `Q${q0 + i + 1}`, question: q?.question || phrase(n, id), contexte: `${titreRubrique(etat, id)} — ${phrase(n, id)}`, statut: 'ouvert', reperes: [n], groupe: q?.groupe });
+    });
   }
 
   let page: number | undefined;

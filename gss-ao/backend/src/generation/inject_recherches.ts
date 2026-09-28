@@ -139,6 +139,14 @@ export async function injectValidatedRecherches(dossierId: string): Promise<Inje
 
   const finalInjected = Math.max(injected, validated.length);
 
+  // Le Word temporaire est le cadre AVANT insertion des réponses rédigées : s'il reste des marqueurs
+  // [CHAMP_n], le fichier produit serait le cadre vierge de l'acheteur. On ne le propose donc pas : les
+  // recherches restent enregistrées en base et dans la mémoire RAG (reprises à la prochaine génération).
+  if (tEls.some((t: any) => /\[CHAMP_[^\]]+\]/.test(t.textContent || ''))) {
+    console.log(`[injection] ${finalInjected} recherche(s) enregistrée(s) en base/RAG ; document temporaire incomplet → aucun .docx produit.`);
+    return { injected: finalInjected, skipped, filePath: null };
+  }
+
   // 5. Ré-rendu d'un NOUVEAU .docx (jamais le temp en place).
   zip.file('word/document.xml', new XMLSerializer().serializeToString(xmlDoc));
   const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
