@@ -5655,6 +5655,8 @@ RÈGLES DE FORME (rendu Marp) :
       cover?: any;
       /** Rubriques ajoutées après la génération (assistant de modification). */
       ajouts?: Array<{ id: string; chapter: string; title: string; apres?: string }>;
+      /** Photos ajoutées aux rubriques (assistant de modification), par id de rubrique. */
+      photos?: Record<string, Array<{ chemin: string; legende?: string }>>;
     } = {},
   ): Promise<{ filePath: string; schemas: Map<string, string>; cover: any }> {
     const onProgress = opts.onProgress;
@@ -5677,6 +5679,7 @@ RÈGLES DE FORME (rendu Marp) :
           id: s.id,
           illustration: undefined,
           d2Code: undefined,
+          photos: opts.photos?.[s.id],
         })),
 
     }));

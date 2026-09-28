@@ -63,13 +63,15 @@ export interface EtatCompletion {
     cover: any;
     /** Rubriques ajoutées avec l'assistant de modification. */
     ajouts?: Array<{ id: string; chapter: string; title: string; apres?: string }>;
+    /** Photos ajoutées aux rubriques avec l'assistant (une page par photo). */
+    photos?: Record<string, Array<{ chemin: string; legende?: string }>>;
   };
   /** Cadre imposé : réponses rédigées par GSS (signets GSS_CH_n), les seules que l'assistant peut modifier. */
   champs?: Array<{ cle: string; libelle: string }>;
   /** Demande particulière saisie avant la génération. */
   demande?: string;
   /** Échanges avec l'assistant de modification. */
-  conversation?: Array<{ role: 'utilisateur' | 'assistant'; texte: string; date: string; modifies?: string[] }>;
+  conversation?: Array<{ role: 'utilisateur' | 'assistant'; texte: string; date: string; modifies?: string[]; pieces?: string[] }>;
 }
 
 // ─── État ────────────────────────────────────────────────────────────────────────────────
@@ -393,6 +395,7 @@ export async function recomposerPdf(etat: EtatCompletion): Promise<string> {
     cover: etat.libre!.cover,
     schemas: new Map(Object.entries(etat.libre!.schemas || {})),
     ajouts: etat.libre!.ajouts,
+    photos: etat.libre!.photos,
   });
   etat.libre!.schemas = Object.fromEntries(res.schemas);
   return res.filePath;

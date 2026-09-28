@@ -15,7 +15,7 @@ import { injectValidatedRecherches } from '../generation/inject_recherches';
 import { learnSollicitationsForDossier, learnPendingSollicitations } from '../generation/learn_sollicitation';
 import { getGenerationGate } from '../generation/generation_gate';
 import { lireEtat, vueEtat, remplirSaisie, capitaliser, integrerReponse, memePole, personnesConnuesDuRole } from '../generation/completion';
-import { discuter } from '../generation/assistant_memoire';
+import { discuter, PieceJointe } from '../generation/assistant_memoire';
 import { getSettings } from '../core/config';
 import { getScopedClient, requestContext } from '../core/supabase';
 import { createClient } from '@supabase/supabase-js';
@@ -724,11 +724,42 @@ router.post('/dossiers/:id/completion/demander', async (req: Request, res: Respo
 // Assistant de modification du mémoire généré (demande de Clarence) : refaire, corriger, modifier ou
 // ajouter des pages en langage naturel. Renvoie l'état à jour, la réponse de l'assistant, les parties
 // modifiées et, en réponse libre, la page du PDF où voir la modification.
-router.post('/dossiers/:id/assistant', async (req: Request, res: Response) => {
+// Pièces jointes (bouton « + » ou glisser-déposer) : photos JPEG/PNG (insérables dans le mémoire) et
+// documents PDF/Word/texte (sources d'information). Conservées avec le dossier (response/pieces/<id>).
+const IMAGES_ASSISTANT = ['.jpg', '.jpeg', '.png'];
+const DOCUMENTS_ASSISTANT = ['.pdf', '.docx', '.doc', '.txt', '.md'];
+
+router.post('/dossiers/:id/assistant', upload.array('fichiers', 10), async (req: Request, res: Response) => {
+  const dossierId = req.params.id;
   const message = String(req.body?.message ?? '').trim();
-  if (!message) return res.status(400).json({ error: 'Message vide.' });
+  const fichiers = ((req as any).files || []) as Array<{ path: string; originalname: string }>;
+  if (!message && !fichiers.length) return res.status(400).json({ error: 'Message vide.' });
+  const pieces: PieceJointe[] = [];
   try {
-    const r = await discuter(req.params.id, message);
+    const dossierPieces = path.resolve(__dirname, '../../response/pieces', dossierId.replace(/[^\w.-]/g, '_'));
+    fs.mkdirSync(dossierPieces, { recursive: true });
+    for (const f of fichiers) {
+      const nom = Buffer.from(f.originalname, 'latin1').toString('utf8');
+      const ext = path.extname(nom).toLowerCase();
+      const cible = path.join(dossierPieces, `${Date.now().toString(36)}-${nom.replace(/[^\w.\- ]/g, '_')}`);
+      fs.renameSync(f.path, cible);
+      const ref = `P${pieces.length + 1}`;
+      if (IMAGES_ASSISTANT.includes(ext)) {
+        pieces.push({ ref, nom, chemin: cible, type: 'image' });
+      } else if (DOCUMENTS_ASSISTANT.includes(ext)) {
+        const texte = ['.txt', '.md'].includes(ext) ? fs.readFileSync(cible, 'utf-8') : await extractText(cible);
+        pieces.push({ ref, nom, chemin: cible, type: 'document', texte });
+      } else {
+        fs.rmSync(cible, { force: true });
+        return res.status(400).json({ error: `Format non pris en charge : « ${nom} ». Photos : JPEG ou PNG ; documents : PDF, Word ou texte.` });
+      }
+    }
+  } catch (err: any) {
+    fichiers.forEach((f) => fs.rmSync(f.path, { force: true }));
+    return res.status(400).json({ error: `Pièce jointe illisible : ${err.message}` });
+  }
+  try {
+    const r = await discuter(dossierId, message, pieces);
     res.json({ ...vueEtat(r.etat), reponse: r.reponse, modifies: r.modifies, page: r.page });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

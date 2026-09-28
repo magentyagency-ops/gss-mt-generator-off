@@ -141,6 +141,8 @@ export interface AssembleSection {
   illustration?: string;
   d2Code?: string;
   d2SvgFileName?: string;
+  /** Photos ajoutées à la rubrique avec l'assistant de modification : une page par photo, après le texte. */
+  photos?: Array<{ chemin: string; legende?: string }>;
 }
 
 export interface AssembleChapter {
@@ -587,6 +589,25 @@ export class MarpGenerator {
             lines.push(`![${illus.alt}](media/${illus.fileName})`);
             lines.push('');
           }
+        }
+
+        // Photos ajoutées par l'utilisateur (assistant de modification) : une page par photo, à la suite
+        // du texte de la rubrique. Sans photo, rien ne change.
+        for (const photo of section.photos || []) {
+          let src = '';
+          try {
+            const ext = path.extname(photo.chemin).toLowerCase() === '.png' ? 'png' : 'jpeg';
+            src = `data:image/${ext};base64,${fs.readFileSync(photo.chemin).toString('base64')}`;
+          } catch { continue; }
+          const legende = (photo.legende || '').replace(/[<>]/g, '');
+          lines.push('---');
+          lines.push(`<!-- header: "${headerTitle}" -->`);
+          lines.push('');
+          lines.push(`<div class="photo-gss" style="width: 100%; margin: 20px auto 0; text-align: center;">`);
+          lines.push(`<img src="${src}" alt="${legende.replace(/"/g, '&quot;')}" style="display: block; max-width: 100%; max-height: 470px; height: auto; margin: 0 auto; border-radius: 4px;" />`);
+          if (legende) lines.push(`<p style="margin-top: 10px; font-size: 0.8em; font-style: italic;">${legende}</p>`);
+          lines.push(`</div>`);
+          lines.push('');
         }
 
         // Organigramme GSS (section encadrement) : dessiné dans le design validé des schémas GSS,

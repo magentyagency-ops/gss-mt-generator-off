@@ -27,6 +27,16 @@ import { SECTIONS_REPONSE_LIBRE, CHAPITRES_REPONSE_LIBRE } from './memoire_gener
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const EMBED_MODEL = process.env.RAG_EMBEDDING_MODEL || process.env.EMBEDDING_MODEL_MEMOIRE || 'text-embedding-3-small';
 
+/** Pièce jointe à un message : photo (insérable dans le mémoire) ou document (source d'information). */
+export interface PieceJointe {
+  ref: string;              // P1, P2… (désignation pour l'assistant)
+  nom: string;
+  chemin: string;           // copie conservée avec le dossier (une photo insérée doit pouvoir être re-rendue)
+  type: 'image' | 'document';
+  texte?: string;           // document : contenu extrait
+  description?: string;     // photo : ce qu'elle montre (lu par l'IA)
+}
+
 export interface ResultatAssistant {
   etat: EtatCompletion;
   reponse: string;
@@ -49,6 +59,34 @@ async function sourcesGss(requete: string): Promise<string> {
   } catch {
     return blocRegistre();
   }
+}
+
+/** Décrit une photo (ce qu'elle montre, texte lisible) pour que l'assistant sache où et comment l'utiliser. */
+export async function decrirePhoto(chemin: string): Promise<string> {
+  try {
+    const ext = path.extname(chemin).toLowerCase() === '.png' ? 'png' : 'jpeg';
+    const r = await openai().chat.completions.create({
+      model: process.env.MEMOIRE_MODEL || 'gpt-5.6-luna',
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: "Décris précisément cette image en 2 à 3 phrases, en français : ce qu'elle montre et tout texte, chiffre ou information lisible qu'elle contient. Aucune supposition." },
+          { type: 'image_url', image_url: { url: `data:image/${ext};base64,${fs.readFileSync(chemin).toString('base64')}` } },
+        ] as any,
+      }],
+    });
+    return (r.choices?.[0]?.message?.content || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+/** Bloc « pièces jointes » pour les prompts. */
+function blocPieces(pieces: PieceJointe[], complet: boolean): string {
+  if (!pieces.length) return '';
+  return '\n\nPIÈCES JOINTES PAR L\'UTILISATEUR (sources valables) :\n' + pieces.map((p) => p.type === 'image'
+    ? `[${p.ref}] photo « ${p.nom} » : ${p.description || '(description indisponible)'}`
+    : `[${p.ref}] document « ${p.nom} » :\n${(p.texte || '').slice(0, complet ? 12000 : 1500)}`).join('\n\n');
 }
 
 const historique = (etat: EtatCompletion) =>
@@ -148,7 +186,89 @@ function ajouterAnnexe(xmlDoc: any, cle: string, titre: string, texte: string, n
   inserer(p);
 }
 
-async function assistantCadre(etat: EtatCompletion, message: string): Promise<{ reponse: string; modifies: string[] }> {
+/** Dimensions (px) d'une image PNG ou JPEG. */
+function dimensions(buf: Buffer): { w: number; h: number } | null {
+  if (buf.length > 24 && buf.slice(1, 4).toString() === 'PNG') return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  if (buf[0] === 0xff && buf[1] === 0xd8) {
+    let o = 2;
+    while (o + 9 < buf.length) {
+      if (buf[o] !== 0xff) return null;
+      const m = buf[o + 1];
+      const len = buf.readUInt16BE(o + 2);
+      if (m >= 0xc0 && m <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(m)) return { h: buf.readUInt16BE(o + 5), w: buf.readUInt16BE(o + 7) };
+      o += 2 + len;
+    }
+  }
+  return null;
+}
+
+/**
+ * Insère une photo (paragraphe centré + légende) dans le .docx, juste après `apres` (un paragraphe) ou,
+ * à défaut, à la fin du document. Ajoute l'image au fichier et ses déclarations (relation, type).
+ */
+function insererPhotoDocx(zip: PizZip, xmlDoc: any, piece: PieceJointe, legende: string, apres: any | null, n: number): void {
+  const buf = fs.readFileSync(piece.chemin);
+  const dim = dimensions(buf);
+  if (!dim) throw new Error(`Format d'image non pris en charge : ${piece.nom} (JPEG ou PNG attendu).`);
+  const ext = dim && buf.slice(1, 4).toString() === 'PNG' ? 'png' : 'jpeg';
+  const unique = `${Date.now().toString(36)}${n}`;
+  const media = `media/gss_photo_${unique}.${ext}`;
+  zip.file(`word/${media}`, buf);
+
+  const relsNom = 'word/_rels/document.xml.rels';
+  const rels = zip.file(relsNom)!.asText();
+  const rid = `rIdGssPhoto${unique}`;
+  zip.file(relsNom, rels.replace('</Relationships>', `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${media}"/></Relationships>`));
+  const ct = zip.file('[Content_Types].xml')!.asText();
+  if (!new RegExp(`Extension="${ext}"`, 'i').test(ct)) {
+    zip.file('[Content_Types].xml', ct.replace('<Types ', '<Types ').replace(/(<Types[^>]*>)/, `$1<Default Extension="${ext}" ContentType="image/${ext}"/>`));
+  }
+
+  // Taille : largeur du texte (15,5 cm) ou, dans un tableau, largeur de la cellule ; hauteur ≤ 11 cm ;
+  // proportions conservées.
+  const MAX_H = 3960000;
+  let MAX_W = 5580000;
+  let cellule = apres?.parentNode;
+  while (cellule && cellule.localName !== 'tc') cellule = cellule.parentNode;
+  const tcW = cellule ? elements(cellule, 'tcW')[0] : null;
+  if (tcW && (tcW.getAttribute('w:type') || 'dxa') === 'dxa') {
+    const largeur = Number(tcW.getAttribute('w:w')) * 635 - 250000;   // twips → EMU, moins les marges de cellule
+    if (largeur > 1000000) MAX_W = Math.min(MAX_W, largeur);
+  }
+  let cx = MAX_W;
+  let cy = Math.round(cx * dim.h / dim.w);
+  if (cy > MAX_H) { cx = Math.round(cx * MAX_H / cy); cy = MAX_H; }
+  const idDoc = 5000 + n + Math.floor(Math.random() * 1000);
+  const nomXml = piece.nom.replace(/[<>&"]/g, '');
+  const fragment = `<w:body xmlns:w="${W_NS}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`
+    + `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${idDoc}" name="Photo ${idDoc}" descr="${nomXml}"/>`
+    + `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="${idDoc}" name="${nomXml}"/><pic:cNvPicPr/></pic:nvPicPr>`
+    + `<pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`
+    + `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+    + (legende ? `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:i/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">${legende.replace(/[<>&]/g, '')}</w:t></w:r></w:p>` : '')
+    + '</w:body>';
+  const frag: any = new DOMParser().parseFromString(fragment, 'text/xml').documentElement;
+  const noeuds = Array.from({ length: frag.childNodes.length }, (_, i) => frag.childNodes[i]).filter((x: any) => x.nodeType === 1);
+  let parent: any, suivant: any;
+  if (apres) { parent = apres.parentNode; suivant = apres.nextSibling; } else {
+    parent = elements(xmlDoc, 'body')[0];
+    suivant = Array.from({ length: parent.childNodes.length }, (_, i) => parent.childNodes[i]).reverse().find((x: any) => x.nodeType === 1 && x.localName === 'sectPr') || null;
+  }
+  for (const nd of noeuds) {
+    const imp = xmlDoc.importNode(nd, true);
+    if (suivant) parent.insertBefore(imp, suivant); else parent.appendChild(imp);
+  }
+}
+
+/** Paragraphe qui contient le signet d'une réponse. */
+function paragrapheDuChamp(xmlDoc: any, cle: string): any | null {
+  const b = elements(xmlDoc, 'bookmarkStart').find((x) => x.getAttribute('w:name') === cle);
+  let n = b?.parentNode;
+  while (n && n.localName !== 'p') n = n.parentNode;
+  return n || null;
+}
+
+async function assistantCadre(etat: EtatCompletion, message: string, pieces: PieceJointe[]): Promise<{ reponse: string; modifies: string[] }> {
   const zip = new PizZip(fs.readFileSync(etat.fichier));
   const xmlDoc = new DOMParser().parseFromString(zip.file('word/document.xml')!.asText(), 'text/xml');
   const champs = (etat.champs || [])
@@ -162,11 +282,13 @@ async function assistantCadre(etat: EtatCompletion, message: string): Promise<{ 
     `Tu es l'assistant de modification d'un mémoire technique GSS (sécurité privée) rédigé dans le CADRE IMPOSÉ par l'acheteur. Actions possibles :
 1. "modifier" : réécrire, corriger, compléter, développer, raccourcir ou enrichir UNE réponse de GSS (repérée par sa clé GSS_CH_…). Ajouter du contenu à une réponse existante passe aussi par "modifier".
 2. "annexe" : ajouter une ou plusieurs pages en annexe, à la fin du document (titre + contenu).
-3. Aucune action : si l'utilisateur pose une question, réponds-lui simplement.
+3. "image" : insérer une photo jointe (P1, P2…) dans le document, UNIQUEMENT si l'utilisateur le demande : sous une réponse ("cle": GSS_CH_…) ou sur une nouvelle page d'annexe ("annexe": "titre de la page"), avec une légende courte qui décrit UNIQUEMENT ce que montre la photo (d'après sa description) ou ce que l'utilisateur en dit, sans rien affirmer d'autre ("legende").
+4. Aucune action : si l'utilisateur pose une question, réponds-lui simplement.
+Les documents et photos joints sont des sources valables : utilise leurs informations dans les consignes quand l'utilisateur le demande.
 Tu ne peux PAS modifier le texte de l'acheteur (intitulés, critères, barème, mise en page du cadre) : si on te le demande, explique-le poliment.
 Identifie précisément la ou les réponses visées d'après leur libellé et leur contenu. Si la demande est ambiguë (plusieurs réponses possibles et aucune plus évidente), n'agis pas et demande laquelle. Dans chaque action, la "consigne" reprend fidèlement et complètement ce que veut l'utilisateur pour CETTE réponse (y compris les informations qu'il donne).
-Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce qui est fait", "actions": [{"type": "modifier", "cle": "GSS_CH_…", "consigne": "…"} ou {"type": "annexe", "titre": "…", "consigne": "…", "nouvellePage": true}]}.`,
-    `${etat.demande ? `Demande particulière saisie avant la génération : ${etat.demande}\n\n` : ''}Échanges précédents :\n${historique(etat) || '(aucun)'}\n\nRéponses de GSS dans le document :\n${champs.map((c) => `- ${c.cle} | ${c.libelle} | ${c.texte.replace(/\s+/g, ' ').slice(0, 700)}`).join('\n')}\n\nDemande de l'utilisateur : ${message}`,
+Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce qui est fait", "actions": [{"type": "modifier", "cle": "GSS_CH_…", "consigne": "…"} ou {"type": "annexe", "titre": "…", "consigne": "…", "nouvellePage": true} ou {"type": "image", "piece": "P1", "cle": "GSS_CH_…", "legende": "…"} ou {"type": "image", "piece": "P1", "annexe": "…", "legende": "…"}]}.`,
+    `${etat.demande ? `Demande particulière saisie avant la génération : ${etat.demande}\n\n` : ''}Échanges précédents :\n${historique(etat) || '(aucun)'}\n\nRéponses de GSS dans le document :\n${champs.map((c) => `- ${c.cle} | ${c.libelle} | ${c.texte.replace(/\s+/g, ' ').slice(0, 700)}`).join('\n')}${blocPieces(pieces, false)}\n\nDemande de l'utilisateur : ${message}`,
   );
   const actions: any[] = Array.isArray(plan.actions) ? plan.actions : [];
   const modifies: string[] = [];
@@ -182,7 +304,7 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       const sources = await sourcesGss(`${champ.libelle} ${a.consigne}`);
       const r = await json(
         `Tu réécris UNE réponse d'un mémoire technique GSS (sécurité privée) rédigée dans le cadre imposé par l'acheteur, en appliquant exactement la consigne de l'utilisateur. Garde tout ce que la consigne ne demande pas de changer. Texte brut, sans Markdown ; sauts de ligne autorisés ; phrases naturelles, style d'un responsable d'exploitation de GSS.\n${REGLES_REDACTION}\nRenvoie {"texte": "…"}.`,
-        `Question de l'acheteur (libellé) : ${champ.libelle}\n\nRéponse actuelle :\n${champ.texte}\n\nConsigne de l'utilisateur : ${a.consigne}${etat.demande ? `\nDemande particulière du mémoire : ${etat.demande}` : ''}${sources}`,
+        `Question de l'acheteur (libellé) : ${champ.libelle}\n\nRéponse actuelle :\n${champ.texte}\n\nConsigne de l'utilisateur : ${a.consigne}${etat.demande ? `\nDemande particulière du mémoire : ${etat.demande}` : ''}${blocPieces(pieces, true)}${sources}`,
       );
       const texte = nettoyerTexte(r.texte);
       if (!texte) continue;
@@ -193,7 +315,7 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       const sources = await sourcesGss(`${a.titre} ${a.consigne || ''}`);
       const r = await json(
         `Tu rédiges le contenu d'une annexe ajoutée à la fin d'un mémoire technique GSS (sécurité privée), selon la consigne de l'utilisateur. Texte brut, sans Markdown ; sauts de ligne entre les paragraphes ; un intitulé court par partie si utile. Ne répète pas le titre de l'annexe (il est déjà affiché au-dessus).\n${REGLES_REDACTION}\nRenvoie {"texte": "…"}.`,
-        `Titre de l'annexe : ${a.titre}\nConsigne de l'utilisateur : ${a.consigne || a.titre}${etat.demande ? `\nDemande particulière du mémoire : ${etat.demande}` : ''}${sources}`,
+        `Titre de l'annexe : ${a.titre}\nConsigne de l'utilisateur : ${a.consigne || a.titre}${etat.demande ? `\nDemande particulière du mémoire : ${etat.demande}` : ''}${blocPieces(pieces, true)}${sources}`,
       );
       const texte = nettoyerTexte(r.texte);
       if (!texte) continue;
@@ -203,6 +325,24 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       ajouterAnnexe(xmlDoc, cle, String(a.titre).trim(), texte, a.nouvellePage !== false, marque, 70000 + n);
       (etat.champs ||= []).push({ cle, libelle: `Annexe — ${String(a.titre).trim()}` });
       modifies.push(cle);
+    } else if (a?.type === 'image') {
+      const piece = pieces.find((p) => p.ref === a.piece && p.type === 'image');
+      if (!piece) continue;
+      const legende = String(a.legende || '').trim();
+      const cible = a.cle ? paragrapheDuChamp(xmlDoc, a.cle) : null;
+      if (cible) {
+        insererPhotoDocx(zip, xmlDoc, piece, legende, cible, modifies.length);
+        modifies.push(a.cle);
+      } else {
+        // Nouvelle page d'annexe consacrée à la photo.
+        const titre = String(a.annexe || legende || 'Photo').trim();
+        const n = (etat.champs || []).filter((c) => /^GSS_CH_A/.test(c.cle)).length + 1;
+        const cle = `GSS_CH_A${n}`;
+        ajouterAnnexe(xmlDoc, cle, titre, legende || ' ', true, ++marque, 70000 + n);
+        (etat.champs ||= []).push({ cle, libelle: `Annexe — ${titre}` });
+        insererPhotoDocx(zip, xmlDoc, piece, '', paragrapheDuChamp(xmlDoc, cle), modifies.length);
+        modifies.push(cle);
+      }
     }
   }
 
@@ -245,18 +385,22 @@ function chapitreRubrique(etat: EtatCompletion, id: string): string {
   return SECTIONS_REPONSE_LIBRE.find((s) => s.id === id)?.chapter || etat.libre?.ajouts?.find((a) => a.id === id)?.chapter || '';
 }
 
-/** Page du PDF où apparaît le titre d'une rubrique (pour ouvrir l'aperçu au bon endroit). */
-function pageDe(fichier: string, titre: string): number | undefined {
+/**
+ * Page du PDF où apparaît un texte (titre de rubrique, légende de photo), hors couverture et sommaire,
+ * pour ouvrir l'aperçu au bon endroit. `derniere` : dernière page correspondante (photo ajoutée en fin de rubrique).
+ */
+function pageDe(fichier: string, titre: string, derniere = false): number | undefined {
   const r = spawnSync('pdftotext', ['-layout', fichier, '-'], { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
   if (r.status !== 0 || !r.stdout) return undefined;
   const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
   const cible = norm(titre).slice(0, 40);
   const pages = r.stdout.split('\f');
-  const i = pages.findIndex((p) => norm(p).includes(cible));
-  return i >= 0 ? i + 1 : undefined;
+  const trouvees = pages.map((p, i) => ({ p: norm(p), i })).filter(({ p, i }) => i > 0 && !/^\s*sommaire\b/.test(p) && !p.includes(' sommaire ') && p.includes(cible));
+  const t = derniere ? trouvees[trouvees.length - 1] : trouvees[0];
+  return t ? t.i + 1 : undefined;
 }
 
-async function assistantLibre(etat: EtatCompletion, message: string): Promise<{ reponse: string; modifies: string[]; page?: number }> {
+async function assistantLibre(etat: EtatCompletion, message: string, pieces: PieceJointe[]): Promise<{ reponse: string; modifies: string[]; page?: number }> {
   const lib = etat.libre!;
   lib.ajouts ||= [];
   const ids = [...SECTIONS_REPONSE_LIBRE.map((s) => s.id), ...lib.ajouts.map((a) => a.id)].filter((id) => (lib.sections[id] || '').trim());
@@ -265,10 +409,12 @@ async function assistantLibre(etat: EtatCompletion, message: string): Promise<{ 
 1. "modifier" : refaire, corriger, compléter, développer, raccourcir ou enrichir une rubrique existante (repérée par son id).
 2. "ajouter" : ajouter une nouvelle rubrique (une ou plusieurs pages) dans un chapitre (I, II, III ou IV), éventuellement juste après une rubrique donnée ("apres": id).
 3. "supprimer" : retirer une rubrique, UNIQUEMENT si l'utilisateur le demande explicitement.
-4. Aucune action : si l'utilisateur pose une question, réponds-lui simplement.
+4. "image" : insérer une photo jointe (P1, P2…) sur une page dédiée à la suite d'une rubrique ("id"), UNIQUEMENT si l'utilisateur le demande, avec une légende courte qui décrit UNIQUEMENT ce que montre la photo (d'après sa description) ou ce que l'utilisateur en dit, sans rien affirmer d'autre ("legende").
+5. Aucune action : si l'utilisateur pose une question, réponds-lui simplement.
+Les documents et photos joints sont des sources valables : utilise leurs informations dans les consignes quand l'utilisateur le demande.
 Identifie précisément la ou les rubriques visées. Si la demande est ambiguë, n'agis pas et demande une précision. Dans chaque action, la "consigne" reprend fidèlement et complètement ce que veut l'utilisateur (y compris les informations qu'il donne).
-Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce qui est fait", "actions": [{"type": "modifier", "id": "…", "consigne": "…"} ou {"type": "ajouter", "chapitre": "II", "titre": "…", "apres": "…", "consigne": "…"} ou {"type": "supprimer", "id": "…"}]}.`,
-    `${etat.demande ? `Demande particulière saisie avant la génération : ${etat.demande}\n\n` : ''}Échanges précédents :\n${historique(etat) || '(aucun)'}\n\nRubriques du mémoire :\n${ids.map((id) => `- ${id} | chapitre ${chapitreRubrique(etat, id)} | ${titreRubrique(etat, id)} | ${lib.sections[id].replace(/⟦AC:\d+⟧/g, '').replace(/\s+/g, ' ').slice(0, 300)}`).join('\n')}\n\nDemande de l'utilisateur : ${message}`,
+Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce qui est fait", "actions": [{"type": "modifier", "id": "…", "consigne": "…"} ou {"type": "ajouter", "chapitre": "II", "titre": "…", "apres": "…", "consigne": "…"} ou {"type": "supprimer", "id": "…"} ou {"type": "image", "piece": "P1", "id": "…", "legende": "…"}]}.`,
+    `${etat.demande ? `Demande particulière saisie avant la génération : ${etat.demande}\n\n` : ''}Échanges précédents :\n${historique(etat) || '(aucun)'}\n\nRubriques du mémoire :\n${ids.map((id) => `- ${id} | chapitre ${chapitreRubrique(etat, id)} | ${titreRubrique(etat, id)} | ${lib.sections[id].replace(/⟦AC:\d+⟧/g, '').replace(/\s+/g, ' ').slice(0, 300)}`).join('\n')}${blocPieces(pieces, false)}\n\nDemande de l'utilisateur : ${message}`,
   );
   const actions: any[] = Array.isArray(plan.actions) ? plan.actions : [];
   const modifies: string[] = [];
@@ -280,7 +426,7 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       const sources = await sourcesGss(`${titre} ${a.consigne}`);
       const r = await json(
         `Tu réécris une rubrique d'un mémoire technique GSS (sécurité privée) en appliquant exactement la consigne de l'utilisateur. Garde tout ce que la consigne ne demande pas de changer.\n${REGLES_REDACTION}\n${REGLES_FORME_LIBRE}\nRenvoie {"texte": "…"}.`,
-        `Rubrique : ${titre}\n\nTexte actuel :\n${lib.sections[a.id]}\n\nConsigne de l'utilisateur : ${a.consigne}${etat.demande ? `\nDemande particulière du mémoire : ${etat.demande}` : ''}${sources}`,
+        `Rubrique : ${titre}\n\nTexte actuel :\n${lib.sections[a.id]}\n\nConsigne de l'utilisateur : ${a.consigne}${etat.demande ? `\nDemande particulière du mémoire : ${etat.demande}` : ''}${blocPieces(pieces, true)}${sources}`,
       );
       const texte = nettoyerTexte(r.texte);
       if (!texte) continue;
@@ -293,7 +439,7 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       const sources = await sourcesGss(`${titre} ${a.consigne || ''}`);
       const r = await json(
         `Tu rédiges une nouvelle rubrique d'un mémoire technique GSS (sécurité privée) selon la consigne de l'utilisateur, au niveau de qualité des autres rubriques (contenu concret, méthodes et exemples GSS). Longueur : celle que demande l'utilisateur, sachant qu'une page du mémoire contient environ 150 à 200 mots (« une page » ≈ 150-200 mots, « deux pages » ≈ 300-400 mots) ; sans précision, environ 200 à 350 mots.\n${REGLES_REDACTION}\n${REGLES_FORME_LIBRE}\nRenvoie {"texte": "…"}.`,
-        `Titre de la rubrique : ${titre} (chapitre ${chapitre} — ${CHAPITRES_REPONSE_LIBRE[chapitre]})\nConsigne de l'utilisateur : ${a.consigne || titre}${etat.demande ? `\nDemande particulière du mémoire : ${etat.demande}` : ''}${sources}`,
+        `Titre de la rubrique : ${titre} (chapitre ${chapitre} — ${CHAPITRES_REPONSE_LIBRE[chapitre]})\nConsigne de l'utilisateur : ${a.consigne || titre}${etat.demande ? `\nDemande particulière du mémoire : ${etat.demande}` : ''}${blocPieces(pieces, true)}${sources}`,
       );
       const texte = nettoyerTexte(r.texte);
       if (!texte) continue;
@@ -301,9 +447,16 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       lib.sections[id] = texte;
       lib.ajouts.push({ id, chapter: chapitre, title: titre, apres: ids.includes(a.apres) ? a.apres : undefined });
       modifies.push(id);
+    } else if (a?.type === 'image' && ids.includes(a.id)) {
+      const piece = pieces.find((p) => p.ref === a.piece && p.type === 'image');
+      if (!piece || !dimensions(fs.readFileSync(piece.chemin))) continue;
+      lib.photos ||= {};
+      (lib.photos[a.id] ||= []).push({ chemin: piece.chemin, legende: String(a.legende || '').trim() });
+      modifies.push(a.id);
     } else if (a?.type === 'supprimer' && ids.includes(a.id)) {
       lib.sections[a.id] = '';
       lib.ajouts = lib.ajouts.filter((x) => x.id !== a.id);
+      if (lib.photos) delete lib.photos[a.id];
       oublierSchemas(a.id);
       modifies.push(a.id);
     }
@@ -313,20 +466,22 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
   if (modifies.length) {
     etat.fichier = await recomposerPdf(etat);
     const visible = modifies.find((id) => (lib.sections[id] || '').trim());
-    if (visible) page = pageDe(etat.fichier, titreRubrique(etat, visible));
+    const photo = actions.some((a) => a?.type === 'image' && a.id === visible);
+    if (visible) page = pageDe(etat.fichier, titreRubrique(etat, visible), photo);
   }
   return { reponse: String(plan.reponse || (modifies.length ? 'Modification effectuée.' : "Je n'ai rien modifié.")).trim(), modifies, page };
 }
 
 // ─── Point d'entrée ───────────────────────────────────────────────────────────────────────
 
-export async function discuter(dossierId: string, message: string): Promise<ResultatAssistant> {
+export async function discuter(dossierId: string, message: string, pieces: PieceJointe[] = []): Promise<ResultatAssistant> {
   const etat = lireEtat(dossierId);
   if (!etat) throw new Error('Aucun document généré pour ce dossier.');
-  const texte = message.trim();
-  const r = etat.mode === 'cadre' ? await assistantCadre(etat, texte) : await assistantLibre(etat, texte);
+  const texte = message.trim() || (pieces.length ? 'Voici des pièces jointes.' : '');
+  for (const p of pieces) if (p.type === 'image' && !p.description) p.description = await decrirePhoto(p.chemin);
+  const r = etat.mode === 'cadre' ? await assistantCadre(etat, texte, pieces) : await assistantLibre(etat, texte, pieces);
   const date = new Date().toISOString();
-  (etat.conversation ||= []).push({ role: 'utilisateur', texte, date });
+  (etat.conversation ||= []).push({ role: 'utilisateur', texte, date, pieces: pieces.length ? pieces.map((p) => p.nom) : undefined });
   etat.conversation.push({ role: 'assistant', texte: r.reponse, date: new Date().toISOString(), modifies: r.modifies });
   ecrireEtat(etat);
   return { etat, reponse: r.reponse, modifies: r.modifies, page: (r as any).page };
