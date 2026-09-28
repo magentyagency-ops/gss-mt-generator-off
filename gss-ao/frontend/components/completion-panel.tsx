@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { CheckCircle2, Download, Loader2, Mail, MessagesSquare, PencilLine, Send, Users } from "lucide-react";
+import { CheckCircle2, Download, FileText, Loader2, Mail, MessagesSquare, Paperclip, PencilLine, Plus, Send, Upload, Users, X } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { apiFetch, apiBase } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -41,8 +41,12 @@ interface Etat {
   majLe: string;
   elements: Element[];
   restants: number;
-  conversation?: Array<{ role: "utilisateur" | "assistant"; texte: string; date: string; modifies?: string[] }>;
+  conversation?: Array<{ role: "utilisateur" | "assistant"; texte: string; date: string; modifies?: string[]; pieces?: string[] }>;
 }
+
+/** Pièces jointes acceptées par l'assistant : photos (insérables dans le mémoire) et documents (sources). */
+const EXTENSIONS_PIECES = [".jpg", ".jpeg", ".png", ".pdf", ".docx", ".doc", ".txt", ".md"];
+const estImage = (f: File) => /\.(jpe?g|png)$/i.test(f.name);
 
 /** Exemples de demandes affichés quand la conversation avec l'assistant est vide. */
 const EXEMPLES_ASSISTANT: Record<Etat["mode"], string[]> = {
@@ -130,6 +134,22 @@ export function CompletionPanel({
   const [erreurAssistant, setErreurAssistant] = useState<string | null>(null);
   const [pageLibre, setPageLibre] = useState<number | undefined>(undefined);
   const finConversationRef = useRef<HTMLDivElement | null>(null);
+  const [pieces, setPieces] = useState<File[]>([]);
+  const [survolDepot, setSurvolDepot] = useState(false);
+  const entreePiecesRef = useRef<HTMLInputElement | null>(null);
+
+  /** Ajoute des fichiers aux pièces jointes (bouton « + » ou glisser-déposer). */
+  const ajouterPieces = (liste: FileList | File[]) => {
+    const fichiers = Array.from(liste);
+    const refuses = fichiers.filter((f) => !EXTENSIONS_PIECES.some((e) => f.name.toLowerCase().endsWith(e)));
+    const acceptes = fichiers.filter((f) => !refuses.includes(f));
+    if (refuses.length) setErreurAssistant(`Format non pris en charge : ${refuses.map((f) => f.name).join(", ")}. Photos : JPEG ou PNG ; documents : PDF, Word ou texte.`);
+    else setErreurAssistant(null);
+    if (acceptes.length) {
+      setPieces((p) => [...p, ...acceptes].slice(0, 10));
+      setOnglet("assistant");
+    }
+  };
   const itemsRef = useRef<Record<string, HTMLDivElement | null>>({});
   const etatRef = useRef<Etat | null>(null);
   etatRef.current = etat;
@@ -251,16 +271,17 @@ export function CompletionPanel({
   /** Assistant de modification : la demande est appliquée au document, qui est mis à jour aussitôt. */
   async function envoyerAssistant(texte?: string) {
     const m = (texte ?? message).trim();
-    if (!m || enAttenteAssistant) return;
-    setEnAttenteAssistant(m);
+    const jointes = pieces;
+    if ((!m && !jointes.length) || enAttenteAssistant) return;
+    setEnAttenteAssistant(m || `${jointes.length} pièce(s) jointe(s)`);
     setErreurAssistant(null);
     setMessage("");
+    setPieces([]);
     try {
-      const res = await apiFetch(`/api/dossiers/${dossierId}/assistant`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: m }),
-      });
+      const corps = new FormData();
+      corps.append("message", m);
+      jointes.forEach((f) => corps.append("fichiers", f));
+      const res = await apiFetch(`/api/dossiers/${dossierId}/assistant`, { method: "POST", body: corps });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "L'assistant n'a pas pu traiter la demande.");
       if (data.modifies?.length) aSignalerRef.current = data.modifies;
@@ -269,6 +290,7 @@ export function CompletionPanel({
     } catch (e: any) {
       setErreurAssistant(e.message);
       setMessage(m);
+      setPieces(jointes);
     } finally {
       setEnAttenteAssistant(null);
     }
@@ -543,7 +565,18 @@ export function CompletionPanel({
           </div>
 
           {onglet === "assistant" && (
-            <div className="space-y-3">
+            <div
+              className="relative space-y-3"
+              onDragOver={(ev) => { if (ev.dataTransfer.types.includes("Files")) { ev.preventDefault(); setSurvolDepot(true); } }}
+              onDragLeave={(ev) => { if (!ev.currentTarget.contains(ev.relatedTarget as Node)) setSurvolDepot(false); }}
+              onDrop={(ev) => { ev.preventDefault(); setSurvolDepot(false); if (ev.dataTransfer.files?.length) ajouterPieces(ev.dataTransfer.files); }}
+            >
+              {survolDepot && (
+                <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-primary bg-primary/5 text-sm font-medium text-primary">
+                  <Upload className="h-6 w-6" />
+                  Déposez vos photos ou documents ici
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">
                 Demandez une modification en langage naturel : refaire ou corriger une partie, la développer ou la raccourcir, ajouter des pages.
                 {etat.mode === "cadre" ? " Le texte du cadre de l'acheteur n'est jamais modifié ; les pages ajoutées vont en annexe." : ""}
@@ -561,6 +594,11 @@ export function CompletionPanel({
                 {(etat.conversation || []).map((m, i) => (
                   <div key={i} className={cn("rounded-lg px-3 py-2 text-sm", m.role === "utilisateur" ? "ml-6 bg-primary text-primary-foreground" : "mr-6 border border-border bg-card text-foreground")}>
                     <p className="whitespace-pre-line">{m.texte}</p>
+                    {!!m.pieces?.length && (
+                      <p className="mt-1 flex flex-wrap items-center gap-1 text-xs opacity-90">
+                        <Paperclip className="h-3 w-3" /> {m.pieces.join(", ")}
+                      </p>
+                    )}
                     {m.role === "assistant" && !!m.modifies?.length && (
                       <p className="mt-1 flex items-center gap-1 text-xs text-success"><CheckCircle2 className="h-3 w-3" /> Document mis à jour</p>
                     )}
@@ -579,17 +617,57 @@ export function CompletionPanel({
               </div>
               {erreurAssistant && <p className="text-xs text-destructive">{erreurAssistant}</p>}
               <div className="space-y-2">
+                {pieces.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {pieces.map((f, i) => (
+                      <span key={`${f.name}-${i}`} className="flex max-w-full items-center gap-1.5 rounded-md border border-border bg-card py-1 pl-1 pr-2 text-xs">
+                        {estImage(f) ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={URL.createObjectURL(f)} alt="" className="h-7 w-7 rounded object-cover" />
+                        ) : (
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                        )}
+                        <span className="max-w-[180px] truncate">{f.name}</span>
+                        <button type="button" aria-label={`Retirer ${f.name}`} className="text-muted-foreground hover:text-destructive" onClick={() => setPieces((p) => p.filter((_, j) => j !== i))}>
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <textarea
                   id="assistant-message"
                   value={message}
                   onChange={(ev) => setMessage(ev.target.value)}
                   onKeyDown={(ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); envoyerAssistant(); } }}
+                  onPaste={(ev) => { if (ev.clipboardData.files?.length) { ev.preventDefault(); ajouterPieces(ev.clipboardData.files); } }}
                   rows={3}
                   placeholder="Ex. : Refais la partie sur les rondes en insistant sur la traçabilité…"
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
-                <div className="flex justify-end">
-                  <Button size="sm" className="gap-1" disabled={!!enAttenteAssistant || !message.trim()} onClick={() => envoyerAssistant()}>
+                <div className="flex items-center justify-between gap-2">
+                  <input
+                    ref={entreePiecesRef}
+                    id="assistant-pieces"
+                    type="file"
+                    multiple
+                    accept={EXTENSIONS_PIECES.join(",")}
+                    className="hidden"
+                    onChange={(ev) => { if (ev.target.files?.length) ajouterPieces(ev.target.files); ev.target.value = ""; }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    title="Joindre des photos ou des documents (ou glissez-les ici)"
+                    aria-label="Joindre des photos ou des documents"
+                    disabled={!!enAttenteAssistant}
+                    onClick={() => entreePiecesRef.current?.click()}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                  <span className="flex-1 text-[11px] leading-tight text-muted-foreground">Photos ou documents : bouton + ou glisser-déposer</span>
+                  <Button size="sm" className="gap-1" disabled={!!enAttenteAssistant || (!message.trim() && !pieces.length)} onClick={() => envoyerAssistant()}>
                     {enAttenteAssistant ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     Envoyer
                   </Button>
