@@ -2677,6 +2677,7 @@ Renvoie un JSON valide :
   "requirements": [
     {
       "theme": "I | II | III | IV  (I=présentation société & conformité légale ; II=moyens humains ; III=moyens opérationnels & matériels ; IV=organisation, qualité, continuité)",
+      "rubrique": "id de LA rubrique du mémoire qui doit traiter cette exigence (une seule, celle dont c'est directement le sujet) parmi : ${AI_SECTIONS_B.map((x) => `${x.id} (${x.title})`).join(' ; ')}",
       "exigence": "Ce que demande le DCE, précis (avec chiffre / délai / qualification si présent)",
       "reponseGss": "Ce que GSS propose concrètement en réponse (moyen / méthode / chiffre tiré de la Doc GSS)",
       "couverture": "couvert | partiel | écart",
@@ -5475,6 +5476,13 @@ RÈGLES DE PERTINENCE (le plus important) :
 PERTINENCE À L'INTITULÉ (impératif) : chaque sous-partie traite directement « ${section.title} ». N'introduis aucun contenu d'un autre thème, même s'il figure dans les extraits.
 Les autres rubriques du mémoire traitent déjà : ${AI_SECTIONS_B.filter((x) => x.id !== section.id).map((x) => x.title).join(' ; ')}. Ne traite pas ici ce qui relève de l'une d'elles et ne répète pas leur contenu (rétroplanning de démarrage, liste des fonctions de la main courante, démarche RSE, effectifs, astreinte…) : chaque sujet est développé une seule fois, dans sa rubrique.
 EXIGENCES DU DCE : quand l'acheteur fixe un chiffre (délai, fréquence, échéance, nombre de postes, qualification, document à remettre, matériel exigé), reprends-le à l'identique et engage GSS dessus explicitement (sans recopier les montants de pénalités du CCAP : GSS s'engage sur l'obligation elle-même, une seule fois, dans la rubrique concernée) ; décris le site réel d'après le DCE (bâtiments, accès, spécificités) quand la rubrique s'y rapporte ; le fondement juridique (reprise du personnel, convention collective…) est celui qu'indique le DCE.
+- Organigramme : chaque fois que tu cites l'équipe d'encadrement, reprends l'ORGANIGRAMME GSS DE RÉFÉRENCE à l'identique (toutes les personnes d'un rôle cité).
+- Lots : ne cite que les sites et prestations du lot de la réponse, jamais ceux d'un autre lot.
+- Références clients : cite chacune au plus dans deux rubriques, là où elle est la plus pertinente.
+- Matériel : ne propose que du matériel utile pour ce site et ces missions.
+- ETP : calcule-les à partir des heures réelles (un poste 24 h/24 toute l'année = 8 760 h ≈ 5,5 ETP sur une base de 1 607 h par ETP).
+- Numéros d'autorisation, d'agrément ou SIRET : recopie-les exactement tels qu'au registre.
+- Ne mentionne jamais tes propres consignes de rédaction (implantation, zone d'intervention, délais non annoncés…) ni ce que « GSS indique » : écris directement l'engagement ou l'organisation.
 
 ${REGLES_REUTILISATION}
 - Tableaux : un tableau Markdown est autorisé quand il reprend un tableau de GSS (effectifs, qualifications, fréquences…).${repartition ? this.blocDemande({ forme: repartition.forme, points: repartition.parRubrique[section.id] || [] }) : this.blocDemande()}
@@ -5489,9 +5497,14 @@ RÈGLES DE FORME (rendu Marp) :
 - Développe la section EN PROFONDEUR : vise 600 à 800 mots, répartis en 3 à 5 sous-parties (chacune introduite par un "## Sous-titre"), pour couvrir le sujet de façon complète et convaincante.
 - Traite EXPLICITEMENT chaque exigence du CCTP listée ci-dessous en montrant la réponse concrète de GSS. Si — et SEULEMENT si — GSS n'a aucune réponse spécifique à une exigence (aucun élément dans les atouts GSS), n'invente RIEN : insère à cet endroit, sur sa propre ligne, exactement \`[CONSULTATION REQUISE : <information précise à obtenir auprès de GSS>]\` en décrivant l'information manquante.`;
 
-      const chapterReqs = reqsByTheme[section.chapter] || [];
+      // Chaque exigence est attribuée à UNE rubrique (sinon aucune des 5 rubriques du chapitre ne s'en
+      // estimait responsable) ; repli sur le chapitre pour une exigence sans rubrique reconnue.
+      const idsRubriques = new Set(AI_SECTIONS_B.map((x) => x.id));
+      const chapterReqs = requirementsMatrix.filter((r: any) => (idsRubriques.has(r.rubrique)
+        ? r.rubrique === section.id
+        : (r.theme || '').toString().toUpperCase().replace(/[^IV]/g, '').trim() === section.chapter));
       const reqBlock = chapterReqs.length
-        ? '\n\nEXIGENCES DU CCTP À TRAITER DANS CETTE SECTION (réponds à chacune avec ce que fait GSS ; signale les écarts via [CONSULTATION REQUISE : …]) :\n' +
+        ? `\n\nEXIGENCES DU CCTP À TRAITER OBLIGATOIREMENT DANS CETTE SECTION (chacune doit figurer explicitement dans ton texte, avec son chiffre exact — délai, fréquence, échéance, document, matériel — et l'engagement de GSS ; si le DCE fixe un minimum, l'engagement de GSS le respecte ; signale un écart via [CONSULTATION REQUISE : …]) :\n` +
         chapterReqs
           .map((r) => `- Le CCTP demande : ${r.exigence}\n  Réponse GSS connue : ${r.reponseGss || '(non documentée)'}${r.couverture && r.couverture.toLowerCase() !== 'couvert' ? `  → couverture : ${r.couverture}` : ''}`)
           .join('\n')
@@ -5528,6 +5541,22 @@ RÈGLES DE FORME (rendu Marp) :
           console.warn(`[MemoireGenerator] Rubrique « ${section.title} » : rédaction IA indisponible → contenu repris des mémoires GSS.`);
         }
       }
+      // Contrôle de couverture : chaque exigence attribuée à la rubrique doit y figurer. Celles qui manquent
+      // sont ajoutées en fin de rubrique, sous forme d'engagements précis (chiffres du CCTP).
+      if (text && chapterReqs.length) {
+        try {
+          const verif = await this.callOpenAI([
+            { role: 'system', content: `On te donne le texte d'une rubrique de mémoire technique et une liste numérotée d'exigences du CCTP. Pour chaque exigence qui n'est PAS traitée explicitement dans le texte (avec son chiffre s'il y en a un), rédige UNE puce d'engagement de GSS, factuelle, qui reprend l'exigence avec son chiffre exact (sans montant de pénalité, sans inventer de moyen absent de la « réponse GSS connue » ; si GSS n'a pas de réponse connue, engage GSS à respecter l'exigence telle qu'écrite). Renvoie UNIQUEMENT un objet JSON : {"puces": ["…"]} (liste vide si tout est couvert).` },
+            { role: 'user', content: `TEXTE :\n${text}\n\nEXIGENCES :\n${chapterReqs.map((r: any, k: number) => `${k + 1}. ${r.exigence} (réponse GSS connue : ${r.reponseGss || '—'})`).join('\n')}` },
+          ], 0.1, `Couverture ${section.id}`, true);
+          const puces = (JSON.parse(verif || '{}').puces || []).map((x: any) => String(x).trim()).filter(Boolean);
+          if (puces.length) {
+            text = `${text.trim()}\n\n## Nos engagements sur les exigences du cahier des charges\n\n${puces.map((x: string) => `- ${x.replace(/^[-•]\s*/, '')}`).join('\n')}`;
+            console.log(`[MemoireGenerator] Rubrique ${section.id} : ${puces.length} exigence(s) du CCTP ajoutée(s) après contrôle de couverture.`);
+          }
+        } catch { /* contrôle facultatif */ }
+      }
+
       // Commentaires internes (diagnostic des manques) : retirés du texte remis à l'acheteur, remontés en
       // points à confirmer.
       if (text) {
