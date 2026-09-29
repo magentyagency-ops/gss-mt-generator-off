@@ -172,7 +172,8 @@ export function personnesDuRole(role: string): string[] {
  * valeur la plus récente du registre prime sur le fichier « Personnes » (non daté). Sans cette source
  * unique, les rubriques citaient des responsables différents pour un même rôle.
  */
-export function organigrammeGss(referents: string): string {
+/** Rôles de l'organigramme GSS de référence (annuaire « Personnes » + registre des mémoires). */
+export function rolesOrganigramme(referents: string): Array<{ libelle: string; noms: string[] }> {
   const cle = (role: string) => role.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/\(s\)|\(e\)/g, '').replace(/\b(responsables?|directeur|directrice|chef|de|du|des|d|l|la|le|agence)\b/g, ' ')
     .replace(/[^a-z]+/g, ' ').trim().split(' ').filter((w) => w.length >= 2).map((w) => w.replace(/s$/, '').replace(/ale$/, 'al').replace(/iere$/, 'ier')).join(' ');
@@ -202,9 +203,14 @@ export function organigrammeGss(referents: string): string {
       roles.set(k, { libelle: exist?.libelle || e.libelle.replace(/\(s\)/g, 's').replace(/\(e\)/g, ''), noms: exist && exist.noms.some((x) => noms.some((n) => memePersonne(x, n))) ? exist.noms : noms });
     }
   }
-  if (!roles.size) return '';
+  return [...roles.values()];
+}
+
+export function organigrammeGss(referents: string): string {
+  const roles = rolesOrganigramme(referents);
+  if (!roles.length) return '';
   return '\n\nORGANIGRAMME GSS DE RÉFÉRENCE (unique pour tout le document ; aucun autre nom ni rôle) :\n'
-    + [...roles.values()].map((e) => `- ${e.libelle} : ${e.noms.join(', ')}`).join('\n');
+    + roles.map((e) => `- ${e.libelle} : ${e.noms.join(', ')}`).join('\n');
 }
 
 /**
@@ -220,6 +226,51 @@ export function referencesGss(): string {
   } catch {
     return '';
   }
+}
+
+/** Motifs de reconnaissance de chaque référence client (nom complet, et premier mot distinctif). */
+export function motifsReferences(): Array<{ nom: string; motifs: RegExp[] }> {
+  try {
+    const ix = JSON.parse(fs.readFileSync(path.resolve(DIR, '../schemas_gss/bibliotheque/index.json'), 'utf-8'));
+    const GENERIQUES = /^(h[ôo]tel|centre|r[ée]gion|ville|mairie|agence|si[èe]ge|campus|march[ée])$/i;
+    const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return (ix as any[]).filter((x) => x.section === 'b_references' && /^Référence /.test(x.titre)).map((x) => {
+      const nom = String(x.titre).replace(/^Référence\s+/, '').split(' — ').pop()!.trim();
+      const motifs = [new RegExp(`(?<![\\wÀ-ÿ])${esc(nom)}(?![\\wÀ-ÿ])`)];
+      const premier = nom.split(/\s+/)[0];
+      const distinctif = /^centre hospitalier/i.test(nom) ? `hospitalier du ${nom.split(/\s+/).pop()}` : (!GENERIQUES.test(premier) && (premier.length >= 4 || /^[A-Z]{3,}$/.test(premier)) ? premier : '');
+      if (distinctif && distinctif !== nom) motifs.push(new RegExp(`(?<![\\wÀ-ÿ])${esc(distinctif)}(?![\\wÀ-ÿ])`, /^hospitalier/.test(distinctif) ? 'i' : ''));
+      return { nom, motifs };
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Une référence client est citée dans DEUX rubriques au plus (retour GSS : CESI, Schneider… repris
+ * partout). On garde la rubrique « références » puis la première rubrique qui la cite ; ailleurs, les
+ * phrases, puces et lignes de tableau qui la citent sont retirées (jamais au point de vider une rubrique,
+ * jamais une phrase portant un repère à compléter). Renvoie le nombre de passages retirés.
+ */
+export function limiterReferences(sections: Record<string, string>, ordre: string[], rubriqueReferences = 'b_references', maxRubriques = 2): number {
+  let n = 0;
+  for (const { motifs } of motifsReferences()) {
+    const cite = (t: string) => motifs.some((m) => m.test(t));
+    const ids = ordre.filter((id) => cite(sections[id] || ''));
+    const garder = [...(ids.includes(rubriqueReferences) ? [rubriqueReferences] : []), ...ids.filter((id) => id !== rubriqueReferences)].slice(0, maxRubriques);
+    for (const id of ids.filter((x) => !garder.includes(x))) {
+      const avant = sections[id];
+      let t = avant.split('\n').map((ligne) => {
+        if (!cite(ligne) || /⟦AC:|\[CONSULTATION REQUISE/.test(ligne)) return ligne;
+        if (/^\s*(#|\||[-*•]\s|\d+[.)]\s)/.test(ligne)) return null; // titre, puce, ligne de tableau : retirés entiers
+        return ligne.split(/(?<=[.!?])\s+/).filter((ph) => !cite(ph)).join(' ');
+      }).filter((l): l is string => l !== null).join('\n');
+      t = t.replace(/^#{2,4}\s+.+\n+(?=#{2,4}\s|$(?![\s\S]))/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+      if (t !== avant && t.split(/\s+/).length >= 120) { sections[id] = t; n++; }
+    }
+  }
+  return n;
 }
 
 /**
@@ -289,7 +340,10 @@ export function texteSourcesMemoires(): string {
 }
 
 /** Phrases de diagnostic interne sur les manques (jamais destinées à l'acheteur). */
-const COMMENTAIRE_INTERNE = /(\bà ce stade\b|\bne sont pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]est pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]ont pas été (?:communiqué|transmis|fourni)|\bn['’]a pas été (?:communiqué|transmis|fourni)|documentation (?:gss )?(?:fournie|transmise|disponible)|documents? (?:gss )?transmis|éléments? (?:gss )?(?:disponibles|transmis|fournis|communiqués)|\breste(?:nt)? à (?:confirmer|établir|préciser|obtenir)|\bdoi(?:t|vent) être confirmé|\bdevr(?:a|ont) être (?:confirmé|précisé|transposé|validé)|\baprès la visite\b|\blors de la visite obligatoire\b|\bne comporte (?:toutefois )?pas\b|\bne présente ni\b|\bsous réserve de (?:confirmation|validation)\b|\bnon (?:communiqué|précisé|renseigné) dans les|zone d['’]intervention habituelle|\bn['’]annonce (?:donc )?aucun délai|présenter comme acquis|organisation déclarée|\bdocumentés? comme\b|références enregistrées|\bnon précisée?s?(?![a-zà-ÿ])|\bDCE transmis\b|éléments du DCE|implantation habituelle)/i;
+const COMMENTAIRE_INTERNE = /(\bà ce stade\b|\bne sont pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]est pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]ont pas été (?:communiqué|transmis|fourni)|\bn['’]a pas été (?:communiqué|transmis|fourni)|documentation (?:gss )?(?:fournie|transmise|disponible)|documents? (?:gss )?transmis|éléments? (?:gss )?(?:disponibles|transmis|fournis|communiqués)|\breste(?:nt)? à (?:confirmer|établir|préciser|obtenir)|\bdoi(?:t|vent) être confirmé|\bdevr(?:a|ont) être (?:confirmé|précisé|transposé|validé)|\baprès la visite\b|\blors de la visite obligatoire\b|\bne comporte (?:toutefois )?pas\b|\bne présente ni\b|\bsous réserve de (?:confirmation|validation)\b|\bnon (?:communiqué|précisé|renseigné) dans les|zone d['’]intervention habituelle|\bn['’]annonce (?:donc )?aucun délai|présenter comme acquis|organisation déclarée|\bdocumentés? comme\b|références enregistrées|\bnon précisée?s?(?![a-zà-ÿ])|\bDCE transmis\b|éléments du DCE|implantation habituelle|\bces éléments ne (?:décrivent|précisent|mentionnent|détaillent|couvrent)\b)/i;
+
+/** Montant de pénalité du CCAP/CCTP : GSS s'engage sur l'obligation, jamais sur le montant de la sanction. */
+const MONTANT_PENALITE = /p[ée]nalit[ée]s?[^.;]{0,120}?\d[\d\s  ]*(?:,\d+)?\s*(?:€|euros?)|\d[\d\s  ]*(?:,\d+)?\s*(?:€|euros?)[^.;]{0,80}?p[ée]nalit/i;
 
 /**
  * Retire du texte destiné à l'acheteur les phrases de diagnostic interne (« à ce stade, … n'est pas
@@ -299,6 +353,15 @@ const COMMENTAIRE_INTERNE = /(\bà ce stade\b|\bne sont pas (?:encore )?(?:étab
 export function retirerCommentairesInternes(texte: string): { texte: string; retires: string[] } {
   const retires: string[] = [];
   const lignes = texte.split('\n').map((ligne) => {
+    // Montant de pénalité : seule la proposition qui le cite est retirée (phrase, ou partie après « ; »/« , ») ;
+    // une puce ou une ligne qui ne contenait que cela disparaît.
+    if (MONTANT_PENALITE.test(ligne) && !/\[À COMPLÉTER\]|\[CONSULTATION REQUISE|⟦AC:/.test(ligne) && !/^\s*\|/.test(ligne)) {
+      const debut = (ligne.match(/^\s*(?:[-*•]\s+|\d+[.)]\s+)?/) || [''])[0];
+      const reste = ligne.slice(debut.length).split(/(?<=[.;!?])\s+/)
+        .map((ph) => (MONTANT_PENALITE.test(ph) ? ph.replace(/\s*[;,]\s*[^;,]*p[ée]nalit[^;]*$/i, '.').replace(/^.*$/, (x) => (MONTANT_PENALITE.test(x) ? '' : x)) : ph))
+        .filter((ph) => ph.trim()).join(' ').replace(/\s*;\s*$/, '.').trim();
+      ligne = reste ? `${debut}${reste}` : '';
+    }
     if (/^\s*(#|\||[-*•]\s)/.test(ligne) && !COMMENTAIRE_INTERNE.test(ligne)) return ligne;
     const phrases = ligne.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«"(])/);
     const gardees = phrases.filter((ph) => {
@@ -312,6 +375,12 @@ export function retirerCommentairesInternes(texte: string): { texte: string; ret
   const texteFinal = lignes.join('\n').replace(/\n{3,}/g, '\n\n')
     // « GSS indique pouvoir / que … » : formulation de rapporteur → engagement direct.
     .replace(/\b[Ll]a documentation (?:opérationnelle |GSS |interne )*(?:de GSS )?prévoit\b/g, 'La procédure GSS prévoit').replace(/\bGSS indique pouvoir\b/g, 'GSS peut').replace(/\bGSS indique que (ses|son|sa|les|le|la)\b/g, (_m, d) => `${d.charAt(0).toUpperCase()}${d.slice(1)}`).replace(/\bGSS indique\s+/g, 'GSS ')
+    // « GSS confirme que les rondes… » : formulation de réponse à une question interne → affirmation directe.
+    .replace(/\bGSS (?:confirme|précise|atteste) que (\S)/g, (_m, c) => c.toUpperCase())
+    // Renvoi à la numérotation interne des exigences.
+    .replace(/(^|\n)(\s*[-*•]?\s*)(?:Pour|Concernant) l['’]exigence n?°?\s*\d+\s*,\s*(\S)/g, (_m, a, b, c) => `${a}${b}${c.toUpperCase()}`)
+    // Emplacement de schéma laissé en texte (« [Insérer ici le schéma …] ») : le schéma est inséré par le rendu.
+    .replace(/^.*\[\s*(?:Ins[ée]rer|Ajouter|Placer) ici[^\]]*\].*$/gim, '').replace(/^\s*(?:\*\*)?Sch[ée]ma\s*[—:-][^\n]*$/gim, '')
     .replace(/\b(vérifie|vérifient|contrôle|contrôlent|vérifier|contrôler)\s+(son|leur|l['’])\s*identité/gi, (_m, v) => (/nt$/.test(v) ? 'l’invitent à justifier de sa présence' : /er$/.test(v) ? 'l’inviter à justifier de sa présence' : 'l’invite à justifier de sa présence'));
   return { texte: texteFinal, retires };
 }
