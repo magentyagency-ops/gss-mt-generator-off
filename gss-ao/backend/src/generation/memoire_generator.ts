@@ -2,8 +2,9 @@ import { MarpGenerator, AssembleChapter, AssembleSection } from './marp_generato
 import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema } from './schema_service';
+import { insererSchemasReponses } from './visuels_cadre';
 import { poserSignets, poserSignetsChamps, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter } from './completion';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -3655,7 +3656,7 @@ ${REGLES_REUTILISATION}
 - Réponds précisément à la QUESTION du champ : n'utilise un extrait de mémoire que s'il répond à CETTE question.
 - Champ court, d'identité ou de contact : une valeur présente dans le REGISTRE DES INFORMATIONS GSS ou dans un extrait de mémoire GSS EST une source valable → donne-la (ne réponds pas « [À COMPLÉTER] » si elle y figure).
 - Une certification indiquée « en cours » n'est PAS obtenue : ne la présente jamais comme acquise.
-- Dénomination / « NOM » du candidat : écris exactement la raison sociale du registre.${blocRegistre()}${organigrammeGss(referentsContext)}
+- Dénomination / « NOM » du candidat : écris exactement la raison sociale du registre.${blocRegistre()}${organigrammeGss(referentsContext)}${referencesGss()}
 ${this.blocDemande()}
 
 FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "value": "..."} ]}`;
@@ -3747,6 +3748,11 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
 - RÉDACTION : phrases simples, naturelles et exactes, comme les écrirait un responsable d'exploitation de GSS. Le site est déjà décrit par l'acheteur dans le cas pratique : ne recopie JAMAIS la liste de ses caractéristiques (surface, bâtiments, étages, accès, barrières, parking, clôture, quartier) et n'ouvre pas chaque composante par l'« enjeu » du site ; cite au plus UNE caractéristique, une seule fois, quand elle justifie concrètement un choix. Va directement à ce que fait GSS. Pas d'effet dramatique ni de formule creuse. La réponse ne contredit jamais une autre composante (même nombre d'équipes, mêmes responsables).
 - Un [À COMPLÉTER] prend la place de la SEULE donnée manquante. Donnée chiffrée : dans une phrase naturelle (« GSS affecte [À COMPLÉTER] agents de sécurité au site », « intervention sous [À COMPLÉTER] minutes »). Donnée qualitative ou descriptive (recours à la sous-traitance, composition nominative…) : sous la forme « Libellé : [À COMPLÉTER]. ». Jamais de tournure du type « est défini comme suit : [À COMPLÉTER] ». Interdit : « est de [À COMPLÉTER] » ou « sont de [À COMPLÉTER] » pour autre chose qu'un nombre, « est la suivante : [À COMPLÉTER] ». Une seule donnée par [À COMPLÉTER], et une même donnée n'est laissée à compléter qu'à un seul endroit de la réponse.
 - CAS PRATIQUE (nombre d'agents, de maîtres-chiens, d'équipes, schéma opérationnel, rotations) : c'est à GSS de proposer son dispositif — propose un dimensionnement ARGUMENTÉ, cohérent avec le site décrit, les créneaux horaires et les profils du DQE s'ils figurent dans les extraits (ex. créneaux 6h-21h / 21h-6h ; agent, agent SSI, maître-chien, encadrant) et avec la réglementation (vacations de 12 h au plus, relèves), puis ajoute sur sa propre ligne [CONSULTATION REQUISE : GSS doit valider le dimensionnement proposé : <résumé chiffré>]. Le même dimensionnement vaut dans toutes les composantes. Si un DQE figure dans les extraits, respecte EXACTEMENT ses blocs (ex. une seule nuit s'il n'en compte qu'une) et ses profils : pour chaque bloc, présente sous forme de lignes « Bloc | profil | effectif en service | effectif pour la rotation », avec une rotation cohérente avec la durée du bloc (une seule vacation de 12 h au plus n'exige pas de relève). Justifie la répartition jour/nuit par les risques du site (ex. intrusion et vandalisme surtout la nuit) et précise si l'encadrant est présent en continu ou ponctuellement — identiquement partout.
+- Nombre d'équipes et effectifs demandés ailleurs dans la grille : déduis-les du dimensionnement que tu proposes (ne laisse pas « [À COMPLÉTER] » une donnée que ton propre dimensionnement fixe). Justifie la présence de CHAQUE profil retenu (ex. agent de sécurité incendie : levée de doute sur alarme, vérification des installations ; maître-chien : rondes extérieures et dissuasion la nuit).
+- Rétroplanning d'une prestation ponctuelle (bon de commande) : il part de la réception du bon de commande et du délai de mise en place (préparation, briefing, prise de poste, relèves, fin de mission, rapport), jamais du calendrier de démarrage d'un marché annuel (J-30, J-15).
+- Chaque document porte le NOM exact que lui donne la composante : un « rapport journalier type » est intitulé « Modèle de rapport journalier » (rubriques à renseigner par l'agent), un « rapport d'exécution rempli » est intitulé « Exemple de rapport d'exécution rempli » — ne les confonds jamais.
+- « Rapport d'exécution rempli » : fournis un EXEMPLE REMPLI pour le cas pratique, intitulé « Exemple de rapport d'exécution rempli », avec les horaires et les postes du dispositif proposé et des événements présentés comme types (ronde RAS, levée de doute, etc.) — jamais un modèle aux rubriques vides.
+- Schéma opérationnel / répartition des effectifs sur le périmètre : affecte chaque poste à une ZONE du site décrit (accès, bâtiments, étages, parking, clôture) avec ses missions et ses horaires, en plus de la répartition par créneau.
 - Composante « Fourniture d'un rapport type / d'un rapport d'exécution / d'un schéma / d'un rétroplanning » : fournis l'OBJET lui-même, sous forme structurée et adaptée au cas (intitulé « Modèle de … », puis lignes « Rubrique : contenu », horaires, cases à renseigner), jamais une simple description de ce qu'il contient.
 - Composition des équipes / moyens de l'entreprise : appuie-toi sur l'autorisation CNAPS, les effectifs par qualification du registre et au moins une référence de marché comparable de GSS.
 - Délais d'intervention dans un accord-cadre à bons de commande : distingue le délai de mise en place d'une prestation commandée (intervention courante) et le délai de réaction en cas d'urgence ; indique d'où partent les moyens.
@@ -4095,6 +4101,8 @@ Renvoie UNIQUEMENT un objet JSON : {"reponses": [{"id": <id>, "texte": "…"}]} 
         retires.forEach((x) => confirmationsGss.add(`À confirmer : ${x}`));
       }
     }
+    // Valeurs du registre encore « à confirmer » reprises dans le document : GSS est prévenu.
+    confirmationsRegistreUtilisees(replacements.map((r) => String(r.value ?? '')).join('\n')).forEach((c) => confirmationsGss.add(c));
     console.log(`[MemoireGenerator] GPT a renvoyé ${replacements.length} valeurs au total.`);
     setProgress(dossierId, { phase: 'finalisation', pct: 94, label: 'Application des réponses au cadre…' });
     if (onProgress) onProgress(94, 'Application des réponses au cadre…');
@@ -4592,6 +4600,18 @@ Renvoie UNIQUEMENT un objet JSON : {"reponses": [{"id": <id>, "texte": "…"}]} 
       for (const el of elementsACompleter) { const q = precises.get(el.cle); if (q) { el.question = q.question; el.groupe = q.groupe; } }
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Formulation des questions par emplacement indisponible : ${e?.message || e}`);
+    }
+
+    // 7 quater. Schémas GSS validés sous les réponses développées (retour GSS : visuels non réutilisés).
+    try {
+      const libelleChamp = (id: number) => ((descriptors.find((x) => x.id === id)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '');
+      const developpees = champsRediges
+        .map((id) => ({ cle: `GSS_CH_${id}`, question: libelleChamp(id), texte: String(replacements.find((r) => r.id === id)?.value ?? '') }))
+        .filter((x) => x.texte.length >= 600);
+      const nSchemas = await insererSchemasReponses(zip, xmlDoc, developpees);
+      if (nSchemas) console.log(`[MemoireGenerator] ${nSchemas} schéma(s) GSS inséré(s) sous les réponses.`);
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Schémas GSS non insérés (non bloquant) : ${e?.message || e}`);
     }
 
     // 8. Serialize and save
@@ -5401,7 +5421,7 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Recherche dans les mémoires GSS indisponible (${e?.message || e}).`);
     }
-    const registreGss = blocRegistre() + organigrammeGss(await this.getGssReferents());
+    const registreGss = blocRegistre() + organigrammeGss(await this.getGssReferents()) + referencesGss();
     const repartition = await this.repartirDemande(AI_SECTIONS_B);
     const commentairesRetires = new Set<string>();
     const secoursMemoires: Record<string, string> = {};
@@ -5521,7 +5541,11 @@ RÈGLES DE FORME (rendu Marp) :
     // ── Consultations requises : exigences que GSS ne couvre pas et qui doivent être précisées ──
     // Deux sources : (1) les écarts détectés par la matrice de conformité ; (2) les marqueurs
     // [CONSULTATION REQUISE : …] que le rédacteur a insérés faute de réponse spécifique dans la Doc GSS.
-    const consultations = new Set<string>(commentairesRetires);
+    const consultations = new Set<string>([
+      ...commentairesRetires,
+      // Valeurs du registre encore « à confirmer » reprises dans le texte : GSS est prévenu.
+      ...confirmationsRegistreUtilisees(Object.values(sectionsMap).join('\n')),
+    ]);
     for (const r of requirementsMatrix) {
       if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence) {
         consultations.add(r.exigence.trim());

@@ -1576,6 +1576,26 @@
    "source_retenue": "Région Normandie (lot 1)",
    "statut": "confirmee",
    "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "recours_sous_traitance",
+   "libelle": "Recours à la sous-traitance (prestations fixes ou supplémentaires)",
+   "categorie": "organisation",
+   "valeurs": [
+    {
+     "valeur": "Non",
+     "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
+     "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+     "date": "2026-04",
+     "page": 2,
+     "citation": "Utilisation envisagée de la sous-traitance pour les prestations fixes ou supplémentaires Oui (niveau N-1) Oui (niveau N-2 en cascade) x Non"
+    }
+   ],
+   "valeur_retenue": "Non : GSS n'envisage pas de recourir à la sous-traitance pour les prestations fixes ou supplémentaires",
+   "date_retenue": "2026-04",
+   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
   }
  ]
 }

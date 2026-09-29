@@ -55,6 +55,7 @@ export const CATALOGUE: Array<{ cle: string; libelle: string; categorie: string 
   { cle: 'logiciel_planification', libelle: 'Logiciel de planification', categorie: 'moyens' },
   { cle: 'logiciel_controle', libelle: 'Logiciel de contrôle des prestations', categorie: 'moyens' },
   { cle: 'application_pti', libelle: 'Application PTI (travailleur isolé)', categorie: 'moyens' },
+  { cle: 'recours_sous_traitance', libelle: 'Recours à la sous-traitance (prestations fixes ou supplémentaires)', categorie: 'organisation' },
   { cle: 'certification_iso', libelle: 'Certification ISO', categorie: 'certifications' },
   { cle: 'certification_apsad', libelle: 'Certification APSAD', categorie: 'certifications' },
   { cle: 'partenaire_telesurveillance', libelle: 'Partenaire de télésurveillance', categorie: 'partenaires' },

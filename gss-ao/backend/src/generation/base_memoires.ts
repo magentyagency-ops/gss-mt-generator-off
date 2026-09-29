@@ -202,6 +202,39 @@ export function organigrammeGss(referents: string): string {
     + [...roles.values()].map((e) => `- ${e.libelle} : ${e.noms.join(', ')}`).join('\n');
 }
 
+/**
+ * Références clients RÉELLES de GSS (fiches validées de la bibliothèque : client, lieu, effectif,
+ * amplitude, missions). Seule source autorisée pour citer une référence ; mentions Covid retirées.
+ */
+export function referencesGss(): string {
+  try {
+    const ix = JSON.parse(fs.readFileSync(path.resolve(DIR, '../schemas_gss/bibliotheque/index.json'), 'utf-8'));
+    const refs = (ix as any[]).filter((x) => x.section === 'b_references' && /^Référence /.test(x.titre))
+      .map((x) => `- ${x.titre.replace(/^Référence\s+/, '')} : ${String(x.texte).replace(/Vérification des pass sanitaires[^A-Z]*/g, '').replace(/\s+/g, ' ').trim()}`);
+    return refs.length ? `\n\nRÉFÉRENCES CLIENTS DE GSS (marchés réellement exécutés — seules références autorisées ; cite la plus comparable au marché avec ses caractéristiques exactes) :\n${refs.join('\n')}` : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Valeurs du registre « à confirmer » effectivement reprises dans un texte : chacune donne une question de
+ * confirmation pour GSS (la valeur utilisée reste dans le document, mais GSS est prévenu).
+ */
+export function confirmationsRegistreUtilisees(texte: string): string[] {
+  const t = normTxt(texte).replace(/\s+/g, ' ');
+  const out: string[] = [];
+  for (const e of charger().registre) {
+    const ancien = CATEGORIES_VARIABLES.has(e.categorie) && moisDepuis(e.date_retenue) > FRAICHEUR_MOIS;
+    if (e.statut !== 'a_confirmer' && !ancien) continue;
+    const morceaux = e.valeur_retenue.split(';').map((x) => normTxt(x).replace(/\s+/g, ' ').trim()).filter((x) => x.length >= 4);
+    if (morceaux.some((m) => t.includes(m))) {
+      out.push(`Confirmer ${e.libelle.charAt(0).toLowerCase()}${e.libelle.slice(1)} — valeur utilisée dans le mémoire : ${e.valeur_retenue} (${e.source_retenue}, ${e.date_retenue})`);
+    }
+  }
+  return out;
+}
+
 /** Valeur la plus récente d'une information du registre (clé du catalogue), ou '' si inconnue. */
 export function valeurRegistre(cle: string): string {
   return charger().registre.find((e) => e.cle === cle)?.valeur_retenue || '';
@@ -220,7 +253,7 @@ export const REGLES_REUTILISATION = `RÈGLES DE RÉUTILISATION DES MÉMOIRES GSS
 - Chiffres GSS : reprends-les À L'IDENTIQUE (fréquences, délais, effectifs, durées) — ne les arrondis pas, ne les élargis pas (« deux à trois fois par mois » ne devient jamais « une à trois fois »).
 - Effectifs GSS : n'utilise QUE les valeurs du REGISTRE (jamais les chiffres d'autres documents plus anciens) et cite toujours les mêmes dans tout le document ; un nombre d'agents ne dépasse jamais l'effectif total ; une valeur incohérente marquée [À CONFIRMER] n'est pas citée.
 - Personnes et rôles : utilise UNIQUEMENT l'ORGANIGRAMME GSS DE RÉFÉRENCE, identique dans tout le document (mêmes personnes pour un même rôle, même rôle pour une même personne).
-- Implantation : GSS est implanté à Rouen (Normandie). Les délais d'intervention, d'astreinte ou de mobilisation du registre ont été pris pour des marchés normands : pour un site situé dans une autre région, ne les présente pas comme un engagement ; décris l'organisation prévue (renforts, prépositionnement, relais local) sans chiffre inventé et demande le délai à GSS (consultation / [À COMPLÉTER]).
+- Implantation : GSS est implanté à Rouen (Normandie). Les délais d'intervention, d'astreinte, de mobilisation, de remplacement ou de mise en place d'une commande (ex. « 1 h à 24 h ») figurant dans le registre ou les mémoires ont été pris pour des marchés normands : pour un site situé dans une autre région, ne les présente pas comme un engagement ; décris l'organisation prévue (renforts, prépositionnement, relais local) sans chiffre inventé et demande le délai à GSS (consultation / [À COMPLÉTER]).
 - Contenu daté ou étranger au marché : ne reprends jamais les mesures Covid (gestes barrières, pass sanitaire, gel hydroalcoolique) ni un contenu propre à un autre secteur (magasin, caisses, transport de fonds, événementiel) s'il ne concerne pas ce marché. « Pôle emploi » s'appelle désormais « France Travail ».
 - Le document est destiné à l'ACHETEUR : n'y écris JAMAIS de commentaire interne ou de diagnostic sur les manques (« à ce stade », « n'est pas établi », « la documentation fournie ne comporte pas », « reste à confirmer », « devra être confirmé », « selon les éléments disponibles »…). Une information manquante se signale uniquement par le marqueur prévu (consultation / [À COMPLÉTER]). Si une visite du site est obligatoire, elle est réputée faite : jamais de futur « après la visite ».
 - Reprise du personnel : le fondement est l'accord de reprise de la convention collective de la prévention-sécurité (IDCC 1351), sauf autre indication du DCE ; ne cite jamais l'article L1224-1 du Code du travail pour une simple perte de marché, et n'aborde pas la reprise quand la prestation est ponctuelle (bons de commande).
