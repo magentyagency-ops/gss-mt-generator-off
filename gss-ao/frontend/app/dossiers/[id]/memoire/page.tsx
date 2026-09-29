@@ -202,11 +202,23 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
       }
 
       // Start progress polling for the background job
+      // Le serveur marque la génération « running » avant de répondre : un état « idle » ensuite signifie
+      // qu'il a redémarré en cours de route (la génération est perdue). Sans ce contrôle, l'écran restait
+      // indéfiniment sur « Génération en cours… / Non démarré 0 % ».
+      let idleConsecutifs = 0;
       const interval = setInterval(async () => {
         try {
           const progRes = await apiFetch(`/api/dossiers/${id}/progress`);
           if (progRes.ok) {
             const data = await progRes.json();
+            idleConsecutifs = data.status === 'idle' ? idleConsecutifs + 1 : 0;
+            if (idleConsecutifs >= 3) {
+              clearInterval(interval);
+              setIsGeneratingDocx(false);
+              setProgressInfo(null);
+              setDocxResult({ type: "error", message: "La génération a été interrompue : le serveur a redémarré pendant le traitement. Relancez la génération." });
+              return;
+            }
             setProgressInfo(data);
             
             if (data.status === 'completed') {
