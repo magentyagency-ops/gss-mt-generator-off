@@ -380,11 +380,22 @@ export function openai(): OpenAI {
 }
 
 export async function json(system: string, user: string): Promise<any> {
-  const r = await openai().chat.completions.create({
-    model: MODELE,
-    messages: [{ role: 'system', content: `${system}\nRéponds uniquement par un objet JSON.` }, { role: 'user', content: user }],
-    response_format: { type: 'json_object' },
-  });
+  // Coupure réseau, limite de débit ou erreur serveur passagères : nouvel essai (5 s, 15 s, 30 s).
+  let r: any;
+  for (let essai = 1; ; essai++) {
+    try {
+      r = await openai().chat.completions.create({
+        model: MODELE,
+        messages: [{ role: 'system', content: `${system}\nRéponds uniquement par un objet JSON.` }, { role: 'user', content: user }],
+        response_format: { type: 'json_object' },
+      });
+      break;
+    } catch (e: any) {
+      const passagere = !e?.status || e.status === 429 || e.status >= 500;
+      if (!passagere || essai >= 4) throw e;
+      await new Promise((ok) => setTimeout(ok, [5_000, 15_000, 30_000][essai - 1]));
+    }
+  }
   // Le modèle écrit parfois l'espace insécable sous une forme invalide (« \\u0000a0 ») : on la rétablit.
   const brut = (r.choices?.[0]?.message?.content || '{}').replace(/\\u0000a0/gi, '\\u00a0').replace(/\\u0000/g, '');
   try { return JSON.parse(brut); } catch { return {}; }

@@ -2099,9 +2099,10 @@ export class MemoireGenerator {
       } catch (e: any) {
         const status = e?.status || e?.code || '';
         const msg = (e?.message || String(e)).toString();
-        if (status === 429 && attempt < maxAttempts) {
+        // Coupure réseau passagère (pas de statut HTTP) : même traitement qu'une limite de débit.
+        if ((status === 429 || !e?.status) && attempt < maxAttempts) {
           const wait = 15000 * attempt; // 15s, 30s, 45s, 60s
-          console.warn(`[MemoireGenerator] ${label}: 429 (TPM) — attente ${wait / 1000}s puis réessai (${attempt}/${maxAttempts - 1})`);
+          console.warn(`[MemoireGenerator] ${label}: ${e?.status ? '429 (TPM)' : 'connexion interrompue'} — attente ${wait / 1000}s puis réessai (${attempt}/${maxAttempts - 1})`);
           await this.sleep(wait);
           continue;
         }
@@ -2626,17 +2627,23 @@ Renvoie UNIQUEMENT un objet JSON : {"reponses": [{"n": 1, "reponse": "..." | nul
       const id = Object.keys(sections).find((k) => sections[k].includes(REPERE(reperes[0])));
       if (!id) continue;
       const reste = String(r?.reste ?? '').trim();
-      if (reste && reste !== 'null') {
-        // Réponse partielle : ce qui est connu entre dans le texte, seul le reste est demandé à GSS
-        // (le repère est conservé juste après pour y insérer la suite).
-        const suite = '⟦SUITE⟧';
-        sections[id] = sections[id].replace(REPERE(reperes[0]), `${REPERE(reperes[0])}${suite}`);
-        sections[id] = (await integrerDansRubrique(sections[id], REPERE(reperes[0]), b.e.question, texte)).replace(suite, ` ${REPERE(reperes[0])}`);
-        b.e.question = reste;
-        partiels++;
+      // Intégration non bloquante : si l'IA est injoignable, la question reste simplement posée à GSS.
+      try {
+        if (reste && reste !== 'null') {
+          // Réponse partielle : ce qui est connu entre dans le texte, seul le reste est demandé à GSS
+          // (le repère est conservé juste après pour y insérer la suite).
+          const suite = '⟦SUITE⟧';
+          const avecSuite = sections[id].replace(REPERE(reperes[0]), `${REPERE(reperes[0])}${suite}`);
+          sections[id] = (await integrerDansRubrique(avecSuite, REPERE(reperes[0]), b.e.question, texte)).replace(suite, ` ${REPERE(reperes[0])}`);
+          b.e.question = reste;
+          partiels++;
+          continue;
+        }
+        sections[id] = await integrerDansRubrique(sections[id], REPERE(reperes[0]), b.e.question, texte);
+      } catch (e: any) {
+        console.warn(`[MemoireGenerator] Réponse des mémoires non intégrée (${e?.message || e}) : la question reste posée à GSS.`);
         continue;
       }
-      sections[id] = await integrerDansRubrique(sections[id], REPERE(reperes[0]), b.e.question, texte);
       for (const rp of reperes.slice(1)) for (const k of Object.keys(sections)) sections[k] = sections[k].split(REPERE(rp)).join('');
       Object.assign(b.e, { statut: 'complete', valeur: texte, source: 'memoires', completeLe: new Date().toISOString() });
       n++;
