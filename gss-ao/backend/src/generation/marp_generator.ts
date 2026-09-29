@@ -300,7 +300,9 @@ export class MarpGenerator {
       args,
       {
         cwd: workDir,
-        timeout: 300_000, // 5 minutes max (les gros mémoires ~120 pages dépassent 2 min de rendu)
+        // 15 min max : un mémoire de ~180 pages avec un schéma par page peut dépasser 5 min de rendu
+        // (machine chargée, rendus simultanés) — l'ancienne limite faisait échouer la génération à la toute fin.
+        timeout: 900_000,
         stdio: 'pipe',
         encoding: 'utf-8',
         shell: isWin,
@@ -309,8 +311,8 @@ export class MarpGenerator {
         // ce délai interne sur le timeout du process (cause du « Timed out after 30000ms »).
         env: { 
           ...process.env, 
-          PUPPETEER_TIMEOUT: '300000',
-          PUPPETEER_PROTOCOL_TIMEOUT: '300000',
+          PUPPETEER_TIMEOUT: '900000',
+          PUPPETEER_PROTOCOL_TIMEOUT: '900000',
           CHROME_PATH: chromePath || '',
         },
       }
