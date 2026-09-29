@@ -65,6 +65,8 @@ export interface EtatCompletion {
     ajouts?: Array<{ id: string; chapter: string; title: string; apres?: string }>;
     /** Photos ajoutées aux rubriques avec l'assistant (une page par photo). */
     photos?: Record<string, Array<{ chemin: string; legende?: string }>>;
+    /** Format court imposé par le RC (nombre de pages maximum et plan) : une partie par point du plan. */
+    court?: { pagesMax: number; plan: Array<{ id: string; title: string; attendu?: string }>; source?: string };
   };
   /** Cadre imposé : réponses rédigées par GSS (signets GSS_CH_n), les seules que l'assistant peut modifier. */
   champs?: Array<{ cle: string; libelle: string }>;
@@ -105,7 +107,12 @@ export function ecrireEtat(etat: EtatCompletion): void {
 /** Vue publique de l'état (sans le texte des rubriques ni les schémas). */
 export function vueEtat(etat: EtatCompletion) {
   const { libre, reponsesTraitees, champs, ...reste } = etat;
-  return { ...reste, restants: etat.elements.filter((e) => e.statut === 'ouvert').length };
+  return {
+    ...reste,
+    restants: etat.elements.filter((e) => e.statut === 'ouvert').length,
+    // Format court imposé par le RC : limite de pages et plan (l'assistant n'y ajoute ni page ni photo).
+    court: libre?.court ? { pagesMax: libre.court.pagesMax, parties: libre.court.plan.map((p) => p.title) } : undefined,
+  };
 }
 
 // ─── Cadre imposé : signets autour des « [À COMPLÉTER] » ─────────────────────────────────
@@ -405,6 +412,10 @@ export async function recomposerPdf(etat: EtatCompletion): Promise<string> {
   const gen = new MemoireGenerator();
   const propres: Record<string, string> = {};
   for (const [id, t] of Object.entries(etat.libre!.sections)) propres[id] = t.replace(REPERE_RE, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  if (etat.libre!.court) {
+    const r = await gen.rendreCourtDepuisSections(propres, etat.libre!.court, etat.libre!.cover, etat.libre!.schemas || {});
+    return r.filePath;
+  }
   const res = await gen.rendreDepuisSections(propres, etat.dossierId, {
     cover: etat.libre!.cover,
     schemas: new Map(Object.entries(etat.libre!.schemas || {})),

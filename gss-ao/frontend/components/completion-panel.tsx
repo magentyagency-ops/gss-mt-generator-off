@@ -41,6 +41,8 @@ interface Etat {
   majLe: string;
   elements: Element[];
   restants: number;
+  /** Format court imposé par le RC (nombre de pages maximum et plan). */
+  court?: { pagesMax: number; parties: string[] };
   conversation?: Array<{ role: "utilisateur" | "assistant"; texte: string; date: string; modifies?: string[]; pieces?: string[] }>;
 }
 
@@ -49,11 +51,16 @@ const EXTENSIONS_PIECES = [".jpg", ".jpeg", ".png", ".pdf", ".docx", ".doc", ".t
 const estImage = (f: File) => /\.(jpe?g|png)$/i.test(f.name);
 
 /** Exemples de demandes affichés quand la conversation avec l'assistant est vide. */
-const EXEMPLES_ASSISTANT: Record<Etat["mode"], string[]> = {
+const EXEMPLES_ASSISTANT: Record<Etat["mode"] | "court", string[]> = {
   cadre: [
     "Dans la réponse sur les délais d'intervention, précise que le chef de site est joignable 24h/24 le week-end.",
     "Développe la réponse sur la stabilité des équipes avec un exemple concret.",
     "Ajoute une page en annexe présentant notre démarche qualité.",
+  ],
+  court: [
+    "Dans la partie sur la continuité de service, précise que le chef de site est joignable 24h/24 le week-end.",
+    "Raccourcis la partie sur les moyens matériels pour rester dans la limite de pages.",
+    "Reformule la décomposition du prix de façon plus synthétique.",
   ],
   libre: [
     "Refais la rubrique sur les plannings en insistant sur la réactivité le week-end.",
@@ -583,7 +590,7 @@ export function CompletionPanel({
               </p>
               {!(etat.conversation || []).length && !enAttenteAssistant && (
                 <div className="space-y-1.5">
-                  {EXEMPLES_ASSISTANT[etat.mode].map((ex) => (
+                  {EXEMPLES_ASSISTANT[etat.court ? "court" : etat.mode].map((ex) => (
                     <button key={ex} type="button" onClick={() => setMessage(ex)} className="w-full rounded-md border border-dashed border-border bg-card px-3 py-2 text-left text-xs text-muted-foreground hover:border-primary/50 hover:text-foreground">
                       {ex}
                     </button>

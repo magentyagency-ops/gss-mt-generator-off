@@ -24,6 +24,7 @@ import {
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION } from './base_memoires';
 import { SECTIONS_REPONSE_LIBRE, CHAPITRES_REPONSE_LIBRE } from './memoire_generator';
 import { dimensions, insererPhotoDocx, paragrapheDuChamp } from './docx_images';
+import { nombrePages } from './format_court';
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const EMBED_MODEL = process.env.RAG_EMBEDDING_MODEL || process.env.EMBEDDING_MODEL_MEMOIRE || 'text-embedding-3-small';
@@ -297,7 +298,7 @@ const REGLES_FORME_LIBRE = `RÈGLES DE FORME (rendu du mémoire) :
 - Conserve à l'identique les repères de la forme ⟦AC:n⟧ présents dans le texte (ils marquent des informations à compléter).`;
 
 function titreRubrique(etat: EtatCompletion, id: string): string {
-  return SECTIONS_REPONSE_LIBRE.find((s) => s.id === id)?.title || etat.libre?.ajouts?.find((a) => a.id === id)?.title || id;
+  return etat.libre?.court?.plan.find((p) => p.id === id)?.title || SECTIONS_REPONSE_LIBRE.find((s) => s.id === id)?.title || etat.libre?.ajouts?.find((a) => a.id === id)?.title || id;
 }
 
 function chapitreRubrique(etat: EtatCompletion, id: string): string {
@@ -322,9 +323,14 @@ function pageDe(fichier: string, titre: string, derniere = false): number | unde
 async function assistantLibre(etat: EtatCompletion, message: string, pieces: PieceJointe[]): Promise<{ reponse: string; modifies: string[]; page?: number }> {
   const lib = etat.libre!;
   lib.ajouts ||= [];
-  const ids = [...SECTIONS_REPONSE_LIBRE.map((s) => s.id), ...lib.ajouts.map((a) => a.id)].filter((id) => (lib.sections[id] || '').trim());
+  const court = lib.court;
+  const ids = (court ? court.plan.map((p) => p.id) : [...SECTIONS_REPONSE_LIBRE.map((s) => s.id), ...lib.ajouts.map((a) => a.id)]).filter((id) => (lib.sections[id] || '').trim());
+  // Format court imposé par le RC : le plan est celui du RC (pas d'ajout de partie) et la limite de pages s'impose.
+  const organisation = court
+    ? `au FORMAT IMPOSÉ PAR LE RÈGLEMENT DE CONSULTATION (${court.pagesMax} pages maximum), organisé selon le plan du RC en parties (les « rubriques » ci-dessous). Une nouvelle demande de contenu s'intègre à la partie concernée (action "modifier") : les actions "ajouter" et "image" ne sont pas disponibles dans ce format (limite de pages) : explique-le si l'utilisateur les demande`
+    : `organisé en chapitres (${Object.entries(CHAPITRES_REPONSE_LIBRE).map(([k, v]) => `${k} : ${v}`).join(' ; ')}) et en rubriques`;
   const plan = await json(
-    `Tu es l'assistant de modification d'un mémoire technique GSS (sécurité privée) déjà généré, organisé en chapitres (${Object.entries(CHAPITRES_REPONSE_LIBRE).map(([k, v]) => `${k} : ${v}`).join(' ; ')}) et en rubriques. Actions possibles :
+    `Tu es l'assistant de modification d'un mémoire technique GSS (sécurité privée) déjà généré, ${organisation}. Actions possibles :
 1. "modifier" : refaire, corriger, compléter, développer, raccourcir ou enrichir une rubrique existante (repérée par son id).
 2. "ajouter" : ajouter une nouvelle rubrique (une ou plusieurs pages) dans un chapitre (I, II, III ou IV), éventuellement juste après une rubrique donnée ("apres": id).
 3. "supprimer" : retirer une rubrique, UNIQUEMENT si l'utilisateur le demande explicitement.
@@ -344,7 +350,7 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       const titre = titreRubrique(etat, a.id);
       const sources = await sourcesGss(`${titre} ${a.consigne}`);
       const r = await json(
-        `Tu réécris une rubrique d'un mémoire technique GSS (sécurité privée) en appliquant exactement la consigne de l'utilisateur. Garde tout ce que la consigne ne demande pas de changer.\n${REGLES_REDACTION}\n${REGLES_FORME_LIBRE}\nRenvoie {"texte": "…"}.`,
+        `Tu réécris une rubrique d'un mémoire technique GSS (sécurité privée) en appliquant exactement la consigne de l'utilisateur. Garde tout ce que la consigne ne demande pas de changer.${court ? ` Le mémoire est limité à ${court.pagesMax} pages par le règlement de consultation : sauf demande contraire, la rubrique garde une longueur comparable (${(lib.sections[a.id] || '').split(/\s+/).length} mots environ), dans un style dense.` : ''}\n${REGLES_REDACTION}\n${REGLES_FORME_LIBRE}\nRenvoie {"texte": "…"}.`,
         `Rubrique : ${titre}\n\nTexte actuel :\n${lib.sections[a.id]}\n\nConsigne de l'utilisateur : ${a.consigne}${etat.demande ? `\nDemande particulière du mémoire : ${etat.demande}` : ''}${blocPieces(pieces, true)}${sources}`,
       );
       const texte = nettoyerTexte(r.texte);
@@ -352,7 +358,7 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       lib.sections[a.id] = texte;
       oublierSchemas(a.id);
       modifies.push(a.id);
-    } else if (a?.type === 'ajouter' && String(a.titre || '').trim()) {
+    } else if (a?.type === 'ajouter' && !court && String(a.titre || '').trim()) {
       const chapitre = ['I', 'II', 'III', 'IV'].includes(a.chapitre) ? a.chapitre : 'IV';
       const titre = String(a.titre).trim();
       const sources = await sourcesGss(`${titre} ${a.consigne || ''}`);
@@ -366,7 +372,7 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       lib.sections[id] = texte;
       lib.ajouts.push({ id, chapter: chapitre, title: titre, apres: ids.includes(a.apres) ? a.apres : undefined });
       modifies.push(id);
-    } else if (a?.type === 'image' && ids.includes(a.id)) {
+    } else if (a?.type === 'image' && !court && ids.includes(a.id)) {
       const piece = pieces.find((p) => p.ref === a.piece && p.type === 'image');
       if (!piece || !dimensions(fs.readFileSync(piece.chemin))) continue;
       lib.photos ||= {};
@@ -412,6 +418,10 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
   let page: number | undefined;
   if (modifies.length) {
     etat.fichier = await recomposerPdf(etat);
+    if (court) {
+      const pages = nombrePages(etat.fichier);
+      if (pages > court.pagesMax) plan.reponse = `${String(plan.reponse || 'Modification effectuée.').trim()} Attention : le mémoire fait maintenant ${pages} pages pour ${court.pagesMax} autorisées par le RC ; demandez-moi de raccourcir une partie.`;
+    }
     const visible = modifies.find((id) => (lib.sections[id] || '').trim());
     const photo = actions.some((a) => a?.type === 'image' && a.id === visible);
     if (visible) page = pageDe(etat.fichier, titreRubrique(etat, visible), photo);
