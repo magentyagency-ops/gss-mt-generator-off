@@ -2087,9 +2087,57 @@ export class MemoireGenerator {
    * redécoupe sur ces frontières pour étiqueter chaque chunk (CCTP, RC, annexe…).
    */
   /** Consigne à insérer dans les prompts quand l'utilisateur a formulé une demande particulière. */
-  private blocDemande(): string {
+  /**
+   * Réponse libre : répartition de la demande particulière entre les rubriques, décidée UNE fois pour
+   * tout le mémoire. Chaque point de fond n'est transmis qu'aux rubriques dont il est le sujet (sinon
+   * chaque rubrique le jugeait « concerné » et le répétait) ; les consignes de forme valent partout.
+   */
+  private async repartirDemande(rubriques: Array<{ id: string; title: string }>): Promise<{ forme: string; parRubrique: Record<string, string[]> } | null> {
+    const d = this.demandeParticuliere;
+    if (!d?.demande) return null;
+    const r = await this.callOpenAI([
+      {
+        role: 'system',
+        content: `Tu répartis une demande particulière entre les rubriques d'un mémoire technique GSS (sécurité privée).
+- "forme" : les consignes de FORME (ton, structure, conclusion des parties, niveau de détail), reformulées fidèlement ; "" s'il n'y en a pas.
+- "points" : chaque point de FOND (dispositif, engagement, chiffre, élément à mettre en avant ou à éviter), reformulé fidèlement avec toutes ses précisions, et la liste des rubriques où il doit figurer : UNIQUEMENT celles dont il est directement le sujet (1 à 3 rubriques, jamais plus de 4). Exemple : un dispositif cynophile → rubriques sur les moyens humains ou les rondes et les alarmes ; la réactivité de l'encadrement → encadrement, continuité de service ; un indicateur de satisfaction → suivi qualité.
+Renvoie UNIQUEMENT un objet JSON : {"forme": "…", "points": [{"texte": "…", "rubriques": ["id", "…"]}]}`,
+      },
+      { role: 'user', content: `Demande : « ${d.demande} »
+
+Rubriques :
+${rubriques.map((x) => `- ${x.id} : ${x.title}`).join('\n')}` },
+    ], 0.1, 'Répartition de la demande particulière', true);
+    try {
+      const data = JSON.parse(r || '{}');
+      const ids = new Set(rubriques.map((x) => x.id));
+      const parRubrique: Record<string, string[]> = {};
+      for (const p of Array.isArray(data.points) ? data.points : []) {
+        const texte = String(p?.texte || '').trim();
+        if (!texte) continue;
+        for (const id of (Array.isArray(p.rubriques) ? p.rubriques : []).filter((x: string) => ids.has(x)).slice(0, 4)) (parRubrique[id] ||= []).push(texte);
+      }
+      console.log(`[MemoireGenerator] Demande particulière répartie : ${Object.entries(parRubrique).map(([k, v]) => `${k}(${v.length})`).join(', ') || 'forme uniquement'}.`);
+      return { forme: String(data.forme || '').trim(), parRubrique };
+    } catch {
+      return null;
+    }
+  }
+
+  private blocDemande(repartition?: { forme: string; points: string[] }): string {
     const d = this.demandeParticuliere;
     if (!d) return '';
+    if (repartition) {
+      // Réponse libre : seuls la forme et les points de fond propres à CETTE rubrique sont transmis.
+      let out = '\n\nDEMANDE PARTICULIÈRE DE L\'UTILISATEUR POUR CE MÉMOIRE (prioritaire) :';
+      if (repartition.forme) out += `\n- Forme, à appliquer dans cette partie : ${repartition.forme}`;
+      if (repartition.points.length) {
+        out += `\n- Points à faire figurer dans CETTE partie, rédigés naturellement comme des faits de l'offre GSS (jamais « GSS met en avant », jamais une formule qui recopie la consigne) :\n${repartition.points.map((p) => `  • ${p}`).join('\n')}`;
+      }
+      out += `\nChaque point listé ci-dessus DOIT figurer dans cette partie. S'il lui manque une donnée (une valeur, un chiffre), présente le point sans l'inventer et insère sur sa propre ligne [CONSULTATION REQUISE : <donnée précise à obtenir de GSS>]. Les autres points de la demande sont traités dans d'autres parties : n'en parle pas ici.`;
+      if (d.documentTexte) out += `\nL'utilisateur a aussi fourni un DOCUMENT COMPLÉMENTAIRE « ${d.documentNom || 'document'} » : ses passages pertinents figurent dans les extraits ; ce sont des informations valables.`;
+      return out;
+    }
     let out = '\n\nDEMANDE PARTICULIÈRE DE L\'UTILISATEUR POUR CE MÉMOIRE (prioritaire) :';
     if (d.demande) out += `\n« ${d.demande} »\nApplique-la ainsi :\n- Consignes de FORME (ton, structure, conclusion de chaque partie, niveau de détail) : partout.\n- Points de FOND à mettre en avant (un dispositif, un engagement, un chiffre) : UNIQUEMENT dans la partie dont c'est directement le sujet (ex. un dispositif cynophile → dispositif, rondes, gestion des alarmes ; la réactivité de l'encadrement → encadrement, continuité de service). Ailleurs n'en parle pas : ne répète jamais le même point de rubrique en rubrique.\n- Intègre-les comme des faits de l'offre GSS, rédigés naturellement : n'écris jamais « GSS met en avant », « pour ce marché, GSS souhaite souligner » ni aucune formule qui recopie la consigne.\nLes informations qu'elle donne sont des données valables. Elle ne t'autorise jamais à inventer une donnée absente des sources : une donnée non fournie reste [À COMPLÉTER].`;
     if (d.documentTexte) out += `\nL'utilisateur a aussi fourni un DOCUMENT COMPLÉMENTAIRE « ${d.documentNom || 'document'} » : ses passages pertinents figurent dans les extraits (étiquette « Document complémentaire ») ; ce sont des informations valables à exploiter en priorité quand elles concernent le sujet.`;
@@ -5267,6 +5315,7 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
       console.warn(`[MemoireGenerator] Recherche dans les mémoires GSS indisponible (${e?.message || e}).`);
     }
     const registreGss = blocRegistre();
+    const repartition = await this.repartirDemande(AI_SECTIONS_B);
     const secoursMemoires: Record<string, string> = {};
     // Document complémentaire de la demande particulière : ses passages les plus proches de chaque rubrique.
     const chunksComplement = this.chunksDocumentComplementaire();
@@ -5314,7 +5363,7 @@ RÈGLES DE PERTINENCE (le plus important) :
 PERTINENCE À L'INTITULÉ (impératif) : chaque sous-partie traite directement « ${section.title} ». N'introduis aucun contenu d'un autre thème, même s'il figure dans les extraits.
 
 ${REGLES_REUTILISATION}
-- Tableaux : un tableau Markdown est autorisé quand il reprend un tableau de GSS (effectifs, qualifications, fréquences…).${this.blocDemande()}
+- Tableaux : un tableau Markdown est autorisé quand il reprend un tableau de GSS (effectifs, qualifications, fréquences…).${repartition ? this.blocDemande({ forme: repartition.forme, points: repartition.parRubrique[section.id] || [] }) : this.blocDemande()}
 
 RÈGLES DE FORME (rendu Marp) :
 - NE répète PAS le titre principal "${section.title}" (il est ajouté automatiquement).
@@ -5428,7 +5477,7 @@ RÈGLES DE FORME (rendu Marp) :
     }
 
     if (onProgress) onProgress(90, 'Assemblage final de la présentation Marp...');
-    const rendu = await this.exportFromSectionsMap(sectionsMap, dossierId, onProgress);
+    const rendu = await this.exportFromSectionsMap(sectionsMap, dossierId, onProgress, analysisData);
     const { schemas: schemasRendus, cover: coverRendu, ...result } = rendu;
     try {
       ecrireEtat({
@@ -5607,7 +5656,7 @@ RÈGLES DE FORME (rendu Marp) :
   }
 
   /** Récupère client / titre / référence pour la page de garde (base puis analyse DCE). */
-  private async getCoverInfo(dossierId: string): Promise<{ client: string; title: string; ref: string }> {
+  private async getCoverInfo(dossierId: string, analyseConnue?: any): Promise<{ client: string; title: string; ref: string }> {
     // Le client affiché est l'ACHETEUR : jamais GSS. Inconnu → ligne omise sur la page de garde.
     const fallback = { client: '', title: 'Mémoire technique', ref: '' };
     // Mentions de remplissage (« Non spécifié », « Acheteur inconnu »…) : ce ne sont pas des valeurs.
@@ -5626,7 +5675,9 @@ RÈGLES DE FORME (rendu Marp) :
           ref: reference,
         };
       }
-      const analysis = await this.analyzeDce(await this.getDceContext(dossierId));
+      // Analyse déjà faite par la génération : réutilisée (une nouvelle analyse pouvait échouer sur une
+      // coupure réseau et laisser la page de garde sans client ni objet).
+      const analysis = analyseConnue?.clientName || analyseConnue?.projectTitle ? analyseConnue : await this.analyzeDce(await this.getDceContext(dossierId));
       return {
         client: propre(analysis?.clientName) || fallback.client,
         title: propre(analysis?.projectTitle) || fallback.title,
@@ -5663,8 +5714,10 @@ RÈGLES DE FORME (rendu Marp) :
     sectionsMap: Record<string, string>,
     dossierId: string = 'export',
     onProgress?: (progress: number, message: string) => void,
+    analyseDce?: any,
   ): Promise<{ filePath: string; generatedData: Record<string, string>; schemas?: Map<string, string>; cover?: any }> {
-    const r = await this.rendreDepuisSections(sectionsMap, dossierId, { onProgress });
+    const cover = analyseDce ? await this.getCoverInfo(dossierId, analyseDce) : undefined;
+    const r = await this.rendreDepuisSections(sectionsMap, dossierId, { onProgress, cover });
     return { filePath: r.filePath, generatedData: {}, schemas: r.schemas, cover: r.cover };
   }
 
