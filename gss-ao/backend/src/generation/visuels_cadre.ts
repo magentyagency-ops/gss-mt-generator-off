@@ -11,6 +11,7 @@ import os from 'os';
 import path from 'path';
 import PizZip from 'pizzip';
 import { insererPhotoDocx, paragrapheDuChamp } from './docx_images';
+import { organigrammeSvg } from './organigramme';
 
 const MOTEUR = path.resolve(__dirname, '../../python/schemas_gss');
 const EXCLUS = /covid|hydroalcool|gestes barri|pass sanitaire|magasin|caisse|transport de fonds|antivol|prospection|commercial/i;
@@ -22,7 +23,7 @@ const mots = (t: string) => new Set(
 );
 
 /** Choisit, pour chaque réponse, le schéma GSS le plus pertinent (ou aucun). */
-function choisir(reponses: Array<{ cle: string; question: string; texte: string }>): Array<{ cle: string; id: string; svg: string }> {
+export function choisir(reponses: Array<{ cle: string; question: string; texte: string }>): Array<{ cle: string; id: string; svg: string }> {
   let index: any[] = [];
   try { index = JSON.parse(fs.readFileSync(path.join(MOTEUR, 'bibliotheque', 'index.json'), 'utf-8')); } catch { return []; }
   const dispo = index.filter((x) => x.reutilisable && x.section !== 'b_references' && !EXCLUS.test(`${x.titre} ${x.texte}`));
@@ -31,8 +32,9 @@ function choisir(reponses: Array<{ cle: string; question: string; texte: string 
   for (const r of reponses) {
     // Encadrement / organisation hiérarchique : l'organigramme GSS.
     if (/composition des [ée]quipes|organisation hi[ée]rarchique|organigramme|encadrement/i.test(r.question) && !utilises.has('organigramme')) {
-      const f = path.join(MOTEUR, 'organigramme_gss.svg');
-      if (fs.existsSync(f)) { utilises.add('organigramme'); out.push({ cle: r.cle, id: 'organigramme', svg: fs.readFileSync(f, 'utf-8') }); continue; }
+      // Organigramme dessiné d'après l'organigramme GSS de référence (mêmes personnes que le texte).
+      const svg = organigrammeSvg();
+      if (svg) { utilises.add('organigramme'); out.push({ cle: r.cle, id: 'organigramme', svg }); continue; }
     }
     const m = mots(`${r.question} ${r.question} ${r.texte}`);
     const score = (x: any) => [...mots(`${x.titre} ${x.texte}`)].filter((w) => m.has(w)).length;

@@ -3,6 +3,7 @@ import path from 'path';
 import { spawnSync } from 'child_process';
 import type { PooledIllustration, SlideContext } from './image_service';
 import { D2Service } from './d2_service';
+import { organigrammeSvg } from './organigramme';
 
 /** Illustrations attribuées, indexées par clé de slide (unicité globale garantie amont). */
 export type SlideAssignments = Map<string, PooledIllustration>;
@@ -17,10 +18,11 @@ const ORGANIGRAMME_GSS_PATH = path.resolve(__dirname, '../../python/schemas_gss/
 /** Organigramme GSS en SVG sur une ligne, identifiants préfixés (null si absent). */
 function lireOrganigrammeGss(): string | null {
   try {
-    return fs.readFileSync(ORGANIGRAMME_GSS_PATH, 'utf-8')
+    // Organigramme dessiné d'après l'organigramme GSS de référence (mêmes personnes que le texte).
+    return (organigrammeSvg() ?? fs.readFileSync(ORGANIGRAMME_GSS_PATH, 'utf-8'))
       .replace(/id="([^"]+)"/g, (_m, id) => `id="org-${id}"`)
       .replace(/url\(#([^)]+)\)/g, (_m, id) => `url(#org-${id})`)
-      .replace('width="1200" height="660"', 'width="100%" preserveAspectRatio="xMidYMid meet"')
+      .replace(/width="1200" height="\d+"/, 'width="100%" preserveAspectRatio="xMidYMid meet"')
       .replace(/\s*\n\s*/g, ' ')
       .trim();
   } catch {
@@ -502,8 +504,10 @@ export class MarpGenerator {
 
       // Numérotation des rubriques propre à chaque chapitre (1, 2, 3… rendus i, ii, iii) : un compteur
       // global faisait démarrer les chapitres suivants à 6, 13… (sommaire « 6. 7. … 11 »).
-      chapter.sections.forEach((sec, idx) => {
-        const sectionLine = `\t${idx + 1}. __${sec.title.toUpperCase()}__`;
+      // Les pages de références « Ils nous font confiance » suivent le chapitre I : elles figurent au sommaire.
+      const titresToc = [...chapter.sections.map((sec) => sec.title), ...((chapter.key === 'I' || chapter.key === '1') && this.getReferencesSlides().length ? ['Ils nous font confiance'] : [])];
+      titresToc.forEach((titre, idx) => {
+        const sectionLine = `\t${idx + 1}. __${titre.toUpperCase()}__`;
         tocPages[tocPages.length - 1].push(sectionLine);
         tocItemCount++;
 
@@ -685,6 +689,9 @@ export class MarpGenerator {
             cleanSlide
               .replace(/^ILS NOUS ONT FAIT CONFIANCE\s*Zone d[’']image\s*$/m, '<!-- header: "ILS NOUS ONT FAIT CONFIANCE" -->\n')
               .replace(/Zone d[’']image/g, '')
+              // Pages de la distribution titrées « I. PRESENTATION » / « PRESENTATION » dans le modèle : même
+              // en-tête que les autres pages de références.
+              .replace(/<!--\s*header:\s*"(?:I\.\s*)?PRESENTATION"\s*-->/g, '<!-- header: "ILS NOUS FONT CONFIANCE" -->')
               .trim(),
           );
         }
