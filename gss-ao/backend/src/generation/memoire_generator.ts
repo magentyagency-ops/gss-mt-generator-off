@@ -2666,8 +2666,22 @@ RÈGLES :
     • "écart"    = GSS N'A PAS ce moyen / ne fournit PAS cette prestation / RIEN dans la Doc GSS ne s'en approche.
   Dans le doute entre "partiel" et "écart", choisis "partiel". Réserve "écart" aux manques FRANCS.`;
 
+    // DCE long : analysé par fenêtres successives (auparavant tronqué à 120 000 caractères, ce qui
+    // perdait la fin du CCTP : matériel exigé, états périodiques, échéances des rapports…).
+    const FEN = 110_000;
+    const fenetres: string[] = [];
+    for (let d = 0; d < dceContext.length && fenetres.length < 3; d += FEN - 5_000) fenetres.push(dceContext.slice(d, d + FEN));
+    if (fenetres.length > 1) {
+      const lots = await Promise.all(fenetres.map((f) => this.analyzeRequirements(f, gssContext)));
+      const norm = (t: string) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+      const vus = new Set<string>();
+      const fusion = lots.flat().filter((r) => { const k = norm(r.exigence).slice(0, 90); if (!k || vus.has(k)) return false; vus.add(k); return true; });
+      console.log(`[MemoireGenerator] Matrice de conformité (DCE en ${fenetres.length} parties) : ${fusion.length} exigence(s).`);
+      return fusion;
+    }
+
     const userPrompt = `=== EXIGENCES DU MARCHÉ (CCTP EN PRIORITÉ, puis RC / annexes) ===
-${dceContext.slice(0, 120_000)}
+${dceContext.slice(0, FEN)}
 
 === CE QUE GSS A / FAIT (Documentation GSS) ===
 ${gssContext.slice(0, 120_000)}
