@@ -131,7 +131,7 @@ function moisDepuis(date: string): number {
 }
 
 /** Registre des informations variables, avec l'instruction de fraîcheur pour chacune. */
-export function blocRegistre(): string {
+export function blocRegistre(horsNormandie = false): string {
   const { registre } = charger();
   if (!registre.length) return '';
   // Contrôle de cohérence : un effectif (agents, qualifiés…) supérieur à l'effectif total de l'entreprise
@@ -139,7 +139,9 @@ export function blocRegistre(): string {
   const total = Number((registre.find((x) => x.cle === 'effectif_total')?.valeur_retenue || '').replace(/[^\d]/g, '')) || 0;
   const incoherent = (e: InfoRegistre) => total > 0 && e.cle !== 'effectif_total' && /^effectif_|^nombre_agents/.test(e.cle)
     && Number(e.valeur_retenue.replace(/[^\d]/g, '')) > total;
-  const lignes = registre.filter((e) => !incoherent(e)).map((e) => {
+  // Site hors de la zone d'intervention habituelle (Normandie) : les délais du registre, pris sur des
+  // marchés normands, ne sont pas transmis (sinon ils étaient promis tels quels, ex. 60 min depuis Rouen).
+  const lignes = registre.filter((e) => !incoherent(e) && !(horsNormandie && e.categorie === 'delais')).map((e) => {
     const ancien = CATEGORIES_VARIABLES.has(e.categorie) && moisDepuis(e.date_retenue) > FRAICHEUR_MOIS;
     const aConfirmer = e.statut === 'a_confirmer' || ancien;
     const raison = e.statut === 'a_confirmer'
@@ -147,7 +149,10 @@ export function blocRegistre(): string {
       : (ancien ? ` — dernière source de plus de ${FRAICHEUR_MOIS} mois` : '');
     return `- ${e.libelle} : ${e.valeur_retenue} [source : ${e.source_retenue}, ${e.date_retenue}]${aConfirmer ? ` [À CONFIRMER${raison}]` : ''}`;
   });
-  return '\n\nREGISTRE DES INFORMATIONS GSS (valeur la plus récente connue de chaque information qui peut évoluer) :\n' + lignes.join('\n');
+  const avertissement = horsNormandie
+    ? "\nCE MARCHÉ EST HORS DE LA ZONE D'INTERVENTION HABITUELLE DE GSS (Normandie) : n'annonce AUCUN délai chiffré d'astreinte, d'intervention, de remplacement ou de mise en place repris d'anciens marchés (ex. 60 minutes, 1 h à 24 h) ; décris l'organisation et demande le délai à GSS."
+    : '';
+  return '\n\nREGISTRE DES INFORMATIONS GSS (valeur la plus récente connue de chaque information qui peut évoluer) :\n' + lignes.join('\n') + avertissement;
 }
 
 /**
@@ -233,6 +238,18 @@ export function confirmationsRegistreUtilisees(texte: string): string[] {
     }
   }
   return out;
+}
+
+/**
+ * Vrai si le marché se situe hors de Normandie (zone d'intervention habituelle de GSS), d'après les codes
+ * postaux de l'analyse du DCE et du début du DCE. Faux si aucun code postal n'est trouvé (doute → pas de filtre).
+ */
+export function marcheHorsNormandie(analyse: any, dce: string): boolean {
+  const texte = `${JSON.stringify(analyse || {})} ${String(dce || '').slice(0, 40000)}`;
+  const codes = [...texte.matchAll(/\b(\d{2})\d{3}\s+[A-ZÉÈa-zéè]/g)].map((m) => m[1]).filter((d) => Number(d) >= 1 && Number(d) <= 95);
+  if (!codes.length) return false;
+  const normands = codes.filter((d) => ['14', '27', '50', '61', '76'].includes(d)).length;
+  return normands < codes.length / 2;
 }
 
 /** Valeur la plus récente d'une information du registre (clé du catalogue), ou '' si inconnue. */

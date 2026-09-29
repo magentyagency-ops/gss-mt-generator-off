@@ -4,7 +4,7 @@ import { D2Service } from './d2_service';
 import { SchemaService, PageSchema } from './schema_service';
 import { insererSchemasReponses } from './visuels_cadre';
 import { poserSignets, poserSignetsChamps, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter } from './completion';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -3218,6 +3218,8 @@ Renvoie un JSON valide :
     // Le DCE reste le contexte primaire (les exigences) ; la Documentation GSS fournit la matière
     // pour y répondre. Toute info absente de ces sources → champ laissé « [À COMPLÉTER] ».
     const gssDocs = await this.getGssDocumentation();
+    // Effectifs : le registre (mémoires datés) fait foi ; l'ancien document « EFFECTIFS » (152 / 93…) est écarté.
+    if (valeurRegistre('effectif_total')) for (const k of Object.keys(gssDocs)) if (/^EFFECTIFS/i.test(k)) delete gssDocs[k];
     const gssDocContext = this.buildFullGssContext(gssDocs);
     const referentsContext = await this.getGssReferents();
     if (onProgress) onProgress(18, 'Chargement de la documentation GSS…');
@@ -3656,7 +3658,7 @@ ${REGLES_REUTILISATION}
 - Réponds précisément à la QUESTION du champ : n'utilise un extrait de mémoire que s'il répond à CETTE question.
 - Champ court, d'identité ou de contact : une valeur présente dans le REGISTRE DES INFORMATIONS GSS ou dans un extrait de mémoire GSS EST une source valable → donne-la (ne réponds pas « [À COMPLÉTER] » si elle y figure).
 - Une certification indiquée « en cours » n'est PAS obtenue : ne la présente jamais comme acquise.
-- Dénomination / « NOM » du candidat : écris exactement la raison sociale du registre.${blocRegistre()}${organigrammeGss(referentsContext)}${referencesGss()}
+- Dénomination / « NOM » du candidat : écris exactement la raison sociale du registre.${blocRegistre(marcheHorsNormandie(analysisData, dceContext))}${organigrammeGss(referentsContext)}${referencesGss()}
 ${this.blocDemande()}
 
 FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "value": "..."} ]}`;
@@ -5393,6 +5395,8 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
     const clientName = analysisData?.clientName || 'le client';
 
     const gssDocs = await this.getGssDocumentation();
+    // Effectifs : le registre (mémoires datés) fait foi ; l'ancien document « EFFECTIFS » (152 / 93…) est écarté.
+    if (valeurRegistre('effectif_total')) for (const k of Object.keys(gssDocs)) if (/^EFFECTIFS/i.test(k)) delete gssDocs[k];
     const availableCategories = Object.keys(gssDocs);
 
     // Matrice de conformité INTERNE : exigences du CCTP/RC ↔ ce que GSS a / fait. On la calcule une
@@ -5421,7 +5425,7 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Recherche dans les mémoires GSS indisponible (${e?.message || e}).`);
     }
-    const registreGss = blocRegistre() + organigrammeGss(await this.getGssReferents()) + referencesGss();
+    const registreGss = blocRegistre(marcheHorsNormandie(analysisData, dceContext)) + organigrammeGss(await this.getGssReferents()) + referencesGss();
     const repartition = await this.repartirDemande(AI_SECTIONS_B);
     const commentairesRetires = new Set<string>();
     const secoursMemoires: Record<string, string> = {};
