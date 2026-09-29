@@ -280,7 +280,7 @@ ILS NOUS ONT FAIT CONFIANCEZone d’image
 
 Ici nous allons vous présenter une partie des enseignes qui nous ont fait, et nous font confiance, en nous confiant la sécurité de leurs sites.
 
-Il est intéressant de vous présenter ces sites et les expériences que nous avons pû y acquérir.
+Il est intéressant de vous présenter ces sites et les expériences que nous avons pu y acquérir.
 
 Nous n'avons sélectionné qu'un certain nombre de références par secteur d'activité.
 
@@ -335,7 +335,7 @@ Les prestations qui nous sont confiées par les mairies sont de deux natures: la
 
 Notre équipe encadrante crée des liens étroits avec les équipes des communes avec lesquelles nous travaillons. En effet, pour la partie évènementielle, il est important de bien cerner les attentes de nos partenaires afin d'y répondre de façon pertinente.
 
-En travaillant régulièrement ensemble, nous connaissons bien les prérogatives des communes et pouvons également les orienter sur les nouveautés en matière de sécurité (comme récemment avec les nouvelles dispositions en matière de lutte contre le Covid). Nous travaillons vraiment en synergie pour réaliser une prestation de qualité.
+En travaillant régulièrement ensemble, nous connaissons bien les prérogatives des communes et pouvons également les orienter sur les nouveautés en matière de sécurité. Nous travaillons vraiment en synergie pour réaliser une prestation de qualité.
 
 Pour ce qui est de la surveillance des bâtiments municipaux, il est important pour nous de mettre en place une équipe pérenne, qui va avoir une parfaite connaissance des lieux et des équipes techniques de la mairie afin de pouvoir réaliser à la fois une surveillance pointue des installations incendie, mais aussi de pouvoir être très réactif lors d'une intervention sur alarme
 
@@ -360,15 +360,11 @@ Nous allons vous présenter dans les grandes lignes nos missions chez une de nos
 * Filtrer les entrées du cinéma et de la salle de spectacle
 * Réaliser des rondes de surveillance pendant les séances et spectacles
 * Réaliser des rondes de surveillance incendie pendant les séances et spectacles
-* Veiller au respect des gestes barrières
-
 **Nos missions événementielles :**
 * Filtrer et compter les entrées et sorties lors d'événements de la commune
 * Organiser la surveillance de sûreté et sécurité pendant les événements
 * Réaliser des rondes de contrôle d'installations de sécurité incendie
 * Réaliser des rondes de surveillance des installations événementielles lors de la fermeture au public et veiller à la non-dégradation du matériel
-* Veiller au respect des gestes barrières
-
 **Nos missions surveillance de bâtiments :**
 * Effectuer des interventions sur alarme lorsqu'une alarme d'un bâtiment municipal se déclenche
 * Effectuer régulièrement des rondes de vérification du matériel incendie et du matériel d'alerte.
@@ -483,7 +479,6 @@ Les agents en place doivent faire preuve d'une bonne communication comme pour to
 Nous allons vous présenter dans les grandes lignes nos missions chez un de nos partenaires bancaires :
 
 **Nos missions :**
-* Vérification du respect des gestes barrières
 * Rondes de vérification du matériel incendie
 * Intervention sur alarme
 * Sécurisation de l'agence
@@ -515,7 +510,7 @@ En effet, sur ce type de site, la représentation, la posture et les compétence
   </div>
 </div>
 
-Nous avons la chance d’accompagner la région Normandie, à la fois pour sécuriser les sièges de Rouen et de Caen, mais aussi pour sécuriser les différents établissements scolaires placés sous la responsabilité de la Région, lors de différents disfonctionnements.
+Nous avons la chance d’accompagner la région Normandie, à la fois pour sécuriser les sièges de Rouen et de Caen, mais aussi pour sécuriser les différents établissements scolaires placés sous la responsabilité de la Région, lors de différents dysfonctionnements.
 
 **Nos missions :**
 * Gardiennage des bâtiments administratifs et des lycées
@@ -743,7 +738,7 @@ Il s’agit des zones de détection, des zones de mise en sécurité, zones de d
 
 La main courante : nos agents sont tenus de mettre à jour la « main courante » du site sur lequel il assure un gardiennage. Cette main courante est un peu le journal de bord du site et doit comporter différents éléments :Les évènements survenus sur le site en matière de sécurité (début d’incendie, intrusion,…)Les prises et fins de services des agents concernés- Les heures de chaque ronde et, le cas échéant, les anomalies constatées lors de ces dernières.
 
-quelconque disfonctionnement du matériel de sécuritéLa main courante se doit d’être intelligible et synthétisée, ne contenant que des éléments factuels ne laissant aucune place à une éventuelle interprétation ou hypothèse, mais uniquement à des faits précis et clairs. Selon les sites, la main courante peut être informatisée, contenant les catégories nécessaires au suivi de la sécurité.
+quelconque dysfonctionnement du matériel de sécuritéLa main courante se doit d’être intelligible et synthétisée, ne contenant que des éléments factuels ne laissant aucune place à une éventuelle interprétation ou hypothèse, mais uniquement à des faits précis et clairs. Selon les sites, la main courante peut être informatisée, contenant les catégories nécessaires au suivi de la sécurité.
 
 Si un fait nécessite une plus ample explication qu’un simple signalement sur la main courante, il peut être demandé à l’agent d’y annexer un rapport plus complet.
 ---

@@ -25,7 +25,7 @@ export const AI_SECTIONS_B: AiSectionB[] = [
   // ---- II — Les moyens humains ----
   { id: "b_moyens_humains", chapter: "II", title: "Qualifications et profils des agents (CQP APS, SSIAP)" },
   { id: "b_encadrement", chapter: "II", title: "Encadrement et organigramme opérationnel" },
-  { id: "b_reprise_personnel", chapter: "II", title: "Reprise du personnel en place (article L1224-1)" },
+  { id: "b_reprise_personnel", chapter: "II", title: "Reprise du personnel en place" },
   { id: "b_recrutement_formation", chapter: "II", title: "Recrutement, formation et montée en compétences" },
   { id: "b_dispositif_absence", chapter: "II", title: "Dispositif palliatif d'absence et remplacement" },
   { id: "b_tenues_epi", chapter: "II", title: "Tenues et équipements de protection des agents" },

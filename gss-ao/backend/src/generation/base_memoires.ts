@@ -156,6 +156,47 @@ export function personnesDuRole(role: string): string[] {
   return e ? e.valeur_retenue.split(';').map((s) => s.trim()).filter(Boolean) : [];
 }
 
+/**
+ * Organigramme GSS de RÉFÉRENCE, unique pour tout le document : fichier « Personnes » + registre
+ * (valeurs datées des mémoires). Règle : un rôle tenu par plusieurs personnes (pôle) → toutes ; sinon la
+ * valeur la plus récente du registre prime sur le fichier « Personnes » (non daté). Sans cette source
+ * unique, les rubriques citaient des responsables différents pour un même rôle.
+ */
+export function organigrammeGss(referents: string): string {
+  const cle = (role: string) => role.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\(s\)|\(e\)/g, '').replace(/\b(responsables?|directeur|directrice|chef|de|du|des|d|l|la|le|agence)\b/g, ' ')
+    .replace(/[^a-z]+/g, ' ').trim().split(' ').filter((w) => w.length >= 2).map((w) => w.replace(/s$/, '').replace(/ale$/, 'al').replace(/iere$/, 'ier')).join(' ');
+  const roles = new Map<string, { libelle: string; noms: string[] }>();
+  for (const ligne of referents.split(/\r?\n/)) {
+    const m = ligne.match(/^\s*(.+?)\s+[—–-]\s+(.+?)\s*$/);
+    if (!m || m[1].startsWith('---')) continue;
+    for (const r of m[2].split('/').map((x) => x.trim()).filter(Boolean)) {
+      const k = cle(r) || r;
+      const e = roles.get(k) || { libelle: r, noms: [] };
+      if (!e.noms.includes(m[1].trim())) e.noms.push(m[1].trim());
+      roles.set(k, e);
+    }
+  }
+  for (const e of charger().registre.filter((x) => /^responsable_|^dirigeant/.test(x.cle) && x.valeur_retenue)) {
+    const noms = e.valeur_retenue.split(';').map((x) => x.trim()).filter(Boolean);
+    const k = cle(e.libelle) || e.libelle;
+    const exist = roles.get(k);
+    const memePersonne = (a: string, b: string) => {
+      const mots = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z]+/).filter((w) => w.length >= 3);
+      const mb = mots(b);
+      return mots(a).some((w) => mb.includes(w));
+    };
+    if (noms.length > 1 && exist) {
+      for (const n of noms) if (!exist.noms.some((x) => memePersonne(x, n))) exist.noms.push(n);
+    } else {
+      roles.set(k, { libelle: exist?.libelle || e.libelle.replace(/\(s\)/g, 's').replace(/\(e\)/g, ''), noms: exist && exist.noms.some((x) => noms.some((n) => memePersonne(x, n))) ? exist.noms : noms });
+    }
+  }
+  if (!roles.size) return '';
+  return '\n\nORGANIGRAMME GSS DE RÉFÉRENCE (unique pour tout le document ; aucun autre nom ni rôle) :\n'
+    + [...roles.values()].map((e) => `- ${e.libelle} : ${e.noms.join(', ')}`).join('\n');
+}
+
 /** Valeur la plus récente d'une information du registre (clé du catalogue), ou '' si inconnue. */
 export function valeurRegistre(cle: string): string {
   return charger().registre.find((e) => e.cle === cle)?.valeur_retenue || '';
@@ -171,6 +212,12 @@ export const REGLES_REUTILISATION = `RÈGLES DE RÉUTILISATION DES MÉMOIRES GSS
 - Si un extrait contient un TABLEAU pertinent (effectifs, qualifications, fréquences de contrôle…), reprends-le sous forme de tableau.
 - Informations qui évoluent (effectifs, responsables, coordonnées, véhicules, logiciels, délais, certifications) : utilise la valeur du REGISTRE DES INFORMATIONS GSS (la plus récente), jamais une valeur plus ancienne d'un extrait. Ordre de priorité : réponse de l'équipe GSS (RECHERCHES ET SOLLICITATIONS) > registre > extraits de mémoires. Si l'information utilisée est marquée [À CONFIRMER], utilise la valeur la plus récente ET ajoute sur sa propre ligne : [CONSULTATION REQUISE : Confirmer <information> — dernière valeur connue : <valeur> (<source>)].
 - Un même rôle peut être tenu par PLUSIEURS personnes (pôle renforcé, ex. l'exploitation) : si les RÉFÉRENTS GSS et le REGISTRE citent des personnes différentes pour un même rôle, cite-les TOUTES ensemble (« responsables d'exploitation : X, Y et Z »), sans en choisir une ni présenter l'une comme remplaçant l'autre.
+- Chiffres GSS : reprends-les À L'IDENTIQUE (fréquences, délais, effectifs, durées) — ne les arrondis pas, ne les élargis pas (« deux à trois fois par mois » ne devient jamais « une à trois fois »).
+- Effectifs GSS : n'utilise QUE les valeurs du REGISTRE (jamais les chiffres d'autres documents plus anciens) et cite toujours les mêmes dans tout le document ; un nombre d'agents ne dépasse jamais l'effectif total ; une valeur incohérente marquée [À CONFIRMER] n'est pas citée.
+- Personnes et rôles : utilise UNIQUEMENT l'ORGANIGRAMME GSS DE RÉFÉRENCE, identique dans tout le document (mêmes personnes pour un même rôle, même rôle pour une même personne).
+- Implantation : GSS est implanté à Rouen (Normandie). Les délais d'intervention, d'astreinte ou de mobilisation du registre ont été pris pour des marchés normands : pour un site situé dans une autre région, ne les présente pas comme un engagement ; décris l'organisation prévue (renforts, prépositionnement, relais local) sans chiffre inventé et demande le délai à GSS (consultation / [À COMPLÉTER]).
+- Contenu daté ou étranger au marché : ne reprends jamais les mesures Covid (gestes barrières, pass sanitaire, gel hydroalcoolique) ni un contenu propre à un autre secteur (magasin, caisses, transport de fonds, événementiel) s'il ne concerne pas ce marché. « Pôle emploi » s'appelle désormais « France Travail ».
+- Le document est destiné à l'ACHETEUR : n'y écris JAMAIS de commentaire interne ou de diagnostic sur les manques (« à ce stade », « n'est pas établi », « la documentation fournie ne comporte pas », « reste à confirmer », « devra être confirmé », « selon les éléments disponibles »…). Une information manquante se signale uniquement par le marqueur prévu (consultation / [À COMPLÉTER]). Si une visite du site est obligatoire, elle est réputée faite : jamais de futur « après la visite ».
 - Les chiffres propres à un ancien marché (agents dédiés à un site, délais par site d'un autre client) ne sont PAS des informations de GSS en général : ne les reprends pas pour le nouveau client.`;
 
 /**
@@ -180,6 +227,29 @@ export const REGLES_REUTILISATION = `RÈGLES DE RÉUTILISATION DES MÉMOIRES GSS
 export function texteSourcesMemoires(): string {
   const { passages, registre } = charger();
   return passages.map((p) => p.texte).join('\n') + '\n' + registre.map((e) => `${e.libelle} : ${e.valeur_retenue}`).join('\n');
+}
+
+/** Phrases de diagnostic interne sur les manques (jamais destinées à l'acheteur). */
+const COMMENTAIRE_INTERNE = /(\bà ce stade\b|\bne sont pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]est pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]ont pas été (?:communiqué|transmis|fourni)|\bn['’]a pas été (?:communiqué|transmis|fourni)|documentation (?:gss )?(?:fournie|transmise|disponible)|documents? (?:gss )?transmis|éléments? (?:gss )?(?:disponibles|transmis|fournis|communiqués)|\breste(?:nt)? à (?:confirmer|établir|préciser|obtenir)|\bdoi(?:t|vent) être confirmé|\bdevr(?:a|ont) être (?:confirmé|précisé|transposé|validé)|\baprès la visite\b|\blors de la visite obligatoire\b|\bne comporte (?:toutefois )?pas\b|\bne présente ni\b|\bsous réserve de (?:confirmation|validation)\b|\bnon (?:communiqué|précisé|renseigné) dans les)/i;
+
+/**
+ * Retire du texte destiné à l'acheteur les phrases de diagnostic interne (« à ce stade, … n'est pas
+ * établi », « la documentation fournie ne comporte pas… ») et les renvoie pour la liste des points à
+ * confirmer. Une phrase qui porte un marqueur ([À COMPLÉTER], [CONSULTATION REQUISE], repère) est gardée.
+ */
+export function retirerCommentairesInternes(texte: string): { texte: string; retires: string[] } {
+  const retires: string[] = [];
+  const lignes = texte.split('\n').map((ligne) => {
+    if (/^\s*(#|\||[-*•]\s)/.test(ligne) && !COMMENTAIRE_INTERNE.test(ligne)) return ligne;
+    const phrases = ligne.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«"(])/);
+    const gardees = phrases.filter((ph) => {
+      if (!COMMENTAIRE_INTERNE.test(ph) || /\[À COMPLÉTER\]|\[CONSULTATION REQUISE|⟦AC:/.test(ph)) return true;
+      retires.push(ph.replace(/[*#]/g, '').trim());
+      return false;
+    });
+    return gardees.join(' ');
+  });
+  return { texte: lignes.join('\n').replace(/\n{3,}/g, '\n\n'), retires };
 }
 
 /** Extrait les demandes de confirmation [CONSULTATION REQUISE : …] d'un texte et les retire. */

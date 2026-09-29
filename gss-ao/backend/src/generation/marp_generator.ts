@@ -498,8 +498,10 @@ export class MarpGenerator {
       tocPages[tocPages.length - 1].push(chapterLine);
       tocItemCount++;
 
-      for (const sec of chapter.sections) {
-        const sectionLine = `\t${tocItemCount}. __${sec.title.toUpperCase()}__`;
+      // Numérotation des rubriques propre à chaque chapitre (1, 2, 3… rendus i, ii, iii) : un compteur
+      // global faisait démarrer les chapitres suivants à 6, 13… (sommaire « 6. 7. … 11 »).
+      chapter.sections.forEach((sec, idx) => {
+        const sectionLine = `\t${idx + 1}. __${sec.title.toUpperCase()}__`;
         tocPages[tocPages.length - 1].push(sectionLine);
         tocItemCount++;
 
@@ -507,7 +509,7 @@ export class MarpGenerator {
         if (tocPages[tocPages.length - 1].length >= 18) {
           tocPages.push([]);
         }
-      }
+      });
     }
 
     // First TOC page already has the "## SOMMAIRE" header

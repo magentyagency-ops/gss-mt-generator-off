@@ -3,7 +3,7 @@ import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema } from './schema_service';
 import { poserSignets, poserSignetsChamps, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter } from './completion';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -76,6 +76,33 @@ function viderValeursNonRenseignees(v: any): any {
     return o;
   }
   return v;
+}
+
+/**
+ * Texte d'un classeur .xlsx (une ligne par ligne de feuille, cellules séparées par « | »), sans
+ * dépendance : un .xlsx est une archive de XML. Les cellules vides et les montants nuls sont ignorés.
+ */
+function lireTableur(chemin: string): string {
+  const zip = new PizZip(fs.readFileSync(chemin));
+  const xml = (n: string) => zip.file(n)?.asText() || '';
+  const dec = (t: string) => t.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+  const partages = [...xml('xl/sharedStrings.xml').matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => dec(m[1]));
+  const feuilles = Object.keys(zip.files).filter((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort();
+  const lignes: string[] = [];
+  for (const f of feuilles) {
+    for (const r of xml(f).matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
+      const cellules: string[] = [];
+      for (const c of r[1].matchAll(/<c ([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const v = /<v>([\s\S]*?)<\/v>/.exec(c[2] || '');
+        const inline = /<t[^>]*>([\s\S]*?)<\/t>/.exec(c[2] || '');
+        let val = v ? (/t="s"/.test(c[1]) ? partages[Number(v[1])] || '' : v[1]) : inline ? dec(inline[1]) : '';
+        val = val.replace(/\s+/g, ' ').trim();
+        if (val && !/^[-–\s€0.,]*$/.test(val)) cellules.push(val);
+      }
+      if (cellules.length) lignes.push(cellules.join(' | '));
+    }
+  }
+  return lignes.join('\n');
 }
 
 /** Demande particulière de l'utilisateur pour UNE génération : consigne libre et/ou document complémentaire. */
@@ -1035,7 +1062,7 @@ const AI_SECTIONS_B: Array<{ id: string; chapter: string; title: string }> = [
   // II — Les moyens humains
   { id: 'b_moyens_humains', chapter: 'II', title: 'Qualifications et profils des agents (CQP APS, SSIAP)' },
   { id: 'b_encadrement', chapter: 'II', title: 'Encadrement et organigramme opérationnel' },
-  { id: 'b_reprise_personnel', chapter: 'II', title: 'Reprise du personnel en place (article L1224-1)' },
+  { id: 'b_reprise_personnel', chapter: 'II', title: 'Reprise du personnel en place' },
   { id: 'b_recrutement_formation', chapter: 'II', title: 'Recrutement, formation et montée en compétences' },
   { id: 'b_dispositif_absence', chapter: 'II', title: "Dispositif palliatif d'absence et remplacement" },
   { id: 'b_tenues_epi', chapter: 'II', title: 'Tenues et équipements de protection des agents' },
@@ -1965,7 +1992,7 @@ export class MemoireGenerator {
 
         const normalized = entry.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
         const ext = path.extname(entry.name).toLowerCase();
-        if (!['.doc', '.docx', '.pdf'].includes(ext)) continue;
+        if (!['.doc', '.docx', '.pdf', '.xlsx'].includes(ext)) continue;
         if (normalized.includes('bpu') || normalized.includes('dpgf')) continue;
         if (normalized.includes('memoire') && (normalized.includes('technique') || normalized.includes('gss'))) continue;
         if (loadedFiles.has(normalized)) continue;
@@ -1973,7 +2000,8 @@ export class MemoireGenerator {
 
         let text = '';
         try {
-          text = await extractText(fullPath);
+          // Tableur (ex. DQE du cas pratique : créneaux horaires, profils attendus) : lu ligne par ligne.
+          text = ext === '.xlsx' ? lireTableur(fullPath) : await extractText(fullPath);
         } catch (e: any) {
           console.warn(`[MemoireGenerator] Impossible de lire: ${entry.name} — ${e.message}`);
           continue;
@@ -2006,7 +2034,7 @@ export class MemoireGenerator {
         }
 
         if (text.length > 100) {
-          pieces.push({ label: entry.name.replace(/\.(doc|docx|pdf)$/i, ''), text, priority: priorityOf(normalized) });
+          pieces.push({ label: entry.name.replace(/\.(doc|docx|pdf|xlsx)$/i, ''), text, priority: priorityOf(normalized) });
           console.log(`[MemoireGenerator] DCE chargé: ${entry.name} (${text.length} chars, prio ${priorityOf(normalized)})`);
         }
       }
@@ -2625,8 +2653,9 @@ Renvoie UNIQUEMENT un objet JSON : {"reponses": [{"n": 1, "reponse": "..." | nul
     const systemPrompt = `Tu es responsable de l'analyse des appels d'offres de sécurité privée chez GSS.
 Mission : dépouiller le DCE — le CCTP EN PRIORITÉ — pour en extraire une CHECK-LIST des GRANDES EXIGENCES du donneur d'ordre, puis confronter chacune à ce que GSS a / fait d'après la Documentation GSS fournie.
 RÈGLES :
-- NIVEAU DE DÉTAIL : reste au niveau des GRANDES THÉMATIQUES (ex: "Dispositif humain et qualifications", "Moyens matériels et technologiques", "Gestion des alarmes et interventions", "Politique RSE"). Ne descends PAS au niveau des sous-détails par site, par poste ou par modèle d'équipement. Regroupe les exigences similaires.
-- Vise 15 à 25 exigences GLOBALES maximum, pas une liste de 50+ micro-détails.
+- ENGAGEMENTS CHIFFRÉS (prioritaires) : chaque obligation PRÉCISE et mesurable du CCTP/CCAP — délai (levée de doute, intervention, remplacement), fréquence (rondes, contrôles, réunions), échéance (rapports, plannings, listes nominatives, bilans, dossier de réversibilité), document à remettre, matériel ou qualification exigés, obligation assortie d'une pénalité — est une exigence À PART, avec son chiffre exact et, s'il y en a une, sa pénalité.
+- Pour le reste, NIVEAU DE DÉTAIL : reste au niveau des GRANDES THÉMATIQUES (ex: "Dispositif humain et qualifications", "Moyens matériels et technologiques", "Gestion des alarmes et interventions", "Politique RSE"). Ne descends PAS au niveau des sous-détails par site, par poste ou par modèle d'équipement. Regroupe les exigences similaires.
+- Vise 15 à 25 exigences globales, plus tous les engagements chiffrés (au total 60 au maximum).
 - Cite l'exigence de façon synthétique ; n'invente rien côté DCE.
 - La réponse GSS s'appuie UNIQUEMENT sur la Documentation GSS ; n'invente AUCUN moyen absent.
 - CLASSE la couverture STRICTEMENT ainsi :
@@ -3624,7 +3653,8 @@ RÈGLE N°5 — CAPITALISER SUR LES MÉMOIRES DÉJÀ RÉDIGÉS PAR GSS
 ${REGLES_REUTILISATION}
 - Réponds précisément à la QUESTION du champ : n'utilise un extrait de mémoire que s'il répond à CETTE question.
 - Champ court, d'identité ou de contact : une valeur présente dans le REGISTRE DES INFORMATIONS GSS ou dans un extrait de mémoire GSS EST une source valable → donne-la (ne réponds pas « [À COMPLÉTER] » si elle y figure).
-- Une certification indiquée « en cours » n'est PAS obtenue : ne la présente jamais comme acquise.${blocRegistre()}
+- Une certification indiquée « en cours » n'est PAS obtenue : ne la présente jamais comme acquise.
+- Dénomination / « NOM » du candidat : écris exactement la raison sociale du registre.${blocRegistre()}${organigrammeGss(referentsContext)}
 ${this.blocDemande()}
 
 FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "value": "..."} ]}`;
@@ -3715,7 +3745,20 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
 - Texte brut : pas de Markdown (ni #, ni **, ni puces « - » ; utilise « • » pour une énumération).
 - RÉDACTION : phrases simples, naturelles et exactes, comme les écrirait un responsable d'exploitation de GSS. Le site est déjà décrit par l'acheteur dans le cas pratique : ne recopie JAMAIS la liste de ses caractéristiques (surface, bâtiments, étages, accès, barrières, parking, clôture, quartier) et n'ouvre pas chaque composante par l'« enjeu » du site ; cite au plus UNE caractéristique, une seule fois, quand elle justifie concrètement un choix. Va directement à ce que fait GSS. Pas d'effet dramatique ni de formule creuse. La réponse ne contredit jamais une autre composante (même nombre d'équipes, mêmes responsables).
 - Un [À COMPLÉTER] prend la place de la SEULE donnée manquante. Donnée chiffrée : dans une phrase naturelle (« GSS affecte [À COMPLÉTER] agents de sécurité au site », « intervention sous [À COMPLÉTER] minutes »). Donnée qualitative ou descriptive (recours à la sous-traitance, composition nominative…) : sous la forme « Libellé : [À COMPLÉTER]. ». Jamais de tournure du type « est défini comme suit : [À COMPLÉTER] ». Interdit : « est de [À COMPLÉTER] » ou « sont de [À COMPLÉTER] » pour autre chose qu'un nombre, « est la suivante : [À COMPLÉTER] ». Une seule donnée par [À COMPLÉTER], et une même donnée n'est laissée à compléter qu'à un seul endroit de la réponse.
+- CAS PRATIQUE (nombre d'agents, de maîtres-chiens, d'équipes, schéma opérationnel, rotations) : c'est à GSS de proposer son dispositif — propose un dimensionnement ARGUMENTÉ, cohérent avec le site décrit, les créneaux horaires et les profils du DQE s'ils figurent dans les extraits (ex. créneaux 6h-21h / 21h-6h ; agent, agent SSI, maître-chien, encadrant) et avec la réglementation (vacations de 12 h au plus, relèves), puis ajoute sur sa propre ligne [CONSULTATION REQUISE : Valider le dimensionnement proposé : <résumé chiffré>]. Le même dimensionnement vaut dans toutes les composantes.
+- Composante « Fourniture d'un rapport type / d'un rapport d'exécution / d'un schéma / d'un rétroplanning » : fournis l'OBJET lui-même, sous forme structurée et adaptée au cas (intitulé « Modèle de … », puis lignes « Rubrique : contenu », horaires, cases à renseigner), jamais une simple description de ce qu'il contient.
+- Composition des équipes / moyens de l'entreprise : appuie-toi sur l'autorisation CNAPS, les effectifs par qualification du registre et au moins une référence de marché comparable de GSS.
+- Délais d'intervention dans un accord-cadre à bons de commande : distingue le délai de mise en place d'une prestation commandée (intervention courante) et le délai de réaction en cas d'urgence ; indique d'où partent les moyens.
+- Matériel : choisis celui qui est adapté au site et aux risques (PTI pour un agent isolé, lampes, moyens de communication…) ; n'en propose pas qui soit sans intérêt pour ce site.
+- Ne traite pas dans cette réponse ce qui relève d'un AUTRE critère de la grille (voir « Autres critères ») : pas de redite d'un critère à l'autre.
 - Pour réduire au minimum ce que GSS doit compléter : un engagement que GSS a déjà pris de façon générale (valeur du REGISTRE DES INFORMATIONS GSS : délai d'intervention du rondier, mobilisation de l'astreinte, délai PTI, envoi des plannings…) est repris avec sa valeur au lieu d'un [À COMPLÉTER].`;
+
+    /** Autres critères de la grille (pour éviter les redites d'un critère à l'autre). */
+    const autresCriteres = (f: FieldDesc): string => {
+      const autres = descriptors.filter((d) => d.grille && d.id !== f.id)
+        .map((d) => ((d.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').split(' : ')[0].slice(0, 120)).filter(Boolean);
+      return autres.length ? `Autres critères de la grille (traités ailleurs) : ${autres.join(' | ')}` : '';
+    };
 
     /** Traite UN champ : recherche ciblée des passages pertinents + 1 appel IA dédié. */
     const answerField = async (f: FieldDesc): Promise<void> => {
@@ -3814,7 +3857,8 @@ INTERDITS : recopier la valeur d'une AUTRE colonne/site ; inventer une donnée f
         const isTotalFrance = /effectif/.test(nqEff) && /total/.test(nqEff)
           && /(entreprise|france|national)/.test(nqEff)
           && !/(departement|\b76\b|\b27\b|\bsite\b|dedie|au marche|par poste)/.test(nqEff);
-        if (isTotalFrance) { replacements.push({ id: f.id, value: `${effectifTotal.total} agents` }); return; }
+        // Effectif total : valeur du registre (mémoires GSS datés) prioritaire sur l'ancienne somme des catégories.
+        if (isTotalFrance) { replacements.push({ id: f.id, value: valeurRegistre('effectif_total') ? `${valeurRegistre('effectif_total')} salariés` : `${effectifTotal.total} agents` }); return; }
       }
       // Effectif / agents / ETP DÉDIÉS au marché : le dimensionnement propre à CE marché n'est PAS
       // déterminable de façon fiable (l'Annexe 1 du DCE donne des postes/horaires non agrégeables
@@ -3870,7 +3914,7 @@ CHAMP UNIQUE À RÉDIGER :
 ${hint}
 
 ${instruction}
-${f.grille ? CONSIGNE_GRILLE + '\n' : ''}${tableGuidance ? tableGuidance + '\n' : ''}${fieldAsk && fieldAsk !== f.context ? `${qEmpty ? `Cette zone à remplir (les pointillés « … ») fait suite, dans le document, au libellé qui la PRÉCÈDE : « ${fieldAsk} ». LIS ce libellé pour comprendre ce qui est attendu et remplis la zone en conséquence.` : `RESTE SUR LE SUJET DE CETTE QUESTION : « ${fieldAsk} ».`} Ne réponds pas sur un thème VOISIN (ex. ne parle pas des moyens d'accès/clés si le sujet est le report des alarmes). Si les extraits apportent une information MÊME PARTIELLE sur CE sujet, donne une réponse (au moins partielle) fondée dessus plutôt que de laisser vide — sans rien inventer. N'écris "[À COMPLÉTER]" QUE si rien d'utile sur ce sujet n'est disponible.\n` : ''}Renvoie UNIQUEMENT un objet JSON : {"id": ${f.id}, "value": "..."}`;
+${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuidance ? tableGuidance + '\n' : ''}${fieldAsk && fieldAsk !== f.context ? `${qEmpty ? `Cette zone à remplir (les pointillés « … ») fait suite, dans le document, au libellé qui la PRÉCÈDE : « ${fieldAsk} ». LIS ce libellé pour comprendre ce qui est attendu et remplis la zone en conséquence.` : `RESTE SUR LE SUJET DE CETTE QUESTION : « ${fieldAsk} ».`} Ne réponds pas sur un thème VOISIN (ex. ne parle pas des moyens d'accès/clés si le sujet est le report des alarmes). Si les extraits apportent une information MÊME PARTIELLE sur CE sujet, donne une réponse (au moins partielle) fondée dessus plutôt que de laisser vide — sans rien inventer. N'écris "[À COMPLÉTER]" QUE si rien d'utile sur ce sujet n'est disponible.\n` : ''}Renvoie UNIQUEMENT un objet JSON : {"id": ${f.id}, "value": "..."}`;
 
       // Températures basses = fidélité aux sources (priorité « 0 inventé ») : on baisse la rédaction
       // de paragraphe de 0.4 → 0.2 pour limiter les détails « brodés » non sourcés.
@@ -3999,6 +4043,38 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       return [`Critère « ${q.split(' : ')[0].slice(0, 140)} » : information marquée [À COMPLÉTER] à fournir`];
     };
 
+    /**
+     * Grille de notation : les critères sont rédigés séparément ; une passe unique harmonise les
+     * réponses (mêmes personnes, mêmes nombres d'équipes/agents, mêmes délais partout) et reprend dans un
+     * critère une donnée qu'un autre critère fournit déjà au lieu d'un [À COMPLÉTER].
+     */
+    const harmoniserGrille = async (): Promise<void> => {
+      const grille = replacements.filter((r) => descriptors.find((d) => d.id === r.id)?.grille && String(r.value || '').trim());
+      if (grille.length < 2) return;
+      const libelle = (id: number) => ((descriptors.find((d) => d.id === id)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').slice(0, 200);
+      const rep = await this.callOpenAI([
+        {
+          role: 'system',
+          content: `Tu relis les réponses d'un mémoire technique GSS à une grille de notation, rédigées séparément, pour qu'elles soient COHÉRENTES entre elles.
+- Harmonise : mêmes personnes et mêmes rôles, mêmes nombres (équipes, agents, maîtres-chiens), mêmes délais et même dispositif dans toutes les réponses (retiens la version la plus précise et la plus complète).
+- Si une réponse laisse « [À COMPLÉTER] » pour une donnée qu'une AUTRE réponse fournit explicitement, remplace-le par cette donnée.
+- Ne change RIEN d'autre : ni le fond, ni la structure, ni la longueur ; conserve à l'identique tout « [À COMPLÉTER] » restant et toute ligne « [CONSULTATION REQUISE : …] ».
+Renvoie UNIQUEMENT un objet JSON : {"reponses": [{"id": <id>, "texte": "…"}]} avec SEULEMENT les réponses modifiées (liste vide si tout est cohérent).`,
+        },
+        { role: 'user', content: grille.map((r) => `### id ${r.id} — ${libelle(r.id)}\n${r.value}`).join('\n\n') },
+      ], 0.1, 'Cohérence de la grille', true);
+      try {
+        const modifs = JSON.parse(rep || '{}').reponses;
+        let n = 0;
+        for (const m of Array.isArray(modifs) ? modifs : []) {
+          const r = grille.find((x) => x.id === Number(m?.id));
+          const t = String(m?.texte || '').trim();
+          if (r && t && t.length > String(r.value).length * 0.6) { r.value = t; n++; }
+        }
+        if (n) console.log(`[MemoireGenerator] Cohérence de la grille : ${n} réponse(s) harmonisée(s).`);
+      } catch { /* passe facultative */ }
+    };
+
     // Passe de complétion : rattrape les champs sans valeur (appel ayant échoué).
     const answeredIds = new Set(replacements.map(r => r.id));
     const missing = descriptors.filter(d => !answeredIds.has(d.id));
@@ -4007,7 +4083,17 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       await runPool(missing.map(d => () => answerField(d)), 2);
     }
 
+    await harmoniserGrille();
     retirerConfirmations();
+    for (const r of replacements) {
+      const d = descriptors.find((x) => x.id === r.id);
+      if (!d || d.kind === 'checkbox') continue;
+      const { texte, retires } = retirerCommentairesInternes(String(r.value ?? ''));
+      if (retires.length) {
+        r.value = texte.trim() || '[À COMPLÉTER]';
+        retires.forEach((x) => confirmationsGss.add(`À confirmer : ${x}`));
+      }
+    }
     console.log(`[MemoireGenerator] GPT a renvoyé ${replacements.length} valeurs au total.`);
     setProgress(dossierId, { phase: 'finalisation', pct: 94, label: 'Application des réponses au cadre…' });
     if (onProgress) onProgress(94, 'Application des réponses au cadre…');
@@ -5314,8 +5400,9 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Recherche dans les mémoires GSS indisponible (${e?.message || e}).`);
     }
-    const registreGss = blocRegistre();
+    const registreGss = blocRegistre() + organigrammeGss(await this.getGssReferents());
     const repartition = await this.repartirDemande(AI_SECTIONS_B);
+    const commentairesRetires = new Set<string>();
     const secoursMemoires: Record<string, string> = {};
     // Document complémentaire de la demande particulière : ses passages les plus proches de chaque rubrique.
     const chunksComplement = this.chunksDocumentComplementaire();
@@ -5361,6 +5448,8 @@ RÈGLES DE PERTINENCE (le plus important) :
 - N'invente JAMAIS une information absente à la fois du DCE et des atouts GSS ; reste factuel.
 
 PERTINENCE À L'INTITULÉ (impératif) : chaque sous-partie traite directement « ${section.title} ». N'introduis aucun contenu d'un autre thème, même s'il figure dans les extraits.
+Les autres rubriques du mémoire traitent déjà : ${AI_SECTIONS_B.filter((x) => x.id !== section.id).map((x) => x.title).join(' ; ')}. Ne traite pas ici ce qui relève de l'une d'elles et ne répète pas leur contenu (rétroplanning de démarrage, liste des fonctions de la main courante, démarche RSE, effectifs, astreinte…) : chaque sujet est développé une seule fois, dans sa rubrique.
+EXIGENCES DU DCE : quand l'acheteur fixe un chiffre (délai, fréquence, échéance, nombre de postes, qualification, document à remettre, matériel exigé), reprends-le à l'identique et engage GSS dessus explicitement ; décris le site réel d'après le DCE (bâtiments, accès, spécificités) quand la rubrique s'y rapporte ; le fondement juridique (reprise du personnel, convention collective…) est celui qu'indique le DCE.
 
 ${REGLES_REUTILISATION}
 - Tableaux : un tableau Markdown est autorisé quand il reprend un tableau de GSS (effectifs, qualifications, fréquences…).${repartition ? this.blocDemande({ forme: repartition.forme, points: repartition.parRubrique[section.id] || [] }) : this.blocDemande()}
@@ -5414,6 +5503,15 @@ RÈGLES DE FORME (rendu Marp) :
           console.warn(`[MemoireGenerator] Rubrique « ${section.title} » : rédaction IA indisponible → contenu repris des mémoires GSS.`);
         }
       }
+      // Commentaires internes (diagnostic des manques) : retirés du texte remis à l'acheteur, remontés en
+      // points à confirmer.
+      if (text) {
+        const nettoye = retirerCommentairesInternes(text);
+        if (nettoye.retires.length) {
+          text = nettoye.texte;
+          nettoye.retires.forEach((x) => commentairesRetires.add(`À confirmer : ${x}`));
+        }
+      }
       sectionsMap[section.id] = text || '';
       if (!text) console.error(`[MemoireGenerator] Rubrique « ${section.title} » non rédigée (IA indisponible, aucune réponse GSS à reprendre).`);
       completed++;
@@ -5422,7 +5520,7 @@ RÈGLES DE FORME (rendu Marp) :
     // ── Consultations requises : exigences que GSS ne couvre pas et qui doivent être précisées ──
     // Deux sources : (1) les écarts détectés par la matrice de conformité ; (2) les marqueurs
     // [CONSULTATION REQUISE : …] que le rédacteur a insérés faute de réponse spécifique dans la Doc GSS.
-    const consultations = new Set<string>();
+    const consultations = new Set<string>(commentairesRetires);
     for (const r of requirementsMatrix) {
       if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence) {
         consultations.add(r.exigence.trim());

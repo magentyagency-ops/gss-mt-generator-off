@@ -147,14 +147,20 @@ function secoursBibliotheque(pages: PageSchema[]): Map<string, string> {
     console.error(`[SchemaService] Bibliothèque GSS illisible : ${e?.message || e}`);
     return out;
   }
-  const dispo = index.filter((x) => x.reutilisable);
+  // Contenu daté (Covid) ou propre à un autre secteur : jamais repris hors de sa propre rubrique.
+  const DATE_OU_SECTEUR = /covid|hydroalcool|gestes barri|pass sanitaire|magasin|caisse|transport de fonds|antivol|prospection|commercial/i;
+  const dispo = index.filter((x) => x.reutilisable && !/covid|hydroalcool|gestes barri|pass sanitaire/i.test(`${x.titre} ${x.texte}`));
   const utilises = new Set<string>();
   for (const p of pages) {
     const mots = motsDe(`${p.sectionTitle} ${p.text}`);
     const score = (x: any) => [...motsDe(`${x.titre} ${x.texte}`)].filter((w) => mots.has(w)).length;
     let cands = dispo.filter((x) => !utilises.has(x.id) && x.section === p.sectionId);
-    if (!cands.length) cands = dispo.filter((x) => !utilises.has(x.id));
-    if (!cands.length) cands = dispo;
+    // Hors de sa rubrique, un schéma doit parler du même sujet que la page : jamais une référence client
+    // ni un contenu d'un autre secteur (ex. « gel hydroalcoolique » d'un magasin dans les plannings d'un hôpital).
+    if (!cands.length) {
+      cands = dispo.filter((x) => !utilises.has(x.id) && x.section !== 'b_references'
+        && !DATE_OU_SECTEUR.test(`${x.titre} ${x.texte}`) && score(x) >= 3);
+    }
     if (!cands.length) continue;
     const choix = cands.reduce((a, b) => (score(b) > score(a) ? b : a));
     utilises.add(choix.id);
