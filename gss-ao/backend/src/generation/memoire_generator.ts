@@ -5607,6 +5607,7 @@ RÈGLES DE FORME (rendu Marp) :
 
     if (onProgress) onProgress(86, 'Contrôle des répétitions entre rubriques…');
     await this.dedoublonnerRubriques(sectionsMap, AI_SECTIONS_B);
+    await this.corrigerContradictions(sectionsMap, AI_SECTIONS_B, requirementsMatrix);
     const refsRetirees = limiterReferences(sectionsMap, AI_SECTIONS_B.map((x) => x.id));
     if (refsRetirees) console.log(`[MemoireGenerator] Références clients : citées dans deux rubriques au plus (${refsRetirees} rubrique(s) allégée(s)).`);
 
@@ -5692,6 +5693,42 @@ RÈGLES DE FORME (rendu Marp) :
     });
 
     return { ...result, generatedData, consultations: consultationList };
+  }
+
+  /**
+   * Cohérence avec le CCTP : une phrase dont un chiffre contredit une exigence chiffrée du DCE (fréquence
+   * inférieure au minimum imposé, délai plus long que le maximum…) est reformulée pour s'aligner sur
+   * l'exigence. Seuls les remplacements retrouvés MOT POUR MOT sont appliqués. Étape non bloquante.
+   */
+  private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>): Promise<void> {
+    const chiffree = (e: string) => /\d|minimum|maximum|au moins|au plus/i.test(e);
+    const ids = rubriques.map((r) => r.id).filter((id) => (sections[id] || '').trim());
+    // Une rubrique à la fois, avec les exigences chiffrées qui lui sont attribuées (contexte court : résultat stable).
+    const lots = ids.map((id) => ({ id, chiffrees: exigences.filter((r) => r.rubrique === id).map((r) => String(r.exigence || '')).filter(chiffree) })).filter((l) => l.chiffrees.length);
+    let n = 0;
+    await Promise.all(lots.map(async ({ id: idLot, chiffrees }) => {
+    const r = await this.callOpenAI([
+      {
+        role: 'system',
+        content: `Tu relis un mémoire technique de sécurité privée au regard des exigences chiffrées du CCTP. Repère chaque phrase ou puce dont un chiffre CONTREDIT une exigence (fréquence inférieure au minimum imposé, délai supérieur au maximum, échéance plus tardive, effectif ou qualification inférieurs) ou contredit un autre passage du mémoire qui applique l'exigence. Propose pour chacune un remplacement qui s'aligne exactement sur l'exigence du CCTP, en gardant le reste de la phrase.
+- "extrait" = texte EXACT recopié caractère pour caractère depuis le mémoire (Markdown compris) ; "remplacement" = la version corrigée.
+- Uniquement quand la phrase et l'exigence portent sur EXACTEMENT la même obligation (même objet, même acteur, même destinataire) : par exemple, le délai de prévenance d'une modification de planning envers l'acheteur n'est PAS le délai dans lequel un agent signale son absence à GSS. En revanche, « la méthode prévoit des contrôles de 1 à 3 fois par mois » alors que le CCTP impose au moins 3 visites inopinées par mois EST une contradiction à corriger (même obligation : fréquence des contrôles inopinés). En cas de doute réel sur l'objet, ne corrige pas.
+- Ne touche pas aux chiffres qui ne concernent pas une exigence, ni aux phrases contenant ⟦AC:…⟧ ou [CONSULTATION REQUISE.
+- "meme_obligation" : explique en quelques mots pourquoi c'est la même obligation.
+Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait": "…", "remplacement": "…", "exigence": "…", "meme_obligation": "…"}]} (liste vide si tout est cohérent).`,
+      },
+      { role: 'user', content: `EXIGENCES CHIFFRÉES DU CCTP :\n${chiffrees.map((e) => `- ${e}`).join('\n')}\n\nMÉMOIRE :\n=== ${idLot} — ${rubriques.find((x) => x.id === idLot)?.title} ===\n${sections[idLot]}` },
+    ], 0.1, `Cohérence ${idLot} avec le CCTP`, true);
+    try {
+      for (const c of JSON.parse(r || '{}').corrections || []) {
+        const id = idLot, extrait = String(c?.extrait || ''), remplacement = String(c?.remplacement || '').trim();
+        if (!ids.includes(id) || extrait.length < 12 || !remplacement || /⟦AC:|CONSULTATION REQUISE/i.test(extrait) || !sections[id].includes(extrait)) continue;
+        sections[id] = sections[id].replace(extrait, remplacement);
+        n++;
+      }
+    } catch { /* étape facultative */ }
+    }));
+    if (n) console.log(`[MemoireGenerator] Cohérence avec le CCTP : ${n} passage(s) aligné(s) sur les exigences chiffrées.`);
   }
 
   /** Sous-titres et phrases porteuses de faits (chiffres, gras, noms propres) d'une rubrique, en bref. */
@@ -5891,6 +5928,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
 
     onProgress?.(78, 'Contrôle des répétitions entre parties…');
     await this.dedoublonnerRubriques(sections, plan);
+    await this.corrigerContradictions(sections, plan, requirementsMatrix);
     limiterReferences(sections, plan.map((p) => p.id), '');
 
     // ── Points à compléter (même logique que la réponse libre) ──
