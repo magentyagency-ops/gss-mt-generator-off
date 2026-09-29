@@ -2670,7 +2670,9 @@ RÈGLES :
     // perdait la fin du CCTP : matériel exigé, états périodiques, échéances des rapports…).
     const FEN = 110_000;
     const fenetres: string[] = [];
-    for (let d = 0; d < dceContext.length && fenetres.length < 3; d += FEN - 5_000) fenetres.push(dceContext.slice(d, d + FEN));
+    if (dceContext.length > FEN) {
+      for (let d = 0; d < dceContext.length - 5_000 && fenetres.length < 3; d += FEN - 5_000) fenetres.push(dceContext.slice(d, d + FEN));
+    }
     if (fenetres.length > 1) {
       const lots = await Promise.all(fenetres.map((f) => this.analyzeRequirements(f, gssContext)));
       const norm = (t: string) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
