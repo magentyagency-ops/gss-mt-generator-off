@@ -311,7 +311,7 @@ export function retirerCommentairesInternes(texte: string): { texte: string; ret
   // Prérogatives : un agent de sécurité privée ne vérifie pas l'identité (formulation héritée de textes sources).
   const texteFinal = lignes.join('\n').replace(/\n{3,}/g, '\n\n')
     // « GSS indique pouvoir / que … » : formulation de rapporteur → engagement direct.
-    .replace(/\bGSS indique pouvoir\b/g, 'GSS peut').replace(/\bGSS indique que (ses|son|sa|les|le|la)\b/g, (_m, d) => `${d.charAt(0).toUpperCase()}${d.slice(1)}`).replace(/\bGSS indique\s+/g, 'GSS ')
+    .replace(/\b[Ll]a documentation (?:opérationnelle |GSS |interne )*(?:de GSS )?prévoit\b/g, 'La procédure GSS prévoit').replace(/\bGSS indique pouvoir\b/g, 'GSS peut').replace(/\bGSS indique que (ses|son|sa|les|le|la)\b/g, (_m, d) => `${d.charAt(0).toUpperCase()}${d.slice(1)}`).replace(/\bGSS indique\s+/g, 'GSS ')
     .replace(/\b(vérifie|vérifient|contrôle|contrôlent|vérifier|contrôler)\s+(son|leur|l['’])\s*identité/gi, (_m, v) => (/nt$/.test(v) ? 'l’invitent à justifier de sa présence' : /er$/.test(v) ? 'l’inviter à justifier de sa présence' : 'l’invite à justifier de sa présence'));
   return { texte: texteFinal, retires };
 }
