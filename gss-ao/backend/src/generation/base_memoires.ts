@@ -585,7 +585,7 @@ export function limiterRappelsSite(sections: Record<string, string>, ordre: stri
  * mention de photos ou vidéos dans les comptes rendus). Les phrases et puces contraires sont retirées.
  */
 export function interditsDce(texte: string, dce: string): string {
-  texte = qualificationsInconditionnelles(texte, dce);
+  texte = nomsComposesDce(qualificationsInconditionnelles(texte, dce), dce);
   const d = (dce || '').replace(/\s+/g, ' ');
   const contraires: RegExp[] = [];
   if (/rondes?[^.]{0,60}(?:effectuées|réalisées|faites|assurées)\s+(?:exclusivement\s+)?à pied/i.test(d)) {
@@ -654,7 +654,7 @@ export function obligationsChiffrees(dce: string): Array<{ phrase: string; cle: 
       const rxPer = /\b(?:tous les|toutes les)\s+(\d{1,3})\s*(heures?|h\b|minutes?|min\b|jours?|semaines?|mois\b)/gi;
       while ((m = rxPer.exec(ph))) { const u = unite(m[2]); if (u) motifs.push(`\\b${m[1]}\\s*${u}`); }
       if (!motifs.length) continue;
-      const cle = ph.toLowerCase().replace(/[^a-z0-9àâçéèêëîïôûùüÿœ]+/g, ' ').slice(0, 120);
+      const cle = ph.toLowerCase().replace(/[^a-z0-9àâçéèêëîïôûùüÿœ]+/g, ' ');
       if (vues.has(cle)) continue;
       vues.add(cle);
       out.push({ phrase: ph, cle: new RegExp(motifs.join('|'), 'i') });
@@ -683,20 +683,40 @@ function piecesTechniques(dce: string): string[] {
  * phrases citées telles quelles, pour le contrôle des contradictions (« fermeture de Coriolis à 19 h » alors que le
  * CCTP fixe la fermeture aux usagers à 21 h et la mise sous alarme à 22 h).
  */
-export function horairesImposes(dce: string, max = 30): string[] {
+export function horairesImposes(dce: string, max = 30, objet = /ouvert|ferm|alarme|vacation|ronde|relève|pr[ée]sence|poste|horaire|pause|accueil/i): string[] {
   const out: string[] = [];
   const vues = new Set<string>();
+  // Titre de partie propre à un site (« Campus de Thiais », « Bâtiment Coriolis : ») : il précède chaque horaire cité,
+  // sinon les horaires de deux campus aux phrases identiques étaient confondus (ou fusionnés en un seul).
+  const TITRE = /(?:campus|site|b[âa]timent|parc|parking|lot\b|antenne|tribunal|palais|juridiction|poste de)/i;
   for (const piece of piecesTechniques(dce)) {
-    const phrases = piece.replace(/[ \t]+/g, ' ').split(/(?<=[.;!?])\s+|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n{2,}/).map((x) => x.replace(/\s+/g, ' ').replace(/^[-•▪●○◦−]\s*/, '').trim()).filter((x) => x.length >= 30 && x.length <= 350);
-    for (const ph of phrases) {
-      if (!/\b\d{1,2}\s*h\s*\d{0,2}\b/i.test(ph) || !/ouvert|ferm|alarme|vacation|ronde|relève|pr[ée]sence|poste|horaire|pause|accueil/i.test(ph)) continue;
-      if (/p[ée]nalit|€|euros?\b|taux horaire|\b(?:J|N)\s+(?:J|N)\b/i.test(ph)) continue;
-      const cle = ph.toLowerCase().replace(/[^a-z0-9]+/g, ' ').slice(0, 100);
-      if (vues.has(cle)) continue;
-      vues.add(cle);
-      out.push(ph);
-      if (out.length >= max) return out;
+    let section = '';
+    let tampon: string[] = [];
+    const vider = () => {
+      const texte = tampon.join('\n');
+      tampon = [];
+      const phrases = texte.replace(/[ \t]+/g, ' ').split(/(?<=[.;!?])\s+|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n{2,}/).map((x) => x.replace(/\s+/g, ' ').replace(/^[-•▪●○◦−]\s*/, '').trim()).filter((x) => x.length >= 30 && x.length <= 350);
+      for (const ph of phrases) {
+        if (out.length >= max) return;
+        if (!/\b\d{1,2}\s*h\s*\d{0,2}\b/i.test(ph) || !objet.test(ph)) continue;
+        if (/p[ée]nalit|€|euros?\b|taux horaire|\b(?:J|N)\s+(?:J|N)\b/i.test(ph)) continue;
+        const cle = `${section}|${ph}`.toLowerCase().replace(/[^a-z0-9|]+/g, ' ');
+        if (vues.has(cle)) continue;
+        vues.add(cle);
+        out.push(section && !ph.toLowerCase().includes(section.toLowerCase()) ? `[${section}] ${ph}` : ph);
+      }
+    };
+    for (const ligne of piece.split('\n')) {
+      const l = ligne.replace(/\s+/g, ' ').trim();
+      if (l && l.length <= 60 && /^[A-ZÀ-Ý0-9]/.test(l) && !/[.;,]/.test(l.replace(/^\d+(?:\.\d+)*\s*/, '')) && TITRE.test(l) && !/\b\d{1,2}\s*h\s*\d{0,2}\b/i.test(l)
+        && !/\b(?:doi(?:t|vent)|veill\w*|dispose\w*|concerne\w*|est|sont|sera|seront|assur\w+|effectu\w+)\b/i.test(l)) {
+        vider();
+        section = l.replace(/\s*:\s*$/, '');
+      }
+      tampon.push(ligne);
     }
+    vider();
+    if (out.length >= max) break;
   }
   return out;
 }
@@ -705,6 +725,44 @@ export function horairesImposes(dce: string, max = 30): string[] {
 export function obligationsChiffreesAbsentes(dce: string, memoire: string): string[] {
   const texte = (memoire || '').replace(/\*\*|__|⟦AC:\d+⟧/g, '').replace(/[\u00a0\u202f]/g, ' ');
   return obligationsChiffrees(dce).filter((o) => !o.cle.test(texte)).map((o) => o.phrase);
+}
+
+/** Distance d'édition (nombre de lettres à changer, ajouter ou retirer). */
+function distance(a: string, b: string): number {
+  let prec = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cour = [i];
+    for (let j = 1; j <= b.length; j++) cour[j] = Math.min(prec[j] + 1, cour[j - 1] + 1, prec[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prec = cour;
+  }
+  return prec[b.length];
+}
+
+/**
+ * Nom composé d'un lieu du DCE mal orthographié dans le mémoire (« Carnot-Cassissi », « Carnot-Cassassi » pour le
+ * bâtiment « Carnot-Cassini ») : remplacé par l'orthographe du DCE. Seuls les noms à trait d'union cités au moins deux
+ * fois dans le DCE, de même première partie, sont concernés (jamais un pluriel : « Éco-gestes »).
+ */
+export function nomsComposesDce(texte: string, dce: string): string {
+  const RX = /\b[A-ZÀ-Ý][A-Za-zÀ-ÿ]+(?:-[A-Za-zÀ-ÿ]+)+\b/g;
+  const freq = new Map<string, number>();
+  for (const m of (dce || '').match(RX) || []) freq.set(m, (freq.get(m) || 0) + 1);
+  const connus = [...freq.keys()].filter((k) => (freq.get(k) || 0) >= 2);
+  if (!connus.length) return texte;
+  const corrections = new Map<string, string>();
+  for (const x of new Set(texte.match(RX) || [])) {
+    if (freq.has(x) || x.length < 8) continue;
+    const bon = connus.find((y) => {
+      const [px, ...rx] = x.split('-'); const [py, ...ry] = y.split('-');
+      const sx = rx.join('-').toLowerCase(); const sy = ry.join('-').toLowerCase();
+      return px === py && sy.length >= 5 && Math.abs(sx.length - sy.length) <= 2 && sx.replace(/s$/, '').replace(/e$/, '') !== sy.replace(/s$/, '').replace(/e$/, '')
+        && distance(sx, sy) <= 3 && sx.slice(0, 3) === sy.slice(0, 3);
+    });
+    if (bon) corrections.set(x, bon);
+  }
+  let t = texte;
+  for (const [faux, bon] of corrections) t = t.split(faux).join(bon);
+  return t;
 }
 
 /** Qualifications que le cahier des charges exige de TOUS les agents (liste « les agents doivent être détenteurs des titres

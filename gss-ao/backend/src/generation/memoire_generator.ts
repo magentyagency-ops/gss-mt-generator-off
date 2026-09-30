@@ -6023,6 +6023,7 @@ RÈGLES DE FORME (rendu Marp) :
     await this.dedoublonnerRubriques(sectionsMap, AI_SECTIONS_B);
     // Obligations chiffrées relevées mot à mot dans le CCTP en tête : contrôlées même si la matrice les a manquées.
     await this.corrigerContradictions(sectionsMap, AI_SECTIONS_B, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...requirementsMatrix, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))]);
+    await this.verifierHoraires(sectionsMap, AI_SECTIONS_B, dceContext);
     await this.engagementsChiffresManquants(sectionsMap, AI_SECTIONS_B, dceContext);
     const remarques = await this.remarquesCahierDesCharges(dceContext);
     if (remarques && sectionsMap.b_organisation) sectionsMap.b_organisation = `${sectionsMap.b_organisation.trim()}\n\n${remarques}`;
@@ -6154,6 +6155,66 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
     } catch { /* étape facultative */ }
     }));
     if (n) console.log(`[MemoireGenerator] Cohérence avec le CCTP : ${n} passage(s) aligné(s) sur les exigences chiffrées.`);
+  }
+
+  /**
+   * Horaires du mémoire confrontés, en une seule passe sur tout le document, aux horaires imposés par le CCTP
+   * (ouverture, fermeture aux usagers, mise sous alarme, présence des postes, rondes, relèves). Le contrôle par
+   * rubrique en laissait passer (« fermeture de Coriolis à 19 h » répété dans plusieurs rubriques alors que le CCTP
+   * fixe la fermeture aux usagers à 21 h et la mise sous alarme à 22 h). Seule la phrase fautive est remplacée,
+   * partout où elle figure. Étape non bloquante.
+   */
+  private async verifierHoraires(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, dce: string): Promise<void> {
+    // Ouverture, fermeture et mise sous alarme des bâtiments seulement : les horaires de rondes et de présence des
+    // postes sont contrôlés rubrique par rubrique (corrigerContradictions), avec le détail de chaque site.
+    const OBJET = /ouvert|ferm|alarme/i;
+    const horaires = horairesImposes(dce, 60, OBJET);
+    if (!horaires.length) return;
+    const ids = rubriques.map((r) => r.id).filter((id) => (sections[id] || '').trim());
+    // Chaque phrase est accompagnée de son contexte (sous-titre et phrase d'introduction d'une liste : « À Thiais, GSS
+    // s'engage à organiser : ») : sans lui, une puce d'horaires propre à un site était « corrigée » avec ceux d'un autre.
+    const contexte = new Map<string, string>();
+    for (const id of ids) {
+      let titre = '', intro = '';
+      for (const ligne of sections[id].split('\n')) {
+        const l = ligne.trim();
+        if (!l) continue;
+        if (/^#{1,4}\s/.test(l)) { titre = l.replace(/^#+\s*/, ''); intro = ''; continue; }
+        const puce = /^(?:[-*•]|\d+[.)])\s/.test(l);
+        for (const ph of l.split(/(?<=[.!?;])\s+/)) {
+          const p = ph.trim();
+          if (p.length >= 20 && /\b\d{1,2}\s*h\s*\d{0,2}\b/i.test(p) && OBJET.test(p) && !/⟦AC:|CONSULTATION REQUISE/.test(p) && !contexte.has(p)) {
+            contexte.set(p, [titre, puce ? intro : ''].filter(Boolean).join(' — ').replace(/\*\*/g, '').slice(0, 220));
+          }
+        }
+        if (!puce) intro = l.slice(0, 200);
+      }
+    }
+    const liste = [...contexte.keys()].slice(0, 200);
+    if (!liste.length) return;
+    const r = await this.callOpenAI([
+      {
+        role: 'system',
+        content: `Tu vérifies les horaires d'un mémoire technique de sécurité privée au regard des horaires imposés par le cahier des charges (CCTP).
+Pour chaque phrase numérotée dont un horaire CONTREDIT le CCTP pour le MÊME objet (même bâtiment ou site, même action : ouverture, fermeture aux usagers, mise sous alarme, présence d'un poste, ronde, relève, pause), réécris la phrase avec l'horaire du CCTP, sans rien changer d'autre (Markdown compris).
+Identifie l'objet de chaque phrase avec son CONTEXTE (sous-titre, phrase d'introduction de la liste) : quand le CCTP fixe des horaires différents selon les sites, bâtiments ou campus, compare uniquement avec ceux du site visé ; si le site ne peut pas être identifié, ne corrige pas.
+Attention : l'heure de relève ou de fin de présence d'un poste n'est pas l'heure de fermeture d'un bâtiment ; une phrase qui ne précise pas l'objet de l'horaire, ou pour laquelle le CCTP ne donne pas d'horaire, n'est pas corrigée. En cas de doute, ne corrige pas.
+Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"n": <numéro>, "phrase": "phrase corrigée", "horaire_cctp": "citation courte du CCTP"}]} (liste vide si tout est conforme).`,
+      },
+      { role: 'user', content: `HORAIRES IMPOSÉS PAR LE CCTP :\n${horaires.map((h) => `- ${h}`).join('\n')}\n\nPHRASES DU MÉMOIRE :\n${liste.map((p, i) => `${i + 1}. ${contexte.get(p) ? `[contexte : ${contexte.get(p)}] ` : ''}${p}`).join('\n')}` },
+    ], 0.1, 'Horaires du CCTP', true);
+    let n = 0;
+    try {
+      const squelette = (x: string) => x.replace(/\d+/g, '').replace(/\s+/g, ' ').trim();
+      for (const c of JSON.parse(r || '{}').corrections || []) {
+        const avant = liste[Number(c?.n) - 1];
+        const apres = String(c?.phrase || '').trim();
+        // Correction d'horaire seulement : la phrase garde l'essentiel de son texte (pas de réécriture).
+        if (!avant || !apres || apres === avant || Math.abs(squelette(apres).length - squelette(avant).length) > 45) continue;
+        for (const id of ids) if (sections[id].includes(avant)) { sections[id] = sections[id].split(avant).join(apres); n++; }
+      }
+    } catch { /* étape facultative */ }
+    if (n) console.log(`[MemoireGenerator] Horaires du CCTP : ${n} phrase(s) corrigée(s).`);
   }
 
   /**
@@ -6409,6 +6470,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     onProgress?.(78, 'Contrôle des répétitions entre parties…');
     await this.dedoublonnerRubriques(sections, plan);
     await this.corrigerContradictions(sections, plan, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...requirementsMatrix, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))]);
+    await this.verifierHoraires(sections, plan, dceContext);
     await this.engagementsChiffresManquants(sections, plan, dceContext);
     const remarquesCourt = await this.remarquesCahierDesCharges(dceContext);
     if (remarquesCourt) {
