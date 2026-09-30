@@ -3396,8 +3396,11 @@ Renvoie un JSON valide :
     // Effectif TOTAL de l'entreprise = somme DÉTERMINISTE des effectifs par catégorie d'EFFECTIFS
     // MOYENS.pdf (agrégation de chiffres réels, pas une invention). Sert à remplir « effectif total
     // de l'entreprise / en France » sans laisser le modèle prendre une seule catégorie pour le total.
-    const effectifTotal = await this.getGssTotalEffectif();
-    if (effectifTotal) console.log(`[MemoireGenerator] Effectif total GSS (somme): ${effectifTotal.total} (${effectifTotal.breakdown}).`);
+    // Le registre (mémoires GSS datés) fait foi ; l'ancienne somme des catégories (152 + 93 + … = 291) n'est plus utilisée.
+    const effectifTotal = Number(valeurRegistre('effectif_total')) > 0
+      ? { total: Number(valeurRegistre('effectif_total')), breakdown: 'registre des informations GSS' }
+      : await this.getGssTotalEffectif();
+    if (effectifTotal) console.log(`[MemoireGenerator] Effectif total GSS : ${effectifTotal.total} (${effectifTotal.breakdown}).`);
 
     // 3. Load DOCX and parse XML DOM
     const content = fs.readFileSync(templatePath);
