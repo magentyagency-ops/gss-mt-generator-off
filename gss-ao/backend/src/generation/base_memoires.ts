@@ -264,12 +264,24 @@ export function limiterReferences(sections: Record<string, string>, ordre: strin
   let n = 0;
   for (const { motifs } of motifsReferences()) {
     const cite = (t: string) => motifs.some((m) => m.test(t));
+    const SUITE_PARAGRAPHE = /^(?:Cette (?:expérience|référence|mission|prestation|organisation)|Ces missions|Elle (?:est|constitue)|Il (?:s.agit|constitue))\b/;
     const ids = ordre.filter((id) => cite(sections[id] || ''));
     const garder = [...(ids.includes(rubriqueReferences) ? [rubriqueReferences] : []), ...ids.filter((id) => id !== rubriqueReferences)].slice(0, maxRubriques);
     for (const id of ids.filter((x) => !garder.includes(x))) {
       const avant = sections[id];
+      let finRetiree = false;  // le paragraphe précédent se terminait par la référence retirée
       let t = avant.split('\n').map((ligne) => {
+        if (!ligne.trim()) return ligne;
+        // Paragraphe qui commence par prolonger la référence retirée juste avant (« Cette expérience… ») :
+        // sa première phrase part aussi.
+        if (finRetiree && SUITE_PARAGRAPHE.test(ligne.trim()) && !/⟦AC:|\[CONSULTATION REQUISE/.test(ligne)) {
+          const phs = ligne.trim().split(/(?<=[.!?])\s+/);
+          phs.shift();
+          ligne = phs.join(' ');
+        }
+        finRetiree = false;
         if (!cite(ligne) || /⟦AC:|\[CONSULTATION REQUISE/.test(ligne)) return ligne;
+        finRetiree = true;
         if (/^\s*(#|\||[-*•]\s|\d+[.)]\s)/.test(ligne)) return null; // titre, puce, ligne de tableau : retirés entiers
         // Les phrases qui suivent une référence retirée et la prolongent (« Les missions comprenaient… »,
         // « Cette expérience… », « Elle constitue… ») partent avec elle : sinon elles restent orphelines.
@@ -294,15 +306,19 @@ export function limiterReferences(sections: Record<string, string>, ordre: strin
  * Valeurs du registre « à confirmer » effectivement reprises dans un texte : chacune donne une question de
  * confirmation pour GSS (la valeur utilisée reste dans le document, mais GSS est prévenu).
  */
-export function confirmationsRegistreUtilisees(texte: string): string[] {
+export function confirmationsRegistreUtilisees(texte: string, horsNormandie = false): string[] {
   const t = normTxt(texte).replace(/\s+/g, ' ');
   const out: string[] = [];
   for (const e of charger().registre) {
+    // Hors Normandie, les délais du registre ne sont jamais repris : un même chiffre dans le texte vient du DCE.
+    if (horsNormandie && e.categorie === 'delais') continue;
     const ancien = CATEGORIES_VARIABLES.has(e.categorie) && moisDepuis(e.date_retenue) > FRAICHEUR_MOIS;
     if (e.statut !== 'a_confirmer' && !ancien) continue;
     const morceaux = e.valeur_retenue.split(';').map((x) => normTxt(x).replace(/\s+/g, ' ').trim()).filter((x) => x.length >= 4);
     if (morceaux.some((m) => t.includes(m))) {
-      out.push(`Confirmer ${e.libelle.charAt(0).toLowerCase()}${e.libelle.slice(1)} — valeur utilisée dans le mémoire : ${e.valeur_retenue} (${e.source_retenue}, ${e.date_retenue})`);
+      // Main courante : le mémoire n'emploie que Trackforce (Vigicom figure dans un ancien mémoire).
+      const valeur = e.cle === 'logiciel_main_courante' ? 'Trackforce (Vigicom cité dans un ancien mémoire)' : e.valeur_retenue;
+      out.push(`Confirmer ${e.libelle.charAt(0).toLowerCase()}${e.libelle.slice(1)} — valeur utilisée dans le mémoire : ${valeur} (${e.source_retenue}, ${e.date_retenue})`);
     }
   }
   return out;
@@ -365,7 +381,7 @@ export function texteSourcesMemoires(): string {
 }
 
 /** Phrases de diagnostic interne sur les manques (jamais destinées à l'acheteur). */
-const COMMENTAIRE_INTERNE = /(\bà ce stade\b|\bne sont pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]est pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]ont pas été (?:communiqué|transmis|fourni)|\bn['’]a pas été (?:communiqué|transmis|fourni)|documentation (?:gss )?(?:fournie|transmise|disponible)|documents? (?:gss )?transmis|éléments? (?:gss )?(?:disponibles|transmis|fournis|communiqués)|\breste(?:nt)? à (?:confirmer|établir|préciser|obtenir)|\bdoi(?:t|vent) être confirmé|\bdevr(?:a|ont) être (?:confirmé|précisé|transposé|validé)|\baprès la visite\b|\blors de la visite obligatoire\b|\bne comporte (?:toutefois )?pas\b|\bne présente ni\b|\bsous réserve de (?:confirmation|validation)\b|\bnon (?:communiqué|précisé|renseigné) dans les|zone d['’]intervention habituelle|\bn['’]annonce (?:donc )?aucun délai|présenter comme acquis|organisation déclarée|\bdocumentés? comme\b|références enregistrées|\bnon précisée?s?(?![a-zà-ÿ])|\bDCE transmis\b|éléments du DCE|implantation habituelle|\bces éléments ne (?:décrivent|précisent|mentionnent|détaillent|couvrent)\b|\breste(?:nt)? à (?:définir|déterminer|arrêter|organiser)|hors de (?:la|sa) zone|\bne sera (?:donc )?pas présentée?s? comme|présence locale déjà constituée|\bn.est toutefois pas établie?\b|\bil ne vaut pas engagement\b|\bconstitue l.engagement opérationnel connu\b|\bdoit être intégrée? au parcours\b|\best signalée? ci-dessous\b|\bsont toutefois traitées comme\b|\bGSS (?:documente|décrit|affirme)\b|\bsans assimiler\b|\bla distance entre Rouen\b|\bincohérence relevée dans le DCE\b|n.a pas (?:encore )?(?:d.agence|d.implantation))/i;
+const COMMENTAIRE_INTERNE = /(\bà ce stade\b|\bne sont pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]est pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]ont pas été (?:communiqué|transmis|fourni)|\bn['’]a pas été (?:communiqué|transmis|fourni)|documentation (?:gss )?(?:fournie|transmise|disponible)|documents? (?:gss )?transmis|éléments? (?:gss )?(?:disponibles|transmis|fournis|communiqués)|\breste(?:nt)? à (?:confirmer|établir|préciser|obtenir)|\bdoi(?:t|vent) être confirmé|\bdevr(?:a|ont) être (?:confirmé|précisé|transposé|validé)|\baprès la visite\b|\blors de la visite obligatoire\b|\bne comporte (?:toutefois )?pas\b|\bne présente ni\b|\bsous réserve de (?:confirmation|validation)\b|\bnon (?:communiqué|précisé|renseigné) dans les|zone d['’]intervention habituelle|\bn['’]annonce (?:donc )?aucun délai|présenter comme acquis|organisation déclarée|\bdocumentés? comme\b|références enregistrées|\bnon précisée?s?(?![a-zà-ÿ])|\bDCE transmis\b|éléments du DCE|implantation habituelle|\bces éléments ne (?:décrivent|précisent|mentionnent|détaillent|couvrent)\b|\breste(?:nt)? à (?:définir|déterminer|arrêter|organiser)|hors de (?:la|sa) zone|\bn(?:e sera|e sont|e seront|.est) (?:donc )?pas présentée?s? comme|\bne sont pas présentées? comme|présence locale déjà constituée|\bn.est toutefois pas établie?\b|\bil ne vaut pas engagement\b|\bconstitue l.engagement opérationnel connu\b|\bdoit être intégrée? au parcours\b|\best signalée? ci-dessous\b|\bsont toutefois traitées comme\b|\bGSS (?:documente|décrit|affirme)\b|\bsans assimiler\b|\bla distance entre Rouen\b|\bincohérence relevée dans le DCE\b|n.a pas (?:encore )?(?:d.agence|d.implantation))/i;
 
 /** Montant de pénalité du CCAP/CCTP : GSS s'engage sur l'obligation, jamais sur le montant de la sanction. */
 const MONTANT_PENALITE = /p[ée]nalit[ée]s?[^.;]{0,120}?\d[\d\s  ]*(?:,\d+)?\s*(?:€|euros?)|\d[\d\s  ]*(?:,\d+)?\s*(?:€|euros?)[^.;]{0,80}?p[ée]nalit/i;
@@ -413,8 +429,11 @@ export function retirerCommentairesInternes(texte: string): { texte: string; ret
     .replace(/\b[Ll]a documentation (?:opérationnelle |GSS |interne )*(?:de GSS )?prévoit\b/g, 'La procédure GSS prévoit').replace(/\bGSS indique pouvoir\b/g, 'GSS peut').replace(/\bGSS indique que (ses|son|sa|leurs|leur|les|le|la)\b/g, (_m, d) => ({ ses: 'Les', son: 'Le', sa: 'La', leurs: 'Les', leur: 'Le' } as Record<string, string>)[d] || `${d.charAt(0).toUpperCase()}${d.slice(1)}`).replace(/\bGSS indique\s+/g, 'GSS ')
     // Incise méta dans une phrase utile (« Beepiz, référencée comme application PTI de GSS, protège… ») : l'incise part, la phrase reste.
     .replace(/,\s*(?:référencée?s?|documentée?s?|mentionnée?s?|présentée?s?) (?:comme|dans) [^,.;]+,\s*/g, ' ')
+    // Incise sur l'implantation de GSS (« Pour cette intervention hors de la zone habituelle de GSS, … ») : retirée.
+    .replace(/(^|[.!?]\s+|\n)(?:Pour|Dans|S.agissant d.)\s+(?:ce|cette|un|une)\s+[^,.\n]{0,40}?hors de (?:la|sa) zone[^,.\n]*,\s*(\S)/g, (_m, a, c) => `${a}${c.toUpperCase()}`)
+    .replace(/,?\s*(?:situ[ée]e?s?\s+)?hors de (?:la|sa) zone (?:d.intervention )?habituelle(?: de GSS)?,?/g, '')
     // Coquilles héritées des documents GSS.
-    .replace(/\bIFESSSU\b/g, 'IFESSU').replace(/\bHOBO\b/g, 'H0B0').replace(/\bentre (\d+) à (\d+)\b/g, 'de $1 à $2')
+    .replace(/\bIFESSSU\b/g, 'IFESSU').replace(/\bHOBO\b/g, 'H0B0').replace(/\bentre (\*{0,2})(\d+) à (\d+)\b/g, 'de $1$2 à $3')
     // Un seul outil de main courante dans le mémoire (Trackforce, outil exact en attente de confirmation par GSS),
     // et l'astreinte GSS compte 5 véhicules, pas « 5 agents ».
     .replace(/\b(?:VIGICOM|Vigicom|vigicom)(?:\s+6TADEL)?\b/g, 'Trackforce')
@@ -478,6 +497,73 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
     return '';
   }).filter((ph, k, t) => ph !== '' || false).join(' '));
   return { texte: lignes.filter((l, k, t) => !(l.trim() === '' && /^\s*[-*•]\s*$/.test(l))).join('\n').replace(/^\s*[-*•]\s*$/gm, '').replace(/\n{3,}/g, '\n\n'), retires };
+}
+
+/**
+ * Rappels répétés de la description du site (« domaine de 130 hectares et 40 000 m² de bâtiments »,
+ * « plus de 200 personnes ») : un chiffre de site présent dans plus de 3 rubriques est gardé dans les 2
+ * premières ; ailleurs, les phrases qui ne font que le rappeler (« Ce fonctionnement est particulièrement
+ * adapté à un domaine de… », « compte tenu de l'étendue… ») sont retirées. Renvoie le nombre de phrases retirées.
+ */
+export function limiterRappelsSite(sections: Record<string, string>, ordre: string[]): number {
+  const FIGURE = /\d[\d\s\u00a0\u202f]*(?:,\d+)?\s*(?:hectares|ha\b|m²|m2\b|personnes|bâtiments|niveaux|places)/gi;
+  const norm = (f: string) => f.replace(/[\s\u00a0\u202f*]+/g, ' ').trim().toLowerCase();
+  const REMPLISSAGE = /(?:est|sont|reste|restent|apparaît) (?:donc |ainsi )?(?:particulièrement |directement |d.autant plus |très )?(?:adapté|adaptée|adaptés|adaptées|pertinente?s?|sensibles?|essentielle?s?|nécessaires?|indispensables?|importante?s?)|tient compte de|tiennent compte de|compte tenu de|au regard de l.(?:ampleur|étendue)|l.(?:ampleur|étendue) du (?:domaine|site)|(?:sur|dans) (?:un|ce) (?:domaine|site|périmètre) (?:de|d.environ|étendu)/i;
+  const rubriquesPar = new Map<string, string[]>();
+  for (const id of ordre) {
+    for (const m of (sections[id] || '').matchAll(FIGURE)) {
+      const k = norm(m[0]);
+      if (!/^\d{2,}/.test(k.replace(/\s/g, ''))) continue;  // « 2 bâtiments » : pas une description de site
+      const l = rubriquesPar.get(k) || [];
+      if (!l.includes(id)) l.push(id);
+      rubriquesPar.set(k, l);
+    }
+  }
+  let n = 0;
+  for (const [fig, ids] of rubriquesPar) {
+    if (ids.length <= 3) continue;
+    for (const id of ids.slice(2)) {
+      sections[id] = sections[id].split('\n').map((ligne) => {
+        if (/^\s*(?:#|\|)/.test(ligne)) return ligne;
+        return ligne.split(/(?<=[.!?])\s+/).filter((ph) => {
+          const garde = !(norm(ph).includes(fig) && REMPLISSAGE.test(ph)) || /⟦AC:|\[CONSULTATION REQUISE/.test(ph);
+          if (!garde) n++;
+          return garde;
+        }).join(' ');
+      }).join('\n');
+    }
+  }
+  return n;
+}
+
+/**
+ * Interdits explicites du DCE qui priment sur les pratiques GSS reprises des anciens mémoires : rondes
+ * « effectuées à pied » (aucun vélo, trottinette ni ronde motorisée), photographies interdites (aucune
+ * mention de photos ou vidéos dans les comptes rendus). Les phrases et puces contraires sont retirées.
+ */
+export function interditsDce(texte: string, dce: string): string {
+  const d = (dce || '').replace(/\s+/g, ' ');
+  const contraires: RegExp[] = [];
+  if (/rondes?[^.]{0,60}(?:effectuées|réalisées|faites|assurées)\s+(?:exclusivement\s+)?à pied/i.test(d)) {
+    contraires.push(/vélo|trottinette|gyropode|rondes?[^.]{0,80}(?:en voiture|en véhicule|motoris)/i);
+  }
+  if (/(?:ne pas|interdiction de|interdit de|il est interdit de|aucune?)\s+(?:prendre|réaliser|capter|faire)?\s*(?:de |des )?(?:photos?|photographies?|clichés)\b/i.test(d)) {
+    contraires.push(/\bphotos?\b|photographi(?!e d.identité)|\bvidéos?\b/i);
+  }
+  if (!contraires.length) return texte;
+  // Une phrase qui RAPPELLE l'interdit (« sans photographie », « interdiction de… ») est conforme ; le vélo
+  // pour les trajets domicile-travail (démarche RSE) n'est pas un moyen de ronde.
+  const conforme = (ph: string) => /\bsans\b|\baucune?\b|\babsence de\b|\bpas de\b|interdi|\bne\b[^.]{0,40}\bpas\b|\bjamais\b|\bn[’']/i.test(ph)
+    || /transports? en commun|covoiturage|domicile|trajets?\b|mobilité douce|déplacements? (?:des salariés|domicile)/i.test(ph);
+  const contraire = (ph: string) => contraires.some((rx) => rx.test(ph)) && !conforme(ph) && !/⟦AC:|\[CONSULTATION REQUISE/.test(ph);
+  // Élément d'une énumération (« des lampes, des vélos ou trottinettes électriques et des contrôleurs ») :
+  // seul cet élément est retiré ; la phrase ou la puce part si elle reste contraire.
+  const allege = (ph: string) => ph.replace(/(?:,\s*(?:et |ou )?|\s+(?:et|ou)\s+)(?:des |de |du |les )?(?:vélos?|trottinettes?)(?:\s+(?:ou|et)\s+(?:des |de )?(?:vélos?|trottinettes?))?(?:\s+électriques?)?(?=[\s,.;]|$)/gi, '').replace(/\s+,/g, ',').replace(/,\s*et\s+/g, ' et ');
+  const traiter = (ph: string) => { if (!contraire(ph)) return ph; const a2 = allege(ph); return contraire(a2) ? null : a2; };
+  return texte.split('\n').map((ligne) => {
+    if (/^\s*(?:[-*•]\s|\|)/.test(ligne)) return traiter(ligne);
+    return ligne.split(/(?<=[.!?])\s+/).map(traiter).filter((ph): ph is string => ph !== null).join(' ');
+  }).filter((l): l is string => l !== null).join('\n');
 }
 
 /**

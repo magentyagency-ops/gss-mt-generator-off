@@ -6,7 +6,7 @@ import { insererSchemasReponses, choisir as choisirSchemasGss } from './visuels_
 import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt } from './format_court';
 import { actualiserOrganigramme } from './organigramme';
 import { poserSignets, poserSignetsChamps, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter } from './completion';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -3439,7 +3439,7 @@ Renvoie un JSON valide :
     const isIdentityCtx = (ctx: string) =>
       /adresse|denomination|raison sociale|candidat|cnaps|siret|siren|agrement|certification|\bstation\b|\bdate\b|n°|numero|delai|minute|intervenant|taux|effectif|\betp\b|telephone|email|mail|coordonnees|soussigne|agissant|qualite de|\bnom\b|prenom|fonction/.test(normCtx(ctx));
     // Libellés d'identité seuls sur leur ligne (« Raison sociale », « Siret ») : réponse courte à côté.
-    const IDENTITE_SEULE = /^(raison sociale|siret|siren|d[ée]nomination(?: sociale)?|nom commercial|adresse(?: du si[èe]ge)?|t[ée]l[ée]phone|t[ée]l\.?|courriel|e-?mail|adresse [ée]lectronique|je soussign[ée]e?|agissant en qualit[ée] de)\s*:?\s*$/i;
+    const IDENTITE_SEULE = /^(raison sociale|siret|siren|d[ée]nomination(?: sociale)?(?: du candidat)?|nom du (?:candidat|soumissionnaire)|nom commercial|adresse(?: du si[èe]ge)?|t[ée]l[ée]phone|t[ée]l\.?|courriel|e-?mail|adresse [ée]lectronique|je soussign[ée]e?|agissant en qualit[ée] de)\s*:?\s*$/i;
     // Bloc signature / cachet : ses lignes vides ne sont pas une zone de réponse.
     const SIGNATURE = /signature|cachet|lu et approuv|rayer la mention|fait [àa]\b|^le\s*:?$/i;
     // Une ligne suivie d'un espace vide n'est une QUESTION que si elle en a la forme (numérotée, consigne,
@@ -3782,7 +3782,8 @@ Renvoie un JSON valide :
                 // « Éléments de réponse attendus : » introduit une liste, ce n'est pas un champ à remplir.
                 && !/attendus?\s*:|ci-dessous\s*:|suivants?\s*:|notamment\s*:|comprenant\s*:/i.test(lastQuestionText)
                 // « Contact pour les commandes : » suivi de « Nom : …… » : ce sont les lignes suivantes qu'on remplit.
-                && !(() => {
+                // (Jamais pour un libellé de donnée : « Date d'obtention de l'autorisation : » reste un champ.)
+                && !(!/date|n°|num[ée]ro|\bnom\b|adresse|t[ée]l[ée]phone|courriel|mail|siret|montant|effectif|d[ée]lai|autorisation|agr[ée]ment/i.test(lastQuestionText) && (() => {
                   for (let sib = node.nextSibling; sib; sib = sib.nextSibling) {
                     if (sib.nodeType !== 1 || sib.localName !== 'p') continue;
                     const tx = getElementText(sib).trim();
@@ -3790,7 +3791,7 @@ Renvoie un JSON valide :
                     return hasDottedRun(tx) || /:\s*$/.test(tx);
                   }
                   return false;
-                })()) {
+                })())) {
                 // paragraphe vide juste après un libellé "… :"
                 const fd = addField({ type: 'text', kind: 'answer', lineCount: 1, context: `Section: "${currentHeading}" | Question: "${lastQuestionText}"` });
                 const r = xmlDoc.createElementNS(WNS, 'w:r');
@@ -4067,6 +4068,7 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
 - Texte brut : pas de Markdown (ni #, ni **, ni puces « - » ; utilise « • » pour une énumération).
 - RÉDACTION : phrases simples, naturelles et exactes, comme les écrirait un responsable d'exploitation de GSS. Le site est déjà décrit par l'acheteur dans le cas pratique : ne recopie JAMAIS la liste de ses caractéristiques (surface, bâtiments, étages, accès, barrières, parking, clôture, quartier) et n'ouvre pas chaque composante par l'« enjeu » du site ; cite au plus UNE caractéristique, une seule fois, quand elle justifie concrètement un choix. Va directement à ce que fait GSS. Pas d'effet dramatique ni de formule creuse. La réponse ne contredit jamais une autre composante (même nombre d'équipes, mêmes responsables).
 - Un [À COMPLÉTER] prend la place de la SEULE donnée manquante. Donnée chiffrée : dans une phrase naturelle (« GSS affecte [À COMPLÉTER] agents de sécurité au site », « intervention sous [À COMPLÉTER] minutes »). Donnée qualitative ou descriptive (recours à la sous-traitance, composition nominative…) : sous la forme « Libellé : [À COMPLÉTER]. ». Jamais de tournure du type « est défini comme suit : [À COMPLÉTER] ». Interdit : « est de [À COMPLÉTER] » ou « sont de [À COMPLÉTER] » pour autre chose qu'un nombre, « est la suivante : [À COMPLÉTER] ». Une seule donnée par [À COMPLÉTER], et une même donnée n'est laissée à compléter qu'à un seul endroit de la réponse.
+- MISE EN SITUATION / CAS PRATIQUE : jamais « [À COMPLÉTER] agents » ni une fourchette vague (« de 1 à 20 PIF ») : chiffre le dispositif proposé, par catégorie de personnel et par poste (accès public, accès artistes/VIP, PIF, zones sensibles, scène, secours), à partir de la jauge, des accès et du plan décrits, puis la validation par GSS passe par la ligne [CONSULTATION REQUISE]. Une mise en situation notée sur 15 points ou plus appelle au moins 800 mots, et chaque situation décrite (ex. forum ET concert) est traitée complètement.
 - CAS PRATIQUE (nombre d'agents, de maîtres-chiens, d'équipes, schéma opérationnel, rotations) : c'est à GSS de proposer son dispositif — propose un dimensionnement ARGUMENTÉ, cohérent avec le site décrit, les créneaux horaires et les profils du DQE s'ils figurent dans les extraits (ex. créneaux 6h-21h / 21h-6h ; agent, agent SSI, maître-chien, encadrant) et avec la réglementation (vacations de 12 h au plus, relèves), puis ajoute sur sa propre ligne [CONSULTATION REQUISE : GSS doit valider le dimensionnement proposé : <résumé chiffré>]. Le même dimensionnement vaut dans toutes les composantes. Si un DQE figure dans les extraits, respecte EXACTEMENT ses blocs (ex. une seule nuit s'il n'en compte qu'une) et ses profils : pour chaque bloc, présente sous forme de lignes « Bloc | profil | effectif en service | effectif pour la rotation », avec une rotation cohérente avec la durée du bloc (une seule vacation de 12 h au plus n'exige pas de relève). Justifie la répartition jour/nuit par les risques du site (ex. intrusion et vandalisme surtout la nuit) et précise si l'encadrant est présent en continu ou ponctuellement — identiquement partout.
 - Nombre d'équipes et effectifs demandés ailleurs dans la grille : déduis-les du dimensionnement que tu proposes (ne laisse pas « [À COMPLÉTER] » une donnée que ton propre dimensionnement fixe). Justifie la présence de CHAQUE profil retenu (ex. agent de sécurité incendie : levée de doute sur alarme, vérification des installations ; maître-chien : rondes extérieures et dissuasion la nuit).
 - Rétroplanning d'une prestation ponctuelle (bon de commande) : il part de la réception du bon de commande et du délai de mise en place (préparation, briefing, prise de poste, relèves, fin de mission, rapport), jamais du calendrier de démarrage d'un marché annuel (J-30, J-15).
@@ -4171,7 +4173,11 @@ INTERDITS : recopier la valeur d'une AUTRE colonne/site ; inventer une donnée f
         const dirigeant = (valeurRegistre('dirigeant') || '').replace(/\b([A-Z])([A-Z]+)$/, (_m, a, b) => a + b.toLowerCase());
         if (/soussign/.test(nq) && dirigeant) { replacements.push({ id: f.id, value: dirigeant }); return; }
         if (/agissant en qualite|en qualite de|qualite du signataire|fonction du signataire/.test(nq)) { replacements.push({ id: f.id, value: 'Dirigeant de GLOBAL SECURITY SERVICES' }); return; }
-        if (/^(?:nom du )?dirigeant\b|nom du (?:representant|gerant)/.test(nq) && dirigeant) { replacements.push({ id: f.id, value: dirigeant }); return; }
+        if (/^(?:nom du )?dirigeant\b|nom du (?:representant|gerant)/.test(nq) && dirigeant) {
+          // « Nom du dirigeant et N° agrément dirigeant CNAPS » : les deux.
+          const agd = /agrement/.test(nq) ? valeurRegistre('agrement_dirigeant') : '';
+          replacements.push({ id: f.id, value: agd ? `${dirigeant} — agrément dirigeant CNAPS ${agd}` : dirigeant }); return;
+        }
         if (/agrement (?:du )?dirigeant/.test(nq) && valeurRegistre('agrement_dirigeant')) { replacements.push({ id: f.id, value: valeurRegistre('agrement_dirigeant') }); return; }
         if (/^(?:n° de )?(?:telephone|tel)\b/.test(nq) && !/agent|site|astreinte|permanence/.test(nq) && valeurRegistre('telephone_contact')) { replacements.push({ id: f.id, value: valeurRegistre('telephone_contact') }); return; }
         if (/^(?:courriel|e-?mail|mail|adresse electronique)\b/.test(nq) && valeurRegistre('email_contact')) { replacements.push({ id: f.id, value: valeurRegistre('email_contact') }); return; }
@@ -4187,6 +4193,17 @@ INTERDITS : recopier la valeur d'une AUTRE colonne/site ; inventer une donnée f
         return;
       }
       if (isTableCell && /validit|fin\b|expir|[ée]ch[ée]ance/i.test(colCell)) { replacements.push({ id: f.id, value: '[À COMPLÉTER]' }); return; }
+      // Tableau des contacts du candidat : le service comptable / facturation de GSS n'est pas connu (jamais
+      // celui de l'acheteur) ; le suivi du marché est assuré par le responsable de marché (registre).
+      if (isTableCell && /comptab|factur/i.test(rowCell)) { replacements.push({ id: f.id, value: '[À COMPLÉTER]' }); return; }
+      if (isTableCell && /suivi du march|responsable (?:d[ée]sign|du march)|interlocuteur|r[ée]f[ée]rent/i.test(rowCell)) {
+        const dir = (valeurRegistre('dirigeant') || '').trim().split(/\s+/);
+        const val = /pr[ée]nom/i.test(colCell) ? (dir[1] ? dir[1].charAt(0) + dir[1].slice(1).toLowerCase() : '')
+          : /^\s*nom\b/i.test(colCell) ? (dir[0] || '')
+          : /t[ée]l/i.test(colCell) ? valeurRegistre('telephone_contact')
+          : /mail|[ée]lectronique|courriel/i.test(colCell) ? valeurRegistre('email_contact') : '';
+        if (val) { replacements.push({ id: f.id, value: val }); return; }
+      }
       const idMatch = identiteCandidatForLabel(isTableCell && colCell ? `${colCell} ${rowCell}` : fieldAsk);
       if (idMatch && !isParagraph) { replacements.push({ id: f.id, value: idMatch }); return; }
 
@@ -4455,13 +4472,13 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       if (!d || d.kind === 'checkbox') continue;
       const { texte, retires } = retirerCommentairesInternes(String(r.value ?? ''));
       // Texte nettoyé toujours repris (reformulations et montants de pénalité retirés, même sans commentaire interne).
-      const delais = delaisHorsNormandie(fondementReprise(texte, dceContext), dceContext, horsNormandieCadre);
+      const delais = delaisHorsNormandie(interditsDce(fondementReprise(texte, dceContext), dceContext), dceContext, horsNormandieCadre);
       r.value = delais.texte.trim() || (retires.length || delais.retires.length ? '[À COMPLÉTER]' : r.value);
       retires.forEach((x) => confirmationsGss.add(`À confirmer : ${x}`));
       delais.retires.forEach((x) => confirmationsGss.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
     }
     // Valeurs du registre encore « à confirmer » reprises dans le document : GSS est prévenu.
-    confirmationsRegistreUtilisees(replacements.map((r) => String(r.value ?? '')).join('\n')).forEach((c) => confirmationsGss.add(c));
+    confirmationsRegistreUtilisees(replacements.map((r) => String(r.value ?? '')).join('\n'), marcheHorsNormandie(analysisData, dceContext)).forEach((c) => confirmationsGss.add(c));
     console.log(`[MemoireGenerator] GPT a renvoyé ${replacements.length} valeurs au total.`);
     setProgress(dossierId, { phase: 'finalisation', pct: 94, label: 'Application des réponses au cadre…' });
     if (onProgress) onProgress(94, 'Application des réponses au cadre…');
@@ -5941,6 +5958,7 @@ RÈGLES DE FORME (rendu Marp) :
     await this.corrigerContradictions(sectionsMap, AI_SECTIONS_B, requirementsMatrix);
     const remarques = await this.remarquesCahierDesCharges(dceContext);
     if (remarques && sectionsMap.b_organisation) sectionsMap.b_organisation = `${sectionsMap.b_organisation.trim()}\n\n${remarques}`;
+    limiterRappelsSite(sectionsMap, AI_SECTIONS_B.map((x) => x.id));
     const refsRetirees = limiterReferences(sectionsMap, AI_SECTIONS_B.map((x) => x.id));
     if (refsRetirees) console.log(`[MemoireGenerator] Références clients : citées dans deux rubriques au plus (${refsRetirees} rubrique(s) allégée(s)).`);
 
@@ -5951,7 +5969,7 @@ RÈGLES DE FORME (rendu Marp) :
       ...alerteCadreAbsent(dceContext),
       ...commentairesRetires,
       // Valeurs du registre encore « à confirmer » reprises dans le texte : GSS est prévenu.
-      ...confirmationsRegistreUtilisees(Object.values(sectionsMap).join('\n')),
+      ...confirmationsRegistreUtilisees(Object.values(sectionsMap).join('\n'), horsNormandieLibre),
     ]);
     for (const r of requirementsMatrix) {
       if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence)) {
@@ -5987,7 +6005,7 @@ RÈGLES DE FORME (rendu Marp) :
     await this.completerParLesMemoires(elementsLibres, sectionsReperes, marcheHorsNormandie(analysisData, dceContext));
     // Nettoyage final : les phrases insérées depuis les mémoires GSS passent aussi par le filtre des
     // commentaires internes et des formulations « GSS indique… ».
-    for (const id of Object.keys(sectionsReperes)) sectionsReperes[id] = nettoyerStructure(delaisHorsNormandie(fondementReprise(retirerCommentairesInternes(sectionsReperes[id]).texte, dceContext), dceContext, horsNormandieLibre).texte);
+    for (const id of Object.keys(sectionsReperes)) sectionsReperes[id] = nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retirerCommentairesInternes(sectionsReperes[id]).texte, dceContext), dceContext, horsNormandieLibre).texte, dceContext));
     const consultationList = elementsLibres.filter((e) => e.statut === 'ouvert').map((e) => e.question);
     for (const titre of Object.values(secoursMemoires)) {
       consultationList.push(`Rubrique « ${titre} » : contenu repris tel quel des mémoires GSS (rédaction automatique indisponible), à relire et adapter au client.`);
@@ -6281,10 +6299,11 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       if (cible && sections[cible.id] !== undefined) sections[cible.id] = `${sections[cible.id].trim()}\n\n${remarquesCourt}`;
     }
     limiterReferences(sections, plan.map((p) => p.id), '');
+    limiterRappelsSite(sections, plan.map((p) => p.id));
 
     // ── Points à compléter (même logique que la réponse libre) ──
     const consultations = new Set<string>([
-      ...alerteCadreAbsent(dceContext),...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'))]);
+      ...alerteCadreAbsent(dceContext),...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie)]);
     for (const r of requirementsMatrix) if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence)) consultations.add(r.exigence.trim());
     const markerRe = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
     const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
@@ -6327,7 +6346,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       return { cle: `Q${i + 1}`, question: q.question, contexte, statut: 'ouvert', reperes, pourAcheteur: /^À demander à l.acheteur/i.test(q.question) };
     });
     await this.completerParLesMemoires(elements, sections, horsNormandie);
-    for (const id of Object.keys(sections)) sections[id] = nettoyerStructure(delaisHorsNormandie(fondementReprise(retirerCommentairesInternes(sections[id]).texte, dceContext), dceContext, horsNormandie).texte);
+    for (const id of Object.keys(sections)) sections[id] = nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retirerCommentairesInternes(sections[id]).texte, dceContext), dceContext, horsNormandie).texte, dceContext));
     // Complétions reprises des mémoires : le PDF est recomposé si un repère a été rempli.
     rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
     const consultationList = elements.filter((e) => e.statut === 'ouvert').map((e) => e.question);
