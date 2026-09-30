@@ -3440,7 +3440,11 @@ Renvoie un JSON valide :
     const isIdentityCtx = (ctx: string) =>
       /adresse|denomination|raison sociale|candidat|cnaps|siret|siren|agrement|certification|\bstation\b|\bdate\b|n°|numero|delai|minute|intervenant|taux|effectif|\betp\b|telephone|email|mail|coordonnees|soussigne|agissant|qualite de|\bnom\b|prenom|fonction/.test(normCtx(ctx));
     // Libellés d'identité seuls sur leur ligne (« Raison sociale », « Siret ») : réponse courte à côté.
-    const IDENTITE_SEULE = /^(raison sociale|siret|siren|d[ée]nomination(?: sociale)?(?: du candidat)?|nom du (?:candidat|soumissionnaire)|nom commercial|adresse(?: du si[èe]ge)?|t[ée]l[ée]phone|t[ée]l\.?|courriel|e-?mail|adresse [ée]lectronique|je soussign[ée]e?|agissant en qualit[ée] de)\s*:?\s*$/i;
+    const IDENTITE_SEULE = /^(raison sociale|siret|siren|d[ée]nomination(?: sociale)?(?: du candidat)?|nom du (?:candidat|soumissionnaire)|nom commercial|adresse(?: du si[èe]ge)?|t[ée]l[ée]phone|t[ée]l\.?|courriel|e-?mail|adresse [ée]lectronique|je soussign[ée]e?|agissant en qualit[ée] de|pr[ée]nom,? (?:et )?nom|nom,? (?:et )?pr[ée]nom|num[ée]ro de t[ée]l[ée]phone(?:\s*\([^)]{1,40}\))?)\s*:?\s*$/i;
+    // Bloc de contacts (« Contact comptable : » puis « Prénom, Nom : », « Téléphone : »…) : le libellé du bloc
+    // accompagne chaque champ, sinon les trois blocs recevaient la même réponse (et les doublons étaient vidés).
+    const GROUPE_CONTACT = /^(?:contact|interlocuteur|correspondant|r[ée]f[ée]rent|responsable)\b[^:]{0,60}:\s*$/i;
+    let groupeContact = '';
     // Bloc signature / cachet : ses lignes vides ne sont pas une zone de réponse.
     const SIGNATURE = /signature|cachet|lu et approuv|rayer la mention|fait [àa]\b|^le\s*:?$/i;
     // Une ligne suivie d'un espace vide n'est une QUESTION que si elle en a la forme (numérotée, consigne,
@@ -3587,7 +3591,10 @@ Renvoie un JSON valide :
             recentParagraphs.length = 0;
             lastQuestionText = '';
             openAnswerField = null;
+            groupeContact = '';
           } else if (pText && !isDottedOnly(pText) && !hasDottedRun(pText)) {
+            if (GROUPE_CONTACT.test(pText)) groupeContact = pText.replace(/\s*:\s*$/, '');
+            else if (!IDENTITE_SEULE.test(pText)) groupeContact = '';
             // paragraphe purement textuel → libellé/question, ferme toute zone ouverte
             const cleaned = pText.replace(/\[CHAMP_\d+\]/g, '').trim();
             if (cleaned) {
@@ -3717,7 +3724,7 @@ Renvoie un JSON valide :
 
             // Libellé d'identité seul (« Raison sociale », « Siret ») : réponse courte sur la même ligne.
             if (IDENTITE_SEULE.test(fullText)) {
-              const fd = addField({ type: 'text', kind: 'answer', lineCount: 1, context: `Section: "${currentHeading}" | Question: "${fullText.replace(/:\s*$/, '')}"` });
+              const fd = addField({ type: 'text', kind: 'answer', lineCount: 1, context: `Section: "${currentHeading}" | Question: "${fullText.replace(/:\s*$/, '')}"${groupeContact ? ` | Groupe: "${groupeContact}"` : ''}` });
               const r = xmlDoc.createElementNS(WNS, 'w:r');
               const t = xmlDoc.createElementNS(WNS, 'w:t');
               t.setAttribute('xml:space', 'preserve');
@@ -3765,7 +3772,8 @@ Renvoie un JSON valide :
                 && RESSEMBLE_QUESTION.test(libelle) && !ENTETE.test(libelle.trim())
                 // Dernier élément d'une liste d'« éléments attendus » : c'est la rubrique entière qui est la
                 // question (passe des rubriques plus bas), pas ce seul élément.
-                && !(libelle === lastQuestionText && lastQuestionListe)
+                // (Sauf titre de sous-rubrique numéroté dans le texte, « 3.1 – Moyens… » : c'est bien la question.)
+                && !(libelle === lastQuestionText && lastQuestionListe && !/^\d+(?:\.\d+)+\s*[-–—.)]\s*\S/.test(libelle))
                 // « PROPOSITION DU SOUMISSIONNAIRE » n'est pas la question : la passe des rubriques (plus bas)
                 // y place la réponse avec toute la description des attentes de l'acheteur.
                 && !/^(?:proposition|r[ée]ponse)s?\s+du\s+(?:soumissionnaire|candidat|titulaire)/i.test(libelle)) {
@@ -3822,7 +3830,10 @@ Renvoie un JSON valide :
     // de réponse développée en reçoit une, avec pour question TOUT le texte de la rubrique (attendus,
     // barème, limite de pages). Sans cela, ces rubriques restaient entièrement vides.
     {
-      const DEBUT_RUBRIQUE = /^(?:sous[-\s]?crit[eè]res?|crit[eè]res?)\s*n?°?\s*\d|^\d+(?:\.\d+)*\s*[-–—.)]\s*\S/i;
+      // (« Critère démarche environnementale – sur 100 points » : critère nommé, sans numéro.)
+      const DEBUT_RUBRIQUE = /^(?:sous[-\s]?crit[eè]res?|crit[eè]res?)\s*n?°?\s*\d|^\d+(?:\.\d+)*\s*[-–—.)]\s*\S|^crit[eè]re\b[^;]{3,120}?[-–—]\s*sur\s+\d+\s*points?\b/i;
+      // Mentions de forme d'une rubrique (limite de pages, annexes autorisées) : ce n'est pas une attente de contenu.
+      const FORME_RUBRIQUE = /^(?:\d+|une?)\s+pages?\b|pages?\s+maximum|^nombre de pages?\b|^annexes?\s+(?:autoris|autorit)|^maximum\s+\d+\s+pages?/i;
       const EMPLACEMENT = /^(?:proposition|r[ée]ponse)s?\s+du\s+(?:soumissionnaire|candidat|titulaire)|^votre\s+r[ée]ponse|^r[ée]ponse\s+du\s+candidat/i;
       const paras = getElementsWithLocalName(xmlDoc.documentElement, 'p')
         .filter((pp: any) => !getParentWithLocalName(pp, 'txbxContent') && !getParentWithLocalName(pp, 'drawing'));
@@ -3841,9 +3852,14 @@ Renvoie un JSON valide :
         const fin = k + 1 < debuts.length ? debuts[k + 1] : paras.length;
         const zone = textes.slice(deb, fin);
         if (zone.some((t) => /\[CHAMP_\d+\]/.test(t) && developpe(t))) continue;
-        const contenu = zone.slice(1).filter(Boolean);
+        const contenu = zone.slice(1).filter((t) => t && !FORME_RUBRIQUE.test(t));
         const emplacement = zone.findIndex((t) => EMPLACEMENT.test(t));
-        const attendus = contenu.some((t) => /attendu|[ée]l[ée]ments? de r[ée]ponse|d[ée]crir|pr[ée]cise|indiquer|d[ée]taill|pr[ée]senter|description|m[ée]thodolog|modalit/i.test(t)) || contenu.length >= 3;
+        // Espace de réponse laissé par l'acheteur sous la rubrique (au moins 3 lignes vides en fin de rubrique).
+        let videsFin = 0;
+        for (let i = zone.length - 1; i > 0 && !zone[i]; i--) videsFin++;
+        const attendus = contenu.some((t) => /attendu|[ée]l[ée]ments? de r[ée]ponse|d[ée]crir|pr[ée]cise|indiquer|d[ée]taill|pr[ée]senter|description|m[ée]thodolog|modalit/i.test(t)) || contenu.length >= 3
+          // « 7 – Mise en œuvre de la responsabilité environnementale » + « Éco-gestes, déchets… » + espace vide.
+          || (contenu.length >= 1 && videsFin >= 3 && RESSEMBLE_QUESTION.test(textes[deb]));
         if (emplacement < 0 && !attendus) continue;  // simple titre de chapitre (ses sous-rubriques suivent)
         // Rubrique qui ne contient que des titres de sous-rubriques numérotées : rien à écrire à ce niveau.
         if (emplacement < 0 && fin < paras.length && !contenu.length) continue;
@@ -3899,6 +3915,25 @@ Renvoie un JSON valide :
         ? ` (zone de ${f.lineCount} lignes — réponse développée attendue)` : '';
       return `Champ [CHAMP_${f.id}] ${hint} : ${cleanCtx}${extent}`;
     };
+    // Rubrique à limite de pages courte partagée entre plusieurs zones de réponse (« 1 page maximum » pour
+    // 1.1 + organisation des effectifs + méthodologie) : chaque réponse reçoit sa part du volume, sinon la
+    // rubrique dépassait nettement la limite fixée par l'acheteur.
+    {
+      const limite = (d: FieldDesc) => {
+        const m = /^Section:\s*"(\d+|une?)\s+pages?\s+maximum"/i.exec(d.context);
+        return m ? (/^\d+$/.test(m[1]) ? Number(m[1]) : 1) : 0;
+      };
+      const parSection = new Map<string, FieldDesc[]>();
+      for (const d of descriptors) if (d.kind === 'answer' && limite(d)) {
+        const cle = (d.context.match(/^Section:\s*"([^"]*)"/) || [])[1] || '';
+        (parSection.get(cle) ?? parSection.set(cle, []).get(cle)!).push(d);
+      }
+      for (const liste of parSection.values()) {
+        const pages = limite(liste[0]);
+        const mots = Math.round((pages * 420) / liste.length / 10) * 10;
+        if (liste.length >= 2 && mots < 500) for (const d of liste) d.context += ` | Limite: "${pages} page(s) au total pour les ${liste.length} réponses de cette rubrique : environ ${mots} mots pour celle-ci, sans dépasser"`;
+      }
+    }
     const prompts: string[] = descriptors.map(buildPrompt);
 
     console.log(`[MemoireGenerator] Detected ${prompts.length} fillable fields in document.`);
@@ -4168,6 +4203,28 @@ INTERDITS : recopier la valeur d'une AUTRE colonne/site ; inventer une donnée f
       const refMatch = isReferent ? referentForLabel(qRaw) : '';
       if (refMatch && !isParagraph) { replacements.push({ id: f.id, value: refMatch }); return; }
 
+      // Bloc de contacts du candidat (« Contact administratif / comptable / commercial » : Prénom, Nom ; téléphone ;
+      // adresse électronique) : le contact administratif est le dirigeant (coordonnées de l'entreprise), le contact
+      // commercial le responsable commercial du registre ; le service comptable de GSS n'est pas connu. Une ligne
+      // directe ou une adresse personnelle inconnue reste à compléter (jamais le numéro d'une autre personne).
+      const groupe = normCtx((f.context.match(/Groupe:\s*"([^"]*)"/) || [])[1] || '');
+      if (groupe && !isParagraph && !isTableCell) {
+        const nq = normCtx(fieldAsk);
+        const estNom = /\bnom\b|prenom/.test(nq);
+        const estTel = /telephone|\btel\b/.test(nq);
+        const estMail = /mail|electronique|courriel/.test(nq);
+        if (estNom || estTel || estMail) {
+          const prenomNom = (v: string) => { const m = v.trim().split(/\s+/); const p = m.pop() || ''; return m.length ? `${p.charAt(0).toUpperCase()}${p.slice(1).toLowerCase()} ${m.join(' ').toUpperCase()}` : v.trim(); };
+          let val = '[À COMPLÉTER]';
+          if (/comptab|factur/.test(groupe)) val = '[À COMPLÉTER]';
+          else if (/commercial/.test(groupe)) val = estNom && valeurRegistre('responsable_commercial') ? prenomNom(valeurRegistre('responsable_commercial')) : '[À COMPLÉTER]';
+          else if (/administrati|contact|interlocuteur|suivi|march/.test(groupe)) {
+            val = (estNom ? (valeurRegistre('dirigeant') ? prenomNom(valeurRegistre('dirigeant')) : '')
+              : estTel ? valeurRegistre('telephone_contact') : valeurRegistre('email_contact')) || '[À COMPLÉTER]';
+          }
+          replacements.push({ id: f.id, value: val }); return;
+        }
+      }
       // Bloc de signature et coordonnées de l'entreprise : valeurs du registre (dirigeant, qualité, téléphone, courriel).
       if (!isParagraph && !isTableCell) {
         const nq = normCtx(fieldAsk);
@@ -4732,7 +4789,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         const section = (ctx.match(/Section:\s*"([^"]*)"/) || [])[1] || '';
         const ligne = (ctx.match(/Ligne:\s*"([^"]*)"/) || [])[1];      // cellules d'une même ligne de tableau
         const question = (ctx.match(/Question:\s*"([^"]*)"/) || [])[1]; // lignes d'une même zone de réponse
-        return normCtx(section + '||' + (ligne ?? question ?? ''));
+        const groupe = (ctx.match(/Groupe:\s*"([^"]*)"/) || [])[1];     // bloc de contacts (comptable, commercial…)
+        return normCtx(section + '||' + (ligne ?? question ?? '') + (groupe ? `||${groupe}` : ''));
       };
       const isPureBlank = (v: string) => /^\[?\s*[àa]\s*compl[ée]ter\s*\]?\.?$/i.test(v.trim());
       const valById = new Map<number, string>(replacements.map(r => [r.id, String(r.value)]));
