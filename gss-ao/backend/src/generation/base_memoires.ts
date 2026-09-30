@@ -381,7 +381,7 @@ export function texteSourcesMemoires(): string {
 }
 
 /** Phrases de diagnostic interne sur les manques (jamais destinées à l'acheteur). */
-const COMMENTAIRE_INTERNE = /(\bà ce stade\b|\bne sont pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]est pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]ont pas été (?:communiqué|transmis|fourni)|\bn['’]a pas été (?:communiqué|transmis|fourni)|documentation (?:gss )?(?:fournie|transmise|disponible)|documents? (?:gss )?transmis|éléments? (?:gss )?(?:disponibles|transmis|fournis|communiqués)|\breste(?:nt)? à (?:confirmer|établir|préciser|obtenir)|\bdoi(?:t|vent) être confirmé|\bdevr(?:a|ont) être (?:confirmé|précisé|transposé|validé)|\baprès la visite\b|\blors de la visite obligatoire\b|\bne comporte (?:toutefois )?pas\b|\bne présente ni\b|\bsous réserve de (?:confirmation|validation)\b|\bnon (?:communiqué|précisé|renseigné) dans les|zone d['’]intervention habituelle|\bn['’]annonce (?:donc )?aucun délai|présenter comme acquis|organisation déclarée|\bdocumentés? comme\b|références enregistrées|\bnon précisée?s?(?![a-zà-ÿ])|\bDCE transmis\b|éléments du DCE|implantation habituelle|\bces éléments ne (?:décrivent|précisent|mentionnent|détaillent|couvrent)\b|\breste(?:nt)? à (?:définir|déterminer|arrêter|organiser)|hors de (?:la|sa) zone|\bn(?:e sera|e sont|e seront|.est) (?:donc )?pas présentée?s? comme|\bne sont pas présentées? comme|présence locale déjà constituée|\bn.est toutefois pas établie?\b|\bil ne vaut pas engagement\b|\bconstitue l.engagement opérationnel connu\b|\bdoit être intégrée? au parcours\b|\best signalée? ci-dessous\b|\bsont toutefois traitées comme\b|\bGSS (?:documente|décrit|affirme)\b|\bsans assimiler\b|\bla distance entre Rouen\b|\bincohérence relevée dans le DCE\b|n.a pas (?:encore )?(?:d.agence|d.implantation))/i;
+const COMMENTAIRE_INTERNE = /(\bà ce stade\b|\bne sont pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]est pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]ont pas été (?:communiqué|transmis|fourni)|\bn['’]a pas été (?:communiqué|transmis|fourni)|documentation (?:gss )?(?:fournie|transmise|disponible)|documents? (?:gss )?transmis|éléments? (?:gss )?(?:disponibles|transmis|fournis|communiqués)|\breste(?:nt)? à (?:confirmer|établir|préciser|obtenir)|\bdoi(?:t|vent) être confirmé|\bdevr(?:a|ont) être (?:confirmé|précisé|transposé|validé)|\baprès la visite\b|\blors de la visite obligatoire\b|\bne comporte (?:toutefois )?pas\b|\bne présente ni\b|\bsous réserve de (?:confirmation|validation)\b|\bsous réserve de (?:la|leur|sa) (?:classification|confirmation|validation|disponibilité|faisabilité)\b|\bla prestation ne comprend pas\b|\bévite d.inclure\b|\bnon (?:communiqué|précisé|renseigné) dans les|zone d['’]intervention habituelle|\bn['’]annonce (?:donc )?aucun délai|présenter comme acquis|organisation déclarée|\bdocumentés? comme\b|références enregistrées|\bnon précisée?s?(?![a-zà-ÿ])|\bDCE transmis\b|éléments du DCE|implantation habituelle|\bces éléments ne (?:décrivent|précisent|mentionnent|détaillent|couvrent)\b|\breste(?:nt)? à (?:définir|déterminer|arrêter|organiser)|hors de (?:la|sa) zone|\bn(?:e sera|e sont|e seront|.est) (?:donc )?pas présentée?s? comme|\bne sont pas présentées? comme|présence locale déjà constituée|\bn.est toutefois pas établie?\b|\bil ne vaut pas engagement\b|\bconstitue l.engagement opérationnel connu\b|\bdoit être intégrée? au parcours\b|\best signalée? ci-dessous\b|\bsont toutefois traitées comme\b|\bGSS (?:documente|décrit|affirme)\b|\bsans assimiler\b|\bla distance entre Rouen\b|\bincohérence relevée dans le DCE\b|n.a pas (?:encore )?(?:d.agence|d.implantation))/i;
 
 /** Montant de pénalité du CCAP/CCTP : GSS s'engage sur l'obligation, jamais sur le montant de la sanction. */
 const MONTANT_PENALITE = /p[ée]nalit[ée]s?[^.;]{0,120}?\d[\d\s  ]*(?:,\d+)?\s*(?:€|euros?)|\d[\d\s  ]*(?:,\d+)?\s*(?:€|euros?)[^.;]{0,80}?p[ée]nalit/i;
@@ -432,6 +432,12 @@ export function retirerCommentairesInternes(texte: string): { texte: string; ret
     // Incise sur l'implantation de GSS (« Pour cette intervention hors de la zone habituelle de GSS, … ») : retirée.
     .replace(/(^|[.!?]\s+|\n)(?:Pour|Dans|S.agissant d.)\s+(?:ce|cette|un|une)\s+[^,.\n]{0,40}?hors de (?:la|sa) zone[^,.\n]*,\s*(\S)/g, (_m, a, c) => `${a}${c.toUpperCase()}`)
     .replace(/,?\s*(?:situ[ée]e?s?\s+)?hors de (?:la|sa) zone (?:d.intervention )?habituelle(?: de GSS)?,?/g, '')
+    // Écho de la consigne de périmètre (« sans poste fixe permanent d'accueil… », « aucun poste fixe n'est créé ») :
+    // le mémoire décrit ce que GSS fait, pas ce qu'elle ne fait pas.
+    .replace(/(^|[.!?]\s+|\n)(?:Cette (?:organisation|préparation|méthode)|Ce dispositif|Aucun (?:remplacement|équipement|poste)[^.\n]{0,60})[^.\n]*(?:ne crée|ne donne lieu|n.est (?:ajouté|créé)|n.est créée?)[^.\n]*poste fixe[^.\n]*\.\s*/g, '$1')
+    .replace(/(^|[.!?]\s+|\n)Aucun poste fixe[^.\n]*\.\s*/g, '$1')
+    .replace(/,?\s*(?:et\s+)?sans (?:création de |créer (?:de|un) |ajouter (?:de|un) |ajout de )?(?:aucun )?poste fixe(?: permanent)?(?: d.accueil)?(?:,? (?:de|du) standard)?(?:,? ou de contrôle d.accès)?(?: permanents?)?/g, '')
+    .replace(/,?\s*\*\*\s*\*\*/g, '')
     // Coquilles héritées des documents GSS.
     .replace(/\bIFESSSU\b/g, 'IFESSU').replace(/\bHOBO\b/g, 'H0B0').replace(/\bentre (\*{0,2})(\d+) à (\d+)\b/g, 'de $1$2 à $3')
     // Un seul outil de main courante dans le mémoire (Trackforce, outil exact en attente de confirmation par GSS),
@@ -479,9 +485,13 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
   const DUREE = /(\d+(?:[,.]\d+)?)\s*(minutes?|min\b|heures?\b|h\b)(?!\s*\d)/gi;
   const PRESENCE = /interven|mobilis|remplac|astreinte|rondier|arriv|sur place|se rend|d[ée]plac|renfort|lev[ée]e de doute/i;
   const dceNorm = (dce || '').replace(/\s+/g, ' ').toLowerCase();
+  // Le DCE écrit parfois le délai en toutes lettres (« moins de cinq minutes »).
+  const LETTRES: Record<string, string> = { '1': 'une?', '2': 'deux', '3': 'trois', '4': 'quatre', '5': 'cinq', '6': 'six', '8': 'huit', '10': 'dix', '12': 'douze', '15': 'quinze', '20': 'vingt', '24': 'vingt-quatre', '30': 'trente', '45': 'quarante-cinq', '48': 'quarante-huit', '60': 'soixante', '72': 'soixante-douze' };
   const dansDce = (n: string, u: string) => {
     const unite = /^m/i.test(u) ? '(?:minutes?|min\\b|mn\\b)' : '(?:heures?|h\\b)';
-    return new RegExp(`(?<![\\d,.])${n.replace('.', '[.,]').replace(',', '[.,]')}\\s*${unite}`, 'i').test(dceNorm);
+    const chiffre = `${n.replace('.', '[.,]').replace(',', '[.,]')}`;
+    const formes = LETTRES[n] ? `(?:${chiffre}|${LETTRES[n]})(?:\\s*\\(${chiffre}\\))?` : chiffre;
+    return new RegExp(`(?<![\\d,.])${formes}\\s*${unite}`, 'i').test(dceNorm);
   };
   const lignes = texte.split('\n').map((ligne) => ligne.split(/(?<=[.!?;])\s+/).map((ph) => {
     if (!PRESENCE.test(ph) || /⟦AC:|\[CONSULTATION REQUISE/.test(ph)) return ph;
@@ -567,12 +577,40 @@ export function interditsDce(texte: string, dce: string): string {
 }
 
 /**
+ * Tableaux Markdown rendus en texte brut dans le PDF : lignes de tableau séparées par une ligne vide
+ * (le tableau est coupé) ou tableau sans ligne de séparation sous l'en-tête. Les lignes sont regroupées et
+ * la séparation ajoutée.
+ */
+export function reparerTableaux(texte: string): string {
+  const estLigne = (l: string) => /^\s*\|.*\|\s*$/.test(l);
+  const estSep = (l: string) => /^\s*\|?\s*:?-{3,}/.test(l);
+  const lignes = texte.split('\n');
+  const out: string[] = [];
+  for (let i = 0; i < lignes.length; i++) {
+    const l = lignes[i];
+    // Ligne vide entre deux lignes de tableau : supprimée (le tableau reste d'un seul tenant).
+    if (!l.trim() && out.length && estLigne(out[out.length - 1]) && estLigne(lignes[i + 1] || '')) continue;
+    if (estLigne(l) && (!out.length || !estLigne(out[out.length - 1]))) {
+      // Début de tableau sans séparation sous l'en-tête : on l'ajoute.
+      out.push(l);
+      if (!estSep(lignes[i + 1] || '') && estLigne(lignes[i + 1] || '') ) {
+        const n = l.trim().replace(/^\||\|$/g, '').split('|').length;
+        out.push(`|${Array(n).fill('---').join('|')}|`);
+      }
+      continue;
+    }
+    out.push(l);
+  }
+  return out.join('\n');
+}
+
+/**
  * Nettoyage de structure après les passes de suppression (répétitions, références, délais) : une phrase
  * d'introduction « … : » qui n'est plus suivie de rien, un tableau réduit à son en-tête, un sous-titre
  * vide, des caractères invisibles.
  */
 export function nettoyerStructure(texte: string): string {
-  let t = texte.replace(/[\u200B-\u200D\uFEFF]/g, '');
+  let t = reparerTableaux(texte.replace(/[\u200B-\u200D\uFEFF]/g, ''));
   const lignes = t.split('\n');
   const out: string[] = [];
   for (let i = 0; i < lignes.length; i++) {

@@ -1667,7 +1667,8 @@ function inferFieldHint(context: string): string {
  * n'est dans les pièces : la réponse libre risque d'être jugée irrégulière. GSS est prévenu.
  */
 function alerteCadreAbsent(dce: string): string[] {
-  const m = /cadre\s+(?:de\s+)?(?:r[ée]ponse|du\s+m[ée]moire|de\s+m[ée]moire)(?:\s+technique)?[^.\n]{0,60}/i.exec(dce || '');
+  const m = [...(dce || '').matchAll(/cadre\s+(?:de\s+)?(?:r[ée]ponse|du\s+m[ée]moire|de\s+m[ée]moire)(?:\s+technique)?[^.\n]{0,60}/gi)]
+    .find((x) => !/financi|prix|bordereau/i.test(x[0]) && !/bordereau|financi/i.test((dce || '').slice(Math.max(0, (x.index || 0) - 80), x.index || 0)));
   return m ? [`Le DCE fait référence à un « ${m[0].trim().replace(/\s+/g, ' ')} » qui ne figure pas parmi les pièces du dossier : l'ajouter au dossier pour que le mémoire soit rédigé dans ce cadre imposé (sinon l'offre risque d'être jugée irrégulière).`] : [];
 }
 
@@ -2569,7 +2570,7 @@ Renvoie UNIQUEMENT un objet JSON : {"perimetre": "texte de 5 à 15 lignes"}`,
   /** Bloc de consigne associé au périmètre réel (vide si le périmètre n'a pas pu être établi). */
   private blocPerimetre(perimetre: string): string {
     return perimetre
-      ? `\n\nPÉRIMÈTRE RÉEL DU MARCHÉ (d'après le CCTP) :\n${perimetre}\nNe décris QUE ces prestations : n'introduis aucun poste fixe, horaire de présence, responsable de site sur place, tenue, contrôle d'accès, vacation, équipement ou effectif que le CCTP ne prévoit pas (même s'ils figurent dans les mémoires GSS). Une rubrique dont le sujet sort du périmètre reste brève et ramène au périmètre réel. Le dispositif décrit reprend EXACTEMENT ces postes (mêmes horaires, mêmes missions) : aucun rondier, chef de site, contrôleur sur place ou poste supplémentaire inventé ; une mission que le CCTP laisse sans poste à certaines heures donne lieu à [CONSULTATION REQUISE : …], jamais à une affectation inventée.`
+      ? `\n\nPÉRIMÈTRE RÉEL DU MARCHÉ (d'après le CCTP) :\n${perimetre}\nNe décris QUE ces prestations : n'introduis aucun poste fixe, horaire de présence, responsable de site sur place, tenue, contrôle d'accès, vacation, équipement ou effectif que le CCTP ne prévoit pas (même s'ils figurent dans les mémoires GSS). Une rubrique dont le sujet sort du périmètre reste brève et ramène au périmètre réel. N'écris jamais ce qui est hors périmètre (« sans poste fixe… », « aucun poste n'est créé ») : décris seulement ce que GSS fait. Le dispositif décrit reprend EXACTEMENT ces postes (mêmes horaires, mêmes missions) : aucun rondier, chef de site, contrôleur sur place ou poste supplémentaire inventé ; une mission que le CCTP laisse sans poste à certaines heures donne lieu à [CONSULTATION REQUISE : …], jamais à une affectation inventée.`
       : '';
   }
 
@@ -5930,7 +5931,7 @@ RÈGLES DE FORME (rendu Marp) :
             { role: 'system', content: `On te donne le texte d'une rubrique de mémoire technique et une liste numérotée d'exigences du CCTP. Pour chaque exigence qui n'est PAS traitée explicitement dans le texte (avec son chiffre s'il y en a un), rédige UNE puce d'engagement de GSS, factuelle, qui reprend l'exigence avec son chiffre exact (sans montant de pénalité, sans inventer de moyen absent de la « réponse GSS connue » ; si GSS n'a pas de réponse connue, engage GSS à respecter l'exigence telle qu'écrite). Jamais « s'engage à confirmer » ni « s'engage à formaliser » : écris l'engagement lui-même. Une exigence déjà traitée dans le texte, même formulée autrement, n'est PAS reprise. Ne cite jamais le numéro d'une exigence. Ignore les exigences qui portent sur la composition du dossier de l'offre (pièces à remettre, nombre de pages du mémoire, visite, signature) : elles ne s'écrivent pas dans le mémoire. Pas de numéro en tête de puce. Renvoie UNIQUEMENT un objet JSON : {"puces": ["…"]} (liste vide si tout est couvert).` },
             { role: 'user', content: `TEXTE :\n${text}\n\nEXIGENCES :\n${chapterReqs.map((r: any, k: number) => `${k + 1}. ${r.exigence} (réponse GSS connue : ${r.reponseGss || '—'})`).join('\n')}` },
           ], 0.1, `Couverture ${section.id}`, true);
-          const puces = (JSON.parse(verif || '{}').puces || []).map((x: any) => String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, '')).filter((x: string) => x && !PIECES_OFFRE.test(x));
+          const puces = (JSON.parse(verif || '{}').puces || []).map((x: any) => String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, '')).filter((x: string) => x && !PIECES_OFFRE.test(x) && !/p[ée]nalit|plafonnement/i.test(x));
           if (puces.length) {
             text = `${text.trim()}\n\n## Nos engagements sur les exigences du cahier des charges\n\n${puces.map((x: string) => `- ${x.replace(/^[-•]\s*/, '')}`).join('\n')}`;
             console.log(`[MemoireGenerator] Rubrique ${section.id} : ${puces.length} exigence(s) du CCTP ajoutée(s) après contrôle de couverture.`);
@@ -6275,7 +6276,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
             { role: 'system', content: `On te donne une partie de mémoire technique et une liste numérotée d'exigences du CCTP. Pour chaque exigence qui n'est PAS traitée explicitement dans le texte (avec son chiffre s'il y en a un), rédige UNE puce d'engagement de GSS, courte et factuelle, avec le chiffre exact (sans pénalité, sans inventer de moyen absent de la « réponse GSS connue » ; si GSS n'a pas de réponse connue, engage GSS à respecter l'exigence telle qu'écrite). Jamais « s'engage à confirmer » ni « s'engage à formaliser » : écris l'engagement lui-même. Une exigence déjà traitée dans le texte, même formulée autrement, n'est PAS reprise. Ne cite jamais le numéro d'une exigence. Ignore les exigences qui portent sur la composition du dossier de l'offre (pièces à remettre, nombre de pages du mémoire, visite, signature) : elles ne s'écrivent pas dans le mémoire. Pas de numéro en tête de puce. Renvoie UNIQUEMENT un objet JSON : {"puces": ["…"]} (liste vide si tout est couvert).` },
             { role: 'user', content: `TEXTE :\n${texte}\n\nEXIGENCES :\n${reqs.map((r: any, k: number) => `${k + 1}. ${r.exigence} (réponse GSS connue : ${r.reponseGss || '—'})`).join('\n')}` },
           ], 0.1, `Couverture ${p.id}`, true);
-          const puces = (JSON.parse(verif || '{}').puces || []).map((x: any) => String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, '')).filter((x: string) => x && !PIECES_OFFRE.test(x));
+          const puces = (JSON.parse(verif || '{}').puces || []).map((x: any) => String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, '')).filter((x: string) => x && !PIECES_OFFRE.test(x) && !/p[ée]nalit|plafonnement/i.test(x));
           if (puces.length) texte = `${texte.trim()}\n\n## Engagements sur les exigences du cahier des charges\n\n${puces.map((x: string) => `- ${x.replace(/^[-•]\s*/, '')}`).join('\n')}`;
         } catch { /* contrôle facultatif */ }
       }
