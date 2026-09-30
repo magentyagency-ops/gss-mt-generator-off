@@ -161,6 +161,10 @@ export function loadDocxStructure(filePath: string): DocxStructure {
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
     parseAttributeValue: false,
+    // Texte des runs tel quel : sans cela, les espaces de début/fin de run disparaissaient (« deThiaiscomporte »)
+    // et un run purement numérique était converti en nombre puis ignoré (« environ 7|5 points » lu « environ 7 »).
+    trimValues: false,
+    parseTagValue: false,
   });
 
   const jsonObj = parser.parse(xmlText);
@@ -185,8 +189,8 @@ export function loadDocxStructure(filePath: string): DocxStructure {
       const ts = Array.isArray(r['w:t']) ? r['w:t'] : [r['w:t']];
       for (const t of ts) {
         if (!t) continue;
-        if (typeof t === 'string') {
-          text += t;
+        if (typeof t === 'string' || typeof t === 'number') {
+          text += String(t);
         } else if (typeof t === 'object') {
           if (t['#text']) {
             text += t['#text'];
