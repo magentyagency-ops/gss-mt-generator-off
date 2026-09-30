@@ -4,6 +4,7 @@ import { execSync, spawnSync } from 'child_process';
 import AdmZip from 'adm-zip';
 import { XMLParser } from 'fast-xml-parser';
 import pdf from 'pdf-parse';
+import { texteTropPauvre, transcrirePdf } from './ocr_pdf';
 import { getSettings } from '../core/config';
 import { ExtractionMethod } from '../schemas/common';
 
@@ -404,12 +405,23 @@ export async function extractPdfText(filePath: string): Promise<string> {
     throw new DocConverterError(`Fichier non trouvé : ${filePath}`);
   }
   const dataBuffer = fs.readFileSync(filePath);
+  let data: any;
   try {
-    const data = await pdf(dataBuffer);
-    return data.text;
+    data = await pdf(dataBuffer);
   } catch (e: any) {
     throw new DocConverterError(`Échec extraction PDF : ${e.message}`);
   }
+  // PDF sans couche texte (scan, « Microsoft Print To PDF ») : transcription par le modèle, sinon le
+  // CCTP / RC n'était pas lu du tout (quelques centaines de caractères pour 30 pages).
+  if (texteTropPauvre(data.text || '', data.numpages || 0)) {
+    try {
+      const transcrit = await transcrirePdf(filePath);
+      if (transcrit.replace(/\s+/g, '').length > (data.text || '').replace(/\s+/g, '').length) return transcrit;
+    } catch (e: any) {
+      console.warn(`[docConverter] Transcription du PDF ${path.basename(filePath)} impossible : ${e?.message || e}`);
+    }
+  }
+  return data.text;
 }
 
 export function extractDocText(src: string): { text: string; method: ExtractionMethod } {
@@ -419,6 +431,10 @@ export function extractDocText(src: string): { text: string; method: ExtractionM
       const converted = convertDocToDocx(src, tempDir);
       const text = loadDocxText(converted);
       return { text, method: ExtractionMethod.DOC_LIBREOFFICE };
+    } catch (e) {
+      // soffice présent mais inutilisable (ex. lien Homebrew vers une application désinstallée) :
+      // repli sur textutil plutôt que de perdre la pièce.
+      if (findTextutil() === null) throw e;
     } finally {
       try {
         fs.rmSync(tempDir, { recursive: true, force: true });
