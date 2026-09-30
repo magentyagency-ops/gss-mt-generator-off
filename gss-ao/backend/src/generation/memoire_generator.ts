@@ -6,7 +6,7 @@ import { insererSchemasReponses, choisir as choisirSchemasGss } from './visuels_
 import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt } from './format_court';
 import { actualiserOrganigramme } from './organigramme';
 import { poserSignets, poserSignetsChamps, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter } from './completion';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -17,7 +17,7 @@ import { Client as PgClient } from 'pg';
 import { getSettings } from '../core/config';
 import { DB, FichiersDB } from '../core/db';
 import { getScopedClient } from '../core/supabase';
-import { extractText, loadDocxStructure, loadDocxTemplateAnnotated } from '../ingestion/docConverter';
+import { extractText, loadDocxStructure, loadDocxTemplateAnnotated, convertDocToDocx, findTextutil } from '../ingestion/docConverter';
 import { overlaySynthesis, loadTrebuchetFont, measureZonesCapacity, RefReplacement, RefContext } from './pdf_overlay';
 import { resolveMissingInfo, classifyFieldsLLM, MissingField } from './missing_info_resolver';
 import { uploadTempDocx, downloadTempDocx } from '../core/temp_storage';
@@ -1662,14 +1662,25 @@ function inferFieldHint(context: string): string {
 // frontend/lib/gss-config.ts (commit cda45a2) sans aucune source documentaire → retiré.
 // La dénomination (raison commerciale, non sensible) reste par défaut, surchargeable par env.
 // SIRET / SIREN / adresse du siège : variables d'environnement, sinon valeur des mémoires GSS (registre).
+/**
+ * Le DCE cite un cadre de réponse imposé (« cadre de réponse technique », « cadre du mémoire ») mais aucun
+ * n'est dans les pièces : la réponse libre risque d'être jugée irrégulière. GSS est prévenu.
+ */
+function alerteCadreAbsent(dce: string): string[] {
+  const m = /cadre\s+(?:de\s+)?(?:r[ée]ponse|du\s+m[ée]moire|de\s+m[ée]moire)(?:\s+technique)?[^.\n]{0,60}/i.exec(dce || '');
+  return m ? [`Le DCE fait référence à un « ${m[0].trim().replace(/\s+/g, ' ')} » qui ne figure pas parmi les pièces du dossier : l'ajouter au dossier pour que le mémoire soit rédigé dans ce cadre imposé (sinon l'offre risque d'être jugée irrégulière).`] : [];
+}
+
 export const GSS_IDENTITE = {
-  denomination: process.env.GSS_DENOMINATION || 'GSS — Sécurité privée',
-  numCnaps: process.env.GSS_CNAPS || '',
-  dateAutorisation: process.env.GSS_DATE_AUTORISATION || '',
-  siret: process.env.GSS_SIRET || siretRegistre() || '905 274 635 00010',
-  siren: process.env.GSS_SIREN || siretRegistre().slice(0, 11) || '905 274 635',
-  adresse: process.env.GSS_ADRESSE || valeurRegistre('adresse_siege') || '31 boulevard Gambetta, 76000 Rouen',
-  adresseAgence: process.env.GSS_ADRESSE_AGENCE || valeurRegistre('adresse_siege') || '31 boulevard Gambetta, 76000 Rouen',
+  // Valeurs du registre des mémoires GSS (datées et sourcées) ; jamais de valeur fictive en repli : une
+  // donnée absente reste « [À COMPLÉTER] » (auparavant « GSS — Sécurité privée », SIRET et adresse inventés).
+  denomination: process.env.GSS_DENOMINATION || valeurRegistre('raison_sociale') || '',
+  numCnaps: process.env.GSS_CNAPS || valeurRegistre('autorisation_cnaps') || '',
+  dateAutorisation: process.env.GSS_DATE_AUTORISATION || valeurRegistre('date_autorisation_cnaps') || '',
+  siret: process.env.GSS_SIRET || siretRegistre(),
+  siren: process.env.GSS_SIREN || siretRegistre().slice(0, 11),
+  adresse: process.env.GSS_ADRESSE || valeurRegistre('adresse_siege') || '',
+  adresseAgence: process.env.GSS_ADRESSE_AGENCE || valeurRegistre('adresse_siege') || '',
 };
 
 /** SIRET de GSS tel qu'il figure dans ses mémoires (registre), au format « 805 295 516 00019 ». */
@@ -1853,21 +1864,67 @@ export class MemoireGenerator {
 
   private findDceTemplate(dceDir: string): string | null {
     if (!fs.existsSync(dceDir)) return null;
-    const files = fs.readdirSync(dceDir);
-    const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    // Fichiers temporaires Office (« ~$… ») et fichiers cachés : jamais des pièces du DCE.
+    const files = fs.readdirSync(dceDir).filter((f) => !f.startsWith('~$') && !f.startsWith('.'));
+    const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[_]+/g, ' ');
     // Les noms uploadés sont parfois en MOJIBAKE (nom UTF-8 lu en latin1 par multer :
     // « 5-Mémoire Technique… » écrit « 5-MÃ©moire Technique… » sur le disque). On teste donc
     // le nom brut ET sa réparation latin1→utf8, sinon « memoire » n'est jamais reconnu → repli
     // sur le mémoire GSS maître (génération « hors cadre ») au lieu de remplir le cadre imposé.
     const repaired = (s: string) => { try { return Buffer.from(s, 'latin1').toString('utf8'); } catch { return s; } };
-    // Un cadre de réponse imposé s'appelle « …mémoire… », mais AUSSI « Cadre de réponse »,
-    // « Cadre de mémoire technique », « Trame mémoire technique »… On reconnaît donc memoire | cadre | trame
-    // (nom brut ET réparé latin1→utf8, à cause du mojibake multer).
-    const TEMPLATE_NAME_RE = /memoire|cadre|trame/;
-    const isMemoire = (f: string) =>
-      /\.docx?$/i.test(f) && (TEMPLATE_NAME_RE.test(norm(f)) || TEMPLATE_NAME_RE.test(norm(repaired(f))));
-    const memoireFile = files.find(isMemoire);
-    return memoireFile ? path.join(dceDir, memoireFile) : null;
+    // Un cadre de réponse imposé s'appelle « …mémoire… », mais AUSSI « Cadre de réponse », « CRT »
+    // (cadre de réponse technique), « CADRE_REP », « Trame mémoire technique », « Questionnaire
+    // technique »… Un « accord-cadre », un cadre de réponse « candidatures » ou une pièce DC1/DC2 n'en
+    // sont pas. S'il y a plusieurs candidats, on garde le cadre TECHNIQUE (score), puis le .docx.
+    const score = (f: string): number => {
+      const n = `${norm(f)} ${norm(repaired(f))}`;
+      if (!/\.docx?$/i.test(f)) return 0;
+      if (/candidature|accord[- ]cadre|\bdc ?[1-4]\b|acte d.?engagement|\bbpu\b|\bdpgf\b|\bdqe\b|fiche contact/.test(n)) return 0;
+      let sc = 0;
+      if (/memoire technique|cadre (de )?(reponse|memoire)|\bcrt\b|cadre rep\b|trame|questionnaire technique|reponse technique/.test(n)) sc = 10;
+      else if (/memoire|cadre/.test(n)) sc = 5;
+      if (!sc) return 0;
+      if (/technique/.test(n)) sc += 3;
+      if (/\.docx$/i.test(f)) sc += 1;
+      return sc;
+    };
+    const candidats = files.map((f) => ({ f, sc: score(f) })).filter((c) => c.sc > 0).sort((a, b) => b.sc - a.sc);
+    if (!candidats.length) return null;
+    if (candidats.length > 1) console.log(`[MemoireGenerator] Plusieurs cadres possibles (${candidats.map((c) => c.f).join(' ; ')}) → « ${candidats[0].f} ».`);
+    return this.cadreEnDocx(path.join(dceDir, candidats[0].f));
+  }
+
+  /**
+   * Cadre imposé au format Word 97-2003 (.doc) : converti en .docx (LibreOffice), seul format que le
+   * remplissage sait traiter. Sans conversion possible, le cadre est ignoré (génération sans cadre)
+   * plutôt que de faire échouer toute la génération.
+   */
+  private cadreEnDocx(fichier: string): string | null {
+    if (!/\.doc$/i.test(fichier)) return fichier;
+    try {
+      const sortie = convertDocToDocx(fichier, fs.mkdtempSync(path.join(os.tmpdir(), 'gss-cadre-')));
+      console.log(`[MemoireGenerator] Cadre imposé .doc converti en .docx : ${path.basename(fichier)}.`);
+      return sortie;
+    } catch (e: any) {
+      // Sans LibreOffice : textutil (macOS) sait aussi produire un .docx.
+      const textutil = findTextutil();
+      if (textutil) {
+        const sortie = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gss-cadre-')), path.basename(fichier).replace(/\.doc$/i, '.docx'));
+        const r = spawnSync(textutil, ['-convert', 'docx', '-output', sortie, fichier], { timeout: 120_000 });
+        if (r.status === 0 && fs.existsSync(sortie)) {
+          // textutil perd le fond coloré des bandeaux mais garde leur texte blanc : texte remis en noir, sinon invisible.
+          try {
+            const zip = new PizZip(fs.readFileSync(sortie));
+            const xml = zip.file('word/document.xml')?.asText();
+            if (xml) { zip.file('word/document.xml', xml.replace(/<w:color w:val="(?:FFFFFF|ffffff)"\/>/g, '')); fs.writeFileSync(sortie, zip.generate({ type: 'nodebuffer' })); }
+          } catch { /* conversion gardée telle quelle */ }
+          console.log(`[MemoireGenerator] Cadre imposé .doc converti en .docx (textutil) : ${path.basename(fichier)}.`);
+          return sortie;
+        }
+      }
+      console.warn(`[MemoireGenerator] Cadre imposé .doc non convertible (${e?.message || e}) : génération sans cadre.`);
+      return null;
+    }
   }
 
   /**
@@ -2100,7 +2157,8 @@ export class MemoireGenerator {
         const status = e?.status || e?.code || '';
         const msg = (e?.message || String(e)).toString();
         // Coupure réseau passagère (pas de statut HTTP) : même traitement qu'une limite de débit.
-        if ((status === 429 || !e?.status) && attempt < maxAttempts) {
+        // Crédit OpenAI épuisé (« insufficient_quota ») : inutile de réessayer.
+        if ((status === 429 || !e?.status) && e?.code !== 'insufficient_quota' && attempt < maxAttempts) {
           const wait = 15000 * attempt; // 15s, 30s, 45s, 60s
           console.warn(`[MemoireGenerator] ${label}: ${e?.status ? '429 (TPM)' : 'connexion interrompue'} — attente ${wait / 1000}s puis réessai (${attempt}/${maxAttempts - 1})`);
           await this.sleep(wait);
@@ -2453,6 +2511,35 @@ ${rubriques.map((x) => `- ${x.id} : ${x.title}`).join('\n')}` },
    * En plus des faits, le modèle propose des arguments différenciants et des problématiques
    * anticipées — ce qui fait gagner un appel d'offres.
    */
+  /**
+   * Périmètre RÉEL des prestations d'après le CCTP (postes fixes ou non, rondes, télésurveillance,
+   * interventions, événementiel, horaires). Injecté dans la rédaction : sans lui, les rubriques d'un marché
+   * de rondes ou de télésurveillance se remplissaient de contenus de gardiennage à poste fixe tirés des
+   * anciens mémoires (responsable de site sur place, contrôle d'accès 7 h-19 h, tenue, vacations de nuit…).
+   */
+  private async perimetreMarche(dceContext: string): Promise<string> {
+    const r = await this.callOpenAI([
+      {
+        role: 'system',
+        content: `Tu lis le DCE d'un marché de sécurité privée (CCTP en priorité) et tu décris en quelques lignes le PÉRIMÈTRE RÉEL des prestations, sans rien ajouter :
+- postes fixes : oui / non ; si oui, lesquels (site, qualification, horaires) ;
+- rondes, télésurveillance, interventions sur alarme, levée de doute, prestations ponctuelles sur bon de commande, événementiel : oui / non et en quoi elles consistent ;
+- sites et lots concernés ;
+- ce qui est HORS périmètre et ne doit pas être décrit (ex. aucun poste fixe, aucun contrôle d'accès permanent, pas de SSIAP).
+Renvoie UNIQUEMENT un objet JSON : {"perimetre": "texte de 5 à 10 lignes"}`,
+      },
+      { role: 'user', content: dceContext.slice(0, 110_000) },
+    ], 0.1, 'Périmètre du marché', true);
+    try { return String(JSON.parse(r || '{}').perimetre || '').trim(); } catch { return ''; }
+  }
+
+  /** Bloc de consigne associé au périmètre réel (vide si le périmètre n'a pas pu être établi). */
+  private blocPerimetre(perimetre: string): string {
+    return perimetre
+      ? `\n\nPÉRIMÈTRE RÉEL DU MARCHÉ (d'après le CCTP) :\n${perimetre}\nNe décris QUE ces prestations : n'introduis aucun poste fixe, horaire de présence, responsable de site sur place, tenue, contrôle d'accès, vacation, équipement ou effectif que le CCTP ne prévoit pas (même s'ils figurent dans les mémoires GSS). Une rubrique dont le sujet sort du périmètre reste brève et ramène au périmètre réel.`
+      : '';
+  }
+
   private async analyzeDce(dceContext: string): Promise<any> {
     const systemPrompt = `Tu es un expert en marchés publics de sécurité privée pour l'entreprise GSS (Global Security Service, ex-GIS).
 Ton process s'appuie sur deux rôles : Sacha (amont : analyse du DCE, vérification de l'obligation de visite, comptes-rendus de visite terrain — 60% contiennent des contraintes du terrain absentes du CCTP) et Mme Vaché (rédaction du mémoire technique avec une personnalisation forte : anticiper des problématiques opérationnelles non formulées par l'acheteur).
@@ -2592,7 +2679,7 @@ Renvoie UNIQUEMENT un objet JSON : {"questions": [{"question": "...", "sources":
    * texte à l'emplacement du manque et la question n'est pas posée. Ne concerne ni les confirmations
    * d'informations qui évoluent, ni les questions pour l'acheteur, ni les données propres au marché.
    */
-  private async completerParLesMemoires(elements: ElementACompleter[], sections: Record<string, string>): Promise<void> {
+  private async completerParLesMemoires(elements: ElementACompleter[], sections: Record<string, string>, horsNormandie = false): Promise<void> {
     const candidats = elements.filter((e) => e.statut === 'ouvert' && !e.pourAcheteur && e.reperes?.length
       && !/derni[èe]re valeur connue/i.test(e.question));
     if (!candidats.length) return;
@@ -2610,7 +2697,9 @@ Renvoie UNIQUEMENT un objet JSON : {"questions": [{"question": "...", "sources":
 - Jamais un chiffre, un nom de site, un effectif ou un dispositif propre à l'ancien client ; jamais une information qui dépend du nouveau marché (effectifs dédiés, horaires, dimensionnement, délais propres au site) ; jamais une confirmation de document à joindre.
 - La réponse : 1 à 3 phrases factuelles, fidèles aux extraits, sans nommer l'ancien client ni parler de « mémoire » ou d'« extrait ».
 - Si les extraits ne répondent qu'à UNE PARTIE de la question : donne cette partie dans "reponse" et, dans "reste", la question réduite à ce qui manque encore — une vraie question adressée à GSS, AUTONOME et complète (le sujet est nommé explicitement : jamais « ces autorisations », « celle-ci »… ; jamais une constatation du type « … ne sont pas précisées »).
-- Si les extraits n'y répondent pas : "reponse": null.
+- Si les extraits n'y répondent pas : "reponse": null.${horsNormandie ? `
+- Le nouveau marché est HORS de Normandie (où GSS est implanté) : aucun délai chiffré d'intervention, de mobilisation, de remplacement ou d'alerte (minutes, heures) et aucune organisation locale (agence, astreinte, véhicules, rondier) tirés des extraits : ils ne valent que pour la Normandie ("reponse": null pour ces questions).` : ''}
+- Jamais de commentaire sur ce qui manque, reste à définir ou à confirmer, ni sur l'implantation de GSS : uniquement des faits.
 Renvoie UNIQUEMENT un objet JSON : {"reponses": [{"n": 1, "reponse": "..." | null, "reste": "..." | null}]}`,
       },
       { role: 'user', content: blocs.map((b, i) => `### ${i + 1}. ${b.e.question}\n${b.extraits.map((p) => p.texte).join('\n---\n')}`).join('\n\n') },
@@ -2623,6 +2712,8 @@ Renvoie UNIQUEMENT un objet JSON : {"reponses": [{"n": 1, "reponse": "..." | nul
       const b = blocs[Number(r?.n) - 1];
       const texte = String(r?.reponse ?? '').trim();
       if (!b || !texte || texte === 'null') continue;
+      // Hors Normandie : un délai chiffré repris d'un ancien marché normand n'est jamais réutilisé.
+      if (horsNormandie && /\d+\s*(?:minutes?|min\b|heures?\b|h\b)/i.test(texte) && /interven|mobilis|remplac|alerte|astreinte|rondier|d[ée]lai|arriv/i.test(texte)) continue;
       const reperes = b.e.reperes || [];
       const id = Object.keys(sections).find((k) => sections[k].includes(REPERE(reperes[0])));
       if (!id) continue;
@@ -2669,8 +2760,8 @@ Renvoie UNIQUEMENT un objet JSON : {"reponses": [{"n": 1, "reponse": "..." | nul
 Mission : dépouiller le DCE — le CCTP EN PRIORITÉ — pour en extraire une CHECK-LIST des GRANDES EXIGENCES du donneur d'ordre, puis confronter chacune à ce que GSS a / fait d'après la Documentation GSS fournie.
 RÈGLES :
 - ENGAGEMENTS CHIFFRÉS (prioritaires) : chaque obligation PRÉCISE et mesurable du CCTP/CCAP — délai (levée de doute, intervention, remplacement), fréquence (rondes, contrôles, réunions), échéance (rapports, plannings, listes nominatives, bilans, dossier de réversibilité), document à remettre, matériel ou qualification exigés, obligation assortie d'une pénalité, HORAIRE IMPOSÉ (pauses, rondes, ouverture/fermeture), modalité de traçabilité exigée (tampon, visa, signature), et la DESCRIPTION DU SITE (bâtiments, zones sensibles, accès, catégorie ERP) — est une exigence À PART, avec son chiffre exact et, s'il y en a une, sa pénalité.
-- Pour le reste, NIVEAU DE DÉTAIL : reste au niveau des GRANDES THÉMATIQUES (ex: "Dispositif humain et qualifications", "Moyens matériels et technologiques", "Gestion des alarmes et interventions", "Politique RSE"). Ne descends PAS au niveau des sous-détails par site, par poste ou par modèle d'équipement. Regroupe les exigences similaires.
-- Vise 15 à 25 exigences globales, plus tous les engagements chiffrés (au total 60 au maximum).
+- OBLIGATIONS DE MOYEN, DE MÉTHODE ET D'ORGANISATION : chaque obligation explicite du CCTP est aussi une exigence — liste des tâches d'un poste, contenu imposé d'un dossier, d'un rapport ou d'une réunion, INTERDITS et modalités imposées (rondes à pied, pas de photos, alerte par le poste central, maintien en poste jusqu'à la relève…), interlocuteurs désignés, points que « le candidat précisera / indiquera » dans son mémoire (délai, effectif, véhicules, organisation, bilan social…). Regroupe celles d'un même article en UNE exigence qui les énumère toutes. Ne descends pas au niveau du modèle d'équipement.
+- Vise 25 à 45 exigences, plus tous les engagements chiffrés (au total 80 au maximum).
 - Cite l'exigence de façon synthétique ; n'invente rien côté DCE.
 - La réponse GSS s'appuie UNIQUEMENT sur la Documentation GSS ; n'invente AUCUN moyen absent.
 - CLASSE la couverture STRICTEMENT ainsi :
@@ -3202,7 +3293,7 @@ Renvoie un JSON valide :
       const templateFile = dossier.dce_files.find((f: any) => f.type === 'Mémoire (cadre)');
       if (templateFile && templateFile.nom) {
         const p = path.join(templateSearchDir, path.basename(templateFile.nom));
-        if (fs.existsSync(p)) { templatePath = p; }
+        if (fs.existsSync(p)) { templatePath = this.cadreEnDocx(p); }
       }
     }
 
@@ -3301,7 +3392,17 @@ Renvoie un JSON valide :
     const stripDots = (s: string) => s.replace(DOT_RUN_G, ' ').trim();
     const normCtx = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const isIdentityCtx = (ctx: string) =>
-      /adresse|denomination|raison sociale|candidat|cnaps|siret|siren|agrement|certification|station|\bdate\b|n°|numero|delai|minute|intervenant|taux|effectif|\betp\b|telephone|email|mail|coordonnees/.test(normCtx(ctx));
+      /adresse|denomination|raison sociale|candidat|cnaps|siret|siren|agrement|certification|\bstation\b|\bdate\b|n°|numero|delai|minute|intervenant|taux|effectif|\betp\b|telephone|email|mail|coordonnees|soussigne|agissant|qualite de|\bnom\b|prenom|fonction/.test(normCtx(ctx));
+    // Libellés d'identité seuls sur leur ligne (« Raison sociale », « Siret ») : réponse courte à côté.
+    const IDENTITE_SEULE = /^(raison sociale|siret|siren|d[ée]nomination(?: sociale)?|nom commercial|adresse(?: du si[èe]ge)?|t[ée]l[ée]phone|t[ée]l\.?|courriel|e-?mail|adresse [ée]lectronique|je soussign[ée]e?|agissant en qualit[ée] de)\s*:?\s*$/i;
+    // Bloc signature / cachet : ses lignes vides ne sont pas une zone de réponse.
+    const SIGNATURE = /signature|cachet|lu et approuv|rayer la mention|fait [àa]\b|^le\s*:?$/i;
+    // Une ligne suivie d'un espace vide n'est une QUESTION que si elle en a la forme (numérotée, consigne,
+    // thème de réponse technique) — jamais un élément d'en-tête (adresse, n° de marché, titre du document).
+    const RESSEMBLE_QUESTION = /\?|^\d+(?:\.\d+)*\s*[-–—.)]\s*\S|d[ée]cri|pr[ée]cis|indiqu|pr[ée]sent|d[ée]taill|expliqu|justifi|organisation|modalit|moyens|m[ée]thod|compr[ée]hension|politique|gestion|suivi|proc[ée]dure|dispositif|mesures|contr[ôo]le|formation|environnement|responsabilit|qualit[ée] de la prestation|planning|astreinte|t[ée]l[ée]surveillance|mat[ée]riel|prise en charge|reprise/i;
+    const ENTETE = /\b\d{5}\b|cedex|\bbp\s*\d|n°\s*de\s*march|^m[ée]moire technique$|^cadre de (?:r[ée]ponse|m[ée]moire)|^mp\s*n°|^march[ée]s? publics?|^accord[- ]cadre|^lot\s*n?°?\s*\d+\s*:?$|^\d{4}ma\d+$/i;
+    const aDessin = (n: any) => getElementsWithLocalName(n, 'drawing').length > 0 || getElementsWithLocalName(n, 'pict').length > 0;
+    const videsARetirer: any[] = [];
 
     interface FieldDesc {
       id: number;
@@ -3312,6 +3413,8 @@ Renvoie un JSON valide :
       lineCount?: number;
       /** Réponse du candidat à un critère d'une GRILLE DE NOTATION (« sous-critère | ……/10 points »). */
       grille?: boolean;
+      /** Zone de réponse faite de paragraphes vides : ses lignes vides suivantes sont retirées après remplissage. */
+      vide?: boolean;
     }
 
     let fieldCounter = 1;
@@ -3320,6 +3423,7 @@ Renvoie un JSON valide :
     let currentHeading = 'Introduction / Généralités';
     const recentParagraphs: string[] = [];
     let lastQuestionText = '';          // dernier paragraphe-question purement textuel
+    let lastQuestionListe = false;      // ce paragraphe est un élément de liste (puce / numérotation Word)
     let openAnswerField: FieldDesc | null = null; // zone de réponse en cours de coalescence
 
     const addField = (f: Omit<FieldDesc, 'id'>): FieldDesc => {
@@ -3337,11 +3441,16 @@ Renvoie un JSON valide :
         if (placeId !== null && !placed) {
           tEl.textContent = isDottedOnly(text)
             ? `[CHAMP_${placeId}]`
-            : text.replace(DOT_RUN, `[CHAMP_${placeId}]`).replace(DOT_RUN_G, '');
+            : text.replace(DOT_RUN, `[CHAMP_${placeId}]`).replace(DOT_RUN_G, '').replace(/(\[CHAMP_\d+\])[\s_.…]{2,}/, '$1');
           placed = true;
         } else {
           tEl.textContent = isDottedOnly(text) ? '' : text.replace(DOT_RUN_G, '');
         }
+      });
+      // Restes courts de pointillés (« …….. » dans un autre run) : effacés, sinon ils suivent la réponse.
+      if (placeId !== null) getElementsWithLocalName(pNode, 't').forEach((tEl: any) => {
+        const text = tEl.textContent || '';
+        if (/^[\s_.…]+$/.test(text) && (text.match(/[_.…]/g) || []).length >= 2) tEl.textContent = '';
       });
       return placed;
     };
@@ -3438,7 +3547,12 @@ Renvoie un JSON valide :
             if (cleaned) {
               recentParagraphs.push(cleaned);
               if (recentParagraphs.length > 3) recentParagraphs.shift();
-              if (cleaned.length < 300) lastQuestionText = cleaned;
+              if (cleaned.length < 300) {
+                lastQuestionText = cleaned;
+                const pPr = findLocalNameChild(node, 'pPr');
+                const style = pPr ? findLocalNameChild(pPr, 'pStyle') : null;
+                lastQuestionListe = !!(pPr && findLocalNameChild(pPr, 'numPr')) || /liste|list/i.test(style?.getAttribute('w:val') || '');
+              }
               openAnswerField = null;
             }
           }
@@ -3555,27 +3669,83 @@ Renvoie un JSON valide :
               });
             }
 
+            // Libellé d'identité seul (« Raison sociale », « Siret ») : réponse courte sur la même ligne.
+            if (IDENTITE_SEULE.test(fullText)) {
+              const fd = addField({ type: 'text', kind: 'answer', lineCount: 1, context: `Section: "${currentHeading}" | Question: "${fullText.replace(/:\s*$/, '')}"` });
+              const r = xmlDoc.createElementNS(WNS, 'w:r');
+              const t = xmlDoc.createElementNS(WNS, 'w:t');
+              t.setAttribute('xml:space', 'preserve');
+              t.textContent = `${/:\s*$/.test(fullText) ? ' ' : ' : '}[CHAMP_${fd.id}]`;
+              r.appendChild(t); node.appendChild(r);
+              lastQuestionText = '';
+              openAnswerField = null;
+            }
+
             // Zones de réponse : pointillés ou paragraphe vide → coalescence
             const dotted = hasDottedRun(fullText) || getElementsWithLocalName(node, 't').some((t: any) => isDottedOnly(t.textContent || ''));
-            if (dotted) {
+            if (IDENTITE_SEULE.test(fullText)) {
+              // traité ci-dessus
+            } else if (dotted) {
               const inlineLabel = stripDots(fullText);
               if (openAnswerField && inlineLabel === '') {
                 // ligne de pointillés qui prolonge la zone ouverte
                 placeOrClearDotted(node, null);
                 openAnswerField.lineCount = (openAnswerField.lineCount || 1) + 1;
               } else {
-                const ctxLabel = inlineLabel || lastQuestionText || recentParagraphs.slice(-1)[0] || '';
+                // Ligne pointillée juste sous un titre (question stylée en titre ou en liste, ex. « 3.2 Les
+                // effectifs ») : le titre EST la question. Sans cela, la ligne était rattachée à la
+                // question précédente et recevait une réponse décalée.
+                const ctxLabel = inlineLabel || lastQuestionText || recentParagraphs.slice(-1)[0] || (!/^introduction/i.test(currentHeading) ? currentHeading : '');
                 const nearby = recentParagraphs.length ? ` | Contexte: "${recentParagraphs.slice(-2).join(' / ')}"` : '';
                 const fd = addField({ type: 'text', kind: 'answer', lineCount: 1, context: `Section: "${currentHeading}" | Question: "${ctxLabel}"${nearby}` });
                 placeOrClearDotted(node, fd.id);
                 openAnswerField = fd;
                 if (!inlineLabel) lastQuestionText = ''; // question consommée
               }
-            } else if (fullText === '') {
+            } else if (fullText === '' && !aDessin(node)) {
+              // Question posée sous un titre de section (« 1.1 - Compréhension… ») : le titre sert de libellé.
+              const libelle = lastQuestionText || (recentParagraphs.length === 0 && !/^introduction/i.test(currentHeading) ? currentHeading : '');
+              // Nombre de paragraphes vides consécutifs à partir de celui-ci (espace de réponse laissé par l'acheteur).
+              let vides = 1;
+              for (let sib = node.nextSibling; sib; sib = sib.nextSibling) {
+                if (sib.nodeType !== 1) continue;
+                if (sib.localName === 'p' && getElementText(sib).trim() === '' && !aDessin(sib)) vides++; else break;
+              }
               if (openAnswerField) {
                 // ligne blanche au sein d'une zone de réponse en cours
                 openAnswerField.lineCount = (openAnswerField.lineCount || 1) + 1;
-              } else if (lastQuestionText && lastQuestionText.trimEnd().endsWith(':')) {
+                if (openAnswerField.vide) videsARetirer.push(node);
+              } else if (libelle && !libelle.trimEnd().endsWith(':') && !SIGNATURE.test(libelle) && vides >= 3
+                && RESSEMBLE_QUESTION.test(libelle) && !ENTETE.test(libelle.trim())
+                // Dernier élément d'une liste d'« éléments attendus » : c'est la rubrique entière qui est la
+                // question (passe des rubriques plus bas), pas ce seul élément.
+                && !(libelle === lastQuestionText && lastQuestionListe)
+                // « PROPOSITION DU SOUMISSIONNAIRE » n'est pas la question : la passe des rubriques (plus bas)
+                // y place la réponse avec toute la description des attentes de l'acheteur.
+                && !/^(?:proposition|r[ée]ponse)s?\s+du\s+(?:soumissionnaire|candidat|titulaire)/i.test(libelle)) {
+                // Question suivie d'un espace de réponse fait de lignes vides (cadres « par rubriques »,
+                // ex. Cour d'appel de Rouen) : zone de réponse développée. Sans cette règle, toutes les
+                // rubriques notées de ce type de cadre restaient vides.
+                const fd = addField({ type: 'text', kind: 'answer', lineCount: vides, vide: true, grille: true, context: `Section: "${currentHeading}" | Question: "${libelle}"` });
+                const r = xmlDoc.createElementNS(WNS, 'w:r');
+                const t = xmlDoc.createElementNS(WNS, 'w:t');
+                t.textContent = `[CHAMP_${fd.id}]`;
+                r.appendChild(t); node.appendChild(r);
+                openAnswerField = fd;
+                lastQuestionText = '';
+              } else if (lastQuestionText && lastQuestionText.trimEnd().endsWith(':') && !SIGNATURE.test(lastQuestionText)
+                // « Éléments de réponse attendus : » introduit une liste, ce n'est pas un champ à remplir.
+                && !/attendus?\s*:|ci-dessous\s*:|suivants?\s*:|notamment\s*:|comprenant\s*:/i.test(lastQuestionText)
+                // « Contact pour les commandes : » suivi de « Nom : …… » : ce sont les lignes suivantes qu'on remplit.
+                && !(() => {
+                  for (let sib = node.nextSibling; sib; sib = sib.nextSibling) {
+                    if (sib.nodeType !== 1 || sib.localName !== 'p') continue;
+                    const tx = getElementText(sib).trim();
+                    if (!tx) continue;
+                    return hasDottedRun(tx) || /:\s*$/.test(tx);
+                  }
+                  return false;
+                })()) {
                 // paragraphe vide juste après un libellé "… :"
                 const fd = addField({ type: 'text', kind: 'answer', lineCount: 1, context: `Section: "${currentHeading}" | Question: "${lastQuestionText}"` });
                 const r = xmlDoc.createElementNS(WNS, 'w:r');
@@ -3598,6 +3768,69 @@ Renvoie un JSON valide :
 
     walkDOM(xmlDoc.documentElement, false);
 
+    // ── C. Rubriques à réponse IMPLICITE ──
+    // Cadres « par rubriques » (ex. Citédia : « SOUS-CRITÈRE 1 … Éléments de réponse attendus : • … • … »,
+    // Vitry : « DESCRIPTION DES ATTENTES … PROPOSITION DU SOUMISSIONNAIRE ») : aucune ligne pointillée ni
+    // cellule vide, le candidat écrit sous la rubrique. Chaque rubrique notée qui n'a encore aucune zone
+    // de réponse développée en reçoit une, avec pour question TOUT le texte de la rubrique (attendus,
+    // barème, limite de pages). Sans cela, ces rubriques restaient entièrement vides.
+    {
+      const DEBUT_RUBRIQUE = /^(?:sous[-\s]?crit[eè]res?|crit[eè]res?)\s*n?°?\s*\d|^\d+(?:\.\d+)*\s*[-–—.)]\s*\S/i;
+      const EMPLACEMENT = /^(?:proposition|r[ée]ponse)s?\s+du\s+(?:soumissionnaire|candidat|titulaire)|^votre\s+r[ée]ponse|^r[ée]ponse\s+du\s+candidat/i;
+      const paras = getElementsWithLocalName(xmlDoc.documentElement, 'p')
+        .filter((pp: any) => !getParentWithLocalName(pp, 'txbxContent') && !getParentWithLocalName(pp, 'drawing'));
+      const textes = paras.map((pp: any) => getElementText(pp).replace(/\s+/g, ' ').trim());
+      const developpe = (t: string) => [...t.matchAll(/\[CHAMP_(\d+)\]/g)].some((m) => {
+        const d = descriptors.find((x) => x.id === Number(m[1]));
+        return !!d && (d.grille || (d.kind === 'answer' && (d.lineCount || 1) >= 3));
+      });
+      // Même critère annoncé deux fois (bandeau « SOUS CRITÈRE 1 : … » puis description « Sous critère 1 : … ») :
+      // une seule rubrique, sinon la réponse était écrite deux ou trois fois.
+      const cleCritere = (t: string) => { const m = /^(sous[-\s]?crit[eè]res?|crit[eè]res?)\s*n?°?\s*(\d+)/i.exec(t); return m ? `${/^sous/i.test(m[1]) ? 's' : 'c'}${m[2]}` : ''; };
+      const debuts = textes.map((t, i) => (t && t.length < 250 && DEBUT_RUBRIQUE.test(t) ? i : -1)).filter((i) => i >= 0)
+        .filter((i, k, tous) => !(k > 0 && cleCritere(textes[i]) && cleCritere(textes[i]) === cleCritere(textes[tous[k - 1]])));
+      for (let k = 0; k < debuts.length; k++) {
+        const deb = debuts[k];
+        const fin = k + 1 < debuts.length ? debuts[k + 1] : paras.length;
+        const zone = textes.slice(deb, fin);
+        if (zone.some((t) => /\[CHAMP_\d+\]/.test(t) && developpe(t))) continue;
+        const contenu = zone.slice(1).filter(Boolean);
+        const emplacement = zone.findIndex((t) => EMPLACEMENT.test(t));
+        const attendus = contenu.some((t) => /attendu|[ée]l[ée]ments? de r[ée]ponse|d[ée]crir|pr[ée]cise|indiquer|d[ée]taill|pr[ée]senter|description|m[ée]thodolog|modalit/i.test(t)) || contenu.length >= 3;
+        if (emplacement < 0 && !attendus) continue;  // simple titre de chapitre (ses sous-rubriques suivent)
+        // Rubrique qui ne contient que des titres de sous-rubriques numérotées : rien à écrire à ce niveau.
+        if (emplacement < 0 && fin < paras.length && !contenu.length) continue;
+        const question = zone.slice(0, emplacement >= 0 ? emplacement : zone.length).filter((t) => t && !/\[CHAMP_/.test(t)).join(' ; ').replace(/"/g, "'").slice(0, 1800);
+        if (!question) continue;
+        // Emplacement de la réponse : juste après « PROPOSITION DU SOUMISSIONNAIRE », sinon après le
+        // dernier paragraphe non vide de la rubrique ; dans un paragraphe vide existant si possible.
+        const apres = emplacement >= 0 ? deb + emplacement : deb + zone.map((t, i) => (t ? i : -1)).filter((i) => i >= 0).pop()!;
+        const ancre = paras[apres];
+        let cible = apres + 1 < fin && textes[apres + 1] === '' && paras[apres + 1].parentNode === ancre.parentNode ? paras[apres + 1] : null;
+        if (!cible) {
+          cible = xmlDoc.createElementNS(WNS, 'w:p');
+          ancre.parentNode.insertBefore(cible, ancre.nextSibling);
+        }
+        // Rubrique notée : traitée comme un critère de grille (chaque élément attendu, longueur selon le barème).
+        const fd = addField({ type: 'text', kind: 'answer', lineCount: 12, vide: true, grille: true, context: `Section: "${textes[deb].replace(/"/g, "'")}" | Question: "${question}"` });
+        const r = xmlDoc.createElementNS(WNS, 'w:r');
+        const t = xmlDoc.createElementNS(WNS, 'w:t');
+        t.textContent = `[CHAMP_${fd.id}]`;
+        r.appendChild(t); cible.appendChild(r);
+        // Lignes vides réservées sous l'emplacement : retirées (on en garde une).
+        for (let i = apres + 2; i < fin && textes[i] === '' && paras[i].parentNode === cible.parentNode; i++) videsARetirer.push(paras[i]);
+      }
+    }
+
+    // Lignes vides réservées par l'acheteur sous une réponse : retirées (la réponse occupe l'espace),
+    // la dernière est gardée pour aérer.
+    for (let i = 0; i < videsARetirer.length; i++) {
+      const n = videsARetirer[i];
+      const suivant = videsARetirer[i + 1];
+      const dernier = !suivant || n.nextSibling !== suivant && n.nextSibling?.nextSibling !== suivant;
+      if (!dernier && n.parentNode) n.parentNode.removeChild(n);
+    }
+
     // Construit le libellé de prompt de chaque champ (hint de format + contexte)
     const buildPrompt = (f: FieldDesc): string => {
       // Les mots-codes de champs de formulaire Word ne doivent pas polluer l'inférence ni le prompt
@@ -3608,6 +3841,13 @@ Renvoie un JSON valide :
       // Une zone de réponse étalée sur plusieurs lignes appelle un paragraphe développé,
       // sauf s'il s'agit clairement d'un champ d'identité court.
       if (f.kind === 'answer' && (f.lineCount || 1) >= 3 && !isIdentityCtx(cleanCtx)) hint = '[PARAGRAPHE]';
+      // Question qui demande de DÉCRIRE (organisation, modalités, moyens, formations, mesures…) : réponse
+      // développée même si l'acheteur n'a laissé qu'une ligne (le cadre s'agrandit). Sinon « 2.1 L'organisation
+      // mise en place pour le contrôle de la prestation » recevait 4 mots.
+      const questionSeule = (cleanCtx.match(/Question:\s*"([^"]*)"/) || [])[1] || '';
+      const identiteStricte = /adresse|d[ée]nomination|raison sociale|cnaps|siret|siren|agr[ée]ment|t[ée]l[ée]phone|e-?mail|courriel|coordonn[ée]es|soussign|agissant|qualit[ée] de|\bnom\b|pr[ée]nom|\bdate\b|n°|num[ée]ro/i;
+      if (f.kind === 'answer' && hint !== '[PARAGRAPHE]' && questionSeule && !identiteStricte.test(questionSeule)
+        && /organisation|modalit|moyens|m[ée]thod|d[ée]cri|pr[ée]sent|formations?|qualifications|proc[ée]dure|contr[ôo]le|dispositif|mesures|initiatives|politique|gestion|suivi|compr[ée]hension|rondes?|communication|permanence|astreinte|r[ée]activit|remplacement|continuit|encadrement|mat[ée]riels?|[ée]quipements|outils|d[ée]marche|traitement|actions|environnement|soci[ée]tal|responsabilit[ée]/i.test(questionSeule)) hint = '[PARAGRAPHE]';
       const extent = f.kind === 'answer' && (f.lineCount || 1) > 1
         ? ` (zone de ${f.lineCount} lignes — réponse développée attendue)` : '';
       return `Champ [CHAMP_${f.id}] ${hint} : ${cleanCtx}${extent}`;
@@ -3617,6 +3857,8 @@ Renvoie un JSON valide :
     console.log(`[MemoireGenerator] Detected ${prompts.length} fillable fields in document.`);
     if (prompts.length === 0) throw new Error("Aucun champ à remplir détecté dans le template Word.");
 
+    // Périmètre réel du marché (évite les contenus de gardiennage à poste fixe hors sujet).
+    const blocPerimetreCadre = this.blocPerimetre(await this.perimetreMarche(dceContext));
     const systemPrompt = `Tu es un rédacteur chevronné de mémoires techniques pour l'entreprise GSS (Global Security Service, ex-GIS), expert des marchés publics de sécurité privée.
 On te fournit (1) l'ANALYSE stratégique et opérationnelle du marché issue du DCE (client, sites, exigences, rapport de visite de Sacha, arguments différenciants de GSS, problématiques terrain anticipées), (2) la DOCUMENTATION GSS (moyens, procédures, organisation, formations… — connaissances internes), (3) les RÉFÉRENTS GSS (dossier « Personnes ») et (4) une liste de champs [CHAMP_X] repérés dans le cadre de réponse de l'acheteur. Tu rédiges la valeur à insérer dans chacun.
 
@@ -3689,7 +3931,7 @@ ${REGLES_REUTILISATION}
 - Réponds précisément à la QUESTION du champ : n'utilise un extrait de mémoire que s'il répond à CETTE question.
 - Champ court, d'identité ou de contact : une valeur présente dans le REGISTRE DES INFORMATIONS GSS ou dans un extrait de mémoire GSS EST une source valable → donne-la (ne réponds pas « [À COMPLÉTER] » si elle y figure).
 - Une certification indiquée « en cours » n'est PAS obtenue : ne la présente jamais comme acquise.
-- Dénomination / « NOM » du candidat : écris exactement la raison sociale du registre.${blocRegistre(marcheHorsNormandie(analysisData, dceContext))}${organigrammeGss(referentsContext)}${referencesGss()}
+- Dénomination / « NOM » du candidat : écris exactement la raison sociale du registre.${blocRegistre(marcheHorsNormandie(analysisData, dceContext))}${organigrammeGss(referentsContext)}${referencesGss()}${blocPerimetreCadre}
 ${this.blocDemande()}
 
 FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "value": "..."} ]}`;
@@ -3773,7 +4015,7 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     /** Consigne des réponses aux critères d'une GRILLE DE NOTATION (notés composante par composante). */
     const CONSIGNE_GRILLE = `CE CHAMP EST LA RÉPONSE DE GSS À UN CRITÈRE NOTÉ PAR L'ACHETEUR (voir « Barème ») : l'acheteur attribue ses points composante par composante. Cette consigne prime sur celle du paragraphe unique :
 - Traite CHAQUE composante listée dans la question, dans l'ordre, sans en omettre aucune : pour chacune, une ligne d'intitulé courte reprenant la composante, puis 3 à 6 phrases concrètes (méthode GSS, moyens, outils, procédure, exemple réel tiré des références GSS). Sépare les composantes par une ligne vide.
-- Longueur proportionnée au barème : environ 150 à 250 mots pour 10 points, 300 à 500 mots au-delà.
+- Longueur proportionnée au barème : environ 150 à 250 mots pour 10 points, 300 à 500 mots au-delà. Si la rubrique fixe un nombre de pages maximum, vise environ la moitié de ce volume (≈ 450 mots par page) sans jamais le dépasser ; une rubrique de plusieurs pages appelle une réponse développée sur CHAQUE élément attendu.
 - Si un « Critère » parent est indiqué (ex. un cas pratique sur un site précis), applique la réponse à CE cas (site, surface, accès, calendrier) et non en termes généraux.
 - Donnée propre à ce marché absente des sources (nombre d'agents dimensionné pour ce site, rotations…) : n'invente rien, écris [À COMPLÉTER] à cet endroit et ajoute sur sa propre ligne : [CONSULTATION REQUISE : <information précise à obtenir de GSS>]. Ne commente jamais l'absence d'information (pas de « non précisé dans les sources », « à confirmer ») : le texte reste rédigé comme la réponse définitive de GSS, avec [À COMPLÉTER] à la place de la donnée.
 - Si une composante demande de FOURNIR un document (CV, rapport type, cartes professionnelles, certificats…), décris ce que GSS fournit d'après les sources et ajoute sur sa propre ligne : [CONSULTATION REQUISE : Joindre <document> au mémoire].
@@ -3870,13 +4112,37 @@ INTERDITS : recopier la valeur d'une AUTRE colonne/site ; inventer une donnée f
       // (isReferent) ET que sa PROPRE question (qRaw, pas un libellé voisin) nomme un rôle connu
       // (« coordonnées du responsable qualité » → VATTIER). On NE déclenche PAS sur un « responsable »
       // d'un libellé de process voisin (évite « VATTIER » sous « Certification ISO/APSAD »).
+      // Tableau nominatif d'agents (formations, habilitations : NOM / Prénom / Date) : les agents affectés
+      // ne sont pas connus à ce stade → à compléter, jamais un paragraphe dans la cellule.
+      if (isTableCell && /^\s*(nom|pr[ée]nom|dates?)\b/i.test(colCell) && /formation|sst|cqp|ssiap|habilitation|dipl[ôo]me|intitul|recyclage|carte/i.test(`${rowCell} ${f.context}`) && !/dirigeant|entreprise/i.test(rowCell)) {
+        replacements.push({ id: f.id, value: '[À COMPLÉTER]' }); return;
+      }
       const refMatch = isReferent ? referentForLabel(qRaw) : '';
       if (refMatch && !isParagraph) { replacements.push({ id: f.id, value: refMatch }); return; }
 
+      // Bloc de signature et coordonnées de l'entreprise : valeurs du registre (dirigeant, qualité, téléphone, courriel).
+      if (!isParagraph && !isTableCell) {
+        const nq = normCtx(fieldAsk);
+        const dirigeant = (valeurRegistre('dirigeant') || '').replace(/\b([A-Z])([A-Z]+)$/, (_m, a, b) => a + b.toLowerCase());
+        if (/soussign/.test(nq) && dirigeant) { replacements.push({ id: f.id, value: dirigeant }); return; }
+        if (/agissant en qualite|en qualite de|qualite du signataire|fonction du signataire/.test(nq)) { replacements.push({ id: f.id, value: 'Dirigeant de GLOBAL SECURITY SERVICES' }); return; }
+        if (/^(?:nom du )?dirigeant\b|nom du (?:representant|gerant)/.test(nq) && dirigeant) { replacements.push({ id: f.id, value: dirigeant }); return; }
+        if (/agrement (?:du )?dirigeant/.test(nq) && valeurRegistre('agrement_dirigeant')) { replacements.push({ id: f.id, value: valeurRegistre('agrement_dirigeant') }); return; }
+        if (/^(?:n° de )?(?:telephone|tel)\b/.test(nq) && !/agent|site|astreinte|permanence/.test(nq) && valeurRegistre('telephone_contact')) { replacements.push({ id: f.id, value: valeurRegistre('telephone_contact') }); return; }
+        if (/^(?:courriel|e-?mail|mail|adresse electronique)\b/.test(nq) && valeurRegistre('email_contact')) { replacements.push({ id: f.id, value: valeurRegistre('email_contact') }); return; }
+        if (/^adresse\s*:?$/.test(nq.trim()) && GSS_IDENTITE.adresse) { replacements.push({ id: f.id, value: GSS_IDENTITE.adresse }); return; }
+      }
       // IDENTITÉ CANDIDAT connue → valeur DÉTERMINISTE : dénomination, N° CNAPS, date d'autorisation
       // sont des données stables de GSS (cf. GSS_IDENTITE) ; on les place sans appel IA ni risque
       // d'inventer/de répondre « [À COMPLÉTER] ». (Pas pour un [PARAGRAPHE] : on laisse rédiger.)
-      const idMatch = identiteCandidatForLabel(fieldAsk);
+      // Cellule d'un tableau d'autorisations : la COLONNE dit quelle donnée écrire (la ligne « Autorisation
+      // entreprise » ne veut pas dire que chaque cellule reçoit le n° CNAPS).
+      if (isTableCell && /activit/i.test(colCell) && /autorisation|cnaps|agr[ée]ment|dirigeant/i.test(`${rowCell} ${f.context}`)) {
+        replacements.push({ id: f.id, value: /dirigeant/i.test(rowCell) ? 'Dirigeant d\u2019entreprise de surveillance et de gardiennage' : 'Surveillance humaine et gardiennage (activités privées de sécurité, livre VI du CSI)' });
+        return;
+      }
+      if (isTableCell && /validit|fin\b|expir|[ée]ch[ée]ance/i.test(colCell)) { replacements.push({ id: f.id, value: '[À COMPLÉTER]' }); return; }
+      const idMatch = identiteCandidatForLabel(isTableCell && colCell ? `${colCell} ${rowCell}` : fieldAsk);
       if (idMatch && !isParagraph) { replacements.push({ id: f.id, value: idMatch }); return; }
 
       // Identité d'une PERSONNE DIRIGEANTE (nom du dirigeant + n° d'agrément dirigeant CNAPS) :
@@ -3968,7 +4234,14 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
       if (aiResponse === null) return;
       try {
         const data = JSON.parse(aiResponse || '{}');
-        const value = data.value ?? (Array.isArray(data.replacements) ? data.replacements[0]?.value : undefined);
+        let value = data.value ?? (Array.isArray(data.replacements) ? data.replacements[0]?.value : undefined);
+        // Cellule de tableau : une valeur, pas un paragraphe (la cellule ne s'y prête pas).
+        if (isTableCell && value && String(value).split(/\s+/).length > 45) {
+          const phrases = String(value).split(/(?<=[.!?])\s+/);
+          let court = '';
+          for (const ph of phrases) { if ((court + ' ' + ph).split(/\s+/).length > 35) break; court = `${court} ${ph}`.trim(); }
+          value = court || String(value).split(/\s+/).slice(0, 30).join(' ');
+        }
         if (value !== undefined && value !== null) replacements.push({ id: f.id, value: String(value) });
       } catch (e) {
         console.error(`[MemoireGenerator] ${label}: parse JSON échoué:`, (aiResponse || '').slice(0, 160));
@@ -3988,13 +4261,15 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
       ((d.context.match(/Contexte(?: proche)?:\s*"([^"]*)"/) || [])[1] || '')
         .split('/').map(s => s.trim()).filter(Boolean).pop() || '';
     interface AnswerZone { label: string; fields: FieldDesc[]; }
+    const sectionDe = (d: FieldDesc): string => (d.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '';
     const zones: AnswerZone[] = [];
     let curZone: AnswerZone | null = null;
     for (const d of descriptors) {
       if (d.kind !== 'answer') { curZone = null; continue; }   // case/tableau → casse la zone
       const qReal = qRealOf(d);
       if (qReal) { curZone = { label: qReal, fields: [d] }; zones.push(curZone); }
-      else if (curZone) { curZone.fields.push(d); }            // ligne « …… » → suite de la zone
+      // ligne « …… » → suite de la zone, seulement sous la MÊME section (jamais d'une question à la suivante)
+      else if (curZone && sectionDe(d) === sectionDe(curZone.fields[0])) { curZone.fields.push(d); }
       else { curZone = { label: precedingLabelOf(d), fields: [d] }; zones.push(curZone); }
     }
 
@@ -4092,26 +4367,30 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       const grille = replacements.filter((r) => descriptors.find((d) => d.id === r.id)?.grille && String(r.value || '').trim());
       if (grille.length < 2) return;
       const libelle = (id: number) => ((descriptors.find((d) => d.id === id)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').slice(0, 200);
+      // Corrections CIBLÉES (extrait exact → remplacement) : les réponses longues ne sont jamais réécrites en
+      // entier (une réécriture complète les résumait ou les tronquait).
       const rep = await this.callOpenAI([
         {
           role: 'system',
           content: `Tu relis les réponses d'un mémoire technique GSS à une grille de notation, rédigées séparément, pour qu'elles soient COHÉRENTES entre elles.
-- Harmonise : mêmes personnes et mêmes rôles, mêmes nombres (équipes, agents, maîtres-chiens), mêmes délais et même dispositif dans toutes les réponses (retiens la version la plus précise et la plus complète).
-- Si une réponse laisse « [À COMPLÉTER] » pour une donnée qu'une AUTRE réponse fournit explicitement, remplace-le par cette donnée.
-- Ne change RIEN d'autre : ni le fond, ni la structure, ni la longueur ; conserve à l'identique tout « [À COMPLÉTER] » restant et toute ligne « [CONSULTATION REQUISE : …] ».
-Renvoie UNIQUEMENT un objet JSON : {"reponses": [{"id": <id>, "texte": "…"}]} avec SEULEMENT les réponses modifiées (liste vide si tout est cohérent).`,
+- Repère les incohérences : personnes ou rôles différents, nombres différents (équipes, agents, maîtres-chiens), délais ou dispositifs différents d'une réponse à l'autre (retiens la version la plus précise et la plus complète).
+- Repère aussi un « [À COMPLÉTER] » laissé pour une donnée qu'une AUTRE réponse fournit explicitement.
+- Pour chacune, donne une correction ciblée : "extrait" = passage EXACT recopié caractère pour caractère depuis la réponse concernée (le plus court possible), "remplacement" = le passage corrigé. Ne touche à rien d'autre ; conserve toute ligne « [CONSULTATION REQUISE : …] ».
+Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…", "remplacement": "…"}]} (liste vide si tout est cohérent).`,
         },
-        { role: 'user', content: grille.map((r) => `### id ${r.id} — ${libelle(r.id)}\n${r.value}`).join('\n\n') },
+        { role: 'user', content: grille.map((r) => `### Réponse ${r.id} (question : ${libelle(r.id)})\n${r.value}`).join('\n\n') },
       ], 0.1, 'Cohérence de la grille', true);
       try {
-        const modifs = JSON.parse(rep || '{}').reponses;
+        const corrections = JSON.parse(rep || '{}').corrections;
         let n = 0;
-        for (const m of Array.isArray(modifs) ? modifs : []) {
-          const r = grille.find((x) => x.id === Number(m?.id));
-          const t = String(m?.texte || '').trim();
-          if (r && t && t.length > String(r.value).length * 0.6) { r.value = t; n++; }
+        for (const c of Array.isArray(corrections) ? corrections : []) {
+          const r = grille.find((x) => x.id === Number(c?.id));
+          const extrait = String(c?.extrait || ''), remplacement = String(c?.remplacement ?? '');
+          if (!r || extrait.length < 3 || !String(r.value).includes(extrait) || /CONSULTATION REQUISE/.test(extrait)) continue;
+          r.value = String(r.value).replace(extrait, remplacement);
+          n++;
         }
-        if (n) console.log(`[MemoireGenerator] Cohérence de la grille : ${n} réponse(s) harmonisée(s).`);
+        if (n) console.log(`[MemoireGenerator] Cohérence de la grille : ${n} correction(s) ciblée(s).`);
       } catch { /* passe facultative */ }
     };
 
@@ -4125,13 +4404,16 @@ Renvoie UNIQUEMENT un objet JSON : {"reponses": [{"id": <id>, "texte": "…"}]} 
 
     await harmoniserGrille();
     retirerConfirmations();
+    const horsNormandieCadre = marcheHorsNormandie(analysisData, dceContext);
     for (const r of replacements) {
       const d = descriptors.find((x) => x.id === r.id);
       if (!d || d.kind === 'checkbox') continue;
       const { texte, retires } = retirerCommentairesInternes(String(r.value ?? ''));
       // Texte nettoyé toujours repris (reformulations et montants de pénalité retirés, même sans commentaire interne).
-      r.value = texte.trim() || (retires.length ? '[À COMPLÉTER]' : r.value);
+      const delais = delaisHorsNormandie(fondementReprise(texte, dceContext), dceContext, horsNormandieCadre);
+      r.value = delais.texte.trim() || (retires.length || delais.retires.length ? '[À COMPLÉTER]' : r.value);
       retires.forEach((x) => confirmationsGss.add(`À confirmer : ${x}`));
+      delais.retires.forEach((x) => confirmationsGss.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
     }
     // Valeurs du registre encore « à confirmer » reprises dans le document : GSS est prévenu.
     confirmationsRegistreUtilisees(replacements.map((r) => String(r.value ?? '')).join('\n')).forEach((c) => confirmationsGss.add(c));
@@ -5458,7 +5740,8 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Recherche dans les mémoires GSS indisponible (${e?.message || e}).`);
     }
-    const registreGss = blocRegistre(marcheHorsNormandie(analysisData, dceContext)) + organigrammeGss(await this.getGssReferents()) + referencesGss();
+    const horsNormandieLibre = marcheHorsNormandie(analysisData, dceContext);
+    const registreGss = blocRegistre(horsNormandieLibre) + organigrammeGss(await this.getGssReferents()) + referencesGss() + this.blocPerimetre(await this.perimetreMarche(dceContext));
     const repartition = await this.repartirDemande(AI_SECTIONS_B);
     const commentairesRetires = new Set<string>();
     const secoursMemoires: Record<string, string> = {};
@@ -5538,7 +5821,7 @@ RÈGLES DE FORME (rendu Marp) :
       const reqBlock = chapterReqs.length
         ? `\n\nEXIGENCES DU CCTP À TRAITER OBLIGATOIREMENT DANS CETTE SECTION (chacune doit figurer explicitement dans ton texte, avec son chiffre exact — délai, fréquence, échéance, document, matériel — et l'engagement de GSS ; si le DCE fixe un minimum, l'engagement de GSS le respecte ; signale un écart via [CONSULTATION REQUISE : …]) :\n` +
         chapterReqs
-          .map((r) => `- Le CCTP demande : ${r.exigence}\n  Réponse GSS connue : ${r.reponseGss || '(non documentée)'}${r.couverture && r.couverture.toLowerCase() !== 'couvert' ? `  → couverture : ${r.couverture}` : ''}`)
+          .map((r) => `- Le cahier des charges demande : ${r.exigence}\n  Réponse GSS connue : ${r.reponseGss || '(non documentée)'}${r.couverture && r.couverture.toLowerCase() !== 'couvert' ? `  → couverture : ${r.couverture}` : ''}`)
           .join('\n')
         : '';
 
@@ -5599,6 +5882,9 @@ RÈGLES DE FORME (rendu Marp) :
         const nettoye = retirerCommentairesInternes(text);
         text = nettoye.texte;
         nettoye.retires.forEach((x) => commentairesRetires.add(`À confirmer : ${x}`));
+        const delais = delaisHorsNormandie(text, dceContext, horsNormandieLibre);
+        text = delais.texte;
+        delais.retires.forEach((x) => commentairesRetires.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
       }
       sectionsMap[section.id] = text || '';
       if (!text) console.error(`[MemoireGenerator] Rubrique « ${section.title} » non rédigée (IA indisponible, aucune réponse GSS à reprendre).`);
@@ -5615,6 +5901,7 @@ RÈGLES DE FORME (rendu Marp) :
     // Deux sources : (1) les écarts détectés par la matrice de conformité ; (2) les marqueurs
     // [CONSULTATION REQUISE : …] que le rédacteur a insérés faute de réponse spécifique dans la Doc GSS.
     const consultations = new Set<string>([
+      ...alerteCadreAbsent(dceContext),
       ...commentairesRetires,
       // Valeurs du registre encore « à confirmer » reprises dans le texte : GSS est prévenu.
       ...confirmationsRegistreUtilisees(Object.values(sectionsMap).join('\n')),
@@ -5650,7 +5937,10 @@ RÈGLES DE FORME (rendu Marp) :
       }
       return { cle: `Q${i + 1}`, question: q.question, contexte, statut: 'ouvert', reperes, pourAcheteur: /^À demander à l.acheteur/i.test(q.question) };
     });
-    await this.completerParLesMemoires(elementsLibres, sectionsReperes);
+    await this.completerParLesMemoires(elementsLibres, sectionsReperes, marcheHorsNormandie(analysisData, dceContext));
+    // Nettoyage final : les phrases insérées depuis les mémoires GSS passent aussi par le filtre des
+    // commentaires internes et des formulations « GSS indique… ».
+    for (const id of Object.keys(sectionsReperes)) sectionsReperes[id] = nettoyerStructure(delaisHorsNormandie(fondementReprise(retirerCommentairesInternes(sectionsReperes[id]).texte, dceContext), dceContext, horsNormandieLibre).texte);
     const consultationList = elementsLibres.filter((e) => e.statut === 'ouvert').map((e) => e.question);
     for (const titre of Object.values(secoursMemoires)) {
       consultationList.push(`Rubrique « ${titre} » : contenu repris tel quel des mémoires GSS (rédaction automatique indisponible), à relire et adapter au client.`);
@@ -5701,7 +5991,7 @@ RÈGLES DE FORME (rendu Marp) :
    * l'exigence. Seuls les remplacements retrouvés MOT POUR MOT sont appliqués. Étape non bloquante.
    */
   private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>): Promise<void> {
-    const chiffree = (e: string) => /\d|minimum|maximum|au moins|au plus/i.test(e);
+    const chiffree = (e: string) => /\d|minimum|maximum|au moins|au plus|interdit|ne (?:doit|pourra|peut)|aucun|jamais|uniquement|exclusivement|à pied|obligatoire/i.test(e);
     const ids = rubriques.map((r) => r.id).filter((id) => (sections[id] || '').trim());
     // Une rubrique à la fois, avec les exigences chiffrées qui lui sont attribuées (contexte court : résultat stable).
     const lots = ids.map((id) => ({ id, chiffrees: exigences.filter((r) => r.rubrique === id).map((r) => String(r.exigence || '')).filter(chiffree) })).filter((l) => l.chiffrees.length);
@@ -5710,7 +6000,7 @@ RÈGLES DE FORME (rendu Marp) :
     const r = await this.callOpenAI([
       {
         role: 'system',
-        content: `Tu relis un mémoire technique de sécurité privée au regard des exigences chiffrées du CCTP. Repère chaque phrase ou puce dont un chiffre CONTREDIT une exigence (fréquence inférieure au minimum imposé, délai supérieur au maximum, échéance plus tardive, effectif ou qualification inférieurs) ou contredit un autre passage du mémoire qui applique l'exigence. Propose pour chacune un remplacement qui s'aligne exactement sur l'exigence du CCTP, en gardant le reste de la phrase.
+        content: `Tu relis un mémoire technique de sécurité privée au regard des exigences du CCTP. Repère chaque phrase ou puce qui CONTREDIT une exigence : chiffre non conforme (fréquence inférieure au minimum imposé, délai supérieur au maximum, échéance plus tardive, effectif ou qualification inférieurs), pratique contraire à un interdit ou à une modalité imposée (ex. rondes « en voiture ou à vélo » alors que le CCTP les impose à pied ; photos alors qu'elles sont interdites), ou passage qui contredit un autre passage du mémoire appliquant l'exigence. Propose pour chacune un remplacement qui s'aligne exactement sur l'exigence du CCTP, en gardant le reste de la phrase.
 - "extrait" = texte EXACT recopié caractère pour caractère depuis le mémoire (Markdown compris) ; "remplacement" = la version corrigée.
 - Uniquement quand la phrase et l'exigence portent sur EXACTEMENT la même obligation (même objet, même acteur, même destinataire) : par exemple, le délai de prévenance d'une modification de planning envers l'acheteur n'est PAS le délai dans lequel un agent signale son absence à GSS. En revanche, « la méthode prévoit des contrôles de 1 à 3 fois par mois » alors que le CCTP impose au moins 3 visites inopinées par mois EST une contradiction à corriger (même obligation : fréquence des contrôles inopinés). En cas de doute réel sur l'objet, ne corrige pas.
 - Ne touche pas aux chiffres qui ne concernent pas une exigence, ni aux phrases contenant ⟦AC:…⟧ ou [CONSULTATION REQUISE.
@@ -5769,6 +6059,10 @@ Renvoie UNIQUEMENT un objet JSON : {"suppressions": [{"id": "rubrique où retire
         if (!ids.includes(id) || id === garde || !ids.includes(garde) || extrait.length < 30 || /⟦AC:|CONSULTATION REQUISE/i.test(extrait)) continue;
         const t = sections[id];
         if (!t.includes(extrait)) continue;
+        // La phrase suivante renvoie à celle-ci (« Ces vacations… », « Elle constitue… ») : on la garde, sinon
+        // la suivante devient orpheline.
+        const suite = t.slice(t.indexOf(extrait) + extrait.length).replace(/^[\s.;:]+/, '');
+        if (/^(?:Ces|Ce|Cet|Cette|Ils|Elles|Il|Elle|Celle|Celui|Ceux|Celles|Lui|Leur|Leurs|Là|Ainsi|De plus|En outre)\b/.test(suite)) continue;
         // Retire la puce entière, sinon la phrase seule.
         const lignes = t.split('\n');
         const k = lignes.findIndex((l) => l.replace(/^\s*[-*•]\s*/, '').trim() === extrait);
@@ -5852,7 +6146,7 @@ Renvoie UNIQUEMENT un objet JSON : {"limite": true|false, "pagesMax": nombre, "c
     const horsNormandie = marcheHorsNormandie(analysisData, dceContext);
     const referents = await this.getGssReferents();
     actualiserOrganigramme(referents);
-    const registreGss = blocRegistre(horsNormandie) + organigrammeGss(referents) + referencesGss();
+    const registreGss = blocRegistre(horsNormandie) + organigrammeGss(referents) + referencesGss() + this.blocPerimetre(await this.perimetreMarche(dceContext));
     const marcheCtx = [analysisData?.clientName, analysisData?.objet, analysisData?.secteur].filter(Boolean).join(' — ');
     let embs: number[][] = [];
     try { embs = await this.embedTexts(plan.map((p) => `${p.title}. ${p.attendu || ''}. ${marcheCtx}`.slice(0, 1000))); } catch { /* base de mémoires indisponible */ }
@@ -5915,13 +6209,16 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
             { role: 'user', content: `TEXTE :\n${texte}\n\nEXIGENCES :\n${reqs.map((r: any, k: number) => `${k + 1}. ${r.exigence} (réponse GSS connue : ${r.reponseGss || '—'})`).join('\n')}` },
           ], 0.1, `Couverture ${p.id}`, true);
           const puces = (JSON.parse(verif || '{}').puces || []).map((x: any) => String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, '')).filter((x: string) => x && !PIECES_OFFRE.test(x));
-          if (puces.length) texte = `${texte.trim()}\n\n## Engagements sur les exigences du CCTP\n\n${puces.map((x: string) => `- ${x.replace(/^[-•]\s*/, '')}`).join('\n')}`;
+          if (puces.length) texte = `${texte.trim()}\n\n## Engagements sur les exigences du cahier des charges\n\n${puces.map((x: string) => `- ${x.replace(/^[-•]\s*/, '')}`).join('\n')}`;
         } catch { /* contrôle facultatif */ }
       }
       if (texte) {
         const nettoye = retirerCommentairesInternes(texte);
         texte = nettoye.texte;
         nettoye.retires.forEach((x) => commentairesRetires.add(`À confirmer : ${x}`));
+        const delais = delaisHorsNormandie(texte, dceContext, horsNormandie);
+        texte = delais.texte;
+        delais.retires.forEach((x) => commentairesRetires.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
       }
       sections[p.id] = (texte || '').replace(/^#\s+[^\n]*\n+/, '').trim();
     }
@@ -5932,7 +6229,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     limiterReferences(sections, plan.map((p) => p.id), '');
 
     // ── Points à compléter (même logique que la réponse libre) ──
-    const consultations = new Set<string>([...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'))]);
+    const consultations = new Set<string>([
+      ...alerteCadreAbsent(dceContext),...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'))]);
     for (const r of requirementsMatrix) if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence)) consultations.add(r.exigence.trim());
     const markerRe = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
     const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
@@ -5974,7 +6272,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       }
       return { cle: `Q${i + 1}`, question: q.question, contexte, statut: 'ouvert', reperes, pourAcheteur: /^À demander à l.acheteur/i.test(q.question) };
     });
-    await this.completerParLesMemoires(elements, sections);
+    await this.completerParLesMemoires(elements, sections, horsNormandie);
+    for (const id of Object.keys(sections)) sections[id] = nettoyerStructure(delaisHorsNormandie(fondementReprise(retirerCommentairesInternes(sections[id]).texte, dceContext), dceContext, horsNormandie).texte);
     // Complétions reprises des mémoires : le PDF est recomposé si un repère a été rempli.
     rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
     const consultationList = elements.filter((e) => e.statut === 'ouvert').map((e) => e.question);

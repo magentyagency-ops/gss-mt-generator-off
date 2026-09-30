@@ -22,7 +22,7 @@ import OpenAI from 'openai';
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getSettings } from '../core/config';
-import { personnesDuRole } from './base_memoires';
+import { personnesDuRole, retirerCommentairesInternes } from './base_memoires';
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const RESPONSE_DIR = path.resolve(__dirname, '../../response');
@@ -391,7 +391,7 @@ export async function json(system: string, user: string): Promise<any> {
       });
       break;
     } catch (e: any) {
-      const passagere = !e?.status || e.status === 429 || e.status >= 500;
+      const passagere = (!e?.status || e.status === 429 || e.status >= 500) && e?.code !== 'insufficient_quota';
       if (!passagere || essai >= 4) throw e;
       await new Promise((ok) => setTimeout(ok, [5_000, 15_000, 30_000][essai - 1]));
     }
@@ -409,10 +409,12 @@ export async function integrerDansRubrique(texteRubrique: string, repere: string
   const pos = texteRubrique.indexOf(repere);
   const extrait = pos >= 0 ? texteRubrique.slice(Math.max(0, pos - 700), pos + 300) : texteRubrique.slice(-900);
   const r = await json(
-    `Tu complètes un mémoire technique GSS (sécurité privée). Une information manquait à l'endroit marqué ${repere}. Rédige 1 à 2 phrases à insérer à cet endroit, dans le ton du texte, qui intègrent l'information fournie. N'ajoute AUCUN fait absent de l'information fournie. Pas de titre, pas de Markdown de titre. Renvoie {"phrase": "..."}.`,
+    `Tu complètes un mémoire technique GSS (sécurité privée). Une information manquait à l'endroit marqué ${repere}. Rédige 1 à 2 phrases à insérer à cet endroit, dans le ton du texte, qui intègrent l'information fournie. N'ajoute AUCUN fait absent de l'information fournie. Pas de titre, pas de Markdown de titre. Écris l'information comme un fait ou un engagement de GSS : jamais « GSS indique / précise / confirme », jamais de commentaire sur ce qui manque ou reste à définir. Renvoie {"phrase": "..."}.`,
     `Information attendue : ${question}\nInformation fournie : ${info}\n\nTexte autour de l'emplacement :\n${extrait}`,
   );
-  const phrase = String(r.phrase || info).trim();
+  // Même filtre que le texte généré (formulations « GSS indique… », commentaires internes).
+  const nettoyee = retirerCommentairesInternes(String(r.phrase || info).trim()).texte.trim();
+  const phrase = nettoyee || String(r.phrase || info).trim();
   return pos >= 0 ? texteRubrique.replace(repere, phrase) : `${texteRubrique.trim()}\n\n${phrase}`;
 }
 

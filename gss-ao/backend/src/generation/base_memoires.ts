@@ -200,9 +200,16 @@ export function rolesOrganigramme(referents: string): Array<{ libelle: string; n
     if (noms.length > 1 && exist) {
       for (const n of noms) if (!exist.noms.some((x) => memePersonne(x, n))) exist.noms.push(n);
     } else {
-      roles.set(k, { libelle: exist?.libelle || e.libelle.replace(/\(s\)/g, 's').replace(/\(e\)/g, ''), noms: exist && exist.noms.some((x) => noms.some((n) => memePersonne(x, n))) ? exist.noms : noms });
+      const memes = !!exist && exist.noms.some((x) => noms.some((n) => memePersonne(x, n)));
+      // Personne remplacée par le registre : le libellé est celui du registre (sans accord au féminin hérité
+      // de l'ancienne titulaire : « Responsable Commerciale » pour DA SILVA Luis).
+      roles.set(k, { libelle: memes && exist ? exist.libelle : e.libelle.replace(/\(s\)/g, 's').replace(/\(e\)/g, ''), noms: memes && exist ? exist.noms : noms });
     }
   }
+  // Noms au format « NOM Prénom » (« ATTOU NESRINE » → « ATTOU Nesrine »).
+  const nomPropre = (n: string) => (/^[A-ZÀ-Ý' -]+\s+[A-ZÀ-Ý' -]+$/.test(n.trim()) && n.trim().split(/\s+/).length === 2
+    ? n.trim().replace(/\s+(\S+)$/, (_m, p) => ` ${p.charAt(0)}${p.slice(1).toLowerCase()}`) : n);
+  for (const r of roles.values()) r.noms = r.noms.map(nomPropre);
   return [...roles.values()];
 }
 
@@ -264,7 +271,17 @@ export function limiterReferences(sections: Record<string, string>, ordre: strin
       let t = avant.split('\n').map((ligne) => {
         if (!cite(ligne) || /⟦AC:|\[CONSULTATION REQUISE/.test(ligne)) return ligne;
         if (/^\s*(#|\||[-*•]\s|\d+[.)]\s)/.test(ligne)) return null; // titre, puce, ligne de tableau : retirés entiers
-        return ligne.split(/(?<=[.!?])\s+/).filter((ph) => !cite(ph)).join(' ');
+        // Les phrases qui suivent une référence retirée et la prolongent (« Les missions comprenaient… »,
+        // « Cette expérience… », « Elle constitue… ») partent avec elle : sinon elles restent orphelines.
+        const SUITE = /^(?:Ces?|Cet|Cette|Ils|Elles|Il|Elle|Celle|Celui|Ceux|Celles|Les missions|La mission|Le dispositif|La même|Là|Sur ce site|Sur ce marché|Dans ce cadre)\b/;
+        const phs = ligne.split(/(?<=[.!?])\s+/);
+        let retirer = false;
+        return phs.filter((ph) => {
+          if (cite(ph)) { retirer = true; return false; }
+          if (retirer && SUITE.test(ph)) return false;
+          retirer = false;
+          return true;
+        }).join(' ');
       }).filter((l): l is string => l !== null).join('\n');
       t = t.replace(/^#{2,4}\s+.+\n+(?=#{2,4}\s|$(?![\s\S]))/gm, '').replace(/\n{3,}/g, '\n\n').trim();
       if (t !== avant && t.split(/\s+/).length >= 120) { sections[id] = t; n++; }
@@ -328,7 +345,14 @@ export const REGLES_REUTILISATION = `RÈGLES DE RÉUTILISATION DES MÉMOIRES GSS
 - Prérogatives des agents : un agent de sécurité privée ne contrôle pas l'identité ; il invite la personne à justifier de sa présence et fait appel aux forces de l'ordre.
 - Références : ne cite comme référence qu'un marché réellement exécuté par GSS, avec uniquement les caractéristiques présentes dans les sources (un mémoire de candidature n'est pas une référence) ; privilégie un marché comparable (même type d'acheteur ou de site).
 - Durée de la prestation : adapte les éléments récurrents (contrôles mensuels ou trimestriels, bilans à J+7/J+15, reprise du personnel) à la durée réelle du marché ; pour une prestation ponctuelle de quelques jours, décris les contrôles pendant la mission elle-même.
-- Les chiffres propres à un ancien marché (agents dédiés à un site, délais par site d'un autre client) ne sont PAS des informations de GSS en général : ne les reprends pas pour le nouveau client.`;
+- Les chiffres propres à un ancien marché (agents dédiés à un site, délais par site d'un autre client) ne sont PAS des informations de GSS en général : ne les reprends pas pour le nouveau client.
+- N'attribue au CCTP / au DCE (« le CCTP demande, impose, prévoit… ») QUE ce qui y figure réellement ; une méthode ou un moyen de GSS se présente comme tel.
+- Calculs : arrondis au plus proche (26 280 h ÷ 1 607 h = 16,35 ETP) ; un même chiffre est identique partout dans le mémoire.
+- Photos ou vidéos (main courante, rapports) : toujours « dans le respect des consignes du client », jamais présentées comme libres (sites sensibles : santé, justice, recherche) ; si le DCE les interdit, n'en parle pas.
+- Quand le DCE demande au candidat de PRÉCISER ou d'INDIQUER une donnée (délai, effectif, nombre de véhicules, organisation, pauses, bilan social, protocole…), donne-la ou propose-la de façon argumentée ; si GSS ne peut pas la fixer, écris [CONSULTATION REQUISE : …] — jamais « GSS précisera / indiquera / déterminera / mettra en œuvre un dispositif précisant… ».
+- Un interdit ou une modalité imposée par le DCE (rondes à pied, pas de photos, agent en formation jamais compté dans l'effectif, alerte des secours par le PC, maintien de l'agent en poste jusqu'à la relève…) prime sur toute pratique GSS contraire : ne décris jamais la pratique contraire.
+- Ne rouvre pas chaque rubrique par la description du site (adresse, surface, bâtiments, jauge) : cite au plus une caractéristique, quand elle justifie concrètement un choix.
+- Main courante électronique et pointage des rondes : Trackforce (un seul outil dans tout le mémoire). Protection du travailleur isolé (PTI) : application Beepiz. Astreinte : 5 véhicules d'astreinte (et non « 5 agents »).`;
 
 /**
  * Texte de la base (passages + valeurs du registre) pour les GARDE-FOUS anti-invention : une valeur
@@ -340,7 +364,7 @@ export function texteSourcesMemoires(): string {
 }
 
 /** Phrases de diagnostic interne sur les manques (jamais destinées à l'acheteur). */
-const COMMENTAIRE_INTERNE = /(\bà ce stade\b|\bne sont pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]est pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]ont pas été (?:communiqué|transmis|fourni)|\bn['’]a pas été (?:communiqué|transmis|fourni)|documentation (?:gss )?(?:fournie|transmise|disponible)|documents? (?:gss )?transmis|éléments? (?:gss )?(?:disponibles|transmis|fournis|communiqués)|\breste(?:nt)? à (?:confirmer|établir|préciser|obtenir)|\bdoi(?:t|vent) être confirmé|\bdevr(?:a|ont) être (?:confirmé|précisé|transposé|validé)|\baprès la visite\b|\blors de la visite obligatoire\b|\bne comporte (?:toutefois )?pas\b|\bne présente ni\b|\bsous réserve de (?:confirmation|validation)\b|\bnon (?:communiqué|précisé|renseigné) dans les|zone d['’]intervention habituelle|\bn['’]annonce (?:donc )?aucun délai|présenter comme acquis|organisation déclarée|\bdocumentés? comme\b|références enregistrées|\bnon précisée?s?(?![a-zà-ÿ])|\bDCE transmis\b|éléments du DCE|implantation habituelle|\bces éléments ne (?:décrivent|précisent|mentionnent|détaillent|couvrent)\b)/i;
+const COMMENTAIRE_INTERNE = /(\bà ce stade\b|\bne sont pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]est pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]ont pas été (?:communiqué|transmis|fourni)|\bn['’]a pas été (?:communiqué|transmis|fourni)|documentation (?:gss )?(?:fournie|transmise|disponible)|documents? (?:gss )?transmis|éléments? (?:gss )?(?:disponibles|transmis|fournis|communiqués)|\breste(?:nt)? à (?:confirmer|établir|préciser|obtenir)|\bdoi(?:t|vent) être confirmé|\bdevr(?:a|ont) être (?:confirmé|précisé|transposé|validé)|\baprès la visite\b|\blors de la visite obligatoire\b|\bne comporte (?:toutefois )?pas\b|\bne présente ni\b|\bsous réserve de (?:confirmation|validation)\b|\bnon (?:communiqué|précisé|renseigné) dans les|zone d['’]intervention habituelle|\bn['’]annonce (?:donc )?aucun délai|présenter comme acquis|organisation déclarée|\bdocumentés? comme\b|références enregistrées|\bnon précisée?s?(?![a-zà-ÿ])|\bDCE transmis\b|éléments du DCE|implantation habituelle|\bces éléments ne (?:décrivent|précisent|mentionnent|détaillent|couvrent)\b|\breste(?:nt)? à (?:définir|déterminer|arrêter|organiser)|hors de (?:la|sa) zone|\bne sera (?:donc )?pas présentée?s? comme|présence locale déjà constituée|\bn.est toutefois pas établie?\b|\bil ne vaut pas engagement\b|\bconstitue l.engagement opérationnel connu\b|\bdoit être intégrée? au parcours\b|\best signalée? ci-dessous\b|\bsont toutefois traitées comme\b|\bréférencée? comme\b|\bGSS (?:documente|décrit|affirme)\b|\bsans assimiler\b|\bla distance entre Rouen\b|\bincohérence relevée dans le DCE\b|n.a pas (?:encore )?(?:d.agence|d.implantation))/i;
 
 /** Montant de pénalité du CCAP/CCTP : GSS s'engage sur l'obligation, jamais sur le montant de la sanction. */
 const MONTANT_PENALITE = /p[ée]nalit[ée]s?[^.;]{0,120}?\d[\d\s  ]*(?:,\d+)?\s*(?:€|euros?)|\d[\d\s  ]*(?:,\d+)?\s*(?:€|euros?)[^.;]{0,80}?p[ée]nalit/i;
@@ -364,25 +388,113 @@ export function retirerCommentairesInternes(texte: string): { texte: string; ret
     }
     if (/^\s*(#|\||[-*•]\s)/.test(ligne) && !COMMENTAIRE_INTERNE.test(ligne)) return ligne;
     const phrases = ligne.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«"(])/);
-    const gardees = phrases.filter((ph) => {
-      if (!COMMENTAIRE_INTERNE.test(ph) || /\[À COMPLÉTER\]|\[CONSULTATION REQUISE|⟦AC:/.test(ph)) return true;
-      retires.push(ph.replace(/[*#]/g, '').trim());
-      return false;
-    });
+    let precedenteRetiree = false;
+    const gardees = phrases.map((ph) => {
+      // Phrase qui prolonge un commentaire interne retiré (« Cette disposition… ») : retirée avec lui.
+      if (precedenteRetiree && /^(?:Ces?|Cet|Cette|Ils|Elles|Il|Elle|Celle|Celui|Ceux|Celles)\b/.test(ph) && !/⟦AC:|\[À COMPLÉTER\]|\[CONSULTATION REQUISE/.test(ph)) {
+        retires.push(ph.replace(/[*#]/g, '').trim());
+        return null;
+      }
+      precedenteRetiree = false;
+      if (!COMMENTAIRE_INTERNE.test(ph) || /\[À COMPLÉTER\]|\[CONSULTATION REQUISE/.test(ph)) return ph;
+      precedenteRetiree = true;
+      // Commentaire interne suivi d'un repère d'information à compléter : le commentaire part, le repère
+      // (emplacement de la future réponse de GSS) reste.
+      const reperes = ph.match(/⟦AC:\d+⟧/g);
+      retires.push(ph.replace(/⟦AC:\d+⟧/g, '').replace(/[*#]/g, '').trim());
+      return reperes ? reperes.join(' ') : null;
+    }).filter((ph): ph is string => ph !== null);
     return gardees.join(' ');
   });
   // Prérogatives : un agent de sécurité privée ne vérifie pas l'identité (formulation héritée de textes sources).
   const texteFinal = lignes.join('\n').replace(/\n{3,}/g, '\n\n')
     // « GSS indique pouvoir / que … » : formulation de rapporteur → engagement direct.
     .replace(/\b[Ll]a documentation (?:opérationnelle |GSS |interne )*(?:de GSS )?prévoit\b/g, 'La procédure GSS prévoit').replace(/\bGSS indique pouvoir\b/g, 'GSS peut').replace(/\bGSS indique que (ses|son|sa|les|le|la)\b/g, (_m, d) => `${d.charAt(0).toUpperCase()}${d.slice(1)}`).replace(/\bGSS indique\s+/g, 'GSS ')
+    // Coquilles héritées des documents GSS.
+    .replace(/\bIFESSSU\b/g, 'IFESSU').replace(/\bHOBO\b/g, 'H0B0').replace(/\bentre (\d+) à (\d+)\b/g, 'de $1 à $2')
     // « GSS confirme que les rondes… » : formulation de réponse à une question interne → affirmation directe.
     .replace(/\bGSS (?:confirme|précise|atteste) que (\S)/g, (_m, c) => c.toUpperCase())
     // Renvoi à la numérotation interne des exigences.
     .replace(/(^|\n)(\s*[-*•]?\s*)(?:Pour|Concernant) l['’]exigence n?°?\s*\d+\s*,\s*(\S)/g, (_m, a, b, c) => `${a}${b}${c.toUpperCase()}`)
     // Emplacement de schéma laissé en texte (« [Insérer ici le schéma …] ») : le schéma est inséré par le rendu.
     .replace(/^.*\[\s*(?:Ins[ée]rer|Ajouter|Placer) ici[^\]]*\].*$/gim, '').replace(/^\s*(?:\*\*)?Sch[ée]ma\s*[—:-][^\n]*$/gim, '')
-    .replace(/\b(vérifie|vérifient|contrôle|contrôlent|vérifier|contrôler)\s+(son|leur|l['’])\s*identité/gi, (_m, v) => (/nt$/.test(v) ? 'l’invitent à justifier de sa présence' : /er$/.test(v) ? 'l’inviter à justifier de sa présence' : 'l’invite à justifier de sa présence'));
+    // …sauf dans une phrase qui l'INTERDIT (« l'interdiction de contrôler l'identité », « ne contrôle pas son
+    // identité ») : la remplacer y produisait une phrase absurde.
+    .replace(/\b(vérifie|vérifient|contrôle|contrôlent|vérifier|contrôler)\s+(son|leur|l['’])\s*identité/gi, (m, v, _d, pos, tout) => {
+      const avant = String(tout).slice(Math.max(0, pos - 60), pos);
+      if (/interdi|\bne\b|\bn['’]|\bsans\b|\bjamais\b|\baucun|pas de\s*$|pas\s*$/i.test(avant) || /^\S+\s+pas\b/i.test(String(tout).slice(pos, pos + 30))) return m;
+      return /nt$/.test(v) ? 'l’invitent à justifier de sa présence' : /er$/.test(v) ? 'l’inviter à justifier de sa présence' : 'l’invite à justifier de sa présence';
+    });
   return { texte: texteFinal, retires };
+}
+
+/**
+ * Fondement juridique de la reprise du personnel : en sécurité privée, c'est la convention collective
+ * (IDCC 1351, annexe VII), pas l'article L. 1224-1 du Code du travail — sauf si le DCE lui-même le cite.
+ * Les phrases qui l'invoquent sans que le DCE le fasse sont retirées (la reprise reste décrite ailleurs).
+ */
+export function fondementReprise(texte: string, dce: string): string {
+  if (/L\.?\s?1224/.test(dce || '') || !/L\.?\s?1224/.test(texte)) return texte;
+  return texte.split('\n').map((ligne) => ligne.split(/(?<=[.!?])\s+/).filter((ph) => !/L\.?\s?1224/.test(ph)).join(' '))
+    .join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
+/**
+ * Marché HORS de Normandie (GSS est implantée à Rouen) : une phrase qui promet une présence physique
+ * (intervention, remplacement, astreinte, renfort, arrivée sur place) dans un délai chiffré ABSENT du DCE
+ * reprend un délai normand intenable. Elle est retirée et renvoyée comme point à confirmer par GSS. Les
+ * délais imposés par le DCE (GSS s'y engage) et les procédures internes (« prise de service 15 minutes
+ * avant ») sont conservés.
+ */
+export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: boolean): { texte: string; retires: string[] } {
+  const retires: string[] = [];
+  if (!horsNormandie) return { texte, retires };
+  const DUREE = /(\d+(?:[,.]\d+)?)\s*(minutes?|min\b|heures?\b|h\b)(?!\s*\d)/gi;
+  const PRESENCE = /interven|mobilis|remplac|astreinte|rondier|arriv|sur place|se rend|d[ée]plac|renfort|lev[ée]e de doute/i;
+  const dceNorm = (dce || '').replace(/\s+/g, ' ').toLowerCase();
+  const dansDce = (n: string, u: string) => {
+    const unite = /^m/i.test(u) ? '(?:minutes?|min\\b|mn\\b)' : '(?:heures?|h\\b)';
+    return new RegExp(`(?<![\\d,.])${n.replace('.', '[.,]').replace(',', '[.,]')}\\s*${unite}`, 'i').test(dceNorm);
+  };
+  const lignes = texte.split('\n').map((ligne) => ligne.split(/(?<=[.!?;])\s+/).map((ph) => {
+    if (!PRESENCE.test(ph) || /⟦AC:|\[CONSULTATION REQUISE/.test(ph)) return ph;
+    const hors: string[] = [];
+    for (const m of ph.matchAll(DUREE)) {
+      const apres = ph.slice((m.index || 0) + m[0].length, (m.index || 0) + m[0].length + 12);
+      if (/^\s*avant\b/i.test(apres)) continue;               // « prise de service 15 minutes avant »
+      if (!dansDce(m[1], m[2])) hors.push(m[0]);
+    }
+    if (!hors.length) return ph;
+    retires.push(ph.replace(/[*#]/g, '').trim());
+    // Puce : on garde le tiret vide ? non — la puce disparaît avec sa phrase.
+    return '';
+  }).filter((ph, k, t) => ph !== '' || false).join(' '));
+  return { texte: lignes.filter((l, k, t) => !(l.trim() === '' && /^\s*[-*•]\s*$/.test(l))).join('\n').replace(/^\s*[-*•]\s*$/gm, '').replace(/\n{3,}/g, '\n\n'), retires };
+}
+
+/**
+ * Nettoyage de structure après les passes de suppression (répétitions, références, délais) : une phrase
+ * d'introduction « … : » qui n'est plus suivie de rien, un tableau réduit à son en-tête, un sous-titre
+ * vide, des caractères invisibles.
+ */
+export function nettoyerStructure(texte: string): string {
+  let t = texte.replace(/[\u200B-\u200D\uFEFF]/g, '');
+  const lignes = t.split('\n');
+  const out: string[] = [];
+  for (let i = 0; i < lignes.length; i++) {
+    const l = lignes[i];
+    // Tableau Markdown : en-tête + séparateur sans aucune ligne de données → retiré.
+    if (/^\s*\|.*\|\s*$/.test(l) && /^\s*\|?\s*:?-{3,}/.test(lignes[i + 1] || '') && !/^\s*\|.*\|\s*$/.test(lignes[i + 2] || '')) { i++; continue; }
+    // Introduction « … : » suivie d'aucune liste ni d'aucun tableau.
+    if (/:\s*$/.test(l) && !/^\s*#/.test(l)) {
+      let j = i + 1;
+      while (j < lignes.length && !lignes[j].trim()) j++;
+      if (j >= lignes.length || /^\s*#/.test(lignes[j]) || !/^\s*(?:[-*•]\s|\d+[.)]\s|\|)/.test(lignes[j])) continue;
+    }
+    out.push(l);
+  }
+  t = out.join('\n').replace(/^#{2,4}\s+.+\n+(?=#{2,4}\s|$(?![\s\S]))/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+  return t;
 }
 
 /** Extrait les demandes de confirmation [CONSULTATION REQUISE : …] d'un texte et les retire. */
