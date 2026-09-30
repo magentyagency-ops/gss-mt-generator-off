@@ -469,7 +469,20 @@ export function retirerCommentairesInternes(texte: string): { texte: string; ret
     })
     .replace(/\bvérification\s+de\s+l['’]identité(?![a-zà-ÿ])/gi, (m, pos, tout) => (negationAvant(String(tout), pos) ? m : 'vérification de l’autorisation de présence'))
     .replace(/\bcontr[ôo]l(ent|e) les accès et les identités\b/gi, 'contrôl$1 les accès et les autorisations de présence');
-  return { texte: texteFinal, retires };
+  return { texte: sansRepriseSelective(texteFinal), retires };
+}
+
+/**
+ * Reprise sélective (« maintient sur le site les agents satisfaisants et repositionne les autres sur d'autres sites ») :
+ * la reprise conventionnelle n'est jamais un tri ; la phrase est retirée (sa forme négative, elle, reste).
+ */
+function sansRepriseSelective(texte: string): string {
+  const SELECTIVE = /(?:maint(?:ient|iennent|enir|ien)|conserv\w*|gard\w*)[^.!?\n]{0,60}(?:agents?|salariés?)[^.!?\n]{0,20}(?:satisfaisants|donnant satisfaction|apportant satisfaction)|repositionn\w*[^.!?\n]{0,60}(?:sur d.autres sites|autres sites|selon (?:les besoins|leur adéquation))/i;
+  const garde = (ph: string) => !SELECTIVE.test(ph) || /\bsans\b|\baucun|\bni\b|\bne\b[^.!?\n]{0,50}\bpas\b|\bnon\b|\bjamais\b/i.test(ph) || /\[À COMPLÉTER\]|\[CONSULTATION REQUISE/.test(ph);
+  return texte.split('\n').map((ligne) => {
+    if (!SELECTIVE.test(ligne)) return ligne;
+    return ligne.split(/(?<=[.!?])\s+/).filter(garde).join(' ');
+  }).join('\n');
 }
 
 /** Négation dans les 60 caractères qui précèdent (« ne procède pas », « sans », « jamais »…). */
