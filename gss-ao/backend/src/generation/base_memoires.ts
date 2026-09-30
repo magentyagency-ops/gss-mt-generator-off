@@ -438,6 +438,8 @@ export function retirerCommentairesInternes(texte: string): { texte: string; ret
     .replace(/(^|[.!?]\s+|\n)Aucun poste fixe[^.\n]*\.\s*/g, '$1')
     .replace(/,?\s*(?:et\s+)?sans (?:création de |créer (?:de|un) |ajouter (?:de|un) |ajout de )?(?:aucun )?poste fixe(?: permanent)?(?: d.accueil)?(?:,? (?:de|du) standard)?(?:,? ou de contrôle d.accès)?(?: permanents?)?/g, '')
     .replace(/,?\s*\*\*\s*\*\*/g, '')
+    // Source interne citée (« Le registre GSS recense 27 agents… ») : le chiffre reste, la source part.
+    .replace(/\b[Ll]e registre (?:GSS|des informations GSS|des mémoires GSS) (?:recense|indique|mentionne|fait état de|compte)\b/g, 'GSS compte')
     // Coquilles héritées des documents GSS.
     .replace(/\bIFESSSU\b/g, 'IFESSU').replace(/\bHOBO\b/g, 'H0B0').replace(/\bentre (\*{0,2})(\d+) à (\d+)\b/g, 'de $1$2 à $3')
     // Un seul outil de main courante dans le mémoire (Trackforce, outil exact en attente de confirmation par GSS),
