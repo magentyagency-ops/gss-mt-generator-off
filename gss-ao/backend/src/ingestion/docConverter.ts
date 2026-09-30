@@ -424,6 +424,52 @@ export async function extractPdfText(filePath: string): Promise<string> {
   return data.text;
 }
 
+/**
+ * Conversion .doc → .docx par Microsoft Word (macOS), qui conserve les tableaux du cadre (textutil les
+ * aplatit). Word étant « bac à sable », le fichier passe par son dossier de conteneur, sous un nom unique ;
+ * seul CE document est ouvert, enregistré puis fermé — jamais les autres documents ouverts de l'utilisateur.
+ * Renvoie le chemin du .docx, ou null si Word n'est pas disponible ou si la conversion échoue.
+ */
+export function convertirDocAvecWord(src: string, outDir: string): string | null {
+  if (process.platform !== 'darwin' || !fs.existsSync('/Applications/Microsoft Word.app')) return null;
+  const conteneur = path.join(process.env.HOME || '', 'Library/Containers/com.microsoft.Word/Data/Documents/gss-conversion');
+  const nom = `gss-cadre-${Date.now()}-${Math.round(Math.random() * 1e6)}`;
+  const entree = path.join(conteneur, `${nom}.doc`);
+  const sortieWord = path.join(conteneur, `${nom}.docx`);
+  const script = [
+    'on run argv',
+    'set src to item 1 of argv',
+    'set dst to item 2 of argv',
+    'tell application "Microsoft Word"',
+    'open (POSIX file src)',
+    'set d to document (item 3 of argv)',
+    'save as d file name dst file format format document',
+    'close document (item 4 of argv) saving no',
+    'end tell',
+    'end run',
+  ].join('\n');
+  try {
+    fs.mkdirSync(conteneur, { recursive: true });
+    fs.copyFileSync(src, entree);
+    const r = spawnSync('osascript', ['-e', script, entree, sortieWord, `${nom}.doc`, `${nom}.docx`], { timeout: 120_000, encoding: 'utf-8' });
+    if (!fs.existsSync(sortieWord) || !fs.statSync(sortieWord).size) {
+      console.warn(`[docConverter] Conversion Word impossible (${(r.stderr || '').trim().slice(0, 200)}).`);
+      return null;
+    }
+    fs.mkdirSync(outDir, { recursive: true });
+    const cible = path.join(outDir, path.basename(src).replace(/\.doc$/i, '.docx'));
+    fs.copyFileSync(sortieWord, cible);
+    return cible;
+  } catch (e: any) {
+    console.warn(`[docConverter] Conversion Word impossible (${e?.message || e}).`);
+    return null;
+  } finally {
+    for (const f of [entree, sortieWord, path.join(conteneur, `~$${nom}.doc`), path.join(conteneur, `~$${nom}.docx`)]) {
+      try { fs.rmSync(f, { force: true }); } catch { /* ignore */ }
+    }
+  }
+}
+
 export function extractDocText(src: string): { text: string; method: ExtractionMethod } {
   if (sofficeAvailable()) {
     const tempDir = fs.mkdtempSync(path.join(path.dirname(src), 'gss_lo_temp_'));

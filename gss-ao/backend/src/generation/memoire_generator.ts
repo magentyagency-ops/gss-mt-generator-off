@@ -17,7 +17,7 @@ import { Client as PgClient } from 'pg';
 import { getSettings } from '../core/config';
 import { DB, FichiersDB } from '../core/db';
 import { getScopedClient } from '../core/supabase';
-import { extractText, loadDocxStructure, loadDocxTemplateAnnotated, convertDocToDocx, findTextutil } from '../ingestion/docConverter';
+import { extractText, loadDocxStructure, loadDocxTemplateAnnotated, convertDocToDocx, findTextutil, convertirDocAvecWord } from '../ingestion/docConverter';
 import { overlaySynthesis, loadTrebuchetFont, measureZonesCapacity, RefReplacement, RefContext } from './pdf_overlay';
 import { resolveMissingInfo, classifyFieldsLLM, MissingField } from './missing_info_resolver';
 import { uploadTempDocx, downloadTempDocx } from '../core/temp_storage';
@@ -1906,7 +1906,13 @@ export class MemoireGenerator {
       console.log(`[MemoireGenerator] Cadre imposé .doc converti en .docx : ${path.basename(fichier)}.`);
       return sortie;
     } catch (e: any) {
-      // Sans LibreOffice : textutil (macOS) sait aussi produire un .docx.
+      // Sans LibreOffice : Microsoft Word (macOS) convertit en conservant les tableaux du cadre.
+      const parWord = convertirDocAvecWord(fichier, fs.mkdtempSync(path.join(os.tmpdir(), 'gss-cadre-')));
+      if (parWord) {
+        console.log(`[MemoireGenerator] Cadre imposé .doc converti en .docx (Microsoft Word) : ${path.basename(fichier)}.`);
+        return parWord;
+      }
+      // Dernier recours : textutil (macOS) produit un .docx, mais aplatit les tableaux.
       const textutil = findTextutil();
       if (textutil) {
         const sortie = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gss-cadre-')), path.basename(fichier).replace(/\.doc$/i, '.docx'));
@@ -2512,6 +2518,33 @@ ${rubriques.map((x) => `- ${x.id} : ${x.title}`).join('\n')}` },
    * anticipées — ce qui fait gagner un appel d'offres.
    */
   /**
+   * Le DCE demande au candidat de formuler ses remarques / observations / réserves sur le cahier des
+   * charges (ex. Centre Henri Becquerel §4.6) : GSS y répond par une liste factuelle des ambiguïtés et
+   * contradictions relevées, avec l'article concerné. Renvoie '' si le DCE ne le demande pas.
+   */
+  private async remarquesCahierDesCharges(dceContext: string): Promise<string> {
+    // Demande liée à l'offre ou au cahier des charges — jamais les « observations » d'une procédure de sanction.
+    const demande = [...dceContext.matchAll(/(?:faire|formuler|émettre|emettre|présenter|presenter|indiquer)\s+(?:ses|des|toutes|les)\s+(?:éventuelles\s+)?(?:remarques|observations|réserves)|remarques?\s+(?:éventuelles\s+)?(?:sur|concernant|relatives?\s+au)\s+(?:le\s+|du\s+)?(?:cctp|cahier|dce)/gi)]
+      .some((m) => {
+        const autour = dceContext.slice(Math.max(0, (m.index || 0) - 150), (m.index || 0) + m[0].length + 120);
+        return /offre|cahier|cctp|dce|prestations/i.test(autour) && !/mise en demeure|p[ée]nalit|r[ée]siliation|sanction/i.test(autour);
+      });
+    if (!demande) return '';
+    const r = await this.callOpenAI([
+      {
+        role: 'system',
+        content: `Le DCE demande au candidat de formuler ses remarques sur le cahier des charges. En tant que GSS (sécurité privée), relève dans le DCE UNIQUEMENT les ambiguïtés, contradictions ou points à clarifier RÉELS (ex. qualification exigée différente selon deux articles, mission demandée sans poste pour l'assurer à certaines heures, pièce à fournir non accessible à un employeur privé), chacun avec l'article concerné et la clarification proposée, sur un ton constructif. 2 à 6 puces, factuelles, sans rien inventer ; liste vide s'il n'y en a pas.
+Renvoie UNIQUEMENT un objet JSON : {"remarques": ["…"]}`,
+      },
+      { role: 'user', content: dceContext.slice(0, 110_000) },
+    ], 0.1, 'Remarques sur le cahier des charges', true);
+    try {
+      const l = (JSON.parse(r || '{}').remarques || []).map((x: any) => String(x).trim()).filter(Boolean);
+      return l.length ? `## Remarques sur le cahier des charges\n\n${l.map((x: string) => `- ${x.replace(/^[-•]\s*/, '')}`).join('\n')}` : '';
+    } catch { return ''; }
+  }
+
+  /**
    * Périmètre RÉEL des prestations d'après le CCTP (postes fixes ou non, rondes, télésurveillance,
    * interventions, événementiel, horaires). Injecté dans la rédaction : sans lui, les rubriques d'un marché
    * de rondes ou de télésurveillance se remplissaient de contenus de gardiennage à poste fixe tirés des
@@ -2522,11 +2555,11 @@ ${rubriques.map((x) => `- ${x.id} : ${x.title}`).join('\n')}` },
       {
         role: 'system',
         content: `Tu lis le DCE d'un marché de sécurité privée (CCTP en priorité) et tu décris en quelques lignes le PÉRIMÈTRE RÉEL des prestations, sans rien ajouter :
-- postes fixes : oui / non ; si oui, lesquels (site, qualification, horaires) ;
+- postes fixes : oui / non ; si oui, le DISPOSITIF POSTE PAR POSTE : pour chaque poste, horaires et jours, qualification, missions (qui fait les rondes, les levées de doute, l'accueil, le standard, et à quelles heures), ce que le CCTP interdit ou impose à ce poste (ex. « ne quitte pas le PC », « attend la relève ») ; signale une mission demandée sans poste pour l'assurer à certaines heures ;
 - rondes, télésurveillance, interventions sur alarme, levée de doute, prestations ponctuelles sur bon de commande, événementiel : oui / non et en quoi elles consistent ;
 - sites et lots concernés ;
 - ce qui est HORS périmètre et ne doit pas être décrit (ex. aucun poste fixe, aucun contrôle d'accès permanent, pas de SSIAP).
-Renvoie UNIQUEMENT un objet JSON : {"perimetre": "texte de 5 à 10 lignes"}`,
+Renvoie UNIQUEMENT un objet JSON : {"perimetre": "texte de 5 à 15 lignes"}`,
       },
       { role: 'user', content: dceContext.slice(0, 110_000) },
     ], 0.1, 'Périmètre du marché', true);
@@ -2536,7 +2569,7 @@ Renvoie UNIQUEMENT un objet JSON : {"perimetre": "texte de 5 à 10 lignes"}`,
   /** Bloc de consigne associé au périmètre réel (vide si le périmètre n'a pas pu être établi). */
   private blocPerimetre(perimetre: string): string {
     return perimetre
-      ? `\n\nPÉRIMÈTRE RÉEL DU MARCHÉ (d'après le CCTP) :\n${perimetre}\nNe décris QUE ces prestations : n'introduis aucun poste fixe, horaire de présence, responsable de site sur place, tenue, contrôle d'accès, vacation, équipement ou effectif que le CCTP ne prévoit pas (même s'ils figurent dans les mémoires GSS). Une rubrique dont le sujet sort du périmètre reste brève et ramène au périmètre réel.`
+      ? `\n\nPÉRIMÈTRE RÉEL DU MARCHÉ (d'après le CCTP) :\n${perimetre}\nNe décris QUE ces prestations : n'introduis aucun poste fixe, horaire de présence, responsable de site sur place, tenue, contrôle d'accès, vacation, équipement ou effectif que le CCTP ne prévoit pas (même s'ils figurent dans les mémoires GSS). Une rubrique dont le sujet sort du périmètre reste brève et ramène au périmètre réel. Le dispositif décrit reprend EXACTEMENT ces postes (mêmes horaires, mêmes missions) : aucun rondier, chef de site, contrôleur sur place ou poste supplémentaire inventé ; une mission que le CCTP laisse sans poste à certaines heures donne lieu à [CONSULTATION REQUISE : …], jamais à une affectation inventée.`
       : '';
   }
 
@@ -2643,7 +2676,8 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
         role: 'system',
         content: `Tu prépares la liste des informations à obtenir pour finaliser un mémoire technique GSS. La liste fournie a été produite rubrique par rubrique : beaucoup de demandes portent sur le MÊME sujet avec des formulations différentes.
 - Fusionne toutes les demandes d'un même sujet en UNE seule question claire, qui reprend TOUTES leurs précisions (sites, bâtiments, normes, documents, délais, « dernière valeur connue : … (source) »).
-- Ne supprime aucun sujet et n'en crée aucun ; n'ajoute aucune information absente de la liste.
+- Ne supprime aucun sujet et n'en crée aucun ; n'ajoute aucune information absente de la liste. EXCEPTION : retire une demande qui ne fait que demander à GSS de CONFIRMER qu'elle respectera une obligation du cahier des charges (assurance, dépôt de pièces, délai de transmission d'un document, périodicité d'une réunion…) — GSS s'y engage dans le mémoire ; garde-la si elle demande un document, un nom, un chiffre, un moyen ou une organisation à fournir.
+- Une demande sur un équipement ou un système de l'acheteur (ses caméras, ses écrans, sa GTB, ses commandes internes) ou sur une ambiguïté de son cahier des charges est « À demander à l'acheteur : ».
 - Une demande « Confirmer … — dernière valeur connue : … » porte sur UNE information (un responsable, un effectif, un outil…) : ne la fusionne qu'avec des demandes sur cette MÊME information.
 - Une demande qui ne peut être renseignée que par l'ACHETEUR (données qu'il doit transmettre, ses préférences, ses choix) commence par « À demander à l'acheteur : ».
 - La validation par GSS de ce que propose le mémoire (dimensionnement, organisation, délais) est une question pour GSS, jamais « à demander à l'acheteur ».
@@ -2718,6 +2752,17 @@ Renvoie UNIQUEMENT un objet JSON : {"reponses": [{"n": 1, "reponse": "..." | nul
       const id = Object.keys(sections).find((k) => sections[k].includes(REPERE(reperes[0])));
       if (!id) continue;
       const reste = String(r?.reste ?? '').trim();
+      // Réponse déjà présente dans le texte qui précède l'emplacement (même contenu, autre formulation) :
+      // rien n'est inséré (sinon le paragraphe se répétait), l'emplacement est retiré et la question close.
+      const motsCles = (x: string) => new Set(x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter((w) => w.length >= 5));
+      const avantRepere = sections[id].slice(Math.max(0, sections[id].indexOf(REPERE(reperes[0])) - 900), sections[id].indexOf(REPERE(reperes[0])));
+      const mr = motsCles(texte), ma = motsCles(avantRepere);
+      if (!(reste && reste !== 'null') && mr.size >= 4 && [...mr].filter((w) => ma.has(w)).length / mr.size >= 0.6) {
+        for (const rp of reperes) for (const k of Object.keys(sections)) sections[k] = sections[k].split(REPERE(rp)).join('');
+        Object.assign(b.e, { statut: 'complete', valeur: texte, source: 'memoires', completeLe: new Date().toISOString() });
+        n++;
+        continue;
+      }
       // Intégration non bloquante : si l'IA est injoignable, la question reste simplement posée à GSS.
       try {
         if (reste && reste !== 'null') {
@@ -5894,6 +5939,8 @@ RÈGLES DE FORME (rendu Marp) :
     if (onProgress) onProgress(86, 'Contrôle des répétitions entre rubriques…');
     await this.dedoublonnerRubriques(sectionsMap, AI_SECTIONS_B);
     await this.corrigerContradictions(sectionsMap, AI_SECTIONS_B, requirementsMatrix);
+    const remarques = await this.remarquesCahierDesCharges(dceContext);
+    if (remarques && sectionsMap.b_organisation) sectionsMap.b_organisation = `${sectionsMap.b_organisation.trim()}\n\n${remarques}`;
     const refsRetirees = limiterReferences(sectionsMap, AI_SECTIONS_B.map((x) => x.id));
     if (refsRetirees) console.log(`[MemoireGenerator] Références clients : citées dans deux rubriques au plus (${refsRetirees} rubrique(s) allégée(s)).`);
 
@@ -5991,10 +6038,12 @@ RÈGLES DE FORME (rendu Marp) :
    * l'exigence. Seuls les remplacements retrouvés MOT POUR MOT sont appliqués. Étape non bloquante.
    */
   private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>): Promise<void> {
-    const chiffree = (e: string) => /\d|minimum|maximum|au moins|au plus|interdit|ne (?:doit|pourra|peut)|aucun|jamais|uniquement|exclusivement|à pied|obligatoire/i.test(e);
     const ids = rubriques.map((r) => r.id).filter((id) => (sections[id] || '').trim());
     // Une rubrique à la fois, avec les exigences chiffrées qui lui sont attribuées (contexte court : résultat stable).
-    const lots = ids.map((id) => ({ id, chiffrees: exigences.filter((r) => r.rubrique === id).map((r) => String(r.exigence || '')).filter(chiffree) })).filter((l) => l.chiffrees.length);
+    // Chaque rubrique est confrontée à TOUTES les exigences (une contradiction se trouve souvent hors de la
+    // rubrique à laquelle l'exigence est attribuée : « 1 à 3 contrôles » écrit dans une autre rubrique).
+    const toutes = exigences.map((r) => String(r.exigence || '')).filter(Boolean).slice(0, 90);
+    const lots = ids.map((id) => ({ id, chiffrees: toutes })).filter((l) => l.chiffrees.length);
     let n = 0;
     await Promise.all(lots.map(async ({ id: idLot, chiffrees }) => {
     const r = await this.callOpenAI([
@@ -6007,7 +6056,7 @@ RÈGLES DE FORME (rendu Marp) :
 - "meme_obligation" : explique en quelques mots pourquoi c'est la même obligation.
 Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait": "…", "remplacement": "…", "exigence": "…", "meme_obligation": "…"}]} (liste vide si tout est cohérent).`,
       },
-      { role: 'user', content: `EXIGENCES CHIFFRÉES DU CCTP :\n${chiffrees.map((e) => `- ${e}`).join('\n')}\n\nMÉMOIRE :\n=== ${idLot} — ${rubriques.find((x) => x.id === idLot)?.title} ===\n${sections[idLot]}` },
+      { role: 'user', content: `EXIGENCES DU CCTP :\n${chiffrees.map((e) => `- ${e}`).join('\n')}\n\nMÉMOIRE :\n=== ${idLot} — ${rubriques.find((x) => x.id === idLot)?.title} ===\n${sections[idLot]}` },
     ], 0.1, `Cohérence ${idLot} avec le CCTP`, true);
     try {
       for (const c of JSON.parse(r || '{}').corrections || []) {
@@ -6226,6 +6275,11 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     onProgress?.(78, 'Contrôle des répétitions entre parties…');
     await this.dedoublonnerRubriques(sections, plan);
     await this.corrigerContradictions(sections, plan, requirementsMatrix);
+    const remarquesCourt = await this.remarquesCahierDesCharges(dceContext);
+    if (remarquesCourt) {
+      const cible = plan.find((p) => /enjeux|compr[ée]hension/i.test(p.title)) || plan[plan.length - 1];
+      if (cible && sections[cible.id] !== undefined) sections[cible.id] = `${sections[cible.id].trim()}\n\n${remarquesCourt}`;
+    }
     limiterReferences(sections, plan.map((p) => p.id), '');
 
     // ── Points à compléter (même logique que la réponse libre) ──
