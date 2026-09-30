@@ -585,7 +585,7 @@ export function limiterRappelsSite(sections: Record<string, string>, ordre: stri
  * mention de photos ou vidéos dans les comptes rendus). Les phrases et puces contraires sont retirées.
  */
 export function interditsDce(texte: string, dce: string): string {
-  texte = nomsComposesDce(qualificationsInconditionnelles(texte, dce), dce);
+  texte = sansContenuCovid(nomsComposesDce(qualificationsInconditionnelles(texte, dce), dce), dce);
   const d = (dce || '').replace(/\s+/g, ' ');
   const contraires: RegExp[] = [];
   if (/rondes?[^.]{0,60}(?:effectuées|réalisées|faites|assurées)\s+(?:exclusivement\s+)?à pied/i.test(d)) {
@@ -725,6 +725,21 @@ export function horairesImposes(dce: string, max = 30, objet = /ouvert|ferm|alar
 export function obligationsChiffreesAbsentes(dce: string, memoire: string): string[] {
   const texte = (memoire || '').replace(/\*\*|__|⟦AC:\d+⟧/g, '').replace(/[\u00a0\u202f]/g, ' ');
   return obligationsChiffrees(dce).filter((o) => !o.cle.test(texte)).map((o) => o.phrase);
+}
+
+/**
+ * Mesures Covid reprises d'anciens mémoires (« contrôle des pass sanitaires », gestes barrières, gel hydroalcoolique) :
+ * retirées (élément d'énumération, sinon la phrase), sauf si le DCE lui-même en parle.
+ */
+export function sansContenuCovid(texte: string, dce: string): string {
+  const COVID = /pass(?:es)? sanitaires?|gestes? barrières?|gel hydro-?alcoolique|\bcovid/i;
+  if (!COVID.test(texte) || COVID.test(dce || '')) return texte;
+  const t = texte.replace(/,?\s*(?:ou |et )?(?:de |du |le |la |des )?(?:contr[ôo]les?|v[ée]rifications?) (?:des |du )?pass(?:es)? sanitaires?/gi, '');
+  return t.split('\n').map((ligne) => {
+    if (!COVID.test(ligne)) return ligne;
+    if (/^\s*(?:[-*•]|\d+[.)])\s/.test(ligne)) return null;
+    return ligne.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«"(⟦*])/).filter((ph) => !COVID.test(ph) || /⟦AC:|\[À COMPLÉTER\]/.test(ph)).join(' ');
+  }).filter((l): l is string => l !== null).join('\n');
 }
 
 /** Distance d'édition (nombre de lettres à changer, ajouter ou retirer). */

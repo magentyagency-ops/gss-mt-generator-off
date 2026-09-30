@@ -4690,12 +4690,15 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     // Mots-indices d'une personne : permettent de repérer un nom même en casse normale ("Pierre Martin").
     const CUE = `(?:M\\.|Mme|Mr\\.?|Monsieur|Madame|Dr\\.?|interlocuteur|responsable|directeur|directrice|contact|r[ée]f[ée]rent|dirigeant|g[ée]rant|pr[ée]sident|pr[ée]sidente|chef|encadrant|nomm[ée]|assur[ée])`;
     // Un nom = 2 mots Capitalisés (l'un peut être en CAPITALES : convention NOM Prénom).
-    const NAME = `[A-ZÀ-Ÿ][\\wÀ-ÿ'’-]+\\s+[A-ZÀ-Ÿ][\\wÀ-ÿ'’-]+`;
+    // Majuscules seulement : la plage « À-Ÿ » contient aussi les minuscules accentuées (é, è, à…), si bien que
+    // « GSS établit » ou « GSS équipe » étaient pris pour un « NOM Prénom » et remplacés par [À COMPLÉTER].
+    const MAJ = 'A-ZÀ-ÖØ-ÞŒŸ';
+    const NAME = `[${MAJ}][\\wÀ-ÿ'’-]+\\s+[${MAJ}][\\wÀ-ÿ'’-]+`;
     // Détecte un nom SOIT précédé d'un indice (cas casse normale), SOIT en convention CAPITALES/Capitale.
     const PERSON_NAME_RE = new RegExp(
       `(?:${CUE}[\\s,’'-]+)(${NAME})` +                                       // indice + Prénom Nom
-      `|\\b([A-ZÀ-Ÿ]{2,}(?:[-'’][A-ZÀ-Ÿ]+)*\\s+[A-ZÀ-Ÿ][a-zà-ÿ][\\wà-ÿ'’-]*)` + // NOM Prénom
-      `|\\b([A-ZÀ-Ÿ][a-zà-ÿ][\\wà-ÿ'’-]*\\s+[A-ZÀ-Ÿ]{2,}(?:[-'’][A-ZÀ-Ÿ]+)*)\\b`, // Prénom NOM
+      `|\\b([${MAJ}]{2,}(?:[-'’][${MAJ}]+)*\\s+[${MAJ}][a-zà-ÿ][\\wà-ÿ'’-]*)` + // NOM Prénom
+      `|\\b([${MAJ}][a-zà-ÿ][\\wà-ÿ'’-]*\\s+[${MAJ}]{2,}(?:[-'’][${MAJ}]+)*)\\b`, // Prénom NOM
       'g');
     /** Vrai si CHAQUE composant du nom (≥3 lettres) est présent dans les sources (ordre indifférent). */
     const nameInSources = (name: string): boolean => {
