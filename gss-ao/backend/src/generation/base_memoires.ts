@@ -607,18 +607,8 @@ export function obligationsChiffrees(dce: string): Array<{ phrase: string; cle: 
     [/^semaines?/i, 'semaines?'], [/^mois\b/i, 'mois\\b'],
   ];
   const unite = (u: string) => UNITES.find(([rx]) => rx.test(u.trim()))?.[1] || '';
-  // Pièces techniques seulement (le RC, l'acte d'engagement et les bordereaux de prix ne décrivent pas la prestation).
-  const blocs = (dce || '').split(/\n\n--- (.+?) ---\n|\n?===== PIÈCE : (.+?) =====\n/);
-  const pieces: string[] = [];
-  for (let i = 1; i < blocs.length; i += 3) {
-    const brut = blocs[i] || blocs[i + 1] || '';
-    const nom = `${brut} ${brut.replace(/[_.\s-]+/g, '')}`;  // « C_C_T_P_ COMMUN » → « CCTPCOMMUN »
-    const corps = blocs[i + 2] || '';
-    if (/\bRC\b|r[èe]glement (?:de (?:la )?)?consultation|acte d.engagement|\bAE\b|DPGF|BPU|DQE|bordereau|\bDC\s?\d|attestation|cadre de r[ée]ponse|m[ée]moire|candidature|lettre|avis/i.test(nom)) continue;
-    if (/cctp|ccap|ccp\b|cahier des (?:clauses|charges)|clauses techniques|programme|annexe|besoin|consignes?|proc[ée]dure|analys/i.test(nom)) pieces.push(corps);
-  }
-  if (!pieces.length && !/--- .+? ---|===== PIÈCE/.test(dce || '')) pieces.push(dce || '');
-  const HORS_PRESTATION = /p[ée]nalit|€|euros?\b|factur|paiement|mandatement|int[ée]r[êe]ts|avance|acompte|r[ée]vis(?:ion|er)|\\bprix\\b|actualisation|garantie|r[ée]siliation|reconduction|notifi|litige|tribunal|\boffres?\b|candidat|date limite|remise des plis|questions?\b|d[ée]lai de validit|sous-trait|assurance|ordre de service|admission|r[ée]ception des prestations|v[ée]rifications? (?:quantitative|qualitative)|retenue|variation|dur[ée]e (?:du march|de l.accord)|\bans?\b[^.]{0,20}(?:reconductible|ferme)|prolongation|préavis|pr[ée]avis|cong[ée]s pay|convention collective|code du travail|article [LR]\s?\d/i;
+  const pieces = piecesTechniques(dce);
+  const HORS_PRESTATION = /p[ée]nalit|€|euros?\b|factur|paiement|mandatement|int[ée]r[êe]ts|avance|acompte|r[ée]vis(?:ion|er)|\bprix\b|actualisation|garantie|r[ée]siliation|reconduction|notifi|litige|tribunal|\boffres?\b|candidat|date limite|remise des plis|questions?\b|d[ée]lai de validit|sous-trait|assurance|ordre de service|admission|r[ée]ception des prestations|v[ée]rifications? (?:quantitative|qualitative)|retenue|variation|dur[ée]e (?:du march|de l.accord)|\bans?\b[^.]{0,20}(?:reconductible|ferme)|prolongation|préavis|pr[ée]avis|cong[ée]s pay|convention collective|code du travail|article [LR]\s?\d/i;
   const ACHETEUR = /\b(?:le pouvoir adjudicateur|l.acheteur|l.administration|la personne publique|le ma[îi]tre d.ouvrage|le client|l.[ée]tablissement)\s+(?:dispose|peut|pourra|notifie|informe|transmet|adresse|communique|se r[ée]serve)/i;
   const out: Array<{ phrase: string; cle: RegExp }> = [];
   const vues = new Set<string>();
@@ -651,6 +641,44 @@ export function obligationsChiffrees(dce: string): Array<{ phrase: string; cle: 
       if (vues.has(cle)) continue;
       vues.add(cle);
       out.push({ phrase: ph, cle: new RegExp(motifs.join('|'), 'i') });
+    }
+  }
+  return out;
+}
+
+/** Pièces techniques du DCE (CCTP, CCAP, annexes) : le RC, l'acte d'engagement et les bordereaux de prix ne décrivent pas la prestation. */
+function piecesTechniques(dce: string): string[] {
+  const blocs = (dce || '').split(/\n\n--- (.+?) ---\n|\n?===== PIÈCE : (.+?) =====\n/);
+  const pieces: string[] = [];
+  for (let i = 1; i < blocs.length; i += 3) {
+    const brut = blocs[i] || blocs[i + 1] || '';
+    const nom = `${brut} ${brut.replace(/[_.\s-]+/g, '')}`;  // « C_C_T_P_ COMMUN » → « CCTPCOMMUN »
+    const corps = blocs[i + 2] || '';
+    if (/\bRC\b|r[èe]glement (?:de (?:la )?)?consultation|acte d.engagement|\bAE\b|DPGF|BPU|DQE|bordereau|\bDC\s?\d|attestation|cadre de r[ée]ponse|m[ée]moire|candidature|lettre|avis/i.test(nom)) continue;
+    if (/cctp|ccap|ccp\b|cahier des (?:clauses|charges)|clauses techniques|programme|annexe|besoin|consignes?|proc[ée]dure|analys/i.test(nom)) pieces.push(corps);
+  }
+  if (!pieces.length && !/--- .+? ---|===== PIÈCE/.test(dce || '')) pieces.push(dce || '');
+  return pieces;
+}
+
+/**
+ * Horaires imposés par le cahier des charges (ouverture, fermeture, mise sous alarme, vacations, rondes, relèves) :
+ * phrases citées telles quelles, pour le contrôle des contradictions (« fermeture de Coriolis à 19 h » alors que le
+ * CCTP fixe la fermeture aux usagers à 21 h et la mise sous alarme à 22 h).
+ */
+export function horairesImposes(dce: string, max = 30): string[] {
+  const out: string[] = [];
+  const vues = new Set<string>();
+  for (const piece of piecesTechniques(dce)) {
+    const phrases = piece.replace(/[ \t]+/g, ' ').split(/(?<=[.;!?])\s+|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n{2,}/).map((x) => x.replace(/\s+/g, ' ').replace(/^[-•▪●○◦−]\s*/, '').trim()).filter((x) => x.length >= 30 && x.length <= 350);
+    for (const ph of phrases) {
+      if (!/\b\d{1,2}\s*h\s*\d{0,2}\b/i.test(ph) || !/ouvert|ferm|alarme|vacation|ronde|relève|pr[ée]sence|poste|horaire|pause|accueil/i.test(ph)) continue;
+      if (/p[ée]nalit|€|euros?\b|taux horaire|\b(?:J|N)\s+(?:J|N)\b/i.test(ph)) continue;
+      const cle = ph.toLowerCase().replace(/[^a-z0-9]+/g, ' ').slice(0, 100);
+      if (vues.has(cle)) continue;
+      vues.add(cle);
+      out.push(ph);
+      if (out.length >= max) return out;
     }
   }
   return out;

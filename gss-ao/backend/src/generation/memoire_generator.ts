@@ -6,7 +6,7 @@ import { insererSchemasReponses, choisir as choisirSchemasGss } from './visuels_
 import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt } from './format_court';
 import { actualiserOrganigramme } from './organigramme';
 import { poserSignets, poserSignetsChamps, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter } from './completion';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -6017,7 +6017,7 @@ RÈGLES DE FORME (rendu Marp) :
     if (onProgress) onProgress(86, 'Contrôle des répétitions entre rubriques…');
     await this.dedoublonnerRubriques(sectionsMap, AI_SECTIONS_B);
     // Obligations chiffrées relevées mot à mot dans le CCTP en tête : contrôlées même si la matrice les a manquées.
-    await this.corrigerContradictions(sectionsMap, AI_SECTIONS_B, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...requirementsMatrix]);
+    await this.corrigerContradictions(sectionsMap, AI_SECTIONS_B, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...requirementsMatrix, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))]);
     await this.engagementsChiffresManquants(sectionsMap, AI_SECTIONS_B, dceContext);
     const remarques = await this.remarquesCahierDesCharges(dceContext);
     if (remarques && sectionsMap.b_organisation) sectionsMap.b_organisation = `${sectionsMap.b_organisation.trim()}\n\n${remarques}`;
@@ -6123,7 +6123,7 @@ RÈGLES DE FORME (rendu Marp) :
     // Une rubrique à la fois, avec les exigences chiffrées qui lui sont attribuées (contexte court : résultat stable).
     // Chaque rubrique est confrontée à TOUTES les exigences (une contradiction se trouve souvent hors de la
     // rubrique à laquelle l'exigence est attribuée : « 1 à 3 contrôles » écrit dans une autre rubrique).
-    const toutes = exigences.map((r) => String(r.exigence || '')).filter(Boolean).slice(0, 90);
+    const toutes = exigences.map((r) => String(r.exigence || '')).filter(Boolean).slice(0, 130);
     const lots = ids.map((id) => ({ id, chiffrees: toutes })).filter((l) => l.chiffrees.length);
     let n = 0;
     await Promise.all(lots.map(async ({ id: idLot, chiffrees }) => {
@@ -6403,7 +6403,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
 
     onProgress?.(78, 'Contrôle des répétitions entre parties…');
     await this.dedoublonnerRubriques(sections, plan);
-    await this.corrigerContradictions(sections, plan, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...requirementsMatrix]);
+    await this.corrigerContradictions(sections, plan, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...requirementsMatrix, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))]);
     await this.engagementsChiffresManquants(sections, plan, dceContext);
     const remarquesCourt = await this.remarquesCahierDesCharges(dceContext);
     if (remarquesCourt) {
