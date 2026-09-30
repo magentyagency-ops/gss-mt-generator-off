@@ -441,6 +441,7 @@ export function retirerCommentairesInternes(texte: string): { texte: string; ret
     .replace(/,?\s*\*\*\s*\*\*/g, '')
     // Source interne citée (« Le registre GSS recense 27 agents… ») : le chiffre reste, la source part.
     .replace(/\b[Ll]e registre (?:GSS|des informations GSS|des mémoires GSS) (?:recense|indique|mentionne|fait état de|compte)\b/g, 'GSS compte')
+    .replace(/\b[Ll]e registre (?:GSS|des informations GSS|des mémoires GSS) (identifie|prévoit|retient|désigne|cite|liste|précise)\b/g, 'GSS $1')
     // Coquilles héritées des documents GSS.
     .replace(/\bIFESSSU\b/g, 'IFESSU').replace(/\bHOBO\b/g, 'H0B0').replace(/\bentre (\*{0,2})(\d+) à (\d+)\b/g, 'de $1$2 à $3')
     // Un seul outil de main courante dans le mémoire (Trackforce, outil exact en attente de confirmation par GSS),
@@ -497,7 +498,8 @@ function negationAvant(tout: string, pos: number): boolean {
  */
 export function fondementReprise(texte: string, dce: string): string {
   if (/L\.?\s?1224/.test(dce || '') || !/L\.?\s?1224/.test(texte)) return texte;
-  return texte.split('\n').map((ligne) => ligne.split(/(?<=[.!?])\s+/).filter((ph) => !/L\.?\s?1224/.test(ph)).join(' '))
+  // Découpe en phrases sur une majuscule suivante : « l'article L. 1224-1 » ne coupe pas la phrase au « L. ».
+  return texte.split('\n').map((ligne) => ligne.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«"(⟦*#])/).filter((ph) => !/L\.?\s?1224/.test(ph)).join(' '))
     .join('\n').replace(/\n{3,}/g, '\n\n');
 }
 

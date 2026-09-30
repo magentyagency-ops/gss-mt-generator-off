@@ -5003,7 +5003,9 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         // question soit sans ambiguïté. Sinon on prend la Question / l'option de case à cocher.
         const m = ctx.match(/Question:\s*"([^"]*)"|option:\s*"([^"]*)"|Tableau:\s*(.+?)(?:\s*\|\s*Contexte proche:|$)/);
         const label = (m ? m.slice(1).find(Boolean) : '') || ctx.replace(/\s*\|\s*Contexte proche:.*$/, '').trim();
-        return (label || `Champ ${r.id}`).trim();
+        // Bloc de contacts : « Contact comptable — Prénom, Nom » (sinon trois questions identiques, sans le contact visé).
+        const groupe = (ctx.match(/Groupe:\s*"([^"]*)"/) || [])[1];
+        return (groupe && label ? `${groupe} — ${label}` : label || `Champ ${r.id}`).trim();
       })
       .filter((s: string, i: number, arr: string[]) => Boolean(s) && arr.indexOf(s) === i);
     if (aCompleter.length) {
