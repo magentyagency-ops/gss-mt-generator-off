@@ -404,6 +404,36 @@ export function loadDocxTemplateAnnotated(filePath: string): string {
   return lines.join('\n');
 }
 
+/**
+ * Texte d'une page PDF avec les ESPACES entre les éléments d'une même ligne. Le rendu par défaut les collait :
+ * dans un tableau, « 2 niveaux | 1183 places » devenait « 21183 » (le mémoire annonçait alors « 21 183 places »), et
+ * « Parc ouvert 24h/24 | du lundi au samedi de 7h30 à 20h30 » mêlait deux colonnes. Un écart visible entre deux
+ * éléments donne une espace ; un écart de colonne en donne trois. Le texte lui-même est inchangé.
+ */
+function rendrePagePdf(pageData: any): Promise<string> {
+  return pageData.getTextContent({ normalizeWhitespace: false, disableCombineTextItems: false }).then((contenu: any) => {
+    let texte = '';
+    let dernierY: number | null = null;
+    let finX = 0;
+    for (const el of contenu.items) {
+      const x = el.transform[4];
+      const y = el.transform[5];
+      const hauteur = Math.abs(el.transform[3]) || Math.abs(el.transform[0]) || 10;
+      if (dernierY !== null && Math.abs(y - dernierY) < 0.5) {
+        const ecart = x - finX;
+        if (ecart > hauteur * 1.2) texte += '   ';
+        else if (ecart > hauteur * 0.25 && !/\s$/.test(texte) && !/^\s/.test(el.str)) texte += ' ';
+      } else if (dernierY !== null) {
+        texte += '\n';
+      }
+      texte += el.str;
+      dernierY = y;
+      finX = x + (el.width || 0);
+    }
+    return texte;
+  });
+}
+
 export async function extractPdfText(filePath: string): Promise<string> {
   if (!fs.existsSync(filePath)) {
     throw new DocConverterError(`Fichier non trouvé : ${filePath}`);
@@ -411,7 +441,7 @@ export async function extractPdfText(filePath: string): Promise<string> {
   const dataBuffer = fs.readFileSync(filePath);
   let data: any;
   try {
-    data = await pdf(dataBuffer);
+    data = await pdf(dataBuffer, { pagerender: rendrePagePdf });
   } catch (e: any) {
     throw new DocConverterError(`Échec extraction PDF : ${e.message}`);
   }
