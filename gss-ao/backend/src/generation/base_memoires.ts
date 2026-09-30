@@ -369,6 +369,7 @@ export const REGLES_REUTILISATION = `RÈGLES DE RÉUTILISATION DES MÉMOIRES GSS
 - Un interdit ou une modalité imposée par le DCE (rondes à pied, pas de photos, agent en formation jamais compté dans l'effectif, alerte des secours par le PC, maintien de l'agent en poste jusqu'à la relève…) prime sur toute pratique GSS contraire : ne décris jamais la pratique contraire.
 - Ne rouvre pas chaque rubrique par la description du site (adresse, surface, bâtiments, jauge) : cite au plus une caractéristique, quand elle justifie concrètement un choix.
 - Reprise du personnel : jamais sélective — pas de tri avec le client des agents « apportant satisfaction », pas de repositionnement annoncé sur d'autres sites ; elle concerne les salariés remplissant les conditions de l'accord conventionnel (annexe VII de l'IDCC 1351) ou du DCE.
+- Qualifications exigées par le DCE (SSIAP, secourisme SST/PSE1, habilitation électrique, CQP APS, ARI…) : présente-les comme détenues par tous les agents concernés (tous les agents, ou la catégorie que le DCE désigne), jamais au conditionnel (« le cas échéant », « lorsqu'elle est requise », « selon les missions »).
 - Main courante électronique et pointage des rondes : Trackforce (un seul outil dans tout le mémoire). Protection du travailleur isolé (PTI) : application Beepiz. Astreinte : 5 véhicules d'astreinte (et non « 5 agents »).`;
 
 /**
@@ -459,8 +460,21 @@ export function retirerCommentairesInternes(texte: string): { texte: string; ret
       const avant = String(tout).slice(Math.max(0, pos - 60), pos);
       if (/interdi|\bne\b|\bn['’]|\bsans\b|\bjamais\b|\baucun|pas de\s*$|pas\s*$/i.test(avant) || /^\S+\s+pas\b/i.test(String(tout).slice(pos, pos + 30))) return m;
       return /nt$/.test(v) ? 'l’invitent à justifier de sa présence' : /er$/.test(v) ? 'l’inviter à justifier de sa présence' : 'l’invite à justifier de sa présence';
-    });
+    })
+    // Variantes affirmatives (« l'agent procède lui-même au contrôle de l'identité des personnes entrant sur le site »,
+    // « la vérification de l'identité de l'individu ») : l'agent vérifie l'AUTORISATION d'accès ou de présence.
+    .replace(/\b(procèdent|procède|procéder|effectuent|effectue|effectuer|réalisent|réalise|réaliser)\s+(?:(?:lui|eux|elle|elles)-mêmes?\s+)?(?:au|le|un|à un|à des|des)\s+contr[ôo]les?\s+(?:de\s+l['’]|d['’])identit[ée]s?/gi, (m, v, pos, tout) => {
+      if (negationAvant(String(tout), pos) || /^\S+\s+pas\b/i.test(String(tout).slice(pos, pos + 30))) return m;
+      return `${/nt$/i.test(v) ? 'vérifient' : /er$/i.test(v) ? 'vérifier' : 'vérifie'} l’autorisation d’accès`;
+    })
+    .replace(/\bvérification\s+de\s+l['’]identité(?![a-zà-ÿ])/gi, (m, pos, tout) => (negationAvant(String(tout), pos) ? m : 'vérification de l’autorisation de présence'))
+    .replace(/\bcontr[ôo]l(ent|e) les accès et les identités\b/gi, 'contrôl$1 les accès et les autorisations de présence');
   return { texte: texteFinal, retires };
+}
+
+/** Négation dans les 60 caractères qui précèdent (« ne procède pas », « sans », « jamais »…). */
+function negationAvant(tout: string, pos: number): boolean {
+  return /interdi|\bne\b|\bn['’]|\bsans\b|\bjamais\b|\baucun|pas de\s*$|pas\s*$/i.test(tout.slice(Math.max(0, pos - 60), pos));
 }
 
 /**
@@ -554,6 +568,7 @@ export function limiterRappelsSite(sections: Record<string, string>, ordre: stri
  * mention de photos ou vidéos dans les comptes rendus). Les phrases et puces contraires sont retirées.
  */
 export function interditsDce(texte: string, dce: string): string {
+  texte = qualificationsInconditionnelles(texte, dce);
   const d = (dce || '').replace(/\s+/g, ' ');
   const contraires: RegExp[] = [];
   if (/rondes?[^.]{0,60}(?:effectuées|réalisées|faites|assurées)\s+(?:exclusivement\s+)?à pied/i.test(d)) {
@@ -576,6 +591,118 @@ export function interditsDce(texte: string, dce: string): string {
     if (/^\s*(?:[-*•]\s|\|)/.test(ligne)) return traiter(ligne);
     return ligne.split(/(?<=[.!?])\s+/).map(traiter).filter((ph): ph is string => ph !== null).join(' ');
   }).filter((l): l is string => l !== null).join('\n');
+}
+
+/**
+ * Obligations CHIFFRÉES du cahier des charges (échéance « avant le 5 du mois », délai « sous 48 heures », fréquence
+ * « 2 fois par nuit », périodicité « toutes les 4 heures ») repérées mot à mot dans les pièces techniques (CCTP,
+ * CCAP, annexes), avec pour chacune le motif qui permet de vérifier que le mémoire reprend ce chiffre. Filet de
+ * sécurité de la matrice de conformité, dont l'extraction par le modèle varie d'une génération à l'autre (la
+ * clause « compte rendu des visites avant le 5 du mois suivant » tombait une fois sur deux).
+ */
+export function obligationsChiffrees(dce: string): Array<{ phrase: string; cle: RegExp }> {
+  const UNITES: Array<[RegExp, string]> = [
+    [/^jours?\s+ouvr[ée]s?/i, 'jours?\\s+ouvr[ée]s?'], [/^jours?\s+ouvrables?/i, 'jours?\\s+ouvrables?'], [/^jours?/i, 'jours?'],
+    [/^(?:heures?|h)\b/i, '(?:heures?|h)\\b'], [/^(?:minutes?|min|mn)\b/i, '(?:minutes?|min|mn)\\b'],
+    [/^semaines?/i, 'semaines?'], [/^mois\b/i, 'mois\\b'],
+  ];
+  const unite = (u: string) => UNITES.find(([rx]) => rx.test(u.trim()))?.[1] || '';
+  // Pièces techniques seulement (le RC, l'acte d'engagement et les bordereaux de prix ne décrivent pas la prestation).
+  const blocs = (dce || '').split(/\n\n--- (.+?) ---\n|\n?===== PIÈCE : (.+?) =====\n/);
+  const pieces: string[] = [];
+  for (let i = 1; i < blocs.length; i += 3) {
+    const brut = blocs[i] || blocs[i + 1] || '';
+    const nom = `${brut} ${brut.replace(/[_.\s-]+/g, '')}`;  // « C_C_T_P_ COMMUN » → « CCTPCOMMUN »
+    const corps = blocs[i + 2] || '';
+    if (/\bRC\b|r[èe]glement (?:de (?:la )?)?consultation|acte d.engagement|\bAE\b|DPGF|BPU|DQE|bordereau|\bDC\s?\d|attestation|cadre de r[ée]ponse|m[ée]moire|candidature|lettre|avis/i.test(nom)) continue;
+    if (/cctp|ccap|ccp\b|cahier des (?:clauses|charges)|clauses techniques|programme|annexe|besoin|consignes?|proc[ée]dure|analys/i.test(nom)) pieces.push(corps);
+  }
+  if (!pieces.length && !/--- .+? ---|===== PIÈCE/.test(dce || '')) pieces.push(dce || '');
+  const HORS_PRESTATION = /p[ée]nalit|€|euros?\b|factur|paiement|mandatement|int[ée]r[êe]ts|avance|acompte|r[ée]vis(?:ion|er)|\\bprix\\b|actualisation|garantie|r[ée]siliation|reconduction|notifi|litige|tribunal|\boffres?\b|candidat|date limite|remise des plis|questions?\b|d[ée]lai de validit|sous-trait|assurance|ordre de service|admission|r[ée]ception des prestations|v[ée]rifications? (?:quantitative|qualitative)|retenue|variation|dur[ée]e (?:du march|de l.accord)|\bans?\b[^.]{0,20}(?:reconductible|ferme)|prolongation|préavis|pr[ée]avis|cong[ée]s pay|convention collective|code du travail|article [LR]\s?\d/i;
+  const ACHETEUR = /\b(?:le pouvoir adjudicateur|l.acheteur|l.administration|la personne publique|le ma[îi]tre d.ouvrage|le client|l.[ée]tablissement)\s+(?:dispose|peut|pourra|notifie|informe|transmet|adresse|communique|se r[ée]serve)/i;
+  const out: Array<{ phrase: string; cle: RegExp }> = [];
+  const vues = new Set<string>();
+  for (const piece of pieces) {
+    const phrases = piece.replace(/[ \t]+/g, ' ').split(/(?<=[.;!?])\s+|\n\s*(?:[-•▪●○◦]|\d+[.)])\s+|\n{2,}/).map((x) => x.replace(/\s+/g, ' ').replace(/^[-•▪●○◦]\s*/, '').trim()).filter((x) => x.length >= 25 && x.length <= 400);
+    for (const ph of phrases) {
+      if (HORS_PRESTATION.test(ph) || ACHETEUR.test(ph)) continue;
+      const motifs: string[] = [];
+      let m: RegExpExecArray | null;
+      const rxEch = /avant le (\d{1,2})(?:er)?\s+(?:du mois|de chaque mois)/gi;
+      while ((m = rxEch.exec(ph))) motifs.push(`(?:avant (?:le )?|le )${m[1]}(?:er)?\\b[^.\\n]{0,25}mois|\\b${m[1]}(?:er)? (?:du|de chaque) mois`);
+      const LETTRES: Record<string, string> = { un: '1', une: '1', deux: '2', trois: '3', quatre: '4', cinq: '5', six: '6', sept: '7', huit: '8', dix: '10', quinze: '15', trente: '30', 'quarante-huit': '48' };
+      const rxDelai = /(?:au (?:moins|minimum|plus tard)|dans un d[ée]lai(?: maxim(?:um|al))?(?: de)?|sous|en moins de|dans les|d[ée]lai de|pr[ée]avis de)\s+(\d{1,3}|une?|deux|trois|quatre|cinq|six|sept|huit|dix|quinze|trente|quarante-huit)\s*(?:\(\d+\)\s*)?(jours?\s+ouvr[ée]s?|jours?\s+ouvrables?|jours?|heures?|h\b|minutes?|min\b|mn\b|semaines?|mois\b)/gi;
+      while ((m = rxDelai.exec(ph))) {
+        const u = unite(m[2]);
+        const n = LETTRES[m[1].toLowerCase()] || m[1];
+        const lettres = Object.keys(LETTRES).filter((k) => LETTRES[k] === n).join('|');
+        if (u) motifs.push(`\\b(?:${n}${lettres ? `|${lettres}` : ''})\\s*${u}`);
+      }
+      const rxFreq = /\b(\d{1,2}|une|deux|trois|quatre)\s*(?:fois|passages?|rondes?|contr[ôo]les?|visites?|r[ée]unions?)\s+(?:au minimum\s+|minimum\s+)?par\s+(jour|nuit|semaine|mois|trimestre|semestre|an|vacation|poste)\b/gi;
+      while ((m = rxFreq.exec(ph))) {
+        const n = ({ une: '1', deux: '2', trois: '3', quatre: '4' } as Record<string, string>)[m[1].toLowerCase()] || m[1];
+        const lettres = ({ '1': 'une?', '2': 'deux', '3': 'trois', '4': 'quatre' } as Record<string, string>)[n];
+        motifs.push(`\\b(?:${n}${lettres ? `|${lettres}` : ''})\\s*(?:fois|passages?|rondes?|contr[ôo]les?|visites?|r[ée]unions?)[^.\\n]{0,30}${m[2]}`);
+      }
+      const rxPer = /\b(?:tous les|toutes les)\s+(\d{1,3})\s*(heures?|h\b|minutes?|min\b|jours?|semaines?|mois\b)/gi;
+      while ((m = rxPer.exec(ph))) { const u = unite(m[2]); if (u) motifs.push(`\\b${m[1]}\\s*${u}`); }
+      if (!motifs.length) continue;
+      const cle = ph.toLowerCase().replace(/[^a-z0-9àâçéèêëîïôûùüÿœ]+/g, ' ').slice(0, 120);
+      if (vues.has(cle)) continue;
+      vues.add(cle);
+      out.push({ phrase: ph, cle: new RegExp(motifs.join('|'), 'i') });
+    }
+  }
+  return out;
+}
+
+/** Obligations chiffrées du cahier des charges dont le chiffre n'apparaît nulle part dans le mémoire. */
+export function obligationsChiffreesAbsentes(dce: string, memoire: string): string[] {
+  const texte = (memoire || '').replace(/\*\*|__|⟦AC:\d+⟧/g, '').replace(/[\u00a0\u202f]/g, ' ');
+  return obligationsChiffrees(dce).filter((o) => !o.cle.test(texte)).map((o) => o.phrase);
+}
+
+/** Qualifications que le cahier des charges exige de TOUS les agents (liste « les agents doivent être détenteurs des titres
+ *  suivants : – … », « chaque prestation doit être assurée par un agent titulaire des qualifications suivantes : • … »). */
+const QUALIFS: Array<{ dce: RegExp; texte: string }> = [
+  { dce: /SSIAP\s*1\b|S\.S\.I\.A\.P\.?(?!\s*[23])/i, texte: 'SSIAP\\s*1\\b' },
+  { dce: /\bSST\b|S\.S\.T\b|secourisme|PSE\s*1/i, texte: '(?:SST|PSE\\s*1|secourisme|sauveteur secouriste)' },
+  { dce: /H0\s*B0|H0V|habilitation électrique/i, texte: '(?:H0\\s*-?\\s*B0\\w*|H0V\\s*B0|habilitation électrique)' },
+  { dce: /CQP\s*-?\s*APS|CQPAPS/i, texte: 'CQP\\s*-?\\s*APS' },
+];
+export function qualificationsExigees(dce: string): string[] {
+  const d = (dce || '').replace(/[ \t]+/g, ' ');
+  const DECLENCHEUR = /(?:agents?|personnel|chaque prestation|chaque agent)[^.:]{0,140}?(?:doivent|devront|doit|devra)\s+(?:obligatoirement\s+)?(?:être\s+)?(?:détenteurs?|titulaires?|posséder|disposer)[^.:]{0,100}?(?:titres?|qualifications?|habilitations?|diplômes?)[^.:]{0,40}?(?:suivant(?:e?s)?|ci-après)\s*:|doit être assurée? par un agent titulaire[^.:]{0,60}?qualifications? suivantes?\s*:|devra posséder\s*:|dispose d.agents titulaires de\s*:/gi;
+  const out = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = DECLENCHEUR.exec(d))) {
+    const liste = d.slice(m.index + m[0].length, m.index + m[0].length + 500).replace(/^\s+/, '');
+    // Liste à puces ou à tirets seulement (un tableau de qualifications PAR POSTE ne vaut pas pour tous les agents).
+    if (!/^[-•▪●]/.test(liste)) continue;
+    const bloc = liste.split(/\n\s*\n|\.\s+(?=[A-Z])/)[0];
+    for (const q of QUALIFS) if (q.dce.test(bloc)) out.add(q.texte);
+  }
+  return [...out];
+}
+
+/**
+ * Qualification exigée de tous les agents présentée au conditionnel (« la qualification SSIAP 1, lorsqu'elle est
+ * requise », « et, selon les missions commandées, qualification SSIAP 1 ») : la condition est retirée.
+ */
+export function qualificationsInconditionnelles(texte: string, dce: string): string {
+  const qualifs = qualificationsExigees(dce);
+  if (!qualifs.length) return texte;
+  const COND = "(?:lorsqu['’](?:elle|il)s? (?:est|sont) (?:requise?s?|exigée?s?|nécessaires?)|lorsque (?:nécessaire|requis|cela est requis)|le cas échéant|si (?:nécessaire|requis|exigé|le poste l.exige)|selon (?:les |le )?(?:postes?|missions?(?: commandées)?|besoins?)|en fonction (?:des|du) (?:postes?|missions?))";
+  let t = texte;
+  for (const q of qualifs) {
+    // Condition APRÈS la qualification : « SSIAP 1, lorsqu'elle est requise ; » → « SSIAP 1 ; ».
+    t = t.replace(new RegExp(`(${q}(?:\\*\\*)?(?:\\s+(?:et|avec) (?:attestations? de )?recyclages?(?: à jour)?)?)\\s*,?\\s*${COND}(?:,(?=\\s+(?:et|ou)\\b))?(?=\\s*[,;.)\\n]|\\s+(?:et|ou)\\b|$)`, 'gi'), '$1');
+    // Condition AVANT, en incise après « et » : « et, selon les missions commandées, qualification SSIAP 1 » → « et qualification SSIAP 1 ».
+    t = t.replace(new RegExp(`\\b(et|ou)\\s*,\\s*${COND}\\s*,\\s*(?=(?:(?:la|une|de|d['’]|des)\\s+)?(?:(?:qualification|habilitation|formation|diplôme|certificat)s?\\s+)?(?:\\*\\*)?${q})`, 'gi'), '$1 ');
+  }
+  // « des qualifications requises selon les missions : … SSIAP 1 » → « des qualifications requises : … ».
+  t = t.replace(/(qualifications? (?:requises?|exigées?))\s+(?:selon|en fonction (?:des|du))\s+(?:les |le )?(?:postes?|missions?(?: commandées)?)(?=\s*:)/gi, '$1');
+  return t.replace(/(\S) {2,}(?=\S)/g, '$1 ');
 }
 
 /**

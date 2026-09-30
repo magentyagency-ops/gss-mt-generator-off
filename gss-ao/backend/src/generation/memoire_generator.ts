@@ -6,7 +6,7 @@ import { insererSchemasReponses, choisir as choisirSchemasGss } from './visuels_
 import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt } from './format_court';
 import { actualiserOrganigramme } from './organigramme';
 import { poserSignets, poserSignetsChamps, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter } from './completion';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -6016,7 +6016,9 @@ RÈGLES DE FORME (rendu Marp) :
 
     if (onProgress) onProgress(86, 'Contrôle des répétitions entre rubriques…');
     await this.dedoublonnerRubriques(sectionsMap, AI_SECTIONS_B);
-    await this.corrigerContradictions(sectionsMap, AI_SECTIONS_B, requirementsMatrix);
+    // Obligations chiffrées relevées mot à mot dans le CCTP en tête : contrôlées même si la matrice les a manquées.
+    await this.corrigerContradictions(sectionsMap, AI_SECTIONS_B, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...requirementsMatrix]);
+    await this.engagementsChiffresManquants(sectionsMap, AI_SECTIONS_B, dceContext);
     const remarques = await this.remarquesCahierDesCharges(dceContext);
     if (remarques && sectionsMap.b_organisation) sectionsMap.b_organisation = `${sectionsMap.b_organisation.trim()}\n\n${remarques}`;
     limiterRappelsSite(sectionsMap, AI_SECTIONS_B.map((x) => x.id));
@@ -6147,6 +6149,52 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
     } catch { /* étape facultative */ }
     }));
     if (n) console.log(`[MemoireGenerator] Cohérence avec le CCTP : ${n} passage(s) aligné(s) sur les exigences chiffrées.`);
+  }
+
+  /**
+   * Obligations chiffrées du cahier des charges (échéances, délais, fréquences) dont le chiffre n'apparaît nulle
+   * part dans le mémoire : le modèle vérifie qu'elles ne sont pas déjà traitées autrement et, sinon, rédige
+   * l'engagement correspondant, ajouté à la rubrique dont c'est le sujet. Étape non bloquante.
+   */
+  private async engagementsChiffresManquants(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, dce: string): Promise<void> {
+    const ids = rubriques.map((r) => r.id).filter((id) => (sections[id] || '').trim());
+    const absentes = obligationsChiffreesAbsentes(dce, ids.map((id) => sections[id]).join('\n\n')).slice(0, 25);
+    if (!ids.length || !absentes.length) return;
+    const r = await this.callOpenAI([
+      {
+        role: 'system',
+        content: `Tu contrôles un mémoire technique de GSS (sécurité privée) avant sa remise. On te donne le mémoire, rubrique par rubrique (identifiant entre crochets), puis des obligations chiffrées du cahier des charges dont le chiffre n'a pas été retrouvé tel quel dans le mémoire.
+Pour CHAQUE obligation :
+- si le mémoire la traite déjà avec le même chiffre, même formulé autrement (« une journée », « trimestrielle », « 48 h »), ignore-la ;
+- ignore-la aussi si elle incombe à l'acheteur, ou si elle relève de la procédure ou de l'administratif du marché (offre, prix, facturation, pénalités, durée du marché) ;
+- sinon, rédige UNE puce d'engagement de GSS, courte et factuelle, qui reprend l'obligation avec son chiffre EXACT (échéance, délai, fréquence, destinataire), et choisis la rubrique dont c'est directement le sujet.
+Jamais de montant de pénalité, jamais « s'engage à confirmer / à formaliser » (écris l'engagement lui-même), jamais de numéro d'article ni de référence au « cahier des charges » en tête de puce.
+Renvoie UNIQUEMENT un objet JSON : {"puces": [{"rubrique": "identifiant", "texte": "…"}]} (liste vide si tout est déjà traité).`,
+      },
+      { role: 'user', content: `MÉMOIRE :\n${ids.map((id) => `[${id}] ${rubriques.find((x) => x.id === id)?.title || ''}\n${sections[id]}`).join('\n\n')}\n\nOBLIGATIONS CHIFFRÉES DU CAHIER DES CHARGES NON RETROUVÉES :\n${absentes.map((x) => `- ${x}`).join('\n')}` },
+    ], 0.1, 'Obligations chiffrées du CCTP', true);
+    let n = 0;
+    try {
+      const parRubrique = new Map<string, string[]>();
+      for (const p of JSON.parse(r || '{}').puces || []) {
+        const id = String(p?.rubrique || '').trim();
+        const texte = String(p?.texte || '').trim().replace(/^[-•]\s*/, '');
+        if (!ids.includes(id) || texte.length < 15 || PIECES_OFFRE.test(texte) || /p[ée]nalit|plafonnement/i.test(texte)
+          || /\b(?:indiquera|précisera|détaillera|déterminera|communiquera ultérieurement)\b/i.test(texte)) continue;
+        (parRubrique.get(id) ?? parRubrique.set(id, []).get(id)!).push(texte);
+      }
+      for (const [id, puces] of parRubrique) {
+        const liste = puces.map((x) => `- ${x}`).join('\n');
+        const titres = [...sections[id].matchAll(/^#{2,4}\s+(.+)$/gm)];
+        const dernier = titres.length ? titres[titres.length - 1][1] : '';
+        // À la suite de la liste d'engagements déjà présente en fin de rubrique, sinon sous un nouveau sous-titre.
+        sections[id] = /engagements sur les exigences du cahier des charges/i.test(dernier)
+          ? `${sections[id].trim()}\n${liste}`
+          : `${sections[id].trim()}\n\n## Nos engagements sur les exigences du cahier des charges\n\n${liste}`;
+        n += puces.length;
+      }
+    } catch { /* étape facultative */ }
+    console.log(`[MemoireGenerator] Obligations chiffrées du CCTP : ${absentes.length} non retrouvée(s), ${n} engagement(s) ajouté(s).`);
   }
 
   /** Sous-titres et phrases porteuses de faits (chiffres, gras, noms propres) d'une rubrique, en bref. */
@@ -6355,7 +6403,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
 
     onProgress?.(78, 'Contrôle des répétitions entre parties…');
     await this.dedoublonnerRubriques(sections, plan);
-    await this.corrigerContradictions(sections, plan, requirementsMatrix);
+    await this.corrigerContradictions(sections, plan, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...requirementsMatrix]);
+    await this.engagementsChiffresManquants(sections, plan, dceContext);
     const remarquesCourt = await this.remarquesCahierDesCharges(dceContext);
     if (remarquesCourt) {
       const cible = plan.find((p) => /enjeux|compr[ée]hension/i.test(p.title)) || plan[plan.length - 1];
