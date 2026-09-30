@@ -443,6 +443,8 @@ export function retirerCommentairesInternes(texte: string): { texte: string; ret
     .replace(/\b[Ll]e registre (?:GSS|des informations GSS|des mémoires GSS) (?:recense|indique|mentionne|fait état de|compte)\b/g, 'GSS compte')
     .replace(/\b[Ll]e registre (?:GSS|des informations GSS|des mémoires GSS) (identifie|prévoit|retient|désigne|cite|liste|précise)\b/g, 'GSS $1')
     // Coquilles héritées des documents GSS.
+    // Contenu daté : « plan Covid » (renforts d'un établissement de santé) → plan de crise sanitaire.
+    .replace(/\bplans? Covid(?:-19)?\b/gi, (m) => (/s /i.test(m) ? 'plans de crise sanitaire' : 'plan de crise sanitaire'))
     .replace(/\bIFESSSU\b/g, 'IFESSU').replace(/\bHOBO\b/g, 'H0B0').replace(/\bentre (\*{0,2})(\d+) à (\d+)\b/g, 'de $1$2 à $3')
     // Un seul outil de main courante dans le mémoire (Trackforce, outil exact en attente de confirmation par GSS),
     // et l'astreinte GSS compte 5 véhicules, pas « 5 agents ».
