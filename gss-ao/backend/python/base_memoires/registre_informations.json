@@ -1585,6 +1585,15 @@
    "valeurs": [
     {
      "valeur": "ISO 9001 en cours – prévu pour fin 2026",
+     "client": "Réponse de GSS",
+     "document": "reponses_gss_2026-10-01.md",
+     "date": "2026-10",
+     "page": null,
+     "citation": "ISO 9001 toujours en cours, prévue fin 2026 : oui",
+     "reponse_gss": true
+    },
+    {
+     "valeur": "ISO 9001 en cours – prévu pour fin 2026",
      "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
      "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
      "date": "2026-04",
@@ -1593,8 +1602,8 @@
     }
    ],
    "valeur_retenue": "ISO 9001 en cours – prévu pour fin 2026",
-   "date_retenue": "2026-04",
-   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "date_retenue": "2026-10",
+   "source_retenue": "Réponse de GSS (1er octobre 2026)",
    "statut": "confirmee",
    "valeurs_anterieures_differentes": []
   },

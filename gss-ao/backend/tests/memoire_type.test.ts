@@ -38,7 +38,7 @@ function anomalies(texte: string, dce = ''): string[] {
     ['pole_emploi', /Pôle [Ee]mploi/],
     ['vigicom', /[Vv]igicom/],
     ['controle_identite', /(?:vérifie|vérifient|contrôle|contrôlent|vérifier|contrôler) (?:son|leur|l.)\s*identité|contrôle(?:nt)? les pièces d.identité/],
-    ['effectifs_obsoletes', /\b(?:152|93|423|52|291) (?:agents|salariés|collaborateurs)/],
+    ['effectifs_obsoletes', /\b(?:152|93|423|52|291|320) (?:agents|salariés|collaborateurs)/],
     ['noms_obsoletes', /OTMANI|MEROUANI|MENDES|HANZAZ|FE Lilian/],
     ['iso_certifie', /certifi[ée]e? ISO 9001|ISO 9001 certifi/],
     ['marqueur_interne', /CONSULTATION REQUISE|⟦AC|\[CHAMP_\d+\]|\{\{|\}\}|‹|›/],
