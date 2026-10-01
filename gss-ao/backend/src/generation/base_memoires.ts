@@ -572,7 +572,8 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
   const retires: string[] = [];
   if (!horsNormandie) return { texte, retires };
   const DUREE = /(\d+(?:[,.]\d+)?)\s*(minutes?|min\b|heures?\b|h\b)(?!\s*\d)/gi;
-  const PRESENCE = /interven|mobilis|remplac|astreinte|rondier|arriv|sur place|se rend|d[ée]plac|renfort|lev[ée]e de doute/i;
+  // « remplaçant » (ç), prise de service et absence comprises : « l'agent remplaçant prend son service sous 60 minutes ».
+  const PRESENCE = /interven|mobilis|rempla[cç]|astreinte|rondier|arriv|sur place|se rend|d[ée]plac|renfort|lev[ée]e de doute|(?:prise?|prenne|prend) (?:de |son )?service|absence/i;
   const dceNorm = (dce || '').replace(/\s+/g, ' ').toLowerCase();
   // Le DCE écrit parfois le délai en toutes lettres (« moins de cinq minutes »).
   const LETTRES: Record<string, string> = { '1': 'une?', '2': 'deux', '3': 'trois', '4': 'quatre', '5': 'cinq', '6': 'six', '8': 'huit', '10': 'dix', '12': 'douze', '15': 'quinze', '20': 'vingt', '24': 'vingt-quatre', '30': 'trente', '45': 'quarante-cinq', '48': 'quarante-huit', '60': 'soixante', '72': 'soixante-douze' };
