@@ -342,16 +342,17 @@ export function candidatsReference(mt: MemoireType, textes: Record<string, strin
  * Bloc injecté avant les extraits : textes de référence de GSS candidats ; s'ils traitent la question, le modèle les
  * reprend tels quels et n'adapte que noms, sites et chiffres ; il indique dans « reference » ceux qu'il a repris.
  */
-export function blocReference(candidats: CandidatReference[], o: { limite?: boolean; strict?: boolean } = {}): string {
+export function blocReference(candidats: CandidatReference[], o: { limite?: boolean; strict?: boolean; grille?: boolean } = {}): string {
   if (!candidats.length) return '';
   return `
 --- TEXTES DE RÉFÉRENCE GSS (mémoire type de GSS) ---
 ${candidats.map((c) => `[${c.cle}] ${c.titre}\n${c.texte}`).join('\n\n')}
 --- FIN DES TEXTES DE RÉFÉRENCE ---
-CONSIGNE PRIORITAIRE (elle prime sur la consigne de rédaction du paragraphe) : GSS répond avec son mémoire type, « si c'est toujours le même process, on remet la même réponse ».
+CONSIGNE PRIORITAIRE (elle prime sur toutes les consignes de rédaction ci-dessus) : GSS répond avec son mémoire type, « si c'est toujours le même process, on remet la même réponse ».
 - Commence par décider quels textes de référence traitent VRAIMENT le sujet de la question (même sujet, pas un thème voisin). N'utilise jamais un texte qui parle d'autre chose.
 - Texte retenu : reprends-le TEL QUEL, phrase par phrase, dans le même ordre, en texte brut (puces « • »). Adapte SEULEMENT les noms (acheteur, sites, services) et les chiffres, délais, fréquences et horaires que le DCE impose (le chiffre du DCE remplace celui du texte, jamais les deux) ; retire ce qui est hors du périmètre du marché ou contraire au DCE ; ajoute SEULEMENT ce que la question exige et que le texte ne couvre pas (avec les mots du DCE), à la suite du passage concerné. Ne reformule pas, ne résume pas, n'ajoute ni introduction ni conclusion.
-- Une partie de la question qu'aucun texte retenu ne traite est rédigée comme d'habitude, à partir des extraits.${o.limite ? `
+- Une partie de la question qu'aucun texte retenu ne traite est rédigée comme d'habitude, à partir des extraits.${o.grille ? `
+- Critère d'une grille de notation : place le texte retenu, tel quel, sous l'intitulé de la composante qu'il traite (ses phrases d'origine, pas un résumé) ; pour cette composante, la longueur indiquée par le barème et la consigne de rédaction de la grille ne s'appliquent pas. Les autres composantes suivent la consigne de la grille.` : ''}${o.limite ? `
 - Une limite de longueur s'applique : garde les phrases du texte retenu les plus utiles à la question, recopiées mot pour mot dans le même ordre, plutôt que de le résumer.` : ''}${o.strict ? `
 - Ton essai précédent a reformulé le texte de référence retenu : cette fois, recopie ses phrases MOT POUR MOT (seuls les noms et les chiffres imposés par le DCE peuvent changer).` : ''}
 - Dans le JSON, ajoute "reference": la liste des repères des textes repris (ex. ["R1"]), ou [] si aucun ne traite la question.

@@ -4365,19 +4365,21 @@ En cas de doute → "[À COMPLÉTER]".`;
       // Réponse développée : textes du mémoire type candidats pour cette question (le modèle reprend ceux qui la traitent).
       const developpee = isParagraph && !isCheckbox && !isTableCell && !!repriseMT;
       const questionMT = `${qRaw || fieldAsk} ${(f.context.match(/Critère:\s*"([^"]*)"/) || [])[1] || ''}`.trim();
-      const limiteChamp = /Limite:|pages? maximum/i.test(f.context);
+      // Limite de pages, ou critère de grille (longueur fixée par le barème, réponse par composante) : la reprise intégrale
+      // n'est pas toujours possible ; la fidélité retient aussi la part de la réponse venue du texte de GSS.
+      const limiteChamp = /Limite:|pages? maximum/i.test(f.context) || !!f.grille;
       const candidats: CandidatReference[] = developpee ? candidatsReference(repriseMT!.mt, repriseMT!.textes, questionMT, { scores: repriseMT!.scores.get(f.id) }) : [];
       const userPrompt = `Analyse du marché (contexte de rédaction) :
 ${analysisJson}
 
 --- CONTEXTE STRATÉGIQUE GSS ---
 ${strategicCtx}
-${fmtBlock("EXTRAITS PERTINENTS DU DCE (exigences de l'acheteur)", dcePassages)}${fmtBlock('DOCUMENTATION GSS PERTINENTE (sources internes — appuie ta réponse dessus)', gssPassages)}${memoiresChamp}${blocReference(candidats, { limite: limiteChamp, strict })}${isReferent && referentsContext ? `\n--- RÉFÉRENTS GSS (« Personnes ») ---\n${referentsContext}\nLIS BIEN LE LIBELLÉ : s'il demande UNE personne (singulier : « la personne », « l'interlocuteur », « le contact ») → donne EXACTEMENT UN référent, le plus pertinent au regard du libellé (le rôle nommé s'il y en a un ; sinon l'interlocuteur principal du marché). NE recopie PAS toute la liste. Il ne faut PLUSIEURS personnes QUE si le libellé le demande explicitement (« les personnes », « liste », « organigramme »).\n` : ''}
+${fmtBlock("EXTRAITS PERTINENTS DU DCE (exigences de l'acheteur)", dcePassages)}${fmtBlock('DOCUMENTATION GSS PERTINENTE (sources internes — appuie ta réponse dessus)', gssPassages)}${memoiresChamp}${isReferent && referentsContext ? `\n--- RÉFÉRENTS GSS (« Personnes ») ---\n${referentsContext}\nLIS BIEN LE LIBELLÉ : s'il demande UNE personne (singulier : « la personne », « l'interlocuteur », « le contact ») → donne EXACTEMENT UN référent, le plus pertinent au regard du libellé (le rôle nommé s'il y en a un ; sinon l'interlocuteur principal du marché). NE recopie PAS toute la liste. Il ne faut PLUSIEURS personnes QUE si le libellé le demande explicitement (« les personnes », « liste », « organigramme »).\n` : ''}
 CHAMP UNIQUE À RÉDIGER :
 ${hint}
 
 ${instruction}
-${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuidance ? tableGuidance + '\n' : ''}${fieldAsk && fieldAsk !== f.context ? `${qEmpty ? `Cette zone à remplir (les pointillés « … ») fait suite, dans le document, au libellé qui la PRÉCÈDE : « ${fieldAsk} ». LIS ce libellé pour comprendre ce qui est attendu et remplis la zone en conséquence.` : `RESTE SUR LE SUJET DE CETTE QUESTION : « ${fieldAsk} ».`} Ne réponds pas sur un thème VOISIN (ex. ne parle pas des moyens d'accès/clés si le sujet est le report des alarmes). Si les extraits apportent une information MÊME PARTIELLE sur CE sujet, donne une réponse (au moins partielle) fondée dessus plutôt que de laisser vide — sans rien inventer. N'écris "[À COMPLÉTER]" QUE si rien d'utile sur ce sujet n'est disponible.\n` : ''}Renvoie UNIQUEMENT un objet JSON : {"id": ${f.id}, "value": "..."${candidats.length ? ', "reference": ["R1"]' : ''}}`;
+${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuidance ? tableGuidance + '\n' : ''}${fieldAsk && fieldAsk !== f.context ? `${qEmpty ? `Cette zone à remplir (les pointillés « … ») fait suite, dans le document, au libellé qui la PRÉCÈDE : « ${fieldAsk} ». LIS ce libellé pour comprendre ce qui est attendu et remplis la zone en conséquence.` : `RESTE SUR LE SUJET DE CETTE QUESTION : « ${fieldAsk} ».`} Ne réponds pas sur un thème VOISIN (ex. ne parle pas des moyens d'accès/clés si le sujet est le report des alarmes). Si les extraits apportent une information MÊME PARTIELLE sur CE sujet, donne une réponse (au moins partielle) fondée dessus plutôt que de laisser vide — sans rien inventer. N'écris "[À COMPLÉTER]" QUE si rien d'utile sur ce sujet n'est disponible.\n` : ''}${blocReference(candidats, { limite: limiteChamp, strict, grille: !!f.grille })}Renvoie UNIQUEMENT un objet JSON : {"id": ${f.id}, "value": "..."${candidats.length ? ', "reference": ["R1"]' : ''}}`;
 
       // Températures basses = fidélité aux sources (priorité « 0 inventé ») : on baisse la rédaction
       // de paragraphe de 0.4 → 0.2 pour limiter les détails « brodés » non sourcés.
@@ -4409,7 +4411,17 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
               console.log(`[MemoireGenerator] ${label} : fidélité ${fid.toFixed(2)} au mémoire type (${retenus.map((c) => c.id).join(', ')}) < ${SEUIL_FIDELITE_CADRE} → nouvel essai strict.`);
               const avant = replacements.length;
               await answerField(f, true);
-              if (replacements.length > avant) return;
+              if (replacements.length > avant) {
+                // Le nouvel essai n'est gardé que s'il est plus fidèle au texte de GSS que le premier.
+                const second = repriseParChamp.get(f.id);
+                if (!second || second.fidelite < fid) {
+                  const k = replacements.map((x) => x.id).lastIndexOf(f.id);
+                  if (k >= 0) replacements[k].value = String(value);
+                  repriseParChamp.set(f.id, { ids: retenus.map((c) => c.id), fidelite: fid });
+                  propositionsCadre.set(f.id, `Réponse à relire (mémoire type de GSS repris en partie, fidélité ${Math.round(fid * 100)} %) : ${libelle}`);
+                }
+                return;
+              }
             }
             repriseParChamp.set(f.id, { ids: retenus.map((c) => c.id), fidelite: fid });
             if (fid < SEUIL_FIDELITE_CADRE) propositionsCadre.set(f.id, `Réponse à relire (mémoire type de GSS repris en partie, fidélité ${Math.round(fid * 100)} %) : ${libelle}`);
