@@ -1906,6 +1906,27 @@
    "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
    "statut": "confirmee",
    "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "recours_interim",
+   "libelle": "Recours à l'intérim",
+   "categorie": "organisation",
+   "valeurs": [
+    {
+     "valeur": "Non : GSS n'a pas recours à l'intérim ; les remplacements sont assurés par ses propres équipes",
+     "client": "Réponse de GSS",
+     "document": "reponses_gss_2026-10-01.md",
+     "date": "2026-10",
+     "page": null,
+     "citation": "Intérim : NON",
+     "reponse_gss": true
+    }
+   ],
+   "valeur_retenue": "Non : GSS n'a pas recours à l'intérim ; les remplacements sont assurés par ses propres équipes",
+   "date_retenue": "2026-10",
+   "source_retenue": "Réponse de GSS (1er octobre 2026)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
   }
  ]
 }

@@ -5727,8 +5727,8 @@
    {
     "sujet": "Recours à l'intérim",
     "rubriques_concernees": "b_dispositif_absence, b_recrutement_formation",
-    "ce_qui_existe": "—",
-    "ce_qui_manque": "Politique inconnue (question posée à GSS selon faits_gss.md)"
+    "ce_qui_existe": "Réponse de GSS (2026-10-01) : GSS n'a pas recours à l'intérim ; le remplacement se fait avec ses propres équipes (registre recours_interim)",
+    "ce_qui_manque": "Aucun texte dédié (politique connue : pas d'intérim)"
    },
    {
     "sujet": "Indicateurs chiffrés de performance de GSS (turn-over, absentéisme, taux de remplacement, satisfaction client)",
