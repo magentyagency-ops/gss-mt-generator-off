@@ -1,0 +1,20 @@
+// Correction 9, bug 8 (partie déterministe) : étiquette « … : » vide et phrases répétées dans un champ du cadre (citedia2 12).
+import fs from 'fs';
+import path from 'path';
+import { nettoyerChampCadre, texteCctp } from '../src/generation/base_memoires';
+let ko = 0;
+const verifier = (nom: string, ok: boolean, detail = '') => { console.log(`${ok ? 'OK ' : 'KO '} ${nom}${detail ? ` — ${detail}` : ''}`); if (!ok) ko++; };
+const cit = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../_corpus_verif/_resultats/v-citedia2-12.json'), 'utf-8')).texte_docx as string;
+const i = cit.indexOf('Dispositifs de traçabilité de la prise et fin de poste\nLes agents');
+const champ = cit.slice(i, cit.indexOf('Outils de contrôle de la bonne réalisation', i));
+const r = nettoyerChampCadre(champ);
+console.log(r);
+verifier('étiquette vide retirée', !/points de contrôle :\s*$/m.test(r) && /rondes effectuées…\)\./.test(r));
+const n = (t: string, x: string) => t.split(x).length - 1;
+const phrase = "L'agent envoie en temps réel ses rapports sur les événements de sa vacation";
+verifier('phrase répétée une seule fois', n(champ, phrase) >= 2 && n(r, phrase) === 1, `${n(champ, phrase)} → ${n(r, phrase)}`);
+verifier('liste « • » avec « : » gardée', nettoyerChampCadre('Elle apporte :\n• la ponctualité.\n• la qualité.') === 'Elle apporte :\n• la ponctualité.\n• la qualité.');
+const dce = fs.readFileSync(path.resolve(__dirname, '../../_corpus_verif/_dce_textes/citedia2.txt'), 'utf-8');
+const c = texteCctp(dce);
+verifier('CCTP sans CCAP pour le contrôle de couverture', /^=== C_C_T_P_ COMMUN/.test(c) && !/C_C_A_P_/.test(c) && /NFC|RFID/i.test(c), `${c.length} caractères`);
+console.log(ko ? `${ko} ÉCHEC(S)` : 'TOUT OK');

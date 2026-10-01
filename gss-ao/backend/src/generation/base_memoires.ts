@@ -772,6 +772,52 @@ export function sansRecopieCctp(texte: string, dce: string): { texte: string; re
 }
 
 /**
+ * Réponse d'un champ du cadre : une ligne qui finit par une étiquette « … : » sans rien après (« Outil de pointage des
+ * rondes et points de contrôle : ») perd cette étiquette ; une phrase ou une puce déjà écrite plus haut dans le même
+ * champ (même texte, ou 90 % des mots) n'est pas répétée.
+ */
+export function nettoyerChampCadre(texte: string): string {
+  const lignes = String(texte || '').split('\n');
+  const LISTE = /^\s*(?:[-*•]|\d+[.)])\s+/;
+  const out: string[] = [];
+  const vues: Array<Set<string>> = [];
+  const cles = new Set<string>();
+  const mots = (t: string) => new Set(normTxt(t).replace(/[^a-z0-9]+/g, ' ').split(' ').filter((w) => w.length >= 3));
+  const deja = (ph: string) => {
+    const k = normTxt(ph).replace(/[^a-z0-9]+/g, ' ').trim();
+    if (k.split(' ').length < 6 || /\[À COMPLÉTER\]|⟦|\[CONSULTATION/.test(ph)) return false;
+    if (cles.has(k)) return true;
+    const m = mots(ph);
+    if (vues.some((v) => { let n = 0; for (const w of m) if (v.has(w)) n++; return n / Math.max(m.size, v.size) >= 0.9; })) return true;
+    cles.add(k); vues.push(m);
+    return false;
+  };
+  for (let i = 0; i < lignes.length; i++) {
+    let l = lignes[i];
+    let j = i + 1;
+    while (j < lignes.length && !lignes[j].trim()) j++;
+    const suiteListe = j < lignes.length && LISTE.test(lignes[j]);
+    // Étiquette finale sans contenu (et sans liste qui suit) : retirée de la ligne.
+    if (/:\s*$/.test(l) && !suiteListe) {
+      const debut = l.search(/(?:^|[.!?]\s+)[^.!?]*:\s*$/);
+      const reste = debut <= 0 ? '' : l.slice(0, debut + 1).trim();
+      if (debut <= 0 && l.trim().split(/\s+/).length > 12) { /* phrase longue terminée par « : » : gardée */ } else l = reste;
+      if (!l.trim()) continue;
+    }
+    if (LISTE.test(l)) {
+      if (deja(l.replace(LISTE, ''))) continue;
+      out.push(l);
+      continue;
+    }
+    const puce = '';
+    const phrases = l.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«"(])/).filter((ph) => !deja(ph));
+    if (!phrases.length && l.trim()) continue;
+    out.push(`${puce}${phrases.join(' ')}`);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
+/**
  * Vocabulaire du CCTP pour la fonction de l'agent qui encadre le poste : le mémoire type dit « chef de site » ou
  * « responsable de site » ; quand le CCTP ne parle que de « chef de poste » (IGN), le mémoire emploie son terme. Le
  * « (responsable de site) » de l'acheteur, entre parenthèses, n'est pas touché.
@@ -875,6 +921,25 @@ function piecesTechniques(dce: string): string[] {
   }
   if (!pieces.length && !/--- .+? ---|===== PIÈCE/.test(dce || '')) pieces.push(dce || '');
   return pieces;
+}
+
+/**
+ * Texte du CCTP et de ses annexes (sans CCAP, RC, AE, bordereaux ni cadre de réponse), tronqué à `max` caractères :
+ * les exigences de la prestation, sans les seuils de pénalité du CCAP.
+ */
+export function texteCctp(dce: string, max = 120_000): string {
+  const blocs = (dce || '').split(/\n\n--- (.+?) ---\n|\n?===== PIÈCE : (.+?) =====\n/);
+  const pieces: string[] = [];
+  for (let i = 1; i < blocs.length; i += 3) {
+    const brut = blocs[i] || blocs[i + 1] || '';
+    const nom = `${brut} ${brut.replace(/[_.\s-]+/g, '')}`;
+    if (/ccap|\bRC\b|r[èe]glement (?:de (?:la )?)?consultation|acte d.engagement|\bAE\b|DPGF|BPU|DQE|bordereau|\bDC\s?\d|attestation|cadre de r[ée]ponse|m[ée]moire|candidature|lettre|avis|d[ée]claration/i.test(nom)) continue;
+    // Le CCTP d'abord, ses annexes ensuite (la troncature porte sur les annexes).
+    if (/cctp|cahier des (?:clauses|charges)|clauses techniques/i.test(nom)) pieces.unshift(`=== ${brut} ===\n${blocs[i + 2] || ''}`);
+    else if (/programme|annexe|besoin|consignes?|proc[ée]dure/i.test(nom)) pieces.push(`=== ${brut} ===\n${blocs[i + 2] || ''}`);
+  }
+  const t = pieces.length ? pieces.join('\n\n') : (dce || '');
+  return t.length > max ? t.slice(0, max) : t;
 }
 
 /**

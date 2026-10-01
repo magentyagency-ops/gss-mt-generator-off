@@ -27,7 +27,7 @@ import {
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference,
 } from './memoire_type_cadre';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -4733,6 +4733,16 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     await harmoniserGrille();
     retirerConfirmations();
     const horsNormandieCadre = marcheHorsNormandie(analysisData, dceContext);
+    // Couverture des exigences du CCTP dans les réponses développées (comme en réponse libre).
+    try {
+      const developpeesCadre = replacements
+        .filter((r) => { const d = descriptors.find((x) => x.id === r.id); return d && d.kind !== 'checkbox' && String(r.value ?? '').length >= 400; })
+        .map((r) => ({ id: r.id, question: ((descriptors.find((x) => x.id === r.id)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').slice(0, 300), value: String(r.value ?? '') }));
+      await this.couvertureCadre(developpeesCadre, dceContext, analysisData, horsNormandieCadre);
+      for (const x of developpeesCadre) { const r = replacements.find((y) => y.id === x.id); if (r) r.value = x.value; }
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Couverture du CCTP (cadre) indisponible : ${e?.message || e}`);
+    }
     for (const r of replacements) {
       const d = descriptors.find((x) => x.id === r.id);
       if (!d || d.kind === 'checkbox') continue;
@@ -4742,7 +4752,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       const recopie = sansRecopieCctp(texte, dceContext);
       // Texte nettoyé toujours repris (reformulations et montants de pénalité retirés, même sans commentaire interne).
       const delais = delaisHorsNormandie(interditsDce(fondementReprise(voixDeGss(recopie.texte), dceContext), dceContext), dceContext, horsNormandieCadre);
-      r.value = delais.texte.trim() || (retires.length || delais.retires.length || recopie.retires.length ? '[À COMPLÉTER]' : r.value);
+      // Étiquette « … : » restée sans contenu, phrases répétées dans le même champ : retirées.
+      r.value = nettoyerChampCadre(delais.texte).trim() || (retires.length || delais.retires.length || recopie.retires.length ? '[À COMPLÉTER]' : r.value);
       if (recopie.retires.length) console.log(`[MemoireGenerator] Champ ${r.id} : ${recopie.retires.length} phrase(s) du CCTP recopiée(s) à la voix de l'acheteur retirée(s).`);
       retires.forEach((x) => confirmationsGss.add(`À confirmer : ${x}`));
       delais.retires.forEach((x) => confirmationsGss.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
@@ -7054,6 +7065,62 @@ RÈGLES DE FORME (rendu Marp) :
       }
     } catch { /* contrôle facultatif */ }
     return text;
+  }
+
+  /**
+   * Cadre imposé : contrôle de couverture des exigences du CCTP, comme en réponse libre (completerCouverture). Les
+   * réponses développées et le CCTP (sans CCAP) sont confrontés en un appel : pour chaque réponse, les exigences de son
+   * thème qui n'y figurent pas (pointage des rondes NFC, rapport avant 9 h, qualifications SST/H0B0, permis B…) sont
+   * ajoutées en puces d'engagement de GSS, sous le sous-titre de la réponse qui les attend. Étape non bloquante.
+   */
+  private async couvertureCadre(reponses: Array<{ id: number; question: string; value: string }>, dce: string, analysisData: any, horsNormandie: boolean): Promise<number> {
+    const cctp = texteCctp(dce, 120_000);
+    if (!reponses.length || !cctp.trim()) return 0;
+    const lots = (Array.isArray(analysisData?.lots) ? analysisData.lots : []).map((l: any) => `${l?.num || ''} ${l?.perimetre || ''}`.trim()).filter(Boolean).join(' ; ');
+    const r = await this.callOpenAI([
+      {
+        role: 'system',
+        content: `Tu contrôles les réponses de GSS (sécurité privée) au cadre de réponse d'un appel d'offres avant la remise. On te donne chaque réponse (identifiant, question du cadre, texte) puis le CCTP.
+Pour chaque réponse, relève les exigences du CCTP qui relèvent directement de SA question et qu'elle ne traite pas (moyen ou outil imposé, échéance ou horaire de transmission, qualification exigée des agents, véhicule ou permis, volume d'heures, classement ou contenu d'un rapport…) ; une exigence déjà traitée, même formulée autrement, n'est pas reprise.
+Pour chacune, rédige UNE puce d'engagement de GSS, courte et factuelle, au présent, qui reprend l'exigence avec ses mots et chiffres EXACTS (« GSS équipe chaque agent d'un outil de pointage NFC des points de contrôle lors des rondes à pied »), jamais à la voix de l'acheteur (ni « le titulaire », ni « devra ») ni recopiée mot pour mot.
+- Uniquement les exigences du lot de ce marché${lots ? ` (${lots})` : ''} : ignore celles d'un autre lot.
+- Ignore la procédure et l'administratif (offre, prix, facturation, pénalités, durée), les obligations de l'acheteur et ce qui figure déjà dans une autre réponse.
+- Jamais de montant de pénalité, de nom de personne, de chiffre absent du CCTP.${horsNormandie ? ' Marché hors de Normandie : aucun délai d\'intervention, d\'astreinte ou de mise à disposition chiffré.' : ''}
+- "apres" : le sous-titre de la réponse (recopié exactement) sous lequel la puce s'insère, ou "" pour la fin de la réponse.
+- Au plus 4 puces par réponse.
+Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "texte": "…"}]} (liste vide si tout est couvert).`,
+      },
+      { role: 'user', content: `RÉPONSES :\n${reponses.map((x) => `### Réponse ${x.id} — question : ${x.question}\n${x.value.slice(0, 6000)}`).join('\n\n')}\n\nCCTP :\n${cctp}` },
+    ], 0.1, 'Couverture du CCTP (cadre)', true, 'analyse');
+    let n = 0;
+    try {
+      const parId = new Map<number, Array<{ apres: string; texte: string }>>();
+      for (const a of JSON.parse(r || '{}').ajouts || []) {
+        const id = Number(a?.id);
+        const texte = String(a?.texte || '').trim().replace(/^[-•]\s*/, '');
+        if (!reponses.some((x) => x.id === id) || texte.length < 20 || PIECES_OFFRE.test(texte) || /p[ée]nalit|\btitulaire\b|\bdevra\b/i.test(texte)) continue;
+        const l = parId.get(id) ?? parId.set(id, []).get(id)!;
+        if (l.length < 4) l.push({ apres: String(a?.apres || '').trim(), texte });
+      }
+      for (const [id, ajouts] of parId) {
+        const rep = reponses.find((x) => x.id === id)!;
+        let v = rep.value;
+        for (const a of ajouts) {
+          const lignes = v.split('\n');
+          const k = a.apres ? lignes.findIndex((l) => l.trim() === a.apres) : -1;
+          if (k < 0) { v = `${v.trimEnd()}\n• ${a.texte}`; n++; continue; }
+          // Fin du paragraphe (et de la liste) qui suit le sous-titre.
+          let fin = k + 1;
+          while (fin < lignes.length && lignes[fin].trim()) fin++;
+          lignes.splice(fin, 0, `• ${a.texte}`);
+          v = lignes.join('\n');
+          n++;
+        }
+        rep.value = v;
+      }
+    } catch { /* étape facultative */ }
+    if (n) console.log(`[MemoireGenerator] Couverture du CCTP (cadre) : ${n} exigence(s) ajoutée(s) aux réponses.`);
+    return n;
   }
 
   /**
