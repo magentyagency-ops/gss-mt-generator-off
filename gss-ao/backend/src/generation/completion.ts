@@ -81,6 +81,8 @@ export interface EtatCompletion {
     plan?: PlanMemoireType;
     /** Plan v2 : titre-message de la page de schéma de chaque rubrique. */
     titresSchemas?: Record<string, string>;
+    /** Plan v2 : indicateurs vrais du mémoire type et leurs raisons (DCE, analyse, matrice), pour contrôle. */
+    indicateurs?: Record<string, string[]>;
   };
   /** Cadre imposé : réponses rédigées par GSS (signets GSS_CH_n), les seules que l'assistant peut modifier. */
   champs?: Array<{ cle: string; libelle: string }>;

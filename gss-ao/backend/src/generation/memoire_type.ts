@@ -45,6 +45,12 @@ export interface IndicateurMemoireType {
   secteur?: string;
   /** Rubriques : une exigence de la matrice rattachée à l'une d'elles rend l'indicateur vrai. */
   matrice?: string[];
+  /**
+   * Mot du DCE sans lequel une exigence de la matrice (extraite par le modèle) ne suffit pas à rendre l'indicateur
+   * vrai (ex. « inopin ») ; sans ce champ, un indicateur qui déclenche un engagement (valeur_si_exige) exige le motif
+   * « dce » dans le texte du DCE.
+   */
+  motif_dce?: string;
   /** Choix de GSS (assistant, demande particulière) : jamais déduit du DCE. */
   choix_gss?: boolean;
   defaut?: boolean;
@@ -426,6 +432,10 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
   const secteur = valeurPropre(ctx.analyse?.clientSector);
   const matrice = (ctx.matrice || []).filter((e) => e && e.exigence);
   const out: Record<string, EtatIndicateur> = {};
+  // Indicateurs qui déclenchent un engagement de GSS (valeur_si_exige : « au moins trois fois par mois ») : une
+  // exigence de la matrice, reformulée par le modèle, ne compte que si le DCE contient lui-même le motif.
+  const engageants = new Set(Object.values(mt.variables).filter((v) => v.valeur_si_exige && v.indicateur_exige).map((v) => v.indicateur_exige!));
+  const dceNorm = normaliser(dce);
   for (const [nom, def] of Object.entries(mt.indicateurs)) {
     const raisons: string[] = [];
     let valeur = false;
@@ -441,14 +451,16 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
         const m = rx.exec(dce);
         if (m) raisons.push(`DCE : « ${extrait(dce, m.index, m[0].length)} »`);
         const e = matrice.find((x) => rx.test(x.exigence));
-        if (e) raisons.push(`exigence : « ${e.exigence.slice(0, 120)} »`);
+        const sourceDce = !engageants.has(nom) || (def.motif_dce ? dceNorm.includes(normaliser(def.motif_dce)) : !!m);
+        if (e && sourceDce) raisons.push(`exigence : « ${e.exigence.slice(0, 120)} »`);
+        else if (e) console.log(`[MemoireType] Indicateur ${nom} : exigence de la matrice écartée, motif absent du DCE (« ${e.exigence.slice(0, 120)} »).`);
       }
       if (def.analyse) {
         const m = new RegExp(def.analyse, 'i').exec(analyse);
         if (m) raisons.push(`analyse : « ${extrait(analyse, m.index, m[0].length)} »`);
       }
       if (def.secteur && secteur && new RegExp(def.secteur, 'i').test(secteur)) raisons.push(`secteur du client : ${secteur}`);
-      if (def.matrice?.length) {
+      if (def.matrice?.length && (!engageants.has(nom) || (def.motif_dce ? dceNorm.includes(normaliser(def.motif_dce)) : raisons.some((r) => r.startsWith('DCE'))))) {
         const e = matrice.find((x) => x.rubrique && def.matrice!.includes(x.rubrique));
         if (e) raisons.push(`exigence rattachée à ${e.rubrique} : « ${e.exigence.slice(0, 120)} »`);
       }
@@ -462,6 +474,11 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
     out[nom] = { valeur, raisons };
   }
   return out;
+}
+
+/** Indicateurs vrais et leurs raisons (journal de l'état, contrôle des engagements déclenchés). */
+export function indicateursVrais(etats: Record<string, EtatIndicateur>): Record<string, string[]> {
+  return Object.fromEntries(Object.entries(etats).filter(([, v]) => v.valeur).map(([k, v]) => [k, v.raisons]));
 }
 
 /** Valeurs booléennes seules. */
