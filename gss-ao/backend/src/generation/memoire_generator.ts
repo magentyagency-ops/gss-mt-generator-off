@@ -26,7 +26,7 @@ import {
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES,
   type CandidatReference,
 } from './memoire_type_cadre';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -6319,6 +6319,7 @@ RÈGLES DE FORME (rendu Marp) :
     // ── 6. Questions nouvelles du DCE : proposition de réponse de l'IA, en fin du bloc de son thème ──
     const ajouts: AjoutLibre[] = [];
     const enProposition = new Set<ExigenceMatrice>();
+    const alertesAcheteurs: string[] = [];
     if (groupes.length) {
       progres(56, `Questions nouvelles du DCE : ${groupes.length} proposition(s) de réponse…`);
       const idsPris = new Set([...mt.rubriques.map((r) => r.id), ...Object.keys(sections)]);
@@ -6334,6 +6335,7 @@ RÈGLES DE FORME (rendu Marp) :
         if (!p) { ecartees.push(...g.exigences); return; }
         const id = idProposition(g.sujet, idsPris);
         sections[id] = p.texte;
+        if (p.acheteurs.length) alertesAcheteurs.push(`Proposition de réponse « ${p.titre} » : elle cite ${p.acheteurs.join(', ')}, acheteur(s) d'un ancien mémoire de GSS. Vérifiez qu'il s'agit bien d'une référence et non du destinataire (à corriger via l'assistant avant la remise).`);
         g.exigences.forEach((e) => enProposition.add(e));
         propositions[i] = { id, chapter: cle, title: p.titre, apres: bloc.rubriques[bloc.rubriques.length - 1], proposition: true, sujet: g.sujet };
       });
@@ -6375,6 +6377,7 @@ RÈGLES DE FORME (rendu Marp) :
     const consultations = new Set<string>([
       ...alerteCadreAbsent(dceContext),
       ...commentairesRetires,
+      ...alertesAcheteurs,
       ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie),
       // Publipostage : valeurs du registre à confirmer, passages retirés faute de valeur (délai hors Normandie…).
       ...publiees.flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)]).flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
@@ -6577,7 +6580,7 @@ RÈGLES DE FORME (rendu Marp) :
   private async proposerReponse(
     g: GroupeNouveau,
     o: { client?: string; bloc?: string; perimetre?: string; horsNormandie?: boolean; analyse?: string; registre?: string; gssDocs: Record<string, string>; availableCategories: string[] },
-  ): Promise<{ titre: string; texte: string } | null> {
+  ): Promise<{ titre: string; texte: string; acheteurs: string[] } | null> {
     const requete = `${g.sujet}. ${g.exigences.map((e) => e.exigence).join(' ')}`.slice(0, 2000);
     let memoires = '';
     try {
@@ -6592,14 +6595,32 @@ RÈGLES DE FORME (rendu Marp) :
       client: o.client, bloc: o.bloc, perimetre: o.perimetre, horsNormandie: o.horsNormandie, analyse: o.analyse,
       regles: REGLES_REUTILISATION, sources: [memoires.trim(), doc, (o.registre || '').trim()].filter(Boolean).join('\n\n'),
     });
-    const rep = lireJson((await this.callOpenAI(messages, 0.3, `Proposition de réponse : ${g.sujet}`, true, 'analyse', 0)) || '');
-    const texte = String(rep?.texte || '').replace(/^#\s+.*\n+/, '').trim();
+    const brut = (await this.callOpenAI(messages, 0.3, `Proposition de réponse : ${g.sujet}`, true, 'analyse', 0)) || '';
+    let rep = lireJson(brut);
+    let texte = String(rep?.texte || '').replace(/^#\s+.*\n+/, '').trim();
     if (texte.split(/\s+/).length < 80) {
       console.warn(`[MemoireGenerator] Proposition « ${g.sujet} » non rédigée (réponse du modèle vide ou trop courte).`);
       return null;
     }
+    // Garde-fou : un ancien acheteur de GSS repris des anciens mémoires (destinataire d'une autre réponse) → une
+    // relance ; s'il reste cité, la proposition est gardée et GSS est prévenu (consultations).
+    let acheteurs = acheteursCites(texte, o.client);
+    if (acheteurs.length) {
+      const corrige = lireJson((await this.callOpenAI([
+        ...messages,
+        { role: 'assistant', content: brut },
+        { role: 'user', content: `Ta réponse cite ${acheteurs.map((a) => `« ${a} »`).join(', ')}, acheteur(s) d'anciens marchés de GSS. Elle s'adresse à ${o.client || 'ce nouveau client'} : remplace ce nom par le nouveau client quand il désigne le destinataire, ou formule-le explicitement comme une RÉFÉRENCE de GSS (« sur le marché de … ») seulement si c'en est une ; ne change rien d'autre. Renvoie le même objet JSON.` },
+      ], 0.2, `Proposition de réponse : ${g.sujet} (ancien acheteur)`, true, 'analyse', 0)) || '');
+      const texte2 = String(corrige?.texte || '').replace(/^#\s+.*\n+/, '').trim();
+      if (texte2.split(/\s+/).length >= 80) {
+        rep = { ...rep, ...corrige, titre: corrige?.titre || rep?.titre };
+        texte = texte2;
+        acheteurs = acheteursCites(texte, o.client);
+      }
+      if (acheteurs.length) console.warn(`[MemoireGenerator] Proposition « ${g.sujet} » : ancien(s) acheteur(s) cité(s) (${acheteurs.join(', ')}), signalé à GSS.`);
+    }
     const titre = court(rep?.titre, 80) || `${g.sujet.charAt(0).toUpperCase()}${g.sujet.slice(1)}`;
-    return { titre, texte };
+    return { titre, texte, acheteurs };
   }
 
   /**

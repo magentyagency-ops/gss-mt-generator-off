@@ -255,6 +255,35 @@ export function motifsReferences(): Array<{ nom: string; motifs: RegExp[] }> {
 }
 
 /**
+ * Anciens acheteurs de GSS (clients des mémoires indexés) cités dans un texte, hors client courant et hors références
+ * clients validées (citables comme références). Garde-fou des propositions de réponse aux questions nouvelles, rédigées
+ * à partir des anciens mémoires : un ancien acheteur repris comme destinataire est relancé, puis signalé à GSS.
+ */
+export function acheteursCites(texte: string, client = ''): string[] {
+  const norm = (t: string) => normTxt(t).replace(/[^a-z0-9]+/g, ' ').trim();
+  const cible = norm(client);
+  const refs = motifsReferences();
+  const noms = new Map<string, string[]>();
+  for (const p of charger().passages) {
+    const nom = String(p.client || '').replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!nom || /^(gardiennage|surveillance|prestations?|s[ée]curit[ée])\b/i.test(nom) || noms.has(nom)) continue;
+    const mots = nom.split(' ');
+    // Nom complet, ses trois premiers mots (« Université de Rouen ») et son sigle (« CAF »).
+    noms.set(nom, [...new Set([nom, ...(mots.length > 3 ? [mots.slice(0, 3).join(' ')] : []), ...(/^[A-Z]{3,}$/.test(mots[0]) ? [mots[0]] : [])])]);
+  }
+  const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const cites: string[] = [];
+  for (const [nom, variantes] of noms) {
+    const n = norm(nom);
+    if (cible && variantes.some((v) => { const x = norm(v); return cible.includes(x) || x.includes(cible); })) continue;
+    if (refs.some((r) => r.motifs.some((m) => m.test(nom)) || norm(r.nom) === n)) continue;
+    if (variantes.some((v) => new RegExp(`(?<![\\wÀ-ÿ])${esc(v)}(?![\\wÀ-ÿ])`).test(texte))) cites.push(nom);
+  }
+  // « CAF » (mémoire de 2025) n'est pas signalé en plus de « CAF du Val-de-Marne ».
+  return cites.filter((c) => !cites.some((d) => d !== c && d.startsWith(`${c} `)));
+}
+
+/**
  * Une référence client est citée dans DEUX rubriques au plus (retour GSS : CESI, Schneider… repris
  * partout). On garde la rubrique « références » puis la première rubrique qui la cite ; ailleurs, les
  * phrases, puces et lignes de tableau qui la citent sont retirées (jamais au point de vider une rubrique,
