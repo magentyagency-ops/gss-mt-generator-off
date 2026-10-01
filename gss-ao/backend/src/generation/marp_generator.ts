@@ -57,7 +57,9 @@ const CHARS_PER_LINE = 90;
  *  Refonte, calée sur 81 pages de texte rendues par Chromium (réponse libre v2, DCE becquerel et caen) : avec des lignes
  *  de 105 caractères, les lignes de tableau comptées 1,8 fois (cellules repliées) et les lignes de séparation d'un
  *  tableau comptées pour rien, une page tient au moins 44,6 lignes ; 40 lignes laissent une marge de 10 %. L'ancienne
- *  limite (400 mots, lignes de 90 caractères) coupait en deux pages des rubriques qui tiennent sur une seule. */
+ *  limite (400 mots, lignes de 90 caractères) coupait en deux pages des rubriques qui tiennent sur une seule.
+ *  Les lignes de tableau sont désormais estimées d'après leur hauteur réelle (voir lignesParagraphe) ; « ligneTableau »
+ *  marque la mise en page v2. */
 const LIMITES_TEXTE_SEUL = { refonte: { mots: 560, lignes: 40, caracteres: 105, ligneTableau: 1.8 }, origine: { mots: 280, lignes: 28 } };
 
 /** Limites de découpage d'une page de texte : mots, lignes estimées et, pour la mise en page v2 de la refonte, longueur
@@ -96,7 +98,11 @@ function lignesParagraphe(p: string, limites: LimitesPage): number {
   return p.split('\n').reduce((n, l) => {
     if (ligneTableau === undefined) return n + Math.max(1, Math.ceil(l.length / caracteres));
     if (/^\s*\|[\s:|-]+\|\s*$/.test(l)) return n;
-    return n + Math.max(1, Math.ceil(l.length / caracteres)) * (/^\s*\|/.test(l) ? ligneTableau : 1);
+    // Ligne de tableau : hauteur relevée dans Chromium sur les tableaux des réponses libres v2 (becquerel, caen, ign) :
+    // ≈ 0,7 ligne de marges de cellule + 0,87 ligne par ligne repliée (≈ 90 caractères de Markdown par ligne repliée) ;
+    // l'ancien poids (1,8 × lignes de 105 caractères) comptait 3,6 lignes pour une ligne de tableau qui en fait 2,4.
+    if (/^\s*\|/.test(l)) return n + 0.75 + 0.9 * Math.max(1, Math.ceil(l.length / 90));
+    return n + Math.max(1, Math.ceil(l.length / caracteres));
   }, 0) * (/^#{1,6}\s/.test(p) ? 1.5 : 1) + 0.7;
 }
 
@@ -641,13 +647,16 @@ export class MarpGenerator {
       if (!chapter.sections || chapter.sections.length === 0) continue;
 
       const chapterLine = `${this.romanToNumber(chapter.key)}. __${chapter.title.toUpperCase()}__`;
-      tocPages[tocPages.length - 1].push(chapterLine);
-      tocItemCount++;
 
       // Numérotation des rubriques propre à chaque chapitre (1, 2, 3… rendus i, ii, iii) : un compteur
       // global faisait démarrer les chapitres suivants à 6, 13… (sommaire « 6. 7. … 11 »).
       // Les pages de références « Ils nous font confiance » suivent le chapitre I : elles figurent au sommaire.
       const titresToc = [...chapter.sections.map((sec) => sec.title), ...(avecPagesReferences(chapter) && this.getReferencesSlides().length ? ['Ils nous font confiance'] : [])];
+      // Thèmes de la refonte : un chapitre qui ne tient plus sur la page en cours passe entier à la page suivante
+      // (une sous-liste reprise en milieu de chapitre, « 9. », ne peut pas suivre la ligne du chapitre en Markdown).
+      if (refonte && tocPages[tocPages.length - 1].length && tocPages[tocPages.length - 1].length + 1 + titresToc.length > 28) tocPages.push([]);
+      tocPages[tocPages.length - 1].push(chapterLine);
+      tocItemCount++;
       titresToc.forEach((titre, idx) => {
         const sectionLine = `\t${idx + 1}. __${titre.toUpperCase()}__`;
         tocPages[tocPages.length - 1].push(sectionLine);
@@ -657,7 +666,8 @@ export class MarpGenerator {
         if (tocPages[tocPages.length - 1].length >= (refonte ? 28 : 18)) {
           // Thèmes de la refonte (corps de texte plus petit) : 28 lignes par page, et la page suivante reprend la ligne
           // du chapitre en cours (sinon la sous-rubrique qui l'ouvre serait lue comme un bloc de code).
-          tocPages.push(refonte && idx < titresToc.length - 1 ? [chapterLine] : []);
+          // Ligne vide après la ligne du chapitre : la sous-liste reprise (« 28. ») ne peut pas interrompre un paragraphe.
+          tocPages.push(refonte && idx < titresToc.length - 1 ? [chapterLine, ''] : []);
         }
       });
     }
