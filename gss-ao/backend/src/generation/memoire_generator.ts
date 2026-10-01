@@ -20,6 +20,7 @@ import {
   valeursImposeesValides, completerBesoinMinimum,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
+import { CONSIGNE_DIMENSIONNEMENT, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, type Dimensionnement } from './dimensionnement';
 import {
   candidatsReference, blocReference, referencesRetenues, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
@@ -4007,6 +4008,10 @@ Renvoie un JSON valide :
 
     // Périmètre réel du marché (évite les contenus de gardiennage à poste fixe hors sujet).
     const blocPerimetreCadre = this.blocPerimetre(await this.perimetreMarche(dceContext));
+    // Effectifs proposés à partir des postes, des horaires et du cas pratique du DCE (proposition à valider, D5) : repris
+    // par les réponses au lieu de « [À COMPLÉTER] ».
+    const texteDuCadre = getElementsWithLocalName(xmlDoc, 'p').map((p: any) => getElementsWithLocalName(p, 't').map((t: any) => t.textContent || '').join('')).filter((t: string) => t.trim()).join('\n').replace(/\[CHAMP_\d+\]/g, '');
+    const dimensionnementCadre = await this.dimensionner(dceContext, texteDuCadre);
     const systemPrompt = `Tu es un rédacteur chevronné de mémoires techniques pour l'entreprise GSS (Global Security Service, ex-GIS), expert des marchés publics de sécurité privée.
 On te fournit (1) l'ANALYSE stratégique et opérationnelle du marché issue du DCE (client, sites, exigences, rapport de visite de Sacha, arguments différenciants de GSS, problématiques terrain anticipées), (2) la DOCUMENTATION GSS (moyens, procédures, organisation, formations… — connaissances internes), (3) les RÉFÉRENTS GSS (dossier « Personnes ») et (4) une liste de champs [CHAMP_X] repérés dans le cadre de réponse de l'acheteur. Tu rédiges la valeur à insérer dans chacun.
 
@@ -4079,7 +4084,7 @@ ${REGLES_REUTILISATION}
 - Réponds précisément à la QUESTION du champ : n'utilise un extrait de mémoire que s'il répond à CETTE question.
 - Champ court, d'identité ou de contact : une valeur présente dans le REGISTRE DES INFORMATIONS GSS ou dans un extrait de mémoire GSS EST une source valable → donne-la (ne réponds pas « [À COMPLÉTER] » si elle y figure).
 - Une certification indiquée « en cours » n'est PAS obtenue : ne la présente jamais comme acquise.
-- Dénomination / « NOM » du candidat : écris exactement la raison sociale du registre.${blocRegistre(marcheHorsNormandie(analysisData, dceContext))}${organigrammeGss(referentsContext)}${referencesGss()}${blocPerimetreCadre}
+- Dénomination / « NOM » du candidat : écris exactement la raison sociale du registre.${blocRegistre(marcheHorsNormandie(analysisData, dceContext))}${organigrammeGss(referentsContext)}${referencesGss()}${blocPerimetreCadre}${dimensionnementCadre ? texteDimensionnement(dimensionnementCadre) : ''}
 ${this.blocDemande()}
 
 FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "value": "..."} ]}`;
@@ -4134,7 +4139,7 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     //    marché, rubrique par rubrique ; chaque réponse développée reprend le texte des rubriques qui traitent sa
     //    question. Détection des champs, champs courts, identité, tableaux et cases : inchangés. Retour arrière :
     //    GSS_MEMOIRE_TYPE=non. ──
-    const repriseMT = await this.textesMemoireTypeCadre(dossierId, analysisData, dceContext, referentsContext, descriptors, buildPrompt);
+    const repriseMT = await this.textesMemoireTypeCadre(dossierId, analysisData, dceContext, referentsContext, descriptors, buildPrompt, dimensionnementCadre);
     /** Questions développées rédigées hors mémoire type (propositions) et reprises à relire, pour GSS. */
     const propositionsCadre = new Map<number, string>();
     const repriseParChamp = new Map<number, { ids: string[]; fidelite: number }>();
@@ -4754,12 +4759,16 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       const delais = delaisHorsNormandie(interditsDce(fondementReprise(voixDeGss(recopie.texte), dceContext), dceContext), dceContext, horsNormandieCadre);
       // Étiquette « … : » restée sans contenu, phrases répétées dans le même champ : retirées.
       r.value = nettoyerChampCadre(delais.texte).trim() || (retires.length || delais.retires.length || recopie.retires.length ? '[À COMPLÉTER]' : r.value);
+      // Cas pratique : cases « en service : [À COMPLÉTER] | rotation : [À COMPLÉTER] » remplies avec le dispositif proposé.
+      if (dimensionnementCadre) r.value = remplirCasPratique(String(r.value), dimensionnementCadre).texte;
       if (recopie.retires.length) console.log(`[MemoireGenerator] Champ ${r.id} : ${recopie.retires.length} phrase(s) du CCTP recopiée(s) à la voix de l'acheteur retirée(s).`);
       retires.forEach((x) => confirmationsGss.add(`À confirmer : ${x}`));
       delais.retires.forEach((x) => confirmationsGss.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
     }
     // Valeurs du registre encore « à confirmer » reprises dans le document : GSS est prévenu.
     confirmationsRegistreUtilisees(replacements.map((r) => String(r.value ?? '')).join('\n'), marcheHorsNormandie(analysisData, dceContext)).forEach((c) => confirmationsGss.add(c));
+    // Dimensionnement proposé et repris dans le document : une seule question à GSS (proposition à valider).
+    if (dimensionnementCadre && replacements.some((r) => dimensionnementCadre.casPratique.some((x) => String(r.value ?? '').includes(`en service : ${x.enService}`)) || (dimensionnementCadre.titulaires && new RegExp(`\\b${dimensionnementCadre.titulaires} agents? titulaires`).test(String(r.value ?? ''))))) confirmationsGss.add(questionDimensionnement(dimensionnementCadre));
     console.log(`[MemoireGenerator] GPT a renvoyé ${replacements.length} valeurs au total.`);
     if (repriseMT) console.log(`[MemoireGenerator] Mémoire type : ${repriseParChamp.size} réponse(s) développée(s) reprise(s) (${[...repriseParChamp.entries()].map(([id, r]) => `champ ${id} ← ${r.ids.join('+')} ${r.fidelite.toFixed(2)}`).join(' ; ') || 'aucune'}), ${[...propositionsCadre.values()].filter((c) => /^Proposition/.test(c)).length} proposition(s) hors mémoire type.`);
     setProgress(dossierId, { phase: 'finalisation', pct: 94, label: 'Application des réponses au cadre…' });
@@ -5377,13 +5386,18 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       // Premier message de l'assistant : propositions de réponse et réponses à relire, validables ou modifiables (D5).
       // Aucun repère technique (« GSS_CH_n ») montré à GSS : l'assistant retrouve chaque réponse par son libellé.
       const aRelire = [...propositionsCadre.entries()].filter(([id]) => champsRediges.includes(id)).sort((a, b) => a[0] - b[0]);
-      const conversation = aRelire.length ? [{ role: 'assistant' as const, date: new Date().toISOString(), texte: [
-        `J'ai rempli le cadre de réponse avec le mémoire type de GSS. ${aRelire.length === 1 ? 'Une réponse est à relire' : `${aRelire.length} réponses sont à relire`} avant la remise :`,
-        ...aRelire.map(([id, c]) => `- ${court(champsEtat.find((x) => x.cle === `GSS_CH_${id}`)?.libelle || c.split(' : ').slice(1).join(' : '), 160)} (${/^Proposition/.test(c) ? 'proposition de réponse : question que le mémoire type ne traite pas' : c.split(' : ')[0].replace(/^Réponse à relire \(/, '').replace(/\)$/, '')})`),
-        '',
-        'Pour chacune, vous pouvez :',
-        '- la valider telle quelle : « Je valide la réponse sur … » (rien n\'est modifié) ;',
-        '- la modifier : « Dans la réponse sur …, précise que … ».',
+      const dimRepris = dimensionnementCadre && [...confirmationsGss].some((c) => c.startsWith('Proposition à valider : dimensionnement'));
+      const conversation = aRelire.length || dimRepris ? [{ role: 'assistant' as const, date: new Date().toISOString(), texte: [
+        ...(aRelire.length ? [
+          `J'ai rempli le cadre de réponse avec le mémoire type de GSS. ${aRelire.length === 1 ? 'Une réponse est à relire' : `${aRelire.length} réponses sont à relire`} avant la remise :`,
+          ...aRelire.map(([id, c]) => `- ${court(champsEtat.find((x) => x.cle === `GSS_CH_${id}`)?.libelle || c.split(' : ').slice(1).join(' : '), 160)} (${/^Proposition/.test(c) ? 'proposition de réponse : question que le mémoire type ne traite pas' : c.split(' : ')[0].replace(/^Réponse à relire \(/, '').replace(/\)$/, '')})`),
+          '',
+          'Pour chacune, vous pouvez :',
+          '- la valider telle quelle : « Je valide la réponse sur … » (rien n\'est modifié) ;',
+          '- la modifier : « Dans la réponse sur …, précise que … ».',
+        ] : []),
+        // Effectifs proposés à partir du DCE (D5) : à valider ou modifier avant la remise.
+        ...(dimRepris ? [...(aRelire.length ? [''] : []), messageDimensionnement(dimensionnementCadre!)] : []),
       ].join('\n') }] : undefined;
       ecrireEtat({
         dossierId, mode: 'cadre', fichier: outputPath, majLe: '', elements: elementsACompleter, reponsesTraitees: [],
@@ -6471,6 +6485,8 @@ RÈGLES DE FORME (rendu Marp) :
     const cover = await this.getCoverInfo(dossierId, analysisData);
     const horsNormandie = marcheHorsNormandie(analysisData, dceContext);
     const ctxBase: ContexteMarche = { analyse: analysisData, dce: dceContext, cover, referents, horsNormandie };
+    // Effectifs proposés à partir des postes et des horaires du DCE (proposition à valider par GSS, D5).
+    ctxBase.dimensionnement = await this.dimensionner(dceContext);
     let prep: MemoirePrepare = preparerMemoireType(ctxBase, { memoireType: mt });
 
     const gssDocs = await this.getGssDocumentation();
@@ -6717,6 +6733,12 @@ RÈGLES DE FORME (rendu Marp) :
         console.warn(`[MemoireGenerator] Message des propositions non préparé (${e?.message || e}).`);
       }
     }
+    // Dimensionnement proposé (D5) : annoncé dans le premier message de l'assistant, à valider ou modifier.
+    if (ctxBase.dimensionnement?.titulaires) {
+      const texteDim = `${messageDimensionnement(ctxBase.dimensionnement)}`;
+      if (etat.conversation?.length) etat.conversation[0].texte = `${etat.conversation[0].texte}\n\n${texteDim}`;
+      else etat.conversation = [{ role: 'assistant', texte: texteDim, date: new Date().toISOString() }];
+    }
     try {
       ecrireEtat(etat);
     } catch (e: any) {
@@ -6740,6 +6762,7 @@ RÈGLES DE FORME (rendu Marp) :
     referents: string,
     descriptors: Array<{ id: number; context: string; kind: string }>,
     buildPrompt: (f: any) => string,
+    dimensionnement?: Dimensionnement | null,
   ): Promise<{
     mt: MemoireType; textes: Record<string, string>; scores: Map<number, Record<string, number>>; prep: MemoirePrepare; ctx: ContexteMarche;
     schemaDe: (ids: string[]) => { id: string; ref?: string; spec?: { gabarit: string; params: any; titre: string }; alternative?: string } | undefined;
@@ -6749,7 +6772,7 @@ RÈGLES DE FORME (rendu Marp) :
     try {
       const cover = await this.getCoverInfo(dossierId, analysisData);
       const horsNormandie = marcheHorsNormandie(analysisData, dceContext);
-      const ctx: ContexteMarche = { analyse: analysisData, dce: dceContext, cover, referents, horsNormandie };
+      const ctx: ContexteMarche = { analyse: analysisData, dce: dceContext, cover, referents, horsNormandie, dimensionnement };
       const prep = preparerMemoireType(ctx, { memoireType: mt });
       const textes: Record<string, string> = {};
       const publiees = publierMemoire(prep);
@@ -7075,6 +7098,29 @@ RÈGLES DE FORME (rendu Marp) :
       }
     } catch { /* contrôle facultatif */ }
     return text;
+  }
+
+  /**
+   * Dimensionnement proposé (consignes 2 et 4) : le modèle relève dans le DCE les postes, les horaires, les volumes
+   * horaires et, s'il y en a un, le cas pratique ; les effectifs sont calculés sans modèle (dimensionnement.ts). null si
+   * rien d'exploitable ou modèle indisponible. Étape non bloquante.
+   */
+  private async dimensionner(dce: string, cadre = ''): Promise<Dimensionnement | null> {
+    try {
+      const extrait = extraitDimensionnement(dce, cadre);
+      if (!extrait.trim()) return null;
+      const r = await this.callOpenAI([
+        { role: 'system', content: CONSIGNE_DIMENSIONNEMENT },
+        { role: 'user', content: extrait },
+      ], 0.1, 'Dimensionnement (lecture du DCE)', true, 'analyse');
+      const d = calculerDimensionnement(lireJson(r || ''), dce + (cadre ? `\n${cadre}` : ''));
+      if (d) console.log(`[MemoireGenerator] Dimensionnement proposé : ${d.profils.map((x) => `${x.profil} ${x.heuresSemaine} h/sem → ${x.etp} ETP → ${x.titulaires}`).join(' ; ') || 'aucun poste'} ; titulaires ${d.titulaires}, suppléants ${d.suppleants} ; cas pratique : ${d.casPratique.length} ligne(s).`);
+      else console.log('[MemoireGenerator] Dimensionnement : aucun poste ni cas pratique exploitable dans le DCE.');
+      return d;
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Dimensionnement indisponible : ${e?.message || e}`);
+      return null;
+    }
   }
 
   /**

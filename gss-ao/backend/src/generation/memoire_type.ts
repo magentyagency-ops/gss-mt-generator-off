@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { lignesEquipe, questionDimensionnement, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
 import { horairesImposes, marcheHorsNormandie, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce } from './base_memoires';
 
 /**
@@ -402,6 +403,8 @@ export interface ContexteMarche {
   horsNormandie?: boolean;
   /** Registre (tests) : sinon registre_informations.json. */
   registre?: EntreeRegistre[];
+  /** Dimensionnement proposé à partir des postes et des horaires du DCE (dimensionnement.ts), à valider par GSS. */
+  dimensionnement?: Dimensionnement | null;
 }
 
 // ─── Indicateurs (conditions d'inclusion) ────────────────────────────────────────────────────────
@@ -941,6 +944,9 @@ const CALCULS: Record<string, Calculateur> = {
     return { valeur: null };
   },
   LIGNES_EQUIPE_DEDIEE: (c) => {
+    // Postes et horaires du DCE : une ligne par profil exigé, effectif calculé (proposition à valider par GSS).
+    const dim = c.ctx.dimensionnement;
+    if (dim?.profils.length) return { valeur: lignesEquipe(dim), source: 'dimensionnement calculé à partir des postes et des horaires du DCE', aConfirmer: questionDimensionnement(dim) };
     const lignes: string[] = [];
     const ac = '[À COMPLÉTER]';
     if (c.qualifs.includes('SSIAP 3')) lignes.push(`| Chef de service de sécurité incendie | SSIAP 3 | ${ac} | |`);
@@ -952,8 +958,12 @@ const CALCULS: Record<string, Calculateur> = {
     if (c.ind.TELESURVEILLANCE) lignes.push(`| Rondier intervenant | CQP APS | ${ac} | |`);
     return { valeur: lignes.join('\n'), question: "Nombre d'agents par catégorie de l'équipe dédiée au marché (tableau de l'adéquation des moyens humains).", source: 'qualifications exigées par le DCE' };
   },
-  EFFECTIF_AGENTS: () => ({ valeur: null }),
-  NB_AGENTS_RENFORT: () => ({ valeur: null }),
+  EFFECTIF_AGENTS: (c) => (c.ctx.dimensionnement?.titulaires
+    ? { valeur: String(c.ctx.dimensionnement.titulaires), source: 'dimensionnement calculé à partir des postes et des horaires du DCE', aConfirmer: questionDimensionnement(c.ctx.dimensionnement) }
+    : { valeur: null }),
+  NB_AGENTS_RENFORT: (c) => (c.ctx.dimensionnement?.suppleants
+    ? { valeur: String(c.ctx.dimensionnement.suppleants), source: `équipe suppléante : ${Math.round(PART_SUPPLEANTS * 100)} % des titulaires, deux agents au moins`, aConfirmer: questionDimensionnement(c.ctx.dimensionnement) }
+    : { valeur: null }),
   EFFECTIF_ADS_CQP: (c) => {
     const e = c.registre.find((x) => x.cle === 'effectif_agents_securite');
     const total = Number(nombreDe(c.registre.find((x) => x.cle === 'effectif_total')?.valeur_retenue || '')) || 0;
