@@ -1613,6 +1613,29 @@ export interface OptionsModifications {
   maxModifications?: number;
   maxAjouts?: number;
   motsParAjout?: number;
+  /** Titres des rubriques du mémoire type gardées dans le mémoire : un ajout ne pose pas de « [À COMPLÉTER] » sur
+   *  un sujet qu'elles traitent déjà. */
+  titresTraites?: string[];
+}
+
+const MOTS_VIDES_TITRE = new Set(['notre', 'nos', 'votre', 'vos', 'dans', 'pour', 'avec', 'des', 'les', 'une', 'aux', 'sur', 'par', 'leur', 'leurs', 'cas', 'place', 'tout', 'tous', 'toute']);
+const motsSignificatifs = (t: string) => [...new Set(normaliser(t).replace(/[^a-z0-9\s]+/g, ' ').split(/\s+/).filter((m) => m.length >= 4 && !MOTS_VIDES_TITRE.has(m)))];
+
+/**
+ * Phrases d'un ajout qui posent un « [À COMPLÉTER] » sur un sujet déjà traité par une rubrique gardée (libellé qui
+ * reprend au moins deux mots significatifs et la moitié de ceux du titre) : retirées de l'ajout, la rubrique y répond.
+ */
+export function sansACompleterTraite(ajout: string, titres: string[] = []): string {
+  if (!titres.length || !/\[À COMPLÉTER\]/.test(ajout)) return ajout;
+  const motsTitres = titres.map(motsSignificatifs).filter((m) => m.length >= 2);
+  return ajout.split(/(?<=[.!?])\s+/).filter((ph) => {
+    if (!/\[À COMPLÉTER\]/.test(ph)) return true;
+    const libelle = new Set(motsSignificatifs(ph.split('[À COMPLÉTER]')[0]));
+    return !motsTitres.some((mt) => {
+      const communs = mt.filter((m) => libelle.has(m)).length;
+      return communs >= 2 && communs >= mt.length / 2;
+    });
+  }).join(' ').trim();
 }
 
 /** Repère un extrait mot pour mot (espaces et apostrophes tolérés). Renvoie toutes les positions. */
@@ -1722,6 +1745,11 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
   for (const a of mods.ajouts || []) {
     const m: ModificationTraitee = { type: 'ajout', extrait: String(a?.apres || ''), par: sansCovidEnumere(String(a?.texte || '').trim()), motif: a?.motif };
     if (plafond()) { refusees.push({ ...m, raison: 'plafond de modifications atteint' }); continue; }
+    if (o.titresTraites?.length && m.par) {
+      const garde = sansACompleterTraite(m.par, o.titresTraites);
+      if (!garde || garde === '-') { refusees.push({ ...m, raison: 'sujet déjà traité par une rubrique gardée du mémoire type (pas de « [À COMPLÉTER] »)' }); continue; }
+      m.par = garde;
+    }
     if (nAjouts >= o.maxAjouts) { refusees.push({ ...m, raison: `plus de ${o.maxAjouts} ajouts` }); continue; }
     if (!m.par || compterMots(m.par) > o.motsParAjout) { refusees.push({ ...m, raison: `ajout vide ou de plus de ${o.motsParAjout} mots` }); continue; }
     const refus = refusTexteNouveau(m.par, '', o);
@@ -1729,11 +1757,30 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     if (m.extrait) {
       const pos = positionsExtrait(t, m.extrait);
       if (pos.length !== 1) { refusees.push({ ...m, raison: pos.length ? 'point d\'insertion ambigu' : 'point d\'insertion introuvable mot pour mot' }); continue; }
-      // Insertion à la fin de la phrase (ou de la ligne) qui contient l'extrait.
-      const suite = t.slice(pos[0].fin);
-      const fin = /[.!?](?=\s|$)|\n/.exec(suite);
-      const coupe = pos[0].fin + (fin ? fin.index + (fin[0] === '\n' ? 0 : 1) : suite.length);
-      t = `${t.slice(0, coupe)} ${m.par}${t.slice(coupe)}`;
+      const debutLigne = t.lastIndexOf('\n', pos[0].debut - 1) + 1;
+      const finLigne = t.indexOf('\n', pos[0].fin) < 0 ? t.length : t.indexOf('\n', pos[0].fin);
+      const LISTE = /^\s*(?:\d+[.)]|[-•*])\s+/;
+      if (LISTE.test(t.slice(debutLigne, finLigne))) {
+        // Point d'insertion dans une liste : l'ajout a sa propre ligne (nouvelle puce juste après celle-ci), ou son
+        // propre paragraphe après la fin de la liste — jamais collé à la puce précédente.
+        if (LISTE.test(m.par)) {
+          t = `${t.slice(0, finLigne)}\n${m.par}${t.slice(finLigne)}`;
+        } else {
+          let finListe = finLigne;
+          while (finListe < t.length) {
+            const suivante = t.indexOf('\n', finListe + 1) < 0 ? t.length : t.indexOf('\n', finListe + 1);
+            if (!LISTE.test(t.slice(finListe + 1, suivante))) break;
+            finListe = suivante;
+          }
+          t = `${t.slice(0, finListe).trimEnd()}\n\n${m.par}${finListe < t.length ? `\n\n${t.slice(finListe).replace(/^\n+/, '')}` : ''}`;
+        }
+      } else {
+        // Insertion à la fin de la phrase (ou de la ligne) qui contient l'extrait.
+        const suite = t.slice(pos[0].fin);
+        const fin = /[.!?](?=\s|$)|\n/.exec(suite);
+        const coupe = pos[0].fin + (fin ? fin.index + (fin[0] === '\n' ? 0 : 1) : suite.length);
+        t = `${t.slice(0, coupe)} ${m.par}${t.slice(coupe)}`;
+      }
     } else {
       t = `${t.trimEnd()}\n\n${m.par}`;
     }

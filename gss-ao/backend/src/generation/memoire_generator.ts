@@ -7553,7 +7553,11 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
         client: besoin.client, exigences: parRubrique[rp.id] || [], obligations: obligationsPourRubrique(r, dceContext), perimetre,
         analyseCompacte: analyseResumee, registre: registreGss, demande: repartition?.parRubrique[rp.id]?.join(' ; ') || undefined,
         dce: dceContext, horsNormandie,
-      }, appelAdaptation, { nombresAutorises: [registreGss], nomsAutorises: [registreGss, referents] });
+      }, appelAdaptation, {
+        nombresAutorises: [registreGss], nomsAutorises: [registreGss, referents],
+        // Sujets traités par les autres rubriques gardées : pas de « [À COMPLÉTER] » ajouté sur eux.
+        titresTraites: toutesRetenues.filter((id) => id !== rp.id).map((id) => mtParId.get(id)?.titre || '').filter(Boolean),
+      });
       textes[rp.id] = res.texte;
       adaptees++;
       progres(26 + Math.round((24 * adaptees) / Math.max(1, aAdapter.length)), `Adaptation au CCTP : ${adaptees}/${aAdapter.length} rubrique(s)…`);
