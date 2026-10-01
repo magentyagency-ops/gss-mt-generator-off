@@ -9,7 +9,7 @@ import { themeActif, schemasBibliotheque } from './themes';
 import { poserSignets, poserSignetsChamps, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion } from './completion';
 import {
   chargerMemoireType, preparerMemoireType, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
-  obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2,
+  obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite,
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
   type DonneesBesoin, type RubriquePubliee,
 } from './memoire_type';
@@ -22,6 +22,8 @@ import {
 } from './reponse_libre_v2';
 import {
   candidatsReference, blocReference, referencesRetenues, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE,
+  consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
+  partiePourTexte, poidsPartie, rubriquesEssentielles,
   type CandidatReference,
 } from './memoire_type_cadre';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes } from './base_memoires';
@@ -7007,6 +7009,11 @@ Renvoie UNIQUEMENT un objet JSON : {"limite": true|false, "pagesMax": nombre, "c
     format: FormatImpose,
     onProgress?: (progress: number, message: string, status?: string) => void,
   ): Promise<{ filePath: string, generatedData: Record<string, string>, consultations: string[] }> {
+    // Mémoire type (consigne 5 : « on reprend exactement le mémoire de base, on n'adapte que la construction ») : les
+    // parties du RC assemblent les textes de GSS. Retour arrière : GSS_MEMOIRE_TYPE=non → rédaction partie par partie
+    // ci-dessous, inchangée.
+    const memoireType = this.memoireTypeV2();
+    if (memoireType) return this.genererFormatCourtMT(dossierId, dceContext, analysisData, format, memoireType, onProgress);
     const clientName = analysisData?.clientName || 'le client';
     const plan = format.plan;
     onProgress?.(12, `Format imposé par le RC : ${format.pagesMax} pages maximum, ${plan.length} parties…`);
@@ -7176,6 +7183,295 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const generatedData: Record<string, string> = { 'Format imposé par le RC': `${format.pagesMax} pages maximum — mémoire de ${rendu.pages} page(s)` };
     consultationList.forEach((c, i) => { generatedData[`⚠ Consultation requise #${i + 1}`] = c; });
     return { filePath: rendu.filePath, generatedData, consultations: consultationList };
+  }
+
+  /**
+   * Format court imposé par le RC, construit sur le MÉMOIRE TYPE (consigne 5 du dirigeant : « on reprend exactement le
+   * mémoire de base et on ne l'adapte que sur la construction ») : plan et limite de pages du RC inchangés ; chaque
+   * partie du RC assemble, dans l'ordre du mémoire type, les textes publipostés des rubriques qui lui sont rattachées
+   * (rubriques « adapte » : modifications ciblées contrôlées, comme la réponse libre v2) ; la limite de pages est tenue
+   * d'abord en retirant les sous-parties puis les rubriques les moins prioritaires, ensuite seulement par condensation
+   * (acceptée si au moins 60 % des phrases restent celles de GSS). Un élément attendu par le RC qu'aucune rubrique ne
+   * traite est rédigé comme avant et signalé à GSS comme proposition. Contrôles, schémas, rendu et état : inchangés.
+   */
+  private async genererFormatCourtMT(
+    dossierId: string,
+    dceContext: string,
+    analysisData: any,
+    format: FormatImpose,
+    mt: MemoireType,
+    onProgress?: (progress: number, message: string, status?: string) => void,
+  ): Promise<{ filePath: string, generatedData: Record<string, string>, consultations: string[] }> {
+    const plan = format.plan;
+    const progres = (p: number, m: string) => onProgress?.(p, m);
+    console.log(`[MemoireGenerator] ═══ Format court sur le mémoire type : ${format.pagesMax} pages, ${plan.length} parties ═══`);
+    progres(12, `Format imposé par le RC : ${format.pagesMax} pages maximum, ${plan.length} parties — mémoire type de GSS réordonné…`);
+
+    // ── 1. Mémoire type publiposté pour ce marché, matrice des exigences sur ses rubriques, valeurs imposées ──
+    const referents = await this.getGssReferents();
+    actualiserOrganigramme(referents);
+    const cover = await this.getCoverInfo(dossierId, analysisData);
+    const horsNormandie = marcheHorsNormandie(analysisData, dceContext);
+    const ctxBase: ContexteMarche = { analyse: analysisData, dce: dceContext, cover, referents, horsNormandie };
+    let prep: MemoirePrepare = preparerMemoireType(ctxBase, { memoireType: mt });
+    const gssDocs = await this.getGssDocumentation();
+    if (valeurRegistre('effectif_total')) for (const k of Object.keys(gssDocs)) if (/^EFFECTIFS/i.test(k)) delete gssDocs[k];
+    const gssFullContext = this.buildFullGssContext(gssDocs, 3000, 60_000);
+    const perimetre = await this.perimetreMarche(dceContext);
+    progres(15, 'Analyse des exigences du CCTP et rattachement au mémoire type…');
+    const rubriquesMatrice = mt.rubriques.filter((r) => r.ancienne_rubrique !== 'b_references').map((r) => ({ id: r.id, title: r.titre }));
+    const matrice = await this.analyzeRequirements(dceContext, gssFullContext, rubriquesMatrice, { themes: themesPourMatrice(prep.plan), nouvelles: true });
+    prep = preparerMemoireType({ ...ctxBase, matrice }, { memoireType: mt });
+    const appelAnalyse: AppelModele = async (messages, libelle) => (await this.callOpenAI(messages, 0.1, libelle, true, 'analyse')) ?? '';
+    const imposees = valeursImposeesValides((await extraireValeursImposees(mt, dceContext, prep.variables, appelAnalyse)).imposees);
+    if (Object.keys(imposees.valides).length) prep = preparerMemoireType({ ...ctxBase, matrice, imposees: imposees.valides }, { memoireType: mt });
+    const planMT = prep.plan;
+    const mtParId = new Map(mt.rubriques.map((r) => [r.id, r]));
+
+    // ── 2. Construction : chaque rubrique du mémoire type rattachée à une partie du RC (titres et attendus seulement) ──
+    progres(18, 'Rattachement des rubriques du mémoire type aux parties imposées par le RC…');
+    const rep = lireRepartition((await this.callOpenAI(consigneRepartition(mt, planMT, plan), 0.1, 'Format court : répartition du mémoire type', true, 'analyse')) || '', mt, planMT, plan);
+    console.log(`[MemoireGenerator] Format court — répartition (${rep.source}) : ${plan.map((p) => `${p.id} ${rep.parPartie[p.id].length} rubrique(s)${rep.nonCouverts[p.id]?.length ? `, ${rep.nonCouverts[p.id].length} attendu(s) hors mémoire type` : ''}`).join(' | ')}.`);
+    const repartition = await this.repartirDemande(planMT.rubriques.map((r) => ({ id: r.id, title: r.titre })));
+    const publiees = publierMemoire(prep, { marquerConsultations: true });
+    const textes: Record<string, string> = {};
+    for (const p of publiees) if (p.texte) textes[p.id] = p.texte;
+    const { parRubrique, nouvelles: nouvellesMatrice } = exigencesParRubrique(mt, planMT, matrice);
+    const tri = trierNouvelles(mt, planMT, nouvellesMatrice);
+    for (const [id, l] of Object.entries(tri.rattachees)) (parRubrique[id] ||= []).push(...l);
+    const besoin = donneesBesoin(prep, ctxBase);
+    const analyseResumee = analyseCompacte(analysisData);
+
+    // ── 3. Compréhension du besoin, si une partie du RC la demande ──
+    const b1 = planMT.rubriques.find((r) => r.mode === 'besoin');
+    const partieB1 = b1 ? plan.find((p) => rep.parPartie[p.id].includes(b1.id)) : undefined;
+    const avisSecours: string[] = [];
+    if (b1 && partieB1) {
+      progres(22, 'Notre compréhension de votre besoin…');
+      const c = await this.redigerComprehension(prep, ctxBase, besoin, {
+        perimetre, exigences: matrice.filter((e) => e.exigence && !PIECES_OFFRE.test(e.exigence)), analyse: analyseResumee,
+        demande: repartition?.parRubrique[b1.id]?.join(' ; ') || undefined,
+      });
+      textes[b1.id] = c.texte;
+      if (c.secours) avisSecours.push(`Partie « ${partieB1.title} » : compréhension du besoin construite à partir des données du DCE (rédaction automatique indisponible), à relire.`);
+    }
+
+    // ── 4. Budget de mots par partie et sélection par priorité (aucune réécriture) ──
+    const nbSchemas = Math.max(1, Math.floor(format.pagesMax / 4));
+    const choixSchemas = choisirSchemasGss(plan.map((p) => ({ cle: p.id, question: `${p.title} ${p.attendu || ''}`, texte: '' }))).slice(0, nbSchemas);
+    const motsTotal = Math.max(900, format.pagesMax * 560 - choixSchemas.length * 200 - 120);
+    const poids: Record<string, number> = Object.fromEntries(plan.map((p) => [p.id, poidsPartie(p)]));
+    const sommePoids = plan.reduce((s, p) => s + poids[p.id], 0) || 1;
+    // Rubrique qui répond directement à un élément cité par le RC (« démarche RSE », « organigramme »…) : jamais retirée
+    // en entier ; rubrique placée faute de mieux (non rattachée par le modèle) : retirée en premier.
+    const essentielles = new Set(plan.flatMap((p) => [...rubriquesEssentielles(mt, p, rep.parPartie[p.id])]));
+    const infosDe = (pid: string) => rep.parPartie[pid].filter((id) => (textes[id] || '').trim()).map((id) => {
+      const r = mtParId.get(id)!;
+      return { id, titre: r.titre, priorite: rep.secondaires.includes(id) ? 4 : r.priorite, sousParties: r.sous_parties, texte: textes[id], garder: r.mode === 'besoin' || essentielles.has(id) };
+    });
+    // Part réservée aux éléments attendus par le RC hors mémoire type (rédigés à part, proposés à GSS).
+    const aCompleterRC = (pid: string) => !!rep.nonCouverts[pid]?.length || !infosDe(pid).length;
+    const besoinsMots: Record<string, number> = Object.fromEntries(plan.map((p) => [p.id, infosDe(p.id).length
+      ? motsPartie(infosDe(p.id)) + (aCompleterRC(p.id) ? 200 : 0)
+      : (motsTotal * poids[p.id]) / sommePoids]));
+    const budgets = repartirBudget(besoinsMots, poids, motsTotal);
+    const budgetComplement = (pid: string) => (!infosDe(pid).length ? budgets[pid] : aCompleterRC(pid) ? Math.min(300, Math.max(120, Math.round(budgets[pid] * 0.25))) : 0);
+    const retenues: Record<string, string[]> = {};
+    const retraitsSelection: string[] = [];
+    for (const p of plan) {
+      const sel = selectionnerParPriorite(infosDe(p.id), Math.max(150, budgets[p.id] - budgetComplement(p.id)));
+      retenues[p.id] = sel.gardees;
+      for (const id of sel.gardees) textes[id] = sel.textes[id];
+      retraitsSelection.push(...sel.retraits);
+    }
+    if (retraitsSelection.length) console.log(`[MemoireGenerator] Format court — sélection (${motsTotal} mots pour ${format.pagesMax} pages) : ${retraitsSelection.length} passage(s) du mémoire type non repris : ${retraitsSelection.join(' ; ')}.`);
+
+    // ── 5. Adaptation ciblée des rubriques « adapte » retenues (et des rubriques fixes visées par la demande particulière) ──
+    const registreGss = blocRegistre(horsNormandie) + organigrammeGss(referents);
+    const appelAdaptation: AppelModele = async (messages, libelle) => {
+      const user = String(messages[1]?.content || '');
+      const coupe = user.indexOf('\n\nRUBRIQUE : ');
+      const msgs = coupe > 0 ? [messages[0], { role: 'user', content: user.slice(0, coupe) }, { role: 'user', content: user.slice(coupe + 2) }] : messages;
+      return (await this.callOpenAI(msgs, 0.2, libelle, true, 'redaction', coupe > 0 ? 1 : 0)) ?? '';
+    };
+    const toutesRetenues = plan.flatMap((p) => retenues[p.id]);
+    const aAdapter = toutesRetenues.map((id) => planMT.rubriques.find((r) => r.id === id)!).filter((r) => r && (r.mode === 'adapte' || (r.mode === 'fixe' && repartition?.parRubrique[r.id]?.length)));
+    let adaptees = 0;
+    await enParallele(aAdapter, 4, async (rp) => {
+      const r = mtParId.get(rp.id)!;
+      const res = await adapterRubrique({ ...r, mode: 'adapte' }, textes[rp.id], {
+        client: besoin.client, exigences: parRubrique[rp.id] || [], obligations: obligationsPourRubrique(r, dceContext), perimetre,
+        analyseCompacte: analyseResumee, registre: registreGss, demande: repartition?.parRubrique[rp.id]?.join(' ; ') || undefined,
+        dce: dceContext, horsNormandie,
+      }, appelAdaptation, { nombresAutorises: [registreGss], nomsAutorises: [registreGss, referents] });
+      textes[rp.id] = res.texte;
+      adaptees++;
+      progres(26 + Math.round((24 * adaptees) / Math.max(1, aAdapter.length)), `Adaptation au CCTP : ${adaptees}/${aAdapter.length} rubrique(s)…`);
+      console.log(`[MemoireGenerator] Adaptation ${rp.id} : ${res.appliquees.length} modification(s) appliquée(s), ${res.refusees.length} refusée(s), fidélité ${res.fidelite.toFixed(2)}${res.repli ? ` — texte de référence conservé (${res.raison})` : ''}.`);
+    });
+
+    // ── 6. Assemblage dans l'ordre du RC ; éléments attendus hors mémoire type rédigés à part (propositions) ──
+    const sections: Record<string, string> = {};
+    const propositions: string[] = [];
+    const exigencesDe: Record<string, any[]> = Object.fromEntries(plan.map((p) => [p.id, rep.parPartie[p.id].flatMap((id) => parRubrique[id] || [])]));
+    for (const e of tri.nouvelles) {
+      if (!e?.exigence || PIECES_OFFRE.test(e.exigence)) continue;
+      exigencesDe[partiePourTexte(plan, `${e.sujet || ''} ${e.exigence}`).id].push(e);
+    }
+    const analysisJson = JSON.stringify(analysisData, null, 2);
+    const registreComplet = registreGss + referencesGss() + this.blocPerimetre(perimetre);
+    for (let i = 0; i < plan.length; i++) {
+      const p = plan[i];
+      progres(52 + Math.round((i / plan.length) * 14), `Partie ${i + 1}/${plan.length} : ${p.title}…`);
+      let texte = assemblerPartie(retenues[p.id].map((id) => ({ titre: mtParId.get(id)!.titre, texte: textes[id] })));
+      if (aCompleterRC(p.id)) {
+        const elements = rep.nonCouverts[p.id]?.length ? rep.nonCouverts[p.id] : [p.attendu || p.title];
+        const complement = await this.redigerComplementCourt(p, elements, budgetComplement(p.id), texte, {
+          format, analysisJson, gssFullContext, registre: registreComplet, clientName: analysisData?.clientName || 'le client',
+          precedentes: plan.slice(0, i).filter((x) => sections[x.id]).map((x) => `### ${x.title}\n${sections[x.id]}`).join('\n\n'),
+        });
+        if (complement) {
+          texte = `${texte}\n\n${complement}`.trim();
+          propositions.push(`Proposition de réponse à valider (attendu du RC que le mémoire type de GSS ne traite pas) : ${p.title} — ${elements.join(' ; ')}`.slice(0, 400));
+        }
+      }
+      // Contrôle de couverture conservé : une exigence du CCTP que la partie ne traite pas devient un engagement.
+      const reqs = exigencesDe[p.id].filter((e: any) => e?.exigence && !PIECES_OFFRE.test(e.exigence));
+      if (texte && reqs.length) texte = await this.completerCouverture(texte, reqs, p.id);
+      sections[p.id] = texte.trim();
+    }
+    for (const g of grouperNouvelles(tri.nouvelles, 6).groupes) propositions.push(`Proposition de réponse à valider (question nouvelle du DCE, en engagement dans la partie « ${partiePourTexte(plan, `${g.sujet} ${g.exigences.map((e) => e.exigence).join(' ')}`).title} ») : ${g.sujet}`);
+
+    // ── 7. Filtres, contrôles de cohérence avec le CCTP (inchangés), remarques ──
+    const commentairesRetires = new Set<string>();
+    for (const id of Object.keys(sections)) {
+      const nettoye = retirerCommentairesInternes(protegerGras(sections[id]));
+      nettoye.retires.forEach((x) => commentairesRetires.add(`À confirmer : ${retablirGras(x)}`));
+      const delais = delaisHorsNormandie(retablirGras(nettoye.texte), dceContext, horsNormandie);
+      delais.retires.forEach((x) => commentairesRetires.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
+      sections[id] = delais.texte;
+    }
+    progres(70, 'Cohérence avec les exigences chiffrées et les horaires du CCTP…');
+    await this.corrigerContradictions(sections, plan, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))]);
+    await this.verifierHoraires(sections, plan, dceContext);
+    await this.engagementsChiffresManquants(sections, plan, dceContext);
+    const remarquesCourt = await this.remarquesCahierDesCharges(dceContext);
+    if (remarquesCourt) {
+      const cible = partieB1 || plan.find((p) => /enjeux|compr[ée]hension/i.test(p.title)) || plan[plan.length - 1];
+      if (cible && sections[cible.id] !== undefined) sections[cible.id] = `${sections[cible.id].trim()}\n\n${remarquesCourt}`;
+    }
+    const partieRefs = plan.find((p) => rep.parPartie[p.id].includes('b2_references_intro'))?.id || '';
+    limiterReferences(sections, plan.map((p) => p.id), partieRefs);
+    limiterRappelsSite(sections, plan.map((p) => p.id));
+
+    // ── 8. Points à compléter (même logique que le format court d'avant) ──
+    const consultations = new Set<string>([
+      ...alerteCadreAbsent(dceContext), ...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie),
+      ...publiees.filter((p) => toutesRetenues.includes(p.id)).flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)])
+        .flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
+    ]);
+    for (const r of matrice) if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence)) consultations.add(r.exigence.trim());
+    const markerRe = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
+    const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
+    let nRepere = 0;
+    for (const id of Object.keys(sections)) {
+      sections[id] = sections[id].replace(markerRe, (_m: string, q: string) => { nRepere++; demandes.push({ texte: String(q).trim(), repere: nRepere }); return REPERE(nRepere); });
+    }
+
+    // ── 9. Rendu mesuré ; d'abord la sélection (passages entiers du mémoire type), ensuite seulement la condensation ──
+    const infosRubriques = plan.flatMap((p) => infosDe(p.id));
+    const schemas: Record<string, string> = Object.fromEntries(choixSchemas.map((c) => [c.id === 'organigramme' ? `${c.cle}#court#organigramme` : `${c.cle}#court`, c.svg]));
+    let rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
+    for (let tour = 1; rendu.pages > format.pagesMax && tour <= 3; tour++) {
+      const ratio = (format.pagesMax / rendu.pages) * 0.92;
+      progres(86, `Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées : sélection des passages prioritaires (passe ${tour})…`);
+      const retraits: string[] = [];
+      for (const p of plan) {
+        const t = sections[p.id] || '';
+        const cible = Math.round(motsPartie([{ titre: '', texte: t }]) * ratio);
+        const sel = selectionnerDansPartie(t, infosRubriques, cible);
+        retraits.push(...sel.retraits);
+        sections[p.id] = sel.texte;
+        // Condensation seulement si la sélection ne suffit pas, et refusée si moins de 60 % des phrases de GSS restent.
+        const mots = motsPartie([{ titre: '', texte: sections[p.id] }]);
+        if (mots <= cible * 1.05) continue;
+        const r = await this.callOpenAI([
+          { role: 'system', content: `Tu condenses une partie de mémoire technique pour tenir dans la limite de pages du règlement de consultation. Cible : ${cible} mots au plus (actuellement ${mots}). Le texte est celui de GSS : RETIRE des phrases ou des puces entières (redites, phrases générales) plutôt que de reformuler ; les phrases gardées restent MOT POUR MOT. Conserve TOUS les chiffres, délais, fréquences, noms, engagements et exigences du CCTP traitées, les tableaux et les repères de la forme ⟦AC:n⟧ à l'identique. Même format Markdown (## sous-titres, puces, gras). Renvoie uniquement le texte.` },
+          { role: 'user', content: sections[p.id] },
+        ], 0.2, `Condensation ${p.id}`, false);
+        const reps = (x: string) => (x.match(/⟦AC:\d+⟧/g) || []).sort().join();
+        if (r && r.split(/\s+/).length < mots && reps(r) === reps(sections[p.id])) {
+          const fid = fidelite(r, sections[p.id]);
+          if (fid >= 0.6) sections[p.id] = r.replace(/^#\s+[^\n]*\n+/, '').trim();
+          else console.log(`[MemoireGenerator] Condensation ${p.id} refusée : ${Math.round(fid * 100)} % des phrases seulement viennent du texte de GSS (60 % exigés).`);
+        }
+      }
+      if (retraits.length) console.log(`[MemoireGenerator] Format court — passe ${tour} : ${retraits.length} passage(s) non repris : ${retraits.join(' ; ')}.`);
+      rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
+    }
+
+    // ── 10. Questions à GSS, complétion par les mémoires, nettoyage final, état ──
+    const questionsGss = await this.consoliderAvecSources(demandes.map((d) => d.texte));
+    const elements: ElementACompleter[] = questionsGss.map((q, i) => {
+      const reperes = [...new Set(q.sources.map((k) => demandes[k]?.repere).filter((x): x is number => typeof x === 'number'))];
+      const id = reperes.length ? Object.keys(sections).find((k) => sections[k].includes(REPERE(reperes[0]))) : undefined;
+      let contexte = '';
+      if (id) {
+        const t = sections[id];
+        const pos = t.indexOf(REPERE(reperes[0]));
+        contexte = `${plan.find((x) => x.id === id)?.title || ''} — …${t.slice(Math.max(0, pos - 220), pos).replace(REPERE_RE, '').replace(/[#*]/g, '').replace(/\s+/g, ' ').trim()}`;
+      }
+      return { cle: `Q${i + 1}`, question: q.question, contexte, statut: 'ouvert', reperes, pourAcheteur: /^À demander à l.acheteur/i.test(q.question) };
+    });
+    await this.completerParLesMemoires(elements, sections, horsNormandie);
+    for (const id of Object.keys(sections)) sections[id] = nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext));
+    rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
+    const consultationList = elements.filter((e) => e.statut === 'ouvert').map((e) => e.question);
+    if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
+    consultationList.push(...avisSecours, ...propositions);
+    console.log(`[MemoireGenerator] Format court (mémoire type) : ${rendu.pages} page(s) / ${format.pagesMax} autorisée(s) ; ${toutesRetenues.length} rubrique(s) du mémoire type reprise(s), ${propositions.length} proposition(s).`);
+    try {
+      ecrireEtat({
+        dossierId, mode: 'libre', fichier: rendu.filePath, majLe: '', elements, reponsesTraitees: [],
+        libre: { sections, schemas, cover, court: { pagesMax: format.pagesMax, plan, source: format.source }, theme: themeActif() },
+        demande: this.demandeParticuliere?.demande || undefined,
+      });
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] État de complétion non enregistré (non bloquant) : ${e?.message || e}`);
+    }
+    const generatedData: Record<string, string> = { 'Format imposé par le RC': `${format.pagesMax} pages maximum — mémoire de ${rendu.pages} page(s)` };
+    consultationList.forEach((c, i) => { generatedData[`⚠ Consultation requise #${i + 1}`] = c; });
+    return { filePath: rendu.filePath, generatedData, consultations: consultationList };
+  }
+
+  /**
+   * Format court : éléments attendus par le RC qu'aucune rubrique du mémoire type ne traite (décomposition du prix,
+   * dimensionnement propre au site…), rédigés comme le format court d'avant, à la suite des textes de GSS de la partie.
+   */
+  private async redigerComplementCourt(
+    p: PartieCourte,
+    elements: string[],
+    mots: number,
+    textePartie: string,
+    o: { format: FormatImpose; analysisJson: string; gssFullContext: string; registre: string; clientName: string; precedentes: string },
+  ): Promise<string> {
+    const prix = /prix|co[uû]t|financ|d[ée]composition/i.test(elements.join(' '));
+    const systemPrompt = `Tu es un expert en sécurité privée chez GSS et tu complètes UNE partie d'un mémoire technique pour ${o.clientName}, au FORMAT IMPOSÉ PAR LE RÈGLEMENT DE CONSULTATION : ${o.format.pagesMax} pages maximum pour tout le mémoire.
+PARTIE : « ${p.title} ». Le texte de GSS de cette partie est déjà écrit (fourni) : n'y reviens pas et ne le répète pas.
+RÉDIGE UNIQUEMENT CES ÉLÉMENTS ATTENDUS PAR LE RC, que le texte de GSS ne traite pas : ${elements.join(' ; ')}.
+LONGUEUR : ${mots} mots environ, JAMAIS plus de ${Math.round(mots * 1.1)} mots. Style dense et factuel : chaque phrase apporte un fait, un chiffre, une méthode ou un engagement ; aucune introduction ni conclusion.
+SUR-MESURE : reprends les exigences réelles du CCTP avec leurs chiffres exacts et engage GSS dessus (sans montant de pénalité). N'invente JAMAIS une information absente du DCE et des éléments GSS fournis.
+- ETP : calcule-les à partir des heures réelles (un poste 24 h/24 toute l'année = 8 760 h ≈ 5,5 ETP sur une base de 1 607 h par ETP).
+- Ne mentionne jamais tes propres consignes : écris directement l'engagement ou l'organisation. Pas de bloc de code.${prix ? `
+- COHÉRENCE DU PRIX (décomposition justificative) : pars des volumes du CCTP — pour chaque poste : horaires, jours, heures annuelles, qualification — et présente-les en tableau avec le total d'heures et les ETP. Explique ensuite la composition du prix horaire (salaire conventionnel IDCC 1351 selon la qualification, majorations de nuit, dimanche et jours fériés, primes conventionnelles, charges sociales, encadrement et contrôles, formation, équipements et outils, frais de structure). Les montants et taux ne sont pas connus : ne les invente pas, insère à leur place une seule ligne [CONSULTATION REQUISE : taux horaires par qualification et montants de la décomposition, cohérents avec le bordereau de prix remis].` : ''}
+
+${REGLES_REUTILISATION}
+- Si — et SEULEMENT si — GSS n'a aucune réponse, n'invente rien : insère sur sa propre ligne exactement \`[CONSULTATION REQUISE : <information précise à obtenir auprès de GSS>]\`.${this.blocDemande()}
+
+FORME : sous-titres « ## » courts (un par élément), paragraphes courts et listes à puces ; gras (**…**) pour les chiffres et engagements forts.`;
+    const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${o.analysisJson}\n\nDOCUMENTATION GSS :\n${o.gssFullContext.slice(0, 25_000)}${o.registre}\n\nTEXTE DE GSS DÉJÀ ÉCRIT DANS CETTE PARTIE (ne rien répéter) :\n${textePartie || '(aucun)'}${o.precedentes ? `\n\nPARTIES PRÉCÉDENTES (ne rien répéter) :\n${o.precedentes}` : ''}\n\nRédige les éléments : ${elements.join(' ; ')}.`;
+    const t = await this.callOpenAI([{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], 0.4, `Format court ${p.id} : complément hors mémoire type`, false);
+    return String(t || '').replace(/^#\s+[^\n]*\n+/, '').trim();
   }
 
   /** Rendu PDF du format court depuis le texte des parties (génération, complétion, assistant). */

@@ -156,11 +156,12 @@ export function sousPartieDe(sousParties: SousPartie[], titre: string): SousPart
 export interface RubriqueSelection {
   id: string;
   titre: string;
-  /** 1 = essentielle (jamais retirée), 2, 3 = la moins prioritaire. */
+  /** 1 = essentielle (jamais retirée), 2, 3 ; 4 = placée faute de mieux (retirée en premier). */
   priorite: number;
   sousParties: SousPartie[];
   texte: string;
-  /** Jamais retirée (compréhension du besoin, proposition de l'IA…). */
+  /** Jamais retirée en entier (compréhension du besoin, engagements, proposition de l'IA…) ; ses sous-parties de
+   *  priorité 2 ou 3 peuvent l'être. */
   garder?: boolean;
 }
 
@@ -190,13 +191,14 @@ export function selectionnerParPriorite(rubriques: RubriqueSelection[], budgetMo
   const retraits: string[] = [];
   const total = () => motsPartie(rubriques.filter((r) => gardees.has(r.id)).map((r) => ({ titre: r.titre, texte: textes[r.id] })));
   const prioSousPartie = (r: RubriqueSelection, titre: string | null) => (titre === null ? 1 : (sousPartieDe(r.sousParties, titre)?.priorite ?? 2));
-  const etapes: Array<{ type: 'sp' | 'rub'; p: number }> = [{ type: 'sp', p: 3 }, { type: 'rub', p: 3 }, { type: 'sp', p: 2 }, { type: 'rub', p: 2 }];
+  // Priorité 4 : rubrique placée faute de mieux (le modèle ne l'a rattachée à aucune partie) : retirée en premier.
+  const etapes: Array<{ type: 'sp' | 'rub'; p: number }> = [{ type: 'rub', p: 4 }, { type: 'sp', p: 3 }, { type: 'rub', p: 3 }, { type: 'sp', p: 2 }, { type: 'rub', p: 2 }];
   for (const e of etapes) {
     for (let i = rubriques.length - 1; i >= 0 && total() > budgetMots; i--) {
       const r = rubriques[i];
-      if (!gardees.has(r.id) || r.garder) continue;
+      if (!gardees.has(r.id)) continue;
       if (e.type === 'rub') {
-        if (r.priorite >= e.p) { gardees.delete(r.id); retraits.push(r.titre); }
+        if (!r.garder && r.priorite >= e.p) { gardees.delete(r.id); retraits.push(r.titre); }
         continue;
       }
       let morceaux = decouperSousParties(textes[r.id]);
@@ -236,6 +238,28 @@ export function repartirBudget(besoins: Record<string, number>, poids: Record<st
   return Object.fromEntries(ids.map((id) => [id, Math.max(150, Math.round(budget[id]))]));
 }
 
+/**
+ * Sélection dans une partie DÉJÀ assemblée (après adaptation et contrôles) : la partie est redécoupée sur ses
+ * sous-titres « ## » ; un bloc dont le titre est celui d'une rubrique du mémoire type suit sa priorité, tout autre bloc
+ * (introduction, engagements sur les exigences, proposition de l'IA, remarques) est gardé.
+ */
+export function selectionnerDansPartie(texte: string, infos: Array<{ titre: string; priorite: number; sousParties: SousPartie[]; garder?: boolean }>, budgetMots: number): { texte: string; retraits: string[] } {
+  const blocs: Array<{ titre: string | null; corps: string }> = [];
+  for (const morceau of String(texte || '').split(/\n(?=## )/)) {
+    const m = /^## (.+)\n?([\s\S]*)$/.exec(morceau);
+    if (m) blocs.push({ titre: m[1].trim(), corps: m[2].trim() });
+    else if (morceau.trim()) blocs.push({ titre: null, corps: morceau.trim() });
+  }
+  const rubriques: RubriqueSelection[] = blocs.map((b, i) => {
+    const info = b.titre ? infos.find((x) => normaliser(x.titre) === normaliser(b.titre!)) : undefined;
+    return { id: `bloc${i}`, titre: b.titre || '', priorite: info?.priorite ?? 1, sousParties: info?.sousParties || [], texte: b.corps, garder: !info || info.garder };
+  });
+  const r = selectionnerParPriorite(rubriques, budgetMots);
+  const sortie = rubriques.filter((x) => r.gardees.includes(x.id))
+    .map((x) => (x.titre ? `## ${x.titre}\n\n${r.textes[x.id].trim()}` : r.textes[x.id].trim())).join('\n\n');
+  return { texte: sortie, retraits: r.retraits };
+}
+
 /** Partie assemblée : chaque rubrique sous son sous-titre « ## », dans l'ordre donné. */
 export function assemblerPartie(rubriques: Array<{ titre: string; texte: string }>): string {
   return rubriques.filter((r) => r.texte.trim()).map((r) => `## ${r.titre}\n\n${r.texte.trim()}`).join('\n\n');
@@ -248,7 +272,10 @@ export function texteBrut(markdown: string): string {
   return String(markdown || '').split('\n').map((l) => {
     if (/^\s*\|?\s*:?-{3,}/.test(l) && /^[\s|:-]+$/.test(l)) return null;
     if (/^\s*\|.*\|\s*$/.test(l)) return l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim()).filter(Boolean).join(' : ');
-    return l.replace(/^\s*#{1,6}\s+/, '').replace(/^\s*[-*]\s+/, '• ').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*\*/g, '');
+    // Sous-titre (titre Markdown ou ligne entièrement en gras) : « Titre : » (texte brut du cadre, lisible seul).
+    const titre = /^\s*(?:#{1,6}\s+(.+?)|\*\*([^*]+)\*\*)\s*$/.exec(l);
+    if (titre) { const x = (titre[1] || titre[2]).trim(); return /[.:;!?]$/.test(x) ? x : `${x} :`; }
+    return l.replace(/^\s*[-*]\s+/, '• ').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*\*/g, '');
   }).filter((l): l is string => l !== null).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
@@ -348,4 +375,42 @@ export const SEUIL_FIDELITE_CADRE = 0.6;
 export function fideliteReponse(reference: string, reponse: string, limite = false): number {
   const couverture = fidelite(reference, reponse);
   return limite ? Math.max(couverture, fidelite(reponse, reference)) : couverture;
+}
+
+/**
+ * Rubriques d'une partie qui répondent directement à un élément cité par le RC (titre et attendus découpés en
+ * éléments : « équipe », « organigramme », « démarche RSE »…) : pour chaque élément, la rubrique la plus proche (mots-clés
+ * et titre). Elles ne sont jamais retirées en entier par la sélection (seulement leurs sous-parties secondaires).
+ */
+export function rubriquesEssentielles(mt: MemoireType, p: PartieRC, ids: string[]): Set<string> {
+  const elements = `${p.title} ; ${String(p.attendu || '').replace(/Critère de jugement traité ici\s*:\s*/gi, ' ; ')}`
+    .split(/[;,/()«»]|\s+et\s+|\.\s/).map((x) => x.replace(/\(\d+\s*%\)/g, '').trim()).filter((x) => x.length >= 3);
+  const out = new Set<string>();
+  for (const e of elements) {
+    const r = rechercherRubriques(mt, e, 1, ids)[0];
+    if (r && r.score >= 1) out.add(r.id);
+  }
+  return out;
+}
+
+/** Partie du RC la plus proche d'un texte (mots communs avec le titre et les attendus) ; la dernière à défaut. */
+export function partiePourTexte(parties: PartieRC[], texte: string): PartieRC {
+  const m = motsSignificatifs(texte);
+  let meilleure = parties[parties.length - 1];
+  let max = 0;
+  for (const p of parties) {
+    let n = 0;
+    for (const w of motsSignificatifs(`${p.title} ${p.attendu || ''}`)) if (!VIDES.has(w) && m.has(w)) n++;
+    if (n > max) { max = n; meilleure = p; }
+  }
+  return meilleure;
+}
+
+/** Pondération d'une partie du RC (somme des « (N %) » de ses attendus ; 10 à défaut), comme le budget du format court. */
+export function poidsPartie(p: PartieRC): number {
+  const re = /\((\d+)\s*%\)/g;
+  let s = 0;
+  let k: RegExpExecArray | null;
+  while ((k = re.exec(p.attendu || ''))) s += Number(k[1]);
+  return s || 10;
 }
