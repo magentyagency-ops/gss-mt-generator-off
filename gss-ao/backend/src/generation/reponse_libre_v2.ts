@@ -340,6 +340,34 @@ const motsSujet = (t: string) => new Set(normaliser(t).replace(/[^a-z0-9 ]+/g, '
 
 export interface GroupeNouveau { sujet: string; theme: string; exigences: ExigenceMatrice[] }
 
+/**
+ * Proposition de réponse de l'IA : une phrase qui AFFIRME un point posé en question à GSS (« les agents SSIAP 1
+ * effectuent les rondes » alors que GSS est interrogé : « Un agent SSIAP 1 est-il chargé d'effectuer les rondes ? »)
+ * est retirée : la réponse de GSS la remplacera (même règle que les variables « à compléter »). Rapprochement par
+ * racines de mots : au moins 3 racines communes couvrant 60 % de la question. Titres, tableaux et repères gardés.
+ */
+export function retirerAffirmationsQuestionnees(texte: string, questions: string[]): { texte: string; retires: string[] } {
+  const racines = (t: string) => new Set([...motsSujet(t)].map((w) => w.replace(/s$/, '').slice(0, 6)));
+  const qs = questions.filter((q) => /\?\s*$/.test(String(q || '').trim())).map(racines).filter((r) => r.size >= 3);
+  const retires: string[] = [];
+  if (!qs.length) return { texte, retires };
+  const lignes = String(texte || '').split('\n').map((ligne) => {
+    if (/^\s*(?:#|\|)/.test(ligne) || /^\s*\*\*[^*]+\*\*\s*$/.test(ligne)) return ligne;
+    const debut = (ligne.match(/^\s*(?:[-*•]\s+|\d+[.)]\s+)?/) || [''])[0];
+    const phrases = ligne.slice(debut.length).split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«"(*])/);
+    const gardees = phrases.filter((ph) => {
+      if (/\[À COMPLÉTER\]|\[CONSULTATION REQUISE|⟦AC:/.test(ph)) return true;
+      const r = racines(ph);
+      const affirme = qs.some((q) => { const n = [...q].filter((w) => r.has(w)).length; return n >= 3 && n / q.size >= 0.6; });
+      if (affirme) retires.push(ph.replace(/[*#]/g, '').trim());
+      return !affirme;
+    });
+    if (!gardees.length) return debut.trim() ? null : '';
+    return `${debut}${gardees.join(' ')}`;
+  }).filter((l): l is string => l !== null);
+  return { texte: lignes.join('\n').replace(/\n{3,}/g, '\n\n').trim(), retires };
+}
+
 const RANG_CRITICITE = (c?: string) => (/bloqu/i.test(c || '') ? 0 : /facult/i.test(c || '') ? 2 : 1);
 
 /**

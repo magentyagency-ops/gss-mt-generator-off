@@ -16,7 +16,7 @@ import {
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
-  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras,
+  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees,
   valeursImposeesValides,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
@@ -6517,6 +6517,15 @@ RÈGLES DE FORME (rendu Marp) :
     });
     elementsLibres.push(...autres);
     await this.completerParLesMemoires(autres, sections, horsNormandie);
+    // Propositions de réponse : une phrase qui affirme un point posé en question à GSS est retirée (la réponse de
+    // GSS la remplacera), comme une variable « à compléter ».
+    const questionsOuvertes = elementsLibres.filter((e) => e.statut === 'ouvert').map((e) => e.question);
+    for (const a of ajouts) {
+      if (!sections[a.id]) continue;
+      const r = retirerAffirmationsQuestionnees(sections[a.id], questionsOuvertes);
+      if (r.retires.length) console.log(`[MemoireGenerator] Proposition « ${a.title} » : ${r.retires.length} phrase(s) qui tranchaient une question posée à GSS retirée(s).`);
+      sections[a.id] = r.texte;
+    }
     // Nettoyage final (mêmes filtres que la réponse libre v1), sur tout le texte remis à l'acheteur.
     for (const id of Object.keys(sections)) sections[id] = nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext));
     const consultationList = elementsLibres.filter((e) => e.statut === 'ouvert').map((e) => e.question);
