@@ -6887,10 +6887,12 @@ RÈGLES DE FORME (rendu Marp) :
    * Contrôle de couverture d'une rubrique : chaque exigence du CCTP qui lui est attribuée et qu'elle ne traite pas
    * explicitement devient une puce d'engagement (chiffre exact du CCTP), en fin de rubrique. Étape non bloquante.
    */
-  private async completerCouverture(text: string, chapterReqs: any[], sectionId: string): Promise<string> {
+  private async completerCouverture(text: string, chapterReqs: any[], sectionId: string, horsNormandie = false): Promise<string> {
+    // Hors Normandie, GSS n'annonce aucun délai qui ne vient pas du CCTP (même règle que le registre, base_memoires.ts).
+    const regleDelais = horsNormandie ? ` CE MARCHÉ EST HORS DE NORMANDIE : n'écris AUCUN délai chiffré (astreinte, intervention, remplacement, mobilisation) qui ne figure pas mot pour mot dans l'exigence du CCTP ; jamais un délai repris d'un ancien marché normand (ex. 60 minutes).` : '';
     try {
       const verif = await this.callOpenAI([
-        { role: 'system', content: `On te donne le texte d'une rubrique de mémoire technique et une liste numérotée d'exigences du CCTP. Pour chaque exigence qui n'est PAS traitée explicitement dans le texte (avec son chiffre s'il y en a un), rédige UNE puce d'engagement de GSS, factuelle, qui reprend l'exigence avec son chiffre exact (sans montant de pénalité, sans inventer de moyen absent de la « réponse GSS connue » ; si GSS n'a pas de réponse connue, engage GSS à respecter l'exigence telle qu'écrite). Jamais « s'engage à confirmer » ni « s'engage à formaliser » : écris l'engagement lui-même. Une exigence déjà traitée dans le texte, même formulée autrement, n'est PAS reprise. Ne cite jamais le numéro d'une exigence. Ignore les exigences qui portent sur la composition du dossier de l'offre (pièces à remettre, nombre de pages du mémoire, visite, signature) : elles ne s'écrivent pas dans le mémoire. Pas de numéro en tête de puce. Renvoie UNIQUEMENT un objet JSON : {"puces": ["…"]} (liste vide si tout est couvert).` },
+        { role: 'system', content: `On te donne le texte d'une rubrique de mémoire technique et une liste numérotée d'exigences du CCTP. Pour chaque exigence qui n'est PAS traitée explicitement dans le texte (avec son chiffre s'il y en a un), rédige UNE puce d'engagement de GSS, factuelle, qui reprend l'exigence avec son chiffre exact (sans montant de pénalité, sans inventer de moyen absent de la « réponse GSS connue » ; si GSS n'a pas de réponse connue, engage GSS à respecter l'exigence telle qu'écrite). Jamais « s'engage à confirmer » ni « s'engage à formaliser » : écris l'engagement lui-même. Une exigence déjà traitée dans le texte, même formulée autrement, n'est PAS reprise. Ne cite jamais le numéro d'une exigence. Ignore les exigences qui portent sur la composition du dossier de l'offre (pièces à remettre, nombre de pages du mémoire, visite, signature) : elles ne s'écrivent pas dans le mémoire. Pas de numéro en tête de puce. Renvoie UNIQUEMENT un objet JSON : {"puces": ["…"]} (liste vide si tout est couvert).${regleDelais}` },
         { role: 'user', content: `TEXTE :\n${text}\n\nEXIGENCES :\n${chapterReqs.map((r: any, k: number) => `${k + 1}. ${r.exigence} (réponse GSS connue : ${r.reponseGss || '—'})`).join('\n')}` },
       ], 0.1, `Couverture ${sectionId}`, true);
       const puces = (JSON.parse(verif || '{}').puces || []).map((x: any) => String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, '')).filter((x: string) => x && !PIECES_OFFRE.test(x) && !/p[ée]nalit|plafonnement/i.test(x)
@@ -7515,7 +7517,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       }
       // Contrôle de couverture conservé : une exigence du CCTP que la partie ne traite pas devient un engagement.
       const reqs = reqsCouverture(p.id);
-      if (texte && reqs.length) texte = plafonnerEngagements(await this.completerCouverture(texte, reqs, p.id), 6);
+      if (texte && reqs.length) texte = plafonnerEngagements(await this.completerCouverture(texte, reqs, p.id, horsNormandie), 6);
       sections[p.id] = texte.trim();
     }
     for (const g of grouperNouvelles(nouvellesCourt, 6).groupes) {

@@ -580,7 +580,13 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
     const unite = /^m/i.test(u) ? '(?:minutes?|min\\b|mn\\b)' : '(?:heures?|h\\b)';
     const chiffre = `${n.replace('.', '[.,]').replace(',', '[.,]')}`;
     const formes = LETTRES[n] ? `(?:${chiffre}|${LETTRES[n]})(?:\\s*\\(${chiffre}\\))?` : chiffre;
-    return new RegExp(`(?<![\\d,.])${formes}\\s*${unite}`, 'i').test(dceNorm);
+    // Un seuil de pénalité (« retard supérieur à 60 min … 300 € HT / manquement ») n'est pas un délai d'intervention
+    // imposé : il n'autorise pas GSS à promettre ce délai hors Normandie.
+    for (const m of dceNorm.matchAll(new RegExp(`(?<![\\d,.])${formes}\\s*${unite}`, 'gi'))) {
+      const autour = dceNorm.slice(Math.max(0, (m.index || 0) - 70), (m.index || 0) + m[0].length + 50);
+      if (!/€|euros?\b|manquement|p[ée]nalit|retard (?:sup|inf)|retard d.un agent/i.test(autour)) return true;
+    }
+    return false;
   };
   const lignes = texte.split('\n').map((ligne) => ligne.split(/(?<=[.!?;])\s+/).map((ph) => {
     if (!PRESENCE.test(ph) || /⟦AC:|\[CONSULTATION REQUISE/.test(ph)) return ph;
