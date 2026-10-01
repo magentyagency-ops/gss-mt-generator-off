@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   repartitionLexicale, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   texteBrut, candidatsReference, blocReference, referencesRetenues, fideliteReponse, rubriquesEssentielles, partiePourTexte, poidsPartie,
-  sousPartieDe, QUESTION_HORS_MEMOIRE_TYPE, type PartieRC, type RubriqueSelection,
+  sousPartieDe, QUESTION_HORS_MEMOIRE_TYPE, plafonnerEngagements, PIECES_ADMINISTRATIVES, type PartieRC, type RubriqueSelection,
 } from '../src/generation/memoire_type_cadre';
 import { chargerMemoireType, planMemoireType, type PlanMemoireType } from '../src/generation/memoire_type';
 
@@ -106,6 +106,17 @@ describe('Format court : sélection par priorité, jamais de réécriture', () =
 
   it('titres publipostés : la sous-partie est reconnue par sa partie fixe', () => {
     expect(sousPartieDe([{ titre: "L'équipe dédiée à {{CLIENT}}", priorite: 1 }], "L'équipe dédiée à la Mairie d'Etampes")?.priorite).toBe(1);
+  });
+
+  it('engagements plafonnés et pièces administratives écartées', () => {
+    const t = `Texte de GSS.\n\n## Nos engagements sur les exigences du cahier des charges\n\n${[1, 2, 3, 4, 5, 6, 7, 8].map((n) => `- Engagement ${n}.`).join('\n')}`;
+    const p = plafonnerEngagements(t, 6);
+    expect(p.match(/^- /gm)).toHaveLength(6);
+    expect(p.startsWith('Texte de GSS.\n\n## Nos engagements')).toBe(true);
+    expect(plafonnerEngagements('Sans engagements.', 6)).toBe('Sans engagements.');
+    expect(PIECES_ADMINISTRATIVES.test('Assurance responsabilité civile')).toBe(true);
+    expect(PIECES_ADMINISTRATIVES.test('Justificatifs travail dissimulé')).toBe(true);
+    expect(PIECES_ADMINISTRATIVES.test('Remplacement d\'un agent sous 2 heures')).toBe(false);
   });
 
   it('budget : le volume non utilisé par une partie va aux parties qui en manquent', () => {

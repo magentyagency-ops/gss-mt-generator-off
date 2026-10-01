@@ -23,7 +23,7 @@ import {
 import {
   candidatsReference, blocReference, referencesRetenues, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
-  partiePourTexte, poidsPartie, rubriquesEssentielles,
+  partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES,
   type CandidatReference,
 } from './memoire_type_cadre';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes } from './base_memoires';
@@ -7268,6 +7268,20 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       if (c.secours) avisSecours.push(`Partie « ${partieB1.title} » : compréhension du besoin construite à partir des données du DCE (rédaction automatique indisponible), à relire.`);
     }
 
+    // Exigences du CCTP par partie (contrôle de couverture) : celles des rubriques rattachées, puis les questions nouvelles
+    // (sauf pièces administratives de l'offre). Le format court n'en garde que les plus importantes (bloquantes, chiffrées),
+    // 8 au plus par partie, et au plus 6 engagements ajoutés : la place va d'abord au texte de GSS (génération réelle imm :
+    // sans plafond, les engagements occupaient 31 % du mémoire).
+    const exigencesDe: Record<string, any[]> = Object.fromEntries(plan.map((p) => [p.id, rep.parPartie[p.id].flatMap((id) => parRubrique[id] || [])]));
+    const nouvellesCourt = tri.nouvelles.filter((e) => e?.exigence && !PIECES_OFFRE.test(e.exigence) && !PIECES_ADMINISTRATIVES.test(`${e.sujet || ''} ${e.exigence}`));
+    for (const e of nouvellesCourt) exigencesDe[partiePourTexte(plan, `${e.sujet || ''} ${e.exigence}`).id].push(e);
+    const reqsCouverture = (pid: string) => {
+      const rang = (e: any) => (/bloquant/i.test(e.criticite || '') ? 0 : /\d/.test(e.exigence) ? 1 : 2);
+      return exigencesDe[pid].filter((e: any) => e?.exigence && !PIECES_OFFRE.test(e.exigence) && !PIECES_ADMINISTRATIVES.test(e.exigence))
+        .map((e: any, i: number) => ({ e, i })).sort((a: any, b: any) => rang(a.e) - rang(b.e) || a.i - b.i).slice(0, 8).map((x: any) => x.e);
+    };
+    const reserveEngagements = (pid: string) => Math.min(6, reqsCouverture(pid).length) * 25;
+
     // ── 4. Budget de mots par partie et sélection par priorité (aucune réécriture) ──
     const nbSchemas = Math.max(1, Math.floor(format.pagesMax / 4));
     const choixSchemas = choisirSchemasGss(plan.map((p) => ({ cle: p.id, question: `${p.title} ${p.attendu || ''}`, texte: '' }))).slice(0, nbSchemas);
@@ -7291,7 +7305,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const retenues: Record<string, string[]> = {};
     const retraitsSelection: string[] = [];
     for (const p of plan) {
-      const sel = selectionnerParPriorite(infosDe(p.id), Math.max(150, budgets[p.id] - budgetComplement(p.id)));
+      const sel = selectionnerParPriorite(infosDe(p.id), Math.max(150, budgets[p.id] - budgetComplement(p.id) - reserveEngagements(p.id)));
       retenues[p.id] = sel.gardees;
       for (const id of sel.gardees) textes[id] = sel.textes[id];
       retraitsSelection.push(...sel.retraits);
@@ -7325,11 +7339,6 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     // ── 6. Assemblage dans l'ordre du RC ; éléments attendus hors mémoire type rédigés à part (propositions) ──
     const sections: Record<string, string> = {};
     const propositions: string[] = [];
-    const exigencesDe: Record<string, any[]> = Object.fromEntries(plan.map((p) => [p.id, rep.parPartie[p.id].flatMap((id) => parRubrique[id] || [])]));
-    for (const e of tri.nouvelles) {
-      if (!e?.exigence || PIECES_OFFRE.test(e.exigence)) continue;
-      exigencesDe[partiePourTexte(plan, `${e.sujet || ''} ${e.exigence}`).id].push(e);
-    }
     const analysisJson = JSON.stringify(analysisData, null, 2);
     const registreComplet = registreGss + referencesGss() + this.blocPerimetre(perimetre);
     for (let i = 0; i < plan.length; i++) {
@@ -7348,11 +7357,11 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
         }
       }
       // Contrôle de couverture conservé : une exigence du CCTP que la partie ne traite pas devient un engagement.
-      const reqs = exigencesDe[p.id].filter((e: any) => e?.exigence && !PIECES_OFFRE.test(e.exigence));
-      if (texte && reqs.length) texte = await this.completerCouverture(texte, reqs, p.id);
+      const reqs = reqsCouverture(p.id);
+      if (texte && reqs.length) texte = plafonnerEngagements(await this.completerCouverture(texte, reqs, p.id), 6);
       sections[p.id] = texte.trim();
     }
-    for (const g of grouperNouvelles(tri.nouvelles, 6).groupes) propositions.push(`Proposition de réponse à valider (question nouvelle du DCE, en engagement dans la partie « ${partiePourTexte(plan, `${g.sujet} ${g.exigences.map((e) => e.exigence).join(' ')}`).title} ») : ${g.sujet}`);
+    for (const g of grouperNouvelles(nouvellesCourt, 6).groupes) propositions.push(`Proposition de réponse à valider (question nouvelle du DCE, en engagement dans la partie « ${partiePourTexte(plan, `${g.sujet} ${g.exigences.map((e) => e.exigence).join(' ')}`).title} ») : ${g.sujet}`);
 
     // ── 7. Filtres, contrôles de cohérence avec le CCTP (inchangés), remarques ──
     const commentairesRetires = new Set<string>();

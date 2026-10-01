@@ -415,3 +415,15 @@ export function poidsPartie(p: PartieRC): number {
   while ((k = re.exec(p.attendu || ''))) s += Number(k[1]);
   return s || 10;
 }
+
+/** Pièces administratives de l'offre (assurance, attestations, autorisation d'exercer…) : ni engagement, ni proposition. */
+export const PIECES_ADMINISTRATIVES = /assurance|attestation|justificatifs?\b|travail dissimul|kbis|urssaf|autorisation (?:cnaps|d.exercer)|extrait (?:k|du casier)|certificat de r[ée]gularit/i;
+
+/** Garde au plus `max` puces dans la section « Nos engagements sur les exigences du cahier des charges » ajoutée en fin de partie. */
+export function plafonnerEngagements(texte: string, max: number): string {
+  const m = /\n## Nos engagements sur les exigences du cahier des charges\n\n([\s\S]*)$/.exec(texte);
+  if (!m) return texte;
+  const puces = m[1].split('\n').filter((l) => /^- /.test(l));
+  if (puces.length <= max) return texte;
+  return `${texte.slice(0, m.index)}\n## Nos engagements sur les exigences du cahier des charges\n\n${puces.slice(0, max).join('\n')}`;
+}
