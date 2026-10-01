@@ -407,7 +407,8 @@ export const court = (t: unknown, max: number): string => {
 export function specProcessBesoin(etapes: Array<{ titre?: string; texte?: string; role?: string }>, gabarit: 'flux' | 'chevrons' = 'flux'): { gabarit: string; params: any } | null {
   const max = gabarit === 'chevrons' ? 4 : 5;
   const propres = (Array.isArray(etapes) ? etapes : [])
-    .map((e) => ({ titre: court(e?.titre, 34), texte: court(e?.texte, 86), role: String(e?.role || '').toLowerCase().split(/[^a-zé]+/)[0] }))
+    // Limites du moteur (rendu_schemas.py) : titre 36 (flux) ou 26 (chevrons) caractères ; coupe sur un mot plein.
+    .map((e) => ({ titre: titreEtape(e?.titre, gabarit === 'chevrons' ? 26 : 34), texte: court(e?.texte, 86), role: String(e?.role || '').toLowerCase().split(/[^a-zé]+/)[0] }))
     .filter((e) => e.titre)
     .slice(0, max);
   if (propres.length < (gabarit === 'chevrons' ? 3 : 2)) return null;
@@ -418,11 +419,36 @@ export function specProcessBesoin(etapes: Array<{ titre?: string; texte?: string
   return { gabarit, params: { etapes: etapesSpec } };
 }
 
-/** Schéma de secours du bloc « compréhension » : les sous-titres de son texte en phases successives (mots du texte). */
+/** Mots qui ne terminent pas un titre coupé (« Le périmètre de la » → « Le périmètre »). */
+const MOTS_OUTILS = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'l', 'd', 'et', 'ou', 'à', 'au', 'aux', 'en', 'pour', 'par', 'avec', 'sur', 'sous', 'dans', 'un', 'une', 'nos', 'vos', 'notre', 'votre', 'son', 'sa', 'ses', 'leur', 'leurs', 'ce', 'cette', 'ces', 'qui', 'que']);
+
+/** Titre d'étape coupé à la limite du gabarit sur un mot plein (sans mot outil pendant en fin de titre). */
+function titreEtape(t: unknown, max: number): string {
+  const entier = court(t, 1000);
+  let mots = court(t, max).split(' ');
+  if (mots.join(' ') !== entier) while (mots.length > 1 && MOTS_OUTILS.has(mots[mots.length - 1].toLowerCase().replace(/['’]$/, ''))) mots = mots.slice(0, -1);
+  return mots.join(' ');
+}
+
+/**
+ * Schéma de secours du bloc « compréhension » : les sous-titres de son texte (hors « Remarques ») en phases successives
+ * (mots du texte), complétés au besoin d'une phase verte « Votre résultat » (vocabulaire validé du moteur) portant le
+ * libellé du premier engagement du texte, pour garder un process de 4 phases.
+ */
 export function specSecoursBesoin(texte: string): { gabarit: string; params: any } | null {
-  const titres = [...String(texte || '').matchAll(/^#{2,3}\s+(.+?)\s*$/gm)].map((m) => m[1].replace(/\*\*/g, '').trim()).filter(Boolean);
+  const titres = [...String(texte || '').matchAll(/^#{2,3}\s+(.+?)\s*$/gm)].map((m) => m[1].replace(/\*\*/g, '').trim()).filter((t) => t && !/^remarques?\b/i.test(t));
   if (titres.length < 3) return null;
-  return specProcessBesoin(titres.slice(0, 4).map((t) => ({ titre: t })), 'chevrons');
+  const etapes: Array<{ titre: string; texte?: string }> = titres.slice(0, 4).map((t) => ({ titre: t }));
+  if (etapes.length === 3) {
+    // Premier point de la partie « … engagements » (ou à défaut de la dernière partie), recopié du texte.
+    const parties = String(texte).split(/^#{2,3}\s+/m).slice(1);
+    const partie = parties.find((p) => /^[^\n]*engagement/i.test(p)) || parties[parties.length - 1] || '';
+    const point = partie.split('\n').slice(1).map((l) => l.trim()).find((l) => /^[-*]\s+\S/.test(l)) || '';
+    // Libellé de l'engagement (« **Continuité de service** : … » → « Continuité de service »), sinon la phrase coupée sur un mot plein.
+    const engagement = point.replace(/^[-*]\s+/, '').replace(/\*\*/g, '').replace(/\s*→.*$/, '').split(/\s+:\s+/)[0].trim();
+    etapes.push({ titre: 'Votre résultat', ...(engagement ? { texte: titreEtape(engagement, 86) } : {}) });
+  }
+  return specProcessBesoin(etapes, 'chevrons');
 }
 
 // ─── Consignes des deux rédactions du modèle ─────────────────────────────────────────────────────
