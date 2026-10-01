@@ -330,6 +330,12 @@ describe('Indicateurs, plan et variables', () => {
     expect(exige.CONTROLES_INOPINES_MENSUELS.valeur).toBe('au moins trois contrôles inopinés');
   });
 
+  it('lampes conformes ATEX citées seulement si le DCE parle d’ATEX (réponse de GSS)', () => {
+    const texte = (dce: string) => publierMemoire(preparerMemoireType({ analyse: { clientName: 'Site' }, dce }, { memoireType: mt })).find((r) => r.id === 'b4_equipements')!.texte!;
+    expect(texte(DCE_NORMANDIE)).not.toContain('ATEX');
+    expect(texte(`${DCE_NORMANDIE}\nLe site comporte des zones ATEX.`)).toContain('lampes conformes ATEX');
+  });
+
   it('la référence du secteur du client passe en tête des références', () => {
     const prep = preparerMemoireType({ analyse: { clientName: 'Clinique fictive', clientSector: 'santé' }, dce: 'Clinique fictive, 76000 Rouen. Accueil des patients.' }, { memoireType: mt });
     const refs = prep.plan.rubriques.filter((r) => r.id.startsWith('b2_ref_')).map((r) => r.id);

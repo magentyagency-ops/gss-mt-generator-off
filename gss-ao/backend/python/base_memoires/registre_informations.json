@@ -877,6 +877,48 @@
    "valeurs_anterieures_differentes": []
   },
   {
+   "cle": "pti_astreinte",
+   "libelle": "Alarme PTI (Beepiz) : destinataire",
+   "categorie": "moyens",
+   "valeurs": [
+    {
+     "valeur": "Le PTI (Beepiz) est relié à l'astreinte de GSS",
+     "client": "Réponse de GSS",
+     "document": "reponses_gss_2026-10-01.md",
+     "date": "2026-10",
+     "page": null,
+     "citation": "le PTI (Beepiz) est relié à notre astreinte",
+     "reponse_gss": true
+    }
+   ],
+   "valeur_retenue": "Le PTI (Beepiz) est relié à l'astreinte de GSS",
+   "date_retenue": "2026-10",
+   "source_retenue": "Réponse de GSS (1er octobre 2026)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "lampes_atex",
+   "libelle": "Lampes conformes ATEX",
+   "categorie": "moyens",
+   "valeurs": [
+    {
+     "valeur": "Oui : GSS peut fournir des lampes conformes ATEX",
+     "client": "Réponse de GSS",
+     "document": "reponses_gss_2026-10-01.md",
+     "date": "2026-10",
+     "page": null,
+     "citation": "lampes conformes ATEX : oui",
+     "reponse_gss": true
+    }
+   ],
+   "valeur_retenue": "Oui : GSS peut fournir des lampes conformes ATEX",
+   "date_retenue": "2026-10",
+   "source_retenue": "Réponse de GSS (1er octobre 2026)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
    "cle": "organisme_formation",
    "libelle": "Organismes de formation partenaires",
    "categorie": "partenaires",
