@@ -280,10 +280,55 @@ export function texteBrut(markdown: string): string {
 }
 
 /**
- * Questions auxquelles le mémoire type ne répond jamais (propres au site ou au dossier : cas pratique, dimensionnement,
- * compréhension du site…) : rédaction guidée comme avant, signalée en proposition.
+ * Intitulé principal d'une question du cadre : son premier segment qui dit de quoi elle parle, sans la numérotation
+ * seule (« SOUS-CRITERE 1 »), la limite de pages, la consigne de forme ni la liste des éléments attendus qui suivent
+ * (« Description argumentée ; Maximum 7 pages ; Éléments de réponse attendus : … »).
  */
-export const QUESTION_HORS_MEMOIRE_TYPE = /cas pratique|mise en situation|dimensionn|nombre d.agents (?:et|estim)|r[ée]troplanning|rapport d.ex[ée]cution|d[ée]composition (?:du|de son) prix|bordereau|compr[ée]hension|sujétions|enjeux/i;
+export function intitulePrincipal(question: string): string {
+  const forme = /^(?:\)|description (?:argument[ée]e|des attentes)|[ée]l[ée]ments? de r[ée]ponse|maximum|\d+\s*pages?|nombre de pages?|annexe|limite)/i;
+  for (const brut of String(question || '').split(/\s*;\s*/)) {
+    const s = brut.trim();
+    const sens = s.replace(/^(?:sous[- ]?)?crit[eè]re\s*n?°?\s*\d*\s*[:–-]?\s*/i, '').replace(/[–-]?\s*\(?sur \d+ points\)?/gi, '').trim();
+    if ((sens.match(/[A-Za-zÀ-ÿ]{3,}/g) || []).length < 2 || forme.test(sens)) continue;
+    return s;
+  }
+  return String(question || '').trim();
+}
+
+/**
+ * Questions auxquelles le mémoire type ne répond jamais, reconnues à leur INTITULÉ PRINCIPAL (ou à celui du critère
+ * parent) : cas pratique et mise en situation propres au site décrit. Un mot de la liste des éléments attendus
+ * (« dimensionnement des équipes », « annexe autorisée (rétroplanning) », « enjeux environnementaux ») ne suffit pas :
+ * la question relève alors du mémoire type. Rédaction guidée comme avant, signalée en proposition.
+ */
+export const QUESTION_HORS_MEMOIRE_TYPE = /cas pratiques?|mises? en situation/i;
+
+/** Question hors mémoire type (cas pratique, mise en situation), d'après son intitulé principal et celui de son critère. */
+export function questionHorsMemoireType(question: string, critere = ''): boolean {
+  return QUESTION_HORS_MEMOIRE_TYPE.test(intitulePrincipal(question)) || (!!critere.trim() && QUESTION_HORS_MEMOIRE_TYPE.test(intitulePrincipal(critere)));
+}
+
+/**
+ * Question de compréhension du besoin (« qu'avez-vous compris de mon besoin ? », consigne 3) : texte du bloc
+ * « Notre compréhension de votre besoin » et son schéma de process.
+ */
+export const QUESTION_COMPREHENSION = /compr[ée]hension\s+(?:du|des|de\s+(?:la|l['’]|votre|vos|ses|son|sa)|de)\s*(?:\S+\s+)?(?:besoins?|sujétions|sujetions|mission|attentes|enjeux|contexte|site|contrat|march[ée]|prestations?|cahier)/i;
+
+/** Question de compréhension du besoin, d'après son intitulé principal. */
+export function questionComprehension(question: string): boolean {
+  return QUESTION_COMPREHENSION.test(intitulePrincipal(question));
+}
+
+/**
+ * Champ qui demande une VALEUR (« Effectif total … (transmis pour information) : », « si oui est-ce un courriel… »,
+ * « Nombre de … ») et non une réponse développée : ni texte du mémoire type, ni signalement en proposition.
+ */
+export function champValeur(libelle: string): boolean {
+  const p = intitulePrincipal(libelle);
+  const mots = (String(libelle || '').match(/[A-Za-zÀ-ÿ0-9'’-]+/g) || []).length;
+  return /\(?(?:transmis )?pour information\)?|^\s*(?:[àa] titre d.information)/i.test(p)
+    || (/^\s*(?:si oui|si non|effectifs?\b|nombre (?:de|d['’]))/i.test(p) && mots < 20);
+}
 
 /** Texte qui représente une rubrique pour la recherche sémantique : titre, mots-clés, début du texte de GSS. */
 export function signatureRubrique(r: RubriqueMemoireType): string {
@@ -306,6 +351,8 @@ export interface CandidatReference {
   /** Texte brut publiposté de la rubrique. */
   texte: string;
   score: number;
+  /** Score lexical (mots-clés) de la rubrique pour la question : départage les scores sémantiques égaux. */
+  lexical?: number;
 }
 
 /**
@@ -314,8 +361,8 @@ export interface CandidatReference {
  * la meilleure rubrique lexicale (mots-clés) si elle atteint 2,5. Le modèle dit ensuite lesquelles traitent vraiment
  * la question. Aucune candidate pour une question propre au marché (cas pratique, compréhension du site…).
  */
-export function candidatsReference(mt: MemoireType, textes: Record<string, string>, question: string, options: { scores?: Record<string, number>; seuil?: number; ecart?: number; maxMots?: number } = {}): CandidatReference[] {
-  if (!question.trim() || QUESTION_HORS_MEMOIRE_TYPE.test(question)) return [];
+export function candidatsReference(mt: MemoireType, textes: Record<string, string>, question: string, options: { scores?: Record<string, number>; seuil?: number; ecart?: number; maxMots?: number; hors?: boolean } = {}): CandidatReference[] {
+  if (!question.trim() || (options.hors ?? questionHorsMemoireType(question))) return [];
   const parmi = Object.keys(textes).filter((id) => (textes[id] || '').trim() && mt.rubriques.find((r) => r.id === id)?.mode !== 'besoin');
   const seuil = options.seuil ?? SEUIL_SEMANTIQUE;
   const ecart = options.ecart ?? 0.04;
@@ -325,6 +372,7 @@ export function candidatsReference(mt: MemoireType, textes: Record<string, strin
   if (sem[0] && sem[0].score >= seuil) choix.push(...sem.slice(0, 3).filter((x) => x.score >= Math.max(seuil, sem[0].score - ecart)));
   const lex = rechercherRubriques(mt, question, 1, parmi)[0];
   if (lex && lex.score >= 2.5 && !choix.some((x) => x.id === lex.id)) choix.push({ id: lex.id, score: scores[lex.id] ?? 0 });
+  const lexicaux = new Map(rechercherRubriques(mt, question, 50, parmi).map((x) => [x.id, x.score]));
   const maxMots = options.maxMots ?? 1200;
   const out: CandidatReference[] = [];
   let mots = 0;
@@ -333,9 +381,46 @@ export function candidatsReference(mt: MemoireType, textes: Record<string, strin
     const n = compterMots(texte);
     if (out.length && mots + n > maxMots) continue;
     mots += n;
-    out.push({ cle: `R${out.length + 1}`, id: c.id, titre: mt.rubriques.find((r) => r.id === c.id)?.titre || c.id, texte, score: c.score });
+    out.push({ cle: `R${out.length + 1}`, id: c.id, titre: mt.rubriques.find((r) => r.id === c.id)?.titre || c.id, texte, score: c.score, lexical: lexicaux.get(c.id) ?? 0 });
   }
   return out;
+}
+
+/**
+ * Une rubrique du mémoire type n'est reprise intégralement que dans UNE réponse du cadre (« si c'est le même process,
+ * on remet la même réponse », pas deux fois la même dans le même document). Les champs étant rédigés en parallèle,
+ * l'attribution est faite avant les appels : chaque rubrique va au champ qui la vise le plus (score sémantique, puis
+ * lexical, puis ordre du cadre) ; les autres champs la perdent et y renvoient (« voir notre réponse à … »).
+ */
+export function attribuerRubriques(champs: Array<{ id: number; libelle: string; candidats: CandidatReference[] }>): {
+  candidats: Map<number, CandidatReference[]>;
+  renvois: Map<number, Array<{ titre: string; libelle: string }>>;
+} {
+  const ordre = new Map(champs.map((c, i) => [c.id, i]));
+  const paires = champs.flatMap((c) => c.candidats.map((x) => ({ champ: c.id, x })))
+    .sort((a, b) => b.x.score - a.x.score || (b.x.lexical ?? 0) - (a.x.lexical ?? 0) || ordre.get(a.champ)! - ordre.get(b.champ)!);
+  const titulaire = new Map<string, number>();
+  for (const p of paires) if (!titulaire.has(p.x.id)) titulaire.set(p.x.id, p.champ);
+  const candidats = new Map<number, CandidatReference[]>();
+  const renvois = new Map<number, Array<{ titre: string; libelle: string }>>();
+  for (const c of champs) {
+    const gardes = c.candidats.filter((x) => titulaire.get(x.id) === c.id).map((x, i) => ({ ...x, cle: `R${i + 1}` }));
+    candidats.set(c.id, gardes);
+    const ailleurs = c.candidats.filter((x) => titulaire.get(x.id) !== c.id)
+      .map((x) => ({ titre: x.titre, libelle: champs.find((d) => d.id === titulaire.get(x.id))?.libelle || '' }));
+    if (ailleurs.length) renvois.set(c.id, ailleurs);
+  }
+  return { candidats, renvois };
+}
+
+/** Consigne d'un champ dont un texte du mémoire type est déjà repris dans une autre réponse du cadre. */
+export function blocRenvois(renvois: Array<{ titre: string; libelle: string }>): string {
+  if (!renvois.length) return '';
+  return `
+--- TEXTES DE GSS DÉJÀ REPRIS DANS UNE AUTRE RÉPONSE ---
+${renvois.map((r) => `- « ${r.titre} » est déjà repris dans la réponse à la question « ${r.libelle.replace(/\s+/g, ' ').slice(0, 120)} ».`).join('\n')}
+Ne recopie pas ces textes ici. Si cette question porte sur le même sujet, renvoie à cette réponse en une phrase (« voir notre réponse à la question « … » ») et ne développe que ce que cette question demande en plus.
+`;
 }
 
 /**

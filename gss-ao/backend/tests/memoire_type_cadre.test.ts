@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   repartitionLexicale, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   texteBrut, candidatsReference, blocReference, referencesRetenues, fideliteReponse, rubriquesEssentielles, partiePourTexte, poidsPartie,
-  sousPartieDe, QUESTION_HORS_MEMOIRE_TYPE, plafonnerEngagements, PIECES_ADMINISTRATIVES, type PartieRC, type RubriqueSelection,
+  sousPartieDe, QUESTION_HORS_MEMOIRE_TYPE, plafonnerEngagements, intitulePrincipal, questionHorsMemoireType, questionComprehension,
+  champValeur, attribuerRubriques, blocRenvois, PIECES_ADMINISTRATIVES, type PartieRC, type RubriqueSelection,
 } from '../src/generation/memoire_type_cadre';
 import { chargerMemoireType, planMemoireType, type PlanMemoireType } from '../src/generation/memoire_type';
 
@@ -141,8 +142,51 @@ describe('Cadre imposé : texte de référence du mémoire type', () => {
     expect(c[0].cle).toBe('R1');
     expect(c[0].texte).not.toMatch(/\*\*/);
     expect(candidatsReference(mt, textes, 'Cas pratique : gardiennage d’un site municipal', { scores })).toEqual([]);
-    expect(QUESTION_HORS_MEMOIRE_TYPE.test('1.1 - Compréhension des sujétions du site')).toBe(true);
+    expect(QUESTION_HORS_MEMOIRE_TYPE.test('Mise en situation appliquée')).toBe(true);
+    expect(questionComprehension('1.1 - Compréhension des sujétions du site et du contrat')).toBe(true);
+    expect(questionHorsMemoireType('1.1 - Compréhension des sujétions du site et du contrat')).toBe(false);
     expect(candidatsReference(mt, textes, 'Question sans rapport', { scores: Object.fromEntries(Object.keys(textes).map((id) => [id, 0.2])) })).toEqual([]);
+  });
+
+  it('hors mémoire type : intitulé principal seulement (pas un mot de la liste des éléments attendus)', () => {
+    const citedia = "SOUS-CRITERE 1 ; Organisation générale, moyens humains et continuité de service – sur 30 points ; Description argumentée ; Maximum 7 pages recto ; Éléments de réponse attendus : ; Organisation générale mise en œuvre pour assurer les prestations ; Organisation et dimensionnement des équipes affectées au Marché ; Organisation des plannings";
+    const caNormandie = '6 – Organisation pendant la phase de prise en charge ; 3 pages maximum ; Annexe autorisée (rétroplanning) ; Description des moyens mis œuvre au début du marché, calendrier provisoire des opérations mise en œuvre dès la notification, modalité de reprise du personnel';
+    const vitry = 'CRITERE 3 : PERFORMANCE ENVIRONNEMENTALE (sur 15 points) ; ) ; DESCRIPTION DES ATTENTES DE L’ACHETEUR ; Qualité des mesures mises en œuvre par le candidat pour répondre aux enjeux environnementaux et réduire l’empreinte carbone de son activité liée au présent accord-cadre : équipements techniques, organisation des déplacements, gestion des déchets, modalités de transmission des informations, gestion des flux de données…';
+    expect(intitulePrincipal(citedia)).toBe('Organisation générale, moyens humains et continuité de service – sur 30 points');
+    for (const q of [citedia, caNormandie, vitry]) {
+      expect(questionHorsMemoireType(q)).toBe(false);
+      expect(questionComprehension(q)).toBe(false);
+    }
+    const textes = Object.fromEntries(mt.rubriques.filter((r) => r.texte).map((r) => [r.id, r.texte!]));
+    expect(candidatsReference(mt, textes, citedia).length).toBeGreaterThan(0);
+    expect(candidatsReference(mt, textes, vitry).map((c) => c.id)).toContain('b2_ecologie_energie_recyclage');
+    expect(questionHorsMemoireType('SOUS CRITERE 1 : Mises en situation (sur 20 points) ; DESCRIPTION DES ATTENTES')).toBe(true);
+    expect(questionHorsMemoireType('Nombre d’équipes affectées', 'Cas pratique : gardiennage d’un site municipal ; Lieu : groupe scolaire')).toBe(true);
+  });
+
+  it('champ qui demande une valeur : pas de réponse développée', () => {
+    expect(champValeur('Effectif total de l’entreprise en FRANCE (transmis pour information) :')).toBe(true);
+    expect(champValeur('si oui est-ce un courriel, une application dédiée, un extranet ?')).toBe(true);
+    expect(champValeur('A titre d’information - Périodes neutralisées éventuelles (fermeture entreprise) :')).toBe(true);
+    expect(champValeur('3.1 Les moyens humains assignés à la mission :')).toBe(false);
+    expect(champValeur('Dispositif prévu pour pallier à l’absence d’un ou plusieurs agents à leur poste :')).toBe(false);
+    expect(champValeur('Nombre d’équipes ; La composition des équipes (interlocuteur unique à la ville, encadrants, CV détaillés, agréments, certificats et cartes professionnelles) ; Le temps d’encadrement')).toBe(false);
+    expect(champValeur('Nombre de sites gardés en Normandie :')).toBe(true);
+  });
+
+  it('une rubrique reprise dans une seule réponse du cadre ; les autres y renvoient', () => {
+    const c = (id: string, score: number, lexical = 0) => ({ cle: 'R1', id, titre: id, texte: 'Texte.', score, lexical });
+    const a = attribuerRubriques([
+      { id: 33, libelle: '4.1 Les moyens de communication', candidats: [c('b4_communication', 0.6)] },
+      { id: 34, libelle: '4.2 Fiches techniques', candidats: [c('b4_communication', 0.7), c('b4_pti', 0.66)] },
+      { id: 36, libelle: '4.4 Fiches techniques', candidats: [c('b4_communication', 0.7)] },
+    ]);
+    expect(a.candidats.get(34)!.map((x) => [x.cle, x.id])).toEqual([['R1', 'b4_communication'], ['R2', 'b4_pti']]);
+    expect(a.candidats.get(33)).toEqual([]);
+    expect(a.candidats.get(36)).toEqual([]);
+    expect(a.renvois.get(36)).toEqual([{ titre: 'b4_communication', libelle: '4.2 Fiches techniques' }]);
+    expect(blocRenvois(a.renvois.get(33)!)).toMatch(/voir notre réponse à la question/);
+    expect(blocRenvois([])).toBe('');
   });
 
   it('consigne et repères retenus', () => {
