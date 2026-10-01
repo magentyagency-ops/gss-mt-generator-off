@@ -15,6 +15,12 @@
 //                            réponses plus lentes ; « standard » pour le désactiver)
 // L'effort propre à un usage (GSS_IA_EFFORT_<USAGE>) l'emporte sur GSS_IA_EFFORT.
 //
+// Périmètre (consigne 9 : modèle de RÉDACTION ; consigne 10 : rien d'autre) : seuls les appels de rédaction et
+// de génération passent par ce module (callOpenAI de memoire_generator.ts, completion.ts, schema_service.ts,
+// assistant_memoire.ts). Les appels hors rédaction gardent leur modèle d'origine et ne sont pas concernés :
+// extraction du DCE (llmExtractor.ts), missing_info_resolver.ts, learn_sollicitation.ts, veille_parser.ts,
+// routes.ts (recherche, veille), OCR (ocr_pdf.ts), image_service.ts et evaluateMissingInfoChat (fetch direct).
+//
 // Retour à l'état antérieur (gpt-5.6-luna, effort par défaut « medium », cache implicite) :
 //   GSS_IA_MODELE=gpt-5.6-luna GSS_IA_EFFORT=medium GSS_IA_CACHE=implicite
 //

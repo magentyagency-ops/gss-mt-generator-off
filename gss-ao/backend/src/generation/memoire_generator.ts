@@ -7926,8 +7926,9 @@ FORMAT DE SORTIE (JSON EXACT) :
     if (!openAiKey) throw new Error("Clé OpenAI manquante");
 
     const payload = {
-      ...reglagesIA('mecanique', { temperature: 0.2 }),
+      model: 'gpt-5.4-mini',
       messages: [{ role: 'system', content: prompt }],
+      temperature: 0.2,
       response_format: { type: "json_object" }
     };
 
