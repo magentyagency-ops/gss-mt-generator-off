@@ -123,10 +123,12 @@ function organigrammeTheme(theme: string, format: FormatSchema): string | null {
 }
 
 /** SVG de l'organigramme à insérer (celui de référence s'il a été dessiné, sinon l'original), dans le thème :
- *  format « page » (pleine page) ou « paysage » (dans le texte). Retour arrière : exactement l'organigramme d'origine. */
+ *  format « page » (pleine page) ou « paysage » (dans le texte). Retour arrière : exactement l'organigramme d'origine
+ *  au format paysage, toile portrait dans la palette d'origine au format page. */
 export function organigrammeSvg(format: FormatSchema = 'paysage', theme?: string | null): string | null {
   const t = themeActif(theme);
-  if (!estRetourArriere(t)) {
+  // Retour arrière au format page (1 schéma = 1 page) : toile portrait dans la palette d'origine.
+  if (!estRetourArriere(t) || format === 'page') {
     const svg = organigrammeTheme(t, format);
     if (svg) return svg;
   }

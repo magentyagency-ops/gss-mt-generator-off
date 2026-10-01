@@ -277,11 +277,12 @@ section table tr:nth-child(even) td {
   background-color: var(--gss-tableau-ligne, #F2F0EA);
 }
 
-/* Page de schéma (1 schéma = 1 page) : le titre-message du schéma, puis le schéma en grand. */
+/* Page de schéma (1 schéma = 1 page) : le titre-message du schéma, puis le schéma en grand (toile portrait : 212 mm,
+   71 % de la page, laissent la place d'un titre sur deux lignes). */
 section.schema .schema-page svg {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 225mm;
+  max-height: 212mm;
   margin: 0 auto;
 }

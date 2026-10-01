@@ -4,8 +4,9 @@
     themes/themes.json (le style recommandé par l'agent design, « marine ») ; à défaut, THEME_PAR_DEFAUT.
     Un thème inconnu donne le thème par défaut, avec un avertissement.
   · « gss-2026-09 » (RETOUR_ARRIERE) : le moteur d'origine (gss_lib.py + gabarits.py), sans aucun changement :
-    les SVG sont identiques octet pour octet à ceux d'avant les thèmes.
-  · Format « page » (1 schéma = 1 page A4 portrait, toile 1000 × 1270) : moteur_page, dessiné dans le thème.
+    les SVG paysage sont identiques octet pour octet à ceux d'avant les thèmes.
+  · Format « page » (1 schéma = 1 page A4 portrait, toile 1000 × 1270) : moteur_page, dessiné dans le thème ; pour le
+    retour arrière, dans la palette et la police d'origine (« style_page » de « retour_arriere » dans themes.json).
   · Format « paysage » (schéma placé dans le texte : format court, cadre imposé, ancienne mise en page) : le moteur
     d'origine (même mise en page, mêmes textes, mêmes contrôles), puis les couleurs et la police du thème
     (recolorer). Un texte que la police du thème rendrait plus large que la police d'origine est ramené à la
@@ -69,10 +70,17 @@ def est_retour(theme):
     return theme == RETOUR_ARRIERE
 
 
+def style_page_retour():
+    """Jetons du format page du thème de retour arrière (palette et police des schémas d'origine), None si absents."""
+    ra = registre().get("retour_arriere") or {}
+    return ra.get("style_page") if ra.get("id") == RETOUR_ARRIERE else None
+
+
 def format_effectif(theme, fmt):
-    """Le thème de retour arrière n'a qu'une toile (paysage, rendu d'origine)."""
+    """Retour arrière : toile paysage d'origine (octet pour octet), sauf la page de schéma « 1 schéma = 1 page »
+    (format page demandé), dessinée sur toile portrait dans la palette d'origine (style_page de retour_arriere)."""
     if est_retour(theme):
-        return "paysage"
+        return "page" if fmt == "page" and style_page_retour() else "paysage"
     return fmt if fmt in FORMATS else "paysage"
 
 
@@ -320,7 +328,8 @@ def empreinte(theme, fmt):
               if fmt == "page" else [os.path.join(ICI, f) for f in ("gss_lib.py", "gabarits.py")])
     moteur += [os.path.join(ICI, "themes_gss.py"), os.path.join(BIBLIOTHEQUE, "specs.json"),
                os.path.join(BIBLIOTHEQUE, "index.json")]
-    h = hashlib.sha1(json.dumps([theme, fmt, styles().get(theme)], sort_keys=True, ensure_ascii=False).encode())
+    jetons = style_page_retour() if est_retour(theme) else styles().get(theme)
+    h = hashlib.sha1(json.dumps([theme, fmt, jetons], sort_keys=True, ensure_ascii=False).encode())
     h.update(_hash_fichiers(moteur).encode())
     return h.hexdigest()[:16]
 

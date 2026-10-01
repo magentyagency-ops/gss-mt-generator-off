@@ -75,6 +75,184 @@
    "titres": "#DC2626",
    "couverture": "dégradé #111827 → #DC2626",
    "polices": "Inter, Outfit (Google Fonts)"
+  },
+  "style_page": {
+   "id": "gss-2026-09",
+   "nom": "Palette GSS validée le 25/09/2026, format page (retour arrière)",
+   "note": "Pages de schéma « 1 schéma = 1 page » (toile portrait 1000 × 1270, moteur_page) du thème de retour arrière : couleurs et police des schémas d'origine (fond #D9D9D9, cartes #FBFAF4, encre #463A2F, rôles d'origine, Lexend). Le format paysage du retour arrière reste le rendu d'origine, octet pour octet.",
+   "polices": {
+    "titre": {
+     "famille": "Lexend",
+     "repli": "'Arial Rounded MT Bold', Arial, sans-serif",
+     "fichiers": {
+      "400": "polices/Lexend-400.ttf",
+      "500": "polices/Lexend-500.ttf",
+      "600": "polices/Lexend-600.ttf",
+      "700": "polices/Lexend-700.ttf",
+      "800": "polices/Lexend-800.ttf"
+     },
+     "licence": "polices/OFL.txt"
+    },
+    "texte": {
+     "famille": "Lexend",
+     "repli": "'Arial Rounded MT Bold', Arial, sans-serif",
+     "fichiers": {
+      "400": "polices/Lexend-400.ttf",
+      "500": "polices/Lexend-500.ttf",
+      "600": "polices/Lexend-600.ttf",
+      "700": "polices/Lexend-700.ttf",
+      "800": "polices/Lexend-800.ttf"
+     },
+     "licence": "polices/OFL.txt"
+    },
+    "chiffres": {
+     "famille": "Lexend",
+     "repli": "'Arial Rounded MT Bold', Arial, sans-serif",
+     "fichiers": {
+      "400": "polices/Lexend-400.ttf",
+      "500": "polices/Lexend-500.ttf",
+      "600": "polices/Lexend-600.ttf",
+      "700": "polices/Lexend-700.ttf",
+      "800": "polices/Lexend-800.ttf"
+     },
+     "licence": "polices/OFL.txt"
+    }
+   },
+   "typo": {
+    "titre_graisse": 600,
+    "texte_graisse": 400,
+    "chiffres_graisse": 700,
+    "interligne_titre": 1.16,
+    "interligne_texte": 1.34,
+    "interlettrage_titre": 0,
+    "echelle_titre": 1.0,
+    "echelle_texte": 1.0
+   },
+   "couleurs": {
+    "fond_page": "#D9D9D9",
+    "fond_schema": "#D9D9D9",
+    "encre": "#463A2F",
+    "encre_2": "#47494B",
+    "encre_3": "#5B5451",
+    "filet": "#B9B2AE",
+    "surface": "#FBFAF4",
+    "surface_2": "#EDEAE6",
+    "carte_fond": "#FBFAF4",
+    "accent": "#484545",
+    "accent_texte": "#A33E39",
+    "structure": "#484545",
+    "sur_structure": "#F5F5DE",
+    "lien": "#9A928E",
+    "fleche": "#7A726F"
+   },
+   "roles": {
+    "bleu": {
+     "fonce": "#1D49A7",
+     "vif": "#1D49A7",
+     "clair": "#BED3DF",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "contrôle"
+    },
+    "orange": {
+     "fonce": "#8C6236",
+     "vif": "#E99842",
+     "clair": "#F7EAD4",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "action"
+    },
+    "rouge": {
+     "fonce": "#9D3D39",
+     "vif": "#DD4E49",
+     "clair": "#F3CFC7",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "déclencheur / non-conformité"
+    },
+    "vert": {
+     "fonce": "#36723C",
+     "vif": "#377E3F",
+     "clair": "#E0E8D9",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "issue"
+    },
+    "sable": {
+     "fonce": "#7B694A",
+     "vif": "#8A7550",
+     "clair": "#F5EFE0",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "structure"
+    },
+    "or": {
+     "fonce": "#786649",
+     "vif": "#8A7550",
+     "clair": "#F2E7CF",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "structure (tête)"
+    },
+    "creme": {
+     "fonce": "#78706C",
+     "vif": "#8A817C",
+     "clair": "#F9F8EB",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "neutre"
+    },
+    "sombre": {
+     "fonce": "#474444",
+     "vif": "#484545",
+     "clair": "#B3B2AE",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "bandeau"
+    }
+   },
+   "carte": {
+    "entete": "bande_titre",
+    "rayon": 14,
+    "bordure": 0,
+    "couleur_bordure": "#B9B2AE",
+    "ombre": {
+     "dy": 3,
+     "flou": 8,
+     "couleur": "#2E2B2B",
+     "opacite": 0.12
+    },
+    "remplissage": "carte_fond",
+    "epaisseur_filet": 0,
+    "epaisseur_barre": 0,
+    "lueur": false,
+    "icone": {
+     "mode": "dans_bande",
+     "graisse": "bold"
+    },
+    "centrer_titre": false
+   },
+   "bandeau": {
+    "mode": "plein",
+    "rayon": 14
+   },
+   "fleches": {
+    "couleur": "#7A726F",
+    "epaisseur": 3,
+    "pointe": "triangle",
+    "taille": 14
+   },
+   "liens": {
+    "couleur": "#9A928E",
+    "epaisseur": 2.5,
+    "noeud": 7
+   },
+   "etiquettes": {
+    "mode": "plein"
+   },
+   "numeros": {
+    "mode": "cercle_contour"
+   },
+   "puces": {
+    "forme": "rond"
+   },
+   "coche": {
+    "mode": "plein"
+   },
+   "motif_fond": null,
+   "logo": "original"
   }
  },
  "formats": {

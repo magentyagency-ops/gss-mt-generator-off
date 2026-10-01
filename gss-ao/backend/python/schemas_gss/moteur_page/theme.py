@@ -85,11 +85,18 @@ class Theme:
 @lru_cache(maxsize=None)
 def _charger():
     d = json.load(open(FICHIER_THEMES, encoding="utf-8"))
-    return d["styles"], d["formats"], d.get("style_par_defaut", "marine")
+    st = dict(d["styles"])
+    # Thème de retour arrière : son format page (palette et police des schémas d'origine) est servi par ce moteur.
+    ra = d.get("retour_arriere") or {}
+    if ra.get("id") and ra.get("style_page"):
+        st.setdefault(ra["id"], ra["style_page"])
+    return st, d["formats"], d.get("style_par_defaut", "marine")
 
 
 def styles():
-    return list(_charger()[0].keys())
+    """Styles de la refonte (sans le format page du retour arrière)."""
+    d = json.load(open(FICHIER_THEMES, encoding="utf-8"))
+    return list(d["styles"].keys())
 
 
 def par_defaut():

@@ -588,11 +588,12 @@ def redessiner(ids=None, fmt="page", forcer=False):
     """Schémas de la bibliothèque dans le thème actif : SVG bruts (comme les fichiers de bibliotheque/), lus dans le
     cache du thème ou redessinés. Format page : redessin depuis specs.json, textes contrôlés (identiques à
     l'original) ; en cas d'écart ou d'échec, le schéma d'origine aux couleurs du thème (source « repli_paysage »).
-    Format paysage : schéma d'origine aux couleurs et à la police du thème. Retour arrière : schéma d'origine."""
+    Format paysage : schéma d'origine aux couleurs et à la police du thème. Retour arrière au format paysage : schéma d'origine."""
     fmt = _format(fmt)
     if not ids:
         ids = [x["id"] for x in json.load(open(os.path.join(ICI, "bibliotheque", "index.json"), encoding="utf-8"))]
-    retour = themes_gss.est_retour(THEME)
+    # Retour arrière au format paysage : schémas d'origine ; au format page : redessin dans la palette d'origine.
+    retour = themes_gss.est_retour(THEME) and fmt == "paysage"
     cache = None if retour else themes_gss.dossier_cache(THEME, fmt)
     out = []
     for ident in ids:
@@ -659,7 +660,8 @@ def _cli_redessiner(argv):
         sources[r.get("source", "erreur")] = sources.get(r.get("source", "erreur"), 0) + 1
     bilan = {"theme": THEME, "format": _format(opts["--format"]), "schemas": len(res),
              "ok": sum(1 for r in res if r.get("ok")), "sources": sources,
-             "dossier_cache": None if themes_gss.est_retour(THEME) else themes_gss.dossier_cache(THEME, _format(opts["--format"])),
+             "dossier_cache": None if themes_gss.est_retour(THEME) and _format(opts["--format"]) == "paysage"
+             else themes_gss.dossier_cache(THEME, _format(opts["--format"])),
              "replis_ou_erreurs": [{"id": r["id"], "erreurs": r.get("erreurs")} for r in res
                                    if not r.get("ok") or r.get("source") == "repli_paysage"]}
     if opts["--rapport"]:

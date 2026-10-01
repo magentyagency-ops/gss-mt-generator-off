@@ -185,15 +185,17 @@ function pythonBin(): string {
 /**
  * SVG (bruts, comme les fichiers de bibliotheque/) des schémas de la bibliothèque GSS dans le thème : format « page »
  * (redessinés depuis specs.json, textes contrôlés identiques à l'original) ou « paysage » (schéma d'origine aux
- * couleurs et à la police du thème). Cache par thème côté Python. Retour arrière, ou moteur indisponible : les
- * fichiers d'origine.
+ * couleurs et à la police du thème). Cache par thème côté Python. Retour arrière au format paysage, ou moteur
+ * indisponible : les fichiers d'origine.
  */
 export function schemasBibliotheque(ids: string[], format: FormatSchema = 'paysage', theme?: string | null): Map<string, string> {
   const t = themeActif(theme);
   const out = new Map<string, string>();
   const uniques = [...new Set(ids.filter((id) => /^[A-Za-z0-9-]+$/.test(id)))];
   if (!uniques.length) return out;
-  if (!estRetourArriere(t)) {
+  // Retour arrière : fichiers d'origine au format paysage ; au format page (1 schéma = 1 page), redessin sur toile
+  // portrait dans la palette et la police d'origine (moteur Python, « style_page » du retour arrière).
+  if (!estRetourArriere(t) || format === 'page') {
     try {
       const win = process.platform === 'win32';
       const r = spawnSync(pythonBin(), [win ? `"${SCRIPT_SCHEMAS}"` : SCRIPT_SCHEMAS], {

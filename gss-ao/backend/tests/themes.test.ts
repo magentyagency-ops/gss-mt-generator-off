@@ -18,6 +18,11 @@ const MOTEUR = path.resolve(__dirname, '../python/schemas_gss');
 const base = fs.readFileSync(path.join(MARP, 'gss-theme.css'), 'utf-8');
 const ANCIENNE_PALETTE = ['#D9D9D9', '#463A2F', '#FBFAF4', '#484545', '#ECDEC2', '#6298C0', '#B8CCB1', '#E78E83', '#F0D3A3', '#E5CA97', '#7A726F', '#9A928E', '#8A7550'];
 const envOrigine = process.env.GSS_THEME;
+/** Rapport hauteur / largeur de la toile (viewBox) : la toile du format page peut être zoomée, son rapport reste 1270 / 1000. */
+const rapportToile = (svg: string): number => {
+  const v = /viewBox="([\d.\s-]+)"/.exec(svg)![1].trim().split(/\s+/).map(Number);
+  return v[3] / v[2];
+};
 afterEach(() => { if (envOrigine === undefined) delete process.env.GSS_THEME; else process.env.GSS_THEME = envOrigine; });
 
 describe('choix du thème', () => {
@@ -68,15 +73,21 @@ describe('feuille Marp', () => {
 });
 
 describe('schémas de la bibliothèque dans le thème', () => {
-  it('retour arrière : fichiers d\'origine, octet pour octet', () => {
-    const m = schemasBibliotheque(['I-RSE-02', 'III-RON-01'], 'page', RETOUR_ARRIERE);
+  it('retour arrière : fichiers d\'origine, octet pour octet, au format paysage ; toile portrait d\'origine au format page', () => {
+    const m = schemasBibliotheque(['I-RSE-02', 'III-RON-01'], 'paysage', RETOUR_ARRIERE);
     expect(m.get('I-RSE-02')).toBe(fs.readFileSync(path.join(MOTEUR, 'bibliotheque', 'I-RSE-02.svg'), 'utf-8'));
+    const p = schemasBibliotheque(['I-RSE-02'], 'page', RETOUR_ARRIERE).get('I-RSE-02')!;
+    expect(rapportToile(p)).toBeCloseTo(1270 / 1000, 2);
+    expect(p).toContain('data-style="gss-2026-09"');
+    expect(p).toContain('#D9D9D9');
+    expect(p).toContain("'Lexend'");
   });
   it('format page : toile portrait, couleurs du thème, mêmes textes que l\'original', () => {
     const m = schemasBibliotheque(['I-RSE-02', 'III-RON-01'], 'page', 'marine');
     for (const id of ['I-RSE-02', 'III-RON-01']) {
       const svg = m.get(id)!;
-      expect(svg).toContain('viewBox="0 0 1000 1270"');
+      expect(rapportToile(svg)).toBeCloseTo(1270 / 1000, 2);
+      expect(svg).toContain('data-format="page"');
       expect(svg).toContain('data-style="marine"');
       for (const c of ANCIENNE_PALETTE) expect(svg.toUpperCase()).not.toContain(`"${c}"`);
       const mots = (s: string) => [...s.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((x) => x[1]).join(' ').replace(/[  ]/g, ' ').split(/\s+/).filter(Boolean).sort();
@@ -92,7 +103,7 @@ describe('schémas de la bibliothèque dans le thème', () => {
 });
 
 describe('moteur Python', () => {
-  it('rendu identique au moteur d\'origine pour le retour arrière, toile portrait pour le format page', () => {
+  it('rendu identique au moteur d\'origine pour le retour arrière (paysage), toile portrait pour le format page', () => {
     const spec = { id: 't', gabarit: 'grille', titre_section: 'Test', source: 'Rondes. Accueil. Filtrage. Contrôle des accès.',
       params: { cartes: [{ titre: 'Rondes', role: 'bleu' }, { titre: 'Accueil', role: 'sable' }, { titre: 'Filtrage', role: 'orange' }] } };
     const appel = (theme: string, format: string) => JSON.parse(spawnSync('python3', [path.join(MOTEUR, 'rendu_schemas.py')], {
@@ -100,11 +111,18 @@ describe('moteur Python', () => {
     }).stdout).resultats[0];
     const r1 = appel(RETOUR_ARRIERE, 'page');
     const r2 = appel(RETOUR_ARRIERE, 'paysage');
-    expect(r1.ok && r2.ok).toBe(true);
-    expect(r1.svg).toBe(r2.svg);
+    const r3 = appel(RETOUR_ARRIERE, 'inconnu');
+    expect(r1.ok && r2.ok && r3.ok).toBe(true);
+    expect(r3.svg).toBe(r2.svg);
+    expect(r2.svg).toContain('viewBox="0 173 1200 306"');
+    expect(r2.svg).toContain('#D9D9D9');
+    // Page de schéma du retour arrière : toile portrait, palette et police d'origine.
+    expect(rapportToile(r1.svg)).toBeCloseTo(1270 / 1000, 2);
     expect(r1.svg).toContain('#D9D9D9');
+    expect(r1.svg).toContain('data-format="page"');
     const p = appel('marine', 'page');
     expect(p.ok).toBe(true);
-    expect(p.svg).toContain('viewBox="0 0 1000 1270"');
+    expect(rapportToile(p.svg)).toBeCloseTo(1270 / 1000, 2);
+    expect(p.svg).toContain('data-format="page"');
   });
 });
