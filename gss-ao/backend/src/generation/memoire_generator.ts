@@ -7406,7 +7406,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       progres(22, 'Notre compréhension de votre besoin…');
       const c = await this.redigerComprehension(prep, ctxBase, besoin, {
         perimetre, exigences: matrice.filter((e) => e.exigence && !PIECES_OFFRE.test(e.exigence)), analyse: analyseResumee,
-        demande: repartition?.parRubrique[b1.id]?.join(' ; ') || undefined, format: 'paysage',
+        // Format court : process dessiné sur toile portrait, affiché en grand en tête de sa partie (consigne 3).
+        demande: repartition?.parRubrique[b1.id]?.join(' ; ') || undefined, format: 'page',
       });
       textes[b1.id] = c.texte;
       svgComprehension = c.svg;
@@ -7436,10 +7437,13 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       ...(svgComprehension && p.id === partieB1?.id ? { svg: svgComprehension, svgId: 'comprehension' } : {}),
     })));
     const schemaProcess = choixTous.filter((c) => c.id === 'comprehension');
-    const choixSchemas = [...schemaProcess, ...choixTous.filter((c) => c.id !== 'comprehension').slice(0, schemaProcess.length && format.pagesMax < 6 ? nbSchemas - 1 : nbSchemas)];
+    const choixSchemas = [...schemaProcess, ...choixTous.filter((c) => c.id !== 'comprehension').slice(0, schemaProcess.length && format.pagesMax < 6 ? nbSchemas - 1 : nbSchemas)]
+      // Organigramme : toile portrait, affiché en grand (noms lisibles) au lieu d'une vignette paysage.
+      .map((c) => (c.id === 'organigramme' ? { ...c, svg: organigrammeSvg('page', themeActif()) || c.svg } : c));
     // Densité mesurée du rendu à 10 pt : 710 à 760 mots par page pleine. La sélection est volontairement large : c'est le
     // rendu mesuré (étape 9) qui tranche, en retirant les passages de plus faible priorité jusqu'à tenir la limite.
-    const motsTotal = Math.max(900, format.pagesMax * 760 - choixSchemas.length * 200 - 120);
+    // Un schéma dans le texte compte pour 200 mots ; un schéma en grand (process, organigramme : 150 mm) pour 420.
+    const motsTotal = Math.max(900, format.pagesMax * 760 - choixSchemas.reduce((s, c) => s + (c.id === 'comprehension' || c.id === 'organigramme' ? 420 : 200), 0) - 120);
     const poids: Record<string, number> = Object.fromEntries(plan.map((p) => [p.id, poidsPartie(p)]));
     const sommePoids = plan.reduce((s, p) => s + poids[p.id], 0) || 1;
     // Rubrique qui répond directement à un élément cité par le RC (« démarche RSE », « organigramme »…) : jamais retirée
@@ -7772,6 +7776,8 @@ FORME : sous-titres « ## » courts (un par élément), paragraphes courts et li
         texte: sections[p.id].replace(new RegExp(`${REPERE_RE.source}[ \\t]*[.;,]?`, 'g'), '').replace(/^[ \t]*[.;,][ \t]*$/gm, '').replace(/\n{3,}/g, '\n\n').trim(),
         schema: schemas[`${p.id}#court`] ?? schemas[`${p.id}#court#organigramme`] ?? schemas[`${p.id}#court#process`],
         garder: !!(schemas[`${p.id}#court#organigramme`] || schemas[`${p.id}#court#process`]),
+        // Process de la compréhension : en tête de sa partie (et non en bandeau en fin de partie).
+        tete: !schemas[`${p.id}#court`] && !schemas[`${p.id}#court#organigramme`] && !!schemas[`${p.id}#court#process`],
       }));
     const r = await rendreFormatCourt(parties, cover || {}, court.pagesMax, this.responseDir, theme, policeMin);
     return { filePath: r.filePath, pages: r.pages, corps: r.corps };

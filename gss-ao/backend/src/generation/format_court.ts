@@ -165,8 +165,14 @@ li::marker { color: ${v('--gss-accent', accentCouv)}; }
   };
 }
 
+/** Schéma dessiné sur une toile portrait (format « page » du moteur) : affiché en grand, sur au moins la moitié de la page. */
+function schemaPortrait(svg?: string): boolean {
+  const m = /viewBox="\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)\s*"/.exec(String(svg || '').slice(0, 2000));
+  return !!m && Number(m[2]) > Number(m[1]);
+}
+
 function html(
-  parties: Array<{ titre: string; texte: string; schema?: string; garder?: boolean }>,
+  parties: Array<{ titre: string; texte: string; schema?: string; garder?: boolean; tete?: boolean }>,
   cover: { client?: string; title?: string; ref?: string },
   corps: number,
   theme: string = themeActif(),
@@ -177,11 +183,15 @@ function html(
   const logo = path.join(MARP_ASSETS, j.logo);
   // Objet du marché ; « Mémoire technique » (valeur par défaut) ferait doublon avec le bandeau.
   const objet = /^m[ée]moire technique$/i.test((cover.title || '').trim()) ? '' : (cover.title || '').trim();
+  // Schéma de toile portrait (process de la compréhension, organigramme) : en grand (consigne 3 : lisible en 5 secondes),
+  // en tête de sa partie pour le process ; schéma paysage : dans le texte, comme avant.
+  const figure = (p: { schema?: string }) => (p.schema ? `<figure class="schema${schemaPortrait(p.schema) ? ' grand' : ''}">${p.schema}</figure>` : '');
   const blocs = parties.map((p, i) => `
 <section>
   <h1><span class="num">${i + 1}.</span> ${echapper(p.titre)}</h1>
+  ${p.tete ? figure(p) : ''}
   ${md.render(p.texte.replace(/^#\s+/gm, '## '))}
-  ${p.schema ? `<figure class="schema">${p.schema}</figure>` : ''}
+  ${p.tete ? '' : figure(p)}
 </section>`).join('\n');
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><style>
 ${police}
@@ -207,6 +217,7 @@ td { border: 1px solid ${j.filet}; padding: 2px 5px; vertical-align: top; }
 tr:nth-child(even) td { background: ${j.ligne}; }
 figure.schema { margin: 5px auto 7px; text-align: center; break-inside: avoid; }
 figure.schema svg { width: 100%; height: auto; max-height: 72mm; }
+figure.schema.grand svg { width: auto; max-width: 100%; height: 150mm; max-height: 150mm; display: block; margin: 0 auto; }
 ${j.extra}</style></head><body>
 <header class="tete">
   ${fs.existsSync(logo) ? `<img src="file://${logo}" alt="">` : ''}
@@ -223,7 +234,7 @@ ${blocs}
  * paliers (10 → 9 pt) puis retire les schémas (du dernier au premier) tant que la limite est dépassée.
  */
 export async function rendreFormatCourt(
-  parties: Array<{ titre: string; texte: string; schema?: string; garder?: boolean }>,
+  parties: Array<{ titre: string; texte: string; schema?: string; garder?: boolean; tete?: boolean }>,
   cover: { client?: string; title?: string; ref?: string },
   pagesMax: number,
   dossierSortie: string,
