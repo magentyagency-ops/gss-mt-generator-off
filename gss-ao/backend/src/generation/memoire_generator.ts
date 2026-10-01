@@ -6638,7 +6638,9 @@ RÈGLES DE FORME (rendu Marp) :
     const rubriquesDoc = sectionsV2(plan, ajouts).filter((r) => (sections[r.id] || '').trim());
     const fixes = plan.rubriques.filter((r) => r.mode === 'fixe' && !repartition?.parRubrique[r.id]?.length).map((r) => r.id);
     progres(70, 'Contrôle des répétitions entre rubriques…');
-    await this.dedoublonnerRubriques(sections, rubriquesDoc, fixes);
+    // Le bloc 1 annonce ce que les blocs 2 à 5 développent (consigne 3) : ses attentes et points de vigilance ne sont
+    // jamais des redites à retirer (ils disparaissaient tous, génération réelle ign 12 et 13).
+    await this.dedoublonnerRubriques(sections, rubriquesDoc, [...fixes, ...(b1 ? [b1.id] : [])]);
     progres(74, 'Cohérence avec les exigences chiffrées et les horaires du CCTP…');
     await this.corrigerContradictions(sections, rubriquesDoc, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))]);
     await this.verifierHoraires(sections, rubriquesDoc, dceContext);
