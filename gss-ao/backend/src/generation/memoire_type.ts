@@ -59,6 +59,9 @@ export interface VariableMemoireType {
   question?: string;
   registre?: string;
   valeur_gss?: string;
+  /** Valeur de GSS quand l'indicateur « indicateur_exige » est vrai (engagement pris quand le cahier des charges l'exige). */
+  valeur_si_exige?: string;
+  indicateur_exige?: string;
   normandie_seulement?: boolean;
   a_confirmer?: string;
   seulement_si_confirmee?: boolean;
@@ -800,6 +803,16 @@ function delai(c: CalculVariables, nom: string, sujet: keyof typeof SUJETS_DELAI
 
 type Calculateur = (c: CalculVariables) => ValeurVariable;
 
+/**
+ * Engagement de GSS quand le cahier des charges l'exige (ex. contrôles inopinés : au moins 3 par mois et par site,
+ * réponse de GSS du 1er octobre 2026) ; une valeur imposée par le CCTP reste prioritaire (variablesDuMarche).
+ */
+function valeurSiExige(c: CalculVariables, nom: string): ValeurVariable | null {
+  const def = c.mt.variables[nom];
+  if (!def?.valeur_si_exige || !def.indicateur_exige || !c.ind[def.indicateur_exige]) return null;
+  return { valeur: def.valeur_si_exige, source: `engagement GSS quand le cahier des charges l'exige (${def.indicateur_exige})` };
+}
+
 const CALCULS: Record<string, Calculateur> = {
   CLIENT: (c) => {
     const brut = valeurPropre(c.ctx.cover?.client) || valeurPropre(c.ctx.analyse?.clientName);
@@ -913,9 +926,9 @@ const CALCULS: Record<string, Calculateur> = {
   DELAI_COMMANDE_SUPPLEMENTAIRE: (c) => delai(c, 'DELAI_COMMANDE_SUPPLEMENTAIRE', 'commande'),
   DELAI_DEFAILLANCE_SSI: (c) => delai(c, 'DELAI_DEFAILLANCE_SSI', 'ssi'),
   FREQ_CONTROLE_1: (c) => ({ valeur: c.mt.variables.FREQ_CONTROLE_1?.valeur_gss || null, source: 'pratique GSS' }),
-  FREQ_CONTROLE_2: (c) => ({ valeur: c.mt.variables.FREQ_CONTROLE_2?.valeur_gss || null, source: 'pratique GSS (faits_gss.md)' }),
+  FREQ_CONTROLE_2: (c) => valeurSiExige(c, 'FREQ_CONTROLE_2') || ({ valeur: c.mt.variables.FREQ_CONTROLE_2?.valeur_gss || null, source: 'pratique GSS (faits_gss.md)' }),
   FREQ_CONTROLE_3: (c) => ({ valeur: c.mt.variables.FREQ_CONTROLE_3?.valeur_gss || null, source: 'pratique GSS' }),
-  CONTROLES_INOPINES_MENSUELS: (c) => ({ valeur: c.mt.variables.CONTROLES_INOPINES_MENSUELS?.valeur_gss || null, source: 'pratique GSS' }),
+  CONTROLES_INOPINES_MENSUELS: (c) => valeurSiExige(c, 'CONTROLES_INOPINES_MENSUELS') || ({ valeur: c.mt.variables.CONTROLES_INOPINES_MENSUELS?.valeur_gss || null, source: 'pratique GSS' }),
   FREQ_REUNIONS: (c) => ({ valeur: frequenceReunionsDce(c.ctx.dce || '') || null, source: 'DCE' }),
   RESPONSABLE_APR: (c) => ({ valeur: c.mt.variables.RESPONSABLE_APR?.valeur_gss || null, source: 'AO RNE p.49-50', aConfirmer: c.mt.variables.RESPONSABLE_APR?.a_confirmer }),
 };

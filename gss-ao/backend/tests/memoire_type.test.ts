@@ -321,6 +321,15 @@ describe('Indicateurs, plan et variables', () => {
     expect(choix.TEL_INTERLOCUTEUR.valeur).toBeNull();
   });
 
+  it('contrôles inopinés : 1 à 3 par mois en pratique courante, au moins 3 quand le cahier des charges l’exige (réponse de GSS)', () => {
+    const courant = preparerMemoireType({ analyse: { clientName: 'Site' }, dce: DCE_NORMANDIE }, { memoireType: mt }).variables;
+    expect(courant.FREQ_CONTROLE_2.valeur).toBe('une à trois fois par mois');
+    const dce = `${DCE_NORMANDIE}\nLe titulaire réalise au moins 3 contrôles inopinés par mois sur chaque site.`;
+    const exige = preparerMemoireType({ analyse: { clientName: 'Site' }, dce }, { memoireType: mt }).variables;
+    expect(exige.FREQ_CONTROLE_2.valeur).toBe('au moins trois fois par mois');
+    expect(exige.CONTROLES_INOPINES_MENSUELS.valeur).toBe('au moins trois contrôles inopinés');
+  });
+
   it('la référence du secteur du client passe en tête des références', () => {
     const prep = preparerMemoireType({ analyse: { clientName: 'Clinique fictive', clientSector: 'santé' }, dce: 'Clinique fictive, 76000 Rouen. Accueil des patients.' }, { memoireType: mt });
     const refs = prep.plan.rubriques.filter((r) => r.id.startsWith('b2_ref_')).map((r) => r.id);

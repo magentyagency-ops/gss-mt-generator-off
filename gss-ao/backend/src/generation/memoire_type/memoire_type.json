@@ -116,6 +116,10 @@
     "b4_rondes"
    ]
   },
+  "CONTROLES_INOPINES_EXIGES": {
+   "description": "Le cahier des charges exige des contrôles inopinés du titulaire avec un minimum ou une fréquence (GSS s'engage alors sur au moins 3 contrôles inopinés par mois et par site, réponse de GSS du 2026-10-01).",
+   "dce": "(?:contr[ôo]les?|visites?|passages?)\\s+inopin[ée]s?[^.;\\n]{0,80}?(?:par mois|mensuels?|par site|au (?:moins|minimum)|minimum)|(?:au (?:moins|minimum)|minimum)\\s+(?:de\\s+)?(?:\\d+|une?|deux|trois|quatre)\\s+(?:contr[ôo]les?|visites?|passages?)\\s+inopin"
+  },
   "TELESURVEILLANCE": {
    "description": "Le marché prévoit de la télésurveillance ou de la télésécurité (intervention d'un rondier sur alarme).",
    "dce": "t[ée]l[ée]\\s?-?surveillance|t[ée]l[ée]\\s?-?s[ée]curit[ée]|station de surveillance",
@@ -570,10 +574,12 @@
   },
   "FREQ_CONTROLE_2": {
    "description": "Fréquence des contrôles techniques inopinés (contrôleurs)",
-   "origine": "pratique GSS (faits_gss.md : 1 à 3 par mois et par site) ; le CCTP prime, jamais les deux chiffres",
+   "origine": "pratique GSS (faits_gss.md : 1 à 3 par mois et par site) ; le CCTP prime, jamais les deux chiffres ; quand le cahier des charges exige des contrôles inopinés : au moins 3 par mois et par site (réponse de GSS du 2026-10-01)",
    "type": "texte",
    "si_absente": "a_completer",
-   "valeur_gss": "une à trois fois par mois"
+   "valeur_gss": "une à trois fois par mois",
+   "valeur_si_exige": "au moins trois fois par mois",
+   "indicateur_exige": "CONTROLES_INOPINES_EXIGES"
   },
   "FREQ_CONTROLE_3": {
    "description": "Fréquence du contrôle global (responsable qualité)",
@@ -584,10 +590,12 @@
   },
   "CONTROLES_INOPINES_MENSUELS": {
    "description": "Contrôles inopinés par mois dans le calendrier type",
-   "origine": "même origine que FREQ_CONTROLE_2",
+   "origine": "même origine que FREQ_CONTROLE_2 ; quand le cahier des charges l'exige : au moins 3 par mois et par site (réponse de GSS du 2026-10-01)",
    "type": "texte",
    "si_absente": "a_completer",
-   "valeur_gss": "un à trois contrôles inopinés"
+   "valeur_gss": "un à trois contrôles inopinés",
+   "valeur_si_exige": "au moins trois contrôles inopinés",
+   "indicateur_exige": "CONTROLES_INOPINES_EXIGES"
   },
   "FREQ_REUNIONS": {
    "description": "Fréquence des réunions de suivi imposée par le DCE",
@@ -3915,7 +3923,8 @@
     "base_memoires.json — GSS - Gardiennage des sites metropolitains - lot 1.pdf p.29, 36-37 (passage c7ce51a5af425eaa, 373817843894b885, b4d56932a0f4b0d3)",
     "base_memoires.json — GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf p.9, 18",
     "registre_informations.json — certification_iso",
-    "faits_gss.md — Contrôles inopinés ; ISO 9001"
+    "faits_gss.md — Contrôles inopinés ; ISO 9001",
+    "Réponse de GSS (2026-10-01) : au moins 3 contrôles inopinés par mois et par site quand le cahier des charges l'exige"
    ],
    "a_confirmer": [
     "Fréquence du contrôle 2 : « deux à trois fois par mois » (bimensuel, AO RNE) ; « une à trois fois par mois » (Gardiennage 2025-12, slides, faits_gss.md)",
