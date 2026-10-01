@@ -7419,7 +7419,9 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     })));
     const schemaProcess = choixTous.filter((c) => c.id === 'comprehension');
     const choixSchemas = [...schemaProcess, ...choixTous.filter((c) => c.id !== 'comprehension').slice(0, schemaProcess.length && format.pagesMax < 6 ? nbSchemas - 1 : nbSchemas)];
-    const motsTotal = Math.max(900, format.pagesMax * 560 - choixSchemas.length * 200 - 120);
+    // Densité mesurée du rendu à 10 pt : 710 à 760 mots par page pleine. La sélection est volontairement large : c'est le
+    // rendu mesuré (étape 9) qui tranche, en retirant les passages de plus faible priorité jusqu'à tenir la limite.
+    const motsTotal = Math.max(900, format.pagesMax * 760 - choixSchemas.length * 200 - 120);
     const poids: Record<string, number> = Object.fromEntries(plan.map((p) => [p.id, poidsPartie(p)]));
     const sommePoids = plan.reduce((s, p) => s + poids[p.id], 0) || 1;
     // Rubrique qui répond directement à un élément cité par le RC (« démarche RSE », « organigramme »…) : jamais retirée
@@ -7547,6 +7549,77 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     // Organigramme et schéma de process de la compréhension : jamais retirés pour gagner de la place.
     const schemas: Record<string, string> = Object.fromEntries(choixSchemas.map((c) => [c.id === 'organigramme' ? `${c.cle}#court#organigramme` : c.id === 'comprehension' ? `${c.cle}#court#process` : `${c.cle}#court`, c.svg]));
     let rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
+    // Le rendu mesuré fait foi : on garde la plus grande part des passages de GSS qui tient dans la limite à la police
+    // normale (10 pt), en retirant d'abord les passages de plus faible priorité (jamais de réécriture). Recherche par
+    // dichotomie sur la part gardée de chaque partie ; aucune page laissée libre tant qu'un passage retiré y tient.
+    const tientNet = (r: { pages: number; corps: number }) => r.pages <= format.pagesMax && r.corps >= 10;
+    if (!tientNet(rendu)) {
+      const sectionsAvant = { ...sections };
+      const motsAvant: Record<string, number> = Object.fromEntries(plan.map((p) => [p.id, motsPartie([{ titre: '', texte: sectionsAvant[p.id] || '' }])]));
+      // s : part gardée du volume de chaque partie (un nombre pour toutes, ou une part propre à chaque partie).
+      const selection = (s: number | Record<string, number>) => {
+        const textesSel: Record<string, string> = { ...sectionsAvant };
+        const retraitsSel: string[] = [];
+        for (const p of plan) {
+          if (!(sectionsAvant[p.id] || '').trim()) continue;
+          const part = typeof s === 'number' ? s : s[p.id];
+          if (part >= 1) continue;
+          const sel = selectionnerDansPartie(sectionsAvant[p.id], infosRubriques, Math.round(motsAvant[p.id] * part));
+          textesSel[p.id] = sel.texte;
+          retraitsSel.push(...sel.retraits);
+        }
+        return { textes: textesSel, retraits: retraitsSel };
+      };
+      // Rendu d'origine compris : supprimé lui aussi s'il est remplacé par un essai retenu.
+      const essais: string[] = [rendu.filePath];
+      const rendre = async (textesSel: Record<string, string>) => {
+        // Essai à 10 pt seulement : un essai qui ne tient pas n'est pas repris en police réduite.
+        const r = await this.rendreCourtDepuisSections(textesSel, { pagesMax: format.pagesMax, plan }, cover, schemas, undefined, 10);
+        essais.push(r.filePath);
+        return r;
+      };
+      // Une erreur de rendu pendant la recherche (navigateur indisponible…) laisse le texte et le rendu d'avant intacts.
+      try {
+        progres(86, `Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées : sélection des passages prioritaires…`);
+        const plancher = selection(0);
+        let meilleur = { ...plancher, rendu: await rendre(plancher.textes) };
+        if (tientNet(meilleur.rendu)) {
+          let bas = 0;
+          let haut = 1;
+          for (let k = 0; k < 6; k++) {
+            const s = (bas + haut) / 2;
+            const essai = selection(s);
+            const r = await rendre(essai.textes);
+            if (tientNet(r)) { bas = s; meilleur = { ...essai, rendu: r }; } else haut = s;
+          }
+          // Affinage partie par partie : une part commune retire un passage dans chaque partie alors qu'un ou deux
+          // suffisent ; on relève donc la part de chaque partie, l'une après l'autre, tant que le rendu tient à 10 pt.
+          const parts: Record<string, number> = Object.fromEntries(plan.map((p) => [p.id, bas]));
+          for (const p of plan) {
+            if (!(sectionsAvant[p.id] || '').trim() || selection(parts).textes[p.id] === sectionsAvant[p.id]) continue;
+            let b = parts[p.id];
+            let h = 1;
+            for (let k = 0; k < 3; k++) {
+              const s = k === 0 ? 1 : (b + h) / 2;
+              const essai = selection({ ...parts, [p.id]: s });
+              if (essai.textes[p.id] === selection({ ...parts, [p.id]: b }).textes[p.id]) { if (k === 0) break; b = s; continue; }
+              const r = await rendre(essai.textes);
+              if (tientNet(r)) { b = s; meilleur = { ...essai, rendu: r }; if (s >= 1) break; } else h = s;
+            }
+            parts[p.id] = b;
+          }
+          Object.assign(sections, meilleur.textes);
+          rendu = meilleur.rendu;
+          console.log(`[MemoireGenerator] Format court — rendu mesuré : ${rendu.pages} page(s) / ${format.pagesMax} à 10 pt, part gardée ${plan.map((p) => `${p.id} ${Math.round(parts[p.id] * 100)} %`).join(', ')} ; ${meilleur.retraits.length} passage(s) non repris : ${meilleur.retraits.join(' ; ')}.`);
+        }
+      } catch (e: any) {
+        console.warn(`[MemoireGenerator] Format court — recherche de la mise en page à 10 pt interrompue (${e?.message || e}) : texte non modifié.`);
+      }
+      // PDF d'essai non retenus : supprimés (seul le rendu gardé reste).
+      for (const f of essais) if (f !== rendu.filePath) { try { fs.unlinkSync(f); } catch { /* déjà absent */ } }
+    }
+    // Repli (le texte gardé ne tient pas à 10 pt même sans aucun passage retirable) : police réduite par le rendu, puis
+    // sélection par passes et condensation si la limite reste dépassée.
     for (let tour = 1; rendu.pages > format.pagesMax && tour <= 3; tour++) {
       const ratio = (format.pagesMax / rendu.pages) * 0.92;
       progres(86, `Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées : sélection des passages prioritaires (passe ${tour})…`);
@@ -7666,7 +7739,8 @@ FORME : sous-titres « ## » courts (un par élément), paragraphes courts et li
     cover: any,
     schemas: Record<string, string> = {},
     theme?: string,
-  ): Promise<{ filePath: string; pages: number }> {
+    policeMin?: number,
+  ): Promise<{ filePath: string; pages: number; corps: number }> {
     const parties = court.plan
       .filter((p) => (sections[p.id] || '').trim())
       .map((p) => ({
@@ -7676,8 +7750,8 @@ FORME : sous-titres « ## » courts (un par élément), paragraphes courts et li
         schema: schemas[`${p.id}#court`] ?? schemas[`${p.id}#court#organigramme`] ?? schemas[`${p.id}#court#process`],
         garder: !!(schemas[`${p.id}#court#organigramme`] || schemas[`${p.id}#court#process`]),
       }));
-    const r = await rendreFormatCourt(parties, cover || {}, court.pagesMax, this.responseDir, theme);
-    return { filePath: r.filePath, pages: r.pages };
+    const r = await rendreFormatCourt(parties, cover || {}, court.pagesMax, this.responseDir, theme, policeMin);
+    return { filePath: r.filePath, pages: r.pages, corps: r.corps };
   }
 
   /**

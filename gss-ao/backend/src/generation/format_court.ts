@@ -148,6 +148,8 @@ export async function rendreFormatCourt(
   pagesMax: number,
   dossierSortie: string,
   themeDemande?: string,
+  /** Police minimale essayée (10 : essai de mise en page à la police normale seulement, sans retrait de schéma). */
+  policeMin = 9,
 ): Promise<{ filePath: string; pages: number; corps: number; schemasRetires: number }> {
   // Thème de style : celui du mémoire déjà rendu s'il est fourni, sinon GSS_THEME / style par défaut.
   const theme = themeActif(themeDemande);
@@ -176,9 +178,9 @@ export async function rendreFormatCourt(
     };
     let pts = parties.map((p) => ({ ...p }));
     let schemasRetires = 0;
-    for (const corps of [10, 9.5, 9]) {
+    for (const corps of [10, 9.5, 9].filter((c) => c >= policeMin)) {
       const n = await essai(pts, corps);
-      if (n <= pagesMax) return { filePath: pdf, pages: n, corps, schemasRetires };
+      if (n <= pagesMax || corps === policeMin) return { filePath: pdf, pages: n, corps, schemasRetires };
     }
     // Police minimale atteinte : les schémas cèdent la place au texte (le contenu prime).
     for (let i = pts.length - 1; i >= 0; i--) {
