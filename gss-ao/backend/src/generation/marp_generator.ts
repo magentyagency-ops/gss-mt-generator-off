@@ -53,8 +53,16 @@ const MAX_WORDS_PER_SLIDE = 170;
 const MAX_LINES_PER_SLIDE = 19;
 const CHARS_PER_LINE = 90;
 /** Limites d'une page de texte SANS schéma dessous (mise en page « 1 à 2 pages de texte, puis 1 page de schéma ») :
- *  thèmes de la refonte (corps de 10 pt) et thème d'origine (corps de 15 px, marges plus grandes). */
-const LIMITES_TEXTE_SEUL = { refonte: { mots: 400, lignes: 40 }, origine: { mots: 280, lignes: 28 } };
+ *  thèmes de la refonte (corps de 10 pt) et thème d'origine (corps de 15 px, marges plus grandes).
+ *  Refonte, calée sur 81 pages de texte rendues par Chromium (réponse libre v2, DCE becquerel et caen) : avec des lignes
+ *  de 105 caractères, les lignes de tableau comptées 1,8 fois (cellules repliées) et les lignes de séparation d'un
+ *  tableau comptées pour rien, une page tient au moins 44,6 lignes ; 40 lignes laissent une marge de 10 %. L'ancienne
+ *  limite (400 mots, lignes de 90 caractères) coupait en deux pages des rubriques qui tiennent sur une seule. */
+const LIMITES_TEXTE_SEUL = { refonte: { mots: 560, lignes: 40, caracteres: 105, ligneTableau: 1.8 }, origine: { mots: 280, lignes: 28 } };
+
+/** Limites de découpage d'une page de texte : mots, lignes estimées et, pour la mise en page v2 de la refonte, longueur
+ *  d'une ligne et poids d'une ligne de tableau (absents : estimation d'origine, lignes de 90 caractères). */
+interface LimitesPage { mots: number; lignes: number; caracteres?: number; ligneTableau?: number }
 /** Path to Marp assets (CSS + logo) bundled with the backend. */
 const MARP_ASSETS_DIR = path.resolve(__dirname, 'marp');
 
@@ -80,7 +88,7 @@ function cleanTextForMarp(raw: string): string {
  * Split a long text block into chunks of ~MAX_WORDS_PER_SLIDE words,
  * splitting on paragraph boundaries (\n\n) when possible.
  */
-function splitIntoSlideChunks(text: string, limites: { mots: number; lignes: number } = { mots: MAX_WORDS_PER_SLIDE, lignes: MAX_LINES_PER_SLIDE }): string[] {
+function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots: MAX_WORDS_PER_SLIDE, lignes: MAX_LINES_PER_SLIDE }): string[] {
   const paragraphs = text
     .split(/\n{2,}/)
     .map((p) => p.trim())
@@ -88,9 +96,16 @@ function splitIntoSlideChunks(text: string, limites: { mots: number; lignes: num
 
   const isHeading = (p: string) => /^#{1,6}\s/.test(p);
   const wordCount = (p: string) => p.split(/\s+/).length;
-  // Lignes occupées par un paragraphe (chaque retour à la ligne interne compte) + intervalle.
+  const caracteres = limites.caracteres ?? CHARS_PER_LINE;
+  const ligneTableau = limites.ligneTableau;
+  // Lignes occupées par un paragraphe (chaque retour à la ligne interne compte) + intervalle. Mise en page v2 de la
+  // refonte : une ligne de tableau pèse davantage (cellules repliées), sa ligne de séparation ne pèse rien.
   const lineCount = (p: string) =>
-    p.split('\n').reduce((n, l) => n + Math.max(1, Math.ceil(l.length / CHARS_PER_LINE)), 0) * (isHeading(p) ? 1.5 : 1) + 0.7;
+    p.split('\n').reduce((n, l) => {
+      if (ligneTableau === undefined) return n + Math.max(1, Math.ceil(l.length / caracteres));
+      if (/^\s*\|[\s:|-]+\|\s*$/.test(l)) return n;
+      return n + Math.max(1, Math.ceil(l.length / caracteres)) * (/^\s*\|/.test(l) ? ligneTableau : 1);
+    }, 0) * (isHeading(p) ? 1.5 : 1) + 0.7;
 
   // Un bloc plus haut qu'une slide (longue liste sans ligne vide) est scindé par groupes de lignes.
   for (let i = 0; i < paragraphs.length; i++) {
@@ -154,7 +169,7 @@ function slideKeyOf(chapterIdx: number, sectionIdx: number, chunkIdx: number): s
 
 /** Découpage du texte d'une rubrique : pages plus pleines quand son schéma a sa propre page (ou qu'elle n'en a pas,
  *  dans la mise en page « 1 à 2 pages de texte, puis 1 page de schéma »). */
-function limitesSection(section: AssembleSection, theme: string): { mots: number; lignes: number } | undefined {
+function limitesSection(section: AssembleSection, theme: string): LimitesPage | undefined {
   if (!section.schemaPleinePage && !section.texteSeul) return undefined;
   return estRetourArriere(theme) ? LIMITES_TEXTE_SEUL.origine : LIMITES_TEXTE_SEUL.refonte;
 }

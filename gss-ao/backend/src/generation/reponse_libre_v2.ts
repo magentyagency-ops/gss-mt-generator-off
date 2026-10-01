@@ -58,6 +58,23 @@ export async function enParallele<T>(items: T[], n: number, f: (x: T, i: number)
   }));
 }
 
+// ─── Lignes en gras consécutives ─────────────────────────────────────────────────────────────────
+
+const MARQUE_GRAS = '\uE010';
+
+/**
+ * Deux lignes en gras qui se suivent dans le texte de GSS (« **Les sites de santé** » puis « **Site : …** ») : le filtre
+ * des commentaires internes (base_memoires.ts, inchangé) retire toute suite « ** ** » et les fusionnait en une seule
+ * ligne. Une marque invisible posée entre elles avant ce filtre, puis retirée (retablirGras), garde le texte intact.
+ */
+export function protegerGras(texte: string): string {
+  return texte.replace(/\*\*([ \t]*\n[ \t]*)\*\*/g, `**$1${MARQUE_GRAS}**`);
+}
+
+export function retablirGras(texte: string): string {
+  return texte.split(MARQUE_GRAS).join('');
+}
+
 // ─── Ordre de rendu ──────────────────────────────────────────────────────────────────────────────
 
 export interface RubriqueRendue { id: string; chapter: string; title: string; ajout?: AjoutLibre }

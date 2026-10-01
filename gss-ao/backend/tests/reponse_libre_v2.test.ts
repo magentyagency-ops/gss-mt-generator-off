@@ -2,8 +2,9 @@ import { describe, it, expect, afterEach } from 'vitest';
 import {
   rubriquesV2, sectionsV2, chapitresV2, blocPagesReferences, schemaFixe, titreSchemaMemoireType, poserReperes, trierNouvelles,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, messagePropositions, memoireTypeActif,
-  court, texteSecoursBesoin, consigneComprehension, CLE_SCHEMA,
+  court, texteSecoursBesoin, consigneComprehension, CLE_SCHEMA, protegerGras, retablirGras,
 } from '../src/generation/reponse_libre_v2';
+import { retirerCommentairesInternes } from '../src/generation/base_memoires';
 import { chargerMemoireType, planMemoireType, type PlanMemoireType } from '../src/generation/memoire_type';
 
 /** Tests HORS LIGNE des fonctions de la réponse libre v2 (aucun appel au modèle). */
@@ -165,6 +166,14 @@ describe('Réponse libre v2 : bloc « compréhension »', () => {
     expect(m[1].content).toContain('« Ronde à 05H30 »');
     expect(m[1].content.indexOf('Exigence éliminatoire')).toBeLessThan(m[1].content.indexOf('Exigence normale'));
     expect(texteSecoursBesoin(d, '- Rondes du lundi au vendredi')).toContain("L'ACOSS nous consulte.");
+  });
+});
+
+describe('Réponse libre v2 : texte de GSS intact', () => {
+  it('deux lignes en gras consécutives ne sont pas fusionnées par le filtre des commentaires internes', () => {
+    const t = '**Les sites de santé**\n**Site : Centre hospitalier du Rouvray — Saint-Étienne-du-Rouvray (76800)**\nEffectif : 2 agents.';
+    expect(retirerCommentairesInternes(t).texte).not.toBe(t);
+    expect(retablirGras(retirerCommentairesInternes(protegerGras(t)).texte)).toBe(t);
   });
 });
 

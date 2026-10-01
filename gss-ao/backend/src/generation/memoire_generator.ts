@@ -16,7 +16,7 @@ import {
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
-  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court,
+  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes } from './base_memoires';
@@ -6290,9 +6290,9 @@ RÈGLES DE FORME (rendu Marp) :
     // ── 8. Filtres de chaque rubrique : commentaires internes et délais hors Normandie (remontés en consultations) ──
     const commentairesRetires = new Set<string>();
     for (const id of Object.keys(sections)) {
-      const nettoye = retirerCommentairesInternes(sections[id]);
-      nettoye.retires.forEach((x) => commentairesRetires.add(`À confirmer : ${x}`));
-      const delais = delaisHorsNormandie(nettoye.texte, dceContext, horsNormandie);
+      const nettoye = retirerCommentairesInternes(protegerGras(sections[id]));
+      nettoye.retires.forEach((x) => commentairesRetires.add(`À confirmer : ${retablirGras(x)}`));
+      const delais = delaisHorsNormandie(retablirGras(nettoye.texte), dceContext, horsNormandie);
       delais.retires.forEach((x) => commentairesRetires.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
       sections[id] = delais.texte;
     }
@@ -6358,7 +6358,7 @@ RÈGLES DE FORME (rendu Marp) :
     elementsLibres.push(...autres);
     await this.completerParLesMemoires(autres, sections, horsNormandie);
     // Nettoyage final (mêmes filtres que la réponse libre v1), sur tout le texte remis à l'acheteur.
-    for (const id of Object.keys(sections)) sections[id] = nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retirerCommentairesInternes(sections[id]).texte, dceContext), dceContext, horsNormandie).texte, dceContext));
+    for (const id of Object.keys(sections)) sections[id] = nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext));
     const consultationList = elementsLibres.filter((e) => e.statut === 'ouvert').map((e) => e.question);
     consultationList.push(...avisSecours);
     // Propositions de réponse de l'IA : signalées APRÈS les éléments (jamais envoyées à l'équipe comme des questions).
