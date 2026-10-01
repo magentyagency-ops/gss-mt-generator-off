@@ -198,8 +198,13 @@ function structure(md: string, etat: EtatCompletion): any {
     ordre.set(x.entete, (ordre.get(x.entete) || 0) + 1);
   }
   fin();
-  for (const r of res.rubriques) {
-    if (r.textes < 1 || r.textes > 2) res.anomalies.push(`${r.entete} : ${r.textes} page(s) de texte`);
+  // Rubrique courte regroupée (correction 5) : son texte est sur la page de texte de la rubrique précédente, sous son
+  // titre « ## … » ; elle n'a que sa page de schéma.
+  const regroupee = (r: any, i: number) => r.textes === 0 && i > 0 && d.some((x) => x.entete === res.rubriques[i - 1].entete && x.classe !== 'schema'
+    && new RegExp(`^## ${r.entete.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'im').test(x.contenu.toUpperCase()));
+  res.regroupees = res.rubriques.filter((r: any, i: number) => regroupee(r, i)).map((r: any) => r.entete);
+  for (const [i, r] of res.rubriques.entries()) {
+    if ((r.textes < 1 && !regroupee(r, i)) || r.textes > 2) res.anomalies.push(`${r.entete} : ${r.textes} page(s) de texte`);
     if (r.schemas > 1) res.anomalies.push(`${r.entete} : ${r.schemas} pages de schéma`);
   }
   res.sans_schema = res.rubriques.filter((r: any) => !r.schemas).map((r: any) => r.entete);

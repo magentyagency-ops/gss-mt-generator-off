@@ -117,6 +117,8 @@ function lignesTexte(texte: string, limites: LimitesPage): number {
  *  l'espacement normal (voir LIMITES_TEXTE_SEUL) : 1,1 × 40 = 44 lignes restent dans cette mesure, l'espacement
  *  resserré ajoute une marge. Rubrique sans schéma de quelques lignes : chapeau de la rubrique suivante. */
 const SEUIL_PAGE_ORPHELINE = 0.25;
+/** Rubrique « courte » (moins d'un tiers de page de texte) : regroupée avec la suivante du bloc sur une page de texte. */
+const SEUIL_RUBRIQUE_COURTE = 1 / 3;
 const MARGE_PAGE_SERREE = 1.1;
 
 function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots: MAX_WORDS_PER_SLIDE, lignes: MAX_LINES_PER_SLIDE }): string[] {
@@ -207,14 +209,33 @@ function pageSerree(chunk: string, limites?: LimitesPage): boolean {
  * page à elle ; son titre et son texte, inchangés, deviennent le chapeau de la première page de la rubrique suivante
  * du même bloc. Ailleurs (thème de retour arrière, mise en page d'origine), rien ne change.
  */
-function sectionsAPaginer(chapter: AssembleChapter, theme: string): Array<{ section: AssembleSection; si: number; texte: string }> {
-  const sortie: Array<{ section: AssembleSection; si: number; texte: string }> = [];
+function sectionsAPaginer(chapter: AssembleChapter, theme: string): Array<{ section: AssembleSection; si: number; texte: string; sansPageTexte?: boolean }> {
+  const sortie: Array<{ section: AssembleSection; si: number; texte: string; sansPageTexte?: boolean }> = [];
   let chapeau = '';
+  /** Rubrique dont le texte court a rejoint la page de texte de la rubrique précédente (elle garde sa page de schéma). */
+  let regroupee = -1;
   chapter.sections.forEach((section, si) => {
+    if (si === regroupee) { sortie.push({ section, si, texte: '', sansPageTexte: true }); return; }
     let texte = cleanTextForMarp(section.text);
     if (chapeau) { texte = `${chapeau}\n\n${texte}`; chapeau = ''; }
     const limites = limitesSection(section, theme);
     const suivante = chapter.sections[si + 1];
+    // Deux rubriques courtes du même bloc, chacune avec sa page de schéma (moins d'un tiers de page de texte chacune) :
+    // une seule page de texte pour les deux, puis le schéma de chacune (pas de page de texte remplie au quart).
+    const limitesSuivante = suivante ? limitesSection(suivante, theme) : undefined;
+    if (section.schemaPleinePage?.svg && suivante?.schemaPleinePage?.svg && !section.photos?.length && limites?.ligneTableau !== undefined
+      && limitesSuivante?.ligneTableau !== undefined) {
+      const texteSuivant = cleanTextForMarp(suivante.text);
+      const titreSuivant = titreSchema(suivante.title);
+      const lignesA = lignesTexte(texte, limites);
+      const lignesB = lignesTexte(texteSuivant, limites) + 1.5;
+      if (texteSuivant.trim() && titreSuivant && lignesA < limites.lignes * SEUIL_RUBRIQUE_COURTE && lignesB < limites.lignes * SEUIL_RUBRIQUE_COURTE
+        && lignesA + lignesB <= limites.lignes) {
+        sortie.push({ section, si, texte: `${texte}\n\n## ${titreSuivant}\n\n${texteSuivant}` });
+        regroupee = si + 1;
+        return;
+      }
+    }
     if (section.texteSeul && !section.photos?.length && limites?.ligneTableau !== undefined && suivante && limitesSection(suivante, theme)?.ligneTableau !== undefined
       && lignesTexte(texte, limites) < limites.lignes * SEUIL_PAGE_ORPHELINE) {
       const titre = titreSchema(section.title);
@@ -312,8 +333,8 @@ export class MarpGenerator {
     const slides: SlideContext[] = [];
     chapters.forEach((chapter, ci) => {
       if (!chapter.sections || chapter.sections.length === 0) return;
-      sectionsAPaginer(chapter, theme).forEach(({ section, si, texte }) => {
-        const chunks = splitIntoSlideChunks(texte, limitesSection(section, theme));
+      sectionsAPaginer(chapter, theme).forEach(({ section, si, texte, sansPageTexte }) => {
+        const chunks = sansPageTexte ? [] : splitIntoSlideChunks(texte, limitesSection(section, theme));
         chunks.forEach((chunk, k) => {
           slides.push({ key: slideKeyOf(ci, si, k), title: section.title, text: chunk });
         });
@@ -722,10 +743,11 @@ export class MarpGenerator {
       }
 
       // Sections
-      sectionsAPaginer(chapter, theme).forEach(({ section, si, texte: cleanedText }) => {
+      sectionsAPaginer(chapter, theme).forEach(({ section, si, texte: cleanedText, sansPageTexte }) => {
         const headerTitle = section.title.toUpperCase();
         const limites = limitesSection(section, theme);
-        const chunks = splitIntoSlideChunks(cleanedText, limites);
+        // Texte regroupé sur la page de la rubrique précédente : seule la page de schéma reste à rendre.
+        const chunks = sansPageTexte ? [] : splitIntoSlideChunks(cleanedText, limites);
 
         for (let i = 0; i < chunks.length; i++) {
           const chunk = chunks[i];
