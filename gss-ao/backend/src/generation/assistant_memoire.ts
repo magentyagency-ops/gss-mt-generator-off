@@ -354,7 +354,7 @@ async function assistantLibre(etat: EtatCompletion, message: string, pieces: Pie
   const propositions = ids.filter(enAttente);
   // Format court imposé par le RC : le plan est celui du RC (pas d'ajout de partie) et la limite de pages s'impose.
   const organisation = court
-    ? `au FORMAT IMPOSÉ PAR LE RÈGLEMENT DE CONSULTATION (${court.pagesMax} pages maximum), organisé selon le plan du RC en parties (les « rubriques » ci-dessous). Une nouvelle demande de contenu s'intègre à la partie concernée (action "modifier") : les actions "ajouter" et "image" ne sont pas disponibles dans ce format (limite de pages) : explique-le si l'utilisateur les demande`
+    ? `au FORMAT IMPOSÉ PAR LE RÈGLEMENT DE CONSULTATION (${court.pagesMax} pages maximum), organisé selon le plan du RC en parties (les « rubriques » ci-dessous). Une nouvelle demande de contenu s'intègre à la partie concernée (action "modifier") : les actions "ajouter" et "image" ne sont pas disponibles dans ce format (limite de pages) : explique-le si l'utilisateur les demande. Une partie du RC ne se supprime pas (action "supprimer" indisponible). Une proposition de réponse de l'IA ([PROPOSITION À VALIDER]) est un PASSAGE de la partie, pas la partie entière : pour la retirer, action "modifier" sur la partie avec la consigne « retire uniquement le passage proposé sur <sujet> »`
     : `organisé en chapitres (${Object.entries(chapitres).map(([k, v]) => `${k} : ${v}`).join(' ; ')}) et en rubriques`;
   const plan = await json(
     `Tu es l'assistant de modification d'un mémoire technique GSS (sécurité privée) déjà généré, ${organisation}. Actions possibles :
@@ -371,9 +371,32 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
   );
   const actions: any[] = Array.isArray(plan.actions) ? plan.actions : [];
   const modifies: string[] = [];
-  // Schéma fixé par le mémoire type (bibliothèque, spécification, organigramme) : il ne dépend pas du texte réécrit.
-  const oublierSchemas = (id: string) => { if (schemaFixe(planMt, id)) return; for (const k of Object.keys(lib.schemas || {})) if (k.startsWith(`${id}#`)) delete lib.schemas[k]; };
+  // Schéma fixé par le mémoire type (bibliothèque, spécification, organigramme, process du besoin) : il ne dépend pas
+  // du texte réécrit. Format court : tous ses schémas (process de la compréhension, organigramme, schéma de la
+  // bibliothèque choisi d'après le titre de la partie) sont fixés à la génération et le rendu court n'en reconstruit
+  // aucun : ils ne sont jamais effacés (une partie supprimée n'est plus rendue, avec son schéma).
+  const oublierSchemas = (id: string) => { if (court || schemaFixe(planMt, id)) return; for (const k of Object.keys(lib.schemas || {})) if (k.startsWith(`${id}#`)) delete lib.schemas[k]; };
   const valides: string[] = [];
+  // Format court : la proposition de l'IA porte l'id de la partie entière du RC. « Supprimer » une proposition retire
+  // seulement le passage proposé (traduit en « modifier ») ; une partie du RC, elle, n'est jamais supprimée.
+  const propositionsRetirees = new Set<string>();
+  const partiesGardees: string[] = [];
+  if (court) {
+    for (const a of actions) {
+      if (a?.type !== 'supprimer' || !ids.includes(a.id)) continue;
+      const aj = lib.ajouts.find((x) => x.id === a.id && x.proposition);
+      if (aj) {
+        a.type = 'modifier';
+        const sujets = String(aj.sujet || '').split(' ; ').filter(Boolean);
+        a.consigne = `Retire uniquement le passage proposé par l'IA (proposition de réponse à valider) que vise la demande de l'utilisateur (« ${message} ») ; ${sujets.length > 1 ? `propositions de cette partie : ${sujets.join(' ; ')}` : `proposition de cette partie : ${sujets[0] || 'question nouvelle du DCE'}`}. Garde mot pour mot tout le reste de la partie.`;
+        // Plusieurs propositions dans la partie : les autres restent à valider (marque gardée).
+        if (sujets.length <= 1) propositionsRetirees.add(a.id);
+      } else {
+        a.type = 'refus';
+        partiesGardees.push(titreRubrique(etat, a.id));
+      }
+    }
+  }
 
   for (const a of actions) {
     if (a?.type === 'modifier' && ids.includes(a.id) && String(a.consigne || '').trim()) {
@@ -388,6 +411,8 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       lib.sections[a.id] = texte;
       oublierSchemas(a.id);
       modifies.push(a.id);
+      // Passage proposé retiré : plus de proposition à valider dans cette partie.
+      if (propositionsRetirees.has(a.id)) lib.ajouts = lib.ajouts.filter((x) => !(x.id === a.id && x.proposition));
     } else if (a?.type === 'ajouter' && !court && String(a.titre || '').trim()) {
       const cles = Object.keys(chapitres);
       const chapitre = cles.includes(a.chapitre) ? a.chapitre : cles[cles.length - 1];
@@ -480,6 +505,7 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
     if (visible) page = pageDe(etat.fichier, titreRubrique(etat, visible), photo);
   }
   let reponse = String(plan.reponse || (modifies.length || valides.length ? 'Modification effectuée.' : "Je n'ai rien modifié.")).trim();
+  if (partiesGardees.length) reponse += ` ${partiesGardees.length > 1 ? 'Les parties' : 'La partie'} ${partiesGardees.map((t) => `« ${t} »`).join(', ')} ${partiesGardees.length > 1 ? 'sont imposées' : 'est imposée'} par le règlement de consultation : je ne peux pas ${partiesGardees.length > 1 ? 'les' : 'la'} supprimer. Dites-moi plutôt quel passage retirer.`;
   if (valides.length && !/valid/i.test(reponse)) reponse += ` Proposition${valides.length > 1 ? 's' : ''} validée${valides.length > 1 ? 's' : ''} : ${valides.map((t) => `« ${t} »`).join(', ')}.`;
   const aValider = modifies.filter(enAttente).map((id) => titreRubrique(etat, id));
   if (aValider.length) reponse += ` ${aValider.length > 1 ? 'Ces propositions restent' : 'Cette proposition reste'} à valider (${aValider.map((t) => `« ${t} »`).join(', ')}) : dites-moi « je valide » quand ${aValider.length > 1 ? 'elles vous conviennent' : 'elle vous convient'}.`;

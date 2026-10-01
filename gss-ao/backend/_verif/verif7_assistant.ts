@@ -67,6 +67,28 @@ const textePdf = (f: string) => (spawnSync('pdftotext', ['-layout', f, '-'], { e
       out.schemas_apres_2 = Object.keys(r2.etat.libre.schemas);
       fs.copyFileSync(r2.etat.fichier, path.join(SORTIE, 'apres.pdf'));
       out.pdf = path.join(SORTIE, 'apres.pdf');
+      // Contrôle (correction 7) : tous les schémas du format court sont gardés, l'organigramme est toujours dans le PDF.
+      out.controle_schemas_gardes = out.schemas_avant.every((k: string) => out.schemas_apres_2.includes(k));
+      out.controle_organigramme_pdf = /Directeur d.agence/i.test(textePdf(r2.etat.fichier));
+    } else if (CAS === 'E') {
+      // Format court : « Supprime la proposition sur … » ne vide plus la partie du RC ; une partie sans proposition
+      // n'est jamais supprimée.
+      const prop = etat0.libre.ajouts.find((x: any) => x.proposition);
+      const autre = etat0.libre.court.plan.map((p: any) => p.id).find((x: string) => !etat0.libre.ajouts.some((a: any) => a.id === x && a.proposition));
+      const avant = etat0.libre.sections[prop.id].length;
+      plan = { reponse: 'Proposition supprimée.', actions: [{ type: 'supprimer', id: prop.id }, { type: 'supprimer', id: autre }] };
+      const r = await discuter(id, `Supprime la proposition sur ${prop.sujet}.`);
+      const consigne = prompts.find((x) => /Tu réécris/.test(x)) || '';
+      out.proposition = prop;
+      out.autre = autre;
+      out.reponse = r.reponse;
+      out.modifies = r.modifies;
+      out.taille_partie = { avant, apres: (r.etat.libre.sections[prop.id] || '').length };
+      out.autre_gardee = (r.etat.libre.sections[autre] || '').length === etat0.libre.sections[autre].length;
+      out.consigne_reecriture = (/Consigne de l'utilisateur : ([^\n]*)/.exec(consigne) || [])[1];
+      out.proposition_encore_en_attente = r.etat.libre.ajouts.some((x: any) => x.id === prop.id && x.proposition);
+      out.prompt_court = /Une partie du RC ne se supprime pas/.test(prompts.find((x) => /assistant de modification/.test(x)) || '');
+      out.schemas_apres = Object.keys(r.etat.libre.schemas);
     } else if (CAS === 'B') {
       const avant = etat0.libre.schemas['b1_comprehension#schema'] || '';
       out.b1_schema_avant = { taille: avant.length, gabarit: (/data-gabarit="([^"]+)"/.exec(avant) || [])[1], titre: etat0.libre.titresSchemas?.b1_comprehension };
