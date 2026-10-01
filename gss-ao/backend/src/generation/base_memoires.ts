@@ -610,37 +610,72 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
   const retires: string[] = [];
   if (!horsNormandie) return { texte, retires };
   const DUREE = /(\d+(?:[,.]\d+)?)\s*(minutes?|min\b|heures?\b|h\b)(?!\s*\d)/gi;
-  // « remplaçant » (ç), prise de service et absence comprises : « l'agent remplaçant prend son service sous 60 minutes ».
-  const PRESENCE = /interven|mobilis|rempla[cç]|astreinte|rondier|arriv|sur place|se rend|d[ée]plac|renfort|lev[ée]e de doute|(?:prise?|prenne|prend) (?:de |son )?service|absence/i;
+  // « remplaçant » (ç), prise de service et absence comprises : « l'agent remplaçant prend son service sous 60 minutes » ;
+  // mise à disposition d'agents et délais contractuels (« sous 2 heures pour une demande urgente »).
+  const PRESENCE = /interven|mobilis|rempla[cç]|astreinte|rondier|arriv|sur place|se rend|d[ée]plac|renfort|lev[ée]e de doute|(?:prise?|prenne|prend) (?:de |son )?service|absence|mise à disposition|mis à disposition|d[ée]lais? contractuels?|demandes? urgentes?|en urgence/i;
   const dceNorm = (dce || '').replace(/\s+/g, ' ').toLowerCase();
   // Le DCE écrit parfois le délai en toutes lettres (« moins de cinq minutes »).
   const LETTRES: Record<string, string> = { '1': 'une?', '2': 'deux', '3': 'trois', '4': 'quatre', '5': 'cinq', '6': 'six', '8': 'huit', '10': 'dix', '12': 'douze', '15': 'quinze', '20': 'vingt', '24': 'vingt-quatre', '30': 'trente', '45': 'quarante-cinq', '48': 'quarante-huit', '60': 'soixante', '72': 'soixante-douze' };
-  const dansDce = (n: string, u: string) => {
+  /** 'oui' : délai imposé par le DCE ; 'seuil' : seulement un seuil de pénalité (objet du délai) ; 'non' : absent. */
+  const dansDce = (n: string, u: string): { statut: 'oui' | 'seuil' | 'non'; objet?: string } => {
     const unite = /^m/i.test(u) ? '(?:minutes?|min\\b|mn\\b)' : '(?:heures?|h\\b)';
     const chiffre = `${n.replace('.', '[.,]').replace(',', '[.,]')}`;
     const formes = LETTRES[n] ? `(?:${chiffre}|${LETTRES[n]})(?:\\s*\\(${chiffre}\\))?` : chiffre;
-    // Un seuil de pénalité (« retard supérieur à 60 min … 300 € HT / manquement ») n'est pas un délai d'intervention
-    // imposé : il n'autorise pas GSS à promettre ce délai hors Normandie.
-    for (const m of dceNorm.matchAll(new RegExp(`(?<![\\d,.])${formes}\\s*${unite}`, 'gi'))) {
+    // Un seuil de pénalité (« retard supérieur à 60 min … 300 € HT / manquement », « 200 € par agent demandé pour une
+    // mise à disposition urgente attendue dans un délai de 2 heures ») n'est pas un délai d'intervention imposé : il
+    // n'autorise pas GSS à promettre ce délai hors Normandie.
+    let seuil = '';
+    // « 24h/24 » est une amplitude, pas un délai.
+    for (const m of dceNorm.matchAll(new RegExp(`(?<![\\d,.])${formes}\\s*${unite}(?!\\s*/)`, 'gi'))) {
       const autour = dceNorm.slice(Math.max(0, (m.index || 0) - 70), (m.index || 0) + m[0].length + 50);
-      if (!/€|euros?\b|manquement|p[ée]nalit|retard (?:sup|inf)|retard d.un agent/i.test(autour)) return true;
+      // Durée qui n'est pas un délai (« 24 heures de stationnement au tarif horaire ») : ignorée.
+      if (/stationnement|tarif|recharge|cons[ée]cuti/i.test(autour.slice(60, 140))) continue;
+      if (!/€|euros?\b|manquement|p[ée]nalit|retard (?:sup|inf)|retard d.un agent/i.test(autour)) return { statut: 'oui' };
+      seuil ||= (/mise à disposition|intervention|remplacement|prise de service|arrivée/.exec(autour) || ['intervention'])[0];
     }
-    return false;
+    return seuil ? { statut: 'seuil', objet: seuil } : { statut: 'non' };
   };
-  const lignes = texte.split('\n').map((ligne) => ligne.split(/(?<=[.!?;])\s+/).map((ph) => {
+  // Seuils de pénalité cités : le texte dit que c'est l'acheteur qui fixe ces délais (une seule phrase, à la place
+  // de la première phrase retirée), sans engagement de GSS ; la question est posée à GSS (retires).
+  const seuils: Array<{ duree: string; objet: string }> = [];
+  const MARQUE_SEUIL = '\u0001SEUIL\u0001';
+  // Sigles à points (« C.C.T.P. : ») : jamais une fin de phrase.
+  const proteger = (t: string) => t.replace(/\b((?:[A-Z]\.){2,})/g, (m) => m.replace(/\./g, '\u0002'));
+  const retablir = (t: string) => t.replace(/\u0002/g, '.');
+  const lignes = proteger(texte).split('\n').map((ligne) => ligne.split(/(?<=[.!?;])\s+/).map((ph) => {
     if (!PRESENCE.test(ph) || /⟦AC:|\[CONSULTATION REQUISE/.test(ph)) return ph;
     const hors: string[] = [];
+    const seuilsPhrase: Array<{ duree: string; objet: string }> = [];
     for (const m of ph.matchAll(DUREE)) {
       const apres = ph.slice((m.index || 0) + m[0].length, (m.index || 0) + m[0].length + 12);
       if (/^\s*avant\b/i.test(apres)) continue;               // « prise de service 15 minutes avant »
-      if (!dansDce(m[1], m[2])) hors.push(m[0]);
+      const r = dansDce(m[1], m[2]);
+      if (r.statut === 'oui') continue;
+      hors.push(m[0]);
+      if (r.statut === 'seuil') seuilsPhrase.push({ duree: m[0].replace(/\s+/g, ' '), objet: r.objet || 'intervention' });
     }
     if (!hors.length) return ph;
-    retires.push(ph.replace(/[*#]/g, '').trim());
+    retires.push(retablir(ph).replace(/[*#]/g, '').trim());
+    if (seuilsPhrase.length === hors.length) {
+      const premier = !seuils.length;
+      for (const x of seuilsPhrase) if (!seuils.some((y) => y.duree === x.duree)) seuils.push(x);
+      if (premier) return /;\s*$/.test(ph) ? `${MARQUE_SEUIL};` : MARQUE_SEUIL;
+    }
     // Puce : on garde le tiret vide ? non — la puce disparaît avec sa phrase.
     return '';
   }).filter((ph, k, t) => ph !== '' || false).join(' '));
-  return { texte: lignes.filter((l, k, t) => !(l.trim() === '' && /^\s*[-*•]\s*$/.test(l))).join('\n').replace(/^\s*[-*•]\s*$/gm, '').replace(/\n{3,}/g, '\n\n'), retires };
+  let sortie = retablir(lignes.filter((l, k, t) => !(l.trim() === '' && /^\s*[-*•]\s*$/.test(l))).join('\n').replace(/^\s*[-*•]\s*$/gm, '').replace(/\n{3,}/g, '\n\n'));
+  if (seuils.length) {
+    const objets = [...new Set(seuils.map((x) => x.objet))];
+    const phrase = `Le marché fixe des délais de ${objets.join(' et de ')} de ${seuils.map((x) => x.duree).join(' et de ')} ; GSS organise sa mobilisation en conséquence`;
+    sortie = sortie.replace(`${MARQUE_SEUIL};`, `${phrase} ;`).replace(MARQUE_SEUIL, `${phrase}.`).split(MARQUE_SEUIL).join('');
+  }
+  // « ces délais » sans antécédent (phrase retirée, aucun délai cité avant) : « les délais du marché ».
+  {
+    sortie = sortie.replace(/\b([Cc])es délais\b|\b([Cc])e délai\b/g, (m, c1: string, c2: string, pos: number) => (
+      /d[ée]lais?\b/i.test(sortie.slice(0, pos)) ? m : `${(c1 || c2) === 'C' ? 'L' : 'l'}${c1 ? 'es délais' : 'e délai'} du marché`));
+  }
+  return { texte: sortie, retires };
 }
 
 /**
