@@ -689,7 +689,7 @@
     "--gss-titre-filet": "#E2141B",
     "--gss-couverture-fond": "#1C1F23",
     "--gss-couverture-texte": "#FFFFFF",
-    "--gss-couverture-accent": "#E2141B",
+    "--gss-couverture-accent": "#FF4D52",
     "--gss-intercalaire-fond": "#FFFFFF",
     "--gss-intercalaire-texte": "#1C1F23",
     "--gss-intercalaire-numero": "#E2141B"

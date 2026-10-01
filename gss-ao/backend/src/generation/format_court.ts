@@ -12,7 +12,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';
-import { themeActif, styleDuTheme, fontFaceTheme, familleTexte, luminance, contraste, LOGO_FOND_CLAIR } from './themes';
+import { themeActif, styleDuTheme, fontFaceTheme, familleTexte, policesDuTheme, contraste, LOGO_FOND_CLAIR } from './themes';
 
 export interface PartieCourte { id: string; title: string; attendu?: string }
 export interface FormatImpose { pagesMax: number; plan: PartieCourte[]; source: string }
@@ -139,6 +139,17 @@ export function nombrePages(pdf: string): number {
 
 const echapper = (t?: string) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+/** Règle @font-face de la police du texte du thème, graisse la plus proche de 400 seulement (pied de page). */
+function fontFacePied(theme: string): string {
+  const famille = styleDuTheme(theme)?.polices?.texte?.famille;
+  const p = policesDuTheme(theme).filter((x) => x.famille === famille).sort((a, b) => Math.abs(a.poids - 400) - Math.abs(b.poids - 400))[0];
+  if (!p) return '';
+  try {
+    const b64 = fs.readFileSync(p.chemin).toString('base64');
+    return `<style>@font-face{font-family:'${p.famille}';src:url(data:font/ttf;base64,${b64}) format('truetype');font-weight:400;font-style:normal;}</style>`;
+  } catch { return ''; }
+}
+
 /** Couleurs et polices du format court : celles du thème (themes.ts), ou celles d'avant les thèmes (retour arrière,
  *  rendu identique). */
 function jetonsCourt(theme: string) {
@@ -146,7 +157,7 @@ function jetonsCourt(theme: string) {
   if (!p) {
     return { police: 'Arial, Helvetica, sans-serif', encre: '#1f2937', accent: '#dc2626', fort: '#111827', gris: '#4b5563', bandeau: '#494545',
       bandeauTexte: '#fff', numero: '#fca5a5', titre: '#dc2626', teteTableau: '#484545', teteTableauTexte: '#F5F5DE', filet: '#CFC9C5',
-      ligne: '#F7F5EF', pied: '#6b7280', logo: 'logogss.png', extra: '' };
+      ligne: '#F7F5EF', pied: '#6b7280', piedPolice: 'Arial', piedStyle: '', logo: 'logogss.png', extra: '' };
   }
   const v = (k: string, d: string) => p[k] || d;
   const bandeau = v('--gss-tableau-tete', '#0B2545');
@@ -156,7 +167,10 @@ function jetonsCourt(theme: string) {
   const enteteTexte = v('--gss-entete-texte', '#FFFFFF');
   const fond = v('--gss-fond-page', '#FFFFFF');
   // En-tête de la première page dans le bandeau du thème (logo, titre de l'offre), polices du thème embarquées.
+  // Fond de page aussi sous les marges @page (Chromium ne les peint qu'avec le fond de @page) : un thème sombre n'a
+  // plus de cadre blanc autour de la page, et le pied de page s'y écrit en couleur claire.
   const extra = `${fontFaceTheme(theme)}
+@page { background: ${fond}; }
 html, body { background: ${fond}; }
 h1, h2, h3, h4, header.tete .t1, header.tete .t2 { font-family: ${v('--gss-police-titre', 'sans-serif')}; }
 header.tete { background: ${enteteFond}; padding: 7px 12px; border-bottom: 3px solid ${v('--gss-entete-filet', accentCouv)}; }
@@ -169,9 +183,13 @@ li::marker { color: ${v('--gss-accent', accentCouv)}; }
   return {
     police: familleTexte(theme) || 'Arial, Helvetica, sans-serif', encre: v('--gss-encre', '#1f2937'), accent: v('--gss-accent', '#dc2626'),
     fort: v('--gss-titre', '#111827'), gris: v('--gss-encre-2', '#4b5563'), bandeau, bandeauTexte,
-    numero: contraste(accentCouv, bandeau) >= 3 ? accentCouv : bandeauTexte, titre: v('--gss-titre', '#dc2626'), teteTableau: bandeau,
+    // Numéro de partie : texte du titre de partie (corps + 3 pt en gras, sous 14 pt gras) → 4,5:1.
+    numero: contraste(accentCouv, bandeau) >= 4.5 ? accentCouv : bandeauTexte, titre: v('--gss-titre', '#dc2626'), teteTableau: bandeau,
     teteTableauTexte: bandeauTexte, filet: v('--gss-filet', '#CFC9C5'), ligne: v('--gss-tableau-ligne', '#F7F5EF'),
-    pied: luminance(fond) < 0.2 ? '#6b7280' : v('--gss-encre-3', '#6b7280'),
+    pied: v('--gss-encre-3', '#6b7280'),
+    // Pied de page dans la police du texte du thème : le modèle de pied de page de Chromium ne voit pas les @font-face
+    // de la page, la police (graisse normale) y est donc embarquée.
+    piedPolice: familleTexte(theme) || 'Arial', piedStyle: fontFacePied(theme),
     logo: styleDuTheme(theme)?.logo === 'encre' ? LOGO_FOND_CLAIR : 'logogss.png', extra,
   };
 }
@@ -255,7 +273,7 @@ export async function rendreFormatCourt(
 ): Promise<{ filePath: string; pages: number; corps: number; schemasRetires: number }> {
   // Thème de style : celui du mémoire déjà rendu s'il est fourni, sinon GSS_THEME / style par défaut.
   const theme = themeActif(themeDemande);
-  const pied = jetonsCourt(theme).pied;
+  const { pied, piedPolice, piedStyle } = jetonsCourt(theme);
   const puppeteer = require('puppeteer');
   const navigateur = await puppeteer.launch({
     headless: 'new',
@@ -273,7 +291,7 @@ export async function rendreFormatCourt(
       await page.pdf({
         path: pdf, format: 'A4', printBackground: true, preferCSSPageSize: true,
         displayHeaderFooter: true, headerTemplate: '<span></span>',
-        footerTemplate: `<div style="width:100%;font-size:7.5pt;color:${pied};padding:0 14mm;display:flex;justify-content:space-between;font-family:Arial"><span>GSS — Global Security Services</span><span>Page <span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
+        footerTemplate: `${piedStyle}<div style="width:100%;font-size:7.5pt;color:${pied};padding:0 14mm;display:flex;justify-content:space-between;font-family:${piedPolice.replace(/"/g, "'")}"><span>GSS — Global Security Services</span><span>Page <span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
         timeout: 300_000,
       });
       return nombrePages(pdf);
