@@ -3,7 +3,7 @@ import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema, dessinerSpecs, finaliserSvg } from './schema_service';
 import { insererSchemasReponses, choisir as choisirSchemasGss } from './visuels_cadre';
-import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt, renvoisVersParties } from './format_court';
+import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque } from './themes';
 import { poserSignets, poserSignetsChamps, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion } from './completion';
@@ -7521,7 +7521,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       }
       // Contrôle de couverture conservé : une exigence du CCTP que la partie ne traite pas devient un engagement.
       const reqs = reqsCouverture(p.id);
-      if (texte && reqs.length) texte = plafonnerEngagements(await this.completerCouverture(texte, reqs, p.id, horsNormandie), 6);
+      if (texte && reqs.length) texte = plafonnerEngagements(nettoyerEngagements(await this.completerCouverture(texte, reqs, p.id, horsNormandie)), 6);
       sections[p.id] = texte.trim();
     }
     for (const g of grouperNouvelles(nouvellesCourt, 6).groupes) {
@@ -7684,7 +7684,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       return { cle: `Q${i + 1}`, question: q.question, contexte, statut: 'ouvert', reperes, pourAcheteur: /^À demander à l.acheteur/i.test(q.question) };
     });
     await this.completerParLesMemoires(elements, sections, horsNormandie);
-    for (const id of Object.keys(sections)) sections[id] = nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext));
+    // « Le titulaire » des exigences recopiées du CCTP est GSS : voix de GSS dans tout le texte remis.
+    for (const id of Object.keys(sections)) sections[id] = voixDeGss(nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext)));
     rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
     const consultationList = elements.filter((e) => e.statut === 'ouvert').map((e) => e.question);
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);

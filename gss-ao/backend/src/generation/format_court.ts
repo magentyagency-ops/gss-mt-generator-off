@@ -74,6 +74,49 @@ export function renvoisVersParties(
   }).replace(/ +([,.;:])/g, '$1').replace(/ {2,}/g, ' ');
 }
 
+const TITRE_ENGAGEMENTS = '## Nos engagements sur les exigences du cahier des charges';
+const MOTS_NEUTRES_ENGAGEMENT = new Set(['gss', 'prendra', 'prend', 'compte', 'les', 'des', 'aux', 'une', 'un', 'de', 'du', 'la', 'le', 'et', 'en', 'au', 'ses', 'sur', 'pour', 'dans', 'par', 'est', 'sont', 'ainsi', 'que', 'qui', 'avec', 'l', 'd', 's', 'ceux', 'celles', 'pris']);
+const motsEngagement = (t: string) => new Set(t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/)
+  .filter((w) => w && (w.length >= 3 || /\d/.test(w)) && !MOTS_NEUTRES_ENGAGEMENT.has(w)));
+
+/**
+ * « Le titulaire » du CCTP est GSS : dans le texte remis par GSS, l'exigence recopiée se dit à la voix de GSS (« une
+ * copie est remise au titulaire » → « à GSS », « le titulaire gère » → « GSS gère »). « Titulaire du SSIAP, du poste… »
+ * (diplôme, poste tenu par un agent) n'est pas touché.
+ */
+export function voixDeGss(texte: string): string {
+  const SAUF = String.raw`(?!\s+(?:du|d['’]un|d['’]une|des)\s+(?:SSIAP|dipl|poste|PC|carte|permis|CQP|titre|certificat|habilitation|SST|brevet))`;
+  return String(texte || '')
+    .replace(new RegExp(String.raw`\b([Aa])u titulaire(?: du march[ée])?\b${SAUF}`, 'g'), (_m, a: string) => (a === 'A' ? 'À GSS' : 'à GSS'))
+    .replace(new RegExp(String.raw`\b([Dd])u titulaire(?: du march[ée])?\b${SAUF}`, 'g'), (_m, d: string) => `${d}e GSS`)
+    .replace(new RegExp(String.raw`\b[Ll]e titulaire(?: du march[ée])?\b${SAUF}`, 'g'), 'GSS');
+}
+
+/**
+ * Puces « Nos engagements » du format court : une puce dont les mots sont repris à 60 % au moins (3 mots ou plus) par
+ * une puce déjà gardée est une redite (« accès du boulevard Jourdan… » répété trois fois) et disparaît ; les
+ * exigences recopiées passent à la voix de GSS.
+ */
+export function nettoyerEngagements(texte: string): string {
+  const i = texte.indexOf(`\n${TITRE_ENGAGEMENTS}\n`);
+  if (i < 0) return texte;
+  const debut = texte.slice(0, i + TITRE_ENGAGEMENTS.length + 2);
+  const gardees: Array<Set<string>> = [];
+  const sortie: string[] = [];
+  for (const ligne of texte.slice(i + TITRE_ENGAGEMENTS.length + 2).split('\n')) {
+    if (!/^- /.test(ligne)) { sortie.push(ligne); continue; }
+    const mots = motsEngagement(ligne);
+    const redite = mots.size > 0 && gardees.some((g) => {
+      const communs = [...mots].filter((w) => g.has(w)).length;
+      return communs >= 3 && communs / mots.size >= 0.6;
+    });
+    if (redite) continue;
+    gardees.push(mots);
+    sortie.push(voixDeGss(ligne));
+  }
+  return `${debut}${sortie.join('\n')}`.replace(/\n{3,}/g, '\n\n');
+}
+
 /** Nombre de pages d'un PDF (pdfinfo, sinon comptage des objets /Page). */
 export function nombrePages(pdf: string): number {
   const r = spawnSync('pdfinfo', [pdf], { encoding: 'utf-8' });
