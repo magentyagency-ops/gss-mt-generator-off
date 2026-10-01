@@ -154,11 +154,12 @@ export function blocPagesReferences(plan: PlanMemoireType): string | null {
   return plan.blocs.find((b) => b.id === 'presentation')?.cle ?? null;
 }
 
-/** Vrai si le schéma de la rubrique est fixé par le mémoire type (bibliothèque, spécification, organigramme) : il
- *  ne dépend pas d'une réécriture du texte par l'assistant. */
+/** Vrai si le schéma de la rubrique est fixé par le mémoire type (bibliothèque, spécification, organigramme) ou à la
+ *  génération (process du besoin, construit sur les enjeux du DCE et non sur la rédaction) : il ne dépend pas d'une
+ *  réécriture du texte par l'assistant, et son titre de page (titresSchemas) reste celui du schéma dessiné. */
 export function schemaFixe(plan: PlanMemoireType | undefined, id: string): boolean {
   const s = plan?.rubriques.find((r) => r.id === id)?.schema?.source;
-  return s === 'bibliotheque' || s === 'spec' || s === 'organigramme';
+  return s === 'bibliotheque' || s === 'spec' || s === 'organigramme' || s === 'process_besoin';
 }
 
 let indexBibliotheque: Map<string, { titre: string }> | null = null;
