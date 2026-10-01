@@ -2315,10 +2315,10 @@
    "condition": "APR",
    "condition_texte": "si le CCTP prévoit de la protection rapprochée",
    "priorite": 2,
-   "texte": "Certaines missions peuvent ponctuellement nécessiter l'intervention d'un agent de protection rapprochée (APR). Il s'agit de profils très particuliers, disposant d'une formation spécifique. La formation requise pour les APR est le TFP A3P, titre à finalité professionnelle d'agent de protection physique des personnes, au cours duquel l'agent apprend des techniques et des notions bien particulières : secourisme tactique, analyse comportementale, techniques d'interposition, embarquement et débarquement de véhicules… Outre ses qualifications, un APR doit présenter un profil particulier : une bonne condition physique, de la discrétion et du sang-froid, un sens de l'observation très développé et une réelle capacité d'analyse. Ses missions sont principalement la prévention des risques, l'escorte sécurisée, la neutralisation des menaces et la coordination avec les services de sécurité.\n\n**Notre responsable APR : {{RESPONSABLE_APR}}**\n- Qualifications : SST (sauveteur secouriste du travail), HOB0 (habilitation électrique), APR 1 (agent de protection rapprochée), CQP.\n- Savoir-faire : travail en autonomie, capacité de décision, gestion du stress, sens de l'organisation, gestion des conflits, travail en équipe, rigueur.\n- Expériences professionnelles : agent de sécurité industriel, agent cynophile, convoyeur de fonds et opérateur de valeurs, sous-officier de réserve de la gendarmerie nationale.\n- Expériences complémentaires : encadrant de préparation militaire, formation en protection rapprochée.",
+   "texte": "Certaines missions peuvent ponctuellement nécessiter l'intervention d'un agent de protection rapprochée (APR). Il s'agit de profils très particuliers, disposant d'une formation spécifique. La formation requise pour les APR est le TFP A3P, titre à finalité professionnelle d'agent de protection physique des personnes, au cours duquel l'agent apprend des techniques et des notions bien particulières : secourisme tactique, analyse comportementale, techniques d'interposition, embarquement et débarquement de véhicules… Outre ses qualifications, un APR doit présenter un profil particulier : une bonne condition physique, de la discrétion et du sang-froid, un sens de l'observation très développé et une réelle capacité d'analyse. Ses missions sont principalement la prévention des risques, l'escorte sécurisée, la neutralisation des menaces et la coordination avec les services de sécurité.\n\n**Notre responsable APR : LEMELE Fabrice**\n- Qualifications : SST (sauveteur secouriste du travail), HOB0 (habilitation électrique), APR 1 (agent de protection rapprochée), CQP.\n- Savoir-faire : travail en autonomie, capacité de décision, gestion du stress, sens de l'organisation, gestion des conflits, travail en équipe, rigueur.\n- Expériences professionnelles : agent de sécurité industriel, agent cynophile, convoyeur de fonds et opérateur de valeurs, sous-officier de réserve de la gendarmerie nationale.\n- Expériences complémentaires : encadrant de préparation militaire, formation en protection rapprochée.",
    "sous_parties": [
     {
-     "titre": "Notre responsable APR : {{RESPONSABLE_APR}}",
+     "titre": "Notre responsable APR : LEMELE Fabrice",
      "priorite": 1
     }
    ],
@@ -2364,7 +2364,7 @@
     "AO RNE.pdf p.49-50"
    ],
    "a_confirmer": [
-    "Fonction de LEMELE Fabrice : « responsable APR » ici, « responsable d'exploitation » selon faits_gss.md, « responsable administratif » en 2024",
+    "Responsable APR : LEMELE Fabrice (AO RNE p.49-50 ; « responsable d'exploitation » selon faits_gss.md, « responsable administratif » en 2024). Le profil décrit (SST, HOB0, APR 1, CQP, sous-officier de réserve de la gendarmerie nationale) est le sien : si le responsable APR n'est plus M. LEMELE, retirer toute la fiche « Notre responsable APR » plutôt que d'en changer le nom.",
     "Recours à Global Security Protection pour les agents de protection rapprochée (AO RNE p.49) : retiré du texte, contraire à la règle « pas de sous-traitance » ; à confirmer par GSS."
    ],
    "ancienne_rubrique": "b_moyens_humains",
