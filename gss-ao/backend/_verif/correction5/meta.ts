@@ -9,6 +9,7 @@ const meta = [
   'Le délai d\'arrivée des renforts pour les commandes ponctuelles à Paris doit être distingué du délai contractuel de remplacement.',
   "Notre dispositif s'appuie sur les processus décrits dans les blocs cités.",
   "Le marché est conclu pour une durée de 3 ans — aucune reconduction indiquée dans le CCTP.",
+  "Le marché dure 3 ans ; aucune reconduction précisée dans le CCTP fourni.",
 ];
 for (const m of meta) { const r = retirerCommentairesInternes(`Texte gardé. ${m}`); const ok = r.texte.trim() === 'Texte gardé.'; if (!ok) ko++; console.log(ok ? 'OK ' : 'KO ', r.texte); }
 const garde = ['Nos agents sont formés au poste.', 'La main courante est horodatée et conservée 10 ans.'];
