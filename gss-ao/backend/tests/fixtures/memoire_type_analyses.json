@@ -1,0 +1,90 @@
+{
+ "description": "Analyses du DCE simulées (forme de analyzeDce), établies à la lecture des CCTP du corpus _corpus_verif/_dce_textes (becquerel, caen, ign) : tests hors ligne du mémoire type, sans appel OpenAI.",
+ "analyses": {
+  "becquerel": {
+   "clientName": "Centre Henri Becquerel",
+   "projectTitle": "Missions de sécurité incendie et sûreté",
+   "marketRef": "2026-DAGSE-10",
+   "marketType": "privé",
+   "clientSector": "santé (centre de lutte contre le cancer)",
+   "duration": "3 ans",
+   "lots": [],
+   "sites": [
+    {
+     "name": "Centre Henri Becquerel — rue d'Amiens et rue Edouard Adam, Rouen",
+     "requirements": "1 SSIAP 2 au PC sécurité 24 h/24 ; 1 SSIAP 1 au poste d'accueil de 20 h à 7 h"
+    }
+   ],
+   "operationalSummary": {
+    "agentProfiles": "SSIAP 2, SSIAP 1, reprise du personnel en place",
+    "uniforms": "Tenue été et hiver, modèle agréé par le CHB",
+    "equipment": "Contrôleur de rondes (50 puis 120 pointeaux), PTI, 5 talkies-walkies",
+    "qualityControls": "Contrôles de nuit et le week-end, réunions mensuelles"
+   },
+   "telesurveillance": "",
+   "keyRisks": [
+    "Continuité du PC sécurité 24 h/24",
+    "Évacuation de patients (U43)"
+   ],
+   "visitDetails": ""
+  },
+  "caen": {
+   "clientName": "ACOSS",
+   "projectTitle": "Prestation de gardiennage et de sûreté/sécurité des sites de l'ACOSS — lot 5 site de Caen",
+   "marketRef": "P2513-PA-DRH",
+   "marketType": "public",
+   "clientSector": "organisme de sécurité sociale (tertiaire public)",
+   "duration": "Non communiqué dans les documents transmis",
+   "lots": [
+    {
+     "num": "5",
+     "perimetre": "Site de Caen"
+    }
+   ],
+   "sites": [
+    {
+     "name": "Site ACOSS de Caen",
+     "requirements": "Rondes d'ouverture et de fermeture, interventions sur alarme"
+    }
+   ],
+   "operationalSummary": {
+    "agentProfiles": "Agents de sécurité",
+    "uniforms": "",
+    "equipment": "Clés et badges confiés, PTI",
+    "qualityControls": "Réunion d'exploitation qualité"
+   },
+   "telesurveillance": "Télésurveillance et télésécurité, intervention en 30 minutes maximum",
+   "keyRisks": [
+    "Ronde d'ouverture à 5 h 30"
+   ],
+   "visitDetails": ""
+  },
+  "ign": {
+   "clientName": "École nationale des ponts et chaussées (ENPC)",
+   "projectTitle": "Prestations de gardiennage, sécurité incendie et surveillance du site Carnot-Cassini et Coriolis",
+   "marketRef": "202617",
+   "marketType": "public",
+   "clientSector": "enseignement supérieur et recherche",
+   "duration": "2 ans reconductible une fois 2 ans",
+   "lots": [],
+   "sites": [
+    {
+     "name": "Bâtiments Carnot-Cassini et Coriolis, Champs-sur-Marne",
+     "requirements": "SSIAP 2, SSIAP 1 et ADS 24 h/24"
+    }
+   ],
+   "operationalSummary": {
+    "agentProfiles": "SSIAP 2, SSIAP 1, ADS, chef de poste",
+    "uniforms": "Vêtements de sécurité incendie pour les SSIAP",
+    "equipment": "Système de ronde, main courante électronique, PTI",
+    "qualityControls": "Réunion de suivi bimestrielle, rapport d'activité mensuel"
+   },
+   "telesurveillance": "",
+   "keyRisks": [
+    "ERP de 2e catégorie",
+    "Reprise du personnel"
+   ],
+   "visitDetails": ""
+  }
+ }
+}

@@ -1,0 +1,1864 @@
+import fs from 'fs';
+import path from 'path';
+import { horairesImposes, marcheHorsNormandie, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme } from './base_memoires';
+
+/**
+ * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
+ *
+ * Le mémoire type (memoire_type/memoire_type.json) contient, bloc par bloc, le texte GSS de référence de chaque
+ * rubrique, avec ses variables {{NOM}}, ses passages conditionnels {{#si EXPR}}…{{/si}}, son schéma, ses mots-clés
+ * et ses sources. Ce module :
+ *  1. charge et valide le JSON (cache) ;
+ *  2. évalue les indicateurs (conditions d'inclusion) d'après le DCE, l'analyse du DCE et la matrice des exigences ;
+ *  3. calcule les variables du marché (analyse du DCE, registre GSS, annuaire « Personnes », DCE) sans rien inventer ;
+ *  4. établit le plan (blocs dans l'ordre du JSON, rubriques retenues, référence du secteur du client en premier) ;
+ *  5. publiposte de façon déterministe : aucune variable {{…}} ne reste ; une valeur inconnue devient un repère
+ *     « [À COMPLÉTER] » accompagné d'une question à GSS, jamais une valeur inventée ;
+ *  6. adapte une rubrique « adapte » par modifications ciblées (extrait exact → remplacement) proposées par le
+ *     modèle (fonction d'appel reçue en paramètre), avec contrôle de fidélité au texte de référence ;
+ *  7. assure la correspondance avec les anciennes rubriques AI_SECTIONS_B (états v1, assistant).
+ *
+ * Fonctions pures (hors lecture des fichiers de données) : aucun appel réseau dans ce module.
+ */
+
+// ─── Types du mémoire type (JSON) ────────────────────────────────────────────────────────────────
+
+export type ModeRubrique = 'fixe' | 'adapte' | 'besoin';
+export type SiAbsente = 'a_completer' | 'retirer_phrase' | 'vide' | 'repli';
+
+export interface BlocMemoireType {
+  id: string;
+  titre: string;
+  chapitre_v1: string | null;
+  description?: string;
+}
+
+export interface IndicateurMemoireType {
+  description: string;
+  /** Calcul particulier fait dans le code (ex. « hors_normandie »). */
+  calcul?: string;
+  /** Motif (regex JavaScript, drapeau i) cherché dans le texte du DCE (et dans les exigences de la matrice). */
+  dce?: string;
+  /** Motif cherché dans les champs de l'analyse du DCE (profils, équipements, contrôles, sites, lots…). */
+  analyse?: string;
+  /** Motif cherché dans le secteur d'activité du client (analyse.clientSector). */
+  secteur?: string;
+  /** Rubriques : une exigence de la matrice rattachée à l'une d'elles rend l'indicateur vrai. */
+  matrice?: string[];
+  /** Choix de GSS (assistant, demande particulière) : jamais déduit du DCE. */
+  choix_gss?: boolean;
+  defaut?: boolean;
+}
+
+export interface VariableMemoireType {
+  description: string;
+  origine: string;
+  type: 'texte' | 'liste' | 'nombre' | 'markdown' | 'client';
+  si_absente: SiAbsente;
+  repli?: string;
+  question?: string;
+  registre?: string;
+  valeur_gss?: string;
+  normandie_seulement?: boolean;
+  a_confirmer?: string;
+  seulement_si_confirmee?: boolean;
+}
+
+export interface SchemaRubrique {
+  source: 'bibliotheque' | 'spec' | 'organigramme' | 'process_besoin';
+  ref?: string;
+  gabarit?: string;
+  titre?: string;
+  params?: any;
+  origine?: string;
+  fond?: string;
+  remarque?: string;
+  alternative?: SchemaRubrique & { a_corriger?: string };
+  etapes?: any[];
+  variante?: string;
+  objectif?: string;
+  regles?: string[];
+}
+
+export interface SousPartie {
+  titre: string;
+  priorite: number;
+  indicateur?: string;
+}
+
+export interface RubriqueMemoireType {
+  id: string;
+  bloc: string;
+  titre: string;
+  mode: ModeRubrique;
+  /** Expression d'indicateurs (« toujours », « SSIAP », « AGENT_ISOLE|TELESURVEILLANCE »…). */
+  condition: string;
+  condition_texte: string;
+  priorite: number;
+  texte: string | null;
+  sous_parties: SousPartie[];
+  ordre_sous_parties?: 'indicateurs';
+  /** Ordre des sous-parties prioritaires (indicateurs vrais) : « SSIAP » avant « SURVEILLANCE »… */
+  ordre_indicateurs?: string[];
+  schema: SchemaRubrique | null;
+  mots_cles: string[];
+  sources: string[];
+  a_confirmer: string[];
+  ancienne_rubrique: string | null;
+  anciennes_rubriques: string[];
+  reference?: { secteur: string; libelle: string };
+  variantes?: Array<{ statut: string; texte: string; motif: string }>;
+  specification?: any;
+  nettoyage?: string[];
+  notes?: string[];
+  longueur_mots?: number;
+}
+
+export interface MemoireType {
+  titre: string;
+  version: string;
+  statut: string;
+  reference: string;
+  principes: string[];
+  blocs: BlocMemoireType[];
+  indicateurs: Record<string, IndicateurMemoireType>;
+  variables: Record<string, VariableMemoireType>;
+  rubriques: RubriqueMemoireType[];
+  correspondance_v1: Record<string, string[]>;
+  cadre_impose?: any;
+  questions_nouvelles?: any;
+  documentation?: any;
+}
+
+// ─── Chargement et validation ────────────────────────────────────────────────────────────────────
+
+/** Emplacements du JSON : à côté du module (src), ou depuis dist/ vers src/. */
+const CHEMINS_MEMOIRE_TYPE = [
+  path.resolve(__dirname, 'memoire_type', 'memoire_type.json'),
+  path.resolve(__dirname, '../../src/generation/memoire_type/memoire_type.json'),
+];
+
+let cacheMemoireType: { chemin: string; mt: MemoireType } | null = null;
+
+/** Variables que ce module sait calculer (une variable déclarée dans le JSON sans calcul est signalée). */
+export const VARIABLES_CALCULEES = new Set<string>([
+  'CLIENT', 'OBJET_MARCHE', 'REF_MARCHE', 'LOTS', 'DUREE_MARCHE', 'DATE_DEBUT_MARCHE', 'SITE', 'VILLE', 'SECTEUR_CLIENT',
+  'SECTEUR_REFERENCE', 'QUALIFICATIONS_REQUISES', 'PROFILS_DEMANDES', 'DIPLOMES_EQUIPE', 'TENUE_RETENUE', 'LIGNES_EQUIPE_DEDIEE',
+  'EFFECTIF_AGENTS', 'NB_AGENTS_RENFORT', 'EFFECTIF_ADS_CQP', 'EFFECTIF_TOTAL', 'EFFECTIF_76', 'EFFECTIF_27', 'EFFECTIF_SSIAP1',
+  'EFFECTIF_SSIAP2', 'EFFECTIF_SSIAP3', 'EFFECTIF_CONTROLEURS', 'EFFECTIF_CYNOPHILES', 'VIVIER_EVENEMENTIEL', 'AGENTS_MOBILISABLES_48H',
+  'VEHICULES_ASTREINTE', 'LOGICIEL_MAIN_COURANTE', 'ORGANIGRAMME', 'INTERLOCUTEUR_UNIQUE', 'FONCTION_INTERLOCUTEUR', 'TEL_INTERLOCUTEUR',
+  'TAUX_REPRISE', 'FONDEMENT_REPRISE_DCE', 'PARTENAIRE_TELESURVEILLANCE', 'ENGAGEMENTS_TELESURVEILLANCE', 'SITES_RONDES',
+  'FICHE_POSTE_EXEMPLE', 'DELAI_ASTREINTE', 'DELAI_ASTREINTE_NORMANDIE', 'DELAI_PTI', 'DELAI_INTERVENTION_ALARME',
+  'DELAI_ENVOI_PLANNINGS', 'DELAI_COMMANDE_SUPPLEMENTAIRE', 'DELAI_DEFAILLANCE_SSI', 'FREQ_CONTROLE_1', 'FREQ_CONTROLE_2',
+  'FREQ_CONTROLE_3', 'CONTROLES_INOPINES_MENSUELS', 'FREQ_REUNIONS', 'RESPONSABLE_APR',
+]);
+
+/** Variables qu'un CCTP peut imposer (délais, fréquences) : la valeur du CCTP remplace celle de GSS. */
+export const VARIABLES_IMPOSABLES = [
+  'DELAI_ASTREINTE', 'DELAI_PTI', 'DELAI_INTERVENTION_ALARME', 'DELAI_COMMANDE_SUPPLEMENTAIRE', 'DELAI_DEFAILLANCE_SSI',
+  'FREQ_CONTROLE_1', 'FREQ_CONTROLE_2', 'FREQ_CONTROLE_3', 'CONTROLES_INOPINES_MENSUELS', 'FREQ_REUNIONS',
+];
+
+const RX_VARIABLE = /\{\{\s*([A-Z0-9_]+)\s*\}\}/g;
+const RX_SECTION = /\{\{#si\s+([^}]+?)\s*\}\}|\{\{\/si\}\}/g;
+
+/** Noms cités par une expression de condition (« A|!B&C » → A, B, C). */
+function nomsExpression(expr: string): string[] {
+  return expr.split(/[|&]/).map((x) => x.trim().replace(/^!/, '').trim()).filter(Boolean);
+}
+
+/** Contrôle d'un texte à publiposter : sections équilibrées, noms connus. Renvoie les anomalies. */
+function controlerGabarit(id: string, texte: string, mt: MemoireType): string[] {
+  const erreurs: string[] = [];
+  let pile = 0;
+  for (const m of texte.matchAll(RX_SECTION)) {
+    if (m[0].startsWith('{{#si')) {
+      pile++;
+      for (const nom of nomsExpression(m[1])) {
+        if (!mt.indicateurs[nom] && !mt.variables[nom]) erreurs.push(`${id} : condition sur un nom inconnu « ${nom} »`);
+      }
+    } else if (--pile < 0) {
+      erreurs.push(`${id} : {{/si}} sans ouverture`);
+      pile = 0;
+    }
+  }
+  if (pile !== 0) erreurs.push(`${id} : {{#si}} non fermé`);
+  for (const m of texte.matchAll(RX_VARIABLE)) {
+    if (!mt.variables[m[1]]) erreurs.push(`${id} : variable non déclarée {{${m[1]}}}`);
+  }
+  const reste = texte.replace(RX_SECTION, '').replace(RX_VARIABLE, '');
+  if (/\{\{|\}\}/.test(reste)) erreurs.push(`${id} : accolades orphelines`);
+  return erreurs;
+}
+
+/** Validation complète du mémoire type. Renvoie la liste des anomalies (vide si le JSON est valide). */
+export function validerMemoireType(mt: MemoireType): string[] {
+  const erreurs: string[] = [];
+  if (!mt || !Array.isArray(mt.blocs) || !mt.blocs.length) return ['aucun bloc'];
+  if (!Array.isArray(mt.rubriques) || !mt.rubriques.length) return ['aucune rubrique'];
+  const blocs = new Set<string>();
+  for (const b of mt.blocs) {
+    if (!b.id || !b.titre) erreurs.push('bloc sans id ou sans titre');
+    if (blocs.has(b.id)) erreurs.push(`bloc en double : ${b.id}`);
+    blocs.add(b.id);
+  }
+  const ids = new Set<string>();
+  for (const r of mt.rubriques) {
+    if (!r.id || !r.titre) erreurs.push('rubrique sans id ou sans titre');
+    if (ids.has(r.id)) erreurs.push(`rubrique en double : ${r.id}`);
+    ids.add(r.id);
+    if (!blocs.has(r.bloc)) erreurs.push(`${r.id} : bloc inconnu « ${r.bloc} »`);
+    if (!['fixe', 'adapte', 'besoin'].includes(r.mode)) erreurs.push(`${r.id} : mode inconnu « ${r.mode} »`);
+    if (r.mode !== 'besoin' && !r.texte) erreurs.push(`${r.id} : texte de référence absent`);
+    if (r.condition !== 'toujours') {
+      for (const nom of nomsExpression(r.condition)) if (!mt.indicateurs[nom]) erreurs.push(`${r.id} : indicateur inconnu « ${nom} »`);
+    }
+    if (r.texte) erreurs.push(...controlerGabarit(r.id, r.texte, mt));
+    const sc = r.schema;
+    if (sc?.source === 'spec') {
+      if (!sc.gabarit || !sc.params) erreurs.push(`${r.id} : spécification de schéma incomplète`);
+      else erreurs.push(...controlerGabarit(`${r.id} (schéma)`, JSON.stringify(sc.params), mt));
+    }
+    if (sc?.source === 'bibliotheque' && !sc.ref) erreurs.push(`${r.id} : schéma de bibliothèque sans identifiant`);
+    for (const sp of r.sous_parties || []) {
+      if (sp.indicateur && !mt.indicateurs[sp.indicateur]) erreurs.push(`${r.id} : sous-partie liée à un indicateur inconnu`);
+    }
+  }
+  for (const [nom, v] of Object.entries(mt.variables || {})) {
+    if (!VARIABLES_CALCULEES.has(nom)) erreurs.push(`variable « ${nom} » déclarée sans calcul dans memoire_type.ts`);
+    if (!['a_completer', 'retirer_phrase', 'vide', 'repli'].includes(v.si_absente)) erreurs.push(`variable « ${nom} » : règle si_absente inconnue`);
+    if (v.si_absente === 'repli' && !v.repli) erreurs.push(`variable « ${nom} » : repli absent`);
+  }
+  for (const [ancien, nouveaux] of Object.entries(mt.correspondance_v1 || {})) {
+    for (const n of nouveaux) if (!ids.has(n)) erreurs.push(`correspondance v1 ${ancien} → rubrique inconnue ${n}`);
+  }
+  for (const [nom, ind] of Object.entries(mt.indicateurs || {})) {
+    for (const motif of [ind.dce, ind.analyse, ind.secteur]) {
+      if (!motif) continue;
+      try { new RegExp(motif, 'i'); } catch { erreurs.push(`indicateur ${nom} : motif invalide`); }
+    }
+  }
+  return erreurs;
+}
+
+/**
+ * Charge le mémoire type (cache). Lève une erreur si le fichier est absent ou invalide : l'appelant garde alors
+ * le comportement actuel (plan v1).
+ */
+export function chargerMemoireType(chemin?: string): MemoireType {
+  const candidat = chemin || CHEMINS_MEMOIRE_TYPE.find((c) => fs.existsSync(c));
+  if (!candidat) throw new Error(`[MemoireType] Fichier introuvable (${CHEMINS_MEMOIRE_TYPE.join(' ; ')})`);
+  if (cacheMemoireType && cacheMemoireType.chemin === candidat) return cacheMemoireType.mt;
+  const mt = JSON.parse(fs.readFileSync(candidat, 'utf-8')) as MemoireType;
+  const erreurs = validerMemoireType(mt);
+  if (erreurs.length) throw new Error(`[MemoireType] Mémoire type invalide : ${erreurs.slice(0, 12).join(' ; ')}`);
+  cacheMemoireType = { chemin: candidat, mt };
+  return mt;
+}
+
+/** Vide le cache (tests, rechargement après modification du JSON). */
+export function viderCacheMemoireType(): void {
+  cacheMemoireType = null;
+}
+
+// ─── Outils de texte ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Copie de MENTION_NON_RENSEIGNEE (memoire_generator.ts) : une mention de remplissage (« Non communiqué dans les
+ * documents transmis », « N/A »…) n'est jamais une valeur.
+ */
+const MENTION_NON_RENSEIGNEE = /^\s*(?:non[\s-]+(?:communiqu|pr[ée]cis|d[ée]termin|renseign|disponible|identifi|mentionn|indiqu|connu|sp[ée]cifi|fourni|trouv)|inconnu|ind[ée]termin|aucune?\s+(?:information|mention|donn[ée]e)|information\s+(?:non|absente)|(?:n\s*\/\s*a|nc|n\.c\.?)(?![\w])|[-—–?]+\s*$)/i;
+
+/** Valeur exploitable (texte court non vide, sans mention de remplissage), sinon ''. */
+export function valeurPropre(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  const t = String(v).replace(/\s+/g, ' ').trim();
+  if (!t || t.length > 400) return '';
+  if (MENTION_NON_RENSEIGNEE.test(t) || /^(acheteur inconnu|objet non sp[ée]cifi[ée]|non sp[ée]cifi[ée]|undefined|null)$/i.test(t)) return '';
+  return t;
+}
+
+/** Normalisation pour comparer des mots : minuscules, sans accents, apostrophes droites, espaces simples. */
+export function normaliser(t: string): string {
+  return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[’`]/g, "'").toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Liste en français : « a », « a et b », « a, b et c ». */
+export function listeFr(items: string[]): string {
+  const l = items.map((x) => String(x).trim()).filter(Boolean);
+  if (l.length <= 1) return l[0] || '';
+  return `${l.slice(0, -1).join(', ')} et ${l[l.length - 1]}`;
+}
+
+const majuscule = (t: string) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+const echapper = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Texte du DCE en phrases (comme obligationsChiffrees de base_memoires.ts). */
+function phrasesDuDce(dce: string): string[] {
+  return String(dce || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ')
+    .split(/(?<=[.;!?])\s+|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n{2,}/)
+    .map((x) => x.replace(/\s+/g, ' ').replace(/^[-•▪●○◦−]\s*/, '').trim())
+    .filter((x) => x.length >= 12 && x.length <= 600);
+}
+
+// ─── Registre des informations GSS ───────────────────────────────────────────────────────────────
+
+export interface EntreeRegistre {
+  cle: string;
+  libelle: string;
+  categorie: string;
+  valeur_retenue: string;
+  date_retenue: string;
+  source_retenue: string;
+  statut: 'confirmee' | 'a_confirmer';
+}
+
+const FICHIER_REGISTRE = path.resolve(__dirname, '../../python/base_memoires/registre_informations.json');
+const CATEGORIES_VARIABLES = new Set(['effectifs', 'organisation', 'coordonnees', 'moyens', 'certifications', 'delais', 'partenaires']);
+let cacheRegistre: EntreeRegistre[] | null = null;
+
+/** Registre des informations GSS (lecture seule, même fichier que base_memoires.ts). */
+export function lireRegistre(): EntreeRegistre[] {
+  if (cacheRegistre) return cacheRegistre;
+  try {
+    cacheRegistre = JSON.parse(fs.readFileSync(FICHIER_REGISTRE, 'utf-8')).informations || [];
+  } catch {
+    cacheRegistre = [];
+  }
+  return cacheRegistre!;
+}
+
+function moisDepuis(date: string, maintenant = new Date()): number {
+  const m = /^(\d{4})-(\d{2})/.exec(date || '');
+  if (!m) return 999;
+  return (maintenant.getFullYear() - Number(m[1])) * 12 + (maintenant.getMonth() + 1 - Number(m[2]));
+}
+
+/** Valeur du registre « à confirmer » (statut, ou dernière source de plus de 12 mois pour une information variable). */
+function aConfirmerRegistre(e: EntreeRegistre): boolean {
+  return e.statut === 'a_confirmer' || (CATEGORIES_VARIABLES.has(e.categorie) && moisDepuis(e.date_retenue) > 12);
+}
+
+/** Premier nombre d'une valeur du registre (« 500 agents » → « 500 »). */
+function nombreDe(v: string): string {
+  return (/\d+(?:[.,]\d+)?/.exec(v || '') || [''])[0];
+}
+
+/** Délai normalisé (« 60 MINUTES MAXI » → « 60 minutes », « 2 h » → « 2 heures »). */
+export function normaliserDelai(v: string): string {
+  const m = /(\d+)\s*(minutes?|mn|min|heures?|h)(?![\wÀ-ÿ])/i.exec(v || '');
+  if (!m) return valeurPropre(v);
+  const n = Number(m[1]);
+  return /^m/i.test(m[2]) ? `${n} minute${n > 1 ? 's' : ''}` : `${n} heure${n > 1 ? 's' : ''}`;
+}
+
+/** « MARCHANI ADIL » → « MARCHANI Adil » ; « ATTOU NESRINE » → « ATTOU Nesrine ». */
+function nomPropre(n: string): string {
+  const t = String(n || '').replace(/^(?:m(?:r|me|\.)|monsieur|madame)\s+/i, '').trim();
+  const mots = t.split(/\s+/);
+  if (mots.length === 2 && /^[A-ZÀ-Ý' -]+$/.test(t)) return `${mots[0]} ${mots[1].charAt(0)}${mots[1].slice(1).toLowerCase()}`;
+  return t;
+}
+
+// ─── Contexte du marché ──────────────────────────────────────────────────────────────────────────
+
+/** Exigence de la matrice (analyzeRequirements). */
+export interface ExigenceMatrice {
+  exigence: string;
+  rubrique?: string;
+  theme?: string;
+  reponseGss?: string;
+  couverture?: string;
+  criticite?: string;
+  sujet?: string;
+}
+
+export interface ContexteMarche {
+  /** Analyse du DCE (analyzeDce) : clientName, projectTitle, lots, sites, operationalSummary, clientSector… */
+  analyse?: any;
+  /** Texte du DCE (getDceContext). */
+  dce?: string;
+  /** Page de garde (getCoverInfo) : prioritaire sur l'analyse pour le client, l'objet et la référence. */
+  cover?: { client?: string; title?: string; ref?: string };
+  /** Annuaire « Personnes » (getGssReferents) : organigramme et fonction de l'interlocuteur unique. */
+  referents?: string;
+  /** Matrice des exigences (analyzeRequirements). */
+  matrice?: ExigenceMatrice[];
+  /** Choix de GSS (assistant, demande particulière) : prioritaires sur tout le reste. */
+  choix?: { variables?: Record<string, string | string[]>; indicateurs?: Record<string, boolean> };
+  /** Valeurs imposées par le CCTP et vérifiées (extraireValeursImposees). */
+  imposees?: Record<string, { valeur: string; citation: string }>;
+  /** Marché hors Normandie (sinon calculé par marcheHorsNormandie). */
+  horsNormandie?: boolean;
+  /** Registre (tests) : sinon registre_informations.json. */
+  registre?: EntreeRegistre[];
+}
+
+// ─── Indicateurs (conditions d'inclusion) ────────────────────────────────────────────────────────
+
+export interface EtatIndicateur {
+  valeur: boolean;
+  raisons: string[];
+}
+
+/** Champs de l'analyse du DCE consultés par les indicateurs. */
+function texteAnalyse(analyse: any): string {
+  if (!analyse || typeof analyse !== 'object') return '';
+  const o = analyse.operationalSummary || {};
+  const morceaux = [o.agentProfiles, o.uniforms, o.equipment, o.qualityControls, analyse.telesurveillance, analyse.projectTitle,
+    ...(Array.isArray(analyse.sites) ? analyse.sites.map((s: any) => `${s?.name || ''} ${s?.requirements || ''}`) : []),
+    ...(Array.isArray(analyse.lots) ? analyse.lots.map((l: any) => `${l?.perimetre || ''}`) : [])];
+  return morceaux.map((x) => valeurPropre(x)).filter(Boolean).join(' \n ');
+}
+
+function extrait(t: string, i: number, n: number): string {
+  return t.slice(Math.max(0, i - 40), Math.min(t.length, i + n + 40)).replace(/\s+/g, ' ').trim();
+}
+
+/** Évalue chaque indicateur du mémoire type (vrai/faux, avec les raisons). */
+export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record<string, EtatIndicateur> {
+  const dce = String(ctx.dce || '').replace(/[’`]/g, "'").replace(/\s+/g, ' ');
+  const analyse = texteAnalyse(ctx.analyse);
+  const secteur = valeurPropre(ctx.analyse?.clientSector);
+  const matrice = (ctx.matrice || []).filter((e) => e && e.exigence);
+  const out: Record<string, EtatIndicateur> = {};
+  for (const [nom, def] of Object.entries(mt.indicateurs)) {
+    const raisons: string[] = [];
+    let valeur = false;
+    if (def.choix_gss) {
+      valeur = ctx.choix?.indicateurs?.[nom] ?? def.defaut ?? false;
+      if (valeur) raisons.push('choix de GSS');
+    } else if (def.calcul === 'hors_normandie') {
+      valeur = ctx.horsNormandie ?? marcheHorsNormandie(ctx.analyse || {}, ctx.dce || '');
+      raisons.push(valeur ? 'codes postaux hors Normandie' : 'site en Normandie (ou aucun code postal)');
+    } else {
+      if (def.dce) {
+        const rx = new RegExp(def.dce, 'i');
+        const m = rx.exec(dce);
+        if (m) raisons.push(`DCE : « ${extrait(dce, m.index, m[0].length)} »`);
+        const e = matrice.find((x) => rx.test(x.exigence));
+        if (e) raisons.push(`exigence : « ${e.exigence.slice(0, 120)} »`);
+      }
+      if (def.analyse) {
+        const m = new RegExp(def.analyse, 'i').exec(analyse);
+        if (m) raisons.push(`analyse : « ${extrait(analyse, m.index, m[0].length)} »`);
+      }
+      if (def.secteur && secteur && new RegExp(def.secteur, 'i').test(secteur)) raisons.push(`secteur du client : ${secteur}`);
+      if (def.matrice?.length) {
+        const e = matrice.find((x) => x.rubrique && def.matrice!.includes(x.rubrique));
+        if (e) raisons.push(`exigence rattachée à ${e.rubrique} : « ${e.exigence.slice(0, 120)} »`);
+      }
+      valeur = raisons.length > 0;
+    }
+    const force = ctx.choix?.indicateurs?.[nom];
+    if (force !== undefined && !def.choix_gss) {
+      valeur = force;
+      raisons.unshift(`imposé par GSS (${force ? 'oui' : 'non'})`);
+    }
+    out[nom] = { valeur, raisons };
+  }
+  return out;
+}
+
+/** Valeurs booléennes seules. */
+export function valeursIndicateurs(etats: Record<string, EtatIndicateur>): Record<string, boolean> {
+  return Object.fromEntries(Object.entries(etats).map(([k, v]) => [k, v.valeur]));
+}
+
+/** Évalue une expression de condition (« toujours », « A|B », « !A&B »). Les noms inconnus valent faux. */
+export function evaluerCondition(expr: string, indicateurs: Record<string, boolean>, variables?: Variables): boolean {
+  const e = String(expr || '').trim();
+  if (!e || e === 'toujours') return true;
+  return e.split('|').some((ou) => ou.split('&').every((et) => {
+    const t = et.trim();
+    const neg = t.startsWith('!');
+    const nom = t.replace(/^!/, '').trim();
+    let v: boolean;
+    if (nom in indicateurs) v = !!indicateurs[nom];
+    else if (variables && nom in variables) v = variableRenseignee(variables[nom]);
+    else v = false;
+    return neg ? !v : v;
+  }));
+}
+
+// ─── Plan du mémoire ─────────────────────────────────────────────────────────────────────────────
+
+const ROMAINS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+
+export interface RubriquePlan {
+  id: string;
+  bloc: string;
+  /** Numéro de chapitre (I, II…) selon la position du bloc dans le plan. */
+  cle: string;
+  titre: string;
+  mode: ModeRubrique;
+  priorite: number;
+  schema: { source: SchemaRubrique['source']; ref?: string } | null;
+  ancienne_rubrique: string | null;
+}
+
+export interface PlanMemoireType {
+  version: 2;
+  /** Version du mémoire type utilisée. */
+  memoireType: string;
+  blocs: Array<{ id: string; cle: string; numero: number; titre: string; rubriques: string[] }>;
+  rubriques: RubriquePlan[];
+  exclues: Array<{ id: string; raison: string }>;
+  indicateurs: Record<string, boolean>;
+  /** Référence GSS du secteur du client, présentée en premier. */
+  secteurReference?: { id: string; libelle: string };
+}
+
+export interface OptionsPlan {
+  /** Ordre des blocs imposé (identifiants de blocs) : cadre imposé par l'acheteur (consigne 5). */
+  ordreBlocs?: string[];
+  /** Secteur d'activité du client (sinon analyse.clientSector). */
+  secteurClient?: string;
+}
+
+/**
+ * Plan du mémoire : blocs dans l'ordre du JSON (ou imposé), rubriques dont la condition est vraie, dans l'ordre
+ * du JSON ; la référence GSS du secteur du client passe en tête des références.
+ */
+export function planMemoireType(mt: MemoireType, indicateurs: Record<string, boolean>, options: OptionsPlan = {}): PlanMemoireType {
+  let blocs = [...mt.blocs];
+  if (options.ordreBlocs?.length) {
+    const connus = options.ordreBlocs.filter((id) => blocs.some((b) => b.id === id));
+    blocs = [...connus.map((id) => blocs.find((b) => b.id === id)!), ...blocs.filter((b) => !connus.includes(b.id))];
+  }
+  const exclues: Array<{ id: string; raison: string }> = [];
+  const secteur = normaliser(options.secteurClient || '');
+  let secteurReference: PlanMemoireType['secteurReference'];
+  const planBlocs: PlanMemoireType['blocs'] = [];
+  const rubriques: RubriquePlan[] = [];
+  blocs.forEach((b, i) => {
+    const cle = ROMAINS[i] || String(i + 1);
+    let retenues = mt.rubriques.filter((r) => r.bloc === b.id).filter((r) => {
+      if (evaluerCondition(r.condition, indicateurs)) return true;
+      exclues.push({ id: r.id, raison: `condition « ${r.condition} » non remplie` });
+      return false;
+    });
+    // Référence du secteur du client en premier parmi les références.
+    const refs = retenues.filter((r) => r.reference);
+    const enTete = secteur ? refs.find((r) => new RegExp(r.reference!.secteur, 'i').test(secteur)) : undefined;
+    if (enTete && refs.length > 1) {
+      const premier = retenues.indexOf(refs[0]);
+      retenues = retenues.filter((r) => r !== enTete);
+      retenues.splice(premier, 0, enTete);
+      secteurReference = { id: enTete.id, libelle: enTete.reference!.libelle };
+    } else if (enTete) {
+      secteurReference = { id: enTete.id, libelle: enTete.reference!.libelle };
+    }
+    planBlocs.push({ id: b.id, cle, numero: i + 1, titre: b.titre, rubriques: retenues.map((r) => r.id) });
+    for (const r of retenues) {
+      rubriques.push({
+        id: r.id, bloc: b.id, cle, titre: r.titre, mode: r.mode, priorite: r.priorite,
+        schema: r.schema ? { source: r.schema.source, ...(r.schema.ref ? { ref: r.schema.ref } : {}) } : null,
+        ancienne_rubrique: r.ancienne_rubrique,
+      });
+    }
+  });
+  return { version: 2, memoireType: mt.version, blocs: planBlocs, rubriques, exclues, indicateurs: { ...indicateurs }, secteurReference };
+}
+
+// ─── Variables du marché ─────────────────────────────────────────────────────────────────────────
+
+export interface ValeurVariable {
+  /** Valeur (texte, liste ou booléen) ; null ou '' = inconnue. */
+  valeur: string | string[] | boolean | null;
+  /** Article du client (« le », « la », « l' », « les » ou ''). */
+  article?: string;
+  source?: string;
+  /** Valeur reprise mais à confirmer par GSS : question de confirmation. */
+  aConfirmer?: string;
+  /** Question à GSS si la valeur est inconnue ou partielle. */
+  question?: string;
+}
+
+export type Variables = Record<string, ValeurVariable>;
+
+/** Vrai si la variable a une valeur exploitable. */
+export function variableRenseignee(v?: ValeurVariable): boolean {
+  if (!v) return false;
+  const x = v.valeur;
+  if (typeof x === 'boolean') return x;
+  if (Array.isArray(x)) return x.some((y) => String(y).trim());
+  return !!x && !!String(x).trim() && String(x).trim() !== '[À COMPLÉTER]';
+}
+
+const ARTICLES_MASCULINS = /^(?:centre|conseil|d[ée]partement|minist[èe]re|mus[ée]e|syndicat|groupement|chu|chr|chb|service|p[ôo]le|parc|port|palais|tribunal|th[ée][âa]tre|lyc[ée]e|coll[èe]ge|rectorat|cr[ée]dit|comit[ée]|campus|grand|bailleur|crous|sdis|march[ée]|conservatoire|stade|ccas|centre-?ville)$/i;
+const ARTICLES_FEMININS = /^(?:r[ée]gion|ville|mairie|commune|communaut[ée]|m[ée]tropole|caisse|caf|cpam|chambre|direction|pr[ée]fecture|fondation|banque|cour|mutualit[ée]|maison|cit[ée]|soci[ée]t[ée]|r[ée]gie|r[ée]sidence|clinique|f[ée]d[ée]ration|poste|biblioth[èe]que|m[ée]diath[èe]que|sncf|ratp|direction)$/i;
+
+/**
+ * Article du nom de l'acheteur, lu d'abord dans le DCE (« sites de l'ACOSS », « du Centre Henri Becquerel »), puis
+ * déduit du premier mot (« Région » → la ; « Centre » → le ; voyelle → l'). Sans indice : pas d'article.
+ */
+export function articleEtNom(brut: string, dce = ''): { article: string; nom: string } {
+  let nom = brut.replace(/\s+/g, ' ').trim();
+  const m0 = /^(le|la|les)\s+(.+)$/i.exec(nom) || /^(l['’])\s*(.+)$/i.exec(nom);
+  if (m0) return { article: m0[1].toLowerCase().replace('’', "'"), nom: m0[2] };
+  const d = normaliser(dce);
+  const cle = normaliser(nom.split(/\s+/).slice(0, 3).join(' '));
+  if (d && cle.length >= 3) {
+    const compte: Record<string, number> = {};
+    const rx = new RegExp(`(?:^|[^a-z0-9])(de la|de l'|a la|a l'|du|des|au|aux|le|la|les|l')\\s*${echapper(cle)}(?![a-z0-9])`, 'g');
+    for (const m of d.matchAll(rx)) {
+      const a = m[1];
+      const art = a === 'du' || a === 'au' || a === 'le' ? 'le' : a === 'des' || a === 'aux' || a === 'les' ? 'les' : /l'$/.test(a) ? "l'" : 'la';
+      compte[art] = (compte[art] || 0) + 1;
+    }
+    const meilleur = Object.entries(compte).sort((a, b) => b[1] - a[1])[0];
+    if (meilleur) return { article: meilleur[0], nom };
+  }
+  const premier = nom.split(/[\s(]/)[0];
+  // Voyelle (« l'ACOSS », « l'Université ») ou h muet courant (« l'Hôtel », « l'Hôpital »).
+  if (/^[aeiouâàäéèêëîïôöûüœ]/i.test(premier) || /^h(?:[ôo]tel|[ôo]pital|abitat)/i.test(premier)) return { article: "l'", nom };
+  if (ARTICLES_MASCULINS.test(premier)) return { article: 'le', nom };
+  if (ARTICLES_FEMININS.test(premier)) return { article: 'la', nom };
+  return { article: '', nom };
+}
+
+const MOIS = 'janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre';
+
+/** Date de début d'exécution écrite dans le DCE (« date prévisionnelle de démarrage … fixée au 1er janvier 2027 »). */
+export function dateDebutMarche(dce: string): string {
+  const d = String(dce || '').replace(/\s+/g, ' ');
+  const rx = new RegExp(`(?:date (?:pr[ée]visionnelle |effective )?de d[ée]marrage|d[ée]marrage (?:effectif )?des prestations|d[ée]but (?:d.ex[ée]cution|des prestations)|prise d.effet)[^.;]{0,160}?(?:fix[ée]e?|estim[ée]e?|pr[ée]vue?)?\\s*(?:au|le|à compter du)\\s+((?:1er|\\d{1,2})\\s+(?:${MOIS})\\s+\\d{4})`, 'i');
+  const m = rx.exec(d);
+  return m ? m[1].replace(/\s+/g, ' ') : '';
+}
+
+const NOMBRES_LETTRES: Record<string, number> = {
+  un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, neuf: 9, dix: 10, douze: 12, quinze: 15,
+  vingt: 20, trente: 30, quarante: 40, 'quarante-cinq': 45, cinquante: 50, soixante: 60,
+};
+
+const RX_DELAI = /(?:dans|sous|en moins de|d[ée]lai(?:\s+maxim(?:al|um))?\s+de|au plus tard (?:dans|en))\s+(?:les\s+|un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?de\s+)?(\d{1,3}|une?|deux|trois|quatre|cinq|six|sept|huit|dix|douze|quinze|vingt|trente|quarante-cinq|quarante|soixante)\s*(?:\(\s*(\d{1,3})\s*\)\s*)?(minutes?|mn|min|heures?|h)(?![\wÀ-ÿ])/gi;
+
+/** Sujets des délais que le CCTP peut imposer. */
+const SUJETS_DELAI: Record<string, { sujet: RegExp; exclure?: RegExp }> = {
+  // « absence prévue / prévisible » (préavis) exclue ; « absence imprévue », « effectif prévu » gardés.
+  remplacement: { sujet: /rempla[cç]/i, exclure: /absences? (?:pr[ée]vues?|pr[ée]visibles?)|(?<![\wÀ-ÿ])pr[ée]visibles?(?![\wÀ-ÿ])|[àa] l.avance|planning/i },
+  alarme: { sujet: /alarme|t[ée]l[ée]\s?-?surveillance|lev[ée]e de doute|d[ée]clenchement/i, exclure: /(?<![\wÀ-ÿ])(?:PTI|DATI)(?![\wÀ-ÿ])|travailleur isol/i },
+  pti: { sujet: /(?<![\wÀ-ÿ])(?:PTI|DATI)(?![\wÀ-ÿ])|travailleur isol/i },
+  commande: { sujet: /bons? de commande|commandes? (?:compl[ée]mentaires?|suppl[ée]mentaires?)|prestations? (?:ponctuelles?|exceptionnelles?|suppl[ée]mentaires?)/i, exclure: /pr[ée]venance/i },
+  ssi: { sujet: /(?<![\wÀ-ÿ])SSI(?![\wÀ-ÿ])|s[ée]curit[ée] incendie/i },
+};
+
+/**
+ * Délai imposé par le DCE pour un sujet (« le personnel de remplacement dans les UNE (1) heure » → « 1 heure »).
+ * Plusieurs valeurs différentes pour le même sujet : ambigu → '' (l'adaptation et les contrôles s'en chargent).
+ */
+export function delaiDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): string {
+  const def = SUJETS_DELAI[sujet];
+  const valeurs = new Set<string>();
+  for (const ph of phrasesDuDce(dce)) {
+    if (!def.sujet.test(ph) || def.exclure?.test(ph)) continue;
+    if (sujet === 'ssi' && !/d[ée]faillan|hors service|d[ée]rangement/i.test(ph)) continue;
+    for (const m of ph.matchAll(RX_DELAI)) {
+      const n = m[2] ? Number(m[2]) : (/^\d+$/.test(m[1]) ? Number(m[1]) : NOMBRES_LETTRES[m[1].toLowerCase()]);
+      if (!n) continue;
+      valeurs.add(normaliserDelai(`${n} ${m[3]}`));
+    }
+  }
+  return valeurs.size === 1 ? [...valeurs][0] : '';
+}
+
+const FREQUENCES: Array<[RegExp, string]> = [
+  [/bimestriel(?:le)?s?|tous les deux mois/i, 'tous les deux mois'],
+  [/semestriel(?:le)?s?|tous les six mois|chaque semestre/i, 'chaque semestre'],
+  [/trimestriel(?:le)?s?|tous les trois mois|chaque trimestre|une fois par trimestre/i, 'chaque trimestre'],
+  [/(?<!bi|tri|se)mensuel(?:le)?s?|tous les mois|chaque mois|une fois par mois/i, 'chaque mois'],
+  [/hebdomadaires?|chaque semaine|toutes les semaines|une fois par semaine/i, 'chaque semaine'],
+  [/(?<![\wÀ-ÿ])annuel(?:le)?s?|chaque ann[ée]e|une fois par an(?![\wÀ-ÿ])/i, 'chaque année'],
+];
+
+/** Fréquence des réunions de suivi imposée par le DCE (une seule fréquence citée, sinon ''). */
+export function frequenceReunionsDce(dce: string): string {
+  const trouvees = new Map<string, boolean>();
+  for (const ph of phrasesDuDce(dce)) {
+    if (!/r[ée]unions?/i.test(ph)) continue;
+    for (const [rx, libelle] of FREQUENCES) {
+      if (rx.test(ph)) trouvees.set(libelle, (trouvees.get(libelle) || false) || /au (?:minimum|moins)/i.test(ph));
+    }
+  }
+  if (trouvees.size !== 1) return '';
+  const [[libelle, minimum]] = [...trouvees.entries()];
+  return minimum ? `au minimum ${libelle}` : libelle;
+}
+
+/** Fondement juridique de la reprise CITÉ PAR LE DCE (jamais d'article L. 1224-1 si le DCE ne le cite pas). */
+export function fondementRepriseDce(dce: string): string {
+  const d = String(dce || '').replace(/\s+/g, ' ');
+  const parts: string[] = [];
+  if (/L\.?\s?1224-1/.test(d)) parts.push("l'article L. 1224-1 du Code du travail");
+  if (/accord du 5 mars 2002/i.test(d)) parts.push(`l'accord du 5 mars 2002 relatif à la reprise du personnel${/avenant du 28 janvier 2011/i.test(d) ? ', modifié par l\'avenant du 28 janvier 2011' : ''}`);
+  else if (/annexe VII/i.test(d) && /convention collective/i.test(d)) parts.push("l'annexe VII de la convention collective nationale des entreprises de prévention et de sécurité");
+  return parts.join(' et à ');
+}
+
+/** Qualifications exigées par le DCE (et citées par l'analyse), dans l'ordre du catalogue GSS. */
+export function qualificationsDuDce(dce: string, analyse?: any): string[] {
+  const t = `${String(dce || '')} ${texteAnalyse(analyse)}`.replace(/\s+/g, ' ');
+  const out: string[] = [];
+  if (/SSIAP\s*(?:3|III)(?![\wÀ-ÿ])/i.test(t)) out.push('SSIAP 3');
+  if (/SSIAP\s*(?:2|II)(?![\wÀ-ÿ])/i.test(t)) out.push('SSIAP 2');
+  if (/SSIAP\s*(?:1|I)(?![\wÀ-ÿ])|SSIAP(?!\s*(?:[23]|II))/i.test(t)) out.push('SSIAP 1');
+  if (/CQP\s*-?\s*APS|CQPAPS|certificat de qualification professionnelle d.agent de pr[ée]vention/i.test(t)) out.push('CQP APS');
+  if (/(?<![\wÀ-ÿ])SST(?![\wÀ-ÿ])|sauveteur secouriste du travail/i.test(t)) out.push('SST');
+  if (/PSC\s*1/i.test(t)) out.push('PSC1');
+  if (/H0\s*-?\s*B0|H0V|habilitation [ée]lectrique/i.test(t)) out.push('habilitation électrique H0B0');
+  return out;
+}
+
+/** Communes des sites (codes postaux du début du DCE, sinon noms des sites). */
+function villesDuMarche(dce: string, analyse: any): string[] {
+  const out: string[] = [];
+  for (const m of String(dce || '').slice(0, 30000).matchAll(/(?<!\d)(\d{5})\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ'’-]+(?:[ -][A-Za-zÀ-ÿ'’]+){0,4})/g)) {
+    const ville = m[2].replace(/\s+(?:cedex|CEDEX|Cedex).*$/, '').replace(/\s+(?:t[ée]l|tel|fax|courriel|mail)\b.*$/i, '').trim();
+    const propre = ville === ville.toUpperCase() ? ville.charAt(0) + ville.slice(1).toLowerCase() : ville;
+    if (propre.length >= 3 && !out.includes(propre)) out.push(propre);
+    if (out.length >= 3) break;
+  }
+  if (out.length) return out;
+  return (Array.isArray(analyse?.sites) ? analyse.sites : []).map((s: any) => valeurPropre(s?.name)).filter(Boolean).slice(0, 3);
+}
+
+/** Organigramme de référence (annuaire « Personnes » + registre) en liste Markdown, rôles regroupés par personne. */
+function organigrammeMarkdown(referents: string, registre: EntreeRegistre[]): { texte: string; aConfirmer: string[] } {
+  const roles = rolesOrganigramme(referents || '');
+  const groupes: Array<{ libelles: string[]; noms: string[] }> = [];
+  for (const r of roles) {
+    const libelle = r.libelle.split(/\s+/).map((w, i) => (i === 0 || /^[A-Z]{2,}$/.test(w) ? w : w.toLowerCase())).join(' ');
+    const g = groupes.find((x) => x.noms.join('|') === r.noms.join('|'));
+    if (g) g.libelles.push(libelle);
+    else groupes.push({ libelles: [libelle], noms: [...r.noms] });
+  }
+  const lignes = groupes.map((g) => {
+    let libelle = listeFr(g.libelles.map((l, i) => (i === 0 ? l : l.charAt(0).toLowerCase() + l.slice(1))));
+    if (g.noms.length > 1 && g.libelles.length === 1) libelle = libelle.replace(/^(Responsable|Directeur|Directrice|Chef)(?!s)/, '$1s');
+    return `- ${libelle} : ${listeFr(g.noms)}`;
+  });
+  const aConfirmer: string[] = [];
+  for (const e of registre.filter((x) => /^responsable_|^dirigeant/.test(x.cle) && aConfirmerRegistre(x))) {
+    const noms = e.valeur_retenue.split(';').map((x) => nomPropre(x.trim())).filter(Boolean);
+    if (noms.some((n) => lignes.some((l) => l.includes(n)))) {
+      aConfirmer.push(`Confirmer ${e.libelle.charAt(0).toLowerCase()}${e.libelle.slice(1)} — valeur utilisée dans le mémoire : ${noms.join(', ')} (${e.source_retenue}, ${e.date_retenue})`);
+    }
+  }
+  return { texte: lignes.join('\n'), aConfirmer };
+}
+
+/** Fonction d'une personne dans l'annuaire « Personnes » (« Directeur d'agence / Responsable de marché »). */
+function fonctionDansAnnuaire(referents: string, nom: string): string {
+  const cible = normaliser(nom).split(' ')[0];
+  for (const ligne of String(referents || '').split(/\r?\n/)) {
+    const m = /^\s*(.+?)\s+[—–-]\s+(.+?)\s*$/.exec(ligne);
+    if (m && cible && normaliser(m[1]).split(' ')[0] === cible) {
+      return listeFr(m[2].split('/').map((x) => x.trim()).filter(Boolean).map((x) => x.charAt(0).toLowerCase() + x.slice(1)));
+    }
+  }
+  return '';
+}
+
+interface CalculVariables {
+  mt: MemoireType;
+  ctx: ContexteMarche;
+  ind: Record<string, boolean>;
+  plan?: PlanMemoireType;
+  registre: EntreeRegistre[];
+  horsNormandie: boolean;
+  qualifs: string[];
+}
+
+function depuisRegistre(c: CalculVariables, cle: string, transformer: (v: string) => string = (v) => v): ValeurVariable {
+  const e = c.registre.find((x) => x.cle === cle);
+  const v = e ? transformer(e.valeur_retenue) : '';
+  if (!e || !v) return { valeur: null };
+  return {
+    valeur: v,
+    source: `registre ${cle} (${e.source_retenue}, ${e.date_retenue})`,
+    aConfirmer: aConfirmerRegistre(e) ? `Confirmer ${e.libelle.charAt(0).toLowerCase()}${e.libelle.slice(1)} — valeur utilisée dans le mémoire : ${v} (${e.source_retenue}, ${e.date_retenue})` : undefined,
+  };
+}
+
+/** Délai : DCE (imposé) d'abord ; sinon valeur GSS (registre ou valeur_gss), seulement en Normandie. */
+function delai(c: CalculVariables, nom: string, sujet: keyof typeof SUJETS_DELAI | null): ValeurVariable {
+  const def = c.mt.variables[nom];
+  const duDce = sujet ? delaiDuDce(c.ctx.dce || '', sujet) : '';
+  if (duDce) return { valeur: duDce, source: 'délai imposé par le DCE' };
+  if (c.horsNormandie && def?.normandie_seulement) {
+    return { valeur: null, question: `Marché hors Normandie : délai à confirmer par GSS (${def.description.charAt(0).toLowerCase()}${def.description.slice(1)}).` };
+  }
+  if (def?.registre) {
+    const v = depuisRegistre(c, def.registre, normaliserDelai);
+    if (variableRenseignee(v)) return v;
+  }
+  if (def?.valeur_gss) return { valeur: def.valeur_gss, source: def.origine, aConfirmer: def.a_confirmer };
+  return { valeur: null };
+}
+
+type Calculateur = (c: CalculVariables) => ValeurVariable;
+
+const CALCULS: Record<string, Calculateur> = {
+  CLIENT: (c) => {
+    const brut = valeurPropre(c.ctx.cover?.client) || valeurPropre(c.ctx.analyse?.clientName);
+    if (!brut) return { valeur: null };
+    const { article, nom } = articleEtNom(brut, c.ctx.dce || '');
+    return { valeur: nom, article, source: c.ctx.cover?.client ? 'page de garde' : 'analyse du DCE (clientName)' };
+  },
+  OBJET_MARCHE: (c) => {
+    const titre = valeurPropre(c.ctx.cover?.title);
+    const v = titre && !/^m[ée]moire technique$/i.test(titre) ? titre : valeurPropre(c.ctx.analyse?.projectTitle);
+    return { valeur: v ? v.replace(/\.$/, '') : null, source: 'analyse du DCE (projectTitle)' };
+  },
+  REF_MARCHE: (c) => ({ valeur: valeurPropre(c.ctx.cover?.ref) || valeurPropre(c.ctx.analyse?.marketRef) || null }),
+  LOTS: (c) => {
+    const lots = (Array.isArray(c.ctx.analyse?.lots) ? c.ctx.analyse.lots : []).map((l: any) => valeurPropre(l?.num)).filter(Boolean);
+    if (!lots.length) return { valeur: null };
+    return { valeur: `${lots.length > 1 ? 'lots' : 'lot'} ${listeFr(lots)}` };
+  },
+  DUREE_MARCHE: (c) => ({ valeur: valeurPropre(c.ctx.analyse?.duration) || null }),
+  DATE_DEBUT_MARCHE: (c) => ({ valeur: dateDebutMarche(c.ctx.dce || '') || null, source: 'DCE' }),
+  SITE: (c) => ({ valeur: (Array.isArray(c.ctx.analyse?.sites) ? c.ctx.analyse.sites : []).map((s: any) => valeurPropre(s?.name)).filter(Boolean) }),
+  VILLE: (c) => ({ valeur: villesDuMarche(c.ctx.dce || '', c.ctx.analyse) }),
+  SECTEUR_CLIENT: (c) => ({ valeur: valeurPropre(c.ctx.analyse?.clientSector) || null }),
+  SECTEUR_REFERENCE: (c) => ({ valeur: c.plan?.secteurReference?.libelle || null }),
+  QUALIFICATIONS_REQUISES: (c) => ({ valeur: c.qualifs, source: 'DCE' }),
+  PROFILS_DEMANDES: (c) => {
+    const p: string[] = [];
+    if (c.ind.SSIAP) p.push('nos agents de sécurité incendie (SSIAP)');
+    if (c.ind.SURVEILLANCE) p.push('nos agents de sûreté');
+    if (c.ind.CYNOPHILE) p.push('nos agents cynophiles');
+    if (c.ind.TELESURVEILLANCE) p.push('nos agents rondiers intervenants');
+    return { valeur: p };
+  },
+  DIPLOMES_EQUIPE: (c) => (c.qualifs.length ? { valeur: c.qualifs, source: 'qualifications exigées par le DCE' } : { valeur: null }),
+  TENUE_RETENUE: (c) => {
+    const uniformes = valeurPropre(c.ctx.analyse?.operationalSummary?.uniforms);
+    const ads = /(?<![\wÀ-ÿ])ADS(?![\wÀ-ÿ])|agents? de (?:s[ée]curit[ée](?! incendie)|surveillance|s[ûu]ret[ée])/i.test(String(c.ctx.dce || ''));
+    if (/costume|tenue de ville|tailleur/i.test(uniformes)) return { valeur: 'la tenue costume', source: 'analyse du DCE (uniforms)' };
+    if (c.ind.SSIAP) return { valeur: ads ? "la tenue des agents SSIAP et, pour les agents de sécurité, la tenue d'intervention" : 'la tenue des agents SSIAP', source: 'règle du mémoire type' };
+    if (c.ind.RONDES || c.ind.TELESURVEILLANCE || c.ind.SURVEILLANCE) return { valeur: "la tenue d'intervention", source: 'règle du mémoire type' };
+    if (c.ind.ACCUEIL_PUBLIC) return { valeur: 'la tenue costume', source: 'règle du mémoire type' };
+    return { valeur: null };
+  },
+  LIGNES_EQUIPE_DEDIEE: (c) => {
+    const lignes: string[] = [];
+    const ac = '[À COMPLÉTER]';
+    if (c.qualifs.includes('SSIAP 3')) lignes.push(`| Chef de service de sécurité incendie | SSIAP 3 | ${ac} | |`);
+    if (c.qualifs.includes('SSIAP 2')) lignes.push(`| Chef d'équipe de sécurité incendie | SSIAP 2 | ${ac} | |`);
+    if (c.qualifs.includes('SSIAP 1')) lignes.push(`| Agent de sécurité incendie | SSIAP 1 | ${ac} | |`);
+    const ads = /(?<![\wÀ-ÿ])ADS(?![\wÀ-ÿ])|agents? de (?:s[ée]curit[ée](?! incendie)|surveillance|s[ûu]ret[ée])/i.test(String(c.ctx.dce || ''));
+    if (!c.ind.SSIAP || ads || c.qualifs.includes('CQP APS')) lignes.push(`| Agent de sécurité | CQP APS | ${ac} | |`);
+    if (c.ind.CYNOPHILE) lignes.push(`| Agent cynophile | CQP APS – qualification cynophile | ${ac} | |`);
+    if (c.ind.TELESURVEILLANCE) lignes.push(`| Rondier intervenant | CQP APS | ${ac} | |`);
+    return { valeur: lignes.join('\n'), question: "Nombre d'agents par catégorie de l'équipe dédiée au marché (tableau de l'adéquation des moyens humains).", source: 'qualifications exigées par le DCE' };
+  },
+  EFFECTIF_AGENTS: () => ({ valeur: null }),
+  NB_AGENTS_RENFORT: () => ({ valeur: null }),
+  EFFECTIF_ADS_CQP: (c) => {
+    const e = c.registre.find((x) => x.cle === 'effectif_agents_securite');
+    const total = Number(nombreDe(c.registre.find((x) => x.cle === 'effectif_total')?.valeur_retenue || '')) || 0;
+    const v = Number(nombreDe(e?.valeur_retenue || '')) || 0;
+    // Valeur « à confirmer » ou incohérente (supérieure à l'effectif total) : jamais imprimée.
+    if (!e || !v || aConfirmerRegistre(e) || (total && v > total)) return { valeur: null };
+    return { valeur: String(v), source: 'registre effectif_agents_securite' };
+  },
+  EFFECTIF_TOTAL: (c) => depuisRegistre(c, 'effectif_total', nombreDe),
+  EFFECTIF_76: (c) => depuisRegistre(c, 'effectif_departement_76', nombreDe),
+  EFFECTIF_27: (c) => depuisRegistre(c, 'effectif_departement_27', nombreDe),
+  EFFECTIF_SSIAP1: (c) => depuisRegistre(c, 'effectif_ssiap1', nombreDe),
+  EFFECTIF_SSIAP2: (c) => depuisRegistre(c, 'effectif_ssiap2', nombreDe),
+  EFFECTIF_SSIAP3: (c) => depuisRegistre(c, 'effectif_ssiap3', nombreDe),
+  EFFECTIF_CONTROLEURS: (c) => depuisRegistre(c, 'effectif_controleurs', nombreDe),
+  EFFECTIF_CYNOPHILES: (c) => depuisRegistre(c, 'effectif_cynophiles', nombreDe),
+  VIVIER_EVENEMENTIEL: (c) => depuisRegistre(c, 'vivier_evenementiel', nombreDe),
+  AGENTS_MOBILISABLES_48H: (c) => (c.horsNormandie ? { valeur: null } : depuisRegistre(c, 'agents_mobilisables_48h', nombreDe)),
+  VEHICULES_ASTREINTE: (c) => depuisRegistre(c, 'vehicules_astreinte', nombreDe),
+  LOGICIEL_MAIN_COURANTE: (c) => {
+    const e = c.registre.find((x) => x.cle === 'logiciel_main_courante');
+    return { valeur: 'Trackforce', source: 'registre logiciel_main_courante (Trackforce)', aConfirmer: e && aConfirmerRegistre(e) ? c.mt.variables.LOGICIEL_MAIN_COURANTE?.a_confirmer : undefined };
+  },
+  ORGANIGRAMME: (c) => {
+    const o = organigrammeMarkdown(c.ctx.referents || '', c.registre);
+    return { valeur: o.texte || null, source: 'annuaire « Personnes » et registre', aConfirmer: o.aConfirmer.length ? o.aConfirmer.join('\n') : undefined };
+  },
+  INTERLOCUTEUR_UNIQUE: (c) => depuisRegistre(c, 'dirigeant', nomPropre),
+  FONCTION_INTERLOCUTEUR: (c) => {
+    const nom = valeurPropre(c.ctx.choix?.variables?.INTERLOCUTEUR_UNIQUE as string) || nomPropre(c.registre.find((x) => x.cle === 'dirigeant')?.valeur_retenue || '');
+    const f = nom ? fonctionDansAnnuaire(c.ctx.referents || '', nom) : '';
+    if (f) return { valeur: f, source: 'annuaire « Personnes »' };
+    if (!c.ctx.choix?.variables?.INTERLOCUTEUR_UNIQUE && nom) return { valeur: "directeur d'agence et responsable de marché", source: 'faits_gss.md (dirigeant)' };
+    return { valeur: null };
+  },
+  TEL_INTERLOCUTEUR: (c) => {
+    // Interlocuteur choisi par GSS autre que le dirigeant : le numéro du registre (celui du dirigeant) ne vaut pas pour lui.
+    const choisi = valeurPropre(c.ctx.choix?.variables?.INTERLOCUTEUR_UNIQUE as string);
+    const dirigeant = nomPropre(c.registre.find((x) => x.cle === 'dirigeant')?.valeur_retenue || '');
+    if (choisi && normaliser(choisi) !== normaliser(dirigeant)) return { valeur: null, question: `Numéro de téléphone unique de l'interlocuteur choisi (${choisi}).` };
+    return depuisRegistre(c, 'telephone_contact');
+  },
+  TAUX_REPRISE: () => ({ valeur: null }),
+  FONDEMENT_REPRISE_DCE: (c) => ({ valeur: fondementRepriseDce(c.ctx.dce || '') || null, source: 'DCE' }),
+  PARTENAIRE_TELESURVEILLANCE: () => ({ valeur: null }),
+  ENGAGEMENTS_TELESURVEILLANCE: () => ({ valeur: null }),
+  SITES_RONDES: () => ({ valeur: null }),
+  FICHE_POSTE_EXEMPLE: () => ({ valeur: null }),
+  DELAI_ASTREINTE: (c) => delai(c, 'DELAI_ASTREINTE', 'remplacement'),
+  DELAI_ASTREINTE_NORMANDIE: (c) => delai(c, 'DELAI_ASTREINTE_NORMANDIE', null),
+  DELAI_PTI: (c) => delai(c, 'DELAI_PTI', 'pti'),
+  DELAI_INTERVENTION_ALARME: (c) => delai(c, 'DELAI_INTERVENTION_ALARME', 'alarme'),
+  DELAI_ENVOI_PLANNINGS: (c) => depuisRegistre(c, 'envoi_plannings', (v) => valeurPropre(v).replace(/\s+/g, '')),
+  DELAI_COMMANDE_SUPPLEMENTAIRE: (c) => delai(c, 'DELAI_COMMANDE_SUPPLEMENTAIRE', 'commande'),
+  DELAI_DEFAILLANCE_SSI: (c) => delai(c, 'DELAI_DEFAILLANCE_SSI', 'ssi'),
+  FREQ_CONTROLE_1: (c) => ({ valeur: c.mt.variables.FREQ_CONTROLE_1?.valeur_gss || null, source: 'pratique GSS' }),
+  FREQ_CONTROLE_2: (c) => ({ valeur: c.mt.variables.FREQ_CONTROLE_2?.valeur_gss || null, source: 'pratique GSS (faits_gss.md)' }),
+  FREQ_CONTROLE_3: (c) => ({ valeur: c.mt.variables.FREQ_CONTROLE_3?.valeur_gss || null, source: 'pratique GSS' }),
+  CONTROLES_INOPINES_MENSUELS: (c) => ({ valeur: c.mt.variables.CONTROLES_INOPINES_MENSUELS?.valeur_gss || null, source: 'pratique GSS' }),
+  FREQ_REUNIONS: (c) => ({ valeur: frequenceReunionsDce(c.ctx.dce || '') || null, source: 'DCE' }),
+  RESPONSABLE_APR: (c) => ({ valeur: c.mt.variables.RESPONSABLE_APR?.valeur_gss || null, source: 'AO RNE p.49-50', aConfirmer: c.mt.variables.RESPONSABLE_APR?.a_confirmer }),
+};
+
+/**
+ * Variables du marché : choix de GSS > valeurs imposées par le CCTP (vérifiées) > calcul (DCE, analyse, registre,
+ * annuaire). Une variable sans valeur reste vide : le publipostage applique sa règle « si_absente ».
+ */
+export function variablesDuMarche(mt: MemoireType, ctx: ContexteMarche, indicateurs: Record<string, boolean>, plan?: PlanMemoireType): Variables {
+  const registre = ctx.registre || lireRegistre();
+  const horsNormandie = indicateurs.HORS_NORMANDIE ?? ctx.horsNormandie ?? marcheHorsNormandie(ctx.analyse || {}, ctx.dce || '');
+  const c: CalculVariables = { mt, ctx, ind: indicateurs, plan, registre, horsNormandie, qualifs: qualificationsDuDce(ctx.dce || '', ctx.analyse) };
+  const out: Variables = {};
+  for (const nom of Object.keys(mt.variables)) {
+    const choix = ctx.choix?.variables?.[nom];
+    if (choix !== undefined && (Array.isArray(choix) ? choix.length : String(choix).trim())) {
+      if (nom === 'CLIENT' && typeof choix === 'string') {
+        const { article, nom: nomClient } = articleEtNom(choix, ctx.dce || '');
+        out[nom] = { valeur: nomClient, article, source: 'choix de GSS' };
+      } else out[nom] = { valeur: choix, source: 'choix de GSS' };
+      continue;
+    }
+    const imp = ctx.imposees?.[nom];
+    if (imp && valeurPropre(imp.valeur)) {
+      out[nom] = { valeur: imp.valeur, source: `imposé par le DCE : « ${imp.citation.slice(0, 200)} »` };
+      continue;
+    }
+    const calc = CALCULS[nom];
+    out[nom] = calc ? calc(c) : { valeur: null };
+    const def = mt.variables[nom];
+    if (!variableRenseignee(out[nom]) && def?.question && !out[nom].question) out[nom].question = def.question;
+  }
+  return out;
+}
+
+// ─── Publipostage ────────────────────────────────────────────────────────────────────────────────
+
+export const A_COMPLETER = '[À COMPLÉTER]';
+const RETIRER = '\u0007RETIRER\u0007';
+
+export interface ResultatPubliposte {
+  texte: string;
+  /**
+   * Variables sans valeur : questions à GSS. `repere` : un « [À COMPLÉTER] » est imprimé à l'endroit du manque ;
+   * sinon (phrase ou passage retiré, repli), la question va dans la liste des consultations, sans repère.
+   */
+  manquantes: Array<{ variable: string; question: string; repere: boolean }>;
+  /** Valeurs reprises mais à confirmer par GSS. */
+  aConfirmer: Array<{ variable: string; valeur: string; question: string }>;
+  variablesUtilisees: string[];
+}
+
+export interface OptionsPubliposte {
+  definitions?: Record<string, VariableMemoireType>;
+  indicateurs?: Record<string, boolean>;
+  /** Trace (tests) : les valeurs sont remplacées par ‹NOM›, les sections par ‹si:EXPR›…‹/si›. */
+  trace?: boolean;
+  /**
+   * Ajoute, sous le paragraphe (ou le tableau) qui contient chaque « [À COMPLÉTER] », la ligne
+   * « [CONSULTATION REQUISE : question] » attendue par le traitement des consultations de la réponse libre (repères
+   * ⟦AC:n⟧) : la réponse de GSS sera insérée à cet endroit.
+   */
+  marquerConsultations?: boolean;
+}
+
+const SENTINELLE = (i: number) => `\u0001${i}\u0001`;
+
+/** Remplace les sections {{#si EXPR}}…{{/si}} (de l'intérieur vers l'extérieur). */
+function resoudreSections(texte: string, indicateurs: Record<string, boolean>, variables: Variables, trace: boolean): string {
+  const RX = /\{\{#si\s+([^}]+?)\s*\}\}((?:(?!\{\{#si\s)[\s\S])*?)\{\{\/si\}\}/;
+  let t = texte;
+  for (let garde = 0; garde < 500; garde++) {
+    const m = RX.exec(t);
+    if (!m) break;
+    const vrai = evaluerCondition(m[1], indicateurs, variables);
+    const contenu = vrai ? m[2] : '';
+    t = t.slice(0, m.index) + (trace ? `‹si:${m[1].trim()}›${contenu}‹/si›` : contenu) + t.slice(m.index + m[0].length);
+  }
+  return t.replace(/\{\{#si\s+[^}]*\}\}|\{\{\/si\}\}/g, '');
+}
+
+/** Insertion du nom du client avec son article, prépositions accordées (de le → du, à le → au, de + voyelle → d'). */
+function insererClient(sortie: string, v: ValeurVariable): { sortie: string; insere: string } {
+  const nom = Array.isArray(v.valeur) ? listeFr(v.valeur.map(String)) : String(v.valeur || '');
+  let art = v.article || '';
+  const m = /(^|[\s(«"'’*])(de|à|De|À)\s+$/.exec(sortie);
+  if (m) {
+    const prep = m[2];
+    const maj = prep !== prep.toLowerCase();
+    const avant = sortie.slice(0, sortie.length - m[0].length + m[1].length);
+    if (art === 'le' || art === 'les') {
+      const contr = prep.toLowerCase() === 'de' ? (art === 'le' ? 'du' : 'des') : (art === 'le' ? 'au' : 'aux');
+      return { sortie: `${avant}${maj ? majuscule(contr) : contr} `, insere: nom };
+    }
+    if (!art && prep.toLowerCase() === 'de' && /^[aeiouyâàäéèêëîïôöûüœ]/i.test(nom)) {
+      return { sortie: `${avant}${maj ? "D'" : "d'"}`, insere: nom };
+    }
+  }
+  let insere = art ? (art.endsWith("'") ? `${art}${nom}` : `${art} ${nom}`) : nom;
+  // Début de phrase, de ligne ou d'élément de liste (éventuellement en gras) : majuscule.
+  if (/(?:^|[.!?]\s+|\n\s*(?:(?:[-*•]|\d+[.)])\s+)?)(?:\*\*)?$/.test(sortie)) insere = majuscule(insere);
+  return { sortie, insere };
+}
+
+/** Valeur affichée d'une variable renseignée. */
+function valeurAffichee(nom: string, v: ValeurVariable, def?: VariableMemoireType): string {
+  const x = v.valeur;
+  if (typeof x === 'boolean') return '';
+  if (Array.isArray(x)) return listeFr(x.map(String));
+  const t = String(x ?? '').trim();
+  return def?.type === 'markdown' ? t : t.replace(/\s+/g, ' ');
+}
+
+/** Retire les phrases (ou lignes de liste / de tableau) qui contiennent le repère de retrait. */
+function retirerPhrasesMarquees(texte: string): string {
+  return texte.split('\n').map((ligne) => {
+    if (!ligne.includes(RETIRER)) return ligne;
+    if (/^\s*(?:[-*•]|\d+[.)]|\|)/.test(ligne)) return null;
+    return ligne.split(/(?<=[.!?])\s+/).filter((ph) => !ph.includes(RETIRER)).join(' ');
+  }).filter((l): l is string => l !== null).join('\n');
+}
+
+/** Nettoyage typographique après publipostage (espaces, puces vides, tableaux, lignes vides). */
+export function nettoyerPubliposte(texte: string): string {
+  return texte
+    .replace(/[ \t]+$/gm, '')
+    .replace(/^\s*(?:[-*•]|\d+[.)])\s*$/gm, '')
+    .replace(/^(\|.*\|)[ \t]*\n(?:[ \t]*\n)+(?=\|)/gm, '$1\n')
+    .replace(/([^\s|])[ \t]{2,}(?=\S)/g, '$1 ')
+    .replace(/ +([,.)])/g, '$1')
+    .replace(/\( *\)/g, '')
+    .replace(/,\s*([;.])/g, '$1')
+    .replace(/(?<!\.)\.\.(?!\.)/g, '.')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * Publipostage déterministe d'un texte de référence : sections conditionnelles, puis variables. Une variable
+ * inconnue ou sans valeur suit sa règle « si_absente » ; aucun {{…}} ne reste dans le résultat.
+ */
+export function publiposter(texte: string, variables: Variables, options: OptionsPubliposte = {}): ResultatPubliposte {
+  const defs = options.definitions || {};
+  const indicateurs = options.indicateurs || {};
+  const trace = !!options.trace;
+  const marquer = !!options.marquerConsultations && !trace;
+  const manquantes: ResultatPubliposte['manquantes'] = [];
+  /** Enregistre une question ; renvoie la sentinelle à placer après le repère (si les consultations sont marquées). */
+  const manque = (variable: string, question: string, repere: boolean): string => {
+    let i = manquantes.findIndex((x) => x.variable === variable);
+    if (i < 0) { manquantes.push({ variable, question, repere }); i = manquantes.length - 1; } else if (repere) manquantes[i].repere = true;
+    return marquer && repere ? SENTINELLE(i) : '';
+  };
+  const aConfirmer: ResultatPubliposte['aConfirmer'] = [];
+  const utilisees = new Set<string>();
+  const t = resoudreSections(String(texte || ''), indicateurs, variables, trace);
+  let sortie = '';
+  let dernier = 0;
+  for (const m of t.matchAll(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g)) {
+    sortie += t.slice(dernier, m.index);
+    dernier = (m.index || 0) + m[0].length;
+    const nom = m[1];
+    const def = defs[nom];
+    const v = variables[nom];
+    utilisees.add(nom);
+    if (trace) {
+      // Squelette (tests) : le nom seul, sans valeur ni accord de préposition, que la valeur soit connue ou non.
+      sortie += `‹${nom}›`;
+      continue;
+    }
+    if (v && variableRenseignee(v) && typeof v.valeur !== 'boolean') {
+      if (def?.type === 'client' || nom === 'CLIENT') {
+        const r = insererClient(sortie, v);
+        sortie = r.sortie + r.insere;
+      } else {
+        sortie += valeurAffichee(nom, v, def);
+      }
+      if (v.aConfirmer && !aConfirmer.some((x) => x.variable === nom)) aConfirmer.push({ variable: nom, valeur: valeurAffichee(nom, v, def), question: v.aConfirmer });
+      // Valeur qui contient elle-même des repères (lignes du tableau de l'équipe dédiée) : une question pour la valeur.
+      if (v.question && String(v.valeur).includes(A_COMPLETER)) sortie += manque(nom, v.question, true);
+      continue;
+    }
+    const regle: SiAbsente = def?.si_absente || 'a_completer';
+    const question = v?.question || def?.question || `Valeur à fournir : ${def?.description || nom}.`;
+    if (regle === 'repli' && def?.repli) {
+      const repli: ValeurVariable = { valeur: def.repli, article: '' };
+      if (def.type === 'client' || nom === 'CLIENT') {
+        const r = insererClient(sortie, repli);
+        sortie = r.sortie + r.insere;
+      } else sortie += def.repli;
+      if (def.question) manque(nom, def.question, false);
+    } else if (regle === 'retirer_phrase') {
+      sortie += RETIRER;
+    } else if (regle === 'vide') {
+      // rien
+    } else {
+      sortie += A_COMPLETER + manque(nom, question, true);
+    }
+  }
+  sortie += t.slice(dernier);
+  // Passage retiré faute de valeur (ex. délai hors Normandie) : la question prévue pour la variable est posée à GSS.
+  if (!trace) {
+    for (const m of String(texte || '').matchAll(/\{\{#si\s+([^}]+?)\s*\}\}/g)) {
+      for (const nom of nomsExpression(m[1])) {
+        const v = variables[nom];
+        if (!(nom in indicateurs) && v && !variableRenseignee(v) && v.question && !manquantes.some((x) => x.variable === nom)) manque(nom, v.question, false);
+      }
+    }
+  }
+  let resultat = nettoyerPubliposte(retirerPhrasesMarquees(sortie));
+  // Garde-fou : aucune variable ni section ne doit rester.
+  if (/\{\{|\}\}/.test(resultat)) {
+    resultat = resultat.replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, (_x, nom: string) => A_COMPLETER + manque(nom, `Valeur à fournir : ${nom}.`, true))
+      .replace(/\{\{[^}]*\}\}|\{\{|\}\}/g, '');
+  }
+  if (marquer) {
+    // Chaque paragraphe (ou tableau) reçoit, à sa suite, les questions de ses repères.
+    resultat = resultat.split(/\n{2,}/).map((bloc) => {
+      const ids = [...new Set([...bloc.matchAll(/\u0001(\d+)\u0001/g)].map((m) => Number(m[1])))];
+      const propre = bloc.replace(/\u0001\d+\u0001/g, '');
+      return ids.length ? `${propre}\n${ids.map((i) => `[CONSULTATION REQUISE : ${manquantes[i].question}]`).join('\n')}` : propre;
+    }).join('\n\n');
+  }
+  return { texte: resultat, manquantes, aConfirmer, variablesUtilisees: [...utilisees] };
+}
+
+// ─── Sous-parties ────────────────────────────────────────────────────────────────────────────────
+
+export interface MorceauSousPartie {
+  titre: string | null;
+  texte: string;
+  mots: number;
+}
+
+const compterMots = (t: string) => (String(t || '').match(/[\wÀ-ÿ'’-]+/g) || []).length;
+
+/** Découpe un texte en sous-parties (titre en gras seul sur sa ligne, ou titre Markdown). L'introduction a titre null. */
+export function decouperSousParties(texte: string): MorceauSousPartie[] {
+  const lignes = String(texte || '').split('\n');
+  const morceaux: MorceauSousPartie[] = [];
+  let courant: { titre: string | null; lignes: string[] } = { titre: null, lignes: [] };
+  for (const l of lignes) {
+    const m = /^\s*(?:\*\*(.+?)\*\*|#{2,4}\s+(.+?))\s*$/.exec(l);
+    if (m) {
+      if (courant.titre !== null || courant.lignes.some((x) => x.trim())) morceaux.push({ titre: courant.titre, texte: courant.lignes.join('\n').trim(), mots: 0 });
+      courant = { titre: (m[1] || m[2]).trim(), lignes: [l] };
+    } else courant.lignes.push(l);
+  }
+  morceaux.push({ titre: courant.titre, texte: courant.lignes.join('\n').trim(), mots: 0 });
+  return morceaux.filter((x) => x.texte).map((x) => ({ ...x, mots: compterMots(x.texte) }));
+}
+
+/**
+ * Sous-parties liées à un indicateur vrai en premier (dans l'ordre de `ordreIndicateurs` s'il est donné, sinon dans
+ * l'ordre du texte), l'introduction restant en tête ; les autres gardent leur ordre.
+ */
+export function reordonnerSousParties(texte: string, sousParties: SousPartie[], indicateurs: Record<string, boolean>, ordreIndicateurs: string[] = []): string {
+  const morceaux = decouperSousParties(texte);
+  const indicateurDe = (m: MorceauSousPartie) => (m.titre === null ? undefined : sousParties.find((s) => normaliser(s.titre) === normaliser(m.titre!))?.indicateur);
+  const prioritaire = (m: MorceauSousPartie) => { const i = indicateurDe(m); return !!(i && indicateurs[i]); };
+  const rang = (m: MorceauSousPartie) => { const k = ordreIndicateurs.indexOf(indicateurDe(m) || ''); return k < 0 ? ordreIndicateurs.length : k; };
+  const intro = morceaux.filter((m) => m.titre === null);
+  const reste = morceaux.filter((m) => m.titre !== null);
+  const enTete = reste.filter(prioritaire).map((m, i) => ({ m, i })).sort((a, b) => rang(a.m) - rang(b.m) || a.i - b.i).map((x) => x.m);
+  return [...intro, ...enTete, ...reste.filter((m) => !prioritaire(m))].map((m) => m.texte).join('\n\n');
+}
+
+/**
+ * Condensation par sélection (format court) : retire d'abord les sous-parties de priorité 3, puis 2 (en partant de la
+ * fin), jamais l'introduction ni une sous-partie de priorité 1, jusqu'à tenir le budget de mots.
+ */
+export function condenserParSelection(texte: string, sousParties: SousPartie[], budgetMots: number): { texte: string; retirees: string[] } {
+  let morceaux = decouperSousParties(texte);
+  const retirees: string[] = [];
+  const prio = (m: MorceauSousPartie) => (m.titre === null ? 1 : (sousParties.find((s) => normaliser(s.titre) === normaliser(m.titre!))?.priorite ?? 2));
+  const total = () => morceaux.reduce((s, m) => s + m.mots, 0);
+  for (const niveau of [3, 2]) {
+    for (let i = morceaux.length - 1; i >= 0 && total() > budgetMots; i--) {
+      if (prio(morceaux[i]) === niveau) {
+        retirees.push(morceaux[i].titre!);
+        morceaux = morceaux.filter((_, k) => k !== i);
+      }
+    }
+  }
+  return { texte: morceaux.map((m) => m.texte).join('\n\n'), retirees };
+}
+
+// ─── Publication des rubriques et des schémas ────────────────────────────────────────────────────
+
+export interface SchemaPublie {
+  source: SchemaRubrique['source'];
+  ref?: string;
+  gabarit?: string;
+  titre?: string;
+  params?: any;
+  origine?: string;
+  /** Schéma « bibliothèque » à corriger avant usage, ou spécification incomplète. */
+  remarque?: string;
+  alternative?: SchemaRubrique & { a_corriger?: string };
+  etapes?: any[];
+}
+
+export interface RubriquePubliee {
+  id: string;
+  bloc: string;
+  cle: string;
+  titre: string;
+  mode: ModeRubrique;
+  priorite: number;
+  /** Texte publiposté (null pour la rubrique « besoin », rédigée depuis le CCTP). */
+  texte: string | null;
+  manquantes: ResultatPubliposte['manquantes'];
+  aConfirmer: ResultatPubliposte['aConfirmer'];
+  schema: SchemaPublie | null;
+  /** Rubrique « besoin » : première phrase du contexte, publipostée (amorce de la rédaction). */
+  trame?: string;
+  ancienne_rubrique: string | null;
+}
+
+/**
+ * Publipostage d'une spécification de schéma : variables remplacées ; un élément de liste portant « si » faux, ou
+ * dont une variable est inconnue, est retiré ; une autre chaîne avec une variable inconnue rend le schéma
+ * inutilisable (renvoie null : l'appelant passe au secours).
+ */
+export function publierSchema(spec: SchemaRubrique, variables: Variables, indicateurs: Record<string, boolean>, definitions: Record<string, VariableMemoireType> = {}): SchemaPublie | null {
+  if (spec.source !== 'spec') return { ...spec };
+  const RETRAIT = Symbol('retrait');
+  const chaine = (s: string): string | typeof RETRAIT => {
+    let manque = false;
+    const t = s.replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, (_x, nom: string) => {
+      const v = variables[nom];
+      if (!v || !variableRenseignee(v)) { manque = true; return ''; }
+      return valeurAffichee(nom, v, definitions[nom]);
+    });
+    return manque ? RETRAIT : t;
+  };
+  // Un retrait remonte jusqu'à l'élément de liste le plus proche, qui disparaît ; hors de toute liste, le schéma
+  // entier est inutilisable.
+  const visiter = (o: any): any => {
+    if (typeof o === 'string') return chaine(o);
+    if (Array.isArray(o)) return o.map(visiter).filter((x) => x !== RETRAIT);
+    if (o && typeof o === 'object') {
+      if (typeof o.si === 'string' && !evaluerCondition(o.si, indicateurs, variables)) return RETRAIT;
+      const r: any = {};
+      for (const [k, v] of Object.entries(o)) {
+        if (k === 'si') continue;
+        const x = visiter(v);
+        if (x === RETRAIT) return RETRAIT;
+        r[k] = x;
+      }
+      return r;
+    }
+    return o;
+  };
+  const params = visiter(spec.params);
+  const titre = spec.titre ? chaine(spec.titre) : undefined;
+  if (params === RETRAIT || !params) return null;
+  return { source: 'spec', gabarit: spec.gabarit, titre: titre === RETRAIT ? undefined : titre, params, origine: spec.origine };
+}
+
+/** Publie une rubrique : publipostage du texte, ordre des sous-parties, schéma. */
+export function publierRubrique(mt: MemoireType, rubrique: RubriqueMemoireType, variables: Variables, indicateurs: Record<string, boolean>, cle = '', options: { marquerConsultations?: boolean } = {}): RubriquePubliee {
+  const base = {
+    id: rubrique.id, bloc: rubrique.bloc, cle, titre: rubrique.titre, mode: rubrique.mode, priorite: rubrique.priorite,
+    ancienne_rubrique: rubrique.ancienne_rubrique,
+  };
+  if (rubrique.mode === 'besoin' || !rubrique.texte) {
+    const trameBrute = rubrique.specification?.sous_parties?.[0]?.trame_publipostage;
+    const trame = trameBrute ? publiposter(trameBrute, variables, { definitions: mt.variables, indicateurs }) : null;
+    return {
+      ...base, texte: null, manquantes: [], aConfirmer: [],
+      schema: rubrique.schema ? { ...rubrique.schema } : null,
+      ...(trame ? { trame: trame.texte } : {}),
+    };
+  }
+  const r = publiposter(rubrique.texte, variables, { definitions: mt.variables, indicateurs, marquerConsultations: options.marquerConsultations });
+  let texte = r.texte;
+  if (rubrique.ordre_sous_parties === 'indicateurs') texte = reordonnerSousParties(texte, rubrique.sous_parties, indicateurs, rubrique.ordre_indicateurs);
+  let schema: SchemaPublie | null = null;
+  if (rubrique.schema) {
+    schema = rubrique.schema.source === 'spec'
+      ? publierSchema(rubrique.schema, variables, indicateurs, mt.variables)
+      : { ...rubrique.schema };
+    if (!schema && rubrique.schema.alternative) schema = { ...rubrique.schema.alternative };
+  }
+  return { ...base, texte, manquantes: r.manquantes, aConfirmer: r.aConfirmer, schema };
+}
+
+export interface MemoirePrepare {
+  mt: MemoireType;
+  etatsIndicateurs: Record<string, EtatIndicateur>;
+  indicateurs: Record<string, boolean>;
+  plan: PlanMemoireType;
+  variables: Variables;
+}
+
+/** Indicateurs, plan et variables d'un marché, en une fois. */
+export function preparerMemoireType(ctx: ContexteMarche, options: OptionsPlan & { memoireType?: MemoireType } = {}): MemoirePrepare {
+  const mt = options.memoireType || chargerMemoireType();
+  const etatsIndicateurs = evaluerIndicateurs(mt, ctx);
+  const indicateurs = valeursIndicateurs(etatsIndicateurs);
+  const plan = planMemoireType(mt, indicateurs, { ...options, secteurClient: options.secteurClient ?? valeurPropre(ctx.analyse?.clientSector) });
+  const variables = variablesDuMarche(mt, ctx, indicateurs, plan);
+  return { mt, etatsIndicateurs, indicateurs, plan, variables };
+}
+
+/** Publie toutes les rubriques retenues, dans l'ordre du plan. */
+export function publierMemoire(prep: MemoirePrepare, options: { marquerConsultations?: boolean } = {}): RubriquePubliee[] {
+  return prep.plan.rubriques.map((rp) => {
+    const r = prep.mt.rubriques.find((x) => x.id === rp.id)!;
+    return publierRubrique(prep.mt, r, prep.variables, prep.indicateurs, rp.cle, options);
+  });
+}
+
+/** Données du DCE pour la rédaction de la rubrique « besoin » (compréhension), calculées sans modèle. */
+export interface DonneesBesoin {
+  /** Acheteur avec son article (« le Centre Henri Becquerel »), ou « votre établissement ». */
+  client: string;
+  objet: string;
+  lots: string;
+  duree: string;
+  sites: string[];
+  villes: string[];
+  secteur: string;
+  /** Horaires imposés par le CCTP (phrases citées). */
+  horaires: string[];
+  /** Obligations chiffrées du CCTP (phrases citées). */
+  obligations: string[];
+  qualifications: string[];
+  enjeux: string[];
+  /** Prestations prévues au marché, d'après les indicateurs. */
+  prestations: string[];
+  horsNormandie: boolean;
+  /** Première phrase du contexte, publipostée. */
+  amorce: string;
+}
+
+export function donneesBesoin(prep: MemoirePrepare, ctx: ContexteMarche): DonneesBesoin {
+  const v = prep.variables;
+  const texte = (n: string) => (variableRenseignee(v[n]) ? valeurAffichee(n, v[n], prep.mt.variables[n]) : '');
+  const liste = (n: string) => (Array.isArray(v[n]?.valeur) ? (v[n].valeur as string[]).filter(Boolean) : texte(n) ? [texte(n)] : []);
+  const ind = prep.indicateurs;
+  const prestations = [
+    ind.RONDES && 'rondes', ind.VACATIONS_NUIT && 'vacations de nuit', ind.AGENT_ISOLE && 'travail isolé (PTI)',
+    ind.TELESURVEILLANCE && 'télésurveillance et interventions sur alarme', ind.FILTRAGE && 'filtrage et contrôle des accès',
+    ind.PRESTATIONS_PONCTUELLES && 'prestations ponctuelles sur bon de commande', ind.EVENEMENTIEL && 'événementiel',
+    ind.REPRISE_PERSONNEL && 'reprise du personnel en place',
+  ].filter((x): x is string => !!x);
+  const b1 = prep.mt.rubriques.find((r) => r.mode === 'besoin');
+  const trame = b1?.specification?.sous_parties?.[0]?.trame_publipostage;
+  const art = v.CLIENT?.article || '';
+  const nomClient = variableRenseignee(v.CLIENT) ? texte('CLIENT') : '';
+  const client = nomClient ? (art ? (art.endsWith("'") ? `${art}${nomClient}` : `${art} ${nomClient}`) : nomClient) : (prep.mt.variables.CLIENT?.repli || '');
+  return {
+    client,
+    objet: texte('OBJET_MARCHE'), lots: texte('LOTS'), duree: texte('DUREE_MARCHE'), sites: liste('SITE'), villes: liste('VILLE'),
+    secteur: texte('SECTEUR_CLIENT'),
+    horaires: horairesImposes(ctx.dce || '', 15),
+    obligations: obligationsChiffrees(ctx.dce || '').slice(0, 25).map((o) => o.phrase),
+    qualifications: liste('QUALIFICATIONS_REQUISES'),
+    enjeux: (Array.isArray(ctx.analyse?.keyRisks) ? ctx.analyse.keyRisks : []).map((x: unknown) => valeurPropre(x)).filter(Boolean).slice(0, 5),
+    prestations,
+    horsNormandie: !!ind.HORS_NORMANDIE,
+    amorce: trame ? publiposter(trame, v, { definitions: prep.mt.variables, indicateurs: ind }).texte : '',
+  };
+}
+
+/** Questions à GSS issues du publipostage (valeurs manquantes, puis valeurs à confirmer), sans doublon. */
+export function questionsDuPubliposte(rubriques: RubriquePubliee[]): string[] {
+  const vues = new Set<string>();
+  const out: string[] = [];
+  for (const r of rubriques) {
+    for (const q of [...r.manquantes.map((x) => x.question), ...r.aConfirmer.map((x) => x.question)]) {
+      for (const morceau of q.split('\n')) {
+        const k = normaliser(morceau);
+        if (morceau && !vues.has(k)) { vues.add(k); out.push(morceau); }
+      }
+    }
+  }
+  return out;
+}
+
+
+// ─── Exigences, recherche de rubriques, correspondance v1 ────────────────────────────────────────
+
+/** Copie de PIECES_OFFRE (memoire_generator.ts) : exigence sur la composition de l'offre, pas sur la prestation. */
+const PIECES_OFFRE = /acte d.engagement|bordereau de prix|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?/i;
+
+/** Score lexical d'une rubrique pour un texte (mots-clés et titre). */
+function scoreRubrique(r: RubriqueMemoireType, texte: string): number {
+  const net = (x: string) => normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const t = ` ${net(texte)} `;
+  let s = 0;
+  for (const mot of r.mots_cles) {
+    const k = net(mot);
+    if (k && t.includes(` ${k}`)) s += k.includes(' ') ? 2 : 1;
+  }
+  const titre = net(r.titre).split(' ').filter((w) => w.length >= 6);
+  for (const w of titre) if (t.includes(` ${w}`)) s += 0.5;
+  return s;
+}
+
+/** Rubriques du mémoire type les plus proches d'une question ou d'une exigence (recherche lexicale). */
+export function rechercherRubriques(mt: MemoireType, texte: string, n = 2, parmi?: string[]): Array<{ id: string; score: number }> {
+  return mt.rubriques.filter((r) => r.mode !== 'besoin' && (!parmi || parmi.includes(r.id)))
+    .map((r) => ({ id: r.id, score: scoreRubrique(r, texte) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n);
+}
+
+/**
+ * Rattache les exigences de la matrice aux rubriques du plan : rubrique du plan citée ; ancienne rubrique (b_*) →
+ * rubrique correspondante la plus proche ; sinon recherche lexicale (score ≥ 2). Le reste forme les questions
+ * nouvelles (propositions de réponse à faire valider par GSS) ; les pièces de l'offre sont ignorées.
+ */
+export function exigencesParRubrique(mt: MemoireType, plan: PlanMemoireType, matrice: ExigenceMatrice[]): { parRubrique: Record<string, ExigenceMatrice[]>; nouvelles: ExigenceMatrice[] } {
+  const ids = plan.rubriques.map((r) => r.id);
+  const parRubrique: Record<string, ExigenceMatrice[]> = {};
+  const nouvelles: ExigenceMatrice[] = [];
+  const ajouter = (id: string, e: ExigenceMatrice) => { (parRubrique[id] ||= []).push(e); };
+  for (const e of matrice || []) {
+    if (!e?.exigence || PIECES_OFFRE.test(e.exigence)) continue;
+    if (e.rubrique && ids.includes(e.rubrique)) { ajouter(e.rubrique, e); continue; }
+    const candidates = e.rubrique && mt.correspondance_v1[e.rubrique] ? mt.correspondance_v1[e.rubrique].filter((x) => ids.includes(x)) : [];
+    if (candidates.length) {
+      const meilleur = rechercherRubriques(mt, e.exigence, 1, candidates)[0];
+      ajouter(meilleur?.id || candidates[0], e);
+      continue;
+    }
+    const proche = rechercherRubriques(mt, `${e.sujet || ''} ${e.exigence}`, 1, ids)[0];
+    if (proche && proche.score >= 2 && e.rubrique !== 'nouvelle') ajouter(proche.id, e);
+    else nouvelles.push(e);
+  }
+  return { parRubrique, nouvelles };
+}
+
+/**
+ * Obligations chiffrées et horaires imposés du CCTP (phrases citées mot pour mot, base_memoires.ts) qui concernent
+ * une rubrique (mots-clés de la rubrique) : à transmettre à l'adaptation de la rubrique.
+ */
+export function obligationsPourRubrique(rubrique: RubriqueMemoireType, dce: string, max = 8): string[] {
+  const cles = rubrique.mots_cles.map((m) => normaliser(m)).filter((m) => m.length >= 4);
+  const pertinente = (ph: string) => { const t = normaliser(ph); return cles.some((k) => t.includes(k)); };
+  const vues = new Set<string>();
+  const out: string[] = [];
+  for (const ph of [...obligationsChiffrees(dce).map((o) => o.phrase), ...horairesImposes(dce)]) {
+    const k = normaliser(ph);
+    if (vues.has(k) || !pertinente(ph)) continue;
+    vues.add(k);
+    out.push(ph);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/** Rubriques du plan pour la matrice des exigences (analyzeRequirements), au format { id, title }. */
+export function rubriquesPourMatrice(plan: PlanMemoireType): Array<{ id: string; title: string }> {
+  return plan.rubriques.map((r) => ({ id: r.id, title: r.titre }));
+}
+
+/** Thèmes de la matrice (I, II…) d'après les blocs du plan : « I=Notre compréhension… ; II=Présentation de GSS… ». */
+export function themesPourMatrice(plan: PlanMemoireType): string {
+  return plan.blocs.map((b) => `${b.cle}=${b.titre}`).join(' ; ');
+}
+
+/** Rubriques au format de SECTIONS_REPONSE_LIBRE ({ id, chapter, title }) pour l'assistant et le rendu. */
+export function sectionsPourAssistant(plan: PlanMemoireType): Array<{ id: string; chapter: string; title: string }> {
+  return plan.rubriques.map((r) => ({ id: r.id, chapter: r.cle, title: r.titre }));
+}
+
+/** Chapitres au format de CHAPITRES_REPONSE_LIBRE ({ I: titre, … }). */
+export function chapitresPourAssistant(plan: PlanMemoireType): Record<string, string> {
+  return Object.fromEntries(plan.blocs.map((b) => [b.cle, b.titre]));
+}
+
+/** Ancienne rubrique (AI_SECTIONS_B) principale d'une rubrique du mémoire type (états v1, schémas de secours). */
+export function rubriqueV1(mt: MemoireType, id: string): string | null {
+  return mt.rubriques.find((r) => r.id === id)?.ancienne_rubrique ?? null;
+}
+
+/** Rubriques du mémoire type qui reprennent une ancienne rubrique (b_*), limitées au plan s'il est fourni. */
+export function rubriquesDeV1(mt: MemoireType, ancien: string, plan?: PlanMemoireType): string[] {
+  const l = mt.correspondance_v1[ancien] || [];
+  return plan ? l.filter((id) => plan.rubriques.some((r) => r.id === id)) : [...l];
+}
+
+/** Vrai si un état de complétion porte un plan v2 (libre.plan), sinon l'état suit le plan v1. */
+export function estPlanV2(plan: unknown): plan is PlanMemoireType {
+  return !!plan && typeof plan === 'object' && (plan as any).version === 2 && Array.isArray((plan as any).rubriques);
+}
+
+// ─── Adaptation ciblée au CCTP (rubriques « adapte ») ────────────────────────────────────────────
+
+export interface ModificationsProposees {
+  remplacements?: Array<{ extrait: string; par: string; motif?: string }>;
+  retraits?: Array<{ extrait: string; motif?: string }>;
+  ajouts?: Array<{ apres?: string; texte: string; motif?: string }>;
+}
+
+export interface ModificationTraitee {
+  type: 'remplacement' | 'retrait' | 'ajout';
+  extrait: string;
+  par?: string;
+  motif?: string;
+  raison?: string;
+}
+
+export interface OptionsModifications {
+  /** Texte du DCE : tout chiffre nouveau doit y figurer. */
+  dce?: string;
+  /** Texte de référence (publiposté) : les noms propres qu'il contient sont admis. */
+  reference?: string;
+  /** Chiffres admis en plus de ceux du DCE (ex. registre en Normandie). */
+  nombresAutorises?: string[];
+  /** Noms propres admis en plus de ceux du DCE et de la référence (organigramme…). */
+  nomsAutorises?: string[];
+  maxModifications?: number;
+  maxAjouts?: number;
+  motsParAjout?: number;
+}
+
+/** Repère un extrait mot pour mot (espaces et apostrophes tolérés). Renvoie toutes les positions. */
+function positionsExtrait(texte: string, extrait: string): Array<{ debut: number; fin: number }> {
+  const e = String(extrait || '').trim();
+  if (e.length < 3) return [];
+  const motif = e.split(/\s+/).map((w) => echapper(w).replace(/['’]/g, "['’]")).join('\\s+');
+  const rx = new RegExp(motif, 'g');
+  return [...texte.matchAll(rx)].map((m) => ({ debut: m.index || 0, fin: (m.index || 0) + m[0].length }));
+}
+
+/** Nombres d'un texte (chiffres, et nombres en lettres courants). */
+function nombresDe(t: string): string[] {
+  const out = (String(t || '').match(/\d+(?:[.,]\d+)?/g) || []).map((x) => x.replace(',', '.').replace(/^0+(?=\d)/, ''));
+  for (const m of normaliser(t).matchAll(/(?<![a-z])(une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|douze|quinze|vingt|trente|quarante-cinq|quarante|cinquante|soixante)(?![a-z])/g)) {
+    out.push(String(NOMBRES_LETTRES[m[1]]));
+  }
+  return out;
+}
+
+const INTERDITS_ADAPTATION: Array<[RegExp, string]> = [
+  [/covid|pass(?:es)? sanitaires?|gestes? barri|hydroalcool/i, 'Covid'],
+  [/(?:v[ée]rifi|contr[ôo]l)\w*\s+(?:de\s+|son\s+|leur\s+|les\s+)?(?:l['’])?(?:pi[èe]ces?\s+d['’])?identit/i, "contrôle d'identité"],
+  [/certifi[ée]e?s?\s+ISO|ISO\s?9001\s+(?:obtenue|acquise)/i, 'ISO présentée comme acquise'],
+  [/p[ôo]le emploi/i, 'Pôle emploi'],
+  [/vigicom/i, 'Vigicom'],
+  [/OTMANI|MEROUANI|MENDES|HANZAZ|FE Lilian/, 'nom obsolète'],
+  [/sous-trait/i, 'sous-traitance'],
+  [/\[CONSULTATION REQUISE|⟦|\{\{|\}\}/, 'marqueur interne'],
+  [/p[ée]nalit[ée]s?[^.;\n]{0,120}?\d[\d\s]*(?:,\d+)?\s*(?:€|euros?)/i, 'montant de pénalité'],
+];
+
+/** Motif de refus d'un texte proposé par le modèle (ou null s'il est acceptable). */
+function refusTexteNouveau(nouveau: string, ancien: string, o: OptionsModifications): string | null {
+  for (const [rx, motif] of INTERDITS_ADAPTATION) if (rx.test(nouveau) && !rx.test(ancien) && !(motif === 'Covid' && rx.test(o.dce || ''))) return motif;
+  if (/L\.?\s?1224/.test(nouveau) && !/L\.?\s?1224/.test(o.dce || '')) return 'article L. 1224-1 absent du DCE';
+  if (retirerCommentairesInternes(nouveau).retires.length) return 'commentaire interne';
+  const admis = new Set([...nombresDe(ancien), ...nombresDe(o.dce || ''), ...(o.nombresAutorises || []).flatMap(nombresDe)]);
+  const inconnus = nombresDe(nouveau).filter((n) => !admis.has(n));
+  if (inconnus.length) return `chiffre absent du DCE (${[...new Set(inconnus)].join(', ')})`;
+  const sources = normaliser(`${o.dce || ''} ${o.reference || ''} ${ancien} ${(o.nomsAutorises || []).join(' ')}`);
+  // Noms propres : mots à majuscule hors début de phrase (ou après M., Mme…), et sigles.
+  const noms: string[] = [];
+  for (const m of nouveau.matchAll(/[A-ZÀ-Ý][\wÀ-ÿ'’-]{2,}/g)) {
+    const avant = nouveau.slice(0, m.index).replace(/\s+$/, '');
+    const titreCivilite = /(?:^|[\s(])(?:M|Mme|Mlle|Mr|Dr)\.?$/.test(avant);
+    const debutPhrase = !titreCivilite && (avant === '' || /[.!?«(\n*•-]$/.test(avant));
+    if (!debutPhrase || /^[A-ZÀ-Ý0-9]{3,}$/.test(m[0])) noms.push(m[0]);
+  }
+  const inventes = noms.filter((n) => !sources.includes(normaliser(n)));
+  if (inventes.length) return `nom absent du DCE (${[...new Set(inventes)].join(', ')})`;
+  return null;
+}
+
+/**
+ * Applique les modifications proposées : un remplacement ou un retrait n'est appliqué que si l'extrait figure mot
+ * pour mot (une seule fois) dans le texte ; au plus `maxModifications` modifications et `maxAjouts` ajouts de
+ * `motsParAjout` mots ; tout texte nouveau est contrôlé (chiffres du DCE, noms connus, interdits GSS).
+ */
+export function appliquerModifications(texte: string, mods: ModificationsProposees, options: OptionsModifications = {}): { texte: string; appliquees: ModificationTraitee[]; refusees: ModificationTraitee[] } {
+  const o = { maxModifications: 12, maxAjouts: 3, motsParAjout: 60, ...options };
+  const appliquees: ModificationTraitee[] = [];
+  const refusees: ModificationTraitee[] = [];
+  let t = texte;
+  const plafond = () => appliquees.length >= o.maxModifications;
+  for (const r of mods.remplacements || []) {
+    const m: ModificationTraitee = { type: 'remplacement', extrait: String(r?.extrait || ''), par: String(r?.par ?? ''), motif: r?.motif };
+    if (plafond()) { refusees.push({ ...m, raison: 'plafond de modifications atteint' }); continue; }
+    const pos = positionsExtrait(t, m.extrait);
+    if (pos.length !== 1) { refusees.push({ ...m, raison: pos.length ? 'extrait ambigu (plusieurs occurrences)' : 'extrait introuvable mot pour mot' }); continue; }
+    if (!m.par!.trim()) { refusees.push({ ...m, raison: 'remplacement vide (utiliser un retrait)' }); continue; }
+    const refus = refusTexteNouveau(m.par!, m.extrait, o);
+    if (refus) { refusees.push({ ...m, raison: refus }); continue; }
+    t = t.slice(0, pos[0].debut) + m.par + t.slice(pos[0].fin);
+    appliquees.push(m);
+  }
+  for (const r of mods.retraits || []) {
+    const m: ModificationTraitee = { type: 'retrait', extrait: String(r?.extrait || ''), motif: r?.motif };
+    if (plafond()) { refusees.push({ ...m, raison: 'plafond de modifications atteint' }); continue; }
+    const pos = positionsExtrait(t, m.extrait);
+    if (pos.length !== 1) { refusees.push({ ...m, raison: pos.length ? 'extrait ambigu (plusieurs occurrences)' : 'extrait introuvable mot pour mot' }); continue; }
+    if (/\[À COMPLÉTER\]/.test(m.extrait)) { refusees.push({ ...m, raison: 'un repère à compléter ne se retire pas' }); continue; }
+    t = t.slice(0, pos[0].debut) + t.slice(pos[0].fin);
+    appliquees.push(m);
+  }
+  let nAjouts = 0;
+  for (const a of mods.ajouts || []) {
+    const m: ModificationTraitee = { type: 'ajout', extrait: String(a?.apres || ''), par: String(a?.texte || '').trim(), motif: a?.motif };
+    if (plafond()) { refusees.push({ ...m, raison: 'plafond de modifications atteint' }); continue; }
+    if (nAjouts >= o.maxAjouts) { refusees.push({ ...m, raison: `plus de ${o.maxAjouts} ajouts` }); continue; }
+    if (!m.par || compterMots(m.par) > o.motsParAjout) { refusees.push({ ...m, raison: `ajout vide ou de plus de ${o.motsParAjout} mots` }); continue; }
+    const refus = refusTexteNouveau(m.par, '', o);
+    if (refus) { refusees.push({ ...m, raison: refus }); continue; }
+    if (m.extrait) {
+      const pos = positionsExtrait(t, m.extrait);
+      if (pos.length !== 1) { refusees.push({ ...m, raison: pos.length ? 'point d\'insertion ambigu' : 'point d\'insertion introuvable mot pour mot' }); continue; }
+      // Insertion à la fin de la phrase (ou de la ligne) qui contient l'extrait.
+      const suite = t.slice(pos[0].fin);
+      const fin = /[.!?](?=\s|$)|\n/.exec(suite);
+      const coupe = pos[0].fin + (fin ? fin.index + (fin[0] === '\n' ? 0 : 1) : suite.length);
+      t = `${t.slice(0, coupe)} ${m.par}${t.slice(coupe)}`;
+    } else {
+      t = `${t.trimEnd()}\n\n${m.par}`;
+    }
+    nAjouts++;
+    appliquees.push(m);
+  }
+  return { texte: nettoyerPubliposte(t), appliquees, refusees };
+}
+
+/** Phrases (et lignes de liste ou de tableau) d'un texte, normalisées, avec leurs mots. */
+function phrasesNormalisees(t: string): string[][] {
+  return String(t || '').replace(/\*\*|__|#+\s|⟦AC:\d+⟧/g, ' ').split(/\n+|(?<=[.!?;:])\s+/)
+    .map((p) => normaliser(p).replace(/^[-*•|\d.)\s]+/, '').replace(/[^a-z0-9'\s]+/g, ' ').split(/\s+/).filter(Boolean))
+    .filter((mots) => mots.length >= 3);
+}
+
+/** Similarité de deux suites de mots (1 − distance d'édition / longueur maximale). */
+function similarite(a: string[], b: string[]): number {
+  if (!a.length || !b.length) return 0;
+  let prec = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cour = [i];
+    for (let j = 1; j <= b.length; j++) cour[j] = Math.min(prec[j] + 1, cour[j - 1] + 1, prec[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prec = cour;
+  }
+  return 1 - prec[b.length] / Math.max(a.length, b.length);
+}
+
+/**
+ * Fidélité d'un texte au texte de référence : part (pondérée par le nombre de mots) des phrases de référence
+ * conservées, une phrase étant conservée si une phrase du texte lui ressemble à 80 % au moins (un chiffre ou un nom
+ * changé la conserve ; une phrase retirée ou réécrite ne l'est plus). Les ajouts ne changent pas la fidélité.
+ */
+export function fidelite(reference: string, texte: string, seuilPhrase = 0.8): number {
+  const ref = phrasesNormalisees(reference);
+  if (!ref.length) return 1;
+  const cand = phrasesNormalisees(texte);
+  let conserve = 0;
+  let total = 0;
+  for (const p of ref) {
+    total += p.length;
+    const jeu = new Set(p);
+    let meilleur = 0;
+    for (const c of cand) {
+      let communs = 0;
+      for (const w of c) if (jeu.has(w)) communs++;
+      if (communs / Math.max(p.length, c.length) < seuilPhrase * 0.6) continue;
+      meilleur = Math.max(meilleur, similarite(p, c));
+      if (meilleur >= 0.999) break;
+    }
+    if (meilleur >= seuilPhrase) conserve += p.length;
+  }
+  return total ? conserve / total : 1;
+}
+
+/** Fonction d'appel au modèle fournie par le générateur (renvoie le texte JSON de la réponse). */
+export type AppelModele = (messages: Array<{ role: 'system' | 'user'; content: string }>, libelle: string) => Promise<string>;
+
+export interface ContexteAdaptation {
+  client?: string;
+  /** Exigences de la matrice rattachées à la rubrique. */
+  exigences?: ExigenceMatrice[];
+  /** Obligations chiffrées et horaires imposés du CCTP qui concernent la rubrique (phrases citées). */
+  obligations?: string[];
+  perimetre?: string;
+  /** Analyse du DCE résumée (client, objet, sites, lots, durée…). */
+  analyseCompacte?: string;
+  /** Registre GSS (blocRegistre) et organigramme de référence. */
+  registre?: string;
+  /** Demande particulière de GSS pour cette rubrique. */
+  demande?: string;
+  dce?: string;
+  horsNormandie?: boolean;
+}
+
+export interface OptionsAdaptation extends Omit<OptionsModifications, 'dce' | 'reference'> {
+  /** Fidélité minimale au texte de référence (0,75 par défaut). */
+  seuilFidelite?: number;
+  /** « progressif » (défaut) : les modifications qui feraient passer sous le seuil sont refusées une à une ;
+   *  « reference » : sous le seuil, la rubrique revient entièrement au texte de référence. */
+  repli?: 'progressif' | 'reference';
+}
+
+export interface ResultatAdaptation {
+  id: string;
+  texte: string;
+  fidelite: number;
+  /** Vrai si la rubrique est revenue au texte de référence (modèle indisponible, réponse illisible, fidélité). */
+  repli: boolean;
+  raison?: string;
+  appliquees: ModificationTraitee[];
+  refusees: ModificationTraitee[];
+}
+
+const CONSIGNE_ADAPTATION = `Tu adaptes UNE rubrique du mémoire technique de GSS (Global Security Services, sécurité privée, Rouen) au cahier des charges d'un appel d'offres.
+Le texte de la rubrique est le texte de référence de GSS, déjà personnalisé (nom du client, chiffres du registre). Il doit rester celui de GSS : « si c'est toujours le même process, on remet la même réponse ».
+Tu ne réécris RIEN. Tu proposes seulement des modifications ciblées, chacune sur un extrait recopié MOT POUR MOT du texte :
+1. remplacements : un nom (site, bâtiment, service, fonction) écrit autrement dans le DCE ; un chiffre, un délai, une fréquence ou un horaire que le DCE impose et qui diffère du texte (le chiffre du DCE remplace celui de GSS : jamais les deux) ;
+2. retraits : un passage hors du périmètre du marché ou contraire au DCE (poste, matériel, prestation que le CCTP ne prévoit pas ou interdit) ;
+3. ajouts (3 au plus, 60 mots chacun au plus) : une phrase pour une exigence du DCE propre à cette rubrique que le texte ne couvre pas, écrite avec les mots du DCE.
+INTERDITS : inventer un chiffre, un nom, un moyen ou un engagement absent du DCE et du texte ; promettre un délai d'intervention hors Normandie que le DCE n'impose pas ; citer l'article L. 1224-1 si le DCE ne le cite pas ; parler de Covid ; écrire qu'un agent contrôle l'identité (il invite à justifier sa présence) ; présenter l'ISO 9001 comme obtenue (elle est en cours, prévue fin 2026) ; évoquer la sous-traitance ; écrire un commentaire interne (« non précisé », « à confirmer », « selon la documentation »…) ; citer un montant de pénalité. Une donnée propre au marché inconnue de GSS s'écrit « [À COMPLÉTER] ».
+Si aucune modification n'est nécessaire, renvoie des listes vides.
+Réponds UNIQUEMENT par un objet JSON : {"remplacements":[{"extrait":"…","par":"…","motif":"…"}],"retraits":[{"extrait":"…","motif":"…"}],"ajouts":[{"apres":"extrait exact après lequel insérer","texte":"…","motif":"…"}]}`;
+
+/** Messages de la demande d'adaptation (préfixe commun en premier, pour le cache des prompts). */
+export function consigneAdaptation(rubrique: RubriqueMemoireType, texte: string, ctx: ContexteAdaptation): Array<{ role: 'system' | 'user'; content: string }> {
+  const commun = [
+    ctx.analyseCompacte ? `ANALYSE DU MARCHÉ :\n${ctx.analyseCompacte}` : '',
+    ctx.perimetre ? `PÉRIMÈTRE RÉEL DU MARCHÉ (d'après le CCTP) :\n${ctx.perimetre}` : '',
+    ctx.registre ? `INFORMATIONS GSS :\n${ctx.registre}` : '',
+    ctx.horsNormandie ? "MARCHÉ HORS DE NORMANDIE : aucun délai d'intervention, d'astreinte ou de remplacement chiffré, sauf s'il est imposé par le DCE." : '',
+  ].filter(Boolean).join('\n\n');
+  const exigences = (ctx.exigences || []).map((e) => `- ${e.exigence}${e.criticite ? ` [${e.criticite}]` : ''}`).join('\n');
+  const obligations = (ctx.obligations || []).map((o) => `- « ${o} »`).join('\n');
+  const propre = [
+    `RUBRIQUE : ${rubrique.titre}`,
+    ctx.client ? `CLIENT : ${ctx.client}` : '',
+    exigences ? `EXIGENCES DU DCE RATTACHÉES À CETTE RUBRIQUE :\n${exigences}` : 'EXIGENCES DU DCE RATTACHÉES À CETTE RUBRIQUE : aucune.',
+    obligations ? `OBLIGATIONS CHIFFRÉES ET HORAIRES DU CCTP (cités mot pour mot) :\n${obligations}` : '',
+    ctx.demande ? `DEMANDE PARTICULIÈRE DE GSS POUR CETTE RUBRIQUE : ${ctx.demande}` : '',
+    `TEXTE DE LA RUBRIQUE (référence GSS) :\n<<<\n${texte}\n>>>`,
+  ].filter(Boolean).join('\n\n');
+  return [
+    { role: 'system', content: CONSIGNE_ADAPTATION },
+    { role: 'user', content: `${commun ? `${commun}\n\n` : ''}${propre}` },
+  ];
+}
+
+/** Lecture tolérante d'une réponse JSON (bloc de code, texte autour). */
+export function lireJson(reponse: string): any {
+  const t = String(reponse || '').replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, '').trim();
+  try { return JSON.parse(t); } catch { /* suite */ }
+  const debut = t.indexOf('{');
+  const fin = t.lastIndexOf('}');
+  if (debut >= 0 && fin > debut) {
+    try { return JSON.parse(t.slice(debut, fin + 1)); } catch { /* illisible */ }
+  }
+  return null;
+}
+
+/**
+ * Adapte une rubrique « adapte » au CCTP : un appel au modèle (fonction reçue en paramètre) propose des
+ * modifications ciblées, appliquées seulement sur des extraits exacts et contrôlées ; la fidélité au texte de
+ * référence doit rester au-dessus du seuil (0,75), sinon les modifications sont refusées (repli progressif) ou la
+ * rubrique revient à la référence. Une rubrique « fixe » ou « besoin » est rendue telle quelle, sans appel.
+ */
+export async function adapterRubrique(rubrique: RubriqueMemoireType, textePubliposte: string, ctx: ContexteAdaptation, appelModele: AppelModele, options: OptionsAdaptation = {}): Promise<ResultatAdaptation> {
+  const seuil = options.seuilFidelite ?? 0.75;
+  const reference = textePubliposte;
+  const sortie = (texte: string, repli: boolean, raison?: string, appliquees: ModificationTraitee[] = [], refusees: ModificationTraitee[] = []): ResultatAdaptation =>
+    ({ id: rubrique.id, texte, fidelite: fidelite(reference, texte), repli, raison, appliquees, refusees });
+  if (rubrique.mode !== 'adapte') return sortie(reference, false, `rubrique « ${rubrique.mode} » : pas d'adaptation`);
+  let mods: ModificationsProposees | null = null;
+  try {
+    mods = lireJson(await appelModele(consigneAdaptation(rubrique, reference, ctx), `Adaptation ${rubrique.id}`));
+  } catch (e: any) {
+    return sortie(reference, true, `appel au modèle impossible : ${e?.message || e}`);
+  }
+  if (!mods || typeof mods !== 'object') return sortie(reference, true, 'réponse du modèle illisible');
+  const opts: OptionsModifications = { ...options, dce: ctx.dce, reference };
+  const tout = appliquerModifications(reference, mods, opts);
+  if (fidelite(reference, tout.texte) >= seuil) return sortie(tout.texte, false, undefined, tout.appliquees, tout.refusees);
+  if (options.repli === 'reference') {
+    return sortie(reference, true, `fidélité ${fidelite(reference, tout.texte).toFixed(2)} < ${seuil}`, [], [...tout.appliquees, ...tout.refusees].map((m) => ({ ...m, raison: m.raison || 'fidélité insuffisante' })));
+  }
+  // Repli progressif : les modifications acceptées une à une tant que la fidélité reste au-dessus du seuil.
+  let texte = reference;
+  const appliquees: ModificationTraitee[] = [];
+  const refusees: ModificationTraitee[] = [...tout.refusees];
+  for (const m of tout.appliquees) {
+    const une: ModificationsProposees = m.type === 'remplacement' ? { remplacements: [{ extrait: m.extrait, par: m.par || '', motif: m.motif }] }
+      : m.type === 'retrait' ? { retraits: [{ extrait: m.extrait, motif: m.motif }] }
+        : { ajouts: [{ apres: m.extrait, texte: m.par || '', motif: m.motif }] };
+    const essai = appliquerModifications(texte, une, { ...opts, maxModifications: 1 });
+    if (essai.appliquees.length && fidelite(reference, essai.texte) >= seuil) {
+      texte = essai.texte;
+      appliquees.push(m);
+    } else refusees.push({ ...m, raison: essai.refusees[0]?.raison || 'fidélité au texte de référence insuffisante' });
+  }
+  return sortie(texte, appliquees.length === 0, appliquees.length ? undefined : 'aucune modification compatible avec la fidélité', appliquees, refusees);
+}
+
+// ─── Valeurs imposées par le CCTP (un appel, vérifié) ────────────────────────────────────────────
+
+/**
+ * Délais et fréquences imposés par le CCTP qui remplacent les valeurs de GSS dans tout le mémoire (cohérence
+ * entre rubriques : jamais deux chiffres). Le modèle propose une valeur et la phrase exacte du DCE ; une proposition
+ * n'est retenue que si la citation figure dans le DCE et contient chacun des chiffres de la valeur.
+ */
+export async function extraireValeursImposees(mt: MemoireType, dce: string, variables: Variables, appelModele: AppelModele): Promise<{ imposees: Record<string, { valeur: string; citation: string }>; refusees: Array<{ variable: string; raison: string }> }> {
+  const cibles = VARIABLES_IMPOSABLES.filter((n) => mt.variables[n]);
+  const lignes = cibles.map((n) => {
+    const def = mt.variables[n];
+    const v = variables[n];
+    return `- ${n} : ${def.description} (valeur actuelle de GSS : ${variableRenseignee(v) ? valeurAffichee(n, v!, def) : 'aucune'})`;
+  }).join('\n');
+  const messages: Array<{ role: 'system' | 'user'; content: string }> = [
+    {
+      role: 'system',
+      content: `Tu lis le DCE d'un marché de sécurité privée (CCTP en priorité). Pour chaque variable listée, indique la valeur que le DCE IMPOSE explicitement (délai, fréquence, échéance), écrite comme la valeur de GSS (ex. « 30 minutes », « 1 heure », « une fois par mois », « J-7 », « tous les deux mois »), avec la phrase exacte du DCE qui l'impose. N'invente rien : si le DCE n'impose rien pour une variable, ne la cite pas.
+Réponds UNIQUEMENT par un objet JSON : {"valeurs":[{"variable":"NOM","valeur":"…","citation":"phrase exacte du DCE"}]}`,
+    },
+    { role: 'user', content: `VARIABLES :\n${lignes}\n\nDCE :\n${String(dce || '').slice(0, 110_000)}` },
+  ];
+  const imposees: Record<string, { valeur: string; citation: string }> = {};
+  const refusees: Array<{ variable: string; raison: string }> = [];
+  let rep: any = null;
+  try { rep = lireJson(await appelModele(messages, 'Valeurs imposées par le CCTP')); } catch (e: any) {
+    return { imposees, refusees: [{ variable: '*', raison: `appel au modèle impossible : ${e?.message || e}` }] };
+  }
+  const dceNorm = normaliser(dce).replace(/[^a-z0-9']+/g, ' ');
+  for (const x of Array.isArray(rep?.valeurs) ? rep.valeurs : []) {
+    const nom = String(x?.variable || '');
+    const valeur = valeurPropre(x?.valeur);
+    const citation = String(x?.citation || '').trim();
+    if (!cibles.includes(nom)) { refusees.push({ variable: nom, raison: 'variable non imposable' }); continue; }
+    if (!valeur || !citation) { refusees.push({ variable: nom, raison: 'valeur ou citation absente' }); continue; }
+    if (!dceNorm.includes(normaliser(citation).replace(/[^a-z0-9']+/g, ' ').trim())) { refusees.push({ variable: nom, raison: 'citation introuvable dans le DCE' }); continue; }
+    const nombresCitation = new Set(nombresDe(citation));
+    const etrangers = nombresDe(valeur).filter((n) => !nombresCitation.has(n));
+    if (etrangers.length) { refusees.push({ variable: nom, raison: `chiffre absent de la citation (${etrangers.join(', ')})` }); continue; }
+    imposees[nom] = { valeur, citation };
+  }
+  return { imposees, refusees };
+}
