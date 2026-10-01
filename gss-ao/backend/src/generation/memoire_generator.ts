@@ -2,7 +2,7 @@ import { MarpGenerator, AssembleChapter, AssembleSection } from './marp_generato
 import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema, dessinerSpecs, finaliserSvg } from './schema_service';
-import { insererSchemasReponses, choisir as choisirSchemasGss } from './visuels_cadre';
+import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce } from './visuels_cadre';
 import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque } from './themes';
@@ -4355,6 +4355,19 @@ INTERDITS : recopier la valeur d'une AUTRE colonne/site ; inventer une donnée f
       // (EFFECTIFS MOYENS.pdf). On EXCLUT les variantes par département / par site / dédiées au
       // marché (inconnues → [À COMPLÉTER]), pour ne pas y coller le total entreprise.
       const nqEff = normCtx(fieldAsk);
+      // Champ de VALEUR « Effectif … (transmis pour information) : …… » (même en zone de plusieurs lignes) : la seule
+      // valeur publipostée du mémoire type (b2_identite : {{EFFECTIF_TOTAL}} salariés, dont {{EFFECTIF_76}} en
+      // Seine-Maritime et {{EFFECTIF_27}} dans l'Eure), sans rédaction du modèle.
+      if (/effectif/.test(nqEff) && champValeur(fieldAsk) && !/(dedie|au marche|affecte|par poste|\bsite\b|\betp\b)/.test(nqEff)) {
+        const cleEff = /(\b76\b|seine.maritime)/.test(nqEff) ? 'effectif_departement_76'
+          : /(\b27\b|\beure\b)/.test(nqEff) ? 'effectif_departement_27'
+            : /(total|entreprise|france|national)/.test(nqEff) && !/departement/.test(nqEff) ? 'effectif_total' : '';
+        if (cleEff) {
+          const n = (/\d+/.exec(valeurRegistre(cleEff)) || [''])[0];
+          replacements.push({ id: f.id, value: n ? `${n} salariés` : '[À COMPLÉTER]' });
+          return;
+        }
+      }
       if (!isParagraph && effectifTotal) {
         const isTotalFrance = /effectif/.test(nqEff) && /total/.test(nqEff)
           && /(entreprise|france|national)/.test(nqEff)
@@ -5191,7 +5204,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       const texteChamp = (id: number) => String(replacements.find((r) => r.id === id)?.value ?? '');
       // Schéma de la rubrique reprise : bibliothèque GSS, ou spécification du mémoire type dessinée au thème (toile
       // paysage) et contrôlée sur la réponse (refusée : schéma de remplacement du mémoire type, sinon choix par mots).
-      const schemasMT = new Map(champsRediges.map((id) => [id, repriseMT?.schemaDe(repriseParChamp.get(id)?.ids || [])] as const));
+      // Schéma d'une rubrique du mémoire type seulement si la réponse la reprend réellement (fidélité au seuil du cadre).
+      const schemasMT = new Map(champsRediges.map((id) => [id, (repriseParChamp.get(id)?.fidelite ?? 0) >= SEUIL_FIDELITE_CADRE ? repriseMT?.schemaDe(repriseParChamp.get(id)?.ids || []) : undefined] as const));
       const specs = [...schemasMT.entries()].filter(([id, s]) => s?.spec && !svgComprehension.has(id));
       const dessins = specs.length
         ? await dessinerSpecs(specs.map(([id, s]) => ({ id: `champ_${id}`, gabarit: s!.spec!.gabarit, params: s!.spec!.params, source: texteChamp(id), titre_section: s!.spec!.titre })), 'paysage', themeActif())
@@ -5204,8 +5218,10 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
           const svgId = svgComprehension.has(id) ? 'comprehension' : svg ? `mt_${s!.id}` : undefined;
           return { cle: `GSS_CH_${id}`, question: libelleChamp(id), texte: texteChamp(id), prefere: s?.ref || (s?.spec && !svg ? s.alternative : undefined), svg, svgId };
         })
-        .filter((x) => x.texte.length >= 600 || x.svgId === 'comprehension');
-      const nSchemas = await insererSchemasReponses(zip, xmlDoc, developpees);
+        // Champ de valeur (« Effectif … (transmis pour information) ») : jamais de schéma dessous.
+        .filter((x) => (x.texte.length >= 600 && !champValeur(x.question)) || x.svgId === 'comprehension');
+      await schemasSelonDce(developpees, dceContext);
+      const nSchemas = await insererSchemasReponses(zip, xmlDoc, developpees, { seulementReprise: !!repriseMT });
       if (nSchemas) console.log(`[MemoireGenerator] ${nSchemas} schéma(s) GSS inséré(s) sous les réponses.`);
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Schémas GSS non insérés (non bloquant) : ${e?.message || e}`);
