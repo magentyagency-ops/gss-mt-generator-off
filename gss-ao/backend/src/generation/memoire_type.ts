@@ -1691,11 +1691,6 @@ function refusTexteNouveau(nouveau: string, ancien: string, o: OptionsModificati
 }
 
 /**
- * Applique les modifications proposées : un remplacement ou un retrait n'est appliqué que si l'extrait figure mot
- * pour mot (une seule fois) dans le texte ; au plus `maxModifications` modifications et `maxAjouts` ajouts de
- * `motsParAjout` mots ; tout texte nouveau est contrôlé (chiffres du DCE, noms connus, interdits GSS).
- */
-/**
  * Étapes d'une procédure (lignes de liste numérotée « n. » ou puces « - » de six mots au moins) du texte `avant`
  * qui ne se retrouvent plus dans `apres` (aucune ligne de liste ressemblante à 60 % au moins) : GSS ne fonctionne
  * qu'en process, une étape retirée rend la procédure illisible (« 3. Selon le constat » sans les étapes 1 et 2).
@@ -1710,6 +1705,11 @@ export function etapesRetirees(avant: string, apres: string): string[] {
   return lignes(avant).filter((e) => e.mots.length >= 6 && !apresL.some((x) => similarite(e.mots, x.mots) >= 0.6)).map((e) => e.ligne);
 }
 
+/**
+ * Applique les modifications proposées : un remplacement ou un retrait n'est appliqué que si l'extrait figure mot
+ * pour mot (une seule fois) dans le texte ; au plus `maxModifications` modifications et `maxAjouts` ajouts de
+ * `motsParAjout` mots ; tout texte nouveau est contrôlé (chiffres du DCE, noms connus, interdits GSS).
+ */
 export function appliquerModifications(texte: string, mods: ModificationsProposees, options: OptionsModifications = {}): { texte: string; appliquees: ModificationTraitee[]; refusees: ModificationTraitee[] } {
   const o = { maxModifications: 12, maxAjouts: 3, motsParAjout: 60, ...options };
   const appliquees: ModificationTraitee[] = [];
