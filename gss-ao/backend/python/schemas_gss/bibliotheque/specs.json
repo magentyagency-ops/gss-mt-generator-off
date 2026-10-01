@@ -1245,7 +1245,7 @@
     "args": [
      [
       {
-       "valeur": "320",
+       "valeur": "380",
        "label": "salariés en France",
        "icone": "groupe",
        "role": "or"
@@ -1265,13 +1265,13 @@
      ]
     ],
     "kwargs": {
-     "note": "Effectifs déclarés en 2026, réponse au marché de l'Université de Rouen Normandie"
+     "note": "Effectifs déclarés en 2026"
     }
    },
    "params_nommes": {
     "tuiles": [
      {
-      "valeur": "320",
+      "valeur": "380",
       "label": "salariés en France",
       "icone": "groupe",
       "role": "or"
@@ -1289,9 +1289,9 @@
       "role": "sable"
      }
     ],
-    "note": "Effectifs déclarés en 2026, réponse au marché de l'Université de Rouen Normandie"
+    "note": "Effectifs déclarés en 2026"
    },
-   "appel_python": "chiffres([{'valeur': '320', 'label': 'salariés en France', 'icone': 'groupe', 'role': 'or'}, {'valeur': '215', 'label': 'salariés dans le département 76', 'icone': 'lieu', 'role': 'sable'}, {'valeur': '65', 'label': 'salariés dans le département 27', 'icone': 'lieu', 'role': 'sable'}], note=\"Effectifs déclarés en 2026, réponse au marché de l'Université de Rouen Normandie\")",
+   "appel_python": "chiffres([{'valeur': '380', 'label': 'salariés en France', 'icone': 'groupe', 'role': 'or'}, {'valeur': '215', 'label': 'salariés dans le département 76', 'icone': 'lieu', 'role': 'sable'}, {'valeur': '65', 'label': 'salariés dans le département 27', 'icone': 'lieu', 'role': 'sable'}], note=\"Effectifs déclarés en 2026\")",
    "roles": [
     "or",
     "sable"
@@ -1301,15 +1301,15 @@
     "lieu"
    ],
    "textes_svg": [
-    "320",
+    "380",
     "salariés en France",
     "215",
     "salariés dans le département 76",
     "65",
     "salariés dans le département 27",
-    "Effectifs déclarés en 2026, réponse au marché de l'Université de Rouen Normandie"
+    "Effectifs déclarés en 2026"
    ],
-   "texte_index": "320 salariés en France 215 salariés dans le département 76 65 salariés dans le département 27 Effectifs déclarés en 2026, réponse au marché de l'Université de Rouen Normandie",
+   "texte_index": "380 salariés en France 215 salariés dans le département 76 65 salariés dans le département 27 Effectifs déclarés en 2026",
    "_controle_extraction": "identique"
   },
   {
@@ -1318,7 +1318,7 @@
    "titre": "Nos équipes terrain par qualification",
    "titre_script": "Nos équipes terrain par qualification",
    "source_gss": "M",
-   "reutilisable": true,
+   "reutilisable": false,
    "script": "scripts/lot1.py",
    "ligne_script": 97,
    "ordre_dans_lot": 8,

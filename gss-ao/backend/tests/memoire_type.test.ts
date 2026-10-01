@@ -151,8 +151,8 @@ describe('Publipostage', () => {
   const defs = mt.variables;
 
   it('remplace les variables et ne laisse jamais de {{…}} ; une variable inconnue devient un repère à compléter', () => {
-    const r = publiposter('Effectif : {{EFFECTIF_TOTAL}} salariés ; taux : {{TAUX_REPRISE}} ; {{INCONNUE}}.', variables({ EFFECTIF_TOTAL: '320' }), { definitions: defs });
-    expect(r.texte).toBe(`Effectif : 320 salariés ; taux : ${A_COMPLETER} ; ${A_COMPLETER}.`);
+    const r = publiposter('Effectif : {{EFFECTIF_TOTAL}} salariés ; taux : {{TAUX_REPRISE}} ; {{INCONNUE}}.', variables({ EFFECTIF_TOTAL: '380' }), { definitions: defs });
+    expect(r.texte).toBe(`Effectif : 380 salariés ; taux : ${A_COMPLETER} ; ${A_COMPLETER}.`);
     expect(r.manquantes.map((m) => m.variable)).toEqual(['TAUX_REPRISE', 'INCONNUE']);
     expect(r.texte).not.toMatch(/\{\{|\}\}/);
   });
@@ -220,9 +220,9 @@ describe('Publipostage', () => {
 
   it('publie un schéma « spec » : variables remplacées, éléments conditionnels retirés', () => {
     const r = mt.rubriques.find((x) => x.id === 'b3_adequation')!;
-    const v = variables({ EFFECTIF_TOTAL: '320', EFFECTIF_SSIAP1: '185', EFFECTIF_CONTROLEURS: '35', VIVIER_EVENEMENTIEL: '500' });
+    const v = variables({ EFFECTIF_TOTAL: '380', EFFECTIF_SSIAP1: '185', EFFECTIF_CONTROLEURS: '35', VIVIER_EVENEMENTIEL: '500' });
     const s = publierSchema(r.schema!, v, {}, defs)!;
-    expect(s.params.chiffres.map((c: any) => c.valeur)).toEqual(['320', '185', '35', '500']);
+    expect(s.params.chiffres.map((c: any) => c.valeur)).toEqual(['380', '185', '35', '500']);
     expect(JSON.stringify(s)).not.toMatch(/\{\{|"si"/);
     const v2 = variables({ ...Object.fromEntries(Object.entries(v).map(([k, x]) => [k, x.valeur as string])), EFFECTIF_AGENTS: '6' });
     expect(publierSchema(r.schema!, v2, {}, defs)!.params.chiffres[0]).toMatchObject({ valeur: '6' });

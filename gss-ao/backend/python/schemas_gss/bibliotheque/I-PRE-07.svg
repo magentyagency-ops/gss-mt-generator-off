@@ -4,7 +4,7 @@
 <rect x="40.0" y="175.0" width="348.0" height="260.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
 <clipPath id="cb25"><rect x="40.0" y="175.0" width="348.0" height="260.0" rx="22"/></clipPath><rect x="40.0" y="175.0" width="348.0" height="58.0" fill="#E5CA97" clip-path="url(#cb25)"/>
 <circle cx="214.0" cy="233.0" r="30.0" fill="#FBFAF4"/><circle cx="214.0" cy="233.0" r="24.0" fill="#8A7550"/><g transform="translate(214.0,233.0) scale(0.828)" fill="none" stroke="#FFFFFF" stroke-width="2.90" stroke-linecap="round" stroke-linejoin="round"><circle cx="-7" cy="-6" r="5"/><circle cx="8" cy="-6" r="5"/><path d="M-16,12 C-16,3 2,3 2,12"/><path d="M0,12 C0,3 17,3 17,12"/></g>
-<text x="214.0" y="322.0" font-size="64" font-weight="800" fill="#463A2F" text-anchor="middle">320</text>
+<text x="214.0" y="322.0" font-size="64" font-weight="800" fill="#463A2F" text-anchor="middle">380</text>
 <text x="214.0" y="385.8" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">salariés en France</text>
 <rect x="422.0" y="175.0" width="348.0" height="260.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
 <clipPath id="cb26"><rect x="422.0" y="175.0" width="348.0" height="260.0" rx="22"/></clipPath><rect x="422.0" y="175.0" width="348.0" height="58.0" fill="#ECDEC2" clip-path="url(#cb26)"/>
@@ -16,5 +16,5 @@
 <circle cx="978.0" cy="233.0" r="30.0" fill="#FBFAF4"/><circle cx="978.0" cy="233.0" r="24.0" fill="#8A7550"/><g transform="translate(978.0,233.0) scale(0.828)" fill="none" stroke="#FFFFFF" stroke-width="2.90" stroke-linecap="round" stroke-linejoin="round"><path d="M0,15 C-13,0 -12,-14 0,-14 C12,-14 13,0 0,15 z"/><circle cx="0" cy="-4" r="4.5"/></g>
 <text x="978.0" y="322.0" font-size="64" font-weight="800" fill="#463A2F" text-anchor="middle">65</text>
 <text x="978.0" y="385.8" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">salariés dans le département 27</text>
-<text x="600.0" y="608.8" font-size="14" font-weight="400" fill="#463A2F" text-anchor="middle">Effectifs déclarés en 2026, réponse au marché de l'Université de Rouen Normandie</text>
+<text x="600.0" y="608.8" font-size="14" font-weight="400" fill="#463A2F" text-anchor="middle">Effectifs déclarés en 2026</text>
 </svg>

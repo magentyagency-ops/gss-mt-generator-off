@@ -374,7 +374,8 @@
    "statut": "a_confirmer",
    "valeurs_anterieures_differentes": [
     "52 (CAF (2025), 2025-10)"
-   ]
+   ],
+   "remarque": "423 (mémoire Université de Rouen Normandie, 2026-06) dépasse l'effectif total de 380 salariés donné par GSS le 1er octobre 2026 : valeur jamais citée (exclue comme incohérente)."
   },
   {
    "cle": "effectif_ssiap1",
@@ -1351,6 +1352,15 @@
    "categorie": "effectifs",
    "valeurs": [
     {
+     "valeur": "380",
+     "client": "Réponse de GSS",
+     "document": "reponses_gss_2026-10-01.md",
+     "date": "2026-10",
+     "page": null,
+     "citation": "Effectifs : « 380 2026 »",
+     "reponse_gss": true
+    },
+    {
      "valeur": "320",
      "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
      "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
@@ -1359,11 +1369,13 @@
      "citation": "Effectif total de l’entreprise en FRANCE (transmis pour information) :\n320"
     }
    ],
-   "valeur_retenue": "320",
-   "date_retenue": "2026-04",
-   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "valeur_retenue": "380",
+   "date_retenue": "2026-10",
+   "source_retenue": "Réponse de GSS (1er octobre 2026)",
    "statut": "confirmee",
-   "valeurs_anterieures_differentes": []
+   "valeurs_anterieures_differentes": [
+    "320 (Université de Rouen Normandie (cadre lots 1-2-3), 2026-04)"
+   ]
   },
   {
    "cle": "effectif_departement_76",

@@ -52,7 +52,7 @@
   "section": "b_presentation",
   "titre": "GSS en chiffres",
   "source": "L",
-  "texte": "320 salariés en France 215 salariés dans le département 76 65 salariés dans le département 27 Effectifs déclarés en 2026, réponse au marché de l'Université de Rouen Normandie",
+  "texte": "380 salariés en France 215 salariés dans le département 76 65 salariés dans le département 27 Effectifs déclarés en 2026",
   "reutilisable": false
  },
  {
@@ -61,7 +61,7 @@
   "titre": "Nos équipes terrain par qualification",
   "source": "M",
   "texte": "Agents de sécurité · CQP 423 SSIAP 1 185 Contrôleurs 35 SSIAP 2 28 Agents cynophiles 27 SSIAP 3 2 Agents terrain Contrôle",
-  "reutilisable": true
+  "reutilisable": false
  },
  {
   "id": "I-PRE-09",
