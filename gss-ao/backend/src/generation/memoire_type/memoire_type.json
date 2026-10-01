@@ -450,8 +450,7 @@
    "type": "texte",
    "si_absente": "repli",
    "repli": "Trackforce",
-   "registre": "logiciel_main_courante",
-   "a_confirmer": "Confirmer l'outil de main courante électronique — valeur utilisée dans le mémoire : Trackforce (Vigicom cité dans un ancien mémoire)"
+   "registre": "logiciel_main_courante"
   },
   "ORGANIGRAMME": {
    "description": "Organigramme de référence (rôles et noms)",
