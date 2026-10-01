@@ -266,11 +266,6 @@ export function chargerMemoireType(chemin?: string): MemoireType {
   return mt;
 }
 
-/** Vide le cache (tests, rechargement après modification du JSON). */
-export function viderCacheMemoireType(): void {
-  cacheMemoireType = null;
-}
-
 // ─── Outils de texte ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -1365,26 +1360,6 @@ export function reordonnerSousParties(texte: string, sousParties: SousPartie[], 
   return [...intro, ...enTete, ...reste.filter((m) => !prioritaire(m))].map((m) => m.texte).join('\n\n');
 }
 
-/**
- * Condensation par sélection (format court) : retire d'abord les sous-parties de priorité 3, puis 2 (en partant de la
- * fin), jamais l'introduction ni une sous-partie de priorité 1, jusqu'à tenir le budget de mots.
- */
-export function condenserParSelection(texte: string, sousParties: SousPartie[], budgetMots: number): { texte: string; retirees: string[] } {
-  let morceaux = decouperSousParties(texte);
-  const retirees: string[] = [];
-  const prio = (m: MorceauSousPartie) => (m.titre === null ? 1 : (sousParties.find((s) => normaliser(s.titre) === normaliser(m.titre!))?.priorite ?? 2));
-  const total = () => morceaux.reduce((s, m) => s + m.mots, 0);
-  for (const niveau of [3, 2]) {
-    for (let i = morceaux.length - 1; i >= 0 && total() > budgetMots; i--) {
-      if (prio(morceaux[i]) === niveau) {
-        retirees.push(morceaux[i].titre!);
-        morceaux = morceaux.filter((_, k) => k !== i);
-      }
-    }
-  }
-  return { texte: morceaux.map((m) => m.texte).join('\n\n'), retirees };
-}
-
 // ─── Publication des rubriques et des schémas ────────────────────────────────────────────────────
 
 export interface SchemaPublie {
@@ -1662,35 +1637,9 @@ export function obligationsPourRubrique(rubrique: RubriqueMemoireType, dce: stri
   return out;
 }
 
-/** Rubriques du plan pour la matrice des exigences (analyzeRequirements), au format { id, title }. */
-export function rubriquesPourMatrice(plan: PlanMemoireType): Array<{ id: string; title: string }> {
-  return plan.rubriques.map((r) => ({ id: r.id, title: r.titre }));
-}
-
 /** Thèmes de la matrice (I, II…) d'après les blocs du plan : « I=Notre compréhension… ; II=Présentation de GSS… ». */
 export function themesPourMatrice(plan: PlanMemoireType): string {
   return plan.blocs.map((b) => `${b.cle}=${b.titre}`).join(' ; ');
-}
-
-/** Rubriques au format de SECTIONS_REPONSE_LIBRE ({ id, chapter, title }) pour l'assistant et le rendu. */
-export function sectionsPourAssistant(plan: PlanMemoireType): Array<{ id: string; chapter: string; title: string }> {
-  return plan.rubriques.map((r) => ({ id: r.id, chapter: r.cle, title: r.titre }));
-}
-
-/** Chapitres au format de CHAPITRES_REPONSE_LIBRE ({ I: titre, … }). */
-export function chapitresPourAssistant(plan: PlanMemoireType): Record<string, string> {
-  return Object.fromEntries(plan.blocs.map((b) => [b.cle, b.titre]));
-}
-
-/** Ancienne rubrique (AI_SECTIONS_B) principale d'une rubrique du mémoire type (états v1, schémas de secours). */
-export function rubriqueV1(mt: MemoireType, id: string): string | null {
-  return mt.rubriques.find((r) => r.id === id)?.ancienne_rubrique ?? null;
-}
-
-/** Rubriques du mémoire type qui reprennent une ancienne rubrique (b_*), limitées au plan s'il est fourni. */
-export function rubriquesDeV1(mt: MemoireType, ancien: string, plan?: PlanMemoireType): string[] {
-  const l = mt.correspondance_v1[ancien] || [];
-  return plan ? l.filter((id) => plan.rubriques.some((r) => r.id === id)) : [...l];
 }
 
 /** Vrai si un état de complétion porte un plan v2 (libre.plan), sinon l'état suit le plan v1. */

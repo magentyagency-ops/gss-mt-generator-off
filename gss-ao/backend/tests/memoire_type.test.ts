@@ -5,10 +5,10 @@ import { spawnSync } from 'child_process';
 import { blocRegistre, texteSourcesMemoires, valeurInterne } from '../src/generation/base_memoires';
 import {
   A_COMPLETER, VARIABLES_CALCULEES, adapterRubrique, appliquerModifications, articleEtNom,
-  chapitresPourAssistant, chargerMemoireType, condenserParSelection, dateDebutMarche, decouperSousParties, delaiDuDce, donneesBesoin,
+  chargerMemoireType, dateDebutMarche, decouperSousParties, delaiDuDce, donneesBesoin,
   evaluerCondition, exigencesParRubrique, extraireValeursImposees, fidelite, fondementRepriseDce, frequenceReunionsDce, lireRegistre,
   planMemoireType, preparerMemoireType, publierMemoire, publierRubrique, publierSchema, publiposter, rechercherRubriques,
-  reordonnerSousParties, rubriqueV1, rubriquesDeV1, sectionsPourAssistant, validerMemoireType,
+  reordonnerSousParties, validerMemoireType,
   type AppelModele, type ContexteMarche, type MemoireType, type Variables,
 } from '../src/generation/memoire_type';
 
@@ -137,9 +137,9 @@ describe('Mémoire type : JSON de référence', () => {
   it('la correspondance v1 couvre les 20 anciennes rubriques (AI_SECTIONS_B)', () => {
     const v1 = sectionsV1();
     expect(v1.length).toBe(20);
-    for (const s of v1) expect(rubriquesDeV1(mt, s.id).length, s.id).toBeGreaterThan(0);
-    expect(rubriqueV1(mt, 'b2_organigramme')).toBe('b_encadrement');
-    expect(rubriqueV1(mt, 'b3_reprise_personnel')).toBe('b_reprise_personnel');
+    for (const s of v1) expect((mt.correspondance_v1[s.id] || []).length, s.id).toBeGreaterThan(0);
+    expect(mt.rubriques.find((r) => r.id === 'b2_organigramme')?.ancienne_rubrique).toBe('b_encadrement');
+    expect(mt.rubriques.find((r) => r.id === 'b3_reprise_personnel')?.ancienne_rubrique).toBe('b_reprise_personnel');
     for (const r of mt.rubriques.filter((x) => x.mode !== 'besoin')) {
       expect(v1.some((s) => s.id === r.ancienne_rubrique) || r.ancienne_rubrique === 'b_references', r.id).toBe(true);
     }
@@ -564,10 +564,9 @@ describe('Adaptation ciblée (extrait exact → remplacement) et fidélité', ()
 describe('Plan, assistant, exigences et sous-parties', () => {
   const prep = preparerMemoireType({ analyse: { clientName: 'Centre fictif des Docks' }, dce: DCE_NORMANDIE }, { memoireType: mt });
 
-  it('format de l’assistant (SECTIONS_REPONSE_LIBRE / CHAPITRES_REPONSE_LIBRE) avec 5 chapitres I à V', () => {
-    const sections = sectionsPourAssistant(prep.plan);
-    expect(sections[0]).toEqual({ id: 'b1_comprehension', chapter: 'I', title: 'Notre compréhension de votre besoin' });
-    expect(Object.keys(chapitresPourAssistant(prep.plan))).toEqual(['I', 'II', 'III', 'IV', 'V']);
+  it('plan v2 en 5 blocs I à V, compréhension d’abord', () => {
+    expect(prep.plan.rubriques[0]).toMatchObject({ id: 'b1_comprehension', cle: 'I', titre: 'Notre compréhension de votre besoin' });
+    expect(prep.plan.blocs.map((b) => b.cle)).toEqual(['I', 'II', 'III', 'IV', 'V']);
     expect(prep.plan.version).toBe(2);
   });
 
@@ -586,14 +585,12 @@ describe('Plan, assistant, exigences et sous-parties', () => {
     expect(rechercherRubriques(mt, 'Quelle est votre procédure de remplacement en cas d’absence imprévue ?')[0].id).toBe('b5_remplacement_imprevu');
   });
 
-  it('sous-parties : découpe, ordre des profils demandés, condensation par priorité', () => {
+  it('sous-parties : découpe, ordre des profils demandés', () => {
     const catalogue = mt.rubriques.find((r) => r.id === 'b2_catalogue')!;
     const publie = publierRubrique(mt, catalogue, variables({ CLIENT: 'Site' }), { SSIAP: true, SURVEILLANCE: true, CYNOPHILE: false, TELESURVEILLANCE: false });
     const titres = decouperSousParties(publie.texte!).map((m) => m.titre);
     expect(titres.slice(0, 2)).toEqual(['Nos agents de sécurité incendie (SSIAP)', 'Nos agents de sûreté']);
     const t = 'Intro.\n\n**A**\nun deux trois.\n\n**B**\nquatre cinq six sept.\n\n**C**\nhuit neuf.';
-    const sp = [{ titre: 'A', priorite: 1 }, { titre: 'B', priorite: 3 }, { titre: 'C', priorite: 2 }];
-    expect(condenserParSelection(t, sp, 8)).toEqual({ texte: 'Intro.\n\n**A**\nun deux trois.\n\n**C**\nhuit neuf.', retirees: ['B'] });
     expect(reordonnerSousParties(t, [{ titre: 'C', priorite: 2, indicateur: 'X' }], { X: true })).toBe('Intro.\n\n**C**\nhuit neuf.\n\n**A**\nun deux trois.\n\n**B**\nquatre cinq six sept.');
   });
 
