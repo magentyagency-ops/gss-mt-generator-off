@@ -367,7 +367,9 @@ export function confirmationsRegistreUtilisees(texte: string, horsNormandie = fa
     const morceaux = e.valeur_retenue.split(';').map((x) => normTxt(x).replace(/\s+/g, ' ').trim()).filter((x) => x.length >= 4);
     if (morceaux.some((m) => t.includes(m))) {
       // Main courante : le mémoire n'emploie que Trackforce (Vigicom figure dans un ancien mémoire).
-      const valeur = e.cle === 'logiciel_main_courante' ? 'Trackforce (Vigicom cité dans un ancien mémoire)' : e.valeur_retenue;
+      // Nom et prénom en capitales (« ATTOU NESRINE ») : prénom en minuscules (« ATTOU Nesrine »).
+      const valeur = e.cle === 'logiciel_main_courante' ? 'Trackforce (Vigicom cité dans un ancien mémoire)'
+        : e.valeur_retenue.replace(/^([A-ZÀ-Ý][A-ZÀ-Ý'-]+) ([A-ZÀ-Ý])([A-ZÀ-Ý-]+)$/, (_m, n: string, p: string, r: string) => `${n} ${p}${r.toLowerCase()}`);
       out.push(`Confirmer ${e.libelle.charAt(0).toLowerCase()}${e.libelle.slice(1)} — valeur utilisée dans le mémoire : ${valeur} (${e.source_retenue}, ${e.date_retenue})`);
     }
   }
@@ -447,7 +449,26 @@ export function texteSourcesMemoires(): string {
 }
 
 /** Phrases de diagnostic interne sur les manques (jamais destinées à l'acheteur). */
-const COMMENTAIRE_INTERNE = /((?<![a-zà-ÿ])à ce stade\b|\bne sont pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]est pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]ont pas été (?:communiqué|transmis|fourni)|\bn['’]a pas été (?:communiqué|transmis|fourni)|documentation (?:gss )?(?:fournie|transmise|disponible)|documents? (?:gss )?transmis|éléments? (?:gss )?(?:disponibles|transmis|fournis|communiqués)|\breste(?:nt)? à (?:confirmer|établir|préciser|obtenir)|\bdoi(?:t|vent) être confirmé|\bdevr(?:a|ont) être (?:confirmé|précisé|transposé|validé)|\baprès la visite\b|\blors de la visite obligatoire\b|\bne comporte (?:toutefois )?pas\b|\bne présente ni\b|\bsous réserve de (?:confirmation|validation)\b|\bsous réserve de (?:la|leur|sa) (?:classification|confirmation|validation|disponibilité|faisabilité)(?![a-zà-ÿ])|\bla prestation ne comprend pas\b|(?<![a-zà-ÿ])évite d.inclure\b|\bnon (?:communiqué|précisé|renseigné) dans les|zone d['’]intervention habituelle|\bn['’]annonce (?:donc )?aucun délai|présenter comme acquis|organisation déclarée|\bdocumentés? comme\b|références enregistrées|\bnon précisée?s?(?![a-zà-ÿ])|\bDCE transmis\b|éléments du DCE|implantation habituelle|\bces éléments ne (?:décrivent|précisent|mentionnent|détaillent|couvrent)\b|\breste(?:nt)? à (?:définir|déterminer|arrêter|organiser)|hors de (?:la|sa) zone|\bn(?:e sera|e sont|e seront|.est) (?:donc )?pas présentée?s? comme|\bne sont pas présentées? comme|présence locale déjà constituée|\bn.est toutefois pas établie?\b|\bil ne vaut pas engagement\b|\bconstitue l.engagement opérationnel connu\b|\bdoit être intégrée? au parcours\b|\best signalée? ci-dessous\b|\bsont toutefois traitées comme\b|\bGSS (?:documente|décrit|affirme)\b|\bsans assimiler\b|\bla distance entre Rouen\b|\bincohérence relevée dans le DCE\b|n.a pas (?:encore )?(?:d.agence|d.implantation)|\bdoi(?:t|vent) (?:toutefois |encore |donc )?être arrêtée?s?(?![a-zà-ÿ])|\bdoi(?:t|vent) (?:toutefois|encore) être (?:formalisée?s?|précisée?s?|définie?s?|validée?s?|intégrée?s?)(?![a-zà-ÿ])|n.étant pas (?:précisée?s?|indiquée?s?|connue?s?|communiquée?s?)(?![a-zà-ÿ])|\bn.est (?:pas )?expressément (?:demandée?|exigée?|prévue?)(?![a-zà-ÿ])|(?<![a-zà-ÿ])à formaliser\b|(?<![a-zà-ÿ])documentée?s?(?![a-zà-ÿ])|\bn['’](?:est|a été) (?:pas )?(?:indiquée?|mentionnée?)(?![a-zà-ÿ])|\bne sont (?:pas )?(?:indiquée?s|mentionnée?s)(?![a-zà-ÿ])|\b(?:indiquée?s?|précisée?s?|mentionnée?s?) (?:dans|par) (?:le|la|les) (?:CCTP|DCE|RC|CCAP|cahier)|\b(?:CCTP|DCE|RC|CCAP) fournis?\b|\bne désigne(?:nt)? (?:pas|aucun)|\bdoi(?:t|vent) être distinguée?s?(?![a-zà-ÿ])|\bblocs? cités?(?![a-zà-ÿ]))/i;
+const COMMENTAIRE_INTERNE = /((?<![a-zà-ÿ])à ce stade\b|\bne sont pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]est pas (?:encore )?(?:établi|précisé|communiqué|documenté)|\bn['’]ont pas été (?:communiqué|transmis|fourni)|\bn['’]a pas été (?:communiqué|transmis|fourni)|documentation (?:gss )?(?:fournie|transmise|disponible)|documents? (?:gss )?transmis|éléments? (?:gss )?(?:disponibles|transmis|fournis|communiqués)|\breste(?:nt)? à (?:confirmer|établir|préciser|obtenir)|\bdoi(?:t|vent) être confirmé|\bdevr(?:a|ont) être (?:confirmé|précisé|transposé|validé)|\baprès la visite\b|\blors de la visite obligatoire\b|\bne comporte (?:toutefois )?pas\b|\bne présente ni\b|\bsous réserve de (?:confirmation|validation)\b|\bsous réserve de (?:la|leur|sa) (?:classification|confirmation|validation|disponibilité|faisabilité)(?![a-zà-ÿ])|\bla prestation ne comprend pas\b|(?<![a-zà-ÿ])évite d.inclure\b|\bnon (?:communiqué|précisé|renseigné) dans les|zone d['’]intervention habituelle|\bn['’]annonce (?:donc )?aucun délai|présenter comme acquis|organisation déclarée|\bdocumentés? comme\b|références enregistrées|\bnon précisée?s?(?![a-zà-ÿ])|\bDCE transmis\b|éléments du DCE|implantation habituelle|\bces éléments ne (?:décrivent|précisent|mentionnent|détaillent|couvrent)\b|\breste(?:nt)? à (?:définir|déterminer|arrêter|organiser)|hors de (?:la|sa) zone|\bn(?:e sera|e sont|e seront|.est) (?:donc )?pas présentée?s? comme|\bne sont pas présentées? comme|présence locale déjà constituée|\bn.est toutefois pas établie?\b|\bil ne vaut pas engagement\b|\bconstitue l.engagement opérationnel connu\b|\bdoit être intégrée? au parcours\b|\best signalée? ci-dessous\b|\bsont toutefois traitées comme\b|\bGSS (?:documente|décrit|affirme)\b|\bsans assimiler\b|\bla distance entre Rouen\b|\bincohérence relevée dans le DCE\b|n.a pas (?:encore )?(?:d.agence|d.implantation)|\bdoi(?:t|vent) (?:toutefois |encore |donc )?être arrêtée?s?(?![a-zà-ÿ])|\bdoi(?:t|vent) (?:toutefois|encore) être (?:formalisée?s?|précisée?s?|définie?s?|validée?s?|intégrée?s?)(?![a-zà-ÿ])|n.étant pas (?:précisée?s?|indiquée?s?|connue?s?|communiquée?s?)(?![a-zà-ÿ])|\bn.est (?:pas )?expressément (?:demandée?|exigée?|prévue?)(?![a-zà-ÿ])|(?<![a-zà-ÿ])à formaliser\b|(?<![a-zà-ÿ])documentée?s?(?![a-zà-ÿ])|\bn['’](?:est|a été) (?:pas )?(?:indiquée?|mentionnée?)(?![a-zà-ÿ])|\bne sont (?:pas )?(?:indiquée?s|mentionnée?s)(?![a-zà-ÿ])|\b(?:indiquée?s?|précisée?s?|mentionnée?s?) (?:dans|par) (?:le|la|les) (?:CCTP|DCE|RC|CCAP|cahier)|\b(?:CCTP|DCE|RC|CCAP) fournis?\b|\bne désigne(?:nt)? (?:pas|aucun)|\bdoi(?:t|vent) être distinguée?s?(?![a-zà-ÿ])|\bblocs? cités?(?![a-zà-ÿ])|\bne préjuge(?:nt)? (?:pas|en rien)\b)/i;
+
+/** Présent de l'indicatif d'un verbe laissé à l'infinitif après « GSS » (« GSS former » → « GSS forme »). */
+const IRREGULIERS_GSS: Record<string, string> = {
+  tenir: 'tient', maintenir: 'maintient', venir: 'vient', intervenir: 'intervient', ouvrir: 'ouvre', offrir: 'offre', couvrir: 'couvre',
+  partir: 'part', servir: 'sert', sortir: 'sort', mettre: 'met', permettre: 'permet', transmettre: 'transmet', remettre: 'remet',
+  soumettre: 'soumet', prendre: 'prend', reprendre: 'reprend', comprendre: 'comprend', faire: 'fait', produire: 'produit',
+  conduire: 'conduit', répondre: 'répond', rendre: 'rend', dire: 'dit', écrire: 'écrit', inscrire: 'inscrit', décrire: 'décrit',
+  appeler: 'appelle', rappeler: 'rappelle', envoyer: 'envoie', renvoyer: 'renvoie', employer: 'emploie', déployer: 'déploie', recevoir: 'reçoit',
+  avoir: 'a', être: 'est', pouvoir: 'peut', devoir: 'doit', savoir: 'sait', voir: 'voit', prévoir: 'prévoit', pourvoir: 'pourvoit',
+};
+const PAS_VERBES_GSS = /^(?:premi|derni|enti|particuli|r[ée]guli|h|fi|ch|l|m|s|av|d[ée]s|plaisi|loisi|souven|aven|d[ée]si|pouv|savo|devo|po|mo|to|vo|ve|cent|f|nav|press|offi|cuisini|ouvri|pompi|chanti|dossi|courri|fichi|quarti|clavi|pallet|papi|calendri|m[ée]ti|bouclie)$/;
+function conjuguerApresGss(m: string, rad: string, fin: string): string {
+  const inf = `${rad}${fin}`;
+  if (IRREGULIERS_GSS[inf]) return `GSS ${IRREGULIERS_GSS[inf]}`;
+  if (PAS_VERBES_GSS.test(rad) || fin === 're') return m;
+  if (fin === 'ir') return `GSS ${rad}it`;
+  // 1er groupe : « gérer » → « gère », « compléter » → « complète ».
+  return `GSS ${rad.replace(/é([^aeiouyéèêàâîôû]+)$/, 'è$1')}e`;
+}
 
 /** Montant de pénalité du CCAP/CCTP : GSS s'engage sur l'obligation, jamais sur le montant de la sanction. */
 const MONTANT_PENALITE = /p[ée]nalit[ée]s?[^.;]{0,120}?\d[\d\s  ]*(?:,\d+)?\s*(?:€|euros?)|\d[\d\s  ]*(?:,\d+)?\s*(?:€|euros?)[^.;]{0,80}?p[ée]nalit/i;
@@ -516,6 +537,14 @@ export function retirerCommentairesInternes(texte: string): { texte: string; ret
     .replace(/\b(?:VIGICOM|Vigicom|vigicom)(?:\s+6TADEL)?\b/g, 'Trackforce')
     .replace(/\bTrackforce(?:\s*(?:et|\/|;|,|ou)\s*Trackforce)+\b/gi, 'Trackforce').replace(/\bTRACKFORCE\b/g, 'Trackforce')
     .replace(/\b(5|cinq) agents d.astreinte\b/gi, '5 véhicules d’astreinte')
+    // Consigne interne recopiée en incise (« …, sans annoncer de délai de mobilisation non prévu ») : l'incise part.
+    .replace(/,?\s*sans (?:annoncer|promettre|chiffrer|indiquer|s.engager sur) (?:de |d['’]|un |aucun )?d[ée]lais?\b[^.;\n]*/g, '')
+    // Pièces à fournir notées comme une consigne (« … sont à transmettre avec l'offre ») : engagement de GSS.
+    .replace(/\b(sont|est) à (?:transmettre|fournir|joindre|remettre) (?:avec|à|dans) l['’]offre\b/g, (_m, v: string) => (v === 'est' ? 'est joint à l’offre' : 'sont joints à l’offre'))
+    // « GSS former chaque agent » : infinitif laissé après GSS → présent.
+    .replace(/\bGSS ([a-zàâçéèêëîïôûü]{2,}?)(er|ir|re)\b(?=[\s,])/g, (m, rad: string, fin: string) => conjuguerApresGss(m, rad, fin))
+    // Parenthèse de délai qui n'a plus de fourchette (« (selon la distance, en 2 heures) ») : délai simple.
+    .replace(/\(selon la distance, (?:en|sous) ((?:\d+|une?|deux) (?:minutes?|heures?))\)/g, '(dans un délai de $1)')
     // « GSS confirme que les rondes… » : formulation de réponse à une question interne → affirmation directe.
     .replace(/\bGSS (?:confirme|précise|atteste) que (\S)/g, (_m, c) => c.toUpperCase())
     // Renvoi à la numérotation interne des exigences.
@@ -656,8 +685,20 @@ export function limiterRappelsSite(sections: Record<string, string>, ordre: stri
  * « effectuées à pied » (aucun vélo, trottinette ni ronde motorisée), photographies interdites (aucune
  * mention de photos ou vidéos dans les comptes rendus). Les phrases et puces contraires sont retirées.
  */
+/**
+ * Vocabulaire du CCTP pour la fonction de l'agent qui encadre le poste : le mémoire type dit « chef de site » ou
+ * « responsable de site » ; quand le CCTP ne parle que de « chef de poste » (IGN), le mémoire emploie son terme. Le
+ * « (responsable de site) » de l'acheteur, entre parenthèses, n'est pas touché.
+ */
+export function vocabulaireDuCctp(texte: string, dce: string): string {
+  const d = normTxt(dce || '');
+  const nb = (rx: RegExp) => (d.match(rx) || []).length;
+  if (nb(/chefs? de poste/g) < 3 || nb(/(?:chefs?|responsables?) de site/g)) return texte;
+  return texte.replace(/(?<!\(\s?)\b([Cc]hef|[Rr]esponsable)(s?) de site\b(?!\s*\))/g, (_m, f: string, s: string) => `${/^[CR]/.test(f) ? 'C' : 'c'}hef${s} de poste`);
+}
+
 export function interditsDce(texte: string, dce: string): string {
-  texte = sansContenuCovid(nomsComposesDce(qualificationsInconditionnelles(texte, dce), dce), dce);
+  texte = vocabulaireDuCctp(sansContenuCovid(nomsComposesDce(qualificationsInconditionnelles(texte, dce), dce), dce), dce);
   const d = (dce || '').replace(/\s+/g, ' ');
   const contraires: RegExp[] = [];
   if (/rondes?[^.]{0,60}(?:effectuées|réalisées|faites|assurées)\s+(?:exclusivement\s+)?à pied/i.test(d)) {
