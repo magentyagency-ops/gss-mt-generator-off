@@ -98,6 +98,24 @@ function matrice(c: Corpus, idsConnus: Set<string>): any[] {
   return l.filter((x) => x.rubrique === 'nouvelle' || idsConnus.has(x.rubrique) || /^b_/.test(x.rubrique));
 }
 
+/** Lecture du DCE pour le dimensionnement (IGN : relevé de la sonde réelle _verif/correction9_dim_sonde.ts). */
+const TOUS_LES_JOURS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+const DIMENSIONNEMENT: Record<Corpus, any> = {
+  becquerel: {
+    postes: [
+      { profil: 'SSIAP 2', qualification: 'SSIAP 2', lieu: 'PC sécurité', heures_hebdo: null, heures_an: null,
+        plages: [{ jours: TOUS_LES_JOURS, debut: '07:00', fin: '19:00' }, { jours: TOUS_LES_JOURS, debut: '19:00', fin: '07:00' }],
+        citation: 'Poste PC sécurité Le poste devra être couvert 24h / 24h, 7 jours sur 7 par un agent SSIAP2.' },
+      { profil: 'SSIAP 1', qualification: 'SSIAP 1', lieu: 'Poste d\'accueil', heures_hebdo: null, heures_an: null,
+        plages: [{ jours: TOUS_LES_JOURS, debut: '20:00', fin: '07:00' }],
+        citation: 'Poste d’accueil Le poste devra être couvert : entre 20h et 7h tous les soirs par un agent SSIAP1.' },
+    ],
+    cas_pratique: null,
+  },
+  caen: { postes: [], cas_pratique: null },
+  ign: {"postes": [{"profil": "SSIAP 2", "qualification": "SSIAP 2", "lieu": "Carnot-Cassini", "plages": [{"jours": ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"], "debut": "07:00", "fin": "19:00"}, {"jours": ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"], "debut": "19:00", "fin": "07:00"}], "citation": "Permanence d’un SSIAP 2 (qualification minimum niveau 3, échelon 3, coefficient 150) en poste au PCS Horaires : du lundi au dimanche de 7h00 à 19h00"}, {"profil": "SSIAP 2", "qualification": "SSIAP 2", "lieu": "Coriolis", "plages": [{"jours": ["lundi", "mardi", "mercredi", "jeudi", "vendredi"], "debut": "07:00", "fin": "19:00"}], "citation": "Permanence d’un SSIAP 2 (qualification minimum niveau 3, échelon 3, coefficient 150) en poste au PCS et effectuant les rondes techniques le cas échéant, hors jours férié."}, {"profil": "SSIAP 1", "qualification": "SSIAP 1", "lieu": "Carnot-Cassini", "plages": [{"jours": ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"], "debut": "07:00", "fin": "19:00"}, {"jours": ["lundi", "mardi", "mercredi", "jeudi", "vendredi"], "debut": "19:00", "fin": "07:00"}], "citation": "Permanence d’un SSIAP 1 (qualification minimum niveau 3, échelon 2, coefficient 140) en poste au PCS et effectuant les rondes techniques."}, {"profil": "ADS", "qualification": "ADS", "lieu": "Carnot-Cassini", "plages": [{"jours": ["lundi", "mardi", "mercredi", "jeudi", "vendredi"], "debut": "07:00", "fin": "19:00"}, {"jours": ["lundi", "mardi", "mercredi", "jeudi", "vendredi"], "debut": "19:00", "fin": "01:00"}], "citation": "Permanence d’un ADS (qualification minimum niveau 2, échelon 2, coefficient 120) effectuant les rondes à l’intérieur et l’extérieur des locaux"}], "cas_pratique": null},
+};
+
 const IMPOSEES: Record<Corpus, any[]> = {
   becquerel: [
     { variable: 'FREQ_REUNIONS', valeur: 'au minimum tous les mois', citation: 'Ces réunions seront organisées par le titulaire au minimum tous les mois sous peine de se voir appliquer les pénalités prévues au CCAP.' },
@@ -404,6 +422,8 @@ export function repondre(corpus: Corpus, body: any): string {
 
   if (/Tu es un expert en marchés publics de sécurité privée pour l'entreprise GSS/.test(sys)) return type('analyse du DCE', json(ANALYSES[corpus]));
   if (/PÉRIMÈTRE RÉEL des prestations/.test(sys)) return type('périmètre', json({ perimetre: PERIMETRE[corpus] }));
+  // Dimensionnement (46a337b) : postes relevés mot pour mot dans le CCTP (citations présentes dans le DCE).
+  if (/^Tu lis le DCE d'un marché de sécurité privée pour GSS\. Tu ne calcules aucun total/.test(sys)) return type('dimensionnement', json(DIMENSIONNEMENT[corpus]));
   if (/CHECK-LIST des GRANDES EXIGENCES/.test(sys)) {
     const ids = new Set([...tout.matchAll(/(b\d_[a-z_]+) \(/g)].map((m) => m[1]));
     return type('matrice des exigences', json({ requirements: matrice(corpus, ids) }));

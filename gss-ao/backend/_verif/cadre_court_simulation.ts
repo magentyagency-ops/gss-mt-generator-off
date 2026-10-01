@@ -120,6 +120,41 @@ const COMPREHENSION_CA = {
 /** Réécriture simulée (fidélité basse) : chaque phrase longue est résumée en sa première moitié. */
 const reformuler = (t: string) => t.split(/(?<=[.!?])\s+/).map((ph) => { const m = ph.split(/\s+/); return m.length > 8 ? `En résumé, ${m.slice(0, Math.ceil(m.length / 2)).join(' ')}.` : ph; }).join(' ');
 
+/** Lecture du DCE pour le dimensionnement (réponses réalistes ; Étampes : relevé de la sonde réelle _verif/correction9_dim_sonde.ts). */
+const TOUS_LES_JOURS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+const PLAGES_ETAMPES = [
+  { libelle: 'Dimanche férié, 6 h–21 h', debut: '06:00', fin: '21:00' },
+  { libelle: 'Nuit, 21 h–6 h', debut: '21:00', fin: '06:00' },
+  { libelle: 'Lundi férié, 6 h–21 h', debut: '06:00', fin: '21:00' },
+];
+const DIMENSIONNEMENT: Record<CorpusCC, any> = {
+  imm: {
+    postes: [{ profil: 'SSIAP 2', qualification: 'SSIAP 2', lieu: 'Institut Médico-Chirurgical Montsouris', heures_hebdo: null, heures_an: null,
+      plages: [{ jours: TOUS_LES_JOURS, debut: '08:00', fin: '20:00' }, { jours: TOUS_LES_JOURS, debut: '20:00', fin: '08:00' }],
+      citation: 'l’option 2 : 1 SSIAP 2 7j/7 7j/7 24h/24 ou en vacations de 12h (08h00-20h00/20h00-08h00)' }],
+    cas_pratique: null,
+  },
+  etampes1: {
+    postes: [],
+    cas_pratique: {
+      plages: PLAGES_ETAMPES,
+      dispositif: PLAGES_ETAMPES.flatMap((p) => [
+        { plage: p.libelle, profil: 'Agent de sécurité', en_service: 2, justification: 'Deux agents pour couvrir les accès et les abords des équipements municipaux en binôme.' },
+        { plage: p.libelle, profil: 'Maître-chien', en_service: 1, justification: 'Un binôme cynophile pour la dissuasion sur les abords et le quartier.' },
+        { plage: p.libelle, profil: 'Agent de sécurité incendie', en_service: 0, justification: 'Aucune mission de sécurité incendie demandée sur cette plage.' },
+        { plage: p.libelle, profil: 'Encadrant', en_service: 0, justification: 'Contrôle par passage de l’encadrement, sans présence permanente.' },
+      ]),
+    },
+  },
+  rouen_univ: {
+    postes: [{ profil: 'Agent de sécurité', qualification: 'CQP APS', lieu: 'Campus de Mont-Saint-Aignan', heures_hebdo: null, heures_an: null,
+      plages: [{ jours: ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi'], debut: '07:00', fin: '23:00' }, { jours: ['samedi'], debut: '08:00', fin: '17:00' }],
+      citation: 'Fréquence et durée des prestations : du lundi au vendredi, de 7h00 à 23h00 (divisé en 2 vacations) le samedi, de 8h00 à 17h00' }],
+    cas_pratique: null,
+  },
+  ca_normandie: { postes: [], cas_pratique: null },
+};
+
 /** Réponse simulée à un appel du modèle. */
 export function repondre(corpus: CorpusCC, body: any): string {
   const msgs: any[] = body.messages || [];
@@ -131,6 +166,14 @@ export function repondre(corpus: CorpusCC, body: any): string {
 
   if (/Tu es un expert en marchés publics de sécurité privée pour l'entreprise GSS/.test(sys)) return type('analyse du DCE', json(ANALYSES[corpus]));
   if (/PÉRIMÈTRE RÉEL des/.test(sys)) return type('périmètre', json({ perimetre: PERIMETRE[corpus] }));
+  // Dimensionnement (46a337b) : postes du CCTP (citations exactes) ou cas pratique d'Étampes (relevé de la sonde réelle).
+  if (/^Tu lis le DCE d'un marché de sécurité privée pour GSS\. Tu ne calcules aucun total/.test(sys)) return type('dimensionnement', json(DIMENSIONNEMENT[corpus]));
+  // Couverture du CCTP en cadre imposé (ec6aa03) : une exigence de moyens ajoutée à Étampes, rien ailleurs.
+  if (/^Tu contrôles les réponses de GSS \(sécurité privée\) au cadre de réponse/.test(sys)) {
+    const reps = [...tout.matchAll(/^### Réponse (\d+) — question : (.*)$/gm)].map((m) => ({ id: Number(m[1]), question: m[2] }));
+    const cible = corpus === 'etampes1' ? reps.find((x) => /moyens?|matériel|communication/i.test(x.question)) : undefined;
+    return type('couverture du cadre', json({ ajouts: cible ? [{ id: cible.id, apres: '', texte: 'GSS dote chaque agent d’un moyen de communication qui lui permet de joindre en permanence son encadrement pendant la vacation' }] : [] }));
+  }
   // CC_PAGES : limite de pages simulée plus basse (exerce la sélection en boucle et la condensation).
   if (/^Tu lis des extraits du règlement de consultation/.test(sys)) return type('format imposé', json(corpus === 'imm' ? { ...PLAN_IMM, pagesMax: Number(process.env.CC_PAGES) || PLAN_IMM.pagesMax } : { limite: false }));
   if (/CHECK-LIST des GRANDES EXIGENCES/.test(sys)) {
