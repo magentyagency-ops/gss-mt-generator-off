@@ -289,6 +289,9 @@ export function poserSignetsChamps(xmlDoc: any): number[] {
  * Formule, pour CHAQUE emplacement, la question exacte à poser à l'équipe : elle ne porte que sur la
  * donnée manquante à cet endroit précis (lue dans sa phrase), pas sur le sous-critère entier.
  */
+/** Identifiant interne d'emplacement ou de champ (jamais dans une question posée à GSS). */
+export const REPERE_TECHNIQUE = /\b(?:GSS_AC|GSS_CH|CHAMP)_?\d+\b/i;
+
 export async function formulerQuestions(
   items: Array<{ cle: string; contexte: string; environnement: string; critere: string }>,
 ): Promise<Map<string, { question: string; groupe: string }>> {
@@ -298,12 +301,15 @@ export async function formulerQuestions(
 - La question ne porte que sur cet emplacement, pas sur les « […] » ni sur le reste du paragraphe.
 - Elle est autonome et concrète : elle nomme le site ou le sujet, et indique la forme attendue (nombre d'agents, durée en minutes, nom de société, horaires…).
 - Une seule phrase interrogative, sans formule de politesse.
+- Ne cite jamais l'identifiant de l'emplacement (« GSS_AC_3 », « A12 », « CHAMP_5 ») : c'est un repère technique, inconnu du collègue.
 - "groupe" : un libellé court de la DONNÉE attendue (ex. « nombre d'équipes affectées au site », « recours à la sous-traitance et à l'intérim »). Des emplacements qui attendent exactement la même donnée reçoivent le MÊME groupe (et la même question) : GSS n'y répondra qu'une fois.
 Renvoie {"questions": [{"cle": "...", "question": "...", "groupe": "..."}]} avec TOUS les emplacements listés.`;
   const demander = async (lot: typeof items) => {
     const r = await json(systeme, lot.map((i) => `### ${i.cle}\nSous-critère : ${i.critere || '—'}\nPhrase : ${i.contexte}\nTexte autour : ${i.environnement}`).join('\n\n'));
     for (const q of Array.isArray(r.questions) ? r.questions : []) {
-      if (q?.cle && String(q.question || '').trim()) {
+      // Une question qui cite un repère technique (« le champ GSS_AC_3 ») n'a pas de sens pour GSS : écartée (relance,
+      // puis question d'origine de l'emplacement).
+      if (q?.cle && String(q.question || '').trim() && !REPERE_TECHNIQUE.test(String(q.question))) {
         out.set(String(q.cle), { question: String(q.question).trim(), groupe: String(q.groupe || q.question).trim() });
       }
     }

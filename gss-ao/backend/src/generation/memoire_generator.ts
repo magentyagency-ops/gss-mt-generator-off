@@ -6,7 +6,7 @@ import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce }
 import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque } from './themes';
-import { poserSignets, poserSignetsChamps, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion } from './completion';
+import { poserSignets, poserSignetsChamps, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE } from './completion';
 import {
   chargerMemoireType, preparerMemoireType, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite,
@@ -4739,7 +4739,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     // n'est PAS une preuve que GSS la détient → on ne se fie donc PAS aux sources DCE pour ces champs,
     // seulement à la Doc GSS. Si la certification citée n'y figure pas → [À COMPLÉTER] (anti-invention).
     // (Les qualifications d'AGENTS — CQP, SSIAP, SST, HOBO — ne sont pas concernées par ce filtre.)
-    const gssDocCompact = normCtx(gssDocContext + ' ' + texteSourcesMemoires() + this.texteDemande()).replace(/\s+/g, '');
+    // Textes du mémoire type de GSS (publipostés) : ce sont des sources GSS (« prime de fin d'année », valeurs sociales).
+    const gssDocCompact = normCtx(gssDocContext + ' ' + texteSourcesMemoires() + this.texteDemande() + ' ' + Object.values(repriseMT?.textes || {}).join(' ')).replace(/\s+/g, '');
     const SERVICE_CERT_RE = /ISO\s*\d{4,5}|APSAD(?:\s*R?\s*\d+)?|\bR\s?31\b/gi;
     const guardServiceCert = (val: string, _ctx: string): string => {
       // On scanne la VALEUR (pas le contexte) : si elle CITE une certification de service et que la
@@ -4934,6 +4935,15 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       replacements.forEach(r => { if (valById.has(r.id)) r.value = valById.get(r.id)!; });
     }
 
+    /** Ligne de continuation « : …… » (sans question propre) d'un libellé qui a déjà sa propre zone de réponse. */
+    const continuationAvecPrincipale = (d: FieldDesc): boolean => {
+      if (d.kind === 'checkbox') return false;
+      const qD = ((d.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').replace(/[\s.:;,…\-—–/|()]+/g, '');
+      const libelleD = normCtx(((d.context.match(/Contexte(?: proche)?:\s*"([^"]*)"/) || [])[1] || '').split('/').map((s) => s.trim()).filter(Boolean).pop() || '');
+      return !qD && libelleD.length > 5 && descriptors.some((o) => o.id !== d.id && o.kind !== 'checkbox'
+        && normCtx((o.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '') === libelleD);
+    };
+
     // ── Déduplication des zones SUR-DÉCOUPÉES ──
     // Certaines zones de réponse (lignes pointillées consécutives sous un même libellé, ou plusieurs
     // cellules vides d'une même ligne de tableau) sont détectées comme PLUSIEURS champs → elles
@@ -4972,6 +4982,13 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         const v = (valById.get(d.id) ?? '').trim();
         if (!v) continue;
         if (isPureBlank(v)) {
+          // Ligne de continuation « : …… » d'une question qui a déjà sa propre zone de réponse (même libellé) : pointillés
+          // effacés, jamais un « [À COMPLÉTER] » sans objet (la question posée à GSS n'aurait pas de sujet).
+          if (continuationAvecPrincipale(d)) {
+            valById.set(d.id, '');
+            console.log(`[MemoireGenerator] [À COMPLÉTER] retiré d'une ligne de continuation (CHAMP_${d.id})`);
+            continue;
+          }
           if (d.kind === 'table') {
             valById.set(d.id, '');
             console.log(`[MemoireGenerator] [À COMPLÉTER] retiré pour cellule de tableau (CHAMP_${d.id})`);
@@ -5068,6 +5085,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       const desc = descriptors.find(d => d.id === rep.id);
       if (!desc) return;
       let value = dedupeClientName(guardPlaceholders(guardNames(guardInventedClaims(guardServiceCert(guardFactual(String(rep.value), desc.context), desc.context), desc.context)), desc.context));
+      // Ligne de continuation « : …… » vidée par un garde-fou : pointillés effacés plutôt qu'un « [À COMPLÉTER] » sans objet.
+      if (/^\[À COMPLÉTER\]\.?$/.test(value.trim()) && continuationAvecPrincipale(desc)) value = '';
       // Réponse développée d'une grille de notation : mêmes garde-fous, mais appliqués PHRASE par phrase
       // (téléphones/e-mails non sourcés retirés, certifications/claims non prouvées retirées) plutôt
       // qu'en effaçant toute la réponse ; la mise en forme en lignes est conservée.
@@ -5194,6 +5213,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         return { cle, contexte, environnement, critere: ((d?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').slice(0, 400) };
       }));
       for (const el of elementsACompleter) { const q = precises.get(el.cle); if (q) { el.question = q.question; el.groupe = q.groupe; } }
+      // Aucune question ne cite un repère technique (« le champ GSS_AC_3 ») : question d'après la phrase de l'emplacement.
+      for (const el of elementsACompleter) if (REPERE_TECHNIQUE.test(el.question)) el.question = `Information à fournir pour compléter : « ${el.contexte.replace(REPERE_TECHNIQUE, '').trim()} »`;
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Formulation des questions par emplacement indisponible : ${e?.message || e}`);
     }
