@@ -27,7 +27,7 @@ export async function mesurerDessins(html: string): Promise<Array<{ page: number
         svg.querySelectorAll(':scope > *:not(defs)').forEach((e) => {
           const el = e as SVGGraphicsElement;
           // Fond de toile (rectangle de la taille du viewBox) : non compté.
-          if (el.tagName === 'rect' && +(el.getAttribute('width') || 0) >= vb.width && +(el.getAttribute('height') || 0) >= vb.height) return;
+          if (el.tagName === 'rect' && +(el.getAttribute('width') || 0) >= vb.width - 0.5 && +(el.getAttribute('height') || 0) >= vb.height - 0.5) return;
           const b = el.getBoundingClientRect();
           if (!b.width && !b.height) return;
           y0 = Math.min(y0, b.top); y1 = Math.max(y1, b.bottom);

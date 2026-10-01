@@ -132,7 +132,7 @@ async function mesurer(md: string, theme: string): Promise<any> {
           const vb = svg.viewBox.baseVal;
           let y0 = Infinity, y1 = -Infinity;
           svg.querySelectorAll(':scope > *:not(defs)').forEach((e) => {
-            if (e.tagName === 'rect' && +(e.getAttribute('width') || 0) >= vb.width && +(e.getAttribute('height') || 0) >= vb.height) return;
+            if (e.tagName === 'rect' && +(e.getAttribute('width') || 0) >= vb.width - 0.5 && +(e.getAttribute('height') || 0) >= vb.height - 0.5) return;
             const eb = e.getBoundingClientRect();
             if (!eb.width && !eb.height) return;
             y0 = Math.min(y0, eb.top); y1 = Math.max(y1, eb.bottom);

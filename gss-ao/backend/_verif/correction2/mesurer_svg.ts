@@ -19,7 +19,7 @@ import path from 'path';
       const sb = s.getBoundingClientRect();
       let y0 = Infinity, y1 = -Infinity, x0 = Infinity, x1 = -Infinity;
       s.querySelectorAll(':scope > *:not(defs)').forEach((e) => {
-        if (e.tagName === 'rect' && +(e.getAttribute('width') || 0) >= vb.width && +(e.getAttribute('height') || 0) >= vb.height) return;
+        if (e.tagName === 'rect' && +(e.getAttribute('width') || 0) >= vb.width - 0.5 && +(e.getAttribute('height') || 0) >= vb.height - 0.5) return;
         const b = e.getBoundingClientRect();
         if (!b.width && !b.height) return;
         y0 = Math.min(y0, b.top); y1 = Math.max(y1, b.bottom); x0 = Math.min(x0, b.left); x1 = Math.max(x1, b.right);

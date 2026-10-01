@@ -65,7 +65,10 @@ def _ecart(n_rangs, h_rang, ecart, place, maxi=1.7):
 def _remplir(n, besoin, h_max, ecart, place, cible=0.86, k_h=1.28, k_e=2.4):
     """Hauteur de rangée et écart pour que la composition occupe la page (« 1 schéma = 1 page, en gros ») :
     d'abord le contenu + un peu d'air ; si l'ensemble n'occupe pas `cible` de la place, les cartes grandissent
-    (jusqu'à k_h × le besoin), puis les écarts (jusqu'à k_e × l'écart)."""
+    (jusqu'à k_h × le besoin), puis les écarts (jusqu'à k_e × l'écart). Dernier recours d'en_grand (_ETAT["etirer"]) :
+    cartes et écarts grandissent jusqu'à remplir la place."""
+    if _ETAT["etirer"]:
+        cible, k_h, k_e = max(cible, 0.97), max(k_h, 2.5), max(k_e, 4.0)
     h2 = min(h_max, max(besoin, besoin + max(18, besoin * 0.10)))
     h2 = max(h2, besoin)
     tot = n * h2 + (n - 1) * ecart
@@ -666,7 +669,7 @@ def checklist(groupes, h_tete=96):
     # on répartit l'air restant entre les lignes (liste aérée, toujours lisible)
     reste = H - 2 * MY - hauteur(t, b, m, gap_l)
     nl = sum(len(l) + 1 for _, l in m)
-    gap_l = min(b * 2.1, gap_l + max(0, reste * 0.7) / max(nl, 1))
+    gap_l = min(b * (4.0 if _ETAT["etirer"] else 2.1), gap_l + max(0, reste * (0.9 if _ETAT["etirer"] else 0.7)) / max(nl, 1))
     tot = hauteur(t, b, m, gap_l)
     y = (H - tot) / 2
     fond_c = th.c[th.carte.get("remplissage", "carte_fond")]
@@ -960,7 +963,9 @@ def arbre(racine, enfants, h_racine=96, h_enfant=100, rx=8):
                "corps": _it(en, "texte", ()), "icone": _it(en, "icone"), "orient": "h"} for en in enfants]
         t, b, _, besoin = ajuster_cartes(cs, 44, 18, aligner=False, quoi="arbre")
         h2 = _hauteur_finale(h, besoin)
-        gy = _ecart(n, h2, gy, zone_h, 1.8)
+        if _ETAT["etirer"]:     # dernier recours d'en_grand : cartes à leur hauteur maximale
+            h2 = max(h2, min(h, besoin * 2.5))
+        gy = _ecart(n, h2, gy, zone_h, 4.0 if _ETAT["etirer"] else 1.8)
         tot = hr + g_r + n * h2 + (n - 1) * gy
         ytop = (H - tot) / 2
         ye = ytop + hr + g_r
@@ -1011,7 +1016,7 @@ def arbre(racine, enfants, h_racine=96, h_enfant=100, rx=8):
     bi = max(17, b * 0.96)
     hi = max(P["total"] for P in items_P(t, bi)) + 26
     reste = H - 2 * MY - (hr + g_r + ht + 26 + max_items * hi + (max_items - 1) * g_i)
-    hi = min(hi * 1.45, hi + max(0, reste) / max(max_items, 1) * 0.8)
+    hi = min(hi * (3.0 if _ETAT["etirer"] else 1.45), hi + max(0, reste) / max(max_items, 1) * (0.95 if _ETAT["etirer"] else 0.8))
     tot = hr + g_r + ht + 26 + max_items * hi + (max_items - 1) * g_i
     ytop = (H - tot) / 2
     ye = ytop + hr + g_r
@@ -1380,7 +1385,7 @@ def barres(series, unite="", maxi=None, largeur_label=300, legende=None, note=No
     tl = 26
     hb = 60
     bloc = tl * 1.5 + 12 + hb
-    gap = min(70, (H - 2 * MY - h_leg - h_note - n * bloc) / max(n - 1, 1))
+    gap = min(200 if _ETAT["etirer"] else 70, (H - 2 * MY - h_leg - h_note - n * bloc) / max(n - 1, 1))
     tot = n * bloc + (n - 1) * gap + h_leg + h_note
     y = (H - tot) / 2
     xb0 = MX
@@ -2114,8 +2119,8 @@ def pourcentages(taux, note=None):
 # Gabarits dont les cartes et les textes délimitent tout le dessin (mesure fiable par le registre de la toile).
 ZOOMABLES = {"grille", "etoile", "comparatif", "chiffres", "barres", "fiche", "flux", "checklist", "chevrons", "arbre",
              "matrice"}
-ZOOMS = (1.08, 1.16, 1.25, 1.35, 1.45)
-CIBLE_HAUTEUR = 0.80     # part de la hauteur de la toile (la toile fait 0,93 de la hauteur utile de la page)
+ZOOMS = (1.08, 1.16, 1.25, 1.35, 1.45, 1.6)
+CIBLE_HAUTEUR = 0.84     # part de la hauteur de la toile (la toile fait 0,93 de la hauteur utile de la page : ≥ 0,77)
 
 
 def part_hauteur(s):
@@ -2151,7 +2156,7 @@ def en_grand(dessin, gabarit, cible=CIBLE_HAUTEUR):
         if f2 >= cible:
             return meilleur
     # Aucun zoom n'atteint la cible (colonnes étroites, textes déjà à leur taille) : les gabarits qui le permettent
-    # (comparatif) allongent leurs cadres jusqu'à la cible, au meilleur zoom.
+    # (comparatif, et ceux qui répartissent leurs rangées par _remplir) allongent leurs cadres, au meilleur zoom.
     _ETAT["zoom"], _ETAT["etirer"] = z_meilleur, cible
     try:
         s3 = dessin()
