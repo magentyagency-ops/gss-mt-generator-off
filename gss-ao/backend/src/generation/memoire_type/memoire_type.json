@@ -1020,8 +1020,6 @@
     "SLIDE REP AO/EFFECTIFS ET ORGANIGRAMME/ORGANIGRAMME.pdf (version antérieure, voir divergences)"
    ],
    "a_confirmer": [
-    "ALAMAT Ramzi, responsable unité mobile (registre : à confirmer)",
-    "ATTOU Nesrine, responsable incendie (registre : à confirmer)",
     "Présence de DUHAMEL Leo (administratif) et de LEMELE Fabrice (exploitation) cités par faits_gss.md mais absents de l'organigramme du mémoire type 2026-06"
    ],
    "ancienne_rubrique": "b_encadrement",
@@ -1184,9 +1182,7 @@
     "faits_gss.md — Identité ; Outils et moyens (délais normands)",
     "Réponse de GSS (2026-10-01) : équipes et astreinte présentes sur toute la moitié nord, de Nantes à Lille et jusqu'à Reims (remplace « le quart nord-ouest »)"
    ],
-   "a_confirmer": [
-    "Délai « moins de 2 heures sur n'importe quel site » : engagement d'astreinte régionale de 2024 (Région Normandie lot 1, p.45), non reconfirmé par GSS"
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_implantation",
    "anciennes_rubriques": [
     "b_implantation"
@@ -1901,7 +1897,6 @@
     "faits_gss.md — Références clients réelles"
    ],
    "a_confirmer": [
-    "Localisation « Eudebouville (27600) » telle qu'écrite dans la source : orthographe et code postal à vérifier par GSS",
     "Commune écrite « Heudebouville (27600) » (source : « Eudebouville ») : à valider par GSS."
    ],
    "ancienne_rubrique": "b_references",
@@ -2369,7 +2364,6 @@
     "AO RNE.pdf p.49-50"
    ],
    "a_confirmer": [
-    "« Nous faisons appel à Global Security Protection » : à valider par GSS au regard de la règle « pas de sous-traitance » (registre, faits_gss.md)",
     "Fonction de LEMELE Fabrice : « responsable APR » ici, « responsable d'exploitation » selon faits_gss.md, « responsable administratif » en 2024",
     "Recours à Global Security Protection pour les agents de protection rapprochée (AO RNE p.49) : retiré du texte, contraire à la règle « pas de sous-traitance » ; à confirmer par GSS."
    ],
@@ -2595,7 +2589,7 @@
     "registre_informations.json — organisme_formation"
    ],
    "a_confirmer": [
-    "Dénomination d'OPCALIA (les OPCA sont devenus des OPCO en 2019) : qualificatif retiré du texte."
+    "Dénomination d'OPCALIA citée dans le texte (les OPCA sont devenus des OPCO en 2019) : nom actuel de l'organisme à confirmer par GSS."
    ],
    "ancienne_rubrique": "b_recrutement_formation",
    "anciennes_rubriques": [
@@ -2792,7 +2786,6 @@
     "faits_gss.md — Règles de rédaction (L1224, reprise)"
    ],
    "a_confirmer": [
-    "Taux de reprise : 100 % dans la réponse Université de Rouen Normandie (2026-04) — à confirmer par marché",
     "Scénario de la slide « agents non maintenus affectés sur un autre site » retiré du texte et du schéma (reprise jamais sélective ; schéma en trois étapes : réunion, reprise sur le même site, intégration) : à valider par GSS."
    ],
    "ancienne_rubrique": "b_reprise_personnel",
@@ -3218,9 +3211,7 @@
     "faits_gss.md — Outils et moyens (main courante)",
     "Réponse de GSS (2026-10-01) : horodatage infalsifiable et historique des modifications, sauvegardes, exports PDF et Excel, accès du client, conservation 10 ans, restitution ou destruction en fin de marché"
    ],
-   "a_confirmer": [
-    "Outil de main courante : Trackforce (registre) — Vigicom encore cité dans AO RNE 2026-06 et le cadre Université 2026-04 ; « VIGICOM 6TADEL » dans le cadre MIN 2025-10"
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_rondes",
    "anciennes_rubriques": [
     "b_rondes",

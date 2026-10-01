@@ -1371,7 +1371,14 @@ export function publierRubrique(mt: MemoireType, rubrique: RubriqueMemoireType, 
       : { ...rubrique.schema };
     if (!schema && rubrique.schema.alternative) schema = { ...rubrique.schema.alternative };
   }
-  return { ...base, texte, manquantes: r.manquantes, aConfirmer: r.aConfirmer, schema };
+  // Points « à confirmer » de la rubrique (choix de reprise, valeurs anciennes ou divergentes entre sources) : posés
+  // à GSS avec ceux des variables (consultations, premier message de l'assistant).
+  const titreRubrique = rubrique.titre.replace(/\{\{[^}]*\}\}/g, '').replace(/\s*:\s*$/, '').trim();
+  const aConfirmer = [...r.aConfirmer];
+  for (const q of rubrique.a_confirmer || []) {
+    if (q && q.trim()) aConfirmer.push({ variable: `rubrique:${rubrique.id}`, valeur: '', question: `« ${titreRubrique} » — à confirmer : ${q.trim()}` });
+  }
+  return { ...base, texte, manquantes: r.manquantes, aConfirmer, schema };
 }
 
 export interface MemoirePrepare {
