@@ -30,9 +30,9 @@
 <path d="M662.9,321.7 L877.2,327.3" fill="none" stroke="#9A928E" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="8 7"/>
 <path d="M662.9,321.7 L909.5,92.1" fill="none" stroke="#9A928E" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="8 7"/>
 </g>
-<rect x="593.5" y="235.7" width="138.8" height="56.0" rx="12.0" fill="#E5CA97" filter="url(#op)"/>
-<text x="607.5" y="258.7" font-size="16" font-weight="800" fill="#463A2F" text-anchor="start">Rouen · siège</text>
-<text x="607.5" y="279.7" font-size="13" font-weight="400" fill="#463A2F" text-anchor="start">76 rue d'Elbeuf</text>
+<rect x="578.1" y="235.7" width="169.5" height="56.0" rx="12.0" fill="#E5CA97" filter="url(#op)"/>
+<text x="592.1" y="258.7" font-size="16" font-weight="800" fill="#463A2F" text-anchor="start">Rouen · siège</text>
+<text x="592.1" y="279.7" font-size="13" font-weight="400" fill="#463A2F" text-anchor="start">15 place de la Verrerie</text>
 <circle cx="662.8521937578696" cy="321.6774193548408" r="18" fill="#E5CA97" filter="url(#od)"/>
 <g transform="translate(662.9,321.7) scale(0.560)" fill="none" stroke="#463A2F" stroke-width="4.29" stroke-linecap="round" stroke-linejoin="round"><path d="M-12,15 L-12,-14 L6,-14 L6,15 M6,-4 L13,-4 L13,15 M-16,15 L16,15"/><path d="M-7,-8 L-3,-8 M1,-8 L1,-8 M-7,-2 L-3,-2 M-7,4 L-3,4 M-4,15 L-4,9"/></g>
 <rect x="355.5" y="287.3" width="221.2" height="56.0" rx="12.0" fill="#FBFAF4" filter="url(#op)"/>

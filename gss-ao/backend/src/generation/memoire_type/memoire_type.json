@@ -3,7 +3,7 @@
  "version": "2026-10-01",
  "statut": "Référence du générateur (publipostage). Textes GSS repris d'AO RNE, des slides GSS, de la base des mémoires et du registre ; faits « à confirmer » signalés dans chaque rubrique ; à valider par GSS.",
  "reference": "Mémoire type GSS AO RNE (Université de Rouen Normandie, 2026-06), 118 slides GSS « SLIDE REP AO », base des mémoires GSS, registre des informations",
- "entreprise": "GLOBAL SECURITY SERVICES (GSS), 76 rue d'Elbeuf, 76100 Rouen",
+ "entreprise": "GLOBAL SECURITY SERVICES (GSS), 15 place de la Verrerie, 76100 Rouen",
  "syntaxe": {
   "variable": "{{NOM}} : remplacée par sa valeur ; valeur inconnue → règle « si_absente » de la variable (jamais de valeur inventée).",
   "condition": "{{#si EXPR}}…{{/si}} : passage imprimé seulement si EXPR est vraie ; EXPR = NOM, !NOM, A|B (ou), A&B (et) ; NOM = indicateur, ou variable (vraie si elle a une valeur).",
@@ -1022,7 +1022,7 @@
    "condition": "IDENTITE_DEMANDEE",
    "condition_texte": "si le DCE (RC, CCTP ou cadre de réponse) demande dans le mémoire l'identité du candidat, ses autorisations CNAPS, ses effectifs ou sa certification",
    "priorite": 2,
-   "texte": "- Dénomination : Global Security Services (GSS), PME.\n- Siège et agence qui exécute le marché : 76 rue d'Elbeuf, 76100 Rouen.\n- SIRET : 805 295 516 00019.\n- Autorisation d'exercer délivrée par le CNAPS : AUT-076-2114-02-12-20140458592, obtenue le 12 février 2015.\n- Agrément dirigeant CNAPS : M. MARCHANI Adil, AGD-076-2114-01-28-20140458593.\n- Effectif : {{EFFECTIF_TOTAL}} salariés, dont {{EFFECTIF_76}} en Seine-Maritime (76) et {{EFFECTIF_27}} dans l'Eure (27).\n- Démarche qualité : certification ISO 9001 en cours, prévue fin 2026.\n- Sous-traitance : GSS n'envisage pas de recourir à la sous-traitance pour les prestations fixes ou supplémentaires.",
+   "texte": "- Dénomination : Global Security Services (GSS), PME.\n- Siège et agence qui exécute le marché : 15 place de la Verrerie, 76100 Rouen.\n- SIRET : 805 295 516 00019.\n- Autorisation d'exercer délivrée par le CNAPS : AUT-076-2114-02-12-20140458592, obtenue le 12 février 2015.\n- Agrément dirigeant CNAPS : M. MARCHANI Adil, AGD-076-2114-01-28-20140458593.\n- Effectif : {{EFFECTIF_TOTAL}} salariés, dont {{EFFECTIF_76}} en Seine-Maritime (76) et {{EFFECTIF_27}} dans l'Eure (27).\n- Assurance responsabilité civile : Hiscox, contrat HA RCP0242762 (attestation valable du 21 septembre 2026 au 16 mars 2027) : responsabilité civile professionnelle 300 000 € par sinistre et par année d'assurance, tous dommages corporels, matériels et immatériels, consécutifs ou non ; responsabilité civile exploitation et employeur 8 000 000 € par sinistre.\n- Démarche qualité : certification ISO 9001 en cours, prévue fin 2026.\n- Sous-traitance : GSS n'envisage pas de recourir à la sous-traitance pour les prestations fixes ou supplémentaires.",
    "sous_parties": [],
    "schema": {
     "source": "bibliotheque",
@@ -1042,7 +1042,8 @@
    "sources": [
     "registre_informations.json — raison_sociale, adresse_siege, siret, autorisation_cnaps, date_autorisation_cnaps, dirigeant, agrement_dirigeant, effectif_total, effectif_departement_76, effectif_departement_27, certification_iso, recours_sous_traitance",
     "base_memoires.json — GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf p.1-2, 18 (passage 5afe061ca2816499, 87b07d6d690008ef, a456247c41d80b31, c42221666f1c5256)",
-    "faits_gss.md — Identité (registre, confirmé)"
+    "faits_gss.md — Identité (registre, confirmé)",
+    "Réponse de GSS (2026-10-01) : siège 15 place de la Verrerie ; attestation d'assurance RC Hiscox HA RCP0242762 (24/09/2026)"
    ],
    "a_confirmer": [],
    "ancienne_rubrique": "b_agrements",
@@ -1063,7 +1064,7 @@
    "condition": "IMPLANTATION_DEMANDEE",
    "condition_texte": "si le DCE interroge l'implantation, l'agence locale ou la proximité (les délais ne sont cités que si le site est en Normandie)",
    "priorite": 2,
-   "texte": "Notre siège et notre agence sont situés 76 rue d'Elbeuf, à Rouen. Nos agents sont présents sur le quart nord-ouest, et plus précisément sur l'ensemble de la région Normandie : sur nos {{EFFECTIF_TOTAL}} salariés, {{EFFECTIF_76}} travaillent en Seine-Maritime et {{EFFECTIF_27}} dans l'Eure. {{#si !HORS_NORMANDIE}}Nos agents d'astreinte sont répartis géographiquement afin de pouvoir intervenir rapidement sur n'importe quel site ; ce système d'astreinte dédié nous permet de réagir efficacement aux situations d'urgence. Nos agents d'astreinte peuvent ainsi intervenir en {{DELAI_ASTREINTE_NORMANDIE}} sur n'importe quel site normand. {{/si}}Nous disposons d'une astreinte de {{VEHICULES_ASTREINTE}} véhicules pour la région rouennaise.",
+   "texte": "Notre siège et notre agence sont situés 15 place de la Verrerie, à Rouen. Nos agents sont présents sur le quart nord-ouest, et plus précisément sur l'ensemble de la région Normandie : sur nos {{EFFECTIF_TOTAL}} salariés, {{EFFECTIF_76}} travaillent en Seine-Maritime et {{EFFECTIF_27}} dans l'Eure. {{#si !HORS_NORMANDIE}}Nos agents d'astreinte sont répartis géographiquement afin de pouvoir intervenir rapidement sur n'importe quel site ; ce système d'astreinte dédié nous permet de réagir efficacement aux situations d'urgence. Nos agents d'astreinte peuvent ainsi intervenir en {{DELAI_ASTREINTE_NORMANDIE}} sur n'importe quel site normand. {{/si}}Nous disposons d'une astreinte de {{VEHICULES_ASTREINTE}} véhicules pour la région rouennaise.",
    "sous_parties": [],
    "schema": {
     "source": "spec",

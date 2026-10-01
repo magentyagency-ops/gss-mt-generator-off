@@ -124,6 +124,8 @@ describe('Mémoire type : JSON de référence', () => {
     expect(identite.replace(/\s/g, '')).toContain(val('siret'));
     expect(identite).toContain(val('autorisation_cnaps'));
     expect(identite).toContain(val('agrement_dirigeant'));
+    expect(identite).toContain(val('adresse_siege'));
+    expect(identite).toContain(val('assurance_rc_contrat'));
     expect(val('date_autorisation_cnaps')).toBe('12/02/2015');
     expect(identite).toContain('12 février 2015');
     expect(val('certification_iso')).toMatch(/en cours/);

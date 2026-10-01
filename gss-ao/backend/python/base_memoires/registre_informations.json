@@ -1166,6 +1166,15 @@
    "categorie": "identite",
    "valeurs": [
     {
+     "valeur": "15 place de la Verrerie, 76100 Rouen",
+     "client": "Réponse de GSS",
+     "document": "reponses_gss_2026-10-01.md",
+     "date": "2026-10",
+     "page": null,
+     "citation": "siège : 15 place de la Verrerie, 76100 Rouen",
+     "reponse_gss": true
+    },
+    {
      "valeur": "76 RUE D ELBEUF 76100 ROUEN",
      "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
      "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
@@ -1174,11 +1183,13 @@
      "citation": "Adresse du siège de l’entreprise : …76 RUE D ELBEUF 76100 ROUEN"
     }
    ],
-   "valeur_retenue": "76 RUE D ELBEUF 76100 ROUEN",
-   "date_retenue": "2026-04",
-   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "valeur_retenue": "15 place de la Verrerie, 76100 Rouen",
+   "date_retenue": "2026-10",
+   "source_retenue": "Réponse de GSS (1er octobre 2026) ; attestation d'assurance RC Hiscox (24/09/2026)",
    "statut": "confirmee",
-   "valeurs_anterieures_differentes": []
+   "valeurs_anterieures_differentes": [
+    "76 RUE D ELBEUF 76100 ROUEN (Université de Rouen Normandie (cadre lots 1-2-3), 2026-04)"
+   ]
   },
   {
    "cle": "autorisation_cnaps",
@@ -1431,6 +1442,132 @@
    "valeur_retenue": "ISO 9001 en cours – prévu pour fin 2026",
    "date_retenue": "2026-04",
    "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "assurance_rc_assureur",
+   "libelle": "Assureur responsabilité civile",
+   "categorie": "certifications",
+   "valeurs": [
+    {
+     "valeur": "Hiscox (Hiscox SA – Hiscox France, 49 avenue de l'Opéra, 75002 Paris)",
+     "client": "Attestation d'assurance RC (Hiscox)",
+     "document": "GSS - Emission d'avenant - RCP Attestation.PDF",
+     "date": "2026-09",
+     "page": 1,
+     "citation": "Assureur : Hiscox (Hiscox SA – Hiscox France, 49 avenue de l'Opéra, 75002 Paris)",
+     "reponse_gss": true
+    }
+   ],
+   "valeur_retenue": "Hiscox (Hiscox SA – Hiscox France, 49 avenue de l'Opéra, 75002 Paris)",
+   "date_retenue": "2026-09",
+   "source_retenue": "Attestation d'assurance RC Hiscox (fait à Paris le 24/09/2026)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "assurance_rc_contrat",
+   "libelle": "Contrat d'assurance responsabilité civile",
+   "categorie": "certifications",
+   "valeurs": [
+    {
+     "valeur": "HA RCP0242762",
+     "client": "Attestation d'assurance RC (Hiscox)",
+     "document": "GSS - Emission d'avenant - RCP Attestation.PDF",
+     "date": "2026-09",
+     "page": 1,
+     "citation": "Contrat : HA RCP0242762",
+     "reponse_gss": true
+    }
+   ],
+   "valeur_retenue": "HA RCP0242762",
+   "date_retenue": "2026-09",
+   "source_retenue": "Attestation d'assurance RC Hiscox (fait à Paris le 24/09/2026)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "assurance_rc_validite",
+   "libelle": "Validité de l'attestation d'assurance RC",
+   "categorie": "certifications",
+   "valeurs": [
+    {
+     "valeur": "du 21/09/2026 au 16/03/2027",
+     "client": "Attestation d'assurance RC (Hiscox)",
+     "document": "GSS - Emission d'avenant - RCP Attestation.PDF",
+     "date": "2026-09",
+     "page": 1,
+     "citation": "Validité de l'attestation : du 21 septembre 2026 au 16 mars 2027",
+     "reponse_gss": true
+    }
+   ],
+   "valeur_retenue": "du 21/09/2026 au 16/03/2027",
+   "date_retenue": "2026-09",
+   "source_retenue": "Attestation d'assurance RC Hiscox (fait à Paris le 24/09/2026)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "assurance_rc_professionnelle",
+   "libelle": "Plafond RC professionnelle",
+   "categorie": "certifications",
+   "valeurs": [
+    {
+     "valeur": "300 000 € par sinistre et par année d'assurance, dont tous dommages corporels, matériels et immatériels consécutifs ou non : 300 000 €",
+     "client": "Attestation d'assurance RC (Hiscox)",
+     "document": "GSS - Emission d'avenant - RCP Attestation.PDF",
+     "date": "2026-09",
+     "page": 1,
+     "citation": "RC professionnelle et/ou RC après livraison : 300 000 € par sinistre et par année d'assurance, dont tous dommages corporels, matériels et immatériels consécutifs ou non : 300 000 €",
+     "reponse_gss": true
+    }
+   ],
+   "valeur_retenue": "300 000 € par sinistre et par année d'assurance, dont tous dommages corporels, matériels et immatériels consécutifs ou non : 300 000 €",
+   "date_retenue": "2026-09",
+   "source_retenue": "Attestation d'assurance RC Hiscox (fait à Paris le 24/09/2026)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "assurance_rc_exploitation",
+   "libelle": "Plafond RC exploitation / RC employeur",
+   "categorie": "certifications",
+   "valeurs": [
+    {
+     "valeur": "8 000 000 € par sinistre, dont dommages matériels et immatériels consécutifs 1 500 000 € par sinistre ; dommages immatériels non consécutifs 500 000 € par sinistre ; intoxications alimentaires 800 000 € par sinistre ; maladies professionnelles et/ou faute inexcusable 1 500 000 € par année d'assurance ; atteintes accidentelles à l'environnement 800 000 € par sinistre ; vol par préposés 30 000 € par sinistre",
+     "client": "Attestation d'assurance RC (Hiscox)",
+     "document": "GSS - Emission d'avenant - RCP Attestation.PDF",
+     "date": "2026-09",
+     "page": 1,
+     "citation": "RC exploitation / RC employeur : 8 000 000 € par sinistre, dont […]",
+     "reponse_gss": true
+    }
+   ],
+   "valeur_retenue": "8 000 000 € par sinistre, dont dommages matériels et immatériels consécutifs 1 500 000 € par sinistre ; dommages immatériels non consécutifs 500 000 € par sinistre ; intoxications alimentaires 800 000 € par sinistre ; maladies professionnelles et/ou faute inexcusable 1 500 000 € par année d'assurance ; atteintes accidentelles à l'environnement 800 000 € par sinistre ; vol par préposés 30 000 € par sinistre",
+   "date_retenue": "2026-09",
+   "source_retenue": "Attestation d'assurance RC Hiscox (fait à Paris le 24/09/2026)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "assurance_rc_activites",
+   "libelle": "Activités couvertes par l'assurance RC",
+   "categorie": "certifications",
+   "valeurs": [
+    {
+     "valeur": "Gardiennage, surveillance, filtrage ; intervention sur site en cas de déclenchement d'alarme intrusion ; sécurité incendie (agent de sécurité qualifié / confirmé / chef de poste) ; monde entier hors USA / Canada",
+     "client": "Attestation d'assurance RC (Hiscox)",
+     "document": "GSS - Emission d'avenant - RCP Attestation.PDF",
+     "date": "2026-09",
+     "page": 1,
+     "citation": "Activités assurées : gardiennage, surveillance, filtrage ; intervention sur site en cas de déclenchement d'alarme intrusion ; sécurité incendie",
+     "reponse_gss": true
+    }
+   ],
+   "valeur_retenue": "Gardiennage, surveillance, filtrage ; intervention sur site en cas de déclenchement d'alarme intrusion ; sécurité incendie (agent de sécurité qualifié / confirmé / chef de poste) ; monde entier hors USA / Canada",
+   "date_retenue": "2026-09",
+   "source_retenue": "Attestation d'assurance RC Hiscox (fait à Paris le 24/09/2026)",
    "statut": "confirmee",
    "valeurs_anterieures_differentes": []
   },

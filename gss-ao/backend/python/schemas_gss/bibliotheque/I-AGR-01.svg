@@ -10,7 +10,7 @@
 <clipPath id="cb73"><rect x="421.3" y="59.0" width="349.3" height="250.0" rx="22"/></clipPath><rect x="421.3" y="59.0" width="349.3" height="75.0" fill="#ECDEC2" clip-path="url(#cb73)"/>
 <circle cx="596.0" cy="134.0" r="32.0" fill="#FBFAF4"/><circle cx="596.0" cy="134.0" r="26.0" fill="#8A7550"/><g transform="translate(596.0,134.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M0,15 C-13,0 -12,-14 0,-14 C12,-14 13,0 0,15 z"/><circle cx="0" cy="-4" r="4.5"/></g>
 <text x="596.0" y="223.0" font-size="22" font-weight="700" fill="#463A2F" text-anchor="middle">Siège</text>
-<text x="596.0" y="258.1" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">76 rue d'Elbeuf, 76100 Rouen</text>
+<text x="596.0" y="258.1" font-size="17.5" font-weight="400" fill="#463A2F" text-anchor="middle">15 place de la Verrerie, 76100 Rouen</text>
 <rect x="802.7" y="59.0" width="349.3" height="250.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
 <clipPath id="cb74"><rect x="802.7" y="59.0" width="349.3" height="250.0" rx="22"/></clipPath><rect x="802.7" y="59.0" width="349.3" height="75.0" fill="#ECDEC2" clip-path="url(#cb74)"/>
 <circle cx="977.3" cy="134.0" r="32.0" fill="#FBFAF4"/><circle cx="977.3" cy="134.0" r="26.0" fill="#8A7550"/><g transform="translate(977.3,134.0) scale(0.897)" fill="none" stroke="#FFFFFF" stroke-width="2.68" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,-15 L5,-15 L11,-9 L11,15 L-10,15 z"/><path d="M-5,-4 L6,-4 M-5,2 L6,2 M-5,8 L2,8"/></g>
