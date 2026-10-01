@@ -11,7 +11,8 @@
 //   GSS_IA_EFFORT_MECANIQUE  OCR, description de photo, évaluation d'une réponse courte (défaut : none)
 //   GSS_IA_CACHE             « implicite » : cache de prompt implicite d'OpenAI, sans point d'arrêt
 //                            (défaut : explicite sur GPT-5.6 et suivants)
-//   GSS_IA_SERVICE_TIER      « flex » pour les lots de test (−50 %, plus lent) ; vide en production
+//   GSS_IA_SERVICE_TIER      niveau de service OpenAI (défaut : « flex » pour gpt-6-luna, −50 % sur tous les jetons,
+//                            réponses plus lentes ; « standard » pour le désactiver)
 // L'effort propre à un usage (GSS_IA_EFFORT_<USAGE>) l'emporte sur GSS_IA_EFFORT.
 //
 // Retour à l'état antérieur (gpt-5.6-luna, effort par défaut « medium », cache implicite) :
@@ -24,6 +25,7 @@
 // d'entrée, alors que les prompts GSS ne sont presque jamais relus. Le mode explicite n'écrit que les
 // préfixes stables marqués par prefixeEnCache() (relus ensuite à 0,1 ×) ; le reste est facturé 1 ×.
 import './config'; // charge le .env avant toute lecture de process.env
+import OpenAI from 'openai';
 
 export type UsageIA = 'redaction' | 'analyse' | 'mecanique';
 type Effort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -97,9 +99,55 @@ export function reglagesIA(usage: UsageIA, opts: { temperature?: number } = {}):
   if (raisonne(model)) r.reasoning_effort = effortCompatible(model, effortIA(usage));
   else if (opts.temperature !== undefined) r.temperature = opts.temperature;
   if (cacheExplicite()) r.prompt_cache_options = { mode: 'explicit' };
-  const tier = env('GSS_IA_SERVICE_TIER');
+  const tier = niveauService(model);
   if (tier) r.service_tier = tier;
   return r;
+}
+
+/**
+ * Niveau de service : « flex » par défaut pour gpt-6-luna (même modèle, même qualité, prix divisé par 2,
+ * réponses plus lentes et mises en file d'attente). GSS_IA_SERVICE_TIER=standard le désactive ; toute autre
+ * valeur est transmise telle quelle à l'API.
+ */
+function niveauService(model: string): string {
+  const v = env('GSS_IA_SERVICE_TIER').toLowerCase();
+  if (v === 'standard' || v === 'aucun' || v === 'non') return '';
+  if (v) return v;
+  return /^gpt-6-luna/i.test(model) ? 'flex' : '';
+}
+
+// ── Repli automatique du niveau Flex ─────────────────────────────────────────────────────────
+// En Flex, OpenAI peut répondre « ressource indisponible » (429) ou laisser la requête en file d'attente :
+// l'appel est alors refait une fois en niveau standard (coût normal pour CET appel seulement), avec un délai
+// d'attente allongé à 15 minutes en Flex. Un crédit épuisé (insufficient_quota) n'est jamais réessayé.
+// Le repli est posé une seule fois sur le SDK : il vaut pour tous les clients OpenAI du serveur.
+const FLEX_DELAI_MS = 15 * 60 * 1000;
+{
+  const proto: any = Object.getPrototypeOf(new OpenAI({ apiKey: 'sans-cle' }).chat.completions);
+  if (!proto.__repliFlexGss) {
+    const creer = proto.create;
+    proto.create = function (corps: any, options?: any) {
+      if (!corps || corps.service_tier !== 'flex' || corps.stream) return creer.call(this, corps, options);
+      const opts = { ...(options || {}), timeout: Math.max(options?.timeout || 0, FLEX_DELAI_MS) };
+      const appel = creer.call(this, corps, opts);
+      const repli = async () => {
+        try {
+          return await appel;
+        } catch (e: any) {
+          const code = e?.code || e?.error?.code || '';
+          const quota = /insufficient_quota|credit_balance/i.test(`${code} ${e?.message || ''}`);
+          const flexIndisponible = (e?.status === 429 && !quota) || /timed? ?out|timeout/i.test(`${e?.name || ''} ${e?.message || ''}`);
+          if (!flexIndisponible) throw e;
+          console.warn(`[ModelesIA] Flex indisponible (${e?.status || e?.name || 'délai dépassé'}) : appel refait en niveau standard.`);
+          const { service_tier: _niveau, ...standard } = corps;
+          return creer.call(this, standard, options);
+        }
+      };
+      // L'objet renvoyé par le SDK est une promesse enrichie (withResponse, asResponse) : on garde l'usage courant (await).
+      return repli();
+    };
+    proto.__repliFlexGss = true;
+  }
 }
 
 /**
