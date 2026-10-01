@@ -177,16 +177,48 @@ export function imagesTheme(theme: string): string[] {
 
 // ─── Schémas de la bibliothèque dans le thème ────────────────────────────────────────────────
 
-function pythonBin(): string {
+/** Interpréteur Python du moteur de schémas (variable PYTHON_BIN, sinon « py » sous Windows, « python3 » ailleurs). */
+export function pythonBin(): string {
   if (process.env.PYTHON_BIN) return process.env.PYTHON_BIN;
   return process.platform === 'win32' ? 'py' : 'python3';
+}
+
+const BALISE_SVG = /<(text|rect|circle|path|line|ellipse|polygon|polyline|g|feDropShadow|svg)\b([^>]*)>/g;
+
+/**
+ * Repli sans moteur Python : un schéma d'origine (palette du 25/09/2026) aux couleurs du thème, avec la table
+ * « correspondance_paysage » de themes.json (exportée de themes_gss.correspondance : mêmes couleurs que le rendu paysage
+ * du moteur). La police et la géométrie ne changent pas (aucun débordement nouveau). Retour arrière, style ou table
+ * absents : SVG inchangé.
+ */
+export function recolorerSvg(svg: string, theme: string): string {
+  const table = registreThemes().correspondance_paysage;
+  const t = table?.[theme];
+  if (estRetourArriere(theme) || !t) return svg;
+  const inchangees = new Set<string>((table._inchangees || []).map((c: string) => c.toUpperCase()));
+  const hex = (c: string) => {
+    const x = c.trim().toUpperCase();
+    return /^#[0-9A-F]{3}$/.test(x) ? `#${[...x.slice(1)].map((k) => k + k).join('')}` : x;
+  };
+  return svg.replace(BALISE_SVG, (_m, tag: string, attrs: string) => {
+    let a = attrs.replace(/\b(fill|stroke|flood-color)="(#[0-9A-Fa-f]{3,6})"/g, (m0, nom: string, brut: string) => {
+      const val = hex(brut);
+      if (inchangees.has(val)) return m0;
+      if (nom === 'flood-color') return `${nom}="${t.ombre || brut}"`;
+      const usage = nom === 'stroke' ? (tag === 'line' && t.ligne?.[val] ? 'ligne' : 'trait')
+        : tag === 'text' ? 'texte' : (tag === 'circle' && t.puce?.[val] ? 'puce' : 'fond');
+      return `${nom}="${t[usage]?.[val] || brut}"`;
+    });
+    if (tag === 'feDropShadow' && !t.ombre) a = a.replace(/flood-opacity="[\d.]+"/, 'flood-opacity="0"');
+    return `<${tag}${a}>`;
+  });
 }
 
 /**
  * SVG (bruts, comme les fichiers de bibliotheque/) des schémas de la bibliothèque GSS dans le thème : format « page »
  * (redessinés depuis specs.json, textes contrôlés identiques à l'original) ou « paysage » (schéma d'origine aux
- * couleurs et à la police du thème). Cache par thème côté Python. Retour arrière au format paysage, ou moteur
- * indisponible : les fichiers d'origine.
+ * couleurs et à la police du thème). Cache par thème côté Python. Retour arrière au format paysage : les fichiers
+ * d'origine ; moteur indisponible : les fichiers d'origine aux couleurs du thème (recolorerSvg).
  */
 export function schemasBibliotheque(ids: string[], format: FormatSchema = 'paysage', theme?: string | null): Map<string, string> {
   const t = themeActif(theme);
@@ -205,15 +237,22 @@ export function schemasBibliotheque(ids: string[], format: FormatSchema = 'paysa
       if (r.status === 0 && r.stdout) {
         for (const x of JSON.parse(r.stdout).resultats || []) if (x.ok && x.svg) out.set(x.id, x.svg);
       } else {
-        console.warn(`[Thèmes] Schémas de la bibliothèque non redessinés (${r.error?.message || (r.stderr || '').slice(0, 300)}) : schémas d'origine.`);
+        console.warn(`[Thèmes] Schémas de la bibliothèque non redessinés (${r.error?.message || (r.stderr || '').slice(0, 300)}) : repli.`);
       }
     } catch (e: any) {
-      console.warn(`[Thèmes] Schémas de la bibliothèque non redessinés (${e?.message || e}) : schémas d'origine.`);
+      console.warn(`[Thèmes] Schémas de la bibliothèque non redessinés (${e?.message || e}) : repli.`);
     }
   }
+  const replis: string[] = [];
   for (const id of uniques) {
     if (out.has(id)) continue;
-    try { out.set(id, fs.readFileSync(path.join(MOTEUR, 'bibliotheque', `${id}.svg`), 'utf-8')); } catch { /* schéma inconnu */ }
+    try {
+      const origine = fs.readFileSync(path.join(MOTEUR, 'bibliotheque', `${id}.svg`), 'utf-8');
+      // Repli : schéma d'origine aux couleurs du thème (toile paysage, police d'origine).
+      out.set(id, recolorerSvg(origine, t));
+      if (!estRetourArriere(t)) replis.push(id);
+    } catch { /* schéma inconnu */ }
   }
+  if (replis.length) console.warn(`[Thèmes] ${replis.length} schéma(s) de la bibliothèque en repli (moteur Python indisponible) : schéma d'origine aux couleurs du thème « ${t} » (${replis.join(', ')}).`);
   return out;
 }

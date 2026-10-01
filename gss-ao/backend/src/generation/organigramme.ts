@@ -14,7 +14,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { spawnSync } from 'child_process';
 import { rolesOrganigramme } from './base_memoires';
-import { themeActif, estRetourArriere, envTheme, RETOUR_ARRIERE, FormatSchema } from './themes';
+import { themeActif, estRetourArriere, envTheme, RETOUR_ARRIERE, FormatSchema, pythonBin, recolorerSvg } from './themes';
 
 const MOTEUR = path.resolve(__dirname, '../../python/schemas_gss');
 const STATIQUE = path.join(MOTEUR, 'organigramme_gss.svg');
@@ -84,7 +84,7 @@ export function actualiserOrganigramme(referents: string): void {
       fs.writeFileSync(json, JSON.stringify(d), 'utf-8');
       const win = process.platform === 'win32';
       const q = (x: string) => (win ? `"${x}"` : x);
-      const r = spawnSync(win ? 'py' : 'python3', [q(path.join(MOTEUR, 'organigramme_gss.py')), q(svg), q(json)], { encoding: 'utf-8', timeout: 60_000, shell: win, env: envTheme(RETOUR_ARRIERE) });
+      const r = spawnSync(pythonBin(), [q(path.join(MOTEUR, 'organigramme_gss.py')), q(svg), q(json)], { encoding: 'utf-8', timeout: 60_000, shell: win, env: envTheme(RETOUR_ARRIERE) });
       fs.rmSync(json, { force: true });
       if (r.status !== 0 || !fs.existsSync(svg) || !fs.statSync(svg).size) { fs.rmSync(svg, { force: true }); console.warn(`[Organigramme] Schéma non redessiné (${(r.stderr || '').slice(0, 200)}) : organigramme d'origine conservé.`); return; }
     }
@@ -107,17 +107,17 @@ function organigrammeTheme(theme: string, format: FormatSchema): string | null {
       const json = path.join(os.tmpdir(), `gss-organigramme-${theme}-${format}-${cle}.json`);
       if (d) { fs.writeFileSync(json, JSON.stringify(d), 'utf-8'); args.push(q(json)); }
       args.push('--format', format);
-      const r = spawnSync(win ? 'py' : 'python3', args, { encoding: 'utf-8', timeout: 60_000, shell: win, env: envTheme(theme) });
+      const r = spawnSync(pythonBin(), args, { encoding: 'utf-8', timeout: 60_000, shell: win, env: envTheme(theme) });
       fs.rmSync(json, { force: true });
       if (r.status !== 0 || !fs.existsSync(svg) || !fs.statSync(svg).size) {
         fs.rmSync(svg, { force: true });
-        console.warn(`[Organigramme] Organigramme non dessiné dans le thème ${theme} (${(r.stderr || r.error?.message || '').slice(0, 200)}) : organigramme d'origine.`);
+        console.warn(`[Organigramme] Organigramme non dessiné dans le thème ${theme} (${(r.stderr || r.error?.message || '').slice(0, 200)}) : repli.`);
         return null;
       }
     }
     return fs.readFileSync(svg, 'utf-8');
   } catch (e: any) {
-    console.warn(`[Organigramme] Organigramme non dessiné dans le thème ${theme} (${e?.message || e}) : organigramme d'origine.`);
+    console.warn(`[Organigramme] Organigramme non dessiné dans le thème ${theme} (${e?.message || e}) : repli.`);
     return null;
   }
 }
@@ -132,6 +132,12 @@ export function organigrammeSvg(format: FormatSchema = 'paysage', theme?: string
     const svg = organigrammeTheme(t, format);
     if (svg) return svg;
   }
-  if (courant) return courant;
-  try { return fs.readFileSync(STATIQUE, 'utf-8'); } catch { return null; }
+  // Repli (retour arrière, ou moteur indisponible) : organigramme d'origine, aux couleurs du thème hors retour arrière.
+  let svg: string | null = courant;
+  if (!svg) { try { svg = fs.readFileSync(STATIQUE, 'utf-8'); } catch { return null; } }
+  if (!estRetourArriere(t)) {
+    console.warn(`[Organigramme] Organigramme en repli : dessin d'origine aux couleurs du thème « ${t} ».`);
+    return recolorerSvg(svg, t);
+  }
+  return svg;
 }

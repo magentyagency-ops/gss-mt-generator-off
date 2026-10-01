@@ -4,7 +4,7 @@ import path from 'path';
 import { spawnSync } from 'child_process';
 import {
   RETOUR_ARRIERE, themeActif, themeParDefaut, themesDisponibles, estRetourArriere, feuilleMarp, variablesPages,
-  fontFaceTheme, policesDuTheme, schemasBibliotheque, contraste,
+  fontFaceTheme, policesDuTheme, schemasBibliotheque, contraste, recolorerSvg,
 } from '../src/generation/themes';
 
 /**
@@ -99,6 +99,23 @@ describe('schémas de la bibliothèque dans le thème', () => {
     expect(svg).toContain('viewBox="0 0 1200 660"');
     expect(svg).toContain("font-family=\"'IBM Plex Sans', sans-serif\"");
     for (const c of ANCIENNE_PALETTE) expect(svg.toUpperCase()).not.toContain(`"${c}"`);
+  });
+});
+
+describe('repli sans moteur Python', () => {
+  it('table correspondance_paysage de themes.json identique à themes_gss.correspondance (à réexporter sinon)', () => {
+    const r = spawnSync('python3', ['-c', 'import sys,json;sys.path.insert(0,".");import themes_gss as T;print(json.dumps(T.correspondance_exportee()))'],
+      { cwd: MOTEUR, encoding: 'utf-8' });
+    const reg = JSON.parse(fs.readFileSync(path.join(MOTEUR, 'themes', 'themes.json'), 'utf-8'));
+    expect(reg.correspondance_paysage).toEqual(JSON.parse(r.stdout));
+  });
+  it('schéma d\'origine aux couleurs du thème, police et géométrie inchangées ; retour arrière inchangé', () => {
+    const origine = fs.readFileSync(path.join(MOTEUR, 'bibliotheque', 'III-RON-01.svg'), 'utf-8');
+    const svg = recolorerSvg(origine, 'marine');
+    for (const c of ANCIENNE_PALETTE) expect(svg.toUpperCase()).not.toContain(`"${c}"`);
+    expect(/viewBox="[^"]+"/.exec(svg)![0]).toBe(/viewBox="[^"]+"/.exec(origine)![0]);
+    expect(/font-family="[^"]+"/.exec(svg)![0]).toBe(/font-family="[^"]+"/.exec(origine)![0]);
+    expect(recolorerSvg(origine, RETOUR_ARRIERE)).toBe(origine);
   });
 });
 

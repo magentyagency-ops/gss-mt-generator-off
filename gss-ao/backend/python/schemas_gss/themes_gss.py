@@ -430,3 +430,22 @@ def ecrire(chemin, contenu):
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(contenu)
     os.replace(tmp, chemin)
+
+
+# ── Correspondance exportée pour le repli sans moteur Python (themes.ts : recolorerSvg) ──
+def correspondance_exportee():
+    """Tables couleur d'origine → couleur du thème de chaque style (et couleurs inchangées, ombre), telles que
+    recolorer() les applique : themes.ts les relit dans themes.json pour recolorer un schéma d'origine quand le moteur
+    Python est indisponible."""
+    out = {"_inchangees": sorted(_INCHANGEES)}
+    for nom in styles():
+        out[nom] = dict(correspondance(nom), ombre=(style(nom)["carte"].get("ombre") or {}).get("couleur"))
+    return out
+
+
+if __name__ == "__main__" and "--exporter-correspondance" in sys.argv[1:]:
+    # python3 themes_gss.py --exporter-correspondance : à relancer après un changement des couleurs d'un style.
+    d = json.load(open(FICHIER_THEMES, encoding="utf-8"))
+    d["correspondance_paysage"] = correspondance_exportee()
+    ecrire(FICHIER_THEMES, json.dumps(d, ensure_ascii=False, indent=1) + "\n")
+    print(f"correspondance_paysage : {len(d['correspondance_paysage']) - 1} styles exportés dans {FICHIER_THEMES}")
