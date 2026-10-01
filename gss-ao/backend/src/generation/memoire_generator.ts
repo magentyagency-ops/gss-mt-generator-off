@@ -7382,13 +7382,16 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const b1 = planMT.rubriques.find((r) => r.mode === 'besoin');
     const partieB1 = b1 ? plan.find((p) => rep.parPartie[p.id].includes(b1.id)) : undefined;
     const avisSecours: string[] = [];
+    // Consigne 3 : la compréhension du besoin a toujours son schéma de process, même au format court (dans le texte).
+    let svgComprehension: string | undefined;
     if (b1 && partieB1) {
       progres(22, 'Notre compréhension de votre besoin…');
       const c = await this.redigerComprehension(prep, ctxBase, besoin, {
         perimetre, exigences: matrice.filter((e) => e.exigence && !PIECES_OFFRE.test(e.exigence)), analyse: analyseResumee,
-        demande: repartition?.parRubrique[b1.id]?.join(' ; ') || undefined,
+        demande: repartition?.parRubrique[b1.id]?.join(' ; ') || undefined, format: 'paysage',
       });
       textes[b1.id] = c.texte;
+      svgComprehension = c.svg;
       if (c.secours) avisSecours.push(`Partie « ${partieB1.title} » : compréhension du besoin construite à partir des données du DCE (rédaction automatique indisponible), à relire.`);
     }
 
@@ -7408,7 +7411,14 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
 
     // ── 4. Budget de mots par partie et sélection par priorité (aucune réécriture) ──
     const nbSchemas = Math.max(1, Math.floor(format.pagesMax / 4));
-    const choixSchemas = choisirSchemasGss(plan.map((p) => ({ cle: p.id, question: `${p.title} ${p.attendu || ''}`, texte: '' }))).slice(0, nbSchemas);
+    // Schéma de process de la compréhension : il passe avant le choix de la bibliothèque pour sa partie et s'ajoute aux
+    // autres (sous 6 pages, il prend la place du seul schéma permis).
+    const choixTous = choisirSchemasGss(plan.map((p) => ({
+      cle: p.id, question: `${p.title} ${p.attendu || ''}`, texte: '',
+      ...(svgComprehension && p.id === partieB1?.id ? { svg: svgComprehension, svgId: 'comprehension' } : {}),
+    })));
+    const schemaProcess = choixTous.filter((c) => c.id === 'comprehension');
+    const choixSchemas = [...schemaProcess, ...choixTous.filter((c) => c.id !== 'comprehension').slice(0, schemaProcess.length && format.pagesMax < 6 ? nbSchemas - 1 : nbSchemas)];
     const motsTotal = Math.max(900, format.pagesMax * 560 - choixSchemas.length * 200 - 120);
     const poids: Record<string, number> = Object.fromEntries(plan.map((p) => [p.id, poidsPartie(p)]));
     const sommePoids = plan.reduce((s, p) => s + poids[p.id], 0) || 1;
@@ -7526,7 +7536,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
 
     // ── 9. Rendu mesuré ; d'abord la sélection (passages entiers du mémoire type), ensuite seulement la condensation ──
     const infosRubriques = plan.flatMap((p) => infosDe(p.id));
-    const schemas: Record<string, string> = Object.fromEntries(choixSchemas.map((c) => [c.id === 'organigramme' ? `${c.cle}#court#organigramme` : `${c.cle}#court`, c.svg]));
+    // Organigramme et schéma de process de la compréhension : jamais retirés pour gagner de la place.
+    const schemas: Record<string, string> = Object.fromEntries(choixSchemas.map((c) => [c.id === 'organigramme' ? `${c.cle}#court#organigramme` : c.id === 'comprehension' ? `${c.cle}#court#process` : `${c.cle}#court`, c.svg]));
     let rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
     for (let tour = 1; rendu.pages > format.pagesMax && tour <= 3; tour++) {
       const ratio = (format.pagesMax / rendu.pages) * 0.92;
@@ -7634,8 +7645,8 @@ FORME : sous-titres « ## » courts (un par élément), paragraphes courts et li
         titre: p.title,
         // Repères retirés avec la ponctuation qui les suivait (aucun « . » orphelin).
         texte: sections[p.id].replace(new RegExp(`${REPERE_RE.source}[ \\t]*[.;,]?`, 'g'), '').replace(/^[ \t]*[.;,][ \t]*$/gm, '').replace(/\n{3,}/g, '\n\n').trim(),
-        schema: schemas[`${p.id}#court`] ?? schemas[`${p.id}#court#organigramme`],
-        garder: !!schemas[`${p.id}#court#organigramme`],
+        schema: schemas[`${p.id}#court`] ?? schemas[`${p.id}#court#organigramme`] ?? schemas[`${p.id}#court#process`],
+        garder: !!(schemas[`${p.id}#court#organigramme`] || schemas[`${p.id}#court#process`]),
       }));
     const r = await rendreFormatCourt(parties, cover || {}, court.pagesMax, this.responseDir, theme);
     return { filePath: r.filePath, pages: r.pages };
