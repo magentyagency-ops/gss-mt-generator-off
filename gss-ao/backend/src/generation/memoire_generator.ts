@@ -7558,7 +7558,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
 
     // Renvois « au bloc n » de la compréhension : le mémoire suit les parties du RC → renvoi à la partie qui reprend
     // réellement les rubriques du bloc, ou renvoi retiré si aucune ne les reprend.
-    if (b1 && textes[b1.id]) textes[b1.id] = renvoisVersParties(textes[b1.id], planMT.blocs, plan, retenues);
+    if (b1 && textes[b1.id]) textes[b1.id] = renvoisVersParties(textes[b1.id], planMT.blocs, plan, retenues, Object.fromEntries(planMT.rubriques.map((r) => [r.id, r.titre])));
 
     // ── 6. Assemblage dans l'ordre du RC ; éléments attendus hors mémoire type rédigés à part (propositions) ──
     const sections: Record<string, string> = {};

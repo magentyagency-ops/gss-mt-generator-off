@@ -48,30 +48,41 @@ export function renvoisVersParties(
   blocs: Array<{ numero: number; rubriques: string[] }>,
   parties: Array<{ id: string; title: string }>,
   retenues: Record<string, string[]>,
+  /** Titres des rubriques du mémoire type (id → titre) : un renvoi qui cite ses rubriques (« bloc 4 : « La
+   *  planification » ») est rattaché à la partie qui reprend CES rubriques. */
+  titres: Record<string, string> = {},
 ): string {
-  const partiesDuBloc = (n: number): number[] => {
-    const b = blocs.find((x) => x.numero === n);
-    if (!b) return [];
-    return parties.map((p, i) => ((retenues[p.id] || []).some((id) => b.rubriques.includes(id)) ? i : -1)).filter((i) => i >= 0);
+  const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const partiesDe = (ids: string[]): number[] => parties.map((p, i) => ((retenues[p.id] || []).some((id) => ids.includes(id)) ? i : -1)).filter((i) => i >= 0);
+  const partiesDuBloc = (n: number): number[] => partiesDe(blocs.find((x) => x.numero === n)?.rubriques || []);
+  const partiesDesTitres = (cites: string[]): number[] => {
+    const ids = Object.keys(titres).filter((id) => cites.some((c) => norm(titres[id]) === norm(c)));
+    return ids.length ? partiesDe(ids) : [];
   };
-  const libelle = (i: number) => {
-    const t = parties[i].title.trim();
-    return t.length <= 60 ? `${i + 1} « ${t} »` : `${i + 1}`;
-  };
-  const RX = /(,\s*)?(\b(?:d[ée]velopp|d[ée]crit|pr[ée]sent|d[ée]taill|trait)[ée]?e?s?\s+)?\b(au|aux|du|des|le|les|dans les?|en)?\s*\b[Bb]locs?\s+(\d)((?:\s*(?:,|et)\s*\d)*)(?![\d])/g;
-  return String(texte || '').replace(RX, (m, virgule: string | undefined, participe: string | undefined, prep: string | undefined, n1: string, suite: string) => {
+  const libelle = (idx: number[]) => (idx.length > 1
+    ? `${idx.slice(0, -1).map((i) => i + 1).join(', ')} et ${idx[idx.length - 1] + 1}`
+    : (parties[idx[0]].title.trim().length <= 60 ? `${idx[0] + 1} « ${parties[idx[0]].title.trim()} »` : `${idx[0] + 1}`));
+  // « bloc 5 », « blocs 3 et 5 », éventuellement suivis des rubriques citées : « bloc 4 : « La planification » et « … » ».
+  const RX = /(,\s*)?(\b(?:d[ée]velopp|d[ée]crit|pr[ée]sent|d[ée]taill|trait)[ée]?e?s?\s+)?\b(au|aux|du|des|le|les|dans les?|en)?\s*\b[Bb]locs?\s+(\d)((?:\s*(?:,|et)\s*\d)*)(?![\d])(\s*:\s*«[^»]{1,120}»(?:\s*(?:,|et|;)\s*«[^»]{1,120}»)*)?/g;
+  return String(texte || '').replace(RX, (m, virgule: string | undefined, participe: string | undefined, prep: string | undefined, n1: string, suite: string, cites: string | undefined) => {
+    const citations = [...String(cites || '').matchAll(/«\s*([^»]+?)\s*»/g)].map((x) => x[1]);
+    if (citations.length) {
+      // Rubriques citées : elles restent (titres de sous-parties du mémoire), précédées de leur partie si elle est unique.
+      const idx = partiesDesTitres(citations);
+      const liste = citations.map((c) => `« ${c} »`).join(citations.length > 2 ? ', ' : ' et ');
+      return `${virgule || ''}${idx.length === 1 ? `partie ${idx[0] + 1} : ` : ''}${liste}`;
+    }
     const numeros = [Number(n1), ...[...(suite || '').matchAll(/\d/g)].map((x) => Number(x[0]))];
     const idx = [...new Set(numeros.flatMap(partiesDuBloc))].sort((a, b) => a - b);
     if (!idx.length || idx.length > 2) return '';
     const pluriel = idx.length > 1;
-    const liste = pluriel ? `${libelle(idx[0])} et ${libelle(idx[1])}` : libelle(idx[0]);
     const p = (prep || '').toLowerCase();
     const prepNouvelle = /^(?:au|aux|dans|en)/.test(p) ? (pluriel ? 'dans les parties' : 'dans la partie')
       : /^(?:du|des)$/.test(p) ? (pluriel ? 'des parties' : 'de la partie')
         : /^(?:le|les)$/.test(p) ? (pluriel ? 'les parties' : 'la partie')
           : (pluriel ? 'parties' : 'partie');
-    return `${virgule || ''}${participe || ''}${prepNouvelle} ${liste}`;
-  }).replace(/ +([,.;:])/g, '$1').replace(/ {2,}/g, ' ');
+    return `${virgule || ''}${participe || ''}${prepNouvelle} ${libelle(idx)}`;
+  }).replace(/\(\s*[:;,]\s*/g, '(').replace(/[;,]\s*[:;,]\s*/g, '; ').replace(/\(\s*\)/g, '').replace(/ +([,.)])/g, '$1').replace(/ {2,}/g, ' ');
 }
 
 const TITRE_ENGAGEMENTS = '## Nos engagements sur les exigences du cahier des charges';
