@@ -653,6 +653,42 @@ export function completerBesoinMinimum(
   return { texte: parties.join('').replace(/\n{3,}/g, '\n\n').trim(), ajoutees };
 }
 
+/** Mots trop généraux pour lier une citation du CCTP à la puce qui la suit. */
+const MOTS_VIDES_CITATION = new Set(['avant', 'apres', 'dans', 'pour', 'avec', 'sans', 'sous', 'entre', 'leur', 'leurs', 'cette', 'tout', 'toute', 'tous', 'toutes', 'chaque', 'etre', 'sont', 'doit', 'doivent', 'devra', 'devront', 'plus', 'moins', 'ainsi', 'notre', 'votre', 'titulaire', 'prestataire', 'marche', 'prestation', 'prestations']);
+
+/**
+ * Contrôle déterministe des puces du bloc 1 « **Ce que vous attendez** (« citation du CCTP ») : contenu → notre réponse :
+ * … » (génération réelle ign 14 : citation sur la confidentialité, contenu sur le PTI) : la citation doit partager au
+ * moins un mot porteur de sens (4 lettres au moins, hors mots trop généraux, comparé sur ses 5 premières lettres) avec
+ * le contenu qui la suit (avant « → ») ; sinon elle est retirée et la puce gardée. L'initiale d'un nom commun après
+ * « : » (après l'étiquette, la citation ou « notre réponse ») passe en minuscule (« : Transmission au SAIMG » → « : transmission au SAIMG ») ; un nom
+ * propre (jamais écrit en minuscule dans le texte, ou écrit avec sa majuscule en milieu de phrase) la garde.
+ */
+export function citationsCoherentes(texte: string): { texte: string; retirees: number } {
+  let retirees = 0;
+  const racines = (t: string) => new Set(normaliser(t).split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !MOTS_VIDES_CITATION.has(w)).map((w) => w.slice(0, 5)));
+  const tout = String(texte || '');
+  const nomCommun = (mot: string) => {
+    if (!/^[A-ZÀ-Ý][a-zà-ÿ'’-]+$/.test(mot)) return false;
+    // (le mot ne contient que des lettres, des tirets et des apostrophes : aucun caractère spécial d'expression régulière)
+    if (new RegExp(`[a-zà-ÿ,] ${mot}(?![\\p{L}])`, 'u').test(tout)) return false;   // majuscule en milieu de phrase : nom propre
+    const bas = mot.charAt(0).toLowerCase() + mot.slice(1);
+    return new RegExp(`(?<![\\p{L}])${bas}(?![\\p{L}])`, 'u').test(tout);
+  };
+  const minuscule = (ligne: string) => ligne.replace(/(\)\s*:\s*|^\s*[-*•]\s+\*\*[^*]+\*\*\s*:\s*|→\s*notre réponse\s*:\s*)([A-ZÀ-Ý][a-zà-ÿ'’-]+)/g, (m, sep: string, mot: string) => (nomCommun(mot) ? `${sep}${mot.charAt(0).toLowerCase()}${mot.slice(1)}` : m));
+  const sortie = tout.split('\n').map((ligne) => {
+    const m = /^(\s*[-*•]\s+\*\*[^*]+\*\*)\s*\(\s*«\s*([^»]+?)\s*»\s*\)(\s*:\s*)(.*)$/.exec(ligne);
+    if (!m) return /^\s*[-*•]\s+\*\*/.test(ligne) ? minuscule(ligne) : ligne;
+    const contenu = m[4].split('→')[0];
+    const c = racines(m[2]);
+    const lie = [...racines(contenu)].some((w) => c.has(w));
+    if (lie) return minuscule(ligne);
+    retirees++;
+    return minuscule(`${m[1]}${m[3]}${m[4]}`);
+  }).join('\n');
+  return { texte: sortie, retirees };
+}
+
 /** Mots qui ne terminent pas un titre coupé (« Le périmètre de la » → « Le périmètre »). */
 const MOTS_OUTILS = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'l', 'd', 'et', 'ou', 'à', 'au', 'aux', 'en', 'pour', 'par', 'avec', 'sur', 'sous', 'dans', 'un', 'une', 'nos', 'vos', 'notre', 'votre', 'son', 'sa', 'ses', 'leur', 'leurs', 'ce', 'cette', 'ces', 'qui', 'que']);
 

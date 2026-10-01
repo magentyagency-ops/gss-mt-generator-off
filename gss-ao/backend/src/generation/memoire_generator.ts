@@ -17,7 +17,7 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin,
-  valeursImposeesValides, completerBesoinMinimum,
+  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, type Dimensionnement } from './dimensionnement';
@@ -6875,6 +6875,10 @@ RÈGLES DE FORME (rendu Marp) :
       const sources = (o.exigences || []).length ? o.exigences! : besoin.obligations.map((x) => ({ exigence: x }));
       // Méta-commentaires retirés d'abord (retirés de toute façon au nettoyage final) : le minimum compte les puces remises.
       texte = retirerCommentairesInternes(texte).texte;
+      // Citation du CCTP sans rapport avec le contenu de sa puce : retirée, la puce reste (génération réelle ign 14).
+      const cit = citationsCoherentes(texte);
+      if (cit.retirees) console.log(`[MemoireGenerator] Compréhension du besoin : ${cit.retirees} citation(s) du CCTP sans rapport avec leur puce retirée(s).`);
+      texte = cit.texte;
       const m = completerBesoinMinimum(texte, sources, prep.plan, String(ctx.dce || ''));
       if (m.ajoutees) {
         texte = m.texte;
