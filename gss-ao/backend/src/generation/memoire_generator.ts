@@ -20,6 +20,10 @@ import {
   valeursImposeesValides,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
+import {
+  candidatsReference, blocReference, referencesRetenues, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE,
+  type CandidatReference,
+} from './memoire_type_cadre';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
@@ -4081,6 +4085,15 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const queryEmbById = new Map<number, number[]>();
     descriptors.forEach((d, i) => queryEmbById.set(d.id, queryEmbs[i]));
 
+    // ── Mémoire type (consigne 5 : « on reprend exactement le mémoire de base ») : texte de GSS publiposté pour ce
+    //    marché, rubrique par rubrique ; chaque réponse développée reprend le texte des rubriques qui traitent sa
+    //    question. Détection des champs, champs courts, identité, tableaux et cases : inchangés. Retour arrière :
+    //    GSS_MEMOIRE_TYPE=non. ──
+    const repriseMT = await this.textesMemoireTypeCadre(dossierId, analysisData, dceContext, referentsContext, descriptors, buildPrompt);
+    /** Questions développées rédigées hors mémoire type (propositions) et reprises à relire, pour GSS. */
+    const propositionsCadre = new Map<number, string>();
+    const repriseParChamp = new Map<number, { ids: string[]; fidelite: number }>();
+
     const strategicCtx = buildStrategicContext('', analysisData);
 
     // ── Référents par RÔLE (fichier « Personnes » : « NOM Prénom — Rôle1 / Rôle2 ») ──
@@ -4143,7 +4156,7 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     };
 
     /** Traite UN champ : recherche ciblée des passages pertinents + 1 appel IA dédié. */
-    const answerField = async (f: FieldDesc): Promise<void> => {
+    const answerField = async (f: FieldDesc, strict = false): Promise<void> => {
       const qEmb = queryEmbById.get(f.id);
       const top = qEmb ? this.retrieve(qEmb, retrievalChunks, 12, this.buildFieldQuery(f)) : [];
       const gssPassages = top.filter(c => ['GSS', 'WEB', 'SOLLICITATION'].includes(c.source));
@@ -4347,17 +4360,22 @@ RÈGLE DE FIABILITÉ (PRIORITAIRE) — deux faces indissociables :
 - NE RECOPIE PAS l'intitulé de la question, ni les libellés des cases à cocher, ni les options proposées, comme si c'était une réponse.
 En cas de doute → "[À COMPLÉTER]".`;
 
+      // Réponse développée : textes du mémoire type candidats pour cette question (le modèle reprend ceux qui la traitent).
+      const developpee = isParagraph && !isCheckbox && !isTableCell && !!repriseMT;
+      const questionMT = `${qRaw || fieldAsk} ${(f.context.match(/Critère:\s*"([^"]*)"/) || [])[1] || ''}`.trim();
+      const limiteChamp = /Limite:|pages? maximum/i.test(f.context);
+      const candidats: CandidatReference[] = developpee ? candidatsReference(repriseMT!.mt, repriseMT!.textes, questionMT, { scores: repriseMT!.scores.get(f.id) }) : [];
       const userPrompt = `Analyse du marché (contexte de rédaction) :
 ${analysisJson}
 
 --- CONTEXTE STRATÉGIQUE GSS ---
 ${strategicCtx}
-${fmtBlock("EXTRAITS PERTINENTS DU DCE (exigences de l'acheteur)", dcePassages)}${fmtBlock('DOCUMENTATION GSS PERTINENTE (sources internes — appuie ta réponse dessus)', gssPassages)}${memoiresChamp}${isReferent && referentsContext ? `\n--- RÉFÉRENTS GSS (« Personnes ») ---\n${referentsContext}\nLIS BIEN LE LIBELLÉ : s'il demande UNE personne (singulier : « la personne », « l'interlocuteur », « le contact ») → donne EXACTEMENT UN référent, le plus pertinent au regard du libellé (le rôle nommé s'il y en a un ; sinon l'interlocuteur principal du marché). NE recopie PAS toute la liste. Il ne faut PLUSIEURS personnes QUE si le libellé le demande explicitement (« les personnes », « liste », « organigramme »).\n` : ''}
+${fmtBlock("EXTRAITS PERTINENTS DU DCE (exigences de l'acheteur)", dcePassages)}${fmtBlock('DOCUMENTATION GSS PERTINENTE (sources internes — appuie ta réponse dessus)', gssPassages)}${memoiresChamp}${blocReference(candidats, { limite: limiteChamp, strict })}${isReferent && referentsContext ? `\n--- RÉFÉRENTS GSS (« Personnes ») ---\n${referentsContext}\nLIS BIEN LE LIBELLÉ : s'il demande UNE personne (singulier : « la personne », « l'interlocuteur », « le contact ») → donne EXACTEMENT UN référent, le plus pertinent au regard du libellé (le rôle nommé s'il y en a un ; sinon l'interlocuteur principal du marché). NE recopie PAS toute la liste. Il ne faut PLUSIEURS personnes QUE si le libellé le demande explicitement (« les personnes », « liste », « organigramme »).\n` : ''}
 CHAMP UNIQUE À RÉDIGER :
 ${hint}
 
 ${instruction}
-${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuidance ? tableGuidance + '\n' : ''}${fieldAsk && fieldAsk !== f.context ? `${qEmpty ? `Cette zone à remplir (les pointillés « … ») fait suite, dans le document, au libellé qui la PRÉCÈDE : « ${fieldAsk} ». LIS ce libellé pour comprendre ce qui est attendu et remplis la zone en conséquence.` : `RESTE SUR LE SUJET DE CETTE QUESTION : « ${fieldAsk} ».`} Ne réponds pas sur un thème VOISIN (ex. ne parle pas des moyens d'accès/clés si le sujet est le report des alarmes). Si les extraits apportent une information MÊME PARTIELLE sur CE sujet, donne une réponse (au moins partielle) fondée dessus plutôt que de laisser vide — sans rien inventer. N'écris "[À COMPLÉTER]" QUE si rien d'utile sur ce sujet n'est disponible.\n` : ''}Renvoie UNIQUEMENT un objet JSON : {"id": ${f.id}, "value": "..."}`;
+${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuidance ? tableGuidance + '\n' : ''}${fieldAsk && fieldAsk !== f.context ? `${qEmpty ? `Cette zone à remplir (les pointillés « … ») fait suite, dans le document, au libellé qui la PRÉCÈDE : « ${fieldAsk} ». LIS ce libellé pour comprendre ce qui est attendu et remplis la zone en conséquence.` : `RESTE SUR LE SUJET DE CETTE QUESTION : « ${fieldAsk} ».`} Ne réponds pas sur un thème VOISIN (ex. ne parle pas des moyens d'accès/clés si le sujet est le report des alarmes). Si les extraits apportent une information MÊME PARTIELLE sur CE sujet, donne une réponse (au moins partielle) fondée dessus plutôt que de laisser vide — sans rien inventer. N'écris "[À COMPLÉTER]" QUE si rien d'utile sur ce sujet n'est disponible.\n` : ''}Renvoie UNIQUEMENT un objet JSON : {"id": ${f.id}, "value": "..."${candidats.length ? ', "reference": ["R1"]' : ''}}`;
 
       // Températures basses = fidélité aux sources (priorité « 0 inventé ») : on baisse la rédaction
       // de paragraphe de 0.4 → 0.2 pour limiter les détails « brodés » non sourcés.
@@ -4378,6 +4396,25 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
           let court = '';
           for (const ph of phrases) { if ((court + ' ' + ph).split(/\s+/).length > 35) break; court = `${court} ${ph}`.trim(); }
           value = court || String(value).split(/\s+/).slice(0, 30).join(' ');
+        }
+        // Réponse développée : texte du mémoire type repris (fidélité contrôlée), sinon proposition de l'IA à valider.
+        if (developpee && value !== undefined && value !== null && String(value).trim()) {
+          const retenus = referencesRetenues(candidats, data.reference);
+          const libelle = (questionMT || `Champ ${f.id}`).replace(/\s+/g, ' ').slice(0, 160);
+          if (retenus.length) {
+            const fid = fideliteReponse(retenus.map((c) => c.texte).join('\n\n'), String(value), limiteChamp);
+            if (fid < SEUIL_FIDELITE_CADRE && !strict) {
+              console.log(`[MemoireGenerator] ${label} : fidélité ${fid.toFixed(2)} au mémoire type (${retenus.map((c) => c.id).join(', ')}) < ${SEUIL_FIDELITE_CADRE} → nouvel essai strict.`);
+              const avant = replacements.length;
+              await answerField(f, true);
+              if (replacements.length > avant) return;
+            }
+            repriseParChamp.set(f.id, { ids: retenus.map((c) => c.id), fidelite: fid });
+            if (fid < SEUIL_FIDELITE_CADRE) propositionsCadre.set(f.id, `Réponse à relire (mémoire type de GSS repris en partie, fidélité ${Math.round(fid * 100)} %) : ${libelle}`);
+            else propositionsCadre.delete(f.id);
+          } else {
+            propositionsCadre.set(f.id, `Proposition de réponse à valider (question que le mémoire type de GSS ne traite pas) : ${libelle}`);
+          }
         }
         if (value !== undefined && value !== null) replacements.push({ id: f.id, value: String(value) });
       } catch (e) {
@@ -4555,6 +4592,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     // Valeurs du registre encore « à confirmer » reprises dans le document : GSS est prévenu.
     confirmationsRegistreUtilisees(replacements.map((r) => String(r.value ?? '')).join('\n'), marcheHorsNormandie(analysisData, dceContext)).forEach((c) => confirmationsGss.add(c));
     console.log(`[MemoireGenerator] GPT a renvoyé ${replacements.length} valeurs au total.`);
+    if (repriseMT) console.log(`[MemoireGenerator] Mémoire type : ${repriseParChamp.size} réponse(s) développée(s) reprise(s) (${[...repriseParChamp.entries()].map(([id, r]) => `champ ${id} ← ${r.ids.join('+')} ${r.fidelite.toFixed(2)}`).join(' ; ') || 'aucune'}), ${[...propositionsCadre.values()].filter((c) => /^Proposition/.test(c)).length} proposition(s) hors mémoire type.`);
     setProgress(dossierId, { phase: 'finalisation', pct: 94, label: 'Application des réponses au cadre…' });
     if (onProgress) onProgress(94, 'Application des réponses au cadre…');
 
@@ -5063,7 +5101,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     try {
       const libelleChamp = (id: number) => ((descriptors.find((x) => x.id === id)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '');
       const developpees = champsRediges
-        .map((id) => ({ cle: `GSS_CH_${id}`, question: libelleChamp(id), texte: String(replacements.find((r) => r.id === id)?.value ?? '') }))
+        .map((id) => ({ cle: `GSS_CH_${id}`, question: libelleChamp(id), texte: String(replacements.find((r) => r.id === id)?.value ?? ''), prefere: repriseMT?.schemaDe(repriseParChamp.get(id)?.ids || []) }))
         .filter((x) => x.texte.length >= 600);
       const nSchemas = await insererSchemasReponses(zip, xmlDoc, developpees);
       if (nSchemas) console.log(`[MemoireGenerator] ${nSchemas} schéma(s) GSS inséré(s) sous les réponses.`);
@@ -5112,9 +5150,12 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         })))
       },
       // Grille de notation : chaque sous-critère signale ses manques → fusion des questions en doublon.
-      consultations: descriptors.some((d) => d.grille)
-        ? await this.consoliderConsultations([...aCompleter, ...confirmationsGss])
-        : [...aCompleter, ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))],
+      consultations: [
+        ...(descriptors.some((d) => d.grille)
+          ? await this.consoliderConsultations([...aCompleter, ...confirmationsGss])
+          : [...aCompleter, ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))]),
+        ...[...propositionsCadre.entries()].filter(([id]) => champsRediges.includes(id)).sort((a, b) => a[0] - b[0]).map(([, c]) => c),
+      ],
     };
   }
 
@@ -6405,6 +6446,62 @@ RÈGLES DE FORME (rendu Marp) :
     const generatedData: Record<string, string> = {};
     consultationList.forEach((c, i) => { generatedData[`⚠ Consultation requise #${i + 1}`] = c; });
     return { filePath: rendu.filePath, generatedData, consultations: consultationList };
+  }
+
+  /**
+   * Cadre de réponse imposé : textes du mémoire type publipostés pour ce marché (sans modèle : nom de l'acheteur,
+   * sites, valeurs du registre ; rubrique « besoin » exclue) et proximité sémantique (embeddings) de chaque question
+   * développée avec chaque rubrique. null si le mémoire type est désactivé (GSS_MEMOIRE_TYPE=non) ou illisible : le
+   * cadre est alors rempli exactement comme avant.
+   */
+  private async textesMemoireTypeCadre(
+    dossierId: string,
+    analysisData: any,
+    dceContext: string,
+    referents: string,
+    descriptors: Array<{ id: number; context: string; kind: string }>,
+    buildPrompt: (f: any) => string,
+  ): Promise<{ mt: MemoireType; textes: Record<string, string>; scores: Map<number, Record<string, number>>; schemaDe: (ids: string[]) => string | undefined } | null> {
+    const mt = this.memoireTypeV2();
+    if (!mt) return null;
+    try {
+      const cover = await this.getCoverInfo(dossierId, analysisData);
+      const horsNormandie = marcheHorsNormandie(analysisData, dceContext);
+      const prep = preparerMemoireType({ analyse: analysisData, dce: dceContext, cover, referents, horsNormandie }, { memoireType: mt });
+      const textes: Record<string, string> = {};
+      for (const p of publierMemoire(prep)) if (p.texte && p.mode !== 'besoin') textes[p.id] = p.texte;
+      const question = (d: { context: string }) => {
+        const q = (d.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '';
+        const libelle = q.replace(/[\s.:;,…\-—–/|()]+/g, '').length ? q : (((d.context.match(/Contexte(?: proche)?:\s*"([^"]*)"/) || [])[1] || '').split('/').map((s) => s.trim()).filter(Boolean).pop() || '');
+        return `${libelle} ${(d.context.match(/Critère:\s*"([^"]*)"/) || [])[1] || ''}`.trim();
+      };
+      const developpees = descriptors.filter((d) => d.kind !== 'checkbox' && buildPrompt(d).includes('[PARAGRAPHE]') && question(d));
+      const scores = new Map<number, Record<string, number>>();
+      if (developpees.length) {
+        try {
+          const ids = Object.keys(textes);
+          const embs = await this.embedTexts([...ids.map((id) => signatureRubrique(mt.rubriques.find((r) => r.id === id)!)), ...developpees.map(question)]);
+          developpees.forEach((d, i) => {
+            const v = embs[ids.length + i];
+            scores.set(d.id, Object.fromEntries(ids.map((id, k) => [id, cosinus(v, embs[k])])));
+          });
+        } catch (e: any) {
+          console.warn(`[MemoireGenerator] Mémoire type (cadre) : recherche sémantique indisponible (${e?.message || e}) → recherche par mots-clés.`);
+        }
+      }
+      const schemaDe = (ids: string[]) => {
+        for (const id of ids) {
+          const s = mt.rubriques.find((r) => r.id === id)?.schema;
+          if (s?.source === 'bibliotheque' && s.ref) return s.ref;
+        }
+        return undefined;
+      };
+      console.log(`[MemoireGenerator] Mémoire type (cadre) : ${Object.keys(textes).length} rubrique(s) publipostée(s) pour ${developpees.length} réponse(s) développée(s).`);
+      return { mt, textes, scores, schemaDe };
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Mémoire type (cadre) indisponible (${e?.message || e}) : cadre rempli sans texte de référence.`);
+      return null;
+    }
   }
 
   /**

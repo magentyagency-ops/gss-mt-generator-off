@@ -25,7 +25,7 @@ const mots = (t: string) => new Set(
 
 /** Choisit, pour chaque réponse, le schéma GSS le plus pertinent (ou aucun), dans le thème de style (schéma placé dans
  *  le texte : toile paysage du moteur, couleurs et police du thème ; retour arrière : schéma d'origine). */
-export function choisir(reponses: Array<{ cle: string; question: string; texte: string }>, themeDemande?: string): Array<{ cle: string; id: string; svg: string }> {
+export function choisir(reponses: Array<{ cle: string; question: string; texte: string; prefere?: string }>, themeDemande?: string): Array<{ cle: string; id: string; svg: string }> {
   const theme = themeActif(themeDemande);
   let index: any[] = [];
   try { index = JSON.parse(fs.readFileSync(path.join(MOTEUR, 'bibliotheque', 'index.json'), 'utf-8')); } catch { return []; }
@@ -38,6 +38,15 @@ export function choisir(reponses: Array<{ cle: string; question: string; texte: 
       // Organigramme dessiné d'après l'organigramme GSS de référence (mêmes personnes que le texte).
       const svg = organigrammeSvg('paysage', theme);
       if (svg) { utilises.add('organigramme'); out.push({ cle: r.cle, id: 'organigramme', svg }); continue; }
+    }
+    // Réponse reprise du mémoire type : le schéma GSS de la rubrique reprise d'abord (même fond que le texte).
+    const prefere = r.prefere ? dispo.find((x) => x.id === r.prefere && !utilises.has(x.id)) : undefined;
+    if (prefere) {
+      try {
+        out.push({ cle: r.cle, id: prefere.id, svg: fs.readFileSync(path.join(MOTEUR, 'bibliotheque', `${prefere.id}.svg`), 'utf-8') });
+        utilises.add(prefere.id);
+        continue;
+      } catch { /* schéma illisible : recherche par mots ci-dessous */ }
     }
     const m = mots(`${r.question} ${r.question} ${r.texte}`);
     const score = (x: any) => [...mots(`${x.titre} ${x.texte}`)].filter((w) => m.has(w)).length;
@@ -90,7 +99,7 @@ async function rendrePng(svgs: string[], theme: string = themeActif()): Promise<
  * Insère sous les réponses développées du cadre le schéma GSS le plus pertinent. Renvoie le nombre de
  * schémas insérés. Les signets GSS_CH_n doivent déjà être posés.
  */
-export async function insererSchemasReponses(zip: PizZip, xmlDoc: any, reponses: Array<{ cle: string; question: string; texte: string }>): Promise<number> {
+export async function insererSchemasReponses(zip: PizZip, xmlDoc: any, reponses: Array<{ cle: string; question: string; texte: string; prefere?: string }>): Promise<number> {
   const theme = themeActif();
   const choix = choisir(reponses, theme);
   if (!choix.length) return 0;
