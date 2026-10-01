@@ -566,7 +566,9 @@ export function completerBesoinMinimum(
     const out: Array<{ exigence: string; rubrique?: string }> = [];
     for (const e of candidats) {
       if (out.length >= n) break;
-      if (choisies.includes(e.exigence) || dejaCite(e.exigence, `${parties.join('\n')}\n${out.map((x) => x.exigence).join('\n')}`)) continue;
+      // Redite jugée sur les attentes et les points de vigilance seulement (le périmètre, long, recouvre presque tout).
+      const engagements = parties.filter((p) => /^##\s+(?:Vos attentes|Les points de vigilance)/i.test(p)).join('\n');
+      if (choisies.includes(e.exigence) || dejaCite(e.exigence, `${engagements}\n${out.map((x) => x.exigence).join('\n')}`)) continue;
       choisies.push(e.exigence);
       out.push(e);
     }

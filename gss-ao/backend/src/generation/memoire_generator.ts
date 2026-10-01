@@ -6867,6 +6867,8 @@ RÈGLES DE FORME (rendu Marp) :
     // du DCE (sanctionnées d'abord) quand la rédaction en donne moins.
     {
       const sources = (o.exigences || []).length ? o.exigences! : besoin.obligations.map((x) => ({ exigence: x }));
+      // Méta-commentaires retirés d'abord (retirés de toute façon au nettoyage final) : le minimum compte les puces remises.
+      texte = retirerCommentairesInternes(texte).texte;
       const m = completerBesoinMinimum(texte, sources, prep.plan, String(ctx.dce || ''));
       if (m.ajoutees) {
         texte = m.texte;

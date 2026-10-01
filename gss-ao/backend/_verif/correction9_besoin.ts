@@ -30,4 +30,13 @@ d.forEach((x) => console.log(`  défaut : ${x}`));
 verifier('carte « tiennent les postes prescrits » refusée', d.some((x) => /intitulés de poste/.test(x)));
 verifier('dernière étape sans résultat refusée', d.some((x) => /résultat obtenu/.test(x)));
 verifier('étape de résultat acceptée', !defautsEtapesBesoin([...etapes.slice(2, 4), { titre: 'Site sécurisé en continu', texte: 'Les deux bâtiments restent sécurisés sans interruption.' }]).length);
+{
+  // Génération réelle ign 12 : bloc 1 sans sous-partie « Vos attentes » et une seule vigilance (méta-commentaire).
+  const t12: string = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../_corpus_verif/_resultats/v-ign-12.json'), 'utf-8')).sections.b1_comprehension;
+  const r12 = completerBesoinMinimum(t12, sources, undefined, dce);
+  verifier('ign 12 : sous-partie « Vos attentes » créée avec 4 attentes, 3 vigilances', n(partie(r12.texte, /^## Vos attentes/)) >= 4 && n(partie(r12.texte, /^## Les points de vigilance/)) >= 3, `${r12.ajoutees} ajout(s)`);
+  const { retirerCommentairesInternes } = require('../src/generation/base_memoires');
+  const vig = '- **Point de vigilance** : le RC, le rapport de visite terrain et les annexes relatives au personnel sont absents des pièces analysées ; les modalités de visite ne peuvent être établies.';
+  verifier('ign 12 : vigilance « absents des pièces analysées » retirée', !retirerCommentairesInternes(vig).texte.includes('pièces analysées'));
+}
 console.log(ko ? `${ko} ÉCHEC(S)` : 'TOUT OK');
