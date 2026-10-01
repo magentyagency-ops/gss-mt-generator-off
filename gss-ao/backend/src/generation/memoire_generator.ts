@@ -16,7 +16,7 @@ import {
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
-  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees,
+  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin,
   valeursImposeesValides,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
@@ -6732,14 +6732,20 @@ RÈGLES DE FORME (rendu Marp) :
       const r = (await dessinerSpecs([{ id: 'b1_comprehension', gabarit: spec.gabarit, params: spec.params, source: texte, titre_section: titre }], o.format || 'page')).get('b1_comprehension');
       return r?.ok ? { svg: r.svg, erreurs: [] } : { erreurs: r?.erreurs || ['moteur de schémas indisponible'] };
     };
-    let schema = secours ? { erreurs: ['texte de secours'] } as { svg?: string; erreurs: string[] } : await dessiner(specProcessBesoin(rep?.etapes, 'flux'));
+    // Étapes sans contenu propre au marché (titre « Votre besoin », « … nous consulte pour le marché », « Le PC réalise
+    // les rondes ») : refusées comme un schéma invalide (correction des seules étapes, puis schéma de secours).
+    const defautsInitiaux = secours ? [] : defautsEtapesBesoin(rep?.etapes);
+    let schema = secours ? { erreurs: ['texte de secours'] } as { svg?: string; erreurs: string[] }
+      : defautsInitiaux.length ? { erreurs: defautsInitiaux } : await dessiner(specProcessBesoin(rep?.etapes, 'flux'));
     if (!schema.svg && !secours && brut) {
       const correction = await this.callOpenAI([
         ...messages,
         { role: 'assistant', content: brut },
         { role: 'user', content: `Le schéma de process est refusé :\n- ${schema.erreurs.slice(0, 8).join('\n- ')}\nCorrige SEULEMENT les étapes (4 ou 5, dernière étape verte) en recopiant des mots EXACTS de ton texte (même orthographe, mêmes accords), sans aucun chiffre absent du texte. Renvoie UNIQUEMENT {"etapes": [{"titre": "…", "texte": "…", "role": "…"}]}.` },
       ], 0.2, 'Compréhension du besoin : schéma corrigé', true, 'redaction', 0);
-      schema = await dessiner(specProcessBesoin(lireJson(correction || '')?.etapes, 'flux'));
+      const etapesCorrigees = lireJson(correction || '')?.etapes;
+      const defautsCorriges = defautsEtapesBesoin(etapesCorrigees);
+      schema = defautsCorriges.length ? { erreurs: defautsCorriges } : await dessiner(specProcessBesoin(etapesCorrigees, 'flux'));
     }
     if (!schema.svg) schema = await dessiner(specSecoursBesoin(texte));
     if (!schema.svg) console.warn(`[MemoireGenerator] Compréhension du besoin : schéma de process non dessiné (${schema.erreurs.slice(0, 3).join(' | ')}) ; construit au rendu d'après le texte.`);

@@ -448,6 +448,30 @@ export function specProcessBesoin(etapes: Array<{ titre?: string; texte?: string
   return { gabarit, params: { etapes: etapesSpec } };
 }
 
+/**
+ * Défauts de fond des étapes du schéma de process (consignes 3 et 6 : un schéma qui n'apporte rien est refusé) : titre
+ * réduit au nom de l'étape, phrase générale (« … nous consulte pour le marché »), phrase qui reprend le titre de l'étape,
+ * poste présenté comme acteur (« Le PC réalise les rondes »). Liste vide : étapes acceptables.
+ */
+export function defautsEtapesBesoin(etapes: Array<{ titre?: string; texte?: string }> | undefined): string[] {
+  const GENERIQUE = /^(?:(?:votre|vos|notre|nos|le|la|les)\s+)?(?:besoins?|enjeux?|dispositifs?|pilotages?|r[ée]sultats?|attentes?|r[ée]ponses?|process(?:us)?)$/i;
+  const FORMULE = /nous consulte|consult\w* (?:GSS )?pour (?:le|ce|un) march[ée]|^(?:vos|nos) enjeux (?:comprennent|sont|portent)|^notre dispositif s.appuie|^notre pilotage (?:s.appuie|repose)|^votre besoin porte sur|blocs? cit[ée]s?/i;
+  const POSTE_ACTEUR = /^(?:le|la|l['’])\s*(?:PC|PCS|poste(?: central| de s[ée]curit[ée])?|accueil|loge)\s+(?!(?:de|du|des|d['’])\s)(?:r[ée]alis|effectu|assur|g[èe]r|surveill|contr[ôo]l|accueill|alert|fai[ts])/i;
+  const norm = (t: string) => normaliser(t).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const defauts: string[] = [];
+  (Array.isArray(etapes) ? etapes : []).forEach((e, i) => {
+    const titre = String(e?.titre || '').trim();
+    const texte = String(e?.texte || '').trim();
+    const n = `étape ${i + 1}`;
+    if (GENERIQUE.test(titre)) defauts.push(`${n} : titre « ${titre} » réduit au nom de l'étape ; donne un titre nominal qui nomme le contenu propre à ce marché (enjeu, exigence ou moyen du DCE).`);
+    if (FORMULE.test(texte)) defauts.push(`${n} : phrase générale « ${texte} » ; écris un fait concret du DCE ou un moyen de GSS.`);
+    const t = norm(titre);
+    if (t.length >= 4 && norm(texte).startsWith(t)) defauts.push(`${n} : la phrase reprend le titre de l'étape ; elle doit apporter une information nouvelle.`);
+    if (POSTE_ACTEUR.test(texte)) defauts.push(`${n} : « ${texte} » présente un poste comme acteur ; le sujet est l'agent qui l'occupe, avec sa qualification, et son action respecte le CCTP.`);
+  });
+  return defauts;
+}
+
 /** Mots qui ne terminent pas un titre coupé (« Le périmètre de la » → « Le périmètre »). */
 const MOTS_OUTILS = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'l', 'd', 'et', 'ou', 'à', 'au', 'aux', 'en', 'pour', 'par', 'avec', 'sur', 'sous', 'dans', 'un', 'une', 'nos', 'vos', 'notre', 'votre', 'son', 'sa', 'ses', 'leur', 'leurs', 'ce', 'cette', 'ces', 'qui', 'que']);
 
@@ -514,7 +538,7 @@ TEXTE (Markdown, __MOTS__ mots, jamais plus), en quatre sous-parties « ## », d
 ## Vos attentes et nos engagements — 3 à 6 puces de la forme « **Ce que vous attendez** (mots de l'acheteur) : … → notre réponse : … (process GSS), développée au bloc n ».
 ## Les points de vigilance identifiés et nos réponses — 2 à 4 puces de la forme « **Point de vigilance** : … (fait du DCE) → notre réponse : … (process GSS existant) ».
 
-SCHÉMA DE PROCESS (champ "etapes") : 5 étapes lues de gauche à droite : 1. « Votre besoin » (role rouge) ; 2. « Vos enjeux » (rouge) ; 3. « Notre dispositif » (orange) ; 4. « Notre pilotage » (bleu) ; 5. « Votre résultat » (vert, toujours la dernière). Pour chaque étape : "titre" (1 à 3 mots) et "texte" (une phrase de 12 mots au plus, qui commence par une majuscule). RECOPIE dans le "texte" de chaque étape des mots EXACTS de ton TEXTE (même orthographe, mêmes accords) : chaque mot et chaque chiffre du schéma doit figurer dans ton texte, sinon le schéma est refusé. "titre_schema" : le message du schéma, en une phrase courte (60 caractères au plus).
+SCHÉMA DE PROCESS (champ "etapes") : 5 étapes lues de gauche à droite, dans cet ordre : 1. le besoin (role rouge) ; 2. l'enjeu principal (rouge) ; 3. le dispositif de GSS (orange) ; 4. le pilotage (bleu) ; 5. le résultat pour l'acheteur (vert, toujours la dernière). Chaque étape porte un CONTENU propre à CE marché, tiré des enjeux et des exigences clés du DCE (délai de mobilisation, qualification au poste, confidentialité, continuité, tuilage, nouveau bâtiment…) : "titre" = un titre NOMINAL court (1 à 4 mots) qui nomme ce contenu (ex. « Mobilisation sous 2 heures », « SSIAP 2 au PC 24 h/24 », « Confidentialité des patients »), jamais le seul nom de l'étape (« Votre besoin », « Vos enjeux », « Notre dispositif », « Notre pilotage », « Votre résultat ») ; "texte" = une phrase concrète de 12 mots au plus, qui commence par une majuscule, sans reprendre le titre de l'étape ni une formule générale (« … nous consulte pour le marché », « Vos enjeux comprennent… », « Notre dispositif s'appuie sur… »). Un poste (PC, accueil, loge) n'agit pas : le sujet est l'agent qui l'occupe, avec sa qualification (« L'agent SSIAP 2 du PC… »), et ce qu'il fait respecte le CCTP (un agent qui doit rester au PC ne fait pas de ronde). RECOPIE dans le "texte" de chaque étape des mots EXACTS de ton TEXTE (même orthographe, mêmes accords) : chaque mot et chaque chiffre du schéma doit figurer dans ton texte, sinon le schéma est refusé. "titre_schema" : le message du schéma, en une phrase courte (60 caractères au plus).
 
 RÈGLES (impératives) :
 - Contexte, périmètre et attentes : uniquement des faits du DCE ; noms des sites, bâtiments, services et fonctions écrits exactement comme dans le DCE ; chaque chiffre du DCE recopié tel quel (une exigence chiffrée du CCTP prime toujours sur une valeur habituelle de GSS).
