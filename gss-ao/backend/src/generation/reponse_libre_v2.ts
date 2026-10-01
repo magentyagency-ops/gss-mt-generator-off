@@ -248,6 +248,28 @@ function phraseAutour(texte: string, pos: number, longueur: number): string {
 
 const RX_CONSULTATION = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
 
+/** Variante écrite par le modèle : « [À COMPLÉTER : confirmation de …] » (deux-points, tiret). */
+const RX_VARIANTE = /\[\s*[ÀA]\s+COMPL[ÉE]TER\s*[:–—-]\s*([^\]]*?)\s*\]/gi;
+/** Variante qui ne demande que de confirmer l'engagement que la phrase vient d'écrire (proposition déjà « à valider »). */
+const CONFIRMATION_SEULE = /^(?:la\s+|une\s+)?(?:confirmation|confirmer|validation|valider)\s+(?:de\s+|d['’])?(?:l['’]engagement|cet engagement|ces engagements|ce point|la mise en œuvre)\b/i;
+
+/**
+ * Variantes « [À COMPLÉTER : X] » ramenées à la forme reconnue par les repères : la précision X devient la question à
+ * GSS de l'emplacement (sinon la variante échappait aux repères et restait dans le texte remis). Une variante qui ne
+ * demande que de confirmer l'engagement déjà écrit est retirée : la proposition est déjà signalée « à valider ».
+ * Renvoie le texte normalisé et, dans l'ordre du texte, la question propre à chaque « [À COMPLÉTER] » (undefined : aucune).
+ */
+export function normaliserVariantesACompleter(texte: string): { texte: string; questions: Array<string | undefined> } {
+  const questions: Array<string | undefined> = [];
+  const sortie = String(texte || '').replace(/([ \t]*)\[\s*[ÀA]\s+COMPL[ÉE]TER\s*(?:[:–—-]\s*([^\]]*?)\s*)?\](?!⟦AC:)/gi, (_m: string, espace: string, x: string | undefined) => {
+    const precision = String(x || '').trim();
+    if (precision && CONFIRMATION_SEULE.test(precision)) return '';
+    questions.push(precision ? precision.charAt(0).toUpperCase() + precision.slice(1) : undefined);
+    return `${espace}${PLACEHOLDER_V2}`;
+  });
+  return { texte: sortie, questions };
+}
+
 /**
  * Pose les repères ⟦AC:n⟧ des données à compléter dans les rubriques (après toutes les passes de rédaction et de
  * contrôle), en deux formes :
@@ -268,8 +290,15 @@ export function poserReperes(sections: Record<string, string>, ordre: string[], 
   const CIBLE = '\u0001';
   for (const id of ordre) {
     const texte = sections[id];
-    if (!texte || (!texte.includes(PLACEHOLDER_V2) && !/\[CONSULTATION REQUISE/i.test(texte))) continue;
-    const blocs = texte.split(/\n{2,}/);
+    RX_VARIANTE.lastIndex = 0;
+    const variantes = !!texte && RX_VARIANTE.test(texte);
+    RX_VARIANTE.lastIndex = 0;
+    if (!texte || (!variantes && !texte.includes(PLACEHOLDER_V2) && !/\[CONSULTATION REQUISE/i.test(texte))) continue;
+    // Variantes « [À COMPLÉTER : X] » : ramenées à « [À COMPLÉTER] » bloc par bloc, X devient la question de
+    // l'emplacement (questionsVariantes, dans l'ordre des emplacements du bloc).
+    const normalises = texte.split(/\n{2,}/).map((b) => normaliserVariantesACompleter(b));
+    const questionsVariantes = normalises.map((x) => x.questions);
+    const blocs = normalises.map((x) => x.texte.replace(/[ \t]+$/gm, ''));
     const questionsParBloc: Array<Array<string | undefined>> = blocs.map(() => []);
     const lignesConservees: string[][] = blocs.map((b) => b.split('\n'));
     // Emplacements d'un bloc restés sans question : une ligne de consultation isolée juste après eux leur revient.
@@ -288,14 +317,19 @@ export function poserReperes(sections: Record<string, string>, ordre: string[], 
         return;
       }
       const qs: Array<string | undefined> = [];
+      const propres = questionsVariantes[k] || [];
+      // Lignes de consultation réservées aux emplacements sans précision propre.
+      const sansPropre = Array.from({ length: nbEmplacements }, (_, i) => i).filter((i) => !propres[i]);
       for (let i = 0; i < nbEmplacements; i++) {
-        if (!questions.length) qs.push(undefined);
+        const j = sansPropre.indexOf(i);
+        if (propres[i]) qs.push(propres[i]);
+        else if (!questions.length) qs.push(undefined);
         else if (questions.length === 1) qs.push(questions[0]);
-        else qs.push(questions[Math.min(i, questions.length - 1)]);
+        else qs.push(questions[Math.min(j, questions.length - 1)]);
       }
       questionsParBloc[k] = qs;
       lignesConservees[k] = contenu;
-      attente = questions.length ? [] : qs.map((_, i) => ({ bloc: k, index: i }));
+      attente = questions.length ? [] : qs.map((q, i) => ({ q, bloc: k, index: i })).filter((a) => !a.q).map(({ bloc, index }) => ({ bloc, index }));
     });
     // Chaque emplacement reçoit une marque provisoire (bloc, rang), puis son repère, dans l'ordre du texte.
     const blocsMarques = lignesConservees.map((lignes, k) => {

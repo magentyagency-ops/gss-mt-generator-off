@@ -48,7 +48,8 @@ describe('Réponse libre v2 : ordre de rendu', () => {
   it('schémas fixés par le mémoire type et titres des pages de schéma', () => {
     expect(schemaFixe(plan, 'b2_catalogue')).toBe(true);
     expect(schemaFixe(plan, 'b2_organigramme')).toBe(true);
-    expect(schemaFixe(plan, 'b1_comprehension')).toBe(false);
+    // Le schéma de process du bloc 1 (source process_besoin) est fixe : l'assistant le garde (272e45a).
+    expect(schemaFixe(plan, 'b1_comprehension')).toBe(true);
     expect(schemaFixe(plan, 'q_inconnu')).toBe(false);
     expect(titreSchemaMemoireType('b2_valeurs', mt)).toBe('Nos trois valeurs');
     expect(titreSchemaMemoireType('b3_recrutement', mt)).toBe('Quatre étapes pour recruter nos agents');
@@ -87,6 +88,18 @@ describe('Réponse libre v2 : repères des données à compléter', () => {
     expect(r.enPlace).toHaveLength(1);
     expect(r.enPlace[0].question).toBeUndefined();
     expect(sections.c).toBe('Un délai de [À COMPLÉTER]⟦AC:3⟧ minutes.');
+  });
+
+  it('reprend les variantes « [À COMPLÉTER : X] » écrites par le modèle (génération réelle ign 14)', () => {
+    const sections: Record<string, string> = {
+      e: "## Transmission\n\nGSS transmet les reconnaissances signées au SAIMG. [À COMPLÉTER : confirmation de l’engagement de GSS à transmettre au SAIMG les reconnaissances signées]\n\nLe registre est tenu par [À COMPLÉTER : nom du responsable du registre] et visé par [À COMPLÉTER].\n[CONSULTATION REQUISE : Qui vise le registre ?]",
+    };
+    const r = poserReperes(sections, ['e'], 0);
+    // La simple confirmation de l'engagement déjà écrit est retirée : la proposition est déjà « à valider ».
+    expect(sections.e).toContain('GSS transmet les reconnaissances signées au SAIMG.\n');
+    expect(sections.e).not.toMatch(/COMPLÉTER\s*:/);
+    expect(r.enPlace.map((x) => x.question)).toEqual(['Nom du responsable du registre', 'Qui vise le registre ?']);
+    expect(sections.e).toContain('tenu par [À COMPLÉTER]⟦AC:1⟧ et visé par [À COMPLÉTER]⟦AC:2⟧.');
   });
 
   it('ne repose pas de repère sur un emplacement qui a déjà le sien', () => {
@@ -155,7 +168,8 @@ describe('Réponse libre v2 : bloc « compréhension »', () => {
     expect(specProcessBesoin([{ titre: 'Seule' }])).toBeNull();
     const c = specSecoursBesoin('## Votre contexte et votre site\nA\n## Le périmètre\nB\n## Vos attentes\nC\n## Les points de vigilance\nD');
     expect(c?.gabarit).toBe('chevrons');
-    expect(c?.params.etapes.map((e: any) => e.titre)).toEqual(['Votre contexte et votre site', 'Le périmètre', 'Vos attentes', 'Les points de vigilance']);
+    // Titres de chevrons coupés à 26 caractères au plus (afadca1) : « Votre contexte et votre site » → « Votre contexte ».
+    expect(c?.params.etapes.map((e: any) => e.titre)).toEqual(['Votre contexte', 'Le périmètre', 'Vos attentes', 'Les points de vigilance']);
     expect(court('Un titre beaucoup trop long pour une carte de schéma', 20)).toBe('Un titre beaucoup');
   });
 
