@@ -3,7 +3,7 @@ import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema, dessinerSpecs, finaliserSvg } from './schema_service';
 import { insererSchemasReponses, choisir as choisirSchemasGss } from './visuels_cadre';
-import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt } from './format_court';
+import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt, renvoisVersParties } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque } from './themes';
 import { poserSignets, poserSignetsChamps, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion } from './completion';
@@ -7490,6 +7490,10 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       progres(26 + Math.round((24 * adaptees) / Math.max(1, aAdapter.length)), `Adaptation au CCTP : ${adaptees}/${aAdapter.length} rubrique(s)…`);
       console.log(`[MemoireGenerator] Adaptation ${rp.id} : ${res.appliquees.length} modification(s) appliquée(s), ${res.refusees.length} refusée(s), fidélité ${res.fidelite.toFixed(2)}${res.repli ? ` — texte de référence conservé (${res.raison})` : ''}.`);
     });
+
+    // Renvois « au bloc n » de la compréhension : le mémoire suit les parties du RC → renvoi à la partie qui reprend
+    // réellement les rubriques du bloc, ou renvoi retiré si aucune ne les reprend.
+    if (b1 && textes[b1.id]) textes[b1.id] = renvoisVersParties(textes[b1.id], planMT.blocs, plan, retenues);
 
     // ── 6. Assemblage dans l'ordre du RC ; éléments attendus hors mémoire type rédigés à part (propositions) ──
     const sections: Record<string, string> = {};

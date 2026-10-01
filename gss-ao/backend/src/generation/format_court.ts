@@ -37,6 +37,43 @@ export function passagesLimitePages(dce: string): string[] {
   return out.map((o) => o.texte);
 }
 
+/**
+ * Format court : le texte de compréhension renvoie aux « blocs » du mémoire type (« développée au bloc 5 »), alors que le
+ * mémoire suit les parties du RC. Chaque renvoi devient celui de la partie du RC qui reprend réellement les rubriques
+ * du bloc (« dans la partie 2 « Continuité de service » ») ; un bloc dont aucune rubrique n'a été reprise, ou réparti
+ * sur trop de parties, perd son renvoi (avec le participe qui l'introduit : « , développée au bloc 4 »).
+ */
+export function renvoisVersParties(
+  texte: string,
+  blocs: Array<{ numero: number; rubriques: string[] }>,
+  parties: Array<{ id: string; title: string }>,
+  retenues: Record<string, string[]>,
+): string {
+  const partiesDuBloc = (n: number): number[] => {
+    const b = blocs.find((x) => x.numero === n);
+    if (!b) return [];
+    return parties.map((p, i) => ((retenues[p.id] || []).some((id) => b.rubriques.includes(id)) ? i : -1)).filter((i) => i >= 0);
+  };
+  const libelle = (i: number) => {
+    const t = parties[i].title.trim();
+    return t.length <= 60 ? `${i + 1} « ${t} »` : `${i + 1}`;
+  };
+  const RX = /(,\s*)?(\b(?:d[ée]velopp|d[ée]crit|pr[ée]sent|d[ée]taill|trait)[ée]?e?s?\s+)?\b(au|aux|du|des|le|les|dans les?|en)?\s*\b[Bb]locs?\s+(\d)((?:\s*(?:,|et)\s*\d)*)(?![\d])/g;
+  return String(texte || '').replace(RX, (m, virgule: string | undefined, participe: string | undefined, prep: string | undefined, n1: string, suite: string) => {
+    const numeros = [Number(n1), ...[...(suite || '').matchAll(/\d/g)].map((x) => Number(x[0]))];
+    const idx = [...new Set(numeros.flatMap(partiesDuBloc))].sort((a, b) => a - b);
+    if (!idx.length || idx.length > 2) return '';
+    const pluriel = idx.length > 1;
+    const liste = pluriel ? `${libelle(idx[0])} et ${libelle(idx[1])}` : libelle(idx[0]);
+    const p = (prep || '').toLowerCase();
+    const prepNouvelle = /^(?:au|aux|dans|en)/.test(p) ? (pluriel ? 'dans les parties' : 'dans la partie')
+      : /^(?:du|des)$/.test(p) ? (pluriel ? 'des parties' : 'de la partie')
+        : /^(?:le|les)$/.test(p) ? (pluriel ? 'les parties' : 'la partie')
+          : (pluriel ? 'parties' : 'partie');
+    return `${virgule || ''}${participe || ''}${prepNouvelle} ${liste}`;
+  }).replace(/ +([,.;:])/g, '$1').replace(/ {2,}/g, ' ');
+}
+
 /** Nombre de pages d'un PDF (pdfinfo, sinon comptage des objets /Page). */
 export function nombrePages(pdf: string): number {
   const r = spawnSync('pdfinfo', [pdf], { encoding: 'utf-8' });
