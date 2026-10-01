@@ -17,6 +17,7 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras,
+  valeursImposeesValides,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes } from './base_memoires';
@@ -6189,9 +6190,12 @@ RÈGLES DE FORME (rendu Marp) :
     // Délais et fréquences imposés par le CCTP (citation vérifiée) : ils remplacent la valeur de GSS dans tout le mémoire.
     const appelAnalyse: AppelModele = async (messages, libelle) => (await this.callOpenAI(messages, 0.1, libelle, true, 'analyse')) ?? '';
     const valeursImposees = await extraireValeursImposees(mt, dceContext, prep.variables, appelAnalyse);
-    if (Object.keys(valeursImposees.imposees).length) {
-      prep = preparerMemoireType({ ...ctxBase, matrice, imposees: valeursImposees.imposees }, { memoireType: mt });
-      console.log(`[MemoireGenerator] Valeurs imposées par le CCTP : ${Object.entries(valeursImposees.imposees).map(([k, v]) => `${k} = ${v.valeur}`).join(' ; ')}.`);
+    // Seulement une valeur de la forme attendue par sa phrase (délai chiffré, fréquence, nombre de contrôles).
+    const imposees = valeursImposeesValides(valeursImposees.imposees);
+    if (imposees.ecartees.length) console.log(`[MemoireGenerator] Valeurs du CCTP écartées (forme inadaptée à la phrase du mémoire type) : ${imposees.ecartees.map((x) => `${x.variable} = « ${x.valeur} »`).join(' ; ')}.`);
+    if (Object.keys(imposees.valides).length) {
+      prep = preparerMemoireType({ ...ctxBase, matrice, imposees: imposees.valides }, { memoireType: mt });
+      console.log(`[MemoireGenerator] Valeurs imposées par le CCTP : ${Object.entries(imposees.valides).map(([k, v]) => `${k} = ${v.valeur}`).join(' ; ')}.`);
     }
     const plan = prep.plan;
     const mtParId = new Map(mt.rubriques.map((r) => [r.id, r]));

@@ -58,6 +58,36 @@ export async function enParallele<T>(items: T[], n: number, f: (x: T, i: number)
   }));
 }
 
+// ─── Valeurs imposées par le CCTP ────────────────────────────────────────────────────────────────
+
+/**
+ * Forme attendue d'une valeur imposée par le CCTP, selon la phrase du mémoire type qui la reçoit (« sur site en
+ * {{DELAI_ASTREINTE}} maximum », « réalisé {{FREQ_CONTROLE_1}} par le responsable de site », « et
+ * {{CONTROLES_INOPINES_MENSUELS}} de nos contrôleurs ») : un délai chiffré, une fréquence, un nombre de contrôles.
+ */
+const FORME_VALEUR_IMPOSEE: Array<[RegExp, RegExp]> = [
+  [/^DELAI_/, /\d+\s*(?:minutes?|mn|min|h|heures?|jours?)(?![\wÀ-ÿ])/i],
+  [/^FREQ_/, /fois|chaque|tous les|toutes les|par (?:jour|semaine|mois|trimestre|semestre|an)\b|quotidien|hebdomadaire|mensuel|bimestriel|trimestriel|semestriel|annuel/i],
+  [/^CONTROLES_/, /contr[ôo]les?/i],
+];
+
+/**
+ * Valeurs imposées par le CCTP (extraireValeursImposees) gardées si leur forme convient à la phrase qui les reçoit. Une
+ * autre forme (« remplacement immédiat » pour un délai) donnerait une phrase fausse (« sur site en remplacement
+ * immédiat maximum ») : elle est écartée ; la valeur habituelle de GSS reste, et l'exigence du CCTP est traitée par les
+ * contrôles de couverture et de cohérence.
+ */
+export function valeursImposeesValides<T extends { valeur: string }>(imposees: Record<string, T>): { valides: Record<string, T>; ecartees: Array<{ variable: string; valeur: string }> } {
+  const valides: Record<string, T> = {};
+  const ecartees: Array<{ variable: string; valeur: string }> = [];
+  for (const [nom, v] of Object.entries(imposees || {})) {
+    const forme = FORME_VALEUR_IMPOSEE.find(([rx]) => rx.test(nom))?.[1];
+    if (!forme || forme.test(String(v?.valeur || ''))) valides[nom] = v;
+    else ecartees.push({ variable: nom, valeur: String(v?.valeur || '') });
+  }
+  return { valides, ecartees };
+}
+
 // ─── Lignes en gras consécutives ─────────────────────────────────────────────────────────────────
 
 const MARQUE_GRAS = '\uE010';

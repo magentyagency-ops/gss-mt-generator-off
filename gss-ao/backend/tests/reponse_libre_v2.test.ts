@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import {
   rubriquesV2, sectionsV2, chapitresV2, blocPagesReferences, schemaFixe, titreSchemaMemoireType, poserReperes, trierNouvelles,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, messagePropositions, memoireTypeActif,
-  court, texteSecoursBesoin, consigneComprehension, CLE_SCHEMA, protegerGras, retablirGras,
+  court, texteSecoursBesoin, consigneComprehension, CLE_SCHEMA, protegerGras, retablirGras, valeursImposeesValides,
 } from '../src/generation/reponse_libre_v2';
 import { retirerCommentairesInternes } from '../src/generation/base_memoires';
 import { chargerMemoireType, planMemoireType, type PlanMemoireType } from '../src/generation/memoire_type';
@@ -174,6 +174,18 @@ describe('Réponse libre v2 : texte de GSS intact', () => {
     const t = '**Les sites de santé**\n**Site : Centre hospitalier du Rouvray — Saint-Étienne-du-Rouvray (76800)**\nEffectif : 2 agents.';
     expect(retirerCommentairesInternes(t).texte).not.toBe(t);
     expect(retablirGras(retirerCommentairesInternes(protegerGras(t)).texte)).toBe(t);
+  });
+});
+
+describe('Réponse libre v2 : valeurs imposées par le CCTP', () => {
+  it('garde un délai chiffré et une fréquence, écarte une forme qui fausserait la phrase', () => {
+    const c = (valeur: string) => ({ valeur, citation: 'citation' });
+    const r = valeursImposeesValides({
+      DELAI_ASTREINTE: c('remplacement immédiat'), DELAI_PTI: c('30 minutes'), DELAI_COMMANDE_SUPPLEMENTAIRE: c('48 heures'),
+      FREQ_REUNIONS: c('au minimum tous les mois'), FREQ_CONTROLE_1: c('le responsable'), CONTROLES_INOPINES_MENSUELS: c('trois contrôles inopinés'),
+    });
+    expect(Object.keys(r.valides).sort()).toEqual(['CONTROLES_INOPINES_MENSUELS', 'DELAI_COMMANDE_SUPPLEMENTAIRE', 'DELAI_PTI', 'FREQ_REUNIONS']);
+    expect(r.ecartees.map((x) => x.variable).sort()).toEqual(['DELAI_ASTREINTE', 'FREQ_CONTROLE_1']);
   });
 });
 
