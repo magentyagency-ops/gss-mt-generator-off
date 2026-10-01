@@ -2668,9 +2668,33 @@
    "texte": "Dans le cadre de l'intégration d'un nouveau marché, la question de la reprise du personnel est très importante. Lorsque la reprise du personnel figure dans les conditions du marché, nous organisons une réunion sur ce point avec {{CLIENT}}, nous respectons nos obligations légales, reprenons le personnel sur le même site et appliquons notre procédure d'intégration d'un nouveau marché.{{#si FONDEMENT_REPRISE_DCE}} Cette reprise s'effectue conformément à {{FONDEMENT_REPRISE_DCE}}.{{/si}}\n\nTaux de reprise du personnel en place : {{TAUX_REPRISE}}. Les agents repris suivent la même intégration que tout agent (formation théorique à partir du LMC, dotation du paquetage, planification) et sont contrôlés comme les autres dès le premier contrôle de mise en place, à J+7.",
    "sous_parties": [],
    "schema": {
-    "source": "bibliotheque",
-    "ref": "II-REP-01",
-    "fond": "SLIDE REP AO/NOUVEAU MARCHE/GESTION D'UN NOUVEAU MARCHE 4.pdf"
+    "source": "spec",
+    "gabarit": "flux",
+    "titre": "Reprise du personnel en place",
+    "params": {
+     "etapes": [
+      {
+       "titre": "Réunion avec le client",
+       "texte": "La reprise figure dans les conditions du marché",
+       "role": "bleu",
+       "icone": "reunion"
+      },
+      {
+       "titre": "Reprise sur le même site",
+       "texte": "Reprise dans le respect des obligations légales",
+       "role": "orange",
+       "icone": "groupe"
+      },
+      {
+       "titre": "Intégration d'un nouveau marché",
+       "texte": "Formation, paquetage, planification, contrôle de mise en place",
+       "role": "vert",
+       "icone": "check"
+      }
+     ]
+    },
+    "origine": "bibliothèque II-REP-01 (SLIDE REP AO/NOUVEAU MARCHE/GESTION D'UN NOUVEAU MARCHE 4.pdf), sans la branche « Non souhaité → Affectation sur un autre site »",
+    "fond": "Réunion avec le client, reprise sur le même site dans le respect des obligations légales, puis procédure d'intégration d'un nouveau marché"
    },
    "mots_cles": [
     "reprise du personnel",
@@ -2689,7 +2713,7 @@
    ],
    "a_confirmer": [
     "Taux de reprise : 100 % dans la réponse Université de Rouen Normandie (2026-04) — à confirmer par marché",
-    "Scénario de la slide « agents non maintenus affectés sur un autre site » retiré (reprise jamais sélective) : à valider par GSS."
+    "Scénario de la slide « agents non maintenus affectés sur un autre site » retiré du texte et du schéma (reprise jamais sélective ; schéma en trois étapes : réunion, reprise sur le même site, intégration) : à valider par GSS."
    ],
    "ancienne_rubrique": "b_reprise_personnel",
    "anciennes_rubriques": [
