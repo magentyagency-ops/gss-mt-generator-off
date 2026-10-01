@@ -2684,9 +2684,13 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
   private async consoliderAvecSources(liste: string[]): Promise<Array<{ question: string; sources: number[] }>> {
     const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
     const uniques: Array<{ texte: string; origines: number[] }> = [];
+    // Réponse connue de GSS (registre recours_sous_traitance : « Non ») : aucune question sur ses sous-traitants ;
+    // le mémoire répond par la phrase du mémoire type (« GSS n'envisage pas de recourir à la sous-traitance »).
+    const sansSousTraitance = /^\s*non\b/i.test(valeurRegistre('recours_sous_traitance') || '');
     liste.forEach((c, i) => {
       const t = c.replace(/\*\*/g, '').trim();
       if (!t) return;
+      if (sansSousTraitance && /sous[- ]?trait/i.test(t)) return;
       const u = uniques.find((x) => norm(x.texte) === norm(t));
       if (u) u.origines.push(i); else uniques.push({ texte: t, origines: [i] });
     });
