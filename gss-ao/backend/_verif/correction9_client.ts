@@ -23,4 +23,10 @@ const r2 = publiposter("et {{CLIENT}} peut, s'il le souhaite, être destinataire
 verifier('Citédia : société au féminin', /Citédia Métropole peut, si elle le souhaite/.test(r2.texte), r2.texte);
 const r3 = publiposter("d'une durée de {{DUREE_MARCHE}}.", { DUREE_MARCHE: { valeur: 'durée initiale de 2 ans' } }, { definitions: mt.variables });
 verifier('durée sans répétition', r3.texte === "d'une durée initiale de 2 ans." || r3.texte === "d'une durée de 2 ans.", r3.texte);
+{
+  const dceCit = require('fs').readFileSync('/private/tmp/claude-501/-Users-stanislastolegano-GSS-Version-Finale/8345a302-25fc-48b3-8606-859ba09681d5/scratchpad/refonte/c9/dce_citedia2.txt', 'utf-8');
+  const v3 = variablesDuMarche(mt, { cover: { client: 'Citédia Métropole' }, analyse: { clientName: 'Citédia Métropole' }, dce: dceCit, registre: [] } as any, {});
+  const r4 = publiposter("{{CLIENT}} peut, s'il le souhaite, être destinataire", v3, { definitions: mt.variables });
+  verifier('Citédia (S.P.L. dans le DCE) : féminin', /si elle le souhaite/.test(r4.texte), r4.texte);
+}
 console.log(ko ? `${ko} ÉCHEC(S)` : 'TOUT OK');

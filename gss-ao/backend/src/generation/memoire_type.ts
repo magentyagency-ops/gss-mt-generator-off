@@ -901,10 +901,13 @@ const CALCULS: Record<string, Calculateur> = {
     if (FORME_SOCIETE.test(brut) && brut.replace(FORME_SOCIETE, '').trim()) brut = brut.replace(FORME_SOCIETE, '').trim();
     const { article, nom } = articleEtNom(brut, c.ctx.dce || '');
     const formes = formesClient(nom, c.ctx.dce || '');
+    // Société désignée ainsi dans le DCE (« S.P.L. CITEDIA METROPOLE », « société publique locale … ») : féminin.
+    const societeDce = societe || new RegExp(`(?:^|[^a-z])(?:s ?p ?l ?a?|s ?e ?m|societe publique locale|societe d.economie mixte) ${echapper(normaliser(nom).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim())}(?![a-z])`).test(normaliser(c.ctx.dce || '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' '));
     return {
-      valeur: formes.long, article, source: brut === couverture ? 'page de garde' : 'analyse du DCE (clientName)',
+      // Société (nom propre) : sans article (« Citédia Métropole », jamais « le Citédia Métropole »).
+      valeur: formes.long, article: societeDce && !formes.pluriel ? '' : article, source: brut === couverture ? 'page de garde' : 'analyse du DCE (clientName)',
       ...(formes.court ? { court: formes.court.nom, articleCourt: formes.court.article } : {}),
-      ...(formes.pluriel ? { genre: 'p' as const } : societe && !article ? { genre: 'f' as const } : {}),
+      ...(formes.pluriel ? { genre: 'p' as const } : societeDce ? { genre: 'f' as const } : {}),
     };
   },
   OBJET_MARCHE: (c) => {
