@@ -11,7 +11,7 @@ import {
   chargerMemoireType, preparerMemoireType, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite,
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
-  type DonneesBesoin, type RubriquePubliee, normaliser,
+  type DonneesBesoin, type RubriquePubliee, normaliser, formesClient,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles,
@@ -4892,14 +4892,19 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     // (jamais « l'l’établissement » ni « du l’établissement »).
     const clientNameRe = clientNameDedup.length >= 6
       ? new RegExp(`(\\b(?:[Ll]['’]|[Ll][ae]s? |[Dd]u |[Aa]u |[Dd]es |[Aa]ux )|)${clientNameDedup.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g') : null;
+    // Jamais « l'établissement » à la place d'un nom connu (consigne 2) : les occurrences suivantes prennent la forme
+    // courte de l'acheteur (sigles : « l'ENPC et l'IGN ») ; un nom déjà court est gardé tel quel.
+    const courtDedup = clientNameDedup ? formesClient(clientNameDedup).court : undefined;
     const dedupeClientName = (val: string): string => {
-      if (!clientNameRe) return val;
+      if (!clientNameRe || !courtDedup) return val;
       let n = 0;
-      return val.replace(clientNameRe, (m, art: string) => {
+      return val.replace(clientNameRe, (m, art: string, pos: number, tout: string) => {
         if (++n === 1) return m;
         const a = (art || '').toLowerCase();
-        const sub = a === 'du ' || a === 'des ' ? 'de l’établissement' : a === 'au ' || a === 'aux ' ? 'à l’établissement' : 'l’établissement';
-        return art && /^[A-Z]/.test(art) ? sub.charAt(0).toUpperCase() + sub.slice(1) : sub;
+        const c = courtDedup.article ? (courtDedup.article.endsWith("'") ? `${courtDedup.article}${courtDedup.nom}` : `${courtDedup.article} ${courtDedup.nom}`) : courtDedup.nom;
+        const sub = a === 'du ' || a === 'des ' ? `de ${c}` : a === 'au ' || a === 'aux ' ? `à ${c}` : c;
+        const debut = /(?:^|[.!?]\s+|\n\s*(?:[-*•]\s+)?)$/.test(tout.slice(0, pos));
+        return (art && /^[A-Z]/.test(art)) || debut ? sub.charAt(0).toUpperCase() + sub.slice(1) : sub;
       });
     };
 

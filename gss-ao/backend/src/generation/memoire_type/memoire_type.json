@@ -684,7 +684,7 @@
       "titre": "Votre contexte et votre site",
       "format": "3 à 6 lignes (partie de la page 1 du bloc)",
       "objectif": "Situer en quelques lignes l'acheteur, l'objet du marché et le site, pour montrer que GSS sait à qui il répond.",
-      "trame": "{{CLIENT}} nous consulte pour {{OBJET_MARCHE}}{{LOTS}}, pour une durée de {{DUREE_MARCHE}}. La prestation porte sur {{SITE}} ({{VILLE}}) : {{DESCRIPTION_SITE}}.",
+      "trame": "{{CLIENT}} lance le marché {{OBJET_MARCHE}}{{LOTS}}, pour une durée de {{DUREE_MARCHE}}. La prestation porte sur {{SITE}} ({{VILLE}}) : {{DESCRIPTION_SITE}}.",
       "donnees_dce": [
        "analyzeDce.clientName",
        "analyzeDce.projectTitle / RC.objet",
@@ -697,7 +697,7 @@
        "Faits du DCE uniquement, sans qualificatif promotionnel.",
        "Si une donnée est absente du DCE, la phrase correspondante est omise."
       ],
-      "trame_publipostage": "{{CLIENT}} nous consulte pour le marché « {{OBJET_MARCHE}} »{{#si LOTS}} ({{LOTS}}){{/si}}{{#si DUREE_MARCHE}}, d'une durée de {{DUREE_MARCHE}}{{/si}}."
+      "trame_publipostage": "{{CLIENT}} lance le marché « {{OBJET_MARCHE}} »{{#si LOTS}} ({{LOTS}}){{/si}}{{#si DUREE_MARCHE}}, d'une durée de {{DUREE_MARCHE}}{{/si}}."
      },
      {
       "id": "perimetre",

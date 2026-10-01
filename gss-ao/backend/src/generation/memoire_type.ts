@@ -577,6 +577,11 @@ export interface ValeurVariable {
   aConfirmer?: string;
   /** Question à GSS si la valeur est inconnue ou partielle. */
   question?: string;
+  /** Acheteur : forme courte (sigles ou nom principal) et son article, employée après la première mention. */
+  court?: string;
+  articleCourt?: string;
+  /** Acheteur : genre grammatical quand ni l'article ni le premier mot ne le donnent (société : féminin). */
+  genre?: 'f' | 'm' | 'p';
 }
 
 export type Variables = Record<string, ValeurVariable>;
@@ -620,6 +625,51 @@ export function articleEtNom(brut: string, dce = ''): { article: string; nom: st
   if (ARTICLES_MASCULINS.test(premier)) return { article: 'le', nom };
   if (ARTICLES_FEMININS.test(premier)) return { article: 'la', nom };
   return { article: '', nom };
+}
+
+/** Forme juridique d'une société (« S.P.L. », « SAS », « SEM »…) : l'acheteur est une société, donc féminin. */
+const FORME_SOCIETE = /^(?:s\.?\s?p\.?\s?l\.?\s?a?\.?|s\.?\s?e\.?\s?m\.?\s?l?\.?|s\.?\s?a\.?\s?s?\.?\s?u?\.?|s\.?\s?a\.?\s?r\.?\s?l\.?|soci[ée]t[ée]\s+(?:publique|anonyme|d['’][ée]conomie)[^,]*?)(?=\s)/i;
+
+/** Article d'un sigle : « l' » devant une voyelle, sinon celui de l'entité (« le CHU ») ; '' si inconnu. */
+function articleSigle(sigle: string, articleEntite: string): string {
+  if (/^[AEIOUYÉÈ]/.test(sigle)) return "l'";
+  return articleEntite === 'le' || articleEntite === 'la' || articleEntite === 'les' ? articleEntite : '';
+}
+
+/**
+ * Formes de l'acheteur pour le publipostage (consigne 2 : on remplace le nom, sans l'alourdir).
+ * - forme longue : chaque entité coordonnée prend son article (« … (ENPC) et l'Institut national … (IGN) ») ;
+ * - forme courte : sigles des entités (« l'ENPC et l'IGN »), sinon nom principal sans la précision qui suit
+ *   (« …, pour l'École nationale … ») ; absente quand le nom est déjà court.
+ * La forme longue sert à la première mention du bloc 1 (amorce), la forme courte partout ailleurs.
+ */
+export function formesClient(nom: string, dce = ''): { long: string; court?: { article: string; nom: string }; pluriel?: boolean } {
+  const n = String(nom || '').replace(/\s+/g, ' ').trim();
+  const iPrecision = n.search(/,\s*(?:pour|agissant|repr[ée]sent[ée]e?s?|au nom)\b/i);
+  const principal = iPrecision > 0 ? n.slice(0, iPrecision) : n;
+  const suite = iPrecision > 0 ? n.slice(iPrecision) : '';
+  // Entités coordonnées : séparées après la parenthèse d'un sigle (« (ENPC) et Institut … »), jamais dans un nom
+  // (« Ponts et Chaussées »).
+  const entites = principal.split(/(?<=\))\s*(?:,|\s+et)\s+(?=[A-ZÀ-Ý])/).map((x) => x.trim()).filter(Boolean);
+  const articles = entites.map((e) => articleEtNom(e, dce).article);
+  const avecArticle = (art: string, e: string) => (!art ? e : art.endsWith("'") ? `${art}${e}` : `${art} ${e}`);
+  const long = entites.length > 1
+    ? `${[entites[0], ...entites.slice(1).map((e, i) => avecArticle(articles[i + 1], e))].reduce((acc, e, i, l) => (i === 0 ? e : `${acc}${i === l.length - 1 ? ' et ' : ', '}${e}`), '')}${suite}`
+    : n;
+  const pluriel = entites.length > 1 || undefined;
+  const mots = n.split(/\s+/).length;
+  if (mots <= 6) return { long, pluriel };
+  // Sigles des entités (« (ENPC) », « (ENSG, dénommée … ) »).
+  const sigles = entites.map((e) => (/\(([A-Z][A-Z0-9&.\-]{1,11})\s*[,)]/.exec(e) || [])[1] || '');
+  if (sigles.every(Boolean)) {
+    const arts = sigles.map((s, i) => articleSigle(s, articles[i]));
+    if (arts.every(Boolean)) {
+      const reste = sigles.map((s, i) => (i === 0 ? s : avecArticle(arts[i], s)));
+      return { long, pluriel, court: { article: arts[0], nom: reste.length > 1 ? `${reste.slice(0, -1).join(', ')} et ${reste[reste.length - 1]}` : reste[0] } };
+    }
+  }
+  if (suite && entites.length === 1 && principal.split(/\s+/).length <= 8) return { long, court: { article: '', nom: principal } };
+  return { long, pluriel };
 }
 
 const MOIS = 'janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre';
@@ -816,10 +866,26 @@ function valeurSiExige(c: CalculVariables, nom: string): ValeurVariable | null {
 
 const CALCULS: Record<string, Calculateur> = {
   CLIENT: (c) => {
-    const brut = valeurPropre(c.ctx.cover?.client) || valeurPropre(c.ctx.analyse?.clientName);
+    const couverture = valeurPropre(c.ctx.cover?.client);
+    const analyse = valeurPropre(c.ctx.analyse?.clientName);
+    let brut = couverture || analyse;
     if (!brut) return { valeur: null };
+    // Raison sociale en capitales (« S.P.L. CITEDIA METROPOLE ») : le nom d'usage de l'analyse (« Citédia
+    // Métropole ») quand il désigne le même acheteur ; une société (S.P.L., SAS…) est reprise au féminin.
+    const societe = FORME_SOCIETE.test(brut);
+    const lettres = brut.replace(/[^A-Za-zÀ-ÿ]/g, '');
+    if (couverture && analyse && lettres && lettres.replace(/[^A-ZÀ-Ý]/g, '').length / lettres.length > 0.7 && /[a-zà-ÿ]/.test(analyse)) {
+      const sansForme = normaliser(couverture.replace(FORME_SOCIETE, '')).replace(/[^a-z0-9]+/g, ' ').trim();
+      if (sansForme && normaliser(analyse).replace(/[^a-z0-9]+/g, ' ').trim().includes(sansForme)) brut = analyse;
+    }
+    if (FORME_SOCIETE.test(brut) && brut.replace(FORME_SOCIETE, '').trim()) brut = brut.replace(FORME_SOCIETE, '').trim();
     const { article, nom } = articleEtNom(brut, c.ctx.dce || '');
-    return { valeur: nom, article, source: c.ctx.cover?.client ? 'page de garde' : 'analyse du DCE (clientName)' };
+    const formes = formesClient(nom, c.ctx.dce || '');
+    return {
+      valeur: formes.long, article, source: brut === couverture ? 'page de garde' : 'analyse du DCE (clientName)',
+      ...(formes.court ? { court: formes.court.nom, articleCourt: formes.court.article } : {}),
+      ...(formes.pluriel ? { genre: 'p' as const } : societe && !article ? { genre: 'f' as const } : {}),
+    };
   },
   OBJET_MARCHE: (c) => {
     const titre = valeurPropre(c.ctx.cover?.title);
@@ -1000,6 +1066,8 @@ export interface OptionsPubliposte {
    * ⟦AC:n⟧) : la réponse de GSS sera insérée à cet endroit.
    */
   marquerConsultations?: boolean;
+  /** Acheteur sous sa forme longue (première mention du bloc 1) ; sinon forme courte quand elle existe. */
+  clientLong?: boolean;
 }
 
 const SENTINELLE = (i: number) => `\u0001${i}\u0001`;
@@ -1071,7 +1139,12 @@ const MOTS_COMMUNS_INITIALE = /^(?:une?|plusieurs|chaque|deux|trois|quatre|cinq|
  */
 function accorderValeur(nom: string, valeur: string, avant: string, apres: string): { avant: string; valeur: string } {
   let v = valeur;
-  if (nom === 'DUREE_MARCHE') v = v.replace(/^p[ée]riode\s+initiale\s+(?:de\s+|d['’]\s*)?/i, '').replace(/^(?:est\s+)?(?:d['’]une\s+)?dur[ée]e\s+(?:de\s+|d['’]\s*)/i, '');
+  if (nom === 'DUREE_MARCHE') {
+    v = v.replace(/^p[ée]riode\s+initiale\s+(?:de\s+|d['’]\s*)?/i, '');
+    // « d'une durée de {{DUREE_MARCHE}} » avec « durée initiale de 2 ans » : jamais « durée de durée ».
+    if (/dur[ée]e\s+(?:de\s+|d['’]\s*)?$/i.test(avant)) v = v.replace(/^(?:est\s+)?(?:d['’]une\s+)?dur[ée]e\s+(?:initiale|ferme|globale|totale|ma[xi]imale|de base)?\s*(?:est\s+)?(?:de\s+|d['’]\s*|:\s*)/i, '');
+    else v = v.replace(/^(?:est\s+)?(?:d['’]une\s+)?dur[ée]e\s+(?:de\s+|d['’]\s*)/i, '');
+  }
   if (/^\s*maxim(?:um|al|ale|aux)\b/i.test(apres) || /\bmaxim(?:um|al|ale)\s+(?:de\s+|d['’])?$/i.test(avant)) v = v.replace(/\s*\(?\s*(?:au\s+)?maxim(?:um|al|ale)?\s*\)?\s*$|\s+max\.?$/i, '').trim() || v;
   const debut = /(?:^|[.!?:]\s+|\n\s*(?:(?:[-*•]|\d+[.)])\s+)?)(?:\*\*)?$/.test(avant);
   const premier = (/^[\wÀ-ÿ'’]+/.exec(v) || [''])[0];
@@ -1085,6 +1158,7 @@ function accorderValeur(nom: string, valeur: string, avant: string, apres: strin
 const FEMININS_ELIDES = /^(?:association|universit[ée]|agence|[ée]cole|entreprise|administration|autorit[ée]|institution|acad[ée]mie|assembl[ée]e|union|organisation|unit[ée]|[ée]tablissement-?publique|op[ée]ration|h[ôo]tellerie|intercommunalit[ée]|aire|[ée]glise|imprimerie|usine|inspection)$/i;
 function genreClient(v?: ValeurVariable): 'f' | 'm' | 'p' | '' {
   if (!v || !variableRenseignee(v)) return '';
+  if (v.genre) return v.genre;
   if (v.article === 'les') return 'p';
   if (v.article === 'la') return 'f';
   if (v.article === 'le') return 'm';
@@ -1092,9 +1166,17 @@ function genreClient(v?: ValeurVariable): 'f' | 'm' | 'p' | '' {
   if (FEMININS_ELIDES.test(premier) || ARTICLES_FEMININS.test(premier)) return 'f';
   return '';
 }
+/** Verbes du mémoire type dont l'acheteur est le sujet, au pluriel (acheteurs coordonnés : « l'ENPC et l'IGN »). */
+const VERBES_PLURIEL: Record<string, string> = { peut: 'peuvent', dispose: 'disposent', appelle: 'appellent', lance: 'lancent', ait: 'aient', est: 'sont', a: 'ont', souhaite: 'souhaitent', confie: 'confient', reçoit: 'reçoivent' };
 function accorderPronomsClient(t: string, v?: ValeurVariable): string {
   const g = genreClient(v);
   if (g !== 'f' && g !== 'p') return t;
+  // Sujet pluriel : verbe accordé, sauf quand l'acheteur est complément (« le site de {{CLIENT}} reçoit »).
+  if (g === 'p') {
+    t = t.replace(/(^|[^\wÀ-ÿ'’])((?:[\wÀ-ÿ'’]+\s+)?)(\{\{\s*CLIENT\s*\}\}\s+(?:y\s+)?)([a-zç]+)(?![\wÀ-ÿ])/g, (m, a: string, mot: string, c: string, verbe: string) => (
+      VERBES_PLURIEL[verbe] && !/^(?:de|d['’]|du|des|à|au|aux|pour|par|avec|sur|chez|entre|vers)\s+$/i.test(mot) ? `${a}${mot}${c}${VERBES_PLURIEL[verbe]}` : m));
+    t = t.replace(/(\{\{\s*CLIENT\s*\}\}[^.!?\n{]{0,80}?)\bs['’]il le souhaite\b/g, "$1s'ils le souhaitent");
+  }
   return t.replace(/(\{\{\s*CLIENT\s*\}\}[^.!?\n{]{0,80}?)\bs['’]il(?![\wÀ-ÿ])/g, (_m, a: string) => `${a}${g === 'f' ? 'si elle' : "s'ils"}`);
 }
 
@@ -1157,7 +1239,7 @@ export function publiposter(texte: string, variables: Variables, options: Option
     }
     if (v && variableRenseignee(v) && typeof v.valeur !== 'boolean') {
       if (def?.type === 'client' || nom === 'CLIENT') {
-        const r = insererClient(sortie, v);
+        const r = insererClient(sortie, !options.clientLong && v.court ? { ...v, valeur: v.court, article: v.articleCourt ?? '' } : v);
         sortie = r.sortie + r.insere;
       } else {
         const a = accorderValeur(nom, valeurAffichee(nom, v, def), sortie, t.slice(dernier, dernier + 40));
@@ -1354,7 +1436,7 @@ export function publierRubrique(mt: MemoireType, rubrique: RubriqueMemoireType, 
   };
   if (rubrique.mode === 'besoin' || !rubrique.texte) {
     const trameBrute = rubrique.specification?.sous_parties?.[0]?.trame_publipostage;
-    const trame = trameBrute ? publiposter(trameBrute, variables, { definitions: mt.variables, indicateurs }) : null;
+    const trame = trameBrute ? publiposter(trameBrute, variables, { definitions: mt.variables, indicateurs, clientLong: true }) : null;
     return {
       ...base, texte: null, manquantes: [], aConfirmer: [],
       schema: rubrique.schema ? { ...rubrique.schema } : null,
@@ -1443,8 +1525,9 @@ export function donneesBesoin(prep: MemoirePrepare, ctx: ContexteMarche): Donnee
   ].filter((x): x is string => !!x);
   const b1 = prep.mt.rubriques.find((r) => r.mode === 'besoin');
   const trame = b1?.specification?.sous_parties?.[0]?.trame_publipostage;
-  const art = v.CLIENT?.article || '';
-  const nomClient = variableRenseignee(v.CLIENT) ? texte('CLIENT') : '';
+  // Rédaction : l'acheteur sous sa forme courte (« l'ENPC et l'IGN ») ; la forme longue est dans l'amorce.
+  const art = v.CLIENT?.court ? v.CLIENT.articleCourt || '' : v.CLIENT?.article || '';
+  const nomClient = variableRenseignee(v.CLIENT) ? v.CLIENT.court || texte('CLIENT') : '';
   const client = nomClient ? (art ? (art.endsWith("'") ? `${art}${nomClient}` : `${art} ${nomClient}`) : nomClient) : (prep.mt.variables.CLIENT?.repli || '');
   return {
     client,
@@ -1456,7 +1539,7 @@ export function donneesBesoin(prep: MemoirePrepare, ctx: ContexteMarche): Donnee
     enjeux: (Array.isArray(ctx.analyse?.keyRisks) ? ctx.analyse.keyRisks : []).map((x: unknown) => valeurPropre(x)).filter(Boolean).slice(0, 5),
     prestations,
     horsNormandie: !!ind.HORS_NORMANDIE,
-    amorce: trame ? publiposter(trame, v, { definitions: prep.mt.variables, indicateurs: ind }).texte : '',
+    amorce: trame ? publiposter(trame, v, { definitions: prep.mt.variables, indicateurs: ind, clientLong: true }).texte : '',
   };
 }
 

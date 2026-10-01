@@ -294,7 +294,7 @@ describe('Indicateurs, plan et variables', () => {
     const prep = preparerMemoireType(ctx, { memoireType: mt });
     const d = donneesBesoin(prep, ctx);
     expect(d.client).toBe('le Centre fictif des Docks');
-    expect(d.amorce).toBe('Le Centre fictif des Docks nous consulte pour le marché « Gardiennage du centre », d\'une durée de 3 ans.');
+    expect(d.amorce).toBe('Le Centre fictif des Docks lance le marché « Gardiennage du centre », d\'une durée de 3 ans.');
     expect(d.enjeux).toEqual(['Public nombreux']);
     expect(d.prestations).toEqual(expect.arrayContaining(['rondes', 'télésurveillance et interventions sur alarme', 'reprise du personnel en place']));
     expect(d.qualifications).toContain('SSIAP 1');

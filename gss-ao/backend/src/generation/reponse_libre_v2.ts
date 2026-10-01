@@ -651,7 +651,7 @@ export function consigneProposition(groupe: GroupeNouveau, o: { client?: string;
  * périmètre, horaires et obligations chiffrées cités mot pour mot). Signalé à GSS comme texte à relire.
  */
 export function texteSecoursBesoin(d: DonneesBesoin, perimetre = ''): string {
-  const parties: string[] = ['## Votre contexte et votre site', d.amorce || `${d.client ? d.client.charAt(0).toUpperCase() + d.client.slice(1) : 'Vous'} nous consultez pour ${d.objet || 'une prestation de sécurité privée'}.`];
+  const parties: string[] = ['## Votre contexte et votre site', d.amorce || (d.client ? `${d.client.charAt(0).toUpperCase() + d.client.slice(1)} lance le marché ${d.objet ? `« ${d.objet} »` : 'de sécurité privée'}.` : `Vous nous consultez pour ${d.objet || 'une prestation de sécurité privée'}.`)];
   if (d.sites.length) parties.push(`La prestation porte sur ${d.sites.join(', ')}${d.villes.length ? ` (${d.villes.join(', ')})` : ''}.`);
   parties.push('## Le périmètre de la prestation demandée');
   if (perimetre) parties.push(perimetre.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => (/^[-*•]/.test(l) ? l : `- ${l}`)).join('\n'));
