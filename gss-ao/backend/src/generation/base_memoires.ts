@@ -142,7 +142,11 @@ function moisDepuis(date: string): number {
   return (now.getFullYear() - Number(m[1])) * 12 + (now.getMonth() + 1 - Number(m[2]));
 }
 
+/** Entrées du registre encore « à confirmer » mais tranchées pour le mémoire : jamais reposées à GSS. */
+const POINTS_TRANCHES = new Set(['logiciel_main_courante', 'effectif_agents_securite']);
+
 /** Registre des informations variables, avec l'instruction de fraîcheur pour chacune. */
+
 export function blocRegistre(horsNormandie = false): string {
   const { registre } = charger();
   if (!registre.length) return '';
@@ -155,11 +159,13 @@ export function blocRegistre(horsNormandie = false): string {
   // marchés normands, ne sont pas transmis (sinon ils étaient promis tels quels, ex. 60 min depuis Rouen).
   const lignes = registre.filter((e) => !incoherent(e) && !(horsNormandie && e.categorie === 'delais')).map((e) => {
     const ancien = CATEGORIES_VARIABLES.has(e.categorie) && moisDepuis(e.date_retenue) > FRAICHEUR_MOIS;
-    const aConfirmer = e.statut === 'a_confirmer' || ancien;
+    const aConfirmer = (e.statut === 'a_confirmer' || ancien) && !POINTS_TRANCHES.has(e.cle);
     const raison = e.statut === 'a_confirmer'
       ? ` — A ÉVOLUÉ (avant : ${e.valeurs_anterieures_differentes.slice(0, 2).join(' ; ')})`
       : (ancien ? ` — dernière source de plus de ${FRAICHEUR_MOIS} mois` : '');
-    return `- ${e.libelle} : ${e.valeur_retenue} [source : ${e.source_retenue}, ${e.date_retenue}]${aConfirmer ? ` [À CONFIRMER${raison}]` : ''}`;
+    // Main courante tranchée : Trackforce seul (Vigicom figure dans un ancien mémoire).
+    const valeur = e.cle === 'logiciel_main_courante' ? 'Trackforce' : e.valeur_retenue;
+    return `- ${e.libelle} : ${valeur} [source : ${e.source_retenue}, ${e.date_retenue}]${aConfirmer ? ` [À CONFIRMER${raison}]` : ''}`;
   });
   const avertissement = horsNormandie
     ? `\nCE MARCHÉ EST HORS DE NORMANDIE (siège et implantation historique de GSS) : ${ZONE_GSS} ; présente cette présence, sans inventer de ville d'agence. N'annonce AUCUN délai chiffré d'astreinte, d'intervention, de remplacement ou de mise en place repris d'anciens marchés normands (ex. 60 minutes, 1 h à 24 h) ; décris l'organisation et demande le délai à GSS.`
@@ -355,6 +361,9 @@ export function confirmationsRegistreUtilisees(texte: string, horsNormandie = fa
     if (horsNormandie && e.categorie === 'delais') continue;
     const ancien = CATEGORIES_VARIABLES.has(e.categorie) && moisDepuis(e.date_retenue) > FRAICHEUR_MOIS;
     if (e.statut !== 'a_confirmer' && !ancien) continue;
+    // Points déjà tranchés : main courante Trackforce (seul outil employé par le mémoire), effectif de 423 agents
+    // de sécurité (faux, jamais imprimé).
+    if (POINTS_TRANCHES.has(e.cle)) continue;
     const morceaux = e.valeur_retenue.split(';').map((x) => normTxt(x).replace(/\s+/g, ' ').trim()).filter((x) => x.length >= 4);
     if (morceaux.some((m) => t.includes(m))) {
       // Main courante : le mémoire n'emploie que Trackforce (Vigicom figure dans un ancien mémoire).

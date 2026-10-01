@@ -1,0 +1,22 @@
+// Correction 9, bug 3 : questions à GSS du publipostage sur le DCE de l'IGN (aucune référence interne, aucun point tranché).
+import fs from 'fs';
+import path from 'path';
+import { preparerMemoireType, publierMemoire, questionsDuPubliposte, chargerMemoireType } from '../src/generation/memoire_type';
+import { confirmationsRegistreUtilisees, blocRegistre } from '../src/generation/base_memoires';
+let ko = 0;
+const verifier = (nom: string, ok: boolean, detail = '') => { console.log(`${ok ? 'OK ' : 'KO '} ${nom}${detail ? ` — ${detail}` : ''}`); if (!ok) ko++; };
+const code = process.argv[2] || 'ign';
+const dce = fs.readFileSync(path.resolve(__dirname, `../../_corpus_verif/_dce_textes/${code}.txt`), 'utf-8');
+const ctx: any = { cover: { client: 'Client test' }, analyse: { clientName: 'Client test', projectTitle: 'Gardiennage' }, dce };
+const prep = preparerMemoireType(ctx);
+const rubriques = publierMemoire(prep);
+const qs = questionsDuPubliposte(rubriques);
+qs.forEach((q, i) => console.log(`  ${i + 1}. ${q}`));
+const interdit = /faits_gss|slide|AO RNE|m[ée]moire type|423|interlocuteur unique/i;
+verifier('aucune référence interne ni point tranché', !qs.some((q) => interdit.test(q)), qs.filter((q) => interdit.test(q)).join(' | '));
+const reg = confirmationsRegistreUtilisees('Trackforce TRACKFORCE vigicom 423 agents');
+verifier('registre : Trackforce et 423 jamais reposés', !reg.length, reg.join(' | '));
+verifier('registre transmis : Trackforce seul, non à confirmer', /main courante[^\n]*: Trackforce \[source[^\n\]]*\](?!\s*\[À CONFIRMER)/i.test(blocRegistre()), (/.*main courante.*/i.exec(blocRegistre()) || [''])[0]);
+const mt = chargerMemoireType();
+verifier('rubriques sans point à confirmer', mt.rubriques.every((r) => !(r.a_confirmer || []).length));
+console.log(ko ? `${ko} ÉCHEC(S)` : 'TOUT OK');

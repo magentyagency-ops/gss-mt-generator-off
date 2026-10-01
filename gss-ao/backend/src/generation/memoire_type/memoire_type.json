@@ -620,7 +620,7 @@
    "type": "texte",
    "si_absente": "a_completer",
    "valeur_gss": "LEMELE Fabrice",
-   "a_confirmer": "Confirmer le responsable de la protection rapprochée — valeur utilisée dans le mémoire : LEMELE Fabrice (AO RNE ; responsable d'exploitation selon faits_gss.md)"
+   "a_confirmer": "Confirmer que LEMELE Fabrice est toujours le responsable de la protection rapprochée (APR)."
   }
  },
  "rubriques": [
@@ -1018,9 +1018,7 @@
     "base_memoires.json — GSS - CAF du Val-de-Marne.pdf p.9 (passage 13237b781b84a87a)",
     "SLIDE REP AO/EFFECTIFS ET ORGANIGRAMME/ORGANIGRAMME.pdf (version antérieure, voir divergences)"
    ],
-   "a_confirmer": [
-    "Présence de DUHAMEL Leo (administratif) et de LEMELE Fabrice (exploitation) cités par faits_gss.md mais absents de l'organigramme du mémoire type 2026-06"
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_encadrement",
    "anciennes_rubriques": [
     "b_encadrement",
@@ -1895,9 +1893,7 @@
     "SLIDE REP AO/PARTENAIRES/PARTENAIRES 17.pdf",
     "faits_gss.md — Références clients réelles"
    ],
-   "a_confirmer": [
-    "Commune écrite « Heudebouville (27600) » (source : « Eudebouville ») : à valider par GSS."
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_references",
    "anciennes_rubriques": [
     "b_references",
@@ -2084,10 +2080,7 @@
     "registre_informations.json — effectif_total, effectif_departement_76, effectif_departement_27, effectif_ssiap1, effectif_ssiap2, effectif_ssiap3, effectif_controleurs, effectif_cynophiles, effectif_agents_securite, vivier_evenementiel, agents_mobilisables_48h",
     "faits_gss.md — Identité — effectifs"
    ],
-   "a_confirmer": [
-    "Nombre d'agents de sécurité CQP (423 dans le mémoire type 2026-06 ; 52 dans CAF 2025 ; 152 sur la slide EFFECTIFS MOYENS) — le registre le marque « à confirmer » ; 423 dépasse l'effectif total de 380 salariés (réponse de GSS du 2026-10-01)",
-    "Engagement « remplaçants sur site au moins 3 fois par trimestre » : pris pour un seul marché (Région Normandie 2024-05)"
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_moyens_humains",
    "anciennes_rubriques": [
     "b_moyens_humains",
@@ -2362,10 +2355,7 @@
    "sources": [
     "AO RNE.pdf p.49-50"
    ],
-   "a_confirmer": [
-    "Responsable APR : LEMELE Fabrice (AO RNE p.49-50 ; « responsable d'exploitation » selon faits_gss.md, « responsable administratif » en 2024). Le profil décrit (SST, HOB0, APR 1, CQP, sous-officier de réserve de la gendarmerie nationale) est le sien : si le responsable APR n'est plus M. LEMELE, retirer toute la fiche « Notre responsable APR » plutôt que d'en changer le nom.",
-    "Recours à Global Security Protection pour les agents de protection rapprochée (AO RNE p.49) : retiré du texte, contraire à la règle « pas de sous-traitance » ; à confirmer par GSS."
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_moyens_humains",
    "anciennes_rubriques": [
     "b_moyens_humains",
@@ -2587,9 +2577,7 @@
     "base_memoires.json — GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf p.19-20",
     "registre_informations.json — organisme_formation"
    ],
-   "a_confirmer": [
-    "Dénomination d'OPCALIA citée dans le texte (les OPCA sont devenus des OPCO en 2019) : nom actuel de l'organisme à confirmer par GSS."
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_recrutement_formation",
    "anciennes_rubriques": [
     "b_recrutement_formation"
@@ -2721,9 +2709,7 @@
     "faits_gss.md — Identité (dirigeant, interlocuteur unique)",
     "Réponse de GSS (2026-10-01) : téléphones 09 62 21 24 75 (fixe) et 06 58 06 32 25 (numéro unique de l'interlocuteur)"
    ],
-   "a_confirmer": [
-    "Identité de l'interlocuteur unique : MARCHANI Adil, 06 58 06 32 25 (registre, faits_gss.md) ou VATTIER Marie, 06 25 73 94 58 (mémoire type AO RNE 2026-06, CAF du Val-de-Marne 2026-04) — choix par marché dans l'assistant"
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_encadrement",
    "anciennes_rubriques": [
     "b_encadrement"
@@ -2784,9 +2770,7 @@
     "AO RNE.pdf p.114-116",
     "faits_gss.md — Règles de rédaction (L1224, reprise)"
    ],
-   "a_confirmer": [
-    "Scénario de la slide « agents non maintenus affectés sur un autre site » retiré du texte et du schéma (reprise jamais sélective ; schéma en trois étapes : réunion, reprise sur le même site, intégration) : à valider par GSS."
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_reprise_personnel",
    "anciennes_rubriques": [
     "b_reprise_personnel"
@@ -2865,10 +2849,7 @@
     "SLIDE REP AO/TENUES/NOTRE VESTIAIRE 4.pdf",
     "SLIDE REP AO/TENUES/NOTRE VESTIAIRE 5.pdf"
    ],
-   "a_confirmer": [
-    "Mention « fournisseurs agréés » de la slide TENUES 4 : à valider par GSS avant toute réintroduction",
-    "Date d'application (1er octobre 2024) et dimensions des marquages reprises telles quelles de la slide GSS"
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_tenues_epi",
    "anciennes_rubriques": [
     "b_tenues_epi",
@@ -3947,9 +3928,7 @@
     "faits_gss.md — Outils et moyens ; délais normands",
     "Réponse de GSS (2026-10-01) : délai d'intervention du rondier sur alarme 45 minutes (Normandie ; hors Normandie, délai du CCTP ou question à GSS)"
    ],
-   "a_confirmer": [
-    "Partenaire de télésurveillance : ERYMA (slide ALARME 3) ou Delta (slide ALARME 2)"
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_telesurveillance",
    "anciennes_rubriques": [
     "b_telesurveillance",
@@ -4024,10 +4003,7 @@
     "faits_gss.md — Contrôles inopinés ; ISO 9001",
     "Réponse de GSS (2026-10-01) : au moins 3 contrôles inopinés par mois et par site quand le cahier des charges l'exige"
    ],
-   "a_confirmer": [
-    "Fréquence du contrôle 2 : « deux à trois fois par mois » (bimensuel, AO RNE) ; « une à trois fois par mois » (Gardiennage 2025-12, slides, faits_gss.md)",
-    "Nombre de contrôles inopinés par mois dans le calendrier : 2 (AO RNE, CAF du Val-de-Marne) ou 1 (slide, Gardiennage, Région Normandie)"
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_suivi_qualite",
    "anciennes_rubriques": [
     "b_suivi_qualite"
@@ -4424,10 +4400,7 @@
     "base_memoires.json — GSS - CAF du Val-de-Marne.pdf p.99-102",
     "registre_informations.json — responsable_exploitation, responsable_qualite"
    ],
-   "a_confirmer": [
-    "Fonction de DA SILVA Luis : responsable d'exploitation (registre, organigramme) ou gestionnaire d'exploitation (fiche AO RNE p.108) ; responsable commercial selon CAF 2025 et le registre (à confirmer)",
-    "Mentions commerciales des profils (« prospection commerciale », « présentation commerciale ») : à conserver ou non selon GSS"
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_encadrement",
    "anciennes_rubriques": [
     "b_encadrement",
@@ -4652,9 +4625,7 @@
     "base_memoires.json — GSS - Region Normandie - lot 1.pdf p.56 (passage f4e6832beb3ce877)",
     "base_memoires.json — GSS - CAF 2025.pdf p.39-40"
    ],
-   "a_confirmer": [
-    "Démarrage en moins de 30 jours (notification tardive) : aucun rétroplanning court fourni par GSS pour un marché"
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_organisation",
    "anciennes_rubriques": [
     "b_organisation",
@@ -5002,9 +4973,7 @@
    "sources": [
     "base_memoires.json — GSS - Region Normandie - lot 1.pdf p.42-43 (passage c587f6199505c6fe, b57608bf211f4784)"
    ],
-   "a_confirmer": [
-    "Délai « 45 min à 2 h » : valeur de 2024 (Région Normandie), absente du registre"
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_gestion_alarmes",
    "anciennes_rubriques": [
     "b_gestion_alarmes",
@@ -5226,6 +5195,67 @@
   "proposition": "L'IA propose directement une réponse, construite uniquement à partir des sources GSS (base des mémoires, slides, registre). Sans source GSS : réponse structurée avec « [À COMPLÉTER] » là où une donnée manque, jamais de chiffre inventé.",
   "validation": "GSS valide ou modifie la réponse dans l'assistant avant génération (système d'assistant et de modification/ajout existant) ; la réponse validée est enregistrée et réutilisée pour les appels d'offres suivants.",
   "placement": "Dans le bloc du même thème, en fin de bloc (ou à la place imposée par le cadre), avec son schéma si la réponse décrit un process."
+ },
+ "questions_gss_une_fois": {
+  "note": "Points du mémoire type qui ne dépendent pas du marché : ils sont posés une seule fois à GSS (comme le registre), jamais à chaque génération. La réponse de GSS est reportée dans le texte de la rubrique ou dans le registre, puis le point est retiré de cette liste. Les points déjà tranchés (interlocuteur unique MARCHANI Adil, effectif de 423 agents faux, main courante Trackforce) et les valeurs déjà posées par une variable (délai de défaillance du SSI) ne sont plus posés.",
+  "questions": [
+   {
+    "rubrique": "b2_organigramme",
+    "question": "Organigramme : faut-il ajouter DUHAMEL Leo (administratif) et LEMELE Fabrice (exploitation), absents de l'organigramme du mémoire ?"
+   },
+   {
+    "rubrique": "b2_ref_logistique",
+    "question": "Référence logistique : la commune s'écrit-elle bien « Heudebouville (27600) » ?"
+   },
+   {
+    "rubrique": "b3_adequation",
+    "question": "Remplacements : l'engagement « remplaçants sur site au moins 3 fois par trimestre », pris pour la Région Normandie (2024), vaut-il pour tous les marchés ?"
+   },
+   {
+    "rubrique": "b3_formation_apr",
+    "question": "Protection rapprochée : LEMELE Fabrice est-il toujours le responsable APR ? Si ce n'est plus le cas, la fiche « Notre responsable APR » est retirée plutôt que de changer le nom."
+   },
+   {
+    "rubrique": "b3_formation_apr",
+    "question": "Protection rapprochée : GSS fait-elle appel à Global Security Protection pour ses agents de protection rapprochée ? Le mémoire n'en parle pas (règle : pas de sous-traitance)."
+   },
+   {
+    "rubrique": "b3_politique_formation",
+    "question": "Formation : quel est le nom actuel de l'organisme cité sous le nom d'OPCALIA (les OPCA sont devenus des OPCO en 2019) ?"
+   },
+   {
+    "rubrique": "b3_reprise_personnel",
+    "question": "Reprise du personnel : GSS valide-t-elle le schéma en trois étapes (réunion, reprise sur le même site, intégration), sans le scénario « agents non maintenus affectés sur un autre site » ?"
+   },
+   {
+    "rubrique": "b4_tenues_reglementaires",
+    "question": "Tenues : faut-il mentionner des « fournisseurs agréés » ?"
+   },
+   {
+    "rubrique": "b4_tenues_reglementaires",
+    "question": "Tenues : la date d'application du 1er octobre 2024 et les dimensions des marquages sont-elles exactes ?"
+   },
+   {
+    "rubrique": "b4_proc_alarme",
+    "question": "Télésurveillance : quel est le partenaire de télésurveillance de GSS, ERYMA ou Delta ?"
+   },
+   {
+    "rubrique": "b5_controle_trois_niveaux",
+    "question": "Contrôles : la fréquence habituelle des contrôles techniques inopinés est-elle « une à trois fois par mois » ou « deux à trois fois par mois » ?"
+   },
+   {
+    "rubrique": "b5_equipe_controle",
+    "question": "Équipe de contrôle : DA SILVA Luis est-il responsable d'exploitation, gestionnaire d'exploitation ou responsable commercial ?"
+   },
+   {
+    "rubrique": "b5_equipe_controle",
+    "question": "Équipe de contrôle : faut-il garder les mentions « prospection commerciale » et « présentation commerciale » dans les profils ?"
+   },
+   {
+    "rubrique": "b5_nouveau_marche",
+    "question": "Mise en place : GSS a-t-elle un rétroplanning court pour un démarrage en moins de 30 jours (notification tardive) ?"
+   }
+  ]
  },
  "documentation": {
   "sources": {
