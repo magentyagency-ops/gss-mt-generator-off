@@ -7474,6 +7474,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     // ── 6. Assemblage dans l'ordre du RC ; éléments attendus hors mémoire type rédigés à part (propositions) ──
     const sections: Record<string, string> = {};
     const propositions: string[] = [];
+    // Propositions de l'IA par partie (titres rédigés), pour le premier message de l'assistant et l'action « valider » (D5).
+    const propositionsCourt: Array<{ pid: string; titres: string[]; dansLeTexte: boolean }> = [];
     const analysisJson = JSON.stringify(analysisData, null, 2);
     const registreComplet = registreGss + referencesGss() + this.blocPerimetre(perimetre);
     for (let i = 0; i < plan.length; i++) {
@@ -7489,6 +7491,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
         if (complement) {
           texte = `${texte}\n\n${complement}`.trim();
           propositions.push(`Proposition de réponse à valider (attendu du RC que le mémoire type de GSS ne traite pas) : ${p.title} — ${elements.join(' ; ')}`.slice(0, 400));
+          const sousTitres = [...complement.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim()).filter(Boolean);
+          propositionsCourt.push({ pid: p.id, titres: sousTitres.length ? sousTitres : [elements.join(' ; ')], dansLeTexte: sousTitres.length > 0 });
         }
       }
       // Contrôle de couverture conservé : une exigence du CCTP que la partie ne traite pas devient un engagement.
@@ -7496,7 +7500,11 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       if (texte && reqs.length) texte = plafonnerEngagements(await this.completerCouverture(texte, reqs, p.id), 6);
       sections[p.id] = texte.trim();
     }
-    for (const g of grouperNouvelles(nouvellesCourt, 6).groupes) propositions.push(`Proposition de réponse à valider (question nouvelle du DCE, en engagement dans la partie « ${partiePourTexte(plan, `${g.sujet} ${g.exigences.map((e) => e.exigence).join(' ')}`).title} ») : ${g.sujet}`);
+    for (const g of grouperNouvelles(nouvellesCourt, 6).groupes) {
+      const partie = partiePourTexte(plan, `${g.sujet} ${g.exigences.map((e) => e.exigence).join(' ')}`);
+      propositions.push(`Proposition de réponse à valider (question nouvelle du DCE, en engagement dans la partie « ${partie.title} ») : ${g.sujet}`);
+      propositionsCourt.push({ pid: partie.id, titres: [g.sujet], dansLeTexte: false });
+    }
 
     // ── 7. Filtres, contrôles de cohérence avec le CCTP (inchangés), remarques ──
     const commentairesRetires = new Set<string>();
@@ -7587,11 +7595,31 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
     consultationList.push(...avisSecours, ...propositions);
     console.log(`[MemoireGenerator] Format court (mémoire type) : ${rendu.pages} page(s) / ${format.pagesMax} autorisée(s) ; ${toutesRetenues.length} rubrique(s) du mémoire type reprise(s), ${propositions.length} proposition(s).`);
+    // Premier message de l'assistant : les propositions de l'IA, à valider ou modifier avant la remise (D5) ; chaque
+    // partie qui en contient est marquée « proposition à valider » pour l'action « valider » de l'assistant.
+    const pidsPropositions = [...new Set(propositionsCourt.map((x) => x.pid))].filter((pid) => (sections[pid] || '').trim());
+    const ajoutsCourt: AjoutLibre[] = pidsPropositions.map((pid) => ({
+      id: pid, chapter: '', title: plan.find((x) => x.id === pid)?.title || pid, proposition: true,
+      sujet: propositionsCourt.filter((x) => x.pid === pid).flatMap((x) => x.titres).join(' ; '),
+    }));
+    let conversation: EtatCompletion['conversation'];
+    if (propositionsCourt.length) {
+      try {
+        const { pageDe } = await import('./assistant_memoire');
+        const titrePartie = (pid: string) => plan.find((x) => x.id === pid)?.title || '';
+        const texte = messagePropositions(propositionsCourt.flatMap((x) => x.titres.map((t) => ({
+          titre: t, page: (x.dansLeTexte ? pageDe(rendu.filePath, t) : undefined) ?? pageDe(rendu.filePath, titrePartie(x.pid)),
+        })))).replace(/- la supprimer : « Supprime la proposition sur … »\./, '- la retirer : « Dans la partie …, retire la proposition sur … » (le reste de la partie est conservé).');
+        conversation = [{ role: 'assistant', texte, date: new Date().toISOString() }];
+      } catch (e: any) {
+        console.warn(`[MemoireGenerator] Message des propositions non préparé (${e?.message || e}).`);
+      }
+    }
     try {
       ecrireEtat({
         dossierId, mode: 'libre', fichier: rendu.filePath, majLe: '', elements, reponsesTraitees: [],
-        libre: { sections, schemas, cover, court: { pagesMax: format.pagesMax, plan, source: format.source }, theme: themeActif() },
-        demande: this.demandeParticuliere?.demande || undefined,
+        libre: { sections, schemas, cover, court: { pagesMax: format.pagesMax, plan, source: format.source }, theme: themeActif(), ...(ajoutsCourt.length ? { ajouts: ajoutsCourt } : {}) },
+        demande: this.demandeParticuliere?.demande || undefined, conversation,
       });
     } catch (e: any) {
       console.warn(`[MemoireGenerator] État de complétion non enregistré (non bloquant) : ${e?.message || e}`);
