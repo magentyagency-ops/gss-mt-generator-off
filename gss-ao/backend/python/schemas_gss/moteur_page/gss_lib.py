@@ -89,7 +89,7 @@ def clamp(v, a, b):
 
 
 # ── Document ──────────────────────────────────────────────────────────────────
-_ETAT = {"n": 0, "svg": None}
+_ETAT = {"n": 0, "svg": None, "zoom": 1.0, "etirer": 0.0}
 
 
 def courant():
@@ -101,8 +101,9 @@ class Svg:
 
     def __init__(self, W=None, H=None):
         th = T()
-        self.W = W or th.W
-        self.H = H or th.H
+        # Zoom (en_grand, gabarits.py) : toile réduite de même proportion, affichée à la même taille → dessin agrandi.
+        self.W = W or th.W / _ETAT["zoom"]
+        self.H = H or th.H / _ETAT["zoom"]
         _ETAT["n"] += 1
         self.p = f"s{_ETAT['n']}"
         self.el, self.defs, self.textes = [], {}, []

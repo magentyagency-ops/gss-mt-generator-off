@@ -4,7 +4,7 @@
  *     interceptés au niveau du SDK (réponses simulées réalistes : _verif/reponse_libre_v2_simulation.ts), rendu réel
  *     (Marp + Chromium, moteur de schémas Python) ;
  *  2. contrôles : sommaire en 5 blocs dans l'ordre du mémoire type ; pour chaque rubrique 1 à 2 pages de texte puis
- *     exactement 1 page de schéma (≥ 70 % de la hauteur de la page) ; aucun débordement ; aucune variable {{…}}, aucune
+ *     exactement 1 page de schéma (dessin ≥ 70 % de la hauteur utile de la page) ; aucun débordement ; aucune variable {{…}}, aucune
  *     mention « Non communiqué », aucun marqueur interne, aucun autre acheteur du corpus ; rubriques fixes intactes ;
  *     propositions signalées (état, consultations, premier message de l'assistant) ;
  *  3. pages en PNG (pdftoppm) et planche-contact ;
@@ -123,12 +123,26 @@ async function mesurer(md: string, theme: string): Promise<any> {
       const res: any = { pages: sections.length, schemas: [] as any[], debordements: [] as any[], remplissages: [] as number[] };
       sections.forEach((s, i) => {
         const r = s.getBoundingClientRect();
-        const svg = s.querySelector('.schema-page svg') as SVGElement | null;
-        if (svg && s.classList.contains('schema')) {
-          const b = svg.getBoundingClientRect();
-          res.schemas.push({ page: i + 1, hauteur: +(b.height / r.height).toFixed(3), dans_page: b.bottom <= r.bottom + 0.5 });
-        }
+        const svg = s.querySelector('.schema-page svg') as SVGSVGElement | null;
         const cs = getComputedStyle(s);
+        if (svg && s.classList.contains('schema')) {
+          // Hauteur du DESSIN (union des éléments, hors fond de toile), et non de la boîte <svg> (marges blanches
+          // comprises), rapportée à la hauteur utile : sous le titre, au-dessus du pied de page.
+          const b = svg.getBoundingClientRect();
+          const vb = svg.viewBox.baseVal;
+          let y0 = Infinity, y1 = -Infinity;
+          svg.querySelectorAll(':scope > *:not(defs)').forEach((e) => {
+            if (e.tagName === 'rect' && +(e.getAttribute('width') || 0) >= vb.width && +(e.getAttribute('height') || 0) >= vb.height) return;
+            const eb = e.getBoundingClientRect();
+            if (!eb.width && !eb.height) return;
+            y0 = Math.min(y0, eb.top); y1 = Math.max(y1, eb.bottom);
+          });
+          const k = r.height / s.offsetHeight;
+          const h2 = s.querySelector('h2');
+          const haut = h2 ? h2.getBoundingClientRect().bottom : r.top + parseFloat(cs.paddingTop) * k;
+          const basU = r.bottom - parseFloat(cs.paddingBottom) * k;
+          res.schemas.push({ page: i + 1, hauteur: +((y1 - y0) / (basU - haut)).toFixed(3), boite_svg: +(b.height / r.height).toFixed(3), dans_page: b.bottom <= r.bottom + 0.5 });
+        }
         const bas = r.bottom - parseFloat(cs.paddingBottom) * (r.height / s.offsetHeight) + 2;
         let max = 0;
         s.querySelectorAll(':scope > *:not(header):not(footer)').forEach((e) => { max = Math.max(max, (e as HTMLElement).getBoundingClientRect().bottom); });

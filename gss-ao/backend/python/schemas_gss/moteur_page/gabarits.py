@@ -16,7 +16,7 @@ import json as _json
 import math
 import os as _os
 
-from .gss_lib import (Svg, T, Deborde, carte, ajuster_cartes, bandeau, bloc_texte, preparer, dessiner, texte,
+from .gss_lib import (_ETAT, Svg, T, Deborde, carte, ajuster_cartes, bandeau, bloc_texte, preparer, dessiner, texte,
                      texte_seul, largeur, couper, insec, rect, surface, ombre, chemin_arrondi, pastille, glyphe,
                      numero, taille_numero, puce, coche, trait, fleche, lien, noeud, chevron_bas, etiquette,
                      etiquette_dim, pt, secteur, arc, disque, zone, clamp, ajuster, nouveau_bloc, _kw, esc)
@@ -460,6 +460,8 @@ def comparatif(colonnes, vs=False, h_tete=104):
         raise Deborde("comparatif : points trop longs")
     hc = max(P["total"] for P in Ps) + 64
     hc = max(hc, min(place + 64, hc * (1.35 if peu else 1.12)))     # un peu d'air dans les colonnes courtes
+    if _ETAT["etirer"]:     # dernier recours d'en_grand (colonnes étroites, le zoom n'agrandit pas) : corps allongés
+        hc = max(hc, min(place + 64, _ETAT["etirer"] * H - ht - g_tb))
     tot = ht + g_tb + hc
     y0 = _y_optique(H - 2 * MY, tot)
     fond_c = th.c[th.carte.get("remplissage", "carte_fond")]
@@ -2106,3 +2108,58 @@ def pourcentages(taux, note=None):
     if note:
         _note_bas(s, note, y0 + tot + 34, wc, th)
     return s
+
+
+# ── En grand : la composition occupe la hauteur de la page (D4 : au moins 70 % de la hauteur utile) ──────────
+# Gabarits dont les cartes et les textes délimitent tout le dessin (mesure fiable par le registre de la toile).
+ZOOMABLES = {"grille", "etoile", "comparatif", "chiffres", "barres", "fiche", "flux", "checklist", "chevrons", "arbre",
+             "matrice"}
+ZOOMS = (1.08, 1.16, 1.25, 1.35, 1.45)
+CIBLE_HAUTEUR = 0.80     # part de la hauteur de la toile (la toile fait 0,93 de la hauteur utile de la page)
+
+
+def part_hauteur(s):
+    """Part de la hauteur de la toile occupée par le dessin : cadres des cartes et textes (registre de la toile)."""
+    ys = [(z[1], z[3]) for z in s.zones] + [(t["y0"], t["y1"]) for t in s.textes]
+    if not ys:
+        return 1.0
+    return (max(b for _, b in ys) - min(a for a, _ in ys)) / s.H
+
+
+def en_grand(dessin, gabarit, cible=CIBLE_HAUTEUR):
+    """Dessine (dessin() → Svg) ; si la composition reste basse (bandeau au milieu de la page), la redessine sur une
+    toile réduite de même proportion, affichée à la même taille : tout le dessin (cartes, textes, pictogrammes) est
+    agrandi, sans rien ajouter ni retirer. Premier zoom qui atteint la cible, sinon le plus haut qui tient."""
+    s = dessin()
+    if gabarit not in ZOOMABLES:
+        return s
+    f = part_hauteur(s)
+    if f >= cible:
+        return s
+    meilleur, f_meilleur, z_meilleur = s, f, 1.0
+    for z in ZOOMS:
+        _ETAT["zoom"] = z
+        try:
+            s2 = dessin()
+        except Exception:  # noqa: BLE001  (un texte ne tient plus à ce zoom : on garde le meilleur précédent)
+            break
+        finally:
+            _ETAT["zoom"] = 1.0
+        f2 = part_hauteur(s2)
+        if f2 > f_meilleur:
+            meilleur, f_meilleur, z_meilleur = s2, f2, z
+        if f2 >= cible:
+            return meilleur
+    # Aucun zoom n'atteint la cible (colonnes étroites, textes déjà à leur taille) : les gabarits qui le permettent
+    # (comparatif) allongent leurs cadres jusqu'à la cible, au meilleur zoom.
+    _ETAT["zoom"], _ETAT["etirer"] = z_meilleur, cible
+    try:
+        s3 = dessin()
+        if part_hauteur(s3) > f_meilleur:
+            meilleur = s3
+    except Exception:  # noqa: BLE001
+        pass
+    finally:
+        _ETAT["zoom"], _ETAT["etirer"] = 1.0, 0.0
+    return meilleur
+

@@ -511,7 +511,8 @@ def rendre(sp, fmt="paysage"):
         if erreurs:
             return {"id": ident, "ok": False, "erreurs": erreurs[:12]}
         if fmt == "page":
-            svg = construire(sp.get("gabarit"), params, _moteur_page()).rendu()
+            GP = _moteur_page()
+            svg = GP.en_grand(lambda: construire(sp.get("gabarit"), params, GP), sp.get("gabarit")).rendu()
             return {"id": ident, "ok": True, "svg": finaliser_page(svg, "s" + ident)}
         svg = construire(sp.get("gabarit"), params).rendu()
         return {"id": ident, "ok": True, "svg": finaliser(themes_gss.recolorer(svg, THEME), "s" + ident)}
@@ -579,7 +580,8 @@ def _dessiner_page(sp):
         if f is None:
             raise Invalide(f"schéma composé sans version page : {sp['id']}")
         return f().rendu()
-    return getattr(GP, sp["gabarit"])(*_decoder(sp["params"]["args"]), **_decoder(sp["params"]["kwargs"])).rendu()
+    return GP.en_grand(lambda: getattr(GP, sp["gabarit"])(*_decoder(sp["params"]["args"]), **_decoder(sp["params"]["kwargs"])),
+                       sp["gabarit"]).rendu()
 
 
 def redessiner(ids=None, fmt="page", forcer=False):
