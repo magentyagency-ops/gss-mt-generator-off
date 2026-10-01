@@ -209,6 +209,28 @@ function libelleLigneTableau(ligne: string): string {
   return ligne.split('|').map((c) => c.trim()).filter((c) => c && !c.includes(PLACEHOLDER_V2) && !/^-+$/.test(c)).slice(0, 2).join(' · ');
 }
 
+/**
+ * Libellé d'un emplacement « [À COMPLÉTER] » resté seul sur sa ligne (paragraphe sans objet, illisible pour
+ * l'acheteur comme pour GSS) : tiré de la question à GSS (« Obtenir de GSS les modalités formalisées d'engagement
+ * individuel de confidentialité, … » → « Modalités formalisées d'engagement individuel de confidentialité »), sinon
+ * du dernier intertitre qui précède l'emplacement. Chaîne vide : aucun libellé sûr.
+ */
+export function libelleEmplacementSeul(question: string | undefined, texteAvant: string): string {
+  let l = String(question || '')
+    .replace(/^\s*à demander à l.acheteur\s*:\s*/i, '')
+    .replace(/^\s*(?:obtenir|demander|fournir|pr[ée]ciser|indiquer|confirmer|communiquer|transmettre|donner|valider|lister|d[ée]crire)\s+(?:(?:de|à|aupr[èe]s de)\s+(?:GSS|l.acheteur)\s*:?\s*)?/i, '')
+    .split(/\s*(?:[,;:?(]|\s—\s|\sainsi que\s|\set les supports\s)/)[0]
+    .replace(/^(?:les|le|la|l['’]|des|du|un|une)\s*/i, '')
+    .replace(/[.\s]+$/, '')
+    .trim();
+  if (!l || l.split(/\s+/).length < 2) {
+    const titres = [...String(texteAvant || '').matchAll(/^#{2,4}\s+(.+?)\s*$/gm)];
+    l = titres.length ? titres[titres.length - 1][1].replace(/[*_]/g, '').trim() : '';
+  }
+  if (l.length > 110) l = l.slice(0, 110).replace(/\s+\S*$/, '');
+  return l ? l.charAt(0).toUpperCase() + l.slice(1) : '';
+}
+
 /** Phrase (ou ligne de tableau) qui contient le passage [pos, pos + longueur[ de `texte`, passage compris. */
 function phraseAutour(texte: string, pos: number, longueur: number): string {
   const debutLigne = texte.lastIndexOf('\n', pos - 1) + 1;
@@ -299,6 +321,11 @@ export function poserReperes(sections: Record<string, string>, ordre: string[], 
         if (libelle) question = `${question.replace(/[.\s]+$/, '')} — ligne « ${libelle} »`;
       }
       enPlace.push({ n, id, question, contexte, environnement });
+      // « [À COMPLÉTER] » seul sur sa ligne : précédé du libellé de la donnée attendue (question, sinon intertitre).
+      if (/^\s*\[À COMPLÉTER\]\s*[.;]?\s*$/.test(ligne)) {
+        const libelle = libelleEmplacementSeul(question, brut.slice(0, pos));
+        if (libelle) return `${libelle} : ${PLACEHOLDER_V2}⟦AC:${n}⟧${/\]\s*[.;]\s*$/.test(ligne) ? '' : '.'}`;
+      }
       return `${PLACEHOLDER_V2}⟦AC:${n}⟧`;
     });
     // Marqueurs restants (sur leur ligne ou au fil du texte) : repère à leur place, comme en réponse libre v1.
