@@ -22,6 +22,7 @@ import {
   recomposerPdf, poserSignets, formulerQuestions, PLACEHOLDER, MARQUE_CHAMP, REPERE,
 } from './completion';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION } from './base_memoires';
+import { reglagesIA } from '../core/modeles_ia';
 import { SECTIONS_REPONSE_LIBRE, CHAPITRES_REPONSE_LIBRE } from './memoire_generator';
 import { dimensions, insererPhotoDocx, paragrapheDuChamp } from './docx_images';
 import { nombrePages } from './format_court';
@@ -68,7 +69,7 @@ export async function decrirePhoto(chemin: string): Promise<string> {
   try {
     const ext = path.extname(chemin).toLowerCase() === '.png' ? 'png' : 'jpeg';
     const r = await openai().chat.completions.create({
-      model: process.env.MEMOIRE_MODEL || 'gpt-5.6-luna',
+      ...reglagesIA('mecanique'),
       messages: [{
         role: 'user',
         content: [

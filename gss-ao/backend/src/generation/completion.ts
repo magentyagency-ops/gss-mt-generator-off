@@ -22,12 +22,12 @@ import OpenAI from 'openai';
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getSettings } from '../core/config';
+import { reglagesIA } from '../core/modeles_ia';
 import { personnesDuRole, retirerCommentairesInternes } from './base_memoires';
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const RESPONSE_DIR = path.resolve(__dirname, '../../response');
 const ETATS_DIR = path.join(RESPONSE_DIR, 'etats');
-const MODELE = process.env.MEMOIRE_MODEL || 'gpt-5.6-luna';
 const EMBED_MODEL = process.env.RAG_EMBEDDING_MODEL || process.env.EMBEDDING_MODEL_MEMOIRE || 'text-embedding-3-small';
 /** Marqueur interne posé par le générateur juste après chaque « [À COMPLÉTER] » : <champ>. */
 export const MARQUE_CHAMP = (id: number) => `${id}`;
@@ -385,7 +385,7 @@ export async function json(system: string, user: string): Promise<any> {
   for (let essai = 1; ; essai++) {
     try {
       r = await openai().chat.completions.create({
-        model: MODELE,
+        ...reglagesIA('redaction'),
         messages: [{ role: 'system', content: `${system}\nRéponds uniquement par un objet JSON.` }, { role: 'user', content: user }],
         response_format: { type: 'json_object' },
       });

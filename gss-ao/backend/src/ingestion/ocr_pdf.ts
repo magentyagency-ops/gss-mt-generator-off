@@ -13,6 +13,7 @@ import crypto from 'crypto';
 import OpenAI from 'openai';
 import { PDFDocument } from 'pdf-lib';
 import { getSettings } from '../core/config';
+import { reglagesIA } from '../core/modeles_ia';
 
 const CACHE = path.resolve(__dirname, '../../response/ocr_cache');
 const PAGES_PAR_BLOC = 4;
@@ -34,7 +35,6 @@ export async function transcrirePdf(fichier: string): Promise<string> {
   const cleApi = getSettings().openaiApiKey;
   if (!cleApi) return '';
   const client = new OpenAI({ apiKey: cleApi, timeout: 300_000 });
-  const modele = process.env.OCR_MODEL || process.env.MEMOIRE_MODEL || 'gpt-5.6-luna';
   const source = await PDFDocument.load(contenu, { ignoreEncryption: true });
   const total = source.getPageCount();
   const blocs: number[][] = [];
@@ -47,7 +47,7 @@ export async function transcrirePdf(fichier: string): Promise<string> {
     for (let essai = 1; essai <= 3; essai++) {
       try {
         const r = await client.chat.completions.create({
-          model: modele,
+          ...reglagesIA('mecanique'),
           messages: [{
             role: 'user',
             content: [

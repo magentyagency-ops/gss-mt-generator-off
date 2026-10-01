@@ -3,6 +3,7 @@ import path from 'path';
 import { spawn, spawnSync } from 'child_process';
 import OpenAI from 'openai';
 import { getSettings } from '../core/config';
+import { reglagesIA, prefixeEnCache } from '../core/modeles_ia';
 
 /**
  * Schémas GSS du mémoire technique : UN schéma par page de contenu.
@@ -19,7 +20,6 @@ import { getSettings } from '../core/config';
  * la bibliothèque GSS pour la même section : il y a donc toujours un schéma par page.
  */
 
-const SCHEMA_MODEL = process.env.SCHEMA_MODEL || 'gpt-5.6-luna';
 const ESSAIS_LIBRES = 4;      // choix libre du gabarit, corrections guidées par les erreurs
 const ESSAIS_SIMPLIFIES = 3;  // puis gabarits simples, contenu recopié de la page
 const CONCURRENCE = 6;
@@ -273,10 +273,11 @@ export class SchemaService {
       // Les erreurs d'API (limite de débit 429, réseau) sont réessayées sans consommer d'essai de schéma.
       for (let appel = 1; appel <= 5 && spec === null; appel++) {
         try {
+          // Modèle et effort : core/modeles_ia.ts ; la consigne système, identique pour toutes les pages, est mise en cache.
           const c = await this.openai.chat.completions.create({
-            model: SCHEMA_MODEL,
+            ...reglagesIA('redaction'),
             response_format: { type: 'json_object' },
-            messages,
+            messages: prefixeEnCache(messages, 0),
           });
           const brut = c.choices[0]?.message?.content || '{}';
           try {

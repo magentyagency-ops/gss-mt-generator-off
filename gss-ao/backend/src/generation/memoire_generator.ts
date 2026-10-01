@@ -15,6 +15,7 @@ import PizZip from 'pizzip';
 import OpenAI from 'openai';
 import { Client as PgClient } from 'pg';
 import { getSettings } from '../core/config';
+import { modeleIA, reglagesIA, prefixeEnCache, UsageIA } from '../core/modeles_ia';
 import { DB, FichiersDB } from '../core/db';
 import { getScopedClient } from '../core/supabase';
 import { extractText, loadDocxStructure, loadDocxTemplateAnnotated, convertDocToDocx, findTextutil, convertirDocAvecWord } from '../ingestion/docConverter';
@@ -25,14 +26,11 @@ import { setProgress } from '../core/progress';
 // @ts-ignore
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 
-// Modèle de génération SELON LE CAS :
-//  - SANS template (mémoire GSS maître AO RNE : synthèse + réécriture des surlignages) → qualité
-//    rédactionnelle prioritaire → gpt-5.4-mini.
-//  - AVEC template client (remplissage d'un cadre imposé : extraction/insertion ciblée) → tâche plus
-//    mécanique → gpt-5.4-nano (moins cher, suffisant).
-// Le modèle effectif est choisi dans generate() puis porté par this.memoireModel. Surchargeable par env.
-const MEMOIRE_MODEL = 'gpt-5.6-luna'; // Modèle luna demandé par l'utilisateur
-const MODEL_TEMPLATE = 'gpt-5.6-luna'; // Modèle luna demandé par l'utilisateur
+// Modèle de génération : choisi dans core/modeles_ia.ts (gpt-6-luna par défaut, surchargeable par la
+// variable d'environnement GSS_IA_MODELE), le même avec ou sans cadre imposé. L'effort de raisonnement
+// dépend de l'usage de chaque appel (rédaction ou analyse) : voir callOpenAI.
+const MEMOIRE_MODEL = modeleIA();
+const MODEL_TEMPLATE = MEMOIRE_MODEL;
 
 // Modèle de génération d'IMAGES pour remplir les cadres « Zone d'image » du template.
 // Désactivable via GENERATE_IMAGES=false (étape coûteuse, non bloquante).
@@ -1838,8 +1836,7 @@ export class MemoireGenerator {
   // Tableaux du DCE vus PAR COLONNE (par site) : pour une cellule, on n'injecte QUE la colonne du
   // site concerné → le modèle ne peut PAS piocher les données d'un autre site (anti-mélange colonnes).
   private lastDceSiteCols: SiteColumn[] = [];
-  // Modèle de rédaction effectif : gpt-5.4-mini par défaut (cas SANS template), basculé sur
-  // gpt-5.4-nano dans generate() quand un cadre client imposé est détecté (cas AVEC template).
+  // Modèle de rédaction effectif (core/modeles_ia.ts), noté dans le journal et les métadonnées du mémoire.
   private memoireModel: string = MEMOIRE_MODEL;
   /** « Demande particulière » saisie juste avant la génération (consigne et/ou document complémentaire). */
   private demandeParticuliere: DemandeParticuliere | null = null;
@@ -2141,10 +2138,13 @@ export class MemoireGenerator {
   private sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
   /**
-   * Appel gpt-4o avec retry/backoff sur 429 (la limite TPM du compte oblige à espacer les requêtes).
+   * Appel OpenAI avec retry/backoff sur 429 (la limite TPM du compte oblige à espacer les requêtes).
+   * Modèle, effort de raisonnement (selon l'usage : rédaction ou analyse) et cache : core/modeles_ia.ts ;
+   * la température n'est envoyée qu'à un modèle sans raisonnement. prefixe : n° du message dont la fin
+   * marque un préfixe stable, mis en cache (consigne système identique d'un appel à l'autre).
    * Renvoie le contenu texte, ou null si échec définitif.
    */
-  private async callOpenAI(messages: any[], temperature: number, label: string, jsonMode: boolean): Promise<string | null> {
+  private async callOpenAI(messages: any[], temperature: number, label: string, jsonMode: boolean, usage: UsageIA = 'redaction', prefixe?: number): Promise<string | null> {
     // Garde-fou : le mode JSON d'OpenAI EXIGE que le mot « json » figure dans les messages, sinon
     // l'appel renvoie 400. On l'ajoute si absent (évite les échecs silencieux → 0 résultat).
     if (jsonMode && !messages.some((m) => typeof m?.content === 'string' && /json/i.test(m.content))) {
@@ -2154,10 +2154,9 @@ export class MemoireGenerator {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const completion = await this.openai.chat.completions.create({
-          model: this.memoireModel,
+          ...reglagesIA(usage, { temperature }),
           ...(jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
-          messages,
-          ...(/luna|o1/i.test(this.memoireModel) ? {} : { temperature }),
+          messages: prefixe === undefined ? messages : prefixeEnCache(messages, prefixe),
         });
         return completion.choices[0].message.content || '';
       } catch (e: any) {
@@ -2626,7 +2625,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
 
     const content = await this.callOpenAI(
       [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-      0.2, 'Analyse DCE', true,
+      0.2, 'Analyse DCE', true, 'analyse',
     );
     try {
       const data = viderValeursNonRenseignees(JSON.parse(content || '{}'));
@@ -2854,7 +2853,7 @@ Renvoie un JSON valide :
 
     const content = await this.callOpenAI(
       [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-      0.2, 'Analyse exigences ↔ GSS', true,
+      0.2, 'Analyse exigences ↔ GSS', true, 'analyse',
     );
     try {
       const data = JSON.parse(content || '{}');
@@ -2923,7 +2922,7 @@ Renvoie un JSON valide :
           },
           { role: 'user', content: `=== CADRE (annoté) ===\n${templateText.slice(0, 80_000)}\n\nRenvoie un JSON : {"items":[{"label":"...","type":"champ|case|tableau","criticite":"bloquant|facultatif|normal","context":"..."}]}` },
         ],
-        0.1, 'Extraction champs template', true,
+        0.1, 'Extraction champs template', true, 'analyse',
       );
       return parse(content);
     }
@@ -2932,7 +2931,7 @@ Renvoie un JSON valide :
         { role: 'system', content: "Tu extrais la CHECK-LIST des GRANDES EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. ATTENTION: Reste UNIQUEMENT au niveau des grandes thématiques (ex: Dispositif humain global, Matériel et technologies, Astreinte, Politique RSE, Démarche qualité) et ne liste SURTOUT PAS les sous-détails précis (ne liste pas les modèles de radio, les types d'EPI, les plannings précis, etc.). Limite-toi à une quinzaine d'exigences globales maximum. Le but est d'avoir une vue d'ensemble, sois très général et concis. N'invente rien." },
         { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON : {"items":[{"label":"...","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}` },
       ],
-      0.2, 'Extraction exigences CCTP', true,
+      0.2, 'Extraction exigences CCTP', true, 'analyse',
     );
     return parse(content);
   }
@@ -3107,7 +3106,7 @@ Renvoie un JSON valide :
         { role: 'system', content: "Tu relis un DCE (dossier de consultation) de marché de sécurité privée pour GSS. Repère uniquement les VRAIES contradictions ou ambiguïtés INTERNES au dossier : chiffres/dates/horaires qui se contredisent entre pièces, exigences incompatibles, renvois à des annexes absentes, formulations réellement ambiguës qui empêchent de répondre. N'invente rien ; si tout est cohérent, renvoie une liste vide." },
         { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON valide : { "contradictions": [ { "sujet": "de quoi il s'agit (court)", "detail": "la contradiction/ambiguïté constatée (1-2 phrases, cite les valeurs en conflit si possible)" } ] }` },
       ],
-      0.1, 'Détection contradictions DCE', true,
+      0.1, 'Détection contradictions DCE', true, 'analyse',
     );
     try {
       const data = JSON.parse(content || '{}');
@@ -3238,7 +3237,7 @@ Renvoie un JSON valide :
 
     const content = await this.callOpenAI(
       [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-      0.2, 'Détection champs manquants (template)', true,
+      0.2, 'Détection champs manquants (template)', true, 'analyse',
     );
     try {
       const data = JSON.parse(content || '{}');
@@ -3362,8 +3361,7 @@ Renvoie un JSON valide :
 
     console.log(`[MemoireGenerator] Using template: ${templatePath} (${isClientTemplate ? 'cadre client' : 'mémoire GSS maître'})`);
 
-    // Choix du modèle selon le cas : cadre client imposé → gpt-5.4-nano (tâche mécanique, moins cher) ;
-    // mémoire GSS maître (sans template) → gpt-5.4-mini (qualité rédactionnelle). Porté par callOpenAI.
+    // Modèle de rédaction (core/modeles_ia.ts) : le même avec ou sans cadre imposé.
     this.memoireModel = isClientTemplate ? MODEL_TEMPLATE : MEMOIRE_MODEL;
     console.log(`[MemoireGenerator] Modèle de rédaction : ${this.memoireModel} (${isClientTemplate ? 'cas template' : 'cas sans template'}).`);
 
@@ -4352,7 +4350,7 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
       const label = `Champ ${f.id}`;
       const aiResponse = await this.callOpenAI(
         [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-        temperature, label, true,
+        temperature, label, true, 'redaction', 0,
       );
       if (aiResponse === null) return;
       try {
@@ -4419,7 +4417,7 @@ RÈGLE DE FIABILITÉ (PRIORITAIRE) : donne TOUS les éléments que les extraits 
 Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au plus ${N} éléments, dans l'ordre).`;
       const aiResponse = await this.callOpenAI(
         [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-        0.15, `Zone "${zone.label.slice(0, 30)}" (${N}l)`, true,
+        0.15, `Zone "${zone.label.slice(0, 30)}" (${N}l)`, true, 'redaction', 0,
       );
       if (aiResponse === null) return;
       try {
@@ -6345,7 +6343,7 @@ Renvoie UNIQUEMENT un objet JSON : {"suppressions": [{"id": "rubrique où retire
 Renvoie UNIQUEMENT un objet JSON : {"limite": true|false, "pagesMax": nombre, "citation": "phrase exacte du RC", "plan": [{"titre": "…", "attendu": "…"}], "criteres": [{"libelle": "…", "poids": "…", "partie": 0}]}`,
       },
       { role: 'user', content: `EXTRAITS QUI MENTIONNENT UN NOMBRE DE PAGES :\n${passages.join('\n---\n')}\n\nEXTRAITS SUR LES CRITÈRES DE JUGEMENT :\n${criteres.join('\n---\n') || '(aucun)'}` },
-    ], 0.1, 'Format imposé par le RC', true);
+    ], 0.1, 'Format imposé par le RC', true, 'analyse');
     try {
       const d = JSON.parse(r || '{}');
       const pagesMax = Number(d.pagesMax);
@@ -6970,9 +6968,8 @@ FORMAT DE SORTIE (JSON EXACT) :
     if (!openAiKey) throw new Error("Clé OpenAI manquante");
 
     const payload = {
-      model: 'gpt-5.4-mini',
+      ...reglagesIA('mecanique', { temperature: 0.2 }),
       messages: [{ role: 'system', content: prompt }],
-      temperature: 0.2,
       response_format: { type: "json_object" }
     };
 
