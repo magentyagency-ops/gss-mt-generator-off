@@ -3,7 +3,7 @@
 // du corpus (imm : format court du RC, 12 pages ; etampes1 et rouen_univ : cadres de réponse .docx).
 import crypto from 'crypto';
 
-export type CorpusCC = 'imm' | 'etampes1' | 'rouen_univ';
+export type CorpusCC = 'imm' | 'etampes1' | 'rouen_univ' | 'ca_normandie';
 export const journal: Array<{ type: string; entree: number; sortie: number }> = [];
 export const inconnus: string[] = [];
 /** Champs du cadre : réponses reprises (texte de référence), propositions, nouveaux essais stricts. */
@@ -25,6 +25,12 @@ const ANALYSES: Record<CorpusCC, any> = {
     operationalSummary: { agentProfiles: 'Agents de sécurité, maîtres-chiens', uniforms: '', equipment: 'Moyens de communication, véhicules', qualityControls: 'Rapports journaliers' },
     telesurveillance: '', keyRisks: ['Intrusions et dégradations dans un quartier prioritaire'], visitDetails: '',
   },
+  ca_normandie: {
+    clientName: "Cour d'appel de Rouen", projectTitle: 'Gardiennage des sites judiciaires normands (lot 1)', marketRef: 'BOP NORMAND', marketType: 'public', clientSector: 'justice',
+    duration: '1 an reconductible 3 fois', lots: ['Lot 1 : sites judiciaires'], sites: [{ name: 'Palais de justice de Rouen', requirements: 'Contrôle des accès, filtrage et rondes' }],
+    operationalSummary: { agentProfiles: 'Agents de sécurité, SSIAP 1', uniforms: 'Tenue réglementaire', equipment: 'Magnétomètres, radios', qualityControls: 'Contrôles et rapports' },
+    telesurveillance: '', keyRisks: ['Filtrage du public', 'Continuité des postes'], visitDetails: '',
+  },
   rouen_univ: {
     clientName: 'Université de Rouen Normandie', projectTitle: 'Prestations humaines de sûreté, sécurité et télésécurité', marketRef: '2026-08', marketType: 'public', clientSector: 'enseignement supérieur',
     duration: '4 ans', lots: ['Lot 1 : sites 76', 'Lot 2 : sites 27', 'Lot 3 : télésécurité'], sites: [{ name: 'Campus de Mont-Saint-Aignan', requirements: 'Postes de sécurité et rondes' }, { name: 'Campus Pasteur (Rouen)', requirements: 'Accueil et rondes' }, { name: 'Campus d\'Evreux', requirements: 'Rondes' }],
@@ -38,6 +44,7 @@ const PERIMETRE: Record<CorpusCC, string> = {
 - Rondes de nuit entre 20h30 et 6h00 ; levées de doute sur alarme.
 - Hors périmètre : télésurveillance, événementiel.`,
   etampes1: `- Gardiennage ponctuel des équipements municipaux sur bons de commande, agents et maîtres-chiens.\n- Hors périmètre : poste permanent, SSIAP.`,
+  ca_normandie: `- Contrôle des accès et filtrage du public au palais de justice de Rouen, rondes.\n- Hors périmètre : télésurveillance.`,
   rouen_univ: `- Postes de sécurité et rondes de protection du patrimoine sur les campus (lots 1 et 2), télésécurité (lot 3).\n- Levées de doute sur alarme.`,
 };
 
@@ -97,6 +104,19 @@ const COMPREHENSION = {
   ],
 };
 
+/** Compréhension simulée du cadre ca_normandie (question « Compréhension des sujétions du site et du contrat »). */
+const COMPREHENSION_CA = {
+  titre_schema: 'Votre besoin, notre réponse en un process',
+  texte: `## Votre contexte et votre site\nLa cour d'appel de Rouen confie à GSS le gardiennage du palais de justice de Rouen. Le site reçoit chaque jour des justiciables, des avocats et des magistrats.\n\n## Le périmètre de la prestation demandée\n| Site | Poste | Jours et horaires | Qualification | Missions principales |\n|---|---|---|---|---|\n| Palais de justice de Rouen | Filtrage | Jours ouvrés | Agent de sécurité | Contrôle des accès et filtrage du public |\n\n## Vos attentes et nos engagements\n- **Ce que vous attendez** : un filtrage sûr et courtois → notre réponse : des agents formés au filtrage et un chef de poste présent.\n- **Ce que vous attendez** : la continuité des postes → notre réponse : un remplacement organisé par notre service planning.\n\n## Les points de vigilance identifiés et nos réponses\n- **Point de vigilance** : l'affluence aux audiences → notre réponse : un renfort du filtrage aux heures d'audience.`.repeat(1),
+  etapes: [
+    { titre: 'Votre besoin', texte: 'Le gardiennage du palais de justice de Rouen', role: 'rouge' },
+    { titre: 'Vos enjeux', texte: 'Un filtrage sûr et courtois', role: 'rouge' },
+    { titre: 'Notre dispositif', texte: 'Des agents formés au filtrage', role: 'orange' },
+    { titre: 'Notre pilotage', texte: 'Un chef de poste présent', role: 'bleu' },
+    { titre: 'Votre résultat', texte: 'La continuité des postes', role: 'vert' },
+  ],
+};
+
 /** Réécriture simulée (fidélité basse) : chaque phrase longue est résumée en sa première moitié. */
 const reformuler = (t: string) => t.split(/(?<=[.!?])\s+/).map((ph) => { const m = ph.split(/\s+/); return m.length > 8 ? `En résumé, ${m.slice(0, Math.ceil(m.length / 2)).join(' ')}.` : ph; }).join(' ');
 
@@ -126,8 +146,9 @@ export function repondre(corpus: CorpusCC, body: any): string {
   if (/^Tu adaptes UNE rubrique du mémoire technique de GSS/.test(sys)) return type('adaptation', json({ remplacements: [], retraits: [], ajouts: [] }));
   if (/formuler ses remarques sur le cahier des charges/.test(sys)) return type('remarques', json({ remarques: [] }));
   if (/le bloc « Notre compréhension de votre besoin »/.test(sys)) {
-    if (/Le schéma de process est refusé/.test(dernier)) return type('compréhension (schéma corrigé)', json({ etapes: COMPREHENSION.etapes }));
-    return type('compréhension', json(COMPREHENSION));
+    const c = corpus === 'ca_normandie' ? COMPREHENSION_CA : COMPREHENSION;
+    if (/Le schéma de process est refusé/.test(dernier)) return type('compréhension (schéma corrigé)', json({ etapes: c.etapes }));
+    return type('compréhension', json(c));
   }
   if (/tu complètes UNE partie d'un mémoire technique/.test(sys)) {
     return type('complément hors mémoire type', `## Cohérence du prix\n\nLe prix découle du volume du cahier des charges : un poste permanent 24 h/24, 7 j/7, soit **8 760 heures par an**, environ **5,5 ETP** sur une base de 1 607 heures par ETP.\n\n| Poste | Horaires | Heures annuelles | ETP |\n|---|---|---|---|\n| Poste de sécurité incendie et de sûreté | 24 h/24, 7 j/7 | 8 760 | 5,5 |\n\nLe prix horaire comprend le salaire conventionnel (IDCC 1351), les majorations de nuit, de dimanche et de jours fériés, les charges sociales, l'encadrement, les contrôles, la formation et les équipements.\n\n[CONSULTATION REQUISE : taux horaires par qualification et montants de la décomposition, cohérents avec le bordereau de prix remis]`);

@@ -25,7 +25,7 @@ import { repondre, embedding, journal, inconnus, champs, CorpusCC } from './cadr
 const corpus = process.argv[2] as CorpusCC;
 const SORTIE = path.resolve(process.argv[3] || path.join(__dirname, `sorties_cadre_court_${corpus}`));
 const REF = process.argv[4];
-if (!['imm', 'etampes1', 'rouen_univ'].includes(corpus)) { console.error('Corpus : imm, etampes1 ou rouen_univ'); process.exit(2); }
+if (!['imm', 'etampes1', 'rouen_univ', 'ca_normandie'].includes(corpus)) { console.error('Corpus : imm, etampes1, rouen_univ ou ca_normandie'); process.exit(2); }
 const id = `cchl-${corpus}`;
 const ROOT = path.resolve(__dirname, '../..');
 const dceDir = path.join(ROOT, 'data/output', `dce_${id}`);
@@ -105,6 +105,15 @@ const texteDocx = (f: string) => new PizZip(fs.readFileSync(f)).file('word/docum
       if (absentes.length) anomalie(`${absentes.length} ligne(s) d'identité de la référence absente(s) : ${absentes.slice(0, 3).join(' | ')}`);
     }
     if (/\{\{|Non communiqué/.test(texte)) anomalie('variable {{…}} ou « Non communiqué » dans le docx');
+    // Correction 3 : aucune phrase du mémoire type reprise deux fois ; schémas insérés ; premier message de l'assistant.
+    const phrasesMT = new Set(Object.values(publies).flatMap((t) => cadreMT.texteBrut(t).split(/(?<=[.!?])\s+|\n+/)).map((x) => x.trim()).filter((x) => x.split(/\s+/).length >= 12));
+    const doublons = [...phrasesMT].filter((ph) => texte.split(ph).length > 2);
+    res.phrases_mt_en_double = doublons.length;
+    if (doublons.length) anomalie(`${doublons.length} phrase(s) du mémoire type reprise(s) deux fois : ${doublons.slice(0, 2).join(' | ').slice(0, 300)}`);
+    const xml = new PizZip(fs.readFileSync(r.filePath)).file('word/document.xml')!.asText();
+    res.schemas_inseres = [...xml.matchAll(/descr="Schéma GSS ([^"]+)"/g)].map((m) => m[1]);
+    res.conversation = etat?.conversation || null;
+    if (res.propositions.length && !(etat?.conversation?.[0]?.role === 'assistant' && (etat.conversation[0].texte.match(/\[GSS_CH_\d+\]/g) || []).length === res.propositions.length)) anomalie('propositions absentes du premier message de l\'assistant');
     for (const [c, re] of Object.entries(ACHETEURS)) if (c !== corpus && re.test(texte)) anomalie(`nom d'un autre acheteur (${c}) dans le docx`);
   }
   if (r?.filePath && /\.pdf$/.test(r.filePath)) {
