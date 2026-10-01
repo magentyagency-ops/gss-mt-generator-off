@@ -245,6 +245,7 @@ def recolorer(svg, theme):
         return a
 
     svg = _BALISE.sub(lambda m: f"<{m.group(1)}{attr(m.group(1), m.group(2))}>", svg)
+    svg = _numeros_lisibles(svg, theme)
 
     def ajuster(m):
         ouv, contenu, ferm = m.groups()
@@ -263,6 +264,75 @@ def recolorer(svg, theme):
         return f'{ouv[:-1]} textLength="{origine:.1f}" lengthAdjust="spacingAndGlyphs">{contenu}{ferm}'
 
     return _TEXTE.sub(ajuster, svg)
+
+
+_JETON = re.compile(r"<(/?)(g|rect|circle|text)\b([^>]*?)(/?)>")
+
+
+def _num(attrs, k):
+    m = re.search(r'\b' + k + r'="(-?[\d.]+)"', attrs)
+    return float(m.group(1)) if m else None
+
+
+def _numeros_lisibles(svg, theme):
+    """Texte à la couleur d'un rôle ou des dates (numéros « 01 », « 02 »… du moteur d'origine) posé sur un aplat pâle d'un rôle
+    (bandeau de carte, étiquette) : sous 4,5:1 (3:1 à partir de 24 px), il prend l'encre du thème ou le texte sur
+    foncé du rôle, celui des deux qui contraste le mieux avec l'aplat. Aplat repéré par la géométrie (rectangle ou
+    cercle plein qui contient le pied du texte, hors groupes transformés) ; les autres textes ne changent pas."""
+    st = style(theme)
+    c, R = st["couleurs"], st["roles"]
+    t = correspondance(theme)
+    pales = {_hex(t["fond"][o]): r for o, r in _PALES.items()}
+    textes_role = {_hex(t["texte"][o]) for o in _FONCES} | {_hex(t["texte"]["#B9423C"])}  # rôles et dates
+    formes, pile = [], []
+    out, pos = [], 0
+    for m in _JETON.finditer(svg):
+        ferme, tag, attrs, auto = m.groups()
+        if tag == "g":
+            if ferme:
+                if pile:
+                    pile.pop()
+            elif not auto:
+                pile.append("transform=" in attrs)
+            continue
+        if ferme or any(pile) or "transform=" in attrs:
+            continue
+        fill = re.search(r'\bfill="(#[0-9A-Fa-f]{3,6})"', attrs)
+        if tag in ("rect", "circle"):
+            if fill and "opacity=" not in attrs:
+                if tag == "rect":
+                    x, y, w, h = (_num(attrs, k) for k in ("x", "y", "width", "height"))
+                    if w is not None and h is not None:
+                        formes.append(("r", x or 0.0, y or 0.0, w, h, _hex(fill.group(1))))
+                else:
+                    cx, cy, r = (_num(attrs, k) for k in ("cx", "cy", "r"))
+                    if None not in (cx, cy, r):
+                        formes.append(("c", cx, cy, r, 0.0, _hex(fill.group(1))))
+            continue
+        if not fill or _hex(fill.group(1)) not in textes_role:
+            continue
+        x, y, taille = _num(attrs, "x"), _num(attrs, "y"), _num(attrs, "font-size") or 12.0
+        if x is None or y is None:
+            continue
+        py = y - taille * 0.35
+        fond = None
+        for f in reversed(formes):
+            if (f[0] == "r" and f[1] <= x <= f[1] + f[3] and f[2] <= py <= f[2] + f[4]) or \
+               (f[0] == "c" and (x - f[1]) ** 2 + (py - f[2]) ** 2 <= f[3] ** 2):
+                fond = f[5]
+                break
+        if fond not in pales:
+            continue
+        couleur = _hex(fill.group(1))
+        cr = contraste(couleur, fond)
+        if cr >= 4.5 or (taille >= 24 and cr >= 3):
+            continue
+        meilleure = max((c["encre"], R[pales[fond]]["sur_fonce"]), key=lambda k: contraste(k, fond))
+        debut = m.start() + m.group(0).index(fill.group(0))
+        out.append(svg[pos:debut] + f'fill="{meilleure}"')
+        pos = debut + len(fill.group(0))
+    out.append(svg[pos:])
+    return "".join(out)
 
 
 # ── Contrôle des textes d'un redessin ────────────────────────────────────────
