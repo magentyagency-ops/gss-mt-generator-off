@@ -1038,9 +1038,57 @@ function insererClient(sortie: string, v: ValeurVariable): { sortie: string; ins
 function valeurAffichee(nom: string, v: ValeurVariable, def?: VariableMemoireType): string {
   const x = v.valeur;
   if (typeof x === 'boolean') return '';
-  if (Array.isArray(x)) return listeFr(x.map(String));
+  if (Array.isArray(x)) return sansCovidEnumere(listeFr(x.map(String)));
   const t = String(x ?? '').trim();
-  return def?.type === 'markdown' ? t : t.replace(/\s+/g, ' ');
+  return sansCovidEnumere(def?.type === 'markdown' ? t : t.replace(/\s+/g, ' '));
+}
+
+/**
+ * Règle GSS (faits_gss.md) : jamais de Covid, même quand le CCTP en cite un exemple (« Plan Blanc, agent positif
+ * Covid, alerte attentat »). Le terme est retiré des énumérations reprises ; le reste de l'énumération est gardé.
+ */
+export function sansCovidEnumere(t: string): string {
+  const COVID = String.raw`(?:(?:de |d['’]|du |un |une |le |la |les )?(?:(?:agents?|cas|personnels?|crises?|[ée]pid[ée]mies?|plans?)\s+(?:(?:positifs?|sanitaires?)\s+)?(?:au\s+|de\s+|du\s+)?)?(?:la\s+)?covid(?:-19)?)`;
+  return String(t || '')
+    .replace(new RegExp(String.raw`\s*,\s*${COVID}(?=\s*(?:,|\bou\b|\bet\b|\)))`, 'gi'), '')
+    .replace(new RegExp(String.raw`\s+(?:ou|et)\s+${COVID}(?![\wÀ-ÿ-])`, 'gi'), '')
+    .replace(new RegExp(String.raw`(\(\s*(?:ex\.?|par exemple|notamment)?\s*:?\s*)${COVID}\s*,\s*`, 'gi'), '$1');
+}
+
+const MOTS_COMMUNS_INITIALE = /^(?:une?|plusieurs|chaque|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|douze|quinze|vingt|trente|tous|toutes?|tout|dans|moins|entre|par|selon|d[èe]s|apr[èe]s|avant|environ|minimum|maximum|p[ée]riode|dur[ée]e|hebdomadaires?|mensuel(?:le)?s?|quotidien(?:ne)?s?|annuel(?:le)?s?|trimestriel(?:le)?s?|semestriel(?:le)?s?|bimestriel(?:le)?s?|jusqu['’]?\w*)$/i;
+
+/**
+ * Accords d'une valeur insérée dans le texte : minuscule initiale en milieu de phrase (« ont lieu Une fois par mois »),
+ * « maximum » non répété (« en {{DELAI}} maximum » avec « 4 heures maximum »), durée sans « Période initiale », élision
+ * de « de » devant une voyelle (« d'une durée de un an » → « d'un an »).
+ */
+function accorderValeur(nom: string, valeur: string, avant: string, apres: string): { avant: string; valeur: string } {
+  let v = valeur;
+  if (nom === 'DUREE_MARCHE') v = v.replace(/^p[ée]riode\s+initiale\s+(?:de\s+|d['’]\s*)?/i, '').replace(/^(?:est\s+)?(?:d['’]une\s+)?dur[ée]e\s+(?:de\s+|d['’]\s*)/i, '');
+  if (/^\s*maxim(?:um|al|ale|aux)\b/i.test(apres) || /\bmaxim(?:um|al|ale)\s+(?:de\s+|d['’])?$/i.test(avant)) v = v.replace(/\s*\(?\s*(?:au\s+)?maxim(?:um|al|ale)?\s*\)?\s*$|\s+max\.?$/i, '').trim() || v;
+  const debut = /(?:^|[.!?:]\s+|\n\s*(?:(?:[-*•]|\d+[.)])\s+)?)(?:\*\*)?$/.test(avant);
+  const premier = (/^[\wÀ-ÿ'’]+/.exec(v) || [''])[0];
+  if (!debut && /^[A-ZÀ-Ý][a-zà-ÿ'’]/.test(premier) && MOTS_COMMUNS_INITIALE.test(premier)) v = v.charAt(0).toLowerCase() + v.slice(1);
+  let av = avant;
+  if (/(?:^|[\s(])([Dd])e $/.test(av) && /^(?:une?|[aeiouyâàäéèêëîïôöûüœ])/i.test(v) && !/^[A-ZÀ-Ý0-9]{2,}\b/.test(v)) av = av.replace(/([Dd])e $/, "$1'");
+  return { avant: av, valeur: v };
+}
+
+/** Accord d'un pronom qui reprend l'acheteur (« {{CLIENT}} peut, s'il le souhaite » pour l'Association → « si elle »). */
+const FEMININS_ELIDES = /^(?:association|universit[ée]|agence|[ée]cole|entreprise|administration|autorit[ée]|institution|acad[ée]mie|assembl[ée]e|union|organisation|unit[ée]|[ée]tablissement-?publique|op[ée]ration|h[ôo]tellerie|intercommunalit[ée]|aire|[ée]glise|imprimerie|usine|inspection)$/i;
+function genreClient(v?: ValeurVariable): 'f' | 'm' | 'p' | '' {
+  if (!v || !variableRenseignee(v)) return '';
+  if (v.article === 'les') return 'p';
+  if (v.article === 'la') return 'f';
+  if (v.article === 'le') return 'm';
+  const premier = String(Array.isArray(v.valeur) ? v.valeur[0] : v.valeur || '').split(/[\s(]/)[0];
+  if (FEMININS_ELIDES.test(premier) || ARTICLES_FEMININS.test(premier)) return 'f';
+  return '';
+}
+function accorderPronomsClient(t: string, v?: ValeurVariable): string {
+  const g = genreClient(v);
+  if (g !== 'f' && g !== 'p') return t;
+  return t.replace(/(\{\{\s*CLIENT\s*\}\}[^.!?\n{]{0,80}?)\bs['’]il(?![\wÀ-ÿ])/g, (_m, a: string) => `${a}${g === 'f' ? 'si elle' : "s'ils"}`);
 }
 
 /** Retire les phrases (ou lignes de liste / de tableau) qui contiennent le repère de retrait. */
@@ -1085,7 +1133,7 @@ export function publiposter(texte: string, variables: Variables, options: Option
   };
   const aConfirmer: ResultatPubliposte['aConfirmer'] = [];
   const utilisees = new Set<string>();
-  const t = resoudreSections(String(texte || ''), indicateurs, variables, trace);
+  const t = trace ? resoudreSections(String(texte || ''), indicateurs, variables, trace) : accorderPronomsClient(resoudreSections(String(texte || ''), indicateurs, variables, trace), variables.CLIENT);
   let sortie = '';
   let dernier = 0;
   for (const m of t.matchAll(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g)) {
@@ -1105,7 +1153,8 @@ export function publiposter(texte: string, variables: Variables, options: Option
         const r = insererClient(sortie, v);
         sortie = r.sortie + r.insere;
       } else {
-        sortie += valeurAffichee(nom, v, def);
+        const a = accorderValeur(nom, valeurAffichee(nom, v, def), sortie, t.slice(dernier, dernier + 40));
+        sortie = a.avant + a.valeur;
       }
       if (v.aConfirmer && !aConfirmer.some((x) => x.variable === nom)) aConfirmer.push({ variable: nom, valeur: valeurAffichee(nom, v, def), question: v.aConfirmer });
       // Valeur qui contient elle-même des repères (lignes du tableau de l'équipe dédiée) : une question pour la valeur.
@@ -1621,6 +1670,7 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     const pos = positionsExtrait(t, m.extrait);
     if (pos.length !== 1) { refusees.push({ ...m, raison: pos.length ? 'extrait ambigu (plusieurs occurrences)' : 'extrait introuvable mot pour mot' }); continue; }
     if (!m.par!.trim()) { refusees.push({ ...m, raison: 'remplacement vide (utiliser un retrait)' }); continue; }
+    m.par = sansCovidEnumere(m.par!);
     const refus = refusTexteNouveau(m.par!, m.extrait, o);
     if (refus) { refusees.push({ ...m, raison: refus }); continue; }
     t = t.slice(0, pos[0].debut) + m.par + t.slice(pos[0].fin);
@@ -1637,7 +1687,7 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
   }
   let nAjouts = 0;
   for (const a of mods.ajouts || []) {
-    const m: ModificationTraitee = { type: 'ajout', extrait: String(a?.apres || ''), par: String(a?.texte || '').trim(), motif: a?.motif };
+    const m: ModificationTraitee = { type: 'ajout', extrait: String(a?.apres || ''), par: sansCovidEnumere(String(a?.texte || '').trim()), motif: a?.motif };
     if (plafond()) { refusees.push({ ...m, raison: 'plafond de modifications atteint' }); continue; }
     if (nAjouts >= o.maxAjouts) { refusees.push({ ...m, raison: `plus de ${o.maxAjouts} ajouts` }); continue; }
     if (!m.par || compterMots(m.par) > o.motsParAjout) { refusees.push({ ...m, raison: `ajout vide ou de plus de ${o.motsParAjout} mots` }); continue; }

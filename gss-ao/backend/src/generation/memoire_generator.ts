@@ -4802,12 +4802,19 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     // Dans une même valeur, on garde la 1re occurrence du nom de l'acheteur et on remplace les
     // suivantes par un substitut neutre — la personnalisation passe par le contexte, pas la répétition.
     const clientNameDedup = (analysisData?.clientName || '').trim();
+    // L'article qui précède le nom est capturé (« l'Université… », « du Centre… ») : le substitut porte le sien
+    // (jamais « l'l’établissement » ni « du l’établissement »).
     const clientNameRe = clientNameDedup.length >= 6
-      ? new RegExp(clientNameDedup.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g') : null;
+      ? new RegExp(`(\\b(?:[Ll]['’]|[Ll][ae]s? |[Dd]u |[Aa]u |[Dd]es |[Aa]ux )|)${clientNameDedup.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g') : null;
     const dedupeClientName = (val: string): string => {
       if (!clientNameRe) return val;
       let n = 0;
-      return val.replace(clientNameRe, (m) => (++n === 1 ? m : 'l’établissement'));
+      return val.replace(clientNameRe, (m, art: string) => {
+        if (++n === 1) return m;
+        const a = (art || '').toLowerCase();
+        const sub = a === 'du ' || a === 'des ' ? 'de l’établissement' : a === 'au ' || a === 'aux ' ? 'à l’établissement' : 'l’établissement';
+        return art && /^[A-Z]/.test(art) ? sub.charAt(0).toUpperCase() + sub.slice(1) : sub;
+      });
     };
 
     // Garde-fou anti-invention de NOMS de personnes ("c'est qui Jean Dupont ?") : tout nom propre
