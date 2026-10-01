@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { horairesImposes, marcheHorsNormandie, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS } from './base_memoires';
+import { horairesImposes, marcheHorsNormandie, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -1773,6 +1773,11 @@ function refusTexteNouveau(nouveau: string, ancien: string, o: OptionsModificati
   for (const [rx, motif] of INTERDITS_ADAPTATION) if (rx.test(nouveau) && !rx.test(ancien) && !(motif === 'Covid' && rx.test(o.dce || ''))) return motif;
   if (/L\.?\s?1224/.test(nouveau) && !/L\.?\s?1224/.test(o.dce || '')) return 'article L. 1224-1 absent du DCE';
   if (retirerCommentairesInternes(nouveau).retires.length) return 'commentaire interne';
+  // Phrase du CCTP recopiée (« son remplaçant devra être présent … », « À Coriolis, l'accueil des premiers
+  // utilisateurs … ») : ce n'est pas une adaptation du texte de GSS, et l'exigence est traitée par sa rubrique.
+  const motsAncien = new Set(normaliser(ancien).split(/[^a-z0-9]+/));
+  const dejaDansAncien = (ph: string) => { const m = normaliser(ph).split(/[^a-z0-9]+/).filter((w) => w.length >= 3); return !!m.length && m.filter((w) => motsAncien.has(w)).length / m.length >= 0.8; };
+  if (o.dce && nouveau.split(/(?<=[.!?;])\s+/).some((ph) => recopieDuDce(ph, o.dce!) && !dejaDansAncien(ph))) return 'recopie du CCTP';
   const admis = new Set([...nombresDe(ancien), ...nombresDe(o.dce || ''), ...(o.nombresAutorises || []).flatMap(nombresDe)]);
   const inconnus = nombresDe(nouveau).filter((n) => !admis.has(n));
   if (inconnus.length) return `chiffre absent du DCE (${[...new Set(inconnus)].join(', ')})`;
@@ -1825,6 +1830,11 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     m.par = sansCovidEnumere(m.par!);
     const refus = refusTexteNouveau(m.par!, m.extrait, o);
     if (refus) { refusees.push({ ...m, raison: refus }); continue; }
+    // Échéance postérieure au démarrage (« dans le mois suivant la prise d'effet ») placée dans une phase d'avant le
+    // jour J (« De J-30 à J-15 ») : contresens du rétroplanning.
+    const ligne = t.slice(t.lastIndexOf('\n', pos[0].debut - 1) + 1, t.indexOf('\n', pos[0].fin) < 0 ? t.length : t.indexOf('\n', pos[0].fin));
+    const APRES_J = /suivant (?:la |le )?(?:prise d.effet|d[ée]marrage|notification|d[ée]but)|apr[èe]s (?:la |le )?(?:prise d.effet|d[ée]marrage)/i;
+    if (/\bJ\s?[-–]\s?\d+/.test(ligne) && APRES_J.test(m.par!) && !APRES_J.test(m.extrait)) { refusees.push({ ...m, raison: 'échéance postérieure au démarrage placée avant le jour J' }); continue; }
     const essai = t.slice(0, pos[0].debut) + m.par + t.slice(pos[0].fin);
     if (etapesRetirees(t, essai).length) { refusees.push({ ...m, raison: 'une étape de procédure ne se retire pas' }); continue; }
     t = essai;

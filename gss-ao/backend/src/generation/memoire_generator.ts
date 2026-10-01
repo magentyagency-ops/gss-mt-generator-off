@@ -27,7 +27,7 @@ import {
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference,
 } from './memoire_type_cadre';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -4737,9 +4737,13 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       const d = descriptors.find((x) => x.id === r.id);
       if (!d || d.kind === 'checkbox') continue;
       const { texte, retires } = retirerCommentairesInternes(String(r.value ?? ''));
+      // Exigence du CCTP recopiée à la voix de l'acheteur (« Le Titulaire doit… », « Elle ne devra pas… ») : retirée ;
+      // le reste à la voix de GSS (« le titulaire » → « GSS »).
+      const recopie = sansRecopieCctp(texte, dceContext);
       // Texte nettoyé toujours repris (reformulations et montants de pénalité retirés, même sans commentaire interne).
-      const delais = delaisHorsNormandie(interditsDce(fondementReprise(texte, dceContext), dceContext), dceContext, horsNormandieCadre);
-      r.value = delais.texte.trim() || (retires.length || delais.retires.length ? '[À COMPLÉTER]' : r.value);
+      const delais = delaisHorsNormandie(interditsDce(fondementReprise(voixDeGss(recopie.texte), dceContext), dceContext), dceContext, horsNormandieCadre);
+      r.value = delais.texte.trim() || (retires.length || delais.retires.length || recopie.retires.length ? '[À COMPLÉTER]' : r.value);
+      if (recopie.retires.length) console.log(`[MemoireGenerator] Champ ${r.id} : ${recopie.retires.length} phrase(s) du CCTP recopiée(s) à la voix de l'acheteur retirée(s).`);
       retires.forEach((x) => confirmationsGss.add(`À confirmer : ${x}`));
       delais.retires.forEach((x) => confirmationsGss.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
     }
@@ -6658,8 +6662,16 @@ RÈGLES DE FORME (rendu Marp) :
       if (r.retires.length) console.log(`[MemoireGenerator] Proposition « ${a.title} » : ${r.retires.length} phrase(s) qui tranchaient une question posée à GSS retirée(s).`);
       sections[a.id] = r.texte;
     }
-    // Nettoyage final (mêmes filtres que la réponse libre v1), sur tout le texte remis à l'acheteur.
-    for (const id of Object.keys(sections)) sections[id] = nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext));
+    // Nettoyage final (mêmes filtres que la réponse libre v1), sur tout le texte remis à l'acheteur ; exigences du CCTP
+    // recopiées à la voix de l'acheteur retirées (hors bloc 1, qui cite l'acheteur, et hors liste « Nos engagements »,
+    // qui reprend les exigences) et voix de GSS partout (« le titulaire » → « GSS »).
+    const ENGAGEMENTS = '## Nos engagements sur les exigences du cahier des charges';
+    const sansRecopie = (id: string, t: string) => {
+      if (id === 'b1_comprehension') return t;
+      const i = t.indexOf(ENGAGEMENTS);
+      return i < 0 ? sansRecopieCctp(t, dceContext).texte : `${sansRecopieCctp(t.slice(0, i), dceContext).texte.trimEnd()}\n\n${t.slice(i)}`;
+    };
+    for (const id of Object.keys(sections)) sections[id] = voixDeGss(sansRecopie(id, nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext))));
     const consultationList = elementsLibres.filter((e) => e.statut === 'ouvert').map((e) => e.question);
     consultationList.push(...avisSecours);
     // Propositions de réponse de l'IA : signalées APRÈS les éléments (jamais envoyées à l'équipe comme des questions).

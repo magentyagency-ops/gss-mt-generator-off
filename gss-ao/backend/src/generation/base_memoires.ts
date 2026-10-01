@@ -720,6 +720,57 @@ export function limiterRappelsSite(sections: Record<string, string>, ordre: stri
  * « effectuées à pied » (aucun vélo, trottinette ni ronde motorisée), photographies interdites (aucune
  * mention de photos ou vidéos dans les comptes rendus). Les phrases et puces contraires sont retirées.
  */
+/** Index des phrases du DCE (mots de 3 lettres ou plus), mis en cache par texte de DCE. */
+const cacheIndexDce = new Map<string, { phrases: Array<Set<string>>; parMot: Map<string, number[]> }>();
+const motsPhrase = (t: string) => new Set(normTxt(t).replace(/[^a-z0-9]+/g, ' ').split(' ').filter((w) => w.length >= 3));
+function indexDce(dce: string) {
+  const deja = cacheIndexDce.get(dce);
+  if (deja) return deja;
+  const phrases = String(dce || '').replace(/\s+/g, ' ').split(/(?<=[.!?;:])\s+/).map(motsPhrase).filter((m) => m.size >= 6);
+  const parMot = new Map<string, number[]>();
+  phrases.forEach((m, i) => { for (const w of m) (parMot.get(w) ?? parMot.set(w, []).get(w)!).push(i); });
+  // Quelques textes à la fois (DCE du dossier, texte d'origine d'une modification) : le plus ancien sort.
+  if (cacheIndexDce.size >= 4) cacheIndexDce.delete(cacheIndexDce.keys().next().value!);
+  const index = { phrases, parMot };
+  cacheIndexDce.set(dce, index);
+  return index;
+}
+
+/**
+ * Vrai si la phrase recopie une phrase du DCE : 80 % au moins de ses mots (8 mots ou plus) se retrouvent dans une
+ * même phrase du DCE, qui n'en fait pas plus de deux fois et demie la longueur.
+ */
+export function recopieDuDce(phrase: string, dce: string, seuil = 0.8): boolean {
+  const a = motsPhrase(phrase.replace(/[*#]/g, ''));
+  if (a.size < 8 || !dce) return false;
+  const { phrases, parMot } = indexDce(dce);
+  const compte = new Map<number, number>();
+  for (const w of a) for (const i of parMot.get(w) || []) compte.set(i, (compte.get(i) || 0) + 1);
+  for (const [i, n] of compte) if (n / a.size >= seuil && n / phrases[i].size >= 0.4) return true;
+  return false;
+}
+
+/**
+ * Exigences recopiées du CCTP à la voix de l'acheteur (« Le Titulaire doit… », « son remplaçant devra être présent… »,
+ * « Vu que les agents… », « Elle ne devra pas… ») : la phrase recopiée part (elle n'est pas un engagement de GSS) ;
+ * le reste passe à la voix de GSS (« le titulaire » → « GSS »). Phrases porteuses d'un repère ou d'un marqueur gardées.
+ */
+export function sansRecopieCctp(texte: string, dce: string): { texte: string; retires: string[] } {
+  const retires: string[] = [];
+  if (!dce) return { texte, retires };
+  const VOIX_ACHETEUR = /\b(?:devra|devront|doit|doivent|est tenu|sont tenus|il est demand[ée]|quels? que soi(?:t|ent)|vu que|à la charge du titulaire)\b|\b(?:le|au|du) titulaire\b/i;
+  const garder = (ph: string) => /⟦AC:|\[À COMPLÉTER\]|\[CONSULTATION REQUISE|^\s*#/.test(ph) || !VOIX_ACHETEUR.test(ph) || !recopieDuDce(ph, dce);
+  const sortie = texte.split('\n').map((ligne) => {
+    if (/^\s*(?:#|\|)/.test(ligne)) return ligne;
+    const puce = (/^\s*(?:[-*•]|\d+[.)])\s+/.exec(ligne) || [''])[0];
+    const phrases = ligne.slice(puce.length).split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«"(])/);
+    const gardees = phrases.filter((ph) => { if (garder(ph)) return true; retires.push(ph.replace(/[*#]/g, '').trim()); return false; });
+    if (!gardees.length) return null;
+    return `${puce}${gardees.join(' ')}`;
+  }).filter((l): l is string => l !== null).join('\n').replace(/\n{3,}/g, '\n\n');
+  return { texte: sortie, retires };
+}
+
 /**
  * Vocabulaire du CCTP pour la fonction de l'agent qui encadre le poste : le mémoire type dit « chef de site » ou
  * « responsable de site » ; quand le CCTP ne parle que de « chef de poste » (IGN), le mémoire emploie son terme. Le
