@@ -88,6 +88,31 @@ function cleanTextForMarp(raw: string): string {
  * Split a long text block into chunks of ~MAX_WORDS_PER_SLIDE words,
  * splitting on paragraph boundaries (\n\n) when possible.
  */
+/** Lignes estimées occupées par un paragraphe (chaque retour à la ligne interne compte) + intervalle. Mise en page v2
+ *  de la refonte : une ligne de tableau pèse davantage (cellules repliées), sa ligne de séparation ne pèse rien. */
+function lignesParagraphe(p: string, limites: LimitesPage): number {
+  const caracteres = limites.caracteres ?? CHARS_PER_LINE;
+  const ligneTableau = limites.ligneTableau;
+  return p.split('\n').reduce((n, l) => {
+    if (ligneTableau === undefined) return n + Math.max(1, Math.ceil(l.length / caracteres));
+    if (/^\s*\|[\s:|-]+\|\s*$/.test(l)) return n;
+    return n + Math.max(1, Math.ceil(l.length / caracteres)) * (/^\s*\|/.test(l) ? ligneTableau : 1);
+  }, 0) * (/^#{1,6}\s/.test(p) ? 1.5 : 1) + 0.7;
+}
+
+/** Lignes estimées d'un texte (somme de ses paragraphes). */
+function lignesTexte(texte: string, limites: LimitesPage): number {
+  return texte.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).reduce((n, p) => n + lignesParagraphe(p, limites), 0);
+}
+
+/** Mise en page v2 de la refonte : une dernière page de rubrique remplie à moins de ce taux (quelques lignes) est
+ *  évitée ; elle est regroupée avec la page précédente si l'ensemble tient dans la page resserrée (classe
+ *  « texte-serre » : interlignes et espacements légèrement réduits). La page tient au moins 44,6 lignes estimées à
+ *  l'espacement normal (voir LIMITES_TEXTE_SEUL) : 1,1 × 40 = 44 lignes restent dans cette mesure, l'espacement
+ *  resserré ajoute une marge. Rubrique sans schéma de quelques lignes : chapeau de la rubrique suivante. */
+const SEUIL_PAGE_ORPHELINE = 0.25;
+const MARGE_PAGE_SERREE = 1.1;
+
 function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots: MAX_WORDS_PER_SLIDE, lignes: MAX_LINES_PER_SLIDE }): string[] {
   const paragraphs = text
     .split(/\n{2,}/)
@@ -96,16 +121,7 @@ function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots: MAX_W
 
   const isHeading = (p: string) => /^#{1,6}\s/.test(p);
   const wordCount = (p: string) => p.split(/\s+/).length;
-  const caracteres = limites.caracteres ?? CHARS_PER_LINE;
-  const ligneTableau = limites.ligneTableau;
-  // Lignes occupées par un paragraphe (chaque retour à la ligne interne compte) + intervalle. Mise en page v2 de la
-  // refonte : une ligne de tableau pèse davantage (cellules repliées), sa ligne de séparation ne pèse rien.
-  const lineCount = (p: string) =>
-    p.split('\n').reduce((n, l) => {
-      if (ligneTableau === undefined) return n + Math.max(1, Math.ceil(l.length / caracteres));
-      if (/^\s*\|[\s:|-]+\|\s*$/.test(l)) return n;
-      return n + Math.max(1, Math.ceil(l.length / caracteres)) * (/^\s*\|/.test(l) ? ligneTableau : 1);
-    }, 0) * (isHeading(p) ? 1.5 : 1) + 0.7;
+  const lineCount = (p: string) => lignesParagraphe(p, limites);
 
   // Un bloc plus haut qu'une slide (longue liste sans ligne vide) est scindé par groupes de lignes.
   for (let i = 0; i < paragraphs.length; i++) {
@@ -159,7 +175,49 @@ function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots: MAX_W
   }
   flush();
 
+  // Mise en page v2 de la refonte (pages de texte seules) : pas de dernière page de quelques lignes. Elle rejoint la
+  // page précédente quand l'ensemble tient dans une page resserrée (la page est alors rendue en « texte-serre »).
+  const n = chunks.length;
+  if (limites.ligneTableau !== undefined && n >= 2) {
+    const derniere = lignesTexte(chunks[n - 1], limites);
+    const ensemble = lignesTexte(chunks[n - 2], limites) + derniere;
+    const mots = wordCount(chunks[n - 2]) + wordCount(chunks[n - 1]);
+    if (derniere < limites.lignes * SEUIL_PAGE_ORPHELINE && ensemble <= limites.lignes * MARGE_PAGE_SERREE && mots <= limites.mots * MARGE_PAGE_SERREE) {
+      chunks.splice(n - 2, 2, `${chunks[n - 2]}\n\n${chunks[n - 1]}`);
+    }
+  }
+
   return chunks.length > 0 ? chunks : [''];
+}
+
+/** Page de texte de la v2 plus haute que la limite normale (regroupement d'une fin de rubrique) : rendu resserré. */
+function pageSerree(chunk: string, limites?: LimitesPage): boolean {
+  return !!limites && limites.ligneTableau !== undefined && lignesTexte(chunk, limites) > limites.lignes;
+}
+
+/**
+ * Sections d'un chapitre à paginer, avec leur indice d'origine (clés des slides inchangées). Mise en page v2 de la
+ * refonte : une rubrique SANS schéma dont le texte tient en quelques lignes (introduction des références) n'a pas de
+ * page à elle ; son titre et son texte, inchangés, deviennent le chapeau de la première page de la rubrique suivante
+ * du même bloc. Ailleurs (thème de retour arrière, mise en page d'origine), rien ne change.
+ */
+function sectionsAPaginer(chapter: AssembleChapter, theme: string): Array<{ section: AssembleSection; si: number; texte: string }> {
+  const sortie: Array<{ section: AssembleSection; si: number; texte: string }> = [];
+  let chapeau = '';
+  chapter.sections.forEach((section, si) => {
+    let texte = cleanTextForMarp(section.text);
+    if (chapeau) { texte = `${chapeau}\n\n${texte}`; chapeau = ''; }
+    const limites = limitesSection(section, theme);
+    const suivante = chapter.sections[si + 1];
+    if (section.texteSeul && !section.photos?.length && limites?.ligneTableau !== undefined && suivante && limitesSection(suivante, theme)?.ligneTableau !== undefined
+      && lignesTexte(texte, limites) < limites.lignes * SEUIL_PAGE_ORPHELINE) {
+      const titre = titreSchema(section.title);
+      chapeau = titre ? `## ${titre}\n\n${texte}` : texte;
+      return;
+    }
+    sortie.push({ section, si, texte });
+  });
+  return sortie;
 }
 
 /** Clé stable d'une slide de contenu, partagée entre l'énumération et le rendu. */
@@ -248,8 +306,8 @@ export class MarpGenerator {
     const slides: SlideContext[] = [];
     chapters.forEach((chapter, ci) => {
       if (!chapter.sections || chapter.sections.length === 0) return;
-      chapter.sections.forEach((section, si) => {
-        const chunks = splitIntoSlideChunks(cleanTextForMarp(section.text), limitesSection(section, theme));
+      sectionsAPaginer(chapter, theme).forEach(({ section, si, texte }) => {
+        const chunks = splitIntoSlideChunks(texte, limitesSection(section, theme));
         chunks.forEach((chunk, k) => {
           slides.push({ key: slideKeyOf(ci, si, k), title: section.title, text: chunk });
         });
@@ -654,14 +712,15 @@ export class MarpGenerator {
       }
 
       // Sections
-      chapter.sections.forEach((section, si) => {
+      sectionsAPaginer(chapter, theme).forEach(({ section, si, texte: cleanedText }) => {
         const headerTitle = section.title.toUpperCase();
-        const cleanedText = cleanTextForMarp(section.text);
-        const chunks = splitIntoSlideChunks(cleanedText, limitesSection(section, theme));
+        const limites = limitesSection(section, theme);
+        const chunks = splitIntoSlideChunks(cleanedText, limites);
 
         for (let i = 0; i < chunks.length; i++) {
           const chunk = chunks[i];
           lines.push('---');
+          if (pageSerree(chunk, limites)) lines.push('<!-- _class: texte-serre -->');
           lines.push(`<!-- header: "${headerTitle}" -->`);
           lines.push('');
           lines.push(chunk);

@@ -96,6 +96,28 @@ li {
 li::marker {
   color: var(--gss-accent);
 }
+/* Page de texte resserrée (fin de rubrique regroupée pour éviter une page de quelques lignes, marp_generator.ts) :
+   interlignes et espacements légèrement réduits, corps de texte inchangé. */
+section.texte-serre p {
+  line-height: 1.45;
+  margin-bottom: 1.8mm;
+}
+section.texte-serre li {
+  line-height: 1.4;
+  margin-bottom: 0.8mm;
+}
+section.texte-serre ul, section.texte-serre ol {
+  margin-top: 1mm;
+  margin-bottom: 2mm;
+}
+section.texte-serre h2 {
+  margin-top: 4mm;
+  margin-bottom: 1.6mm;
+}
+section.texte-serre h3 {
+  margin-top: 3mm;
+  margin-bottom: 1.2mm;
+}
 strong {
   font-weight: 600;
 }
