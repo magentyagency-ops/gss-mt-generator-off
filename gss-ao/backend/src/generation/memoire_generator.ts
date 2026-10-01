@@ -11,7 +11,7 @@ import {
   chargerMemoireType, preparerMemoireType, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite,
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
-  type DonneesBesoin, type RubriquePubliee,
+  type DonneesBesoin, type RubriquePubliee, normaliser,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles,
@@ -25,7 +25,7 @@ import {
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES,
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
-  type CandidatReference,
+  controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference,
 } from './memoire_type_cadre';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites } from './base_memoires';
 import fs from 'fs';
@@ -4764,6 +4764,18 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     // Textes du mémoire type de GSS (publipostés) : ce sont des sources GSS (« prime de fin d'année », valeurs sociales).
     const gssDocCompact = normCtx(gssDocContext + ' ' + texteSourcesMemoires() + this.texteDemande() + ' ' + Object.values(repriseMT?.textes || {}).join(' ')).replace(/\s+/g, '');
     const SERVICE_CERT_RE = /ISO\s*\d{4,5}|APSAD(?:\s*R?\s*\d+)?|\bR\s?31\b/gi;
+    // Garde-fou FAITS NOUVEAUX (nom propre, ville, certification « APSAD P5 », fréquence d'audit) : tout fait absent du
+    // DCE, des textes du mémoire type, des mémoires et du registre de GSS devient [À COMPLÉTER] (réponse courte) ou est
+    // retiré (phrase d'une réponse longue), avec une question à GSS ; le numéro unique ne va qu'avec l'interlocuteur unique.
+    const textesMT = Object.values(repriseMT?.textes || {}).join(' ');
+    const sourcesFaits: SourcesFaitsCadre = {
+      toutes: normaliser(`${identiteText}${effectifText} ${analysisJson} ${dceContext} ${gssDocContext} ${referentsContext} ${texteSourcesMemoires()} ${this.texteDemande()} ${textesMT}`),
+      gss: normaliser(`${gssDocContext} ${texteSourcesMemoires()} ${this.texteDemande()} ${textesMT}`),
+      telephoneUnique: valeurRegistre('telephone_contact') || undefined,
+      interlocuteurUnique: (valeurRegistre('dirigeant') || '').trim().split(/\s+/)[0] || undefined,
+      questionPartenaire: valeurRegistre('partenaire_telesurveillance') ? undefined
+        : repriseMT?.mt.variables.PARTENAIRE_TELESURVEILLANCE?.question || 'Partenaire de télésurveillance retenu pour ce marché (ERYMA ou Delta).',
+    };
     const guardServiceCert = (val: string, _ctx: string): string => {
       // On scanne la VALEUR (pas le contexte) : si elle CITE une certification de service et que la
       // Doc GSS ne l'atteste pas → non prouvée. Champ court → [À COMPLÉTER]. Paragraphe → on RETIRE
@@ -5106,6 +5118,14 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     replacements.forEach((rep: any) => {
       const desc = descriptors.find(d => d.id === rep.id);
       if (!desc) return;
+      if (desc.kind !== 'checkbox') {
+        const faits = controlerFaitsNouveauxCadre(String(rep.value ?? ''), desc.context, sourcesFaits);
+        if (faits.questions.length) {
+          faits.questions.forEach((q) => confirmationsGss.add(q));
+          console.log(`[MemoireGenerator] Garde-fou faits nouveaux (CHAMP_${rep.id}) : ${faits.questions.length} point(s) posé(s) à GSS.`);
+        }
+        rep.value = faits.texte;
+      }
       let value = dedupeClientName(guardPlaceholders(guardNames(guardInventedClaims(guardServiceCert(guardFactual(String(rep.value), desc.context), desc.context), desc.context)), desc.context));
       // Ligne de continuation « : …… » vidée par un garde-fou : pointillés effacés plutôt qu'un « [À COMPLÉTER] » sans objet.
       if (/^\[À COMPLÉTER\]\.?$/.test(value.trim()) && continuationAvecPrincipale(desc)) value = '';

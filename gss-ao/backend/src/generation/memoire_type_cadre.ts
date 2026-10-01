@@ -584,3 +584,94 @@ export function plafonnerEngagements(texte: string, max: number): string {
   if (puces.length <= max) return texte;
   return `${texte.slice(0, m.index)}\n## Nos engagements sur les exigences du cahier des charges\n\n${puces.slice(0, max).join('\n')}`;
 }
+
+// ─── Cadre imposé : contrôle déterministe des faits nouveaux ─────────────────────────────────────
+
+export interface SourcesFaitsCadre {
+  /** Toutes les sources admises (DCE, documentation et mémoires de GSS, registre, textes du mémoire type), normalisées. */
+  toutes: string;
+  /** Sources de GSS seulement (sans le DCE) : une certification ou un engagement de GSS ne se prouve pas par une exigence du DCE. */
+  gss: string;
+  /** Numéro unique de GSS (registre telephone_contact) et nom de famille de l'interlocuteur unique qui le porte. */
+  telephoneUnique?: string;
+  interlocuteurUnique?: string;
+  /** Question à poser quand la réponse nomme un partenaire de télésurveillance (ERYMA ou Delta) non confirmé par GSS. */
+  questionPartenaire?: string;
+}
+
+const echapperRx = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const SIGLES_ADMIS = new Set(['gss', 'cnaps', 'apsad', 'ssiap', 'cqp', 'aps', 'sst', 'pti', 'dati', 'erp', 'iso', 'rse', 'cctp', 'ccap', 'dce', 'pdf', 'ads', 'etp', 'idcc', 'urssaf', 'siret', 'tel', 'mme']);
+const CERTIF_TYPE = /\bAPSAD\b[^.;\n]{0,25}?\bP\s?\d\b|\bstations?\s+(?:de\s+t[ée]l[ée]surveillance\s+)?certifi[ée]es?\b/gi;
+const AUDIT_FREQ = /\baudits?\b[^.;\n]{0,80}?\b(?:annuel|semestriel|trimestriel|mensuel|bimestriel)(?:le)?s?\b/i;
+
+/**
+ * Faits nouveaux d'une réponse au cadre imposé, absents de toutes les sources (DCE, textes du mémoire type, mémoires
+ * et registre de GSS) : nom propre ou ville (mot à majuscule hors début de phrase, sigle, ou tout mot d'une réponse
+ * courte), certification de type « APSAD P5 » / « stations certifiées » ou engagement de fréquence d'audit
+ * (« audit … annuel ») que seules les sources de GSS peuvent prouver. Une réponse courte (200 caractères au plus)
+ * devient « [À COMPLÉTER] » ; dans une réponse plus longue, la phrase en cause est retirée. Le numéro unique de GSS
+ * ne va qu'avec son interlocuteur unique : associé à un autre nom, il devient « [À COMPLÉTER] ». Chaque retrait
+ * donne une question à GSS.
+ */
+export function controlerFaitsNouveauxCadre(valeur: string, contexte: string, s: SourcesFaitsCadre): { texte: string; questions: string[] } {
+  const questions: string[] = [];
+  let v = String(valeur || '');
+  if (!v.trim() || /^\s*\[À COMPLÉTER\]\.?\s*$/.test(v)) return { texte: v, questions };
+  const ctxN = normaliser(contexte || '');
+  const libelle = ((contexte || '').match(/Question:\s*"([^"]*)"/) || [])[1]?.replace(/\s+/g, ' ').trim().slice(0, 120) || '';
+  // Apostrophe, trait d'union ou espace indifférents entre les parties d'un mot (« Crit’Air » = « CRIT AIR » du DCE).
+  const dansSources = (mot: string, src: string) => new RegExp(`(?<![a-z0-9])${normaliser(mot).split(/['‘´\s-]+/).filter(Boolean).map(echapperRx).join("[\\s'-]?")}(?![a-z0-9])`).test(src);
+
+  // 1. Numéro unique associé à une autre personne que l'interlocuteur unique.
+  if (s.telephoneUnique && s.interlocuteurUnique) {
+    const chiffres = s.telephoneUnique.replace(/\D/g, '');
+    const rxTel = new RegExp(chiffres.split('').join('[\\s.\\-]?'), 'g');
+    v = v.split('\n').map((ligne) => ligne.split(/(?<=;)/).map((seg) => {
+      if (!rxTel.test(seg)) return seg;
+      rxTel.lastIndex = 0;
+      const personnes = [...seg.matchAll(/\b([A-ZÀ-ÖØ-Þ]{2,}(?:[ -][A-ZÀ-ÖØ-Þ]{2,})*)\s+([A-ZÀ-ÖØ-Þ][a-zà-ÿ][\wà-ÿ'’-]*)/g)]
+        .map((m) => `${m[1]} ${m[2]}`).filter((n) => !SIGLES_ADMIS.has(normaliser(n.split(' ')[0])));
+      if (!personnes.length || personnes.some((n) => normaliser(n).includes(normaliser(s.interlocuteurUnique!)))) return seg;
+      questions.push(`Numéro de téléphone de ${personnes[0]} (le ${s.telephoneUnique} est le numéro unique de l'interlocuteur unique, ${s.interlocuteurUnique})${libelle ? ` — champ « ${libelle} »` : ''}.`);
+      return seg.replace(rxTel, '[À COMPLÉTER]');
+    }).join('')).join('\n');
+  }
+
+  // Partenaire de télésurveillance cité (ERYMA ou Delta, choix de GSS par marché) : gardé, mais à confirmer.
+  if (s.questionPartenaire && /\b(?:ERYMA|Delta)\b/.test(v)) questions.push(s.questionPartenaire);
+
+  // 2. Faits nouveaux par phrase (ou par ligne).
+  const court = v.length <= 200;
+  const motifs = (ph: string): string[] => {
+    const out: string[] = [];
+    for (const m of ph.matchAll(/[A-ZÀ-ÖØ-Þ][\wÀ-ÿ'’-]{2,}/g)) {
+      const mot = m[0].replace(/['’-]+$/, '');
+      if (/\d/.test(mot) || SIGLES_ADMIS.has(normaliser(mot))) continue;
+      const avant = ph.slice(0, m.index).replace(/\s+$/, '');
+      const sigle = /^[A-ZÀ-ÖØ-Þ]{3,}$/.test(mot);
+      const debut = avant === '' || /[.!?:;«(\n•—–*-]$/.test(avant);
+      if (!sigle && debut && !court) continue;
+      if (dansSources(mot, s.toutes) || dansSources(mot, ctxN)) continue;
+      out.push(mot);
+    }
+    for (const m of ph.matchAll(CERTIF_TYPE)) if (!s.gss.replace(/\s+/g, '').includes(normaliser(m[0]).replace(/\s+/g, ''))) out.push(m[0].trim());
+    const a = AUDIT_FREQ.exec(ph);
+    if (a && !AUDIT_FREQ.test(s.gss)) out.push(a[0]);
+    return out;
+  };
+  if (court) {
+    const m = motifs(v);
+    if (m.length) {
+      questions.push(`À confirmer par GSS${libelle ? ` (champ « ${libelle} »)` : ''} : « ${v.replace(/\s+/g, ' ').trim()} » — ${[...new Set(m)].join(', ')} absent(s) du DCE, du mémoire type, des mémoires et du registre de GSS.`);
+      return { texte: '[À COMPLÉTER]', questions };
+    }
+    return { texte: v, questions };
+  }
+  const texte = v.split('\n').map((ligne) => ligne.split(/(?<=[.;!?])\s+/).filter((ph) => {
+    const m = motifs(ph);
+    if (!m.length) return true;
+    questions.push(`À confirmer par GSS${libelle ? ` (champ « ${libelle} »)` : ''}, retiré de la réponse : « ${ph.replace(/\s+/g, ' ').trim()} » — ${[...new Set(m)].join(', ')} absent(s) du DCE, du mémoire type, des mémoires et du registre de GSS.`);
+    return false;
+  }).join(' ')).join('\n').replace(/\s*;\s*$/gm, '.').replace(/\n{3,}/g, '\n\n').trim();
+  return { texte: texte || '[À COMPLÉTER]', questions };
+}
