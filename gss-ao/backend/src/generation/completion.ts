@@ -25,6 +25,8 @@ import { getSettings } from '../core/config';
 import { reglagesIA } from '../core/modeles_ia';
 import { personnesDuRole, retirerCommentairesInternes } from './base_memoires';
 import { RETOUR_ARRIERE } from './themes';
+import type { PlanMemoireType } from './memoire_type';
+import type { AjoutLibre } from './reponse_libre_v2';
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const RESPONSE_DIR = path.resolve(__dirname, '../../response');
@@ -62,8 +64,9 @@ export interface EtatCompletion {
     sections: Record<string, string>;
     schemas: Record<string, string>;
     cover: any;
-    /** Rubriques ajoutées avec l'assistant de modification. */
-    ajouts?: Array<{ id: string; chapter: string; title: string; apres?: string }>;
+    /** Rubriques ajoutées avec l'assistant de modification, et propositions de réponse de l'IA aux questions
+     *  nouvelles du DCE (réponse libre v2 : proposition = true tant que GSS ne l'a pas validée). */
+    ajouts?: AjoutLibre[];
     /** Photos ajoutées aux rubriques avec l'assistant (une page par photo). */
     photos?: Record<string, Array<{ chemin: string; legende?: string }>>;
     /** Format court imposé par le RC (nombre de pages maximum et plan) : une partie par point du plan. */
@@ -71,6 +74,13 @@ export interface EtatCompletion {
     /** Thème de style du rendu (themes.ts) : une recomposition garde le même rendu. Absent (état écrit avant les
      *  thèmes) : « gss-2026-09 », le rendu de l'époque. */
     theme?: string;
+    /** Réponse libre construite sur le mémoire type (refonte 2026-10) : 2. Absent : plan v1 (AI_SECTIONS_B). */
+    version?: 2;
+    /** Plan v2 : blocs et rubriques retenues du mémoire type (rendu « 1 à 2 pages de texte, puis 1 page de schéma »,
+     *  titres et chapitres de l'assistant). Absent : plan v1. */
+    plan?: PlanMemoireType;
+    /** Plan v2 : titre-message de la page de schéma de chaque rubrique. */
+    titresSchemas?: Record<string, string>;
   };
   /** Cadre imposé : réponses rédigées par GSS (signets GSS_CH_n), les seules que l'assistant peut modifier. */
   champs?: Array<{ cle: string; libelle: string }>;
@@ -411,6 +421,30 @@ export async function json(system: string, user: string): Promise<any> {
  */
 export async function integrerDansRubrique(texteRubrique: string, repere: string, question: string, info: string): Promise<string> {
   const pos = texteRubrique.indexOf(repere);
+  // Réponse libre v2 (mémoire type) : le repère suit immédiatement le « [À COMPLÉTER] » qu'il complète, au milieu de sa
+  // phrase ou de sa ligne de tableau : l'information remplace ce « [À COMPLÉTER] », sous la forme du fragment qui garde
+  // la phrase correcte (comme dans un cadre imposé). Les repères de la réponse libre v1 ne suivent jamais un
+  // « [À COMPLÉTER] » : leur intégration est inchangée (1 à 2 phrases insérées à l'emplacement).
+  if (pos >= PLACEHOLDER.length && texteRubrique.slice(pos - PLACEHOLDER.length, pos) === PLACEHOLDER) {
+    const debut = pos - PLACEHOLDER.length;
+    const ligneDebut = texteRubrique.lastIndexOf('\n', debut - 1) + 1;
+    const ligneFin = texteRubrique.indexOf('\n', pos);
+    const ligne = texteRubrique.slice(ligneDebut, ligneFin < 0 ? texteRubrique.length : ligneFin);
+    // Les autres emplacements de la ligne sont notés « […] » : seul celui-ci reste « [À COMPLÉTER] ».
+    const net = (x: string) => x.replace(/⟦AC:\d+⟧/g, '').split(PLACEHOLDER).join('[…]');
+    const cible = `${net(ligne.slice(0, debut - ligneDebut))}${PLACEHOLDER}${net(ligne.slice(pos + repere.length - ligneDebut))}`;
+    let valeur = '';
+    try {
+      const r = await json(
+        `Tu complètes un mémoire technique GSS (sécurité privée). Dans la phrase (ou la ligne de tableau) donnée, l'emplacement « ${PLACEHOLDER} » attend une information. Donne le fragment EXACT qui remplace « ${PLACEHOLDER} » pour que la phrase reste correcte et naturelle (ex. « 6 », « ERYMA », « 45 minutes », « CQP APS et SST »), sans répéter les mots déjà présents autour. N'utilise QUE l'information fournie, sans rien ajouter ; jamais de commentaire. Renvoie {"valeur": "..."}.`,
+        `Information attendue : ${question}\nInformation fournie : ${info}\nPhrase : ${cible}`,
+      );
+      valeur = retirerCommentairesInternes(String(r.valeur || '').trim()).texte.trim();
+    } catch { /* l'information fournie est insérée telle quelle */ }
+    if (!valeur) valeur = info.replace(/\s+/g, ' ').trim();
+    if (/^\s*\|/.test(ligne)) valeur = valeur.replace(/\|/g, '/').replace(/\s*\n\s*/g, ' ');
+    return texteRubrique.slice(0, debut) + valeur + texteRubrique.slice(pos + repere.length);
+  }
   const extrait = pos >= 0 ? texteRubrique.slice(Math.max(0, pos - 700), pos + 300) : texteRubrique.slice(-900);
   const r = await json(
     `Tu complètes un mémoire technique GSS (sécurité privée). Une information manquait à l'endroit marqué ${repere}. Rédige 1 à 2 phrases à insérer à cet endroit, dans le ton du texte, qui intègrent l'information fournie. N'ajoute AUCUN fait absent de l'information fournie. Pas de titre, pas de Markdown de titre. Écris l'information comme un fait ou un engagement de GSS : jamais « GSS indique / précise / confirme », jamais de commentaire sur ce qui manque ou reste à définir. Renvoie {"phrase": "..."}.`,
@@ -441,6 +475,9 @@ export async function recomposerPdf(etat: EtatCompletion): Promise<string> {
     ajouts: etat.libre!.ajouts,
     photos: etat.libre!.photos,
     theme,
+    // Réponse libre v2 (mémoire type) : même plan, mêmes pages de schéma ; état v1 : rendu v1 inchangé.
+    plan: etat.libre!.plan,
+    titresSchemas: etat.libre!.titresSchemas,
   });
   etat.libre!.schemas = Object.fromEntries(res.schemas);
   return res.filePath;

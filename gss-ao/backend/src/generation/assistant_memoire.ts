@@ -25,6 +25,8 @@ import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION } 
 import { reglagesIA } from '../core/modeles_ia';
 import { SECTIONS_REPONSE_LIBRE, CHAPITRES_REPONSE_LIBRE } from './memoire_generator';
 import { dimensions, insererPhotoDocx, paragrapheDuChamp } from './docx_images';
+import { estPlanV2, type PlanMemoireType } from './memoire_type';
+import { sectionsV2, chapitresV2, schemaFixe } from './reponse_libre_v2';
 import { nombrePages } from './format_court';
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -298,19 +300,31 @@ const REGLES_FORME_LIBRE = `RÈGLES DE FORME (rendu du mémoire) :
 - Structure avec des sous-titres Markdown « ## Sous-titre », séparés du paragraphe suivant par une ligne vide ; alterne paragraphes courts et listes à puces « - » ; mets en gras (**…**) les mots-clés et engagements forts.
 - Conserve à l'identique les repères de la forme ⟦AC:n⟧ présents dans le texte (ils marquent des informations à compléter).`;
 
+/** Plan v2 de l'état (réponse libre construite sur le mémoire type), sinon undefined (plan v1). */
+function planV2(etat: EtatCompletion): PlanMemoireType | undefined {
+  return estPlanV2(etat.libre?.plan) ? etat.libre!.plan : undefined;
+}
+
 function titreRubrique(etat: EtatCompletion, id: string): string {
+  const plan = planV2(etat);
+  if (plan) return plan.rubriques.find((r) => r.id === id)?.titre || etat.libre?.ajouts?.find((a) => a.id === id)?.title || id;
   return etat.libre?.court?.plan.find((p) => p.id === id)?.title || SECTIONS_REPONSE_LIBRE.find((s) => s.id === id)?.title || etat.libre?.ajouts?.find((a) => a.id === id)?.title || id;
 }
 
 function chapitreRubrique(etat: EtatCompletion, id: string): string {
+  const plan = planV2(etat);
+  if (plan) return plan.rubriques.find((r) => r.id === id)?.cle || etat.libre?.ajouts?.find((a) => a.id === id)?.chapter || '';
   return SECTIONS_REPONSE_LIBRE.find((s) => s.id === id)?.chapter || etat.libre?.ajouts?.find((a) => a.id === id)?.chapter || '';
 }
+
+/** Liste de chapitres en français : « I, II, III ou IV ». */
+const ouChapitres = (cles: string[]) => (cles.length > 1 ? `${cles.slice(0, -1).join(', ')} ou ${cles[cles.length - 1]}` : cles[0] || '');
 
 /**
  * Page du PDF où apparaît un texte (titre de rubrique, légende de photo), hors couverture et sommaire,
  * pour ouvrir l'aperçu au bon endroit. `derniere` : dernière page correspondante (photo ajoutée en fin de rubrique).
  */
-function pageDe(fichier: string, titre: string, derniere = false): number | undefined {
+export function pageDe(fichier: string, titre: string, derniere = false): number | undefined {
   const r = spawnSync('pdftotext', ['-layout', fichier, '-'], { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
   if (r.status !== 0 || !r.stdout) return undefined;
   const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -325,26 +339,35 @@ async function assistantLibre(etat: EtatCompletion, message: string, pieces: Pie
   const lib = etat.libre!;
   lib.ajouts ||= [];
   const court = lib.court;
-  const ids = (court ? court.plan.map((p) => p.id) : [...SECTIONS_REPONSE_LIBRE.map((s) => s.id), ...lib.ajouts.map((a) => a.id)]).filter((id) => (lib.sections[id] || '').trim());
+  // Réponse libre v2 (mémoire type) : rubriques et chapitres (blocs I à V) du plan enregistré ; sinon plan v1.
+  const planMt = planV2(etat);
+  const chapitres: Record<string, string> = planMt ? chapitresV2(planMt) : CHAPITRES_REPONSE_LIBRE;
+  const ids = (court ? court.plan.map((p) => p.id) : planMt ? sectionsV2(planMt, lib.ajouts).map((r) => r.id) : [...SECTIONS_REPONSE_LIBRE.map((s) => s.id), ...lib.ajouts.map((a) => a.id)]).filter((id) => (lib.sections[id] || '').trim());
+  // Propositions de réponse de l'IA aux questions nouvelles du DCE, encore à valider par GSS.
+  const enAttente = (id: string) => !!lib.ajouts!.find((a) => a.id === id && a.proposition);
+  const propositions = ids.filter(enAttente);
   // Format court imposé par le RC : le plan est celui du RC (pas d'ajout de partie) et la limite de pages s'impose.
   const organisation = court
     ? `au FORMAT IMPOSÉ PAR LE RÈGLEMENT DE CONSULTATION (${court.pagesMax} pages maximum), organisé selon le plan du RC en parties (les « rubriques » ci-dessous). Une nouvelle demande de contenu s'intègre à la partie concernée (action "modifier") : les actions "ajouter" et "image" ne sont pas disponibles dans ce format (limite de pages) : explique-le si l'utilisateur les demande`
-    : `organisé en chapitres (${Object.entries(CHAPITRES_REPONSE_LIBRE).map(([k, v]) => `${k} : ${v}`).join(' ; ')}) et en rubriques`;
+    : `organisé en chapitres (${Object.entries(chapitres).map(([k, v]) => `${k} : ${v}`).join(' ; ')}) et en rubriques`;
   const plan = await json(
     `Tu es l'assistant de modification d'un mémoire technique GSS (sécurité privée) déjà généré, ${organisation}. Actions possibles :
 1. "modifier" : refaire, corriger, compléter, développer, raccourcir ou enrichir une rubrique existante (repérée par son id).
-2. "ajouter" : ajouter une nouvelle rubrique (une ou plusieurs pages) dans un chapitre (I, II, III ou IV), éventuellement juste après une rubrique donnée ("apres": id).
+2. "ajouter" : ajouter une nouvelle rubrique (une ou plusieurs pages) dans un chapitre (${ouChapitres(Object.keys(chapitres))}), éventuellement juste après une rubrique donnée ("apres": id).
 3. "supprimer" : retirer une rubrique, UNIQUEMENT si l'utilisateur le demande explicitement.
 4. "image" : insérer une photo jointe (P1, P2…) sur une page dédiée à la suite d'une rubrique ("id"), UNIQUEMENT si l'utilisateur le demande, avec une légende courte qui décrit UNIQUEMENT ce que montre la photo (d'après sa description) ou ce que l'utilisateur en dit, sans rien affirmer d'autre ("legende").
-5. Aucune action : si l'utilisateur pose une question, réponds-lui simplement.
+5. Aucune action : si l'utilisateur pose une question, réponds-lui simplement.${propositions.length ? `
+6. "valider" : l'utilisateur valide TELLE QUELLE une proposition de réponse de l'IA (rubrique marquée [PROPOSITION À VALIDER]) ; s'il demande en même temps un changement, c'est l'action "modifier" (puis "valider" s'il valide aussi le résultat).` : ''}
 Les documents et photos joints sont des sources valables : utilise leurs informations dans les consignes quand l'utilisateur le demande. Une photo sans rapport avec la sécurité privée ou avec la partie visée (d'après sa description) n'est PAS insérée : explique-le dans ta réponse et demande confirmation.
 Identifie précisément la ou les rubriques visées. Si la demande est ambiguë, n'agis pas et demande une précision. Dans chaque action, la "consigne" reprend fidèlement et complètement ce que veut l'utilisateur (y compris les informations qu'il donne).
-Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce qui est fait", "actions": [{"type": "modifier", "id": "…", "consigne": "…"} ou {"type": "ajouter", "chapitre": "II", "titre": "…", "apres": "…", "consigne": "…"} ou {"type": "supprimer", "id": "…"} ou {"type": "image", "piece": "P1", "id": "…", "legende": "…"}]}.`,
-    `${etat.demande ? `Demande particulière saisie avant la génération : ${etat.demande}\n\n` : ''}Échanges précédents :\n${historique(etat) || '(aucun)'}\n\nRubriques du mémoire :\n${ids.map((id) => `- ${id} | chapitre ${chapitreRubrique(etat, id)} | ${titreRubrique(etat, id)} | ${lib.sections[id].replace(/⟦AC:\d+⟧/g, '').replace(/\s+/g, ' ').slice(0, 300)}`).join('\n')}${blocPieces(pieces, false)}\n\nDemande de l'utilisateur : ${message}`,
+Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce qui est fait", "actions": [{"type": "modifier", "id": "…", "consigne": "…"} ou {"type": "ajouter", "chapitre": "II", "titre": "…", "apres": "…", "consigne": "…"} ou {"type": "supprimer", "id": "…"} ou {"type": "image", "piece": "P1", "id": "…", "legende": "…"}${propositions.length ? ' ou {"type": "valider", "id": "…"}' : ''}]}.`,
+    `${etat.demande ? `Demande particulière saisie avant la génération : ${etat.demande}\n\n` : ''}Échanges précédents :\n${historique(etat) || '(aucun)'}\n\nRubriques du mémoire :\n${ids.map((id) => `- ${id} | chapitre ${chapitreRubrique(etat, id)} | ${titreRubrique(etat, id)}${enAttente(id) ? ' [PROPOSITION À VALIDER]' : ''} | ${lib.sections[id].replace(/⟦AC:\d+⟧/g, '').replace(/\s+/g, ' ').slice(0, 300)}`).join('\n')}${blocPieces(pieces, false)}\n\nDemande de l'utilisateur : ${message}`,
   );
   const actions: any[] = Array.isArray(plan.actions) ? plan.actions : [];
   const modifies: string[] = [];
-  const oublierSchemas = (id: string) => { for (const k of Object.keys(lib.schemas || {})) if (k.startsWith(`${id}#`)) delete lib.schemas[k]; };
+  // Schéma fixé par le mémoire type (bibliothèque, spécification, organigramme) : il ne dépend pas du texte réécrit.
+  const oublierSchemas = (id: string) => { if (schemaFixe(planMt, id)) return; for (const k of Object.keys(lib.schemas || {})) if (k.startsWith(`${id}#`)) delete lib.schemas[k]; };
+  const valides: string[] = [];
 
   for (const a of actions) {
     if (a?.type === 'modifier' && ids.includes(a.id) && String(a.consigne || '').trim()) {
@@ -360,12 +383,13 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       oublierSchemas(a.id);
       modifies.push(a.id);
     } else if (a?.type === 'ajouter' && !court && String(a.titre || '').trim()) {
-      const chapitre = ['I', 'II', 'III', 'IV'].includes(a.chapitre) ? a.chapitre : 'IV';
+      const cles = Object.keys(chapitres);
+      const chapitre = cles.includes(a.chapitre) ? a.chapitre : cles[cles.length - 1];
       const titre = String(a.titre).trim();
       const sources = await sourcesGss(`${titre} ${a.consigne || ''}`);
       const r = await json(
         `Tu rédiges une nouvelle rubrique d'un mémoire technique GSS (sécurité privée) selon la consigne de l'utilisateur, au niveau de qualité des autres rubriques (contenu concret, méthodes et exemples GSS). Longueur : celle que demande l'utilisateur, sachant qu'une page du mémoire contient environ 150 à 200 mots (« une page » ≈ 150-200 mots, « deux pages » ≈ 300-400 mots) ; sans précision, environ 200 à 350 mots.\n${REGLES_REDACTION}\n${REGLES_FORME_LIBRE}\nRenvoie {"texte": "…"}.`,
-        `Titre de la rubrique : ${titre} (chapitre ${chapitre} — ${CHAPITRES_REPONSE_LIBRE[chapitre]})\nConsigne de l'utilisateur : ${a.consigne || titre}${etat.demande ? `\nDemande particulière du mémoire : ${etat.demande}` : ''}${blocPieces(pieces, true)}${sources}`,
+        `Titre de la rubrique : ${titre} (chapitre ${chapitre} — ${chapitres[chapitre]})\nConsigne de l'utilisateur : ${a.consigne || titre}${etat.demande ? `\nDemande particulière du mémoire : ${etat.demande}` : ''}${blocPieces(pieces, true)}${sources}`,
       );
       const texte = nettoyerTexte(r.texte);
       if (!texte) continue;
@@ -379,6 +403,12 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       lib.photos ||= {};
       (lib.photos[a.id] ||= []).push({ chemin: piece.chemin, legende: String(a.legende || '').trim() });
       modifies.push(a.id);
+    } else if (a?.type === 'valider' && ids.includes(a.id) && enAttente(a.id)) {
+      // Proposition de réponse de l'IA validée telle quelle par GSS : le texte ne change pas (aucune recomposition).
+      const aj = lib.ajouts.find((x) => x.id === a.id)!;
+      aj.proposition = false;
+      aj.valideLe = new Date().toISOString();
+      valides.push(aj.title);
     } else if (a?.type === 'supprimer' && ids.includes(a.id)) {
       lib.sections[a.id] = '';
       lib.ajouts = lib.ajouts.filter((x) => x.id !== a.id);
@@ -392,17 +422,33 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
   // un repère suivi (question précise dans « À compléter »), jamais un texte brut imprimé dans le PDF.
   const nouveaux: Array<{ n: number; id: string }> = [];
   let maxRepere = Math.max(0, ...etat.elements.flatMap((e) => e.reperes || []), ...Object.values(lib.sections).flatMap((t) => [...t.matchAll(/⟦AC:(\d+)⟧/g)].map((m) => Number(m[1]))));
-  for (const id of modifies) {
-    if (!lib.sections[id]?.includes(PLACEHOLDER)) continue;
-    lib.sections[id] = lib.sections[id].split(PLACEHOLDER).map((morceau, i) => {
-      if (i === 0) return morceau;
-      nouveaux.push({ n: ++maxRepere, id });
-      return `${REPERE(maxRepere)}${morceau}`;
-    }).join('');
+  if (planMt) {
+    // Réponse libre v2 : « [À COMPLÉTER] » reste visible dans le brouillon et reçoit son repère juste après lui (la
+    // réponse de GSS le remplacera à cet endroit) ; ceux qui ont déjà le leur sont laissés tels quels.
+    for (const id of modifies) {
+      if (!lib.sections[id]) continue;
+      lib.sections[id] = lib.sections[id].replace(/\[À COMPLÉTER\](?!⟦AC:)/g, () => {
+        nouveaux.push({ n: ++maxRepere, id });
+        return `${PLACEHOLDER}${REPERE(maxRepere)}`;
+      });
+    }
+    // Emplacements dont tous les repères ont disparu (l'utilisateur a donné l'information dans sa demande) : retirés.
+    const tout = Object.values(lib.sections).join('\n');
+    etat.elements = etat.elements.filter((e) => !(e.statut === 'ouvert' && e.reperes?.length && e.reperes.every((n) => !tout.includes(REPERE(n)))));
+  } else {
+    for (const id of modifies) {
+      if (!lib.sections[id]?.includes(PLACEHOLDER)) continue;
+      lib.sections[id] = lib.sections[id].split(PLACEHOLDER).map((morceau, i) => {
+        if (i === 0) return morceau;
+        nouveaux.push({ n: ++maxRepere, id });
+        return `${REPERE(maxRepere)}${morceau}`;
+      }).join('');
+    }
   }
   if (nouveaux.length) {
     const phrase = (n: number, id: string) => {
-      const t = lib.sections[id];
+      // v2 : le « [À COMPLÉTER] » visible qui précède le repère est noté par la phrase elle-même.
+      const t = planMt ? lib.sections[id].split(`${PLACEHOLDER}${REPERE(n)}`).join(REPERE(n)) : lib.sections[id];
       const p = t.indexOf(REPERE(n));
       return (t.slice(Math.max(0, p - 220), p).split(/[.!?\n]/).pop() || '').replace(/⟦AC:\d+⟧/g, '[…]').replace(/[#*]/g, '').trim() + ` ${PLACEHOLDER}` + (t.slice(p + REPERE(n).length).split(/[.!?\n]/)[0] || '').replace(/⟦AC:\d+⟧/g, '[…]').replace(/[#*]/g, '');
     };
@@ -427,7 +473,11 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
     const photo = actions.some((a) => a?.type === 'image' && a.id === visible);
     if (visible) page = pageDe(etat.fichier, titreRubrique(etat, visible), photo);
   }
-  return { reponse: String(plan.reponse || (modifies.length ? 'Modification effectuée.' : "Je n'ai rien modifié.")).trim(), modifies, page };
+  let reponse = String(plan.reponse || (modifies.length || valides.length ? 'Modification effectuée.' : "Je n'ai rien modifié.")).trim();
+  if (valides.length && !/valid/i.test(reponse)) reponse += ` Proposition${valides.length > 1 ? 's' : ''} validée${valides.length > 1 ? 's' : ''} : ${valides.map((t) => `« ${t} »`).join(', ')}.`;
+  const aValider = modifies.filter(enAttente).map((id) => titreRubrique(etat, id));
+  if (aValider.length) reponse += ` ${aValider.length > 1 ? 'Ces propositions restent' : 'Cette proposition reste'} à valider (${aValider.map((t) => `« ${t} »`).join(', ')}) : dites-moi « je valide » quand ${aValider.length > 1 ? 'elles vous conviennent' : 'elle vous convient'}.`;
+  return { reponse, modifies, page };
 }
 
 // ─── Point d'entrée ───────────────────────────────────────────────────────────────────────

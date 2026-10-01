@@ -152,11 +152,21 @@ function slideKeyOf(chapterIdx: number, sectionIdx: number, chunkIdx: number): s
   return `${chapterIdx}_${sectionIdx}_${chunkIdx}`;
 }
 
-/** Découpage du texte d'une rubrique : pages plus pleines quand son schéma a sa propre page. */
+/** Découpage du texte d'une rubrique : pages plus pleines quand son schéma a sa propre page (ou qu'elle n'en a pas,
+ *  dans la mise en page « 1 à 2 pages de texte, puis 1 page de schéma »). */
 function limitesSection(section: AssembleSection, theme: string): { mots: number; lignes: number } | undefined {
-  if (!section.schemaPleinePage) return undefined;
+  if (!section.schemaPleinePage && !section.texteSeul) return undefined;
   return estRetourArriere(theme) ? LIMITES_TEXTE_SEUL.origine : LIMITES_TEXTE_SEUL.refonte;
 }
+
+/** Pages statiques « Ils nous font confiance » après ce chapitre : choix explicite du plan (réponse libre v2), sinon
+ *  règle d'origine (après le chapitre I). */
+function avecPagesReferences(chapter: AssembleChapter): boolean {
+  return chapter.pagesReferences ?? (chapter.key === 'I' || chapter.key === '1');
+}
+
+/** Ouverture de bloc : au-delà de ce nombre de rubriques, liste resserrée pour tenir sur la page. */
+const RUBRIQUES_OUVERTURE_COMPACTE = 11;
 
 /** Titre d'une page de schéma : une ligne, sans balise. */
 function titreSchema(t?: string): string {
@@ -178,12 +188,23 @@ export interface AssembleSection {
    * pages de texte de la rubrique n'ont alors plus de schéma dessous.
    */
   schemaPleinePage?: { titre?: string; svg: string };
+  /**
+   * Mise en page « 1 à 2 pages de texte, puis 1 page de schéma » pour une rubrique SANS schéma (réponse libre v2) :
+   * pages de texte pleines, aucun schéma sous le texte.
+   */
+  texteSeul?: boolean;
 }
 
 export interface AssembleChapter {
   key: string;
   title: string;
   sections: AssembleSection[];
+  /**
+   * Pages statiques « Ils nous font confiance » (gss_memoire_master.md) à la fin de ce chapitre. Absent : règle
+   * d'origine (après le chapitre I). La réponse libre v2 le fixe pour chaque chapitre (bloc Présentation, ou aucun
+   * quand le mémoire type contient ses propres rubriques de références).
+   */
+  pagesReferences?: boolean;
 }
 
 export interface CoverInfo {
@@ -553,7 +574,7 @@ export class MarpGenerator {
       // Numérotation des rubriques propre à chaque chapitre (1, 2, 3… rendus i, ii, iii) : un compteur
       // global faisait démarrer les chapitres suivants à 6, 13… (sommaire « 6. 7. … 11 »).
       // Les pages de références « Ils nous font confiance » suivent le chapitre I : elles figurent au sommaire.
-      const titresToc = [...chapter.sections.map((sec) => sec.title), ...((chapter.key === 'I' || chapter.key === '1') && this.getReferencesSlides().length ? ['Ils nous font confiance'] : [])];
+      const titresToc = [...chapter.sections.map((sec) => sec.title), ...(avecPagesReferences(chapter) && this.getReferencesSlides().length ? ['Ils nous font confiance'] : [])];
       titresToc.forEach((titre, idx) => {
         const sectionLine = `\t${idx + 1}. __${titre.toUpperCase()}__`;
         tocPages[tocPages.length - 1].push(sectionLine);
@@ -610,8 +631,10 @@ export class MarpGenerator {
       if (refonte) {
         // … puis les rubriques du bloc, dans l'ordre et avec les titres du sommaire.
         const echapper = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const titresBloc = [...chapter.sections.map((sec) => sec.title), ...((chapter.key === 'I' || chapter.key === '1') && this.getReferencesSlides().length ? ['Ils nous font confiance'] : [])];
-        lines.push(`<ul class="gss-bloc-rubriques">${titresBloc.map((t) => `<li>${echapper(t)}</li>`).join('')}</ul>`);
+        const titresBloc = [...chapter.sections.map((sec) => sec.title), ...(avecPagesReferences(chapter) && this.getReferencesSlides().length ? ['Ils nous font confiance'] : [])];
+        // Bloc chargé (réponse libre v2 : jusqu'à une vingtaine de rubriques) : liste resserrée pour tenir sur la page.
+        const classe = titresBloc.length > RUBRIQUES_OUVERTURE_COMPACTE ? 'gss-bloc-rubriques compacte' : 'gss-bloc-rubriques';
+        lines.push(`<ul class="${classe}">${titresBloc.map((t) => `<li>${echapper(t)}</li>`).join('')}</ul>`);
         lines.push('');
       }
 
@@ -629,8 +652,8 @@ export class MarpGenerator {
           lines.push(chunk);
           lines.push('');
 
-          // Rubrique dont le schéma a sa propre page : aucun schéma sous le texte (1 schéma = 1 page).
-          if (section.schemaPleinePage) continue;
+          // Rubrique dont le schéma a sa propre page (ou rubrique v2 sans schéma) : aucun schéma sous le texte.
+          if (section.schemaPleinePage || section.texteSeul) continue;
           const schemaGss = schemas.get(slideKeyOf(ci, si, i));
           if (schemaGss) {
             // Un schéma GSS par page, à l'emplacement réservé à l'illustration (sous le texte).
@@ -740,7 +763,7 @@ export class MarpGenerator {
 
       });
 
-      if (chapter.key === 'I' || chapter.key === '1') {
+      if (avecPagesReferences(chapter)) {
         const refSlides = this.getReferencesSlides();
         for (const slide of refSlides) {
           lines.push('---');

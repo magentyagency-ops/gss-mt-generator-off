@@ -203,6 +203,33 @@ function appelMoteur(python: string, requete: object, theme: string = themeActif
   });
 }
 
+/**
+ * Dessine des spécifications déjà écrites (schémas « spec » du mémoire type, schéma de process de la compréhension
+ * du besoin) avec le moteur, sans appel au modèle : mêmes contrôles de fond que pour un schéma généré (chaque chiffre
+ * et chaque mot doivent figurer dans `source`), dans le thème et le format demandés. Renvoie, par identifiant, le SVG
+ * finalisé (une ligne, identifiants préfixés) ou les erreurs du moteur. Moteur indisponible : carte vide.
+ */
+export async function dessinerSpecs(
+  specs: Array<{ id: string; gabarit?: string; params?: any; source: string; titre_section?: string }>,
+  format: FormatSchema = 'page',
+  theme?: string,
+): Promise<Map<string, { ok: boolean; svg?: string; erreurs?: string[] }>> {
+  const out = new Map<string, { ok: boolean; svg?: string; erreurs?: string[] }>();
+  const python = findPythonBin();
+  if (!python || !specs.length) return out;
+  try {
+    const res = await appelMoteur(python, {
+      mode: 'rendre',
+      format: format === 'page' ? 'page' : 'paysage',
+      schemas: specs.map((s) => ({ id: s.id, gabarit: s.gabarit, params: s.params, source: s.source, titre_section: s.titre_section || '' })),
+    }, themeActif(theme));
+    for (const r of res) out.set(r.id, { ok: !!(r.ok && r.svg), svg: r.svg, erreurs: r.erreurs });
+  } catch (e: any) {
+    console.error(`[SchemaService] Spécifications non dessinées (${e?.message || e}).`);
+  }
+  return out;
+}
+
 async function parLots<T>(items: T[], n: number, f: (x: T) => Promise<void>): Promise<void> {
   let i = 0;
   const workers = Array.from({ length: Math.min(n, items.length) }, async () => {
@@ -224,8 +251,10 @@ export class SchemaService {
 
   /** Construit un schéma par page. Renvoie la carte clé de slide → SVG (une ligne, identifiants uniques).
    *  opts.format : « paysage » (par défaut, schéma sous le texte) ou « page » (1 schéma = 1 page A4 portrait) ;
-   *  opts.theme : thème de style (par défaut GSS_THEME / style par défaut, voir themes.ts). */
-  public async construirePourPages(pages: PageSchema[], onProgress?: (msg: string) => void, opts: { format?: FormatSchema; theme?: string } = {}): Promise<Map<string, string>> {
+   *  opts.theme : thème de style (par défaut GSS_THEME / style par défaut, voir themes.ts) ;
+   *  opts.secours : false = pas de schéma de la bibliothèque en dernier recours (réponse libre v2 : un schéma
+   *  d'un autre sujet n'apporte rien sur une page de schéma dédiée ; la rubrique garde alors ses seules pages de texte). */
+  public async construirePourPages(pages: PageSchema[], onProgress?: (msg: string) => void, opts: { format?: FormatSchema; theme?: string; secours?: boolean } = {}): Promise<Map<string, string>> {
     const format: FormatSchema = opts.format === 'page' ? 'page' : 'paysage';
     const theme = themeActif(opts.theme);
     const resultat = new Map<string, string>();
@@ -254,11 +283,13 @@ export class SchemaService {
       }
     });
 
-    if (aSecourir.length > 0) {
+    if (aSecourir.length > 0 && opts.secours !== false) {
       console.warn(`[SchemaService] ${aSecourir.length} page(s) sans schéma conforme → schéma validé de la bibliothèque GSS.`);
       for (const [k, svg] of secoursBibliotheque(aSecourir, format, theme)) resultat.set(k, svg);
+    } else if (aSecourir.length > 0) {
+      console.warn(`[SchemaService] ${aSecourir.length} page(s) sans schéma conforme (pas de secours par la bibliothèque demandé).`);
     }
-    console.log(`[SchemaService] ${resultat.size}/${pages.length} page(s) illustrée(s) (${pages.length - aSecourir.length} schéma(s) construits, ${aSecourir.length} issus de la bibliothèque).`);
+    console.log(`[SchemaService] ${resultat.size}/${pages.length} page(s) illustrée(s) (${pages.length - aSecourir.length} schéma(s) construits, ${resultat.size - (pages.length - aSecourir.length)} issus de la bibliothèque).`);
     return resultat;
   }
 
