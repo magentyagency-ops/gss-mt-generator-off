@@ -1672,6 +1672,21 @@ function refusTexteNouveau(nouveau: string, ancien: string, o: OptionsModificati
  * pour mot (une seule fois) dans le texte ; au plus `maxModifications` modifications et `maxAjouts` ajouts de
  * `motsParAjout` mots ; tout texte nouveau est contrôlé (chiffres du DCE, noms connus, interdits GSS).
  */
+/**
+ * Étapes d'une procédure (lignes de liste numérotée « n. » ou puces « - » de six mots au moins) du texte `avant`
+ * qui ne se retrouvent plus dans `apres` (aucune ligne de liste ressemblante à 60 % au moins) : GSS ne fonctionne
+ * qu'en process, une étape retirée rend la procédure illisible (« 3. Selon le constat » sans les étapes 1 et 2).
+ * Un chiffre ou un nom changé dans une étape la conserve ; une courte puce d'énumération (moins de six mots) peut
+ * être retirée.
+ */
+export function etapesRetirees(avant: string, apres: string): string[] {
+  const LIGNE_LISTE = /^\s*(?:\d+[.)]|[-•*])\s+(.+)$/;
+  const mots = (l: string) => normaliser(l.replace(/\*\*|__|⟦AC:\d+⟧/g, ' ')).replace(/[^a-z0-9'\s]+/g, ' ').split(/\s+/).filter(Boolean);
+  const lignes = (t: string) => String(t || '').split('\n').map((l) => LIGNE_LISTE.exec(l)).filter((m): m is RegExpExecArray => !!m).map((m) => ({ ligne: m[0].trim(), mots: mots(m[1]) }));
+  const apresL = lignes(apres);
+  return lignes(avant).filter((e) => e.mots.length >= 6 && !apresL.some((x) => similarite(e.mots, x.mots) >= 0.6)).map((e) => e.ligne);
+}
+
 export function appliquerModifications(texte: string, mods: ModificationsProposees, options: OptionsModifications = {}): { texte: string; appliquees: ModificationTraitee[]; refusees: ModificationTraitee[] } {
   const o = { maxModifications: 12, maxAjouts: 3, motsParAjout: 60, ...options };
   const appliquees: ModificationTraitee[] = [];
@@ -1687,7 +1702,9 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     m.par = sansCovidEnumere(m.par!);
     const refus = refusTexteNouveau(m.par!, m.extrait, o);
     if (refus) { refusees.push({ ...m, raison: refus }); continue; }
-    t = t.slice(0, pos[0].debut) + m.par + t.slice(pos[0].fin);
+    const essai = t.slice(0, pos[0].debut) + m.par + t.slice(pos[0].fin);
+    if (etapesRetirees(t, essai).length) { refusees.push({ ...m, raison: 'une étape de procédure ne se retire pas' }); continue; }
+    t = essai;
     appliquees.push(m);
   }
   for (const r of mods.retraits || []) {
@@ -1696,7 +1713,9 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     const pos = positionsExtrait(t, m.extrait);
     if (pos.length !== 1) { refusees.push({ ...m, raison: pos.length ? 'extrait ambigu (plusieurs occurrences)' : 'extrait introuvable mot pour mot' }); continue; }
     if (/\[À COMPLÉTER\]/.test(m.extrait)) { refusees.push({ ...m, raison: 'un repère à compléter ne se retire pas' }); continue; }
-    t = t.slice(0, pos[0].debut) + t.slice(pos[0].fin);
+    const essai = t.slice(0, pos[0].debut) + t.slice(pos[0].fin);
+    if (etapesRetirees(t, essai).length) { refusees.push({ ...m, raison: 'une étape de procédure ne se retire pas' }); continue; }
+    t = essai;
     appliquees.push(m);
   }
   let nAjouts = 0;
