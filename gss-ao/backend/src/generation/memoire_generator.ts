@@ -14,7 +14,7 @@ import {
   type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais,
 } from './memoire_type';
 import {
-  memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles,
+  memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin,
   valeursImposeesValides, completerBesoinMinimum,
@@ -6492,6 +6492,8 @@ RÈGLES DE FORME (rendu Marp) :
     onProgress?: (progress: number, message: string, status?: string) => void,
   ): Promise<{ filePath: string, generatedData: Record<string, string>, consultations: string[] }> {
     console.log('[MemoireGenerator] ═══ Réponse libre v2 : mémoire type en 5 blocs ═══');
+    // Vocabulaire du CCTP (« chef de poste ») aussi dans les titres et les textes des schémas dessinés (génération ign 12).
+    mt = vocabulaireMemoireType(mt, dceContext);
     const progres = (p: number, m: string) => onProgress?.(p, m);
 
     // ── 1. Plan et variables du marché (sans modèle) ──
@@ -7652,6 +7654,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     mt: MemoireType,
     onProgress?: (progress: number, message: string, status?: string) => void,
   ): Promise<{ filePath: string, generatedData: Record<string, string>, consultations: string[] }> {
+    mt = vocabulaireMemoireType(mt, dceContext);
     const plan = format.plan;
     const progres = (p: number, m: string) => onProgress?.(p, m);
     console.log(`[MemoireGenerator] ═══ Format court sur le mémoire type : ${format.pagesMax} pages, ${plan.length} parties ═══`);

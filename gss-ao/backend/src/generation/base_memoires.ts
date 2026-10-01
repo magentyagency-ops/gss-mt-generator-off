@@ -846,14 +846,17 @@ export function nettoyerChampCadre(texte: string): string {
 
 /**
  * Vocabulaire du CCTP pour la fonction de l'agent qui encadre le poste : le mémoire type dit « chef de site » ou
- * « responsable de site » ; quand le CCTP ne parle que de « chef de poste » (IGN), le mémoire emploie son terme. Le
- * « (responsable de site) » de l'acheteur, entre parenthèses, n'est pas touché.
+ * « responsable de site » ; quand le CCTP ne parle que de « chef de poste » (IGN), le mémoire emploie son terme. Dans
+ * le texte, le « (responsable de site) » qui suit le nom de l'acheteur (« en concertation avec l'IGN (responsable de
+ * site) »), entre parenthèses, n'est pas touché ; dans un titre ou un schéma (`parentheses`), la forme entre
+ * parenthèses est celle de GSS (« Contrôle 1 : le contrôle de fond (responsable de site) ») et suit le CCTP.
  */
-export function vocabulaireDuCctp(texte: string, dce: string): string {
+export function vocabulaireDuCctp(texte: string, dce: string, opts: { parentheses?: boolean } = {}): string {
   const d = normTxt(dce || '');
   const nb = (rx: RegExp) => (d.match(rx) || []).length;
   if (nb(/chefs? de poste/g) < 3 || nb(/(?:chefs?|responsables?) de site/g)) return texte;
-  return texte.replace(/(?<!\(\s?)\b([Cc]hef|[Rr]esponsable)(s?) de site\b(?!\s*\))/g, (_m, f: string, s: string) => `${/^[CR]/.test(f) ? 'C' : 'c'}hef${s} de poste`);
+  const rx = opts.parentheses ? /\b([Cc]hef|[Rr]esponsable)(s?) de site\b/g : /(?<!\(\s?)\b([Cc]hef|[Rr]esponsable)(s?) de site\b(?!\s*\))/g;
+  return texte.replace(rx, (_m, f: string, s: string) => `${/^[CR]/.test(f) ? 'C' : 'c'}hef${s} de poste`);
 }
 
 export function interditsDce(texte: string, dce: string): string {

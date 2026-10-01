@@ -15,9 +15,9 @@ import fs from 'fs';
 import path from 'path';
 import {
   chargerMemoireType, normaliser, rechercherRubriques,
-  type DonneesBesoin, type ExigenceMatrice, type MemoireType, type PlanMemoireType,
+  type DonneesBesoin, type ExigenceMatrice, type MemoireType, type PlanMemoireType, type SchemaRubrique,
 } from './memoire_type';
-import { ZONE_GSS } from './base_memoires';
+import { ZONE_GSS, vocabulaireDuCctp } from './base_memoires';
 
 export const PLACEHOLDER_V2 = '[À COMPLÉTER]';
 
@@ -187,6 +187,36 @@ export function titreSchemaMemoireType(id: string, mt?: MemoireType): string | u
   if (r.schema.source === 'bibliotheque' && r.schema.ref) return titreBibliotheque(r.schema.ref);
   if (r.schema.source === 'organigramme') return 'Notre organigramme';
   return undefined;
+}
+
+/**
+ * Vocabulaire du CCTP (« chef de poste » au lieu de « chef de site » / « responsable de site », vocabulaireDuCctp)
+ * appliqué aux titres du mémoire type : titres de rubrique et de sous-partie, titres de page de schéma, textes des
+ * schémas dessinés par le moteur (spec, process). Un schéma de la bibliothèque, figé, garde son dessin d'origine
+ * (consigne 6) ; seul le titre de sa page suit le CCTP. Le fond n'est pas touché (un mot de vocabulaire). Renvoie le
+ * mémoire type lui-même quand rien ne change.
+ */
+export function vocabulaireMemoireType(mt: MemoireType, dce: string): MemoireType {
+  const v = (x: string) => vocabulaireDuCctp(x, dce, { parentheses: true });
+  if (v('chef de site') === 'chef de site') return mt;
+  const profond = (x: any): any => (typeof x === 'string' ? v(x) : Array.isArray(x) ? x.map(profond)
+    : x && typeof x === 'object' ? Object.fromEntries(Object.entries(x).map(([k, y]) => [k, profond(y)])) : x);
+  const schema = (id: string, s: SchemaRubrique | null): SchemaRubrique | null => {
+    if (!s) return s;
+    const t = titreSchemaMemoireType(id, mt);
+    const titre = t && v(t) !== t ? v(t) : s.titre;
+    if (s.source === 'bibliotheque') return titre === s.titre ? s : { ...s, titre };
+    return { ...s, titre, params: profond(s.params), etapes: profond(s.etapes), alternative: s.alternative ? { ...s.alternative, titre: s.alternative.titre && v(s.alternative.titre), params: profond(s.alternative.params) } : s.alternative };
+  };
+  return {
+    ...mt,
+    rubriques: mt.rubriques.map((r) => ({
+      ...r,
+      titre: v(r.titre),
+      sous_parties: (r.sous_parties || []).map((sp) => ({ ...sp, titre: v(sp.titre) })),
+      schema: schema(r.id, r.schema),
+    })),
+  };
 }
 
 // ─── Repères des données à compléter ─────────────────────────────────────────────────────────────
