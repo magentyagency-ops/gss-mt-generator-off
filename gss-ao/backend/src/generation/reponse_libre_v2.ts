@@ -481,6 +481,11 @@ export function specProcessBesoin(etapes: Array<{ titre?: string; texte?: string
  * réduit au nom de l'étape, phrase générale (« … nous consulte pour le marché »), phrase qui reprend le titre de l'étape,
  * poste présenté comme acteur (« Le PC réalise les rondes »). Liste vide : étapes acceptables.
  */
+/** Carte qui ne fait que reprendre les intitulés de poste (« les SSIAP 2, SSIAP 1 et ADS tiennent les postes prescrits »). */
+const INTITULE_POSTE = /\b(?:tienn?ent|occupent|occupe|assurent|assure|tient)\s+(?:les|le|leurs?)\s+postes?\s*(?:prescrits?|pr[ée]vus?|demand[ée]s?|exig[ée]s?|d[ée]finis?|du (?:CCTP|march[ée]))?\s*\.?$/i;
+/** Étape de résultat (« Site sécurisé sans interruption », « Continuité de service garantie »…). */
+const RESULTAT = /s[ée]curis|s[ûu]ret[ée] (?:assur|garanti)|continuit|garanti|conform|ma[îi]tris|fiab|s[ée]r[ée]nit|r[ée]sultat|z[ée]ro|sans (?:interruption|rupture|incident|carence)|prot[ée]g|tranquill|qualit[ée]|respect|confian|trac[ée]|r[ée]activ|disponib|s[ée]curit[ée] (?:des|du)|assur[ée]e?s?\b/i;
+
 export function defautsEtapesBesoin(etapes: Array<{ titre?: string; texte?: string }> | undefined): string[] {
   const GENERIQUE = /^(?:(?:votre|vos|notre|nos|le|la|les)\s+)?(?:besoins?|enjeux?|dispositifs?|pilotages?|r[ée]sultats?|attentes?|r[ée]ponses?|process(?:us)?)$/i;
   const FORMULE = /nous consulte|consult\w* (?:GSS )?pour (?:le|ce|un) march[ée]|^(?:vos|nos) enjeux (?:comprennent|sont|portent)|^notre dispositif s.appuie|^notre pilotage (?:s.appuie|repose)|^votre besoin porte sur|blocs? cit[ée]s?/i;
@@ -496,8 +501,90 @@ export function defautsEtapesBesoin(etapes: Array<{ titre?: string; texte?: stri
     const t = norm(titre);
     if (t.length >= 4 && norm(texte).startsWith(t)) defauts.push(`${n} : la phrase reprend le titre de l'étape ; elle doit apporter une information nouvelle.`);
     if (POSTE_ACTEUR.test(texte)) defauts.push(`${n} : « ${texte} » présente un poste comme acteur ; le sujet est l'agent qui l'occupe, avec sa qualification, et son action respecte le CCTP.`);
+    if (INTITULE_POSTE.test(`${titre} ${texte}`)) defauts.push(`${n} : « ${titre} : ${texte} » ne fait que reprendre les intitulés de poste ; dis ce que l'agent fait de propre à ce marché.`);
   });
+  // « Pour arriver à ça » : la dernière étape dit le résultat obtenu pour l'acheteur.
+  const derniere = Array.isArray(etapes) && etapes.length ? etapes[etapes.length - 1] : null;
+  if (derniere && !RESULTAT.test(`${derniere.titre || ''} ${derniere.texte || ''}`)) {
+    defauts.push(`étape ${etapes!.length} : la dernière étape doit dire le résultat obtenu pour l'acheteur (site sécurisé, continuité de service, prestation conforme et contrôlée…), pas un moyen.`);
+  }
   return defauts;
+}
+
+/**
+ * Minimum déterministe du bloc « compréhension » (consigne 3) : au moins 4 attentes chiffrées et 3 points de vigilance.
+ * Quand la rédaction en donne moins, les puces manquantes sont tirées des exigences du DCE (matrice, sinon obligations
+ * chiffrées du CCTP) : d'abord celles que le DCE sanctionne (pénalité, manquement), puis les bloquantes et les
+ * chiffrées ; une exigence déjà citée dans le bloc (mêmes chiffres, ou 60 % de ses mots) n'est pas reprise. Chaque
+ * puce renvoie à la rubrique du mémoire qui la développe quand la matrice l'y rattache.
+ */
+export function completerBesoinMinimum(
+  texte: string,
+  sources: Array<{ exigence: string; rubrique?: string; criticite?: string }>,
+  plan?: PlanMemoireType,
+  dce = '',
+  minimum = { attentes: 4, vigilance: 3 },
+): { texte: string; ajoutees: number } {
+  const parties = String(texte || '').split(/(?=^## )/m);
+  const iAtt = parties.findIndex((p) => /^##\s+Vos attentes/i.test(p));
+  const iVig = parties.findIndex((p) => /^##\s+Les points de vigilance/i.test(p));
+  const puces = (p: string) => (p.match(/^\s*[-*•]\s+\S/gm) || []).length;
+  const manqueAtt = iAtt < 0 ? minimum.attentes : Math.max(0, minimum.attentes - puces(parties[iAtt]));
+  const manqueVig = iVig < 0 ? minimum.vigilance : Math.max(0, minimum.vigilance - puces(parties[iVig]));
+  if (!manqueAtt && !manqueVig) return { texte, ajoutees: 0 };
+  const motsDe = (t: string) => new Set(normaliser(t).split(/[^a-z0-9]+/).filter((w) => w.length >= 4));
+  const chiffres = (t: string) => (t.match(/\d+(?:[,.]\d+)?/g) || []);
+  const dejaCite = (e: string, dans: string) => {
+    const c = chiffres(e);
+    const n = normaliser(dans);
+    if (c.length && c.every((x) => new RegExp(`(?<![\\d,.])${x.replace('.', '[.,]')}(?![\\d])`).test(dans))) {
+      const m = [...motsDe(e)];
+      if (m.filter((w) => n.includes(w)).length / Math.max(1, m.length) >= 0.4) return true;
+    }
+    const m = [...motsDe(e)];
+    return m.length > 0 && m.filter((w) => n.includes(w)).length / m.length >= 0.6;
+  };
+  // Phrases du DCE qui sanctionnent un manquement : une exigence dont un chiffre y figure est « sanctionnée ».
+  // (« Tout manquement à cette obligation sera sanctionné… » vise la phrase qui la précède.)
+  const phrasesDce = String(dce || '').replace(/\s+/g, ' ').split(/(?<=[.;])\s+/);
+  const sanctions = phrasesDce.filter((ph, i) => /p[ée]nalit|sanctionn|manquement/i.test(ph) || /^(?:tout|ce|cet|cette)\s+(?:manquement|retard|non-respect)/i.test(phrasesDce[i + 1] || '')).join(' ');
+  const sanctionnee = (e: string) => /p[ée]nalit|sanctionn|manquement/i.test(e) || chiffres(e).some((x) => x.length >= 1 && new RegExp(`(?<![\\d,.])${x}\\s*(?:\\(\\d+\\)\\s*)?(?:h\\b|heures?|min|jours?|mois|semaines?)`, 'i').test(sanctions));
+  const rang = (e: { exigence: string; criticite?: string }) => (sanctionnee(e.exigence) ? 0 : 2) + (/bloqu/i.test(e.criticite || '') ? 0 : 1) + (chiffres(e.exigence).length ? 0 : 2);
+  const candidats = sources
+    .map((e) => ({ ...e, exigence: String(e.exigence || '').replace(/\s+/g, ' ').trim() }))
+    .filter((e) => e.exigence.split(' ').length >= 5 && e.exigence.length <= 330 && !/p[ée]nalit[ée]s?[^.]{0,80}\d[\d\s]*(?:€|euros?)|€/i.test(e.exigence)
+      // Phrase qui dépend de la précédente (« Dans ce cas, … », « Ce CR devra… ») : incompréhensible seule.
+      && !/^(?:dans ce cas|en ce cas|de m[êe]me|ce|cet|cette|ces|il|elle|ils|elles|celui|celle|ceux|ledit|ladite)\b/i.test(e.exigence))
+    .sort((a, b) => rang(a) - rang(b));
+  const renvoi = (id?: string) => {
+    const r = id && plan ? plan.rubriques.find((x) => x.id === id) : undefined;
+    const b = r && plan ? plan.blocs.find((x) => x.id === r.bloc) : undefined;
+    return r && b ? ` → notre réponse : « ${r.titre.replace(/\{\{[^}]*\}\}/g, '').replace(/\s*:\s*$/, '').trim()} », développée au bloc ${b.numero}` : '';
+  };
+  const choisies: string[] = [];
+  const prendre = (n: number) => {
+    const out: Array<{ exigence: string; rubrique?: string }> = [];
+    for (const e of candidats) {
+      if (out.length >= n) break;
+      if (choisies.includes(e.exigence) || dejaCite(e.exigence, `${parties.join('\n')}\n${out.map((x) => x.exigence).join('\n')}`)) continue;
+      choisies.push(e.exigence);
+      out.push(e);
+    }
+    return out;
+  };
+  const maj = (t: string) => t.charAt(0).toUpperCase() + t.slice(1).replace(/[.;]\s*$/, '');
+  let ajoutees = 0;
+  const att = prendre(manqueAtt).map((e) => `- **Ce que vous attendez** : ${maj(e.exigence)}${renvoi(e.rubrique)}.`);
+  const vig = prendre(manqueVig).map((e) => `- **Point de vigilance** : ${maj(e.exigence)}${renvoi(e.rubrique)}.`);
+  const ajouter = (i: number, titre: string, l: string[]) => {
+    if (!l.length) return;
+    ajoutees += l.length;
+    if (i >= 0) parties[i] = `${parties[i].trimEnd()}\n${l.join('\n')}\n\n`;
+    else parties.push(`${titre}\n\n${l.join('\n')}\n\n`);
+  };
+  ajouter(iAtt, '## Vos attentes et nos engagements', att);
+  ajouter(iVig < 0 ? -1 : parties.findIndex((p) => /^##\s+Les points de vigilance/i.test(p)), '## Les points de vigilance identifiés et nos réponses', vig);
+  return { texte: parties.join('').replace(/\n{3,}/g, '\n\n').trim(), ajoutees };
 }
 
 /** Mots qui ne terminent pas un titre coupé (« Le périmètre de la » → « Le périmètre »). */

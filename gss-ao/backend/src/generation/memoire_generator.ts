@@ -17,7 +17,7 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin,
-  valeursImposeesValides,
+  valeursImposeesValides, completerBesoinMinimum,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
 import {
@@ -6824,6 +6824,16 @@ RÈGLES DE FORME (rendu Marp) :
     if (secours) {
       console.warn('[MemoireGenerator] Compréhension du besoin : rédaction indisponible → texte de secours (faits du DCE).');
       texte = texteSecoursBesoin(besoin, o.perimetre);
+    }
+    // Minimum de la compréhension (consigne 3) : 4 attentes et 3 points de vigilance, complétés depuis les exigences
+    // du DCE (sanctionnées d'abord) quand la rédaction en donne moins.
+    {
+      const sources = (o.exigences || []).length ? o.exigences! : besoin.obligations.map((x) => ({ exigence: x }));
+      const m = completerBesoinMinimum(texte, sources, prep.plan, String(ctx.dce || ''));
+      if (m.ajoutees) {
+        texte = m.texte;
+        console.log(`[MemoireGenerator] Compréhension du besoin : ${m.ajoutees} attente(s) ou point(s) de vigilance ajouté(s) depuis les exigences du DCE (minimum 4 et 3).`);
+      }
     }
     const titre = court(rep?.titre_schema, 70) || titreDefaut;
     // Schéma de process : étapes de la réponse, puis correction des seules étapes, puis sous-titres du texte en phases.
