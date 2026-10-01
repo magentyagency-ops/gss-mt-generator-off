@@ -631,7 +631,16 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
       // Durée qui n'est pas un délai (« 24 heures de stationnement au tarif horaire ») : ignorée.
       if (/stationnement|tarif|recharge|cons[ée]cuti/i.test(autour.slice(60, 140))) continue;
       if (!/€|euros?\b|manquement|p[ée]nalit|retard (?:sup|inf)|retard d.un agent/i.test(autour)) return { statut: 'oui' };
-      seuil ||= (/mise à disposition|intervention|remplacement|prise de service|arrivée/.exec(autour) || ['intervention'])[0];
+      if (seuil) continue;
+      // Objet du seuil pris dans son contexte immédiat : « Absence d'un agent ou retard supérieur à 60 min » est une
+      // pénalité d'absence ou de retard, pas un délai d'intervention.
+      const avant = dceNorm.slice(Math.max(0, (m.index || 0) - 60), m.index || 0);
+      const objetDelai = /mise à disposition|intervention|remplacement|prise de service|arrivée/.exec(avant);
+      if (!objetDelai && /absence|retard/.test(avant)) {
+        seuil = /absence/.test(avant) && /retard/.test(avant) ? 'absence ou retard' : /absence/.test(avant) ? 'absence' : 'retard';
+      } else {
+        seuil = (objetDelai || /mise à disposition|intervention|remplacement|prise de service|arrivée/.exec(autour) || ['dépassement'])[0];
+      }
     }
     return seuil ? { statut: 'seuil', objet: seuil } : { statut: 'non' };
   };
@@ -659,15 +668,33 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
     if (seuilsPhrase.length === hors.length) {
       const premier = !seuils.length;
       for (const x of seuilsPhrase) if (!seuils.some((y) => y.duree === x.duree)) seuils.push(x);
-      if (premier) return /;\s*$/.test(ph) ? `${MARQUE_SEUIL};` : MARQUE_SEUIL;
+      // Puce gardée (« - Le marché pénalise… ») : la phrase reste dans sa liste.
+      const puce = (/^\s*[-*•]\s+/.exec(ph) || [''])[0];
+      if (premier) return puce + (/;\s*$/.test(ph) ? `${MARQUE_SEUIL};` : MARQUE_SEUIL);
     }
     // Puce : on garde le tiret vide ? non — la puce disparaît avec sa phrase.
     return '';
   }).filter((ph, k, t) => ph !== '' || false).join(' '));
   let sortie = retablir(lignes.filter((l, k, t) => !(l.trim() === '' && /^\s*[-*•]\s*$/.test(l))).join('\n').replace(/^\s*[-*•]\s*$/gm, '').replace(/\n{3,}/g, '\n\n'));
   if (seuils.length) {
-    const objets = [...new Set(seuils.map((x) => x.objet))];
-    const phrase = `Le marché fixe des délais de ${objets.join(' et de ')} de ${seuils.map((x) => x.duree).join(' et de ')} ; GSS organise sa mobilisation en conséquence`;
+    // Préposition élidée devant une voyelle (« délais d'intervention », « d'arrivée »).
+    const de = (x: string) => (/^[aeiouyéèêàâîïôûh]/i.test(x) ? `d’${x}` : `de ${x}`);
+    const PENALITE = /^(?:absence ou retard|absence|retard|dépassement)$/;
+    const delais = seuils.filter((x) => !PENALITE.test(x.objet));
+    const penalites = seuils.filter((x) => PENALITE.test(x.objet));
+    const parties: string[] = [];
+    if (delais.length) {
+      const objets = [...new Set(delais.map((x) => x.objet))];
+      parties.push(`fixe des délais ${objets.map(de).join(' et ')} de ${delais.map((x) => x.duree).join(' et de ')}`);
+    }
+    if (penalites.length) {
+      // Un seuil de pénalité n'est pas présenté comme un délai fixé par le marché.
+      const o = penalites[0].objet;
+      const quoi = o === 'absence ou retard' ? 'toute absence ou tout retard d’agent' : o === 'absence' ? 'toute absence d’agent' : o === 'retard' ? 'tout retard d’agent' : 'tout dépassement';
+      parties.push(`pénalise ${quoi} de plus de ${[...new Set(penalites.map((x) => x.duree))].join(' ou de ')}`);
+    }
+    const suite = delais.length && penalites.length ? 'sa mobilisation et ses remplacements' : delais.length ? 'sa mobilisation' : 'ses remplacements';
+    const phrase = `Le marché ${parties.join(' et ')} ; GSS organise ${suite} en conséquence`;
     sortie = sortie.replace(`${MARQUE_SEUIL};`, `${phrase} ;`).replace(MARQUE_SEUIL, `${phrase}.`).split(MARQUE_SEUIL).join('');
   }
   // « ces délais » sans antécédent (phrase retirée, aucun délai cité avant) : « les délais du marché ».
