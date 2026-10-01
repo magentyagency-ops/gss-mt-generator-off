@@ -5311,10 +5311,11 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         return { cle: `GSS_CH_${id}`, libelle: sec && sec !== libelle && !libelle.includes(sec) ? `${sec} — ${libelle}` : libelle };
       });
       // Premier message de l'assistant : propositions de réponse et réponses à relire, validables ou modifiables (D5).
+      // Aucun repère technique (« GSS_CH_n ») montré à GSS : l'assistant retrouve chaque réponse par son libellé.
       const aRelire = [...propositionsCadre.entries()].filter(([id]) => champsRediges.includes(id)).sort((a, b) => a[0] - b[0]);
       const conversation = aRelire.length ? [{ role: 'assistant' as const, date: new Date().toISOString(), texte: [
         `J'ai rempli le cadre de réponse avec le mémoire type de GSS. ${aRelire.length === 1 ? 'Une réponse est à relire' : `${aRelire.length} réponses sont à relire`} avant la remise :`,
-        ...aRelire.map(([id, c]) => `- ${court(champsEtat.find((x) => x.cle === `GSS_CH_${id}`)?.libelle || c.split(' : ').slice(1).join(' : '), 160)} (${/^Proposition/.test(c) ? 'proposition de réponse : question que le mémoire type ne traite pas' : c.split(' : ')[0].replace(/^Réponse à relire \(/, '').replace(/\)$/, '')}) [GSS_CH_${id}]`),
+        ...aRelire.map(([id, c]) => `- ${court(champsEtat.find((x) => x.cle === `GSS_CH_${id}`)?.libelle || c.split(' : ').slice(1).join(' : '), 160)} (${/^Proposition/.test(c) ? 'proposition de réponse : question que le mémoire type ne traite pas' : c.split(' : ')[0].replace(/^Réponse à relire \(/, '').replace(/\)$/, '')})`),
         '',
         'Pour chacune, vous pouvez :',
         '- la valider telle quelle : « Je valide la réponse sur … » (rien n\'est modifié) ;',
