@@ -41,4 +41,5 @@ console.log(r.texte);
 verifier('Étampes : 12 cases et la phrase de dimensionnement remplies', r.n === 13 && !/\[À COMPLÉTER\]/.test(r.texte), `${r.n} remplacement(s)`);
 verifier('Étampes : rotation 15 h = 2 vacations, nuit 9 h = 1', /Dimanche férié, 6 h–21 h \| Agent de sécurité \| en service : 2 \| rotation : 4/.test(r.texte) && /Nuit, 21 h–6 h \| Agent de sécurité \| en service : 2 \| rotation : 2/.test(r.texte) && /Agent de sécurité incendie \| en service : 0 \| rotation : 0/.test(r.texte));
 console.log(`  question : ${questionDimensionnement(dEt)}`);
+verifier('Étampes : équipe tirée du cas pratique (4 agents de sécurité + 2 maîtres-chiens, 2 suppléants)', dEt.titulaires === 6 && dEt.suppleants === 2 && !dEt.profils.some((x) => /incendie|encadr/i.test(x.profil)), JSON.stringify(dEt.profils.map((x) => [x.profil, x.titulaires])));
 console.log(ko ? `${ko} ÉCHEC(S)` : 'TOUT OK');

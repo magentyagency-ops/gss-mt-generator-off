@@ -29,6 +29,8 @@ export interface ProfilDimensionne {
   heuresAn: number;
   etp: number;
   titulaires: number;
+  /** Observation du tableau quand l'effectif ne vient pas d'heures hebdomadaires (cas pratique). */
+  observation?: string;
 }
 
 export interface LigneCasPratique { plage: string; profil: string; enService: number; rotation: number; dureeH: number; justification: string }
@@ -114,6 +116,7 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     profils.set(cle, x);
   }
   for (const x of profils.values()) {
+    if (x.observation !== undefined) continue;
     x.etp = Math.round((x.heuresAn / BASE_ETP) * 100) / 100;
     x.titulaires = Math.max(1, Math.ceil(x.etp - 0.05));
   }
@@ -134,6 +137,19 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     const d = plagesCas.get(plage);
     if (!plage || !profil || !d || !Number.isInteger(n) || n < 0 || n > 10) continue;
     casPratique.push({ plage, profil, enService: n, rotation: n * Math.ceil(d / VACATION_MAX_H), dureeH: d, justification: String(l?.justification || '').trim() });
+  }
+  // Accord-cadre sans poste permanent, avec un cas pratique : l'équipe proposée est celle du cas pratique (pour chaque
+  // profil, l'effectif nécessaire à la rotation sur la plage la plus exigeante).
+  if (!profils.size && casPratique.length) {
+    for (const l of casPratique) {
+      if (l.rotation <= 0) continue;
+      const cle = normaliser(l.profil);
+      const x = profils.get(cle) || { profil: l.profil, qualification: categorieDe(l.profil) === 'Agent cynophile' ? 'CQP APS – qualification cynophile' : /incendie/i.test(l.profil) ? 'SSIAP 1' : /encadr/i.test(l.profil) ? 'Encadrement' : 'CQP APS', lieux: [], heuresSemaine: 0, heuresAn: 0, etp: 0, titulaires: 0, observation: '' };
+      if (l.rotation > x.titulaires) { x.titulaires = l.rotation; x.observation = `cas pratique : ${l.enService} en service, ${l.rotation} pour la rotation (${l.plage})`; }
+      profils.set(cle, x);
+    }
+    const t = [...profils.values()].reduce((s2, x) => s2 + x.titulaires, 0);
+    return { profils: [...profils.values()], titulaires: t, suppleants: t ? Math.max(2, Math.ceil(t * PART_SUPPLEANTS)) : 0, casPratique };
   }
   if (!profils.size && !casPratique.length) return null;
   return { profils: [...profils.values()], titulaires, suppleants, casPratique };
@@ -164,7 +180,7 @@ export function categorieDe(profil: string): string {
 
 /** Lignes du tableau « L'équipe dédiée » (catégorie, qualification, nombre, observations). */
 export function lignesEquipe(d: Dimensionnement): string {
-  return d.profils.map((x) => `| ${categorieDe(x.profil)} | ${x.qualification} | ${x.titulaires} | ${fr(x.heuresSemaine)} h par semaine${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}, soit ${fr(x.etp)} ETP |`).join('\n');
+  return d.profils.map((x) => `| ${categorieDe(x.profil)} | ${x.qualification} | ${x.titulaires} | ${x.observation || `${fr(x.heuresSemaine)} h par semaine${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}, soit ${fr(x.etp)} ETP`} |`).join('\n');
 }
 
 /** Phrase de synthèse du dispositif d'un cas pratique, plage par plage. */
@@ -179,17 +195,17 @@ export function syntheseCasPratique(d: Dimensionnement): string {
 /** Question consolidée posée à GSS (proposition à valider). */
 export function questionDimensionnement(d: Dimensionnement): string {
   const parts: string[] = [];
-  if (d.profils.length) {
+  if (d.profils.length && !d.profils.some((x) => x.observation)) {
     parts.push(`équipe dédiée de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} (${d.profils.map((x) => `${x.titulaires} ${normaliser(categorieDe(x.profil)) === normaliser(x.profil) ? categorieDe(x.profil) : `${x.profil} (${categorieDe(x.profil).toLowerCase()})`} pour ${fr(x.heuresSemaine)} h par semaine`).join(', ')}, base de 1 607 heures par an et par ETP) et équipe suppléante de ${pluriel(d.suppleants, 'agent formé', 'agents formés')} au site`);
   }
-  if (d.casPratique.length) parts.push(`dispositif du cas pratique (${syntheseCasPratique(d)} ; vacations de ${VACATION_MAX_H} heures au plus)`);
+  if (d.casPratique.length) parts.push(`dispositif du cas pratique (${syntheseCasPratique(d)} ; vacations de ${VACATION_MAX_H} heures au plus)${d.titulaires ? `, d'où une équipe de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} (${d.profils.map((x) => effectifProfil(x.titulaires, x.profil)).join(', ')}) et une équipe suppléante de ${pluriel(d.suppleants, 'agent', 'agents')}` : ''}`);
   return `Proposition à valider : dimensionnement calculé à partir des postes et des horaires du DCE — ${parts.join(' ; ')}. GSS valide ces effectifs ou les modifie dans l'assistant.`;
 }
 
 /** Bloc des consignes de rédaction (cadre imposé) : les chiffres proposés, à reprendre tels quels. */
 export function texteDimensionnement(d: Dimensionnement): string {
   const l: string[] = ['', '', 'DIMENSIONNEMENT PROPOSÉ PAR GSS (calculé à partir des postes et des horaires du DCE ; proposition que GSS validera — reprends ces chiffres EXACTEMENT là où l\'effectif, le nombre d\'agents, de maîtres-chiens, d\'équipes ou les rotations sont demandés, au lieu d\'écrire [À COMPLÉTER]) :'];
-  for (const x of d.profils) l.push(`- ${x.profil} (${x.qualification}) : ${fr(x.heuresSemaine)} h par semaine, ${fr(x.heuresAn)} h par an, soit ${fr(x.etp)} ETP → ${pluriel(x.titulaires, 'titulaire')}${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}`);
+  for (const x of d.profils) l.push(x.observation ? `- ${x.profil} (${x.qualification}) : ${pluriel(x.titulaires, 'titulaire')} (${x.observation})` : `- ${x.profil} (${x.qualification}) : ${fr(x.heuresSemaine)} h par semaine, ${fr(x.heuresAn)} h par an, soit ${fr(x.etp)} ETP → ${pluriel(x.titulaires, 'titulaire')}${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}`);
   if (d.profils.length) l.push(`- Équipe dédiée : ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} ; équipe suppléante formée au site : ${pluriel(d.suppleants, 'agent', 'agents')}.`);
   if (d.casPratique.length) {
     l.push(`- Cas pratique (effectif en service et effectif nécessaire pour la rotation, vacations de ${VACATION_MAX_H} heures au plus) :`);
@@ -268,7 +284,7 @@ Réponds UNIQUEMENT par un objet JSON : {"postes": [...], "cas_pratique": {...} 
 /** Paragraphe du premier message de l'assistant : le dimensionnement proposé, à valider ou à modifier avant la remise. */
 export function messageDimensionnement(d: Dimensionnement): string {
   const l: string[] = ['J\'ai aussi proposé les effectifs, calculés à partir des postes et des horaires du cahier des charges (à relire avant la remise) :'];
-  for (const x of d.profils) l.push(`- ${x.profil} : ${fr(x.heuresSemaine)} h par semaine, soit ${fr(x.etp)} ETP → ${pluriel(x.titulaires, 'titulaire')} ;`);
+  for (const x of d.profils) l.push(x.observation ? `- ${x.profil} : ${pluriel(x.titulaires, 'titulaire')} (${x.observation}) ;` : `- ${x.profil} : ${fr(x.heuresSemaine)} h par semaine, soit ${fr(x.etp)} ETP → ${pluriel(x.titulaires, 'titulaire')} ;`);
   if (d.profils.length) l.push(`- équipe dédiée de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} et équipe suppléante de ${pluriel(d.suppleants, 'agent formé', 'agents formés')} au site ;`);
   for (const p of [...new Set(d.casPratique.map((x) => x.plage))]) l.push(`- cas pratique, ${p} : ${d.casPratique.filter((x) => x.plage === p && x.enService > 0).map((x) => `${effectifProfil(x.enService, x.profil)} (rotation ${x.rotation})`).join(', ') || 'aucun agent'} ;`);
   l.push('', 'Vous pouvez les valider (« Je valide les effectifs proposés ») ou les modifier (« Mets 7 agents SSIAP 2 dans l\'équipe dédiée »).');

@@ -12,6 +12,8 @@ const b = r("Les CV détaillés, agréments, certificats et cartes professionnel
 verifier('pièces à fournir → engagement', /sont joints à l’offre\.$/.test(b), b);
 const c = r("Le rapport mentionne l'heure. Cet exemple illustre le format du compte rendu ; il ne préjuge pas des événements réels de la mission.");
 verifier('« ne préjuge pas » retiré', c === "Le rapport mentionne l'heure.", c);
+const c2 = r("Le rapport mentionne l'heure. Ces mentions illustrent le format de compte rendu et ne prétendent pas rapporter des événements réellement survenus.");
+verifier('« ne prétendent pas rapporter » retiré (etampes1 14)', c2 === "Le rapport mentionne l'heure.", c2);
 const d = r("GSS former chaque agent à la prévention de la malveillance. GSS fournir les tenues. GSS tenir le registre. GSS assure la relève. Le dossier premier de GSS entre en vigueur.");
 verifier('GSS + infinitif', d === 'GSS forme chaque agent à la prévention de la malveillance. GSS fournit les tenues. GSS tient le registre. GSS assure la relève. Le dossier premier de GSS entre en vigueur.', d);
 const e = r("3. Une fois arrivé sur place (selon la distance, en 2 heures), l'agent fait sa prise de service. Une fois arrivé (selon la distance, en 45 minutes à 2 heures), il prend son poste.");
