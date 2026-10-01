@@ -90,7 +90,7 @@ Réponds UNIQUEMENT par un objet JSON : {"parties":[{"id":"c1","rubriques":["id 
 }
 
 export interface RepartitionCourt {
-  /** Rubriques par partie du RC, dans l'ordre du mémoire type. */
+  /** Rubriques par partie du RC, dans l'ordre des éléments cités par le RC (ordre du mémoire type à égalité). */
   parPartie: Record<string, string[]>;
   /** Rubriques placées par le repli lexical (non retenues par le modèle) : retirées en premier si la place manque. */
   secondaires: string[];
@@ -101,7 +101,7 @@ export interface RepartitionCourt {
 
 /**
  * Lecture de la réponse de répartition : ids inconnus ignorés, une rubrique dans une seule partie (la première citée),
- * ordre du mémoire type rétabli. Rubrique non citée : placée par le repli lexical et marquée secondaire. Réponse
+ * rubriques ordonnées selon les éléments cités par le RC. Rubrique non citée : placée par le repli lexical et marquée secondaire. Réponse
  * illisible : tout le repli lexical.
  */
 export function lireRepartition(reponse: string, mt: MemoireType, plan: PlanMemoireType, parties: PartieRC[]): RepartitionCourt {
@@ -109,7 +109,11 @@ export function lireRepartition(reponse: string, mt: MemoireType, plan: PlanMemo
   const lexical = repartitionLexicale(mt, plan, parties);
   const d = lireJson(reponse || '');
   const liste: any[] = Array.isArray(d?.parties) ? d.parties : [];
-  if (!liste.length) return { parPartie: lexical, secondaires: [], nonCouverts: {}, source: 'lexical' };
+  const ordonner = (pp: Record<string, string[]>) => {
+    for (const p of parties) pp[p.id] = ordonnerSelonRC(mt, p, pp[p.id] || [], ordre);
+    return pp;
+  };
+  if (!liste.length) return { parPartie: ordonner(lexical), secondaires: [], nonCouverts: {}, source: 'lexical' };
   const parPartie: Record<string, string[]> = Object.fromEntries(parties.map((p) => [p.id, [] as string[]]));
   const nonCouverts: Record<string, string[]> = {};
   const pris = new Set<string>();
@@ -129,17 +133,71 @@ export function lireRepartition(reponse: string, mt: MemoireType, plan: PlanMemo
   const besoin = mt.rubriques.find((r) => r.mode === 'besoin' && ordre.includes(r.id));
   const partieBesoin = parties.find((p) => PARTIE_COMPREHENSION.test(`${p.title} ${p.attendu || ''}`));
   if (besoin && partieBesoin && !pris.has(besoin.id)) { parPartie[partieBesoin.id].push(besoin.id); pris.add(besoin.id); }
+  // Rubrique non citée par le modèle (secondaire) : placée près de ses voisines telles que le MODÈLE les a placées
+  // (même bloc, titre proche : « Des tenues conformes à l'arrêté… » rejoint « Les tenues »), sinon dans la partie que
+  // désignent ses mots, sinon près de la rubrique du même bloc la plus proche dans le mémoire type ; le repli lexical
+  // seulement à défaut (il regroupait par bloc d'après SA propre répartition et éloignait une rubrique de sa voisine).
+  const partieModele = new Map<string, string>();
+  for (const [pid, ids] of Object.entries(parPartie)) for (const rid of ids) partieModele.set(rid, pid);
+  const blocDe = new Map(plan.rubriques.map((r) => [r.id, r.bloc]));
+  const titreDe = (id: string) => mt.rubriques.find((r) => r.id === id)?.titre || '';
   const secondaires: string[] = [];
-  for (const [pid, ids] of Object.entries(lexical)) {
+  for (const [pidLexical, ids] of Object.entries(lexical)) {
     for (const rid of ids) {
-      if (pris.has(rid) || mt.rubriques.find((r) => r.id === rid)?.mode === 'besoin') continue;
+      const r = mt.rubriques.find((x) => x.id === rid);
+      if (pris.has(rid) || !r || r.mode === 'besoin') continue;
+      const distance = (x: string) => Math.abs(ordre.indexOf(x) - ordre.indexOf(rid));
+      const voisines = [...partieModele.keys()].filter((x) => blocDe.get(x) === blocDe.get(rid));
+      const motsTitre = [...motsSignificatifs(r.titre)].filter((w) => !VIDES.has(w));
+      const proches = voisines.map((x) => { const m = motsSignificatifs(titreDe(x)); return { x, n: motsTitre.filter((w) => m.has(w)).length }; })
+        .filter((v) => v.n > 0).sort((a, b) => b.n - a.n || distance(a.x) - distance(b.x));
+      const parMots = parties.some((p) => scorePartie(r, p) > 0);
+      const voisine = [...voisines].sort((a, b) => distance(a) - distance(b))[0];
+      const pid = proches.length ? partieModele.get(proches[0].x)! : parMots ? pidLexical : voisine ? partieModele.get(voisine)! : pidLexical;
       pris.add(rid);
       parPartie[pid].push(rid);
       secondaires.push(rid);
     }
   }
-  for (const pid of Object.keys(parPartie)) parPartie[pid].sort((a, b) => ordre.indexOf(a) - ordre.indexOf(b));
-  return { parPartie, secondaires, nonCouverts, source: 'modele' };
+  return { parPartie: ordonner(parPartie), secondaires, nonCouverts, source: 'modele' };
+}
+
+/** Éléments cités par une partie du RC : son titre et ses attendus, découpés (« équipe », « organigramme », « démarche RSE »…). */
+export function elementsRC(p: PartieRC): string[] {
+  return `${p.title} ; ${String(p.attendu || '').replace(/Critère de jugement traité ici\s*:\s*/gi, ' ; ')}`
+    .split(/[;,/()«»]|\s+et\s+|\.\s/).map((x) => x.replace(/\(\d+\s*%\)/g, '').trim()).filter((x) => x.length >= 3);
+}
+
+/**
+ * Ordre des rubriques dans une partie du RC : celui des éléments que cite le RC (consigne 5 : seule la construction
+ * change). Chaque rubrique prend le rang du premier élément dont elle est le plus proche ; une rubrique sans aucun mot
+ * commun suit sa voisine dans le mémoire type ; l'ordre du mémoire type départage les égalités. Aucun texte ne change.
+ */
+export function ordonnerSelonRC(mt: MemoireType, p: PartieRC, ids: string[], ordre: string[]): string[] {
+  const elements = elementsRC(p);
+  const rang = new Map<string, number>();
+  for (const id of ids) {
+    const r = mt.rubriques.find((x) => x.id === id);
+    if (!r) continue;
+    if (r.mode === 'besoin') { const k = elements.findIndex((e) => PARTIE_COMPREHENSION.test(e)); rang.set(id, k < 0 ? -1 : k); continue; }
+    let meilleur = 0;
+    elements.forEach((e, k) => {
+      const s = rechercherRubriques(mt, e, 1, [id])[0]?.score || 0;
+      if (s > meilleur) { meilleur = s; rang.set(id, k); }
+    });
+  }
+  const selonMT = [...ids].sort((a, b) => ordre.indexOf(a) - ordre.indexOf(b));
+  const blocDe = (id: string) => mt.rubriques.find((x) => x.id === id)?.bloc;
+  const rangFinal = new Map(selonMT.map((id, i) => {
+    if (rang.has(id)) return [id, rang.get(id)!];
+    // Voisine : d'abord une rubrique du même bloc (précédente, puis suivante), sinon n'importe laquelle.
+    const avant = selonMT.slice(0, i).reverse();
+    const apres = selonMT.slice(i + 1);
+    const voisine = avant.find((x) => rang.has(x) && blocDe(x) === blocDe(id)) || apres.find((x) => rang.has(x) && blocDe(x) === blocDe(id))
+      || avant.find((x) => rang.has(x)) || apres.find((x) => rang.has(x));
+    return [id, voisine ? rang.get(voisine)! : elements.length];
+  }));
+  return selonMT.map((id, i) => ({ id, i })).sort((a, b) => rangFinal.get(a.id)! - rangFinal.get(b.id)! || a.i - b.i).map((x) => x.id);
 }
 
 // ─── Format court : sélection par priorité (avant toute condensation) ────────────────────────────
@@ -466,15 +524,29 @@ export function fideliteReponse(reference: string, reponse: string, limite = fal
 /**
  * Rubriques d'une partie qui répondent directement à un élément cité par le RC (titre et attendus découpés en
  * éléments : « équipe », « organigramme », « démarche RSE »…) : pour chaque élément, la rubrique la plus proche (mots-clés
- * et titre). Elles ne sont jamais retirées en entier par la sélection (seulement leurs sous-parties secondaires).
+ * et titre), si ce rapprochement est net (titre, sigle ou plusieurs mots-clés ; pas d'égalité ; jamais une rubrique
+ * secondaire). Elles ne sont jamais retirées en entier par la sélection (seulement leurs sous-parties secondaires).
  */
-export function rubriquesEssentielles(mt: MemoireType, p: PartieRC, ids: string[]): Set<string> {
-  const elements = `${p.title} ; ${String(p.attendu || '').replace(/Critère de jugement traité ici\s*:\s*/gi, ' ; ')}`
-    .split(/[;,/()«»]|\s+et\s+|\.\s/).map((x) => x.replace(/\(\d+\s*%\)/g, '').trim()).filter((x) => x.length >= 3);
+export function rubriquesEssentielles(mt: MemoireType, p: PartieRC, ids: string[], secondaires: string[] = []): Set<string> {
+  const net = (x: string) => ` ${normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()} `;
+  const sujet = (titre: string) => normaliser(titre.split(/\s[:—–-]\s/)[0]);
+  // Rubrique placée faute de mieux (non rattachée par le modèle) : jamais essentielle.
+  const candidats = ids.filter((id) => !secondaires.includes(id));
   const out = new Set<string>();
-  for (const e of elements) {
-    const r = rechercherRubriques(mt, e, 1, ids)[0];
-    if (r && r.score >= 1) out.add(r.id);
+  for (const e of elementsRC(p)) {
+    const res = rechercherRubriques(mt, e, candidats.length || 1, candidats);
+    if (!res.length || res[0].score < 1) continue;
+    const r = mt.rubriques.find((x) => x.id === res[0].id)!;
+    // Égalité entre plusieurs rubriques : aucune n'est essentielle, sauf les volets d'un même sujet (même titre avant
+    // « : ») : la première l'est (« démarche RSE » → l'engagement écologique ; « renfort » → ni l'événementiel ni la commande).
+    const exaequo = res.filter((x) => x.score === res[0].score);
+    if (exaequo.length > 1 && !exaequo.every((x) => sujet(mt.rubriques.find((y) => y.id === x.id)?.titre || '') === sujet(r.titre))) continue;
+    // Le score doit reposer sur le titre de la rubrique, sur plusieurs mots-clés ou sur un sigle (RSE, SSIAP, PTI…),
+    // pas sur un seul mot courant (« renfort »).
+    const motsE = motsSignificatifs(e);
+    const surTitre = [...motsSignificatifs(r.titre)].some((w) => !VIDES.has(w) && motsE.has(w));
+    const sigle = r.mots_cles.some((k) => /^[A-Z0-9]{2,}(?: [A-Z0-9]{2,})*$/.test(k.trim()) && net(e).includes(net(k)));
+    if (surTitre || sigle || res[0].score >= 1.5) out.add(r.id);
   }
   return out;
 }

@@ -30,7 +30,7 @@ describe('Format court : répartition des rubriques entre les parties du RC', ()
     expect(r.c1).toContain('b2_organigramme');
   });
 
-  it('lecture de la réponse du modèle : ids inconnus ignorés, doublons retirés, ordre du mémoire type, oubliés en secondaires', () => {
+  it('lecture de la réponse du modèle : ids inconnus ignorés, doublons retirés, oubliés en secondaires', () => {
     const rep = lireRepartition(JSON.stringify({ parties: [
       { id: 'c1', rubriques: ['b3_recrutement', 'b2_organigramme', 'inconnue'], non_couverts: [] },
       { id: 'c2', rubriques: ['b2_organigramme', 'b5_remplacement_imprevu'], non_couverts: ['Plan de continuité'] },
@@ -44,8 +44,46 @@ describe('Format court : répartition des rubriques entre les parties du RC', ()
     expect(rep.parPartie.c5).toContain('b1_comprehension');
     expect(rep.secondaires).not.toContain('b2_organigramme');
     expect(rep.secondaires.length).toBeGreaterThan(10);
-    const ordre = plan.rubriques.map((r) => r.id);
-    for (const ids of Object.values(rep.parPartie)) expect([...ids].sort((a, b) => ordre.indexOf(a) - ordre.indexOf(b))).toEqual(ids);
+  });
+
+  // Plan du RC d'imm (vérification 4) : ordre des éléments cités, secondaires près de leurs voisines, essentielles nettes.
+  const IMM: PartieRC[] = [
+    { id: 'c1', title: 'Organisation et moyens humains', attendu: 'équipe, encadrement, organigramme, qualifications' },
+    { id: 'c2', title: 'Continuité de service, gestion des situations dégradées et plan de reprise du personnel', attendu: 'Critère de jugement traité ici : « Délais de remplacement et capacité de renfort » (10 %)' },
+    { id: 'c3', title: 'Moyens matériels et outils de suivi / reporting', attendu: '' },
+    { id: 'c4', title: 'Formation, qualité et démarche RSE', attendu: 'Critère de jugement traité ici : « Formation, qualité et démarche RSE » (10 %)' },
+    { id: 'c5', title: 'Compréhension des enjeux du CCTP et cohérence du prix', attendu: 'décomposition justificative' },
+  ];
+  const repImm = lireRepartition(JSON.stringify({ parties: [
+    { id: 'c1', rubriques: ['b2_catalogue', 'b2_organigramme', 'b3_adequation', 'b3_recrutement'] },
+    { id: 'c2', rubriques: ['b3_reprise_personnel', 'b5_remplacement_prevu', 'b5_remplacement_imprevu'] },
+    { id: 'c3', rubriques: ['b4_tenues', 'b4_communication', 'b4_main_courante'] },
+    { id: 'c4', rubriques: ['b2_ecologie_mobilite_numerique', 'b3_formation_ads', 'b5_controle_trois_niveaux'] },
+    { id: 'c5', rubriques: ['b1_comprehension'] },
+  ] }), mt, plan, IMM);
+
+  it('rubriques d\'une partie dans l\'ordre des éléments cités par le RC (formation, puis qualité, puis RSE)', () => {
+    const c4 = repImm.parPartie.c4;
+    expect(c4.indexOf('b3_formation_ads')).toBeLessThan(c4.indexOf('b5_controle_trois_niveaux'));
+    expect(c4.indexOf('b5_controle_trois_niveaux')).toBeLessThan(c4.indexOf('b2_ecologie_mobilite_numerique'));
+    const c2 = repImm.parPartie.c2;
+    expect(c2.indexOf('b5_remplacement_prevu')).toBeLessThan(c2.indexOf('b3_reprise_personnel'));
+  });
+
+  it('rubrique secondaire placée près de sa voisine (tenues réglementaires avec les tenues)', () => {
+    expect(repImm.secondaires).toContain('b4_tenues_reglementaires');
+    expect(repImm.parPartie.c3).toContain('b4_tenues_reglementaires');
+    expect(repImm.parPartie.c3.indexOf('b4_tenues_reglementaires')).toBe(repImm.parPartie.c3.indexOf('b4_tenues') + 1);
+  });
+
+  it('rubrique essentielle : pas sur un seul mot courant à égalité (« renfort »), jamais une secondaire', () => {
+    const e2 = rubriquesEssentielles(mt, IMM[1], repImm.parPartie.c2, repImm.secondaires);
+    expect(e2.has('b5_evenementiel')).toBe(false);
+    expect(e2.has('b5_commande_supplementaire')).toBe(false);
+    expect(e2.has('b3_reprise_personnel')).toBe(true);
+    expect(rubriquesEssentielles(mt, IMM[3], repImm.parPartie.c4, repImm.secondaires).has('b2_ecologie_mobilite_numerique')).toBe(true);
+    const ids = plan.rubriques.map((r) => r.id);
+    expect(rubriquesEssentielles(mt, IMM[1], ids, ['b5_remplacement_prevu', 'b5_remplacement_imprevu']).has('b5_remplacement_prevu')).toBe(false);
   });
 
   it('réponse illisible : repli lexical complet', () => {

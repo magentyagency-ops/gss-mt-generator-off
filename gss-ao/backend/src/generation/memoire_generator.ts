@@ -7414,10 +7414,11 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const sommePoids = plan.reduce((s, p) => s + poids[p.id], 0) || 1;
     // Rubrique qui répond directement à un élément cité par le RC (« démarche RSE », « organigramme »…) : jamais retirée
     // en entier ; rubrique placée faute de mieux (non rattachée par le modèle) : retirée en premier.
-    const essentielles = new Set(plan.flatMap((p) => [...rubriquesEssentielles(mt, p, rep.parPartie[p.id])]));
+    const essentielles = new Set(plan.flatMap((p) => [...rubriquesEssentielles(mt, p, rep.parPartie[p.id], rep.secondaires)]));
     const infosDe = (pid: string) => rep.parPartie[pid].filter((id) => (textes[id] || '').trim()).map((id) => {
       const r = mtParId.get(id)!;
-      return { id, titre: r.titre, priorite: rep.secondaires.includes(id) ? 4 : r.priorite, sousParties: r.sous_parties, texte: textes[id], garder: r.mode === 'besoin' || essentielles.has(id) };
+      // La référence du secteur du client garde sa priorité même placée faute de mieux (client de santé : référence santé).
+      return { id, titre: r.titre, priorite: rep.secondaires.includes(id) && id !== planMT.secteurReference?.id ? 4 : r.priorite, sousParties: r.sous_parties, texte: textes[id], garder: r.mode === 'besoin' || essentielles.has(id) };
     });
     // Part réservée aux éléments attendus par le RC hors mémoire type (rédigés à part, proposés à GSS).
     const aCompleterRC = (pid: string) => !!rep.nonCouverts[pid]?.length || !infosDe(pid).length;
