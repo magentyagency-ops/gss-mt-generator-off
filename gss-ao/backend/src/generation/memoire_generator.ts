@@ -20,7 +20,7 @@ import {
   valeursImposeesValides, completerBesoinMinimum,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
-import { CONSIGNE_DIMENSIONNEMENT, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, type Dimensionnement } from './dimensionnement';
+import { CONSIGNE_DIMENSIONNEMENT, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, type Dimensionnement } from './dimensionnement';
 import {
   candidatsReference, blocReference, referencesRetenues, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
@@ -5346,16 +5346,31 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       const dessins = specs.length
         ? await dessinerSpecs(specs.map(([id, s]) => ({ id: `champ_${id}`, gabarit: s!.spec!.gabarit, params: s!.spec!.params, source: texteChamp(id), titre_section: s!.spec!.titre })), 'paysage', themeActif())
         : new Map<string, { ok: boolean; svg?: string; erreurs?: string[] }>();
+      // Schéma demandé par l'intitulé du champ (« Schéma opérationnel (comprenant la répartition des effectifs) ») sans
+      // schéma du mémoire type : répartition du cas pratique plage par plage, sinon process des sous-titres de la réponse.
+      const contexteChamp = (id: number) => descriptors.find((x) => x.id === id)?.context || '';
+      const demandes = champsRediges
+        .filter((id) => /sch[ée]ma/i.test(contexteChamp(id)) && !svgComprehension.has(id) && !dessins.get(`champ_${id}`)?.ok)
+        .map((id) => ({ id, spec: specProcessBesoin(etapesSchemaDemande(texteChamp(id), dimensionnementCadre) || [], 'flux') }))
+        .filter((x) => x.spec);
+      const dessinsDemandes = demandes.length
+        ? await dessinerSpecs(demandes.map((x) => ({ id: `demande_${x.id}`, gabarit: x.spec!.gabarit, params: x.spec!.params, source: `${texteChamp(x.id)}\n${texteDuCadre}`, titre_section: libelleChamp(x.id).slice(0, 120) })), 'paysage', themeActif())
+        : new Map<string, { ok: boolean; svg?: string; erreurs?: string[] }>();
+      for (const x of demandes) {
+        const r = dessinsDemandes.get(`demande_${x.id}`);
+        console.log(`[MemoireGenerator] Schéma demandé par le champ ${x.id} : ${r?.ok ? 'dessiné' : `refusé (${(r?.erreurs || ['moteur indisponible']).slice(0, 2).join(' | ')})`}.`);
+      }
       const developpees = champsRediges
         .map((id) => {
           const s = schemasMT.get(id);
           const d = dessins.get(`champ_${id}`);
-          const svg = svgComprehension.get(id) || (d?.ok ? d.svg : undefined);
-          const svgId = svgComprehension.has(id) ? 'comprehension' : svg ? `mt_${s!.id}` : undefined;
+          const dd = dessinsDemandes.get(`demande_${id}`);
+          const svg = svgComprehension.get(id) || (d?.ok ? d.svg : undefined) || (dd?.ok ? dd.svg : undefined);
+          const svgId = svgComprehension.has(id) ? 'comprehension' : d?.ok && s ? `mt_${s.id}` : dd?.ok ? `demande_${id}` : undefined;
           return { cle: `GSS_CH_${id}`, question: libelleChamp(id), texte: texteChamp(id), prefere: s?.ref || (s?.spec && !svg ? s.alternative : undefined), svg, svgId };
         })
         // Champ de valeur (« Effectif … (transmis pour information) ») : jamais de schéma dessous.
-        .filter((x) => (x.texte.length >= 600 && !champValeur(x.question)) || x.svgId === 'comprehension');
+        .filter((x) => (x.texte.length >= 600 && !champValeur(x.question)) || x.svgId === 'comprehension' || !!x.svgId?.startsWith('demande_'));
       await schemasSelonDce(developpees, dceContext);
       const nSchemas = await insererSchemasReponses(zip, xmlDoc, developpees, { seulementReprise: !!repriseMT });
       if (nSchemas) console.log(`[MemoireGenerator] ${nSchemas} schéma(s) GSS inséré(s) sous les réponses.`);

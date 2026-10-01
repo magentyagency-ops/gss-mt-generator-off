@@ -274,3 +274,44 @@ export function messageDimensionnement(d: Dimensionnement): string {
   l.push('', 'Vous pouvez les valider (« Je valide les effectifs proposés ») ou les modifier (« Mets 7 agents SSIAP 2 dans l\'équipe dédiée »).');
   return l.join('\n');
 }
+
+/**
+ * Étapes du schéma demandé par l'intitulé d'un champ (« Schéma opérationnel (comprenant la répartition des effectifs) ») :
+ * la répartition du cas pratique plage par plage, puis l'étape de résultat ; sans cas pratique, les sous-titres de la
+ * réponse en phases successives. Mots et chiffres repris de la réponse (contrôle du moteur de schémas). null si moins de
+ * trois étapes.
+ */
+export function etapesSchemaDemande(texte: string, d?: Dimensionnement | null): Array<{ titre: string; texte?: string; role?: string }> | null {
+  if (d?.casPratique.length) {
+    const plages = [...new Set(d.casPratique.map((x) => x.plage))];
+    const dispositif = (p: string) => {
+      const l = d.casPratique.filter((x) => x.plage === p && x.enService > 0);
+      return l.length ? `${l.map((x) => effectifProfil(x.enService, x.profil)).join(' + ')} en service ; rotation : ${l.map((x) => x.rotation).join(' + ')}` : 'Aucun agent en service';
+    };
+    // Plages au même dispositif (dimanche et lundi fériés de 6 h à 21 h) : une seule étape (« Dimanche et lundi, 6 h–21 h »).
+    const groupes: Array<{ plages: string[]; texte: string }> = [];
+    for (const p of plages) {
+      const t = dispositif(p);
+      const g = groupes.find((x) => x.texte === t && x.plages[0].split(',').slice(1).join(',').trim() === p.split(',').slice(1).join(',').trim());
+      if (g) g.plages.push(p); else groupes.push({ plages: [p], texte: t });
+    }
+    const titre = (l: string[]) => {
+      if (l.length === 1) return l[0];
+      const jours = l.map((p) => p.split(/[\s,]/)[0]);
+      return `${jours.map((j, i) => (i ? j.toLowerCase() : j)).join(' et ')}, ${l[0].split(',').slice(1).join(',').trim()}`;
+    };
+    const etapes = groupes.slice(0, 4).map((g) => ({ titre: titre(g.plages), texte: g.texte }));
+    return [...etapes, { titre: 'Site sécurisé en continu', texte: 'Gardiennage du site en présence permanente', role: 'vert' }];
+  }
+  // Sous-titres : lignes courtes sans ponctuation finale, suivies d'un paragraphe.
+  const lignes = String(texte || '').split('\n').map((l) => l.trim());
+  const etapes: Array<{ titre: string; texte?: string }> = [];
+  lignes.forEach((l, i) => {
+    const mots = l.split(/\s+/).length;
+    if (!l || /[.:;!?]$/.test(l) || /^[•\-*\d]/.test(l) || mots < 2 || mots > 9 || /\|/.test(l)) return;
+    const suite = lignes.slice(i + 1).find((x) => x);
+    if (!suite || suite.split(/\s+/).length < 8) return;
+    etapes.push({ titre: l, texte: (suite.split(/(?<=[.!?])\s/)[0] || '').replace(/^[•\-*]\s*/, '') });
+  });
+  return etapes.length >= 3 ? etapes.slice(0, 5) : null;
+}

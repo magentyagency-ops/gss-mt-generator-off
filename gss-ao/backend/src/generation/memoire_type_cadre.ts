@@ -613,6 +613,9 @@ const AUDIT_FREQ = /\baudits?\b[^.;\n]{0,80}?\b(?:annuel|semestriel|trimestriel|
  * ne va qu'avec son interlocuteur unique : associé à un autre nom, il devient « [À COMPLÉTER] ». Chaque retrait
  * donne une question à GSS.
  */
+/** Proposition de GSS quand le chien d'un binôme cynophile ne peut pas exercer (à valider par GSS). */
+export const RELAIS_CYNOPHILE = 'Si le chien ne peut pas exercer, GSS fait appel à un autre binôme cynophile de ses équipes pour assurer le relais.';
+
 export function controlerFaitsNouveauxCadre(valeur: string, contexte: string, s: SourcesFaitsCadre): { texte: string; questions: string[] } {
   const questions: string[] = [];
   let v = String(valeur || '');
@@ -667,11 +670,25 @@ export function controlerFaitsNouveauxCadre(valeur: string, contexte: string, s:
     }
     return { texte: v, questions };
   }
-  const texte = v.split('\n').map((ligne) => ligne.split(/(?<=[.;!?])\s+/).filter((ph) => {
+  // Mise en situation « chien ne pouvant exercer » : une phrase retirée sur la relève du chien est remplacée par une
+  // proposition à valider (relais par un autre binôme cynophile de GSS), pour ne pas laisser la question sans réponse.
+  const situationChien = /chien[^.]{0,40}(?:ne pouvant|ne peut|indisponib|inapte)|indisponibilit[ée] (?:du|d.un) chien/i.test(contexte || '');
+  let relaisPropose = false;
+  const texte = v.split('\n').map((ligne) => ligne.split(/(?<=[.;!?])\s+/).map((ph) => {
     const m = motifs(ph);
-    if (!m.length) return true;
+    if (!m.length) return ph;
+    if (situationChien && !relaisPropose && /\bchiens?\b|cynophil|ma[îi]tres?-chiens?/i.test(ph)) {
+      relaisPropose = true;
+      questions.push(`Proposition à valider${libelle ? ` (champ « ${libelle} »)` : ''} : « ${RELAIS_CYNOPHILE} » remplace « ${ph.replace(/\s+/g, ' ').trim()} » (${[...new Set(m)].join(', ')} absent(s) des sources de GSS).`);
+      return RELAIS_CYNOPHILE;
+    }
     questions.push(`À confirmer par GSS${libelle ? ` (champ « ${libelle} »)` : ''}, retiré de la réponse : « ${ph.replace(/\s+/g, ' ').trim()} » — ${[...new Set(m)].join(', ')} absent(s) du DCE, du mémoire type, des mémoires et du registre de GSS.`);
-    return false;
-  }).join(' ')).join('\n').replace(/\s*;\s*$/gm, '.').replace(/\n{3,}/g, '\n\n').trim();
+    return null;
+  }).filter((ph): ph is string => ph !== null).join(' ')).join('\n').replace(/\s*;\s*$/gm, '.').replace(/\n{3,}/g, '\n\n').trim();
+  // La réponse ne dit rien du chien alors que la mise en situation le demande : proposition ajoutée, à valider.
+  if (situationChien && !relaisPropose && !/\bchiens?\b|cynophil/i.test(texte)) {
+    questions.push(`Proposition à valider${libelle ? ` (champ « ${libelle} »)` : ''} : « ${RELAIS_CYNOPHILE} » (indisponibilité du chien, demandée par la mise en situation).`);
+    return { texte: `${texte}\n${RELAIS_CYNOPHILE}`.trim(), questions };
+  }
   return { texte: texte || '[À COMPLÉTER]', questions };
 }
