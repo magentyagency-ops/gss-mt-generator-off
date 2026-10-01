@@ -330,7 +330,13 @@ export function pageDe(fichier: string, titre: string, derniere = false): number
   const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
   const cible = norm(titre).slice(0, 40);
   const pages = r.stdout.split('\f');
-  const trouvees = pages.map((p, i) => ({ p: norm(p), i })).filter(({ p, i }) => i > 0 && !/^\s*sommaire\b/.test(p) && !p.includes(' sommaire ') && p.includes(cible));
+  // En-tête de page : 1re ligne non vide « GLOBAL SECURITY SERVICES … <TITRE DE LA RUBRIQUE> ».
+  const entete = (p: string) => norm(p.split('\n').find((l) => l.trim()) || '');
+  const candidates = pages.map((p, i) => ({ p: norm(p), e: entete(p), i })).filter(({ p, i }) => i > 0 && !/^\s*sommaire\b/.test(p) && !p.includes(' sommaire '));
+  // Priorité aux pages dont l'en-tête porte le titre (pages de la rubrique elle-même) ; à défaut, le texte de la page,
+  // hors pages d'ouverture de bloc (« 04 nos moyens… »), qui listent les titres de toutes leurs rubriques.
+  const parEntete = candidates.filter(({ e }) => e.startsWith('global security services') && e.includes(cible));
+  const trouvees = parEntete.length ? parEntete : candidates.filter(({ p }) => !/^\d{2} /.test(p) && p.includes(cible));
   const t = derniere ? trouvees[trouvees.length - 1] : trouvees[0];
   return t ? t.i + 1 : undefined;
 }
