@@ -1768,6 +1768,9 @@ const INTERDITS_ADAPTATION: Array<[RegExp, string]> = [
   [/p[ée]nalit[ée]s?[^.;\n]{0,120}?\d[\d\s]*(?:,\d+)?\s*(?:€|euros?)/i, 'montant de pénalité'],
 ];
 
+/** Exigence écrite à la voix de l'acheteur (« son remplaçant devra être présent », « quels que soit », « le titulaire »). */
+const VOIX_ACHETEUR = /\b(?:devra|devront|doit|doivent|est tenu|sont tenus|il est demand[ée]|quels? que soi(?:t|ent)|vu que)\b|\b(?:le|au|du) titulaire\b/i;
+
 /** Motif de refus d'un texte proposé par le modèle (ou null s'il est acceptable). */
 function refusTexteNouveau(nouveau: string, ancien: string, o: OptionsModifications): string | null {
   for (const [rx, motif] of INTERDITS_ADAPTATION) if (rx.test(nouveau) && !rx.test(ancien) && !(motif === 'Covid' && rx.test(o.dce || ''))) return motif;
@@ -1777,7 +1780,7 @@ function refusTexteNouveau(nouveau: string, ancien: string, o: OptionsModificati
   // utilisateurs … ») : ce n'est pas une adaptation du texte de GSS, et l'exigence est traitée par sa rubrique.
   const motsAncien = new Set(normaliser(ancien).split(/[^a-z0-9]+/));
   const dejaDansAncien = (ph: string) => { const m = normaliser(ph).split(/[^a-z0-9]+/).filter((w) => w.length >= 3); return !!m.length && m.filter((w) => motsAncien.has(w)).length / m.length >= 0.8; };
-  if (o.dce && nouveau.split(/(?<=[.!?;])\s+/).some((ph) => recopieDuDce(ph, o.dce!) && !dejaDansAncien(ph))) return 'recopie du CCTP';
+  if (o.dce && nouveau.split(/(?<=[.!?;])\s+/).some((ph) => VOIX_ACHETEUR.test(ph) && recopieDuDce(ph, o.dce!) && !dejaDansAncien(ph))) return 'recopie du CCTP à la voix de l\'acheteur';
   const admis = new Set([...nombresDe(ancien), ...nombresDe(o.dce || ''), ...(o.nombresAutorises || []).flatMap(nombresDe)]);
   const inconnus = nombresDe(nouveau).filter((n) => !admis.has(n));
   if (inconnus.length) return `chiffre absent du DCE (${[...new Set(inconnus)].join(', ')})`;
