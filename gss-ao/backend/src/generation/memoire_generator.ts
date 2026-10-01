@@ -2277,6 +2277,44 @@ ${rubriques.map((x) => `- ${x.id} : ${x.title}`).join('\n')}` },
     return out;
   }
 
+  /**
+   * Mémoire type (réponse libre v2, format court) : la demande particulière pour UNE rubrique, partie ou proposition,
+   * comme en v1 : points de fond répartis sur elle, consignes de forme (partout) et passages du document complémentaire
+   * proches de son sujet (cosinus ≥ 0,3, 3 au plus). Le document est indexé une seule fois et compte même sans texte
+   * de demande. « consigne » : undefined si la demande ne concerne pas la rubrique ; « passages » : document seul.
+   */
+  private demandeMemoireType(repartition: { forme: string; parRubrique: Record<string, string[]> } | null): {
+    consigne: (id: string | undefined, sujet: string) => Promise<string | undefined>;
+    passages: (sujet: string) => Promise<string>;
+  } {
+    const d = this.demandeParticuliere;
+    const chunks = this.chunksDocumentComplementaire();
+    let index: Promise<void> | null = null;
+    const passages = async (sujet: string): Promise<string> => {
+      if (!chunks.length) return '';
+      index ||= this.embedChunks(chunks).catch((e: any) => { console.warn(`[MemoireGenerator] Document complémentaire non indexé : ${e?.message || e}`); });
+      await index;
+      try {
+        const [emb] = await this.embedTexts([sujet.slice(0, 1000)]);
+        const choisis = chunks.filter((c) => c.embedding).map((c) => ({ c, s: cosine(emb, c.embedding!) })).filter((x) => x.s >= 0.3).sort((a, b) => b.s - a.s).slice(0, 3).map((x) => x.c.text.trim());
+        return choisis.length ? `Document complémentaire « ${d?.documentNom || 'document'} » fourni par GSS (informations valables, à exploiter quand elles concernent le sujet) :\n${choisis.join('\n---\n')}` : '';
+      } catch (e: any) {
+        console.warn(`[MemoireGenerator] Document complémentaire : recherche indisponible (${e?.message || e}).`);
+        return '';
+      }
+    };
+    const consigne = async (id: string | undefined, sujet: string): Promise<string | undefined> => {
+      const parties: string[] = [];
+      const points = id ? repartition?.parRubrique[id] || [] : [];
+      if (points.length) parties.push(`Points à faire figurer ici, rédigés comme des faits de l'offre GSS : ${points.join(' ; ')}`);
+      if (repartition?.forme) parties.push(`Forme, à appliquer ici : ${repartition.forme}`);
+      const doc = await passages(sujet);
+      if (doc) parties.push(doc);
+      return parties.length ? parties.join('\n') : undefined;
+    };
+    return { consigne, passages };
+  }
+
   /** Texte de la demande particulière pour les garde-fous : ce qu'elle apporte est une donnée sourcée. */
   private texteDemande(): string {
     const d = this.demandeParticuliere;
@@ -6456,6 +6494,8 @@ RÈGLES DE FORME (rendu Marp) :
       return (await this.callOpenAI(msgs, 0.2, libelle, true, 'redaction', coupe > 0 ? 1 : 0)) ?? '';
     };
     const aAdapter = plan.rubriques.filter((r) => sections[r.id] && (r.mode === 'adapte' || (r.mode === 'fixe' && repartition?.parRubrique[r.id]?.length)));
+    // Demande particulière : points de fond, forme et passages du document complémentaire (sources GSS autorisées).
+    const demandeMT = this.demandeMemoireType(repartition);
     let adaptees = 0;
     await enParallele(aAdapter, 4, async (rp) => {
       const r = mtParId.get(rp.id)!;
@@ -6466,10 +6506,10 @@ RÈGLES DE FORME (rendu Marp) :
         perimetre,
         analyseCompacte: analyseResumee,
         registre: registreGss,
-        demande: repartition?.parRubrique[rp.id]?.join(' ; ') || undefined,
+        demande: await demandeMT.consigne(rp.id, r.titre),
         dce: dceContext,
         horsNormandie,
-      }, appelAdaptation, { nombresAutorises: [registreGss], nomsAutorises: [registreGss, referents] });
+      }, appelAdaptation, { nombresAutorises: [registreGss, this.texteDemande()], nomsAutorises: [registreGss, referents, this.texteDemande()] });
       sections[rp.id] = res.texte;
       adaptees++;
       progres(18 + Math.round((30 * adaptees) / Math.max(1, aAdapter.length)), `Adaptation au CCTP : ${adaptees}/${aAdapter.length} rubrique(s)…`);
@@ -6486,7 +6526,7 @@ RÈGLES DE FORME (rendu Marp) :
       progres(50, 'Notre compréhension de votre besoin : explication et schéma de process…');
       const c = await this.redigerComprehension(prep, ctxBase, besoin, {
         perimetre, exigences: matrice.filter((e) => e.exigence && !PIECES_OFFRE.test(e.exigence)), remarques,
-        analyse: analyseResumee, demande: repartition?.parRubrique[b1.id]?.join(' ; ') || undefined,
+        analyse: analyseResumee, demande: await demandeMT.consigne(b1.id, b1.titre),
       });
       sections[b1.id] = remarques ? `${c.texte.trim()}\n\n${remarques}` : c.texte;
       titresSchemas[b1.id] = c.titre;
@@ -6509,6 +6549,7 @@ RÈGLES DE FORME (rendu Marp) :
         const p = await this.proposerReponse(g, {
           client: besoin.client, bloc: `${bloc.numero}. ${bloc.titre}`, perimetre, horsNormandie, analyse: analyseResumee,
           registre: registreGss, gssDocs, availableCategories,
+          demande: await demandeMT.consigne(undefined, `${g.sujet}. ${g.exigences.map((e) => e.exigence).join(' ')}`),
         });
         if (!p) { ecartees.push(...g.exigences); return; }
         const id = idProposition(g.sujet, idsPris);
@@ -6784,7 +6825,7 @@ RÈGLES DE FORME (rendu Marp) :
    */
   private async proposerReponse(
     g: GroupeNouveau,
-    o: { client?: string; bloc?: string; perimetre?: string; horsNormandie?: boolean; analyse?: string; registre?: string; gssDocs: Record<string, string>; availableCategories: string[] },
+    o: { client?: string; bloc?: string; perimetre?: string; horsNormandie?: boolean; analyse?: string; registre?: string; gssDocs: Record<string, string>; availableCategories: string[]; demande?: string },
   ): Promise<{ titre: string; texte: string; acheteurs: string[] } | null> {
     const requete = `${g.sujet}. ${g.exigences.map((e) => e.exigence).join(' ')}`.slice(0, 2000);
     let memoires = '';
@@ -6798,7 +6839,7 @@ RÈGLES DE FORME (rendu Marp) :
       .map((c) => `=== Doc GSS : ${c} ===\n${(o.gssDocs[c] || '').slice(0, 3000)}`).join('\n\n');
     const messages = consigneProposition(g, {
       client: o.client, bloc: o.bloc, perimetre: o.perimetre, horsNormandie: o.horsNormandie, analyse: o.analyse,
-      regles: REGLES_REUTILISATION, sources: [memoires.trim(), doc, (o.registre || '').trim()].filter(Boolean).join('\n\n'),
+      regles: REGLES_REUTILISATION, sources: [memoires.trim(), doc, (o.registre || '').trim(), o.demande ? `DEMANDE PARTICULIÈRE DE GSS POUR CE MÉMOIRE (prioritaire ; ses informations sont des données valables) :\n${o.demande}` : ''].filter(Boolean).join('\n\n'),
     });
     const brut = (await this.callOpenAI(messages, 0.3, `Proposition de réponse : ${g.sujet}`, true, 'analyse', 0)) || '';
     let rep = lireJson(brut);
@@ -7473,6 +7514,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const rep = lireRepartition((await this.callOpenAI(consigneRepartition(mt, planMT, plan), 0.1, 'Format court : répartition du mémoire type', true, 'analyse')) || '', mt, planMT, plan);
     console.log(`[MemoireGenerator] Format court — répartition (${rep.source}) : ${plan.map((p) => `${p.id} ${rep.parPartie[p.id].length} rubrique(s)${rep.nonCouverts[p.id]?.length ? `, ${rep.nonCouverts[p.id].length} attendu(s) hors mémoire type` : ''}`).join(' | ')}.`);
     const repartition = await this.repartirDemande(planMT.rubriques.map((r) => ({ id: r.id, title: r.titre })));
+    // Demande particulière : points de fond, forme et passages du document complémentaire (sources GSS autorisées).
+    const demandeMT = this.demandeMemoireType(repartition);
     const publiees = publierMemoire(prep, { marquerConsultations: true });
     const textes: Record<string, string> = {};
     for (const p of publiees) if (p.texte) textes[p.id] = p.texte;
@@ -7493,7 +7536,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       const c = await this.redigerComprehension(prep, ctxBase, besoin, {
         perimetre, exigences: matrice.filter((e) => e.exigence && !PIECES_OFFRE.test(e.exigence)), analyse: analyseResumee,
         // Format court : process dessiné sur toile portrait, affiché en grand en tête de sa partie (consigne 3).
-        demande: repartition?.parRubrique[b1.id]?.join(' ; ') || undefined, format: 'page',
+        demande: await demandeMT.consigne(b1.id, b1.titre), format: 'page',
       });
       textes[b1.id] = c.texte;
       svgComprehension = c.svg;
@@ -7572,10 +7615,10 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       const r = mtParId.get(rp.id)!;
       const res = await adapterRubrique({ ...r, mode: 'adapte' }, textes[rp.id], {
         client: besoin.client, exigences: parRubrique[rp.id] || [], obligations: obligationsPourRubrique(r, dceContext), perimetre,
-        analyseCompacte: analyseResumee, registre: registreGss, demande: repartition?.parRubrique[rp.id]?.join(' ; ') || undefined,
+        analyseCompacte: analyseResumee, registre: registreGss, demande: await demandeMT.consigne(rp.id, r.titre),
         dce: dceContext, horsNormandie,
       }, appelAdaptation, {
-        nombresAutorises: [registreGss], nomsAutorises: [registreGss, referents],
+        nombresAutorises: [registreGss, this.texteDemande()], nomsAutorises: [registreGss, referents, this.texteDemande()],
         // Sujets traités par les autres rubriques gardées : pas de « [À COMPLÉTER] » ajouté sur eux.
         titresTraites: toutesRetenues.filter((id) => id !== rp.id).map((id) => mtParId.get(id)?.titre || '').filter(Boolean),
       });
@@ -7605,6 +7648,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
         const complement = await this.redigerComplementCourt(p, elements, budgetComplement(p.id), texte, {
           format, analysisJson, gssFullContext, registre: registreComplet, clientName: analysisData?.clientName || 'le client',
           precedentes: plan.slice(0, i).filter((x) => sections[x.id]).map((x) => `### ${x.title}\n${sections[x.id]}`).join('\n\n'),
+          document: await demandeMT.passages(`${p.title}. ${elements.join(' ; ')}`),
         });
         if (complement) {
           texte = `${texte}\n\n${complement}`.trim();
@@ -7828,7 +7872,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     elements: string[],
     mots: number,
     textePartie: string,
-    o: { format: FormatImpose; analysisJson: string; gssFullContext: string; registre: string; clientName: string; precedentes: string },
+    o: { format: FormatImpose; analysisJson: string; gssFullContext: string; registre: string; clientName: string; precedentes: string; document?: string },
   ): Promise<string> {
     const prix = /prix|co[uû]t|financ|d[ée]composition/i.test(elements.join(' '));
     const systemPrompt = `Tu es un expert en sécurité privée chez GSS et tu complètes UNE partie d'un mémoire technique pour ${o.clientName}, au FORMAT IMPOSÉ PAR LE RÈGLEMENT DE CONSULTATION : ${o.format.pagesMax} pages maximum pour tout le mémoire.
@@ -7844,7 +7888,7 @@ ${REGLES_REUTILISATION}
 - Si — et SEULEMENT si — GSS n'a aucune réponse, n'invente rien : insère sur sa propre ligne exactement \`[CONSULTATION REQUISE : <information précise à obtenir auprès de GSS>]\`.${this.blocDemande()}
 
 FORME : sous-titres « ## » courts (un par élément), paragraphes courts et listes à puces ; gras (**…**) pour les chiffres et engagements forts.`;
-    const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${o.analysisJson}\n\nDOCUMENTATION GSS :\n${o.gssFullContext.slice(0, 25_000)}${o.registre}\n\nTEXTE DE GSS DÉJÀ ÉCRIT DANS CETTE PARTIE (ne rien répéter) :\n${textePartie || '(aucun)'}${o.precedentes ? `\n\nPARTIES PRÉCÉDENTES (ne rien répéter) :\n${o.precedentes}` : ''}\n\nRédige les éléments : ${elements.join(' ; ')}.`;
+    const userPrompt = `ANALYSE DU MARCHÉ (DCE) :\n${o.analysisJson}\n\nDOCUMENTATION GSS :\n${o.gssFullContext.slice(0, 25_000)}${o.registre}${o.document ? `\n\n${o.document}` : ''}\n\nTEXTE DE GSS DÉJÀ ÉCRIT DANS CETTE PARTIE (ne rien répéter) :\n${textePartie || '(aucun)'}${o.precedentes ? `\n\nPARTIES PRÉCÉDENTES (ne rien répéter) :\n${o.precedentes}` : ''}\n\nRédige les éléments : ${elements.join(' ; ')}.`;
     const t = await this.callOpenAI([{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], 0.4, `Format court ${p.id} : complément hors mémoire type`, false);
     return String(t || '').replace(/^#\s+[^\n]*\n+/, '').trim();
   }
