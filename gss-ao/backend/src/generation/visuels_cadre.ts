@@ -23,24 +23,38 @@ const mots = (t: string) => new Set(
     .filter((w) => w.length >= 5 && !VIDES.has(w)).map((w) => w.replace(/s$/, '')),
 );
 
+/** Réponse développée du cadre : `svg` est un schéma déjà dessiné pour elle (process de la compréhension du besoin,
+ *  spécification du mémoire type de la rubrique reprise), repéré par `svgId` ; `prefere`, le schéma de la bibliothèque
+ *  de la rubrique reprise. */
+export interface ReponseCadre { cle: string; question: string; texte: string; prefere?: string; svg?: string; svgId?: string }
+
 /** Choisit, pour chaque réponse, le schéma GSS le plus pertinent (ou aucun), dans le thème de style (schéma placé dans
  *  le texte : toile paysage du moteur, couleurs et police du thème ; retour arrière : schéma d'origine). */
-export function choisir(reponses: Array<{ cle: string; question: string; texte: string; prefere?: string }>, themeDemande?: string): Array<{ cle: string; id: string; svg: string }> {
+export function choisir(reponses: ReponseCadre[], themeDemande?: string): Array<{ cle: string; id: string; svg: string }> {
   const theme = themeActif(themeDemande);
   let index: any[] = [];
   try { index = JSON.parse(fs.readFileSync(path.join(MOTEUR, 'bibliotheque', 'index.json'), 'utf-8')); } catch { return []; }
   const dispo = index.filter((x) => x.reutilisable && x.section !== 'b_references' && !EXCLUS.test(`${x.titre} ${x.texte}`));
   const utilises = new Set<string>();
   const out: Array<{ cle: string; id: string; svg: string }> = [];
+  const dessines = new Set<string>();
   for (const r of reponses) {
+    // Schéma déjà dessiné pour cette réponse (même fond que le texte) : il passe avant tout autre.
+    if (r.svg && r.svgId && !utilises.has(r.svgId)) {
+      utilises.add(r.svgId);
+      dessines.add(r.svgId);
+      out.push({ cle: r.cle, id: r.svgId, svg: r.svg });
+      continue;
+    }
     // Encadrement / organisation hiérarchique : l'organigramme GSS.
     if (/composition des [ée]quipes|organisation hi[ée]rarchique|organigramme|encadrement/i.test(r.question) && !utilises.has('organigramme')) {
       // Organigramme dessiné d'après l'organigramme GSS de référence (mêmes personnes que le texte).
       const svg = organigrammeSvg('paysage', theme);
       if (svg) { utilises.add('organigramme'); out.push({ cle: r.cle, id: 'organigramme', svg }); continue; }
     }
-    // Réponse reprise du mémoire type : le schéma GSS de la rubrique reprise d'abord (même fond que le texte).
-    const prefere = r.prefere ? dispo.find((x) => x.id === r.prefere && !utilises.has(x.id)) : undefined;
+    // Réponse reprise du mémoire type : le schéma GSS de la rubrique reprise d'abord (même fond que le texte). Il vient du
+    // mémoire type : les exclusions de la recherche par mots (secteurs cités, « grands magasins »…) ne s'y appliquent pas.
+    const prefere = r.prefere ? index.find((x) => x.id === r.prefere && !utilises.has(x.id)) : undefined;
     if (prefere) {
       try {
         out.push({ cle: r.cle, id: prefere.id, svg: fs.readFileSync(path.join(MOTEUR, 'bibliotheque', `${prefere.id}.svg`), 'utf-8') });
@@ -59,8 +73,9 @@ export function choisir(reponses: Array<{ cle: string; question: string; texte: 
     } catch { /* schéma illisible : ignoré */ }
   }
   if (!estRetourArriere(theme)) {
-    const themes = schemasBibliotheque(out.filter((c) => c.id !== 'organigramme').map((c) => c.id), 'paysage', theme);
-    for (const c of out) if (c.id !== 'organigramme' && themes.has(c.id)) c.svg = themes.get(c.id)!;
+    const biblio = out.filter((c) => c.id !== 'organigramme' && !dessines.has(c.id));
+    const themes = schemasBibliotheque(biblio.map((c) => c.id), 'paysage', theme);
+    for (const c of biblio) if (themes.has(c.id)) c.svg = themes.get(c.id)!;
   }
   return out;
 }
@@ -99,7 +114,7 @@ async function rendrePng(svgs: string[], theme: string = themeActif()): Promise<
  * Insère sous les réponses développées du cadre le schéma GSS le plus pertinent. Renvoie le nombre de
  * schémas insérés. Les signets GSS_CH_n doivent déjà être posés.
  */
-export async function insererSchemasReponses(zip: PizZip, xmlDoc: any, reponses: Array<{ cle: string; question: string; texte: string; prefere?: string }>): Promise<number> {
+export async function insererSchemasReponses(zip: PizZip, xmlDoc: any, reponses: ReponseCadre[]): Promise<number> {
   const theme = themeActif();
   const choix = choisir(reponses, theme);
   if (!choix.length) return 0;

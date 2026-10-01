@@ -24,6 +24,7 @@ import {
   candidatsReference, blocReference, referencesRetenues, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES,
+  attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   type CandidatReference,
 } from './memoire_type_cadre';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites } from './base_memoires';
@@ -4095,6 +4096,26 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     /** Questions développées rédigées hors mémoire type (propositions) et reprises à relire, pour GSS. */
     const propositionsCadre = new Map<number, string>();
     const repriseParChamp = new Map<number, { ids: string[]; fidelite: number }>();
+    /** Schéma de process de la compréhension du besoin, inséré sous la réponse qui le reprend (consigne 3). */
+    const svgComprehension = new Map<number, string>();
+    /** Texte « Notre compréhension de votre besoin » (rédigé une seule fois, d'après le DCE), pour les questions de compréhension. */
+    let comprehensionP: Promise<{ id: string; titre: string; texte: string; svg?: string } | null> | null = null;
+    const comprehensionCadre = () => (comprehensionP ||= (async () => {
+      if (!repriseMT) return null;
+      try {
+        const b1 = repriseMT.mt.rubriques.find((r) => r.mode === 'besoin');
+        const c = await this.redigerComprehension(repriseMT.prep, repriseMT.ctx, donneesBesoin(repriseMT.prep, repriseMT.ctx), {
+          analyse: analyseCompacte(analysisData), format: 'paysage',
+          demande: "Cette réponse est placée dans le cadre de réponse imposé par l'acheteur, sous sa question : ne renvoie à aucun bloc ni à aucun numéro de bloc du mémoire (écris « notre réponse : … » sans « développée au bloc n »).",
+        });
+        return { id: b1?.id || 'b1_comprehension', titre: b1?.titre || 'Notre compréhension de votre besoin', texte: texteBrut(c.texte), svg: c.svg };
+      } catch (e: any) {
+        console.warn(`[MemoireGenerator] Compréhension du besoin (cadre) indisponible (${e?.message || e}) : réponse rédigée comme les autres.`);
+        return null;
+      }
+    })());
+    /** Rubriques du mémoire type attribuées aux champs développés (une rubrique reprise dans une seule réponse). */
+    let attribution: ReturnType<typeof attribuerRubriques> | null = null;
 
     const strategicCtx = buildStrategicContext('', analysisData);
 
@@ -4155,6 +4176,29 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
       const autres = descriptors.filter((d) => d.grille && d.id !== f.id)
         .map((d) => ((d.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').split(' : ')[0].slice(0, 120)).filter(Boolean);
       return autres.length ? `Autres critères de la grille (traités ailleurs) : ${autres.join(' | ')}` : '';
+    };
+
+    /**
+     * Reprise du mémoire type pour un champ du cadre : réponse développée (paragraphe, hors case, cellule de tableau et
+     * champ qui demande une valeur), question qui sert à la recherche, question hors mémoire type (cas pratique, mise en
+     * situation, d'après son intitulé principal) et question de compréhension du besoin.
+     */
+    const infosReprise = (f: FieldDesc) => {
+      const q = (f.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '';
+      const proche = (f.context.match(/Contexte(?: proche)?:\s*"([^"]*)"/) || [])[1] || '';
+      const vide = q.replace(/[\s.:;,…\-—–/|()]+/g, '').length === 0;
+      const precede = proche.split('/').map(s => s.trim()).filter(Boolean).pop() || '';
+      const demande = ((vide ? precede : q) || q || precede).trim();
+      const critere = (f.context.match(/Critère:\s*"([^"]*)"/) || [])[1] || '';
+      const tableau = f.kind === 'table' || /\|\s*Tableau:/.test(f.context);
+      const developpee = buildPrompt(f).includes('[PARAGRAPHE]') && f.kind !== 'checkbox' && !tableau && !!repriseMT && !champValeur(q || demande);
+      return {
+        developpee,
+        questionMT: `${q || demande} ${critere}`.trim(),
+        hors: questionHorsMemoireType(q || demande, critere),
+        comprehension: developpee && questionComprehension(q || demande),
+        libelle: intitulePrincipal(q || demande),
+      };
     };
 
     /** Traite UN champ : recherche ciblée des passages pertinents + 1 appel IA dédié. */
@@ -4363,12 +4407,21 @@ RÈGLE DE FIABILITÉ (PRIORITAIRE) — deux faces indissociables :
 En cas de doute → "[À COMPLÉTER]".`;
 
       // Réponse développée : textes du mémoire type candidats pour cette question (le modèle reprend ceux qui la traitent).
-      const developpee = isParagraph && !isCheckbox && !isTableCell && !!repriseMT;
-      const questionMT = `${qRaw || fieldAsk} ${(f.context.match(/Critère:\s*"([^"]*)"/) || [])[1] || ''}`.trim();
+      // Champ qui demande une valeur (effectif, « si oui… ») : traité comme avant, sans texte de référence.
+      const reprise = infosReprise(f);
+      const developpee = reprise.developpee;
+      const questionMT = reprise.questionMT;
       // Limite de pages, ou critère de grille (longueur fixée par le barème, réponse par composante) : la reprise intégrale
       // n'est pas toujours possible ; la fidélité retient aussi la part de la réponse venue du texte de GSS.
       const limiteChamp = /Limite:|pages? maximum/i.test(f.context) || !!f.grille;
-      const candidats: CandidatReference[] = developpee ? candidatsReference(repriseMT!.mt, repriseMT!.textes, questionMT, { scores: repriseMT!.scores.get(f.id) }) : [];
+      // Question de compréhension du besoin : le texte « Notre compréhension de votre besoin » (rédigé d'après le DCE) est
+      // la référence ; son schéma de process est inséré sous la réponse. Autres questions : rubriques attribuées à ce champ
+      // (une rubrique reprise dans une seule réponse ; les autres champs y renvoient).
+      const comprehension = reprise.comprehension ? await comprehensionCadre() : null;
+      const candidats: CandidatReference[] = !developpee ? []
+        : comprehension ? [{ cle: 'R1', id: comprehension.id, titre: comprehension.titre, texte: comprehension.texte, score: 1 }]
+          : attribution?.candidats.get(f.id) ?? candidatsReference(repriseMT!.mt, repriseMT!.textes, questionMT, { scores: repriseMT!.scores.get(f.id), hors: reprise.hors });
+      const renvois = developpee && !comprehension ? attribution?.renvois.get(f.id) || [] : [];
       const userPrompt = `Analyse du marché (contexte de rédaction) :
 ${analysisJson}
 
@@ -4379,7 +4432,7 @@ CHAMP UNIQUE À RÉDIGER :
 ${hint}
 
 ${instruction}
-${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuidance ? tableGuidance + '\n' : ''}${fieldAsk && fieldAsk !== f.context ? `${qEmpty ? `Cette zone à remplir (les pointillés « … ») fait suite, dans le document, au libellé qui la PRÉCÈDE : « ${fieldAsk} ». LIS ce libellé pour comprendre ce qui est attendu et remplis la zone en conséquence.` : `RESTE SUR LE SUJET DE CETTE QUESTION : « ${fieldAsk} ».`} Ne réponds pas sur un thème VOISIN (ex. ne parle pas des moyens d'accès/clés si le sujet est le report des alarmes). Si les extraits apportent une information MÊME PARTIELLE sur CE sujet, donne une réponse (au moins partielle) fondée dessus plutôt que de laisser vide — sans rien inventer. N'écris "[À COMPLÉTER]" QUE si rien d'utile sur ce sujet n'est disponible.\n` : ''}${blocReference(candidats, { limite: limiteChamp, strict, grille: !!f.grille })}Renvoie UNIQUEMENT un objet JSON : {"id": ${f.id}, "value": "..."${candidats.length ? ', "reference": ["R1"]' : ''}}`;
+${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuidance ? tableGuidance + '\n' : ''}${fieldAsk && fieldAsk !== f.context ? `${qEmpty ? `Cette zone à remplir (les pointillés « … ») fait suite, dans le document, au libellé qui la PRÉCÈDE : « ${fieldAsk} ». LIS ce libellé pour comprendre ce qui est attendu et remplis la zone en conséquence.` : `RESTE SUR LE SUJET DE CETTE QUESTION : « ${fieldAsk} ».`} Ne réponds pas sur un thème VOISIN (ex. ne parle pas des moyens d'accès/clés si le sujet est le report des alarmes). Si les extraits apportent une information MÊME PARTIELLE sur CE sujet, donne une réponse (au moins partielle) fondée dessus plutôt que de laisser vide — sans rien inventer. N'écris "[À COMPLÉTER]" QUE si rien d'utile sur ce sujet n'est disponible.\n` : ''}${blocReference(candidats, { limite: limiteChamp, strict, grille: !!f.grille })}${blocRenvois(renvois)}Renvoie UNIQUEMENT un objet JSON : {"id": ${f.id}, "value": "..."${candidats.length ? ', "reference": ["R1"]' : ''}}`;
 
       // Températures basses = fidélité aux sources (priorité « 0 inventé ») : on baisse la rédaction
       // de paragraphe de 0.4 → 0.2 pour limiter les détails « brodés » non sourcés.
@@ -4426,6 +4479,12 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
             repriseParChamp.set(f.id, { ids: retenus.map((c) => c.id), fidelite: fid });
             if (fid < SEUIL_FIDELITE_CADRE) propositionsCadre.set(f.id, `Réponse à relire (mémoire type de GSS repris en partie, fidélité ${Math.round(fid * 100)} %) : ${libelle}`);
             else propositionsCadre.delete(f.id);
+            if (comprehension?.svg && ![...svgComprehension.keys()].some((id) => id !== f.id)) svgComprehension.set(f.id, comprehension.svg);
+          } else if (comprehension) {
+            propositionsCadre.set(f.id, `Réponse à relire (compréhension du besoin rédigée d'après le DCE) : ${libelle}`);
+          } else if (renvois.length) {
+            // Le texte de GSS sur ce sujet est repris dans une autre réponse, à laquelle celle-ci renvoie.
+            propositionsCadre.delete(f.id);
           } else {
             propositionsCadre.set(f.id, `Proposition de réponse à valider (question que le mémoire type de GSS ne traite pas) : ${libelle}`);
           }
@@ -4503,6 +4562,14 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     // answerField (logique 3 niveaux) ; cases/tableaux (hors zones) → answerField individuellement.
     const inZone = new Set(zones.flatMap(z => z.fields.map(f => f.id)));
     const others = descriptors.filter(d => !inZone.has(d.id));
+    // Rubriques du mémoire type attribuées avant les appels (rédaction en parallèle) : chacune à un seul champ.
+    if (repriseMT) {
+      const individuels = [...zones.filter(z => z.fields.length === 1).map(z => z.fields[0]), ...others].sort((a, b) => a.id - b.id);
+      attribution = attribuerRubriques(individuels.map((f) => ({ f, r: infosReprise(f) })).filter(({ r }) => r.developpee && !r.comprehension)
+        .map(({ f, r }) => ({ id: f.id, libelle: r.libelle, candidats: candidatsReference(repriseMT.mt, repriseMT.textes, r.questionMT, { scores: repriseMT.scores.get(f.id), hors: r.hors }) })));
+      const partages = [...attribution.renvois.entries()].map(([id, l]) => `champ ${id} → ${l.map((x) => x.titre).join(', ')}`);
+      if (partages.length) console.log(`[MemoireGenerator] Mémoire type (cadre) : rubrique(s) déjà reprise(s) dans une autre réponse, renvoi : ${partages.join(' ; ')}.`);
+    }
     const jobs: Array<() => Promise<void>> = [
       ...zones.map(z => z.fields.length > 1 ? () => answerZone(z) : () => answerField(z.fields[0])),
       ...others.map(d => () => answerField(d)),
@@ -5114,9 +5181,23 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     // 7 quater. Schémas GSS validés sous les réponses développées (retour GSS : visuels non réutilisés).
     try {
       const libelleChamp = (id: number) => ((descriptors.find((x) => x.id === id)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '');
+      const texteChamp = (id: number) => String(replacements.find((r) => r.id === id)?.value ?? '');
+      // Schéma de la rubrique reprise : bibliothèque GSS, ou spécification du mémoire type dessinée au thème (toile
+      // paysage) et contrôlée sur la réponse (refusée : schéma de remplacement du mémoire type, sinon choix par mots).
+      const schemasMT = new Map(champsRediges.map((id) => [id, repriseMT?.schemaDe(repriseParChamp.get(id)?.ids || [])] as const));
+      const specs = [...schemasMT.entries()].filter(([id, s]) => s?.spec && !svgComprehension.has(id));
+      const dessins = specs.length
+        ? await dessinerSpecs(specs.map(([id, s]) => ({ id: `champ_${id}`, gabarit: s!.spec!.gabarit, params: s!.spec!.params, source: texteChamp(id), titre_section: s!.spec!.titre })), 'paysage', themeActif())
+        : new Map<string, { ok: boolean; svg?: string; erreurs?: string[] }>();
       const developpees = champsRediges
-        .map((id) => ({ cle: `GSS_CH_${id}`, question: libelleChamp(id), texte: String(replacements.find((r) => r.id === id)?.value ?? ''), prefere: repriseMT?.schemaDe(repriseParChamp.get(id)?.ids || []) }))
-        .filter((x) => x.texte.length >= 600);
+        .map((id) => {
+          const s = schemasMT.get(id);
+          const d = dessins.get(`champ_${id}`);
+          const svg = svgComprehension.get(id) || (d?.ok ? d.svg : undefined);
+          const svgId = svgComprehension.has(id) ? 'comprehension' : svg ? `mt_${s!.id}` : undefined;
+          return { cle: `GSS_CH_${id}`, question: libelleChamp(id), texte: texteChamp(id), prefere: s?.ref || (s?.spec && !svg ? s.alternative : undefined), svg, svgId };
+        })
+        .filter((x) => x.texte.length >= 600 || x.svgId === 'comprehension');
       const nSchemas = await insererSchemasReponses(zip, xmlDoc, developpees);
       if (nSchemas) console.log(`[MemoireGenerator] ${nSchemas} schéma(s) GSS inséré(s) sous les réponses.`);
     } catch (e: any) {
@@ -5143,9 +5224,19 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         const libelle = net((m ? m.slice(1).find(Boolean) : '') || section || '') || `Réponse ${id}`;
         return { cle: `GSS_CH_${id}`, libelle: sec && sec !== libelle && !libelle.includes(sec) ? `${sec} — ${libelle}` : libelle };
       });
+      // Premier message de l'assistant : propositions de réponse et réponses à relire, validables ou modifiables (D5).
+      const aRelire = [...propositionsCadre.entries()].filter(([id]) => champsRediges.includes(id)).sort((a, b) => a[0] - b[0]);
+      const conversation = aRelire.length ? [{ role: 'assistant' as const, date: new Date().toISOString(), texte: [
+        `J'ai rempli le cadre de réponse avec le mémoire type de GSS. ${aRelire.length === 1 ? 'Une réponse est à relire' : `${aRelire.length} réponses sont à relire`} avant la remise :`,
+        ...aRelire.map(([id, c]) => `- ${court(champsEtat.find((x) => x.cle === `GSS_CH_${id}`)?.libelle || c.split(' : ').slice(1).join(' : '), 160)} (${/^Proposition/.test(c) ? 'proposition de réponse : question que le mémoire type ne traite pas' : c.split(' : ')[0].replace(/^Réponse à relire \(/, '').replace(/\)$/, '')}) [GSS_CH_${id}]`),
+        '',
+        'Pour chacune, vous pouvez :',
+        '- la valider telle quelle : « Je valide la réponse sur … » (rien n\'est modifié) ;',
+        '- la modifier : « Dans la réponse sur …, précise que … ».',
+      ].join('\n') }] : undefined;
       ecrireEtat({
         dossierId, mode: 'cadre', fichier: outputPath, majLe: '', elements: elementsACompleter, reponsesTraitees: [],
-        champs: champsEtat, demande: this.demandeParticuliere?.demande || undefined,
+        champs: champsEtat, demande: this.demandeParticuliere?.demande || undefined, conversation,
       });
     } catch (e: any) {
       console.warn(`[MemoireGenerator] État de complétion non enregistré (non bloquant) : ${e?.message || e}`);
@@ -6478,15 +6569,20 @@ RÈGLES DE FORME (rendu Marp) :
     referents: string,
     descriptors: Array<{ id: number; context: string; kind: string }>,
     buildPrompt: (f: any) => string,
-  ): Promise<{ mt: MemoireType; textes: Record<string, string>; scores: Map<number, Record<string, number>>; schemaDe: (ids: string[]) => string | undefined } | null> {
+  ): Promise<{
+    mt: MemoireType; textes: Record<string, string>; scores: Map<number, Record<string, number>>; prep: MemoirePrepare; ctx: ContexteMarche;
+    schemaDe: (ids: string[]) => { id: string; ref?: string; spec?: { gabarit: string; params: any; titre: string }; alternative?: string } | undefined;
+  } | null> {
     const mt = this.memoireTypeV2();
     if (!mt) return null;
     try {
       const cover = await this.getCoverInfo(dossierId, analysisData);
       const horsNormandie = marcheHorsNormandie(analysisData, dceContext);
-      const prep = preparerMemoireType({ analyse: analysisData, dce: dceContext, cover, referents, horsNormandie }, { memoireType: mt });
+      const ctx: ContexteMarche = { analyse: analysisData, dce: dceContext, cover, referents, horsNormandie };
+      const prep = preparerMemoireType(ctx, { memoireType: mt });
       const textes: Record<string, string> = {};
-      for (const p of publierMemoire(prep)) if (p.texte && p.mode !== 'besoin') textes[p.id] = p.texte;
+      const publiees = publierMemoire(prep);
+      for (const p of publiees) if (p.texte && p.mode !== 'besoin') textes[p.id] = p.texte;
       const question = (d: { context: string }) => {
         const q = (d.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '';
         const libelle = q.replace(/[\s.:;,…\-—–/|()]+/g, '').length ? q : (((d.context.match(/Contexte(?: proche)?:\s*"([^"]*)"/) || [])[1] || '').split('/').map((s) => s.trim()).filter(Boolean).pop() || '');
@@ -6506,15 +6602,22 @@ RÈGLES DE FORME (rendu Marp) :
           console.warn(`[MemoireGenerator] Mémoire type (cadre) : recherche sémantique indisponible (${e?.message || e}) → recherche par mots-clés.`);
         }
       }
+      // Schéma de la première rubrique reprise qui en a un : bibliothèque GSS, ou spécification publipostée (avec son
+      // schéma de remplacement de la bibliothèque, si le mémoire type en prévoit un).
       const schemaDe = (ids: string[]) => {
         for (const id of ids) {
-          const s = mt.rubriques.find((r) => r.id === id)?.schema;
-          if (s?.source === 'bibliotheque' && s.ref) return s.ref;
+          const r = mt.rubriques.find((x) => x.id === id);
+          const s = publiees.find((p) => p.id === id)?.schema || r?.schema;
+          if (s?.source === 'bibliotheque' && s.ref) return { id, ref: s.ref };
+          if (s?.source === 'spec' && s.gabarit && s.params) {
+            const alt = r?.schema?.alternative;
+            return { id, spec: { gabarit: s.gabarit, params: s.params, titre: r?.titre || id }, alternative: alt?.source === 'bibliotheque' && alt.ref ? alt.ref : undefined };
+          }
         }
         return undefined;
       };
       console.log(`[MemoireGenerator] Mémoire type (cadre) : ${Object.keys(textes).length} rubrique(s) publipostée(s) pour ${developpees.length} réponse(s) développée(s).`);
-      return { mt, textes, scores, schemaDe };
+      return { mt, textes, scores, schemaDe, prep, ctx };
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Mémoire type (cadre) indisponible (${e?.message || e}) : cadre rempli sans texte de référence.`);
       return null;
@@ -6532,7 +6635,7 @@ RÈGLES DE FORME (rendu Marp) :
     prep: MemoirePrepare,
     ctx: ContexteMarche,
     besoin: DonneesBesoin,
-    o: { perimetre?: string; exigences?: ExigenceMatrice[]; remarques?: string; analyse?: string; demande?: string },
+    o: { perimetre?: string; exigences?: ExigenceMatrice[]; remarques?: string; analyse?: string; demande?: string; format?: 'page' | 'paysage' },
   ): Promise<{ texte: string; titre: string; svg?: string; secours: boolean }> {
     const titreDefaut = prep.mt.rubriques.find((r) => r.mode === 'besoin')?.schema?.titre || 'Votre besoin, notre réponse en un process';
     const messages = consigneComprehension(besoin, {
@@ -6555,7 +6658,7 @@ RÈGLES DE FORME (rendu Marp) :
     // Schéma de process : étapes de la réponse, puis correction des seules étapes, puis sous-titres du texte en phases.
     const dessiner = async (spec: { gabarit: string; params: any } | null): Promise<{ svg?: string; erreurs: string[] }> => {
       if (!spec) return { erreurs: ['étapes absentes ou incomplètes'] };
-      const r = (await dessinerSpecs([{ id: 'b1_comprehension', gabarit: spec.gabarit, params: spec.params, source: texte, titre_section: titre }], 'page')).get('b1_comprehension');
+      const r = (await dessinerSpecs([{ id: 'b1_comprehension', gabarit: spec.gabarit, params: spec.params, source: texte, titre_section: titre }], o.format || 'page')).get('b1_comprehension');
       return r?.ok ? { svg: r.svg, erreurs: [] } : { erreurs: r?.erreurs || ['moteur de schémas indisponible'] };
     };
     let schema = secours ? { erreurs: ['texte de secours'] } as { svg?: string; erreurs: string[] } : await dessiner(specProcessBesoin(rep?.etapes, 'flux'));
