@@ -359,6 +359,15 @@
    "registre": "effectif_agents_securite",
    "seulement_si_confirmee": true
   },
+  "STATUT_PME": {
+   "description": "Statut de PME de GSS (mention « PME » de la dénomination, case « PME : Oui / Non » des cadres de réponse)",
+   "origine": "mémoire type 2024 (« Global Security Services (GSS), PME ») ; non confirmé en 2026 : l'effectif de 380 salariés dépasse le seuil de 250 salariés de la définition européenne de la PME",
+   "type": "texte",
+   "si_absente": "vide",
+   "registre": "statut_pme",
+   "valeur_gss": "PME",
+   "a_confirmer": "GSS est-elle une PME au sens européen (moins de 250 salariés, et chiffre d'affaires de 50 M€ au plus ou bilan de 43 M€ au plus) ? Le mémoire écrit « Global Security Services (GSS), PME » alors que l'effectif est de 380 salariés ; répondre Oui ou Non (la case « PME » des cadres de réponse en dépend)."
+  },
   "EFFECTIF_TOTAL": {
    "description": "Effectif total de GSS",
    "origine": "registre effectif_total",
@@ -1033,7 +1042,7 @@
    "condition": "IDENTITE_DEMANDEE",
    "condition_texte": "si le DCE (RC, CCTP ou cadre de réponse) demande dans le mémoire l'identité du candidat, ses autorisations CNAPS, ses effectifs ou sa certification",
    "priorite": 2,
-   "texte": "- Dénomination : Global Security Services (GSS), PME.\n- Siège et agence qui exécute le marché : 15 place de la Verrerie, 76100 Rouen.\n- SIRET : 805 295 516 00019.\n- Autorisation d'exercer délivrée par le CNAPS : AUT-076-2114-02-12-20140458592, obtenue le 12 février 2015.\n- Agrément dirigeant CNAPS : M. MARCHANI Adil, AGD-076-2114-01-28-20140458593.\n- Effectif : {{EFFECTIF_TOTAL}} salariés, dont {{EFFECTIF_76}} en Seine-Maritime (76) et {{EFFECTIF_27}} dans l'Eure (27).\n- Assurance responsabilité civile : Hiscox, contrat HA RCP0242762 (attestation valable du 21 septembre 2026 au 16 mars 2027) : responsabilité civile professionnelle 300 000 € par sinistre et par année d'assurance, tous dommages corporels, matériels et immatériels, consécutifs ou non ; responsabilité civile exploitation et employeur 8 000 000 € par sinistre.\n- Démarche qualité : certification ISO 9001 en cours, prévue fin 2026.\n- Sous-traitance : GSS n'envisage pas de recourir à la sous-traitance pour les prestations fixes ou supplémentaires.",
+   "texte": "- Dénomination : Global Security Services (GSS), {{STATUT_PME}}.\n- Siège et agence qui exécute le marché : 15 place de la Verrerie, 76100 Rouen.\n- SIRET : 805 295 516 00019.\n- Autorisation d'exercer délivrée par le CNAPS : AUT-076-2114-02-12-20140458592, obtenue le 12 février 2015.\n- Agrément dirigeant CNAPS : M. MARCHANI Adil, AGD-076-2114-01-28-20140458593.\n- Effectif : {{EFFECTIF_TOTAL}} salariés, dont {{EFFECTIF_76}} en Seine-Maritime (76) et {{EFFECTIF_27}} dans l'Eure (27).\n- Assurance responsabilité civile : Hiscox, contrat HA RCP0242762 (attestation valable du 21 septembre 2026 au 16 mars 2027) : responsabilité civile professionnelle 300 000 € par sinistre et par année d'assurance, tous dommages corporels, matériels et immatériels, consécutifs ou non ; responsabilité civile exploitation et employeur 8 000 000 € par sinistre.\n- Démarche qualité : certification ISO 9001 en cours, prévue fin 2026.\n- Sous-traitance : GSS n'envisage pas de recourir à la sous-traitance pour les prestations fixes ou supplémentaires.",
    "sous_parties": [],
    "schema": {
     "source": "bibliotheque",

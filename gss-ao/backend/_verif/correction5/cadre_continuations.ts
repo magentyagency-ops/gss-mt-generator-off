@@ -67,6 +67,7 @@ EP.create = async (body: any) => {
     let erreur = '';
     try {
       const r: any = await new MemoireGenerator().generate(id);
+      if (process.env.CONSULTATIONS) console.log('CONSULTATIONS', JSON.stringify(r?.consultations || []));
       if (r?.filePath) {
         const x = new (require('pizzip'))(fs.readFileSync(r.filePath)).file('word/document.xml').asText();
         texte = x.split(/<w:p[ >]/).slice(1).map((pp: string) => (pp.match(/<w:t[^>]*>([^<]*)<\/w:t>/g) || []).map((m: string) => m.replace(/<[^>]+>/g, '')).join('')).join('\n');

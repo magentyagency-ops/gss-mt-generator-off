@@ -147,7 +147,7 @@ let cacheMemoireType: { chemin: string; mt: MemoireType } | null = null;
 export const VARIABLES_CALCULEES = new Set<string>([
   'CLIENT', 'OBJET_MARCHE', 'REF_MARCHE', 'LOTS', 'DUREE_MARCHE', 'DATE_DEBUT_MARCHE', 'SITE', 'VILLE', 'SECTEUR_CLIENT',
   'SECTEUR_REFERENCE', 'QUALIFICATIONS_REQUISES', 'PROFILS_DEMANDES', 'DIPLOMES_EQUIPE', 'TENUE_RETENUE', 'LIGNES_EQUIPE_DEDIEE',
-  'EFFECTIF_AGENTS', 'NB_AGENTS_RENFORT', 'EFFECTIF_ADS_CQP', 'EFFECTIF_TOTAL', 'EFFECTIF_76', 'EFFECTIF_27', 'EFFECTIF_SSIAP1',
+  'STATUT_PME', 'EFFECTIF_AGENTS', 'NB_AGENTS_RENFORT', 'EFFECTIF_ADS_CQP', 'EFFECTIF_TOTAL', 'EFFECTIF_76', 'EFFECTIF_27', 'EFFECTIF_SSIAP1',
   'EFFECTIF_SSIAP2', 'EFFECTIF_SSIAP3', 'EFFECTIF_CONTROLEURS', 'EFFECTIF_CYNOPHILES', 'VIVIER_EVENEMENTIEL', 'AGENTS_MOBILISABLES_48H',
   'VEHICULES_ASTREINTE', 'LOGICIEL_MAIN_COURANTE', 'ORGANIGRAMME', 'INTERLOCUTEUR_UNIQUE', 'FONCTION_INTERLOCUTEUR', 'TEL_INTERLOCUTEUR',
   'TAUX_REPRISE', 'FONDEMENT_REPRISE_DCE', 'PARTENAIRE_TELESURVEILLANCE', 'ENGAGEMENTS_TELESURVEILLANCE', 'SITES_RONDES',
@@ -878,6 +878,13 @@ const CALCULS: Record<string, Calculateur> = {
     // Valeur « à confirmer » ou incohérente (supérieure à l'effectif total) : jamais imprimée.
     if (!e || !v || aConfirmerRegistre(e) || (total && v > total)) return { valeur: null };
     return { valeur: String(v), source: 'registre effectif_agents_securite' };
+  },
+  // Statut de PME : réponse de GSS au registre (« oui » / « non ») ; à défaut, mention du mémoire type à confirmer.
+  STATUT_PME: (c) => {
+    const e = c.registre.find((x) => x.cle === 'statut_pme');
+    if (e) return /^\s*(?:oui|pme)\b/i.test(e.valeur_retenue) ? { valeur: 'PME', source: `registre statut_pme (${e.source_retenue}, ${e.date_retenue})` } : { valeur: null };
+    const def = c.mt.variables.STATUT_PME;
+    return def?.valeur_gss ? { valeur: def.valeur_gss, source: def.origine, aConfirmer: def.a_confirmer } : { valeur: null };
   },
   EFFECTIF_TOTAL: (c) => depuisRegistre(c, 'effectif_total', nombreDe),
   EFFECTIF_76: (c) => depuisRegistre(c, 'effectif_departement_76', nombreDe),

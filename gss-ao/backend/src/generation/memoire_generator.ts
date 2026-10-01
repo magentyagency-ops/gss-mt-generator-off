@@ -4608,6 +4608,24 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     // document remis à l'acheteur → retiré de la valeur, remonté dans les consultations.
     const confirmationsGss = new Set<string>();
     const confirmationsParChamp = new Map<number, string[]>();
+    // Case « PME : Oui / Non » : réponse de GSS au registre (statut_pme) ; à défaut, aucune case cochée et la question
+    // posée à GSS (le mémoire type écrit « PME » alors que l'effectif de 380 salariés dépasse le seuil européen).
+    {
+      const casesPme = descriptors.filter((d) => d.kind === 'checkbox' && /\bPME\b/.test((d.context.match(/Intitul[ée]:\s*"([^"]*)"/) || [])[1] || ''));
+      if (casesPme.length) {
+        const statut = valeurRegistre('statut_pme');
+        for (const d of casesPme) {
+          const opt = normCtx((d.context.match(/option:\s*"([^"]*)"/) || [])[1] || '').trim();
+          const oui = /^oui\b/.test(opt);
+          const non = /^non\b/.test(opt);
+          if (!oui && !non) continue;
+          const valeur = statut && (/^\s*(?:oui|pme)\b/i.test(statut) ? oui : non) ? '☑' : '☐';
+          const k = replacements.findIndex((r) => r.id === d.id);
+          if (k >= 0) replacements[k].value = valeur; else replacements.push({ id: d.id, value: valeur });
+        }
+        if (!statut) confirmationsGss.add(repriseMT?.mt.variables.STATUT_PME?.a_confirmer || 'GSS est-elle une PME au sens européen (moins de 250 salariés) ? Répondre Oui ou Non : la case « PME » du cadre de réponse en dépend.');
+      }
+    }
     const retirerConfirmations = () => {
       for (const r of replacements) {
         const { texte, confirmations } = extraireConfirmations(String(r.value ?? ''));
