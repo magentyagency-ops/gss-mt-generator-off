@@ -324,7 +324,8 @@ let cacheRegistre: EntreeRegistre[] | null = null;
 export function lireRegistre(): EntreeRegistre[] {
   if (cacheRegistre) return cacheRegistre;
   try {
-    cacheRegistre = JSON.parse(fs.readFileSync(FICHIER_REGISTRE, 'utf-8')).informations || [];
+    // Informations internes (prix horaire) : jamais utilisées pour la rédaction.
+    cacheRegistre = (JSON.parse(fs.readFileSync(FICHIER_REGISTRE, 'utf-8')).informations || []).filter((e: any) => !e.interne);
   } catch {
     cacheRegistre = [];
   }

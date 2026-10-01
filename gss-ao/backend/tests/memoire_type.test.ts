@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
+import { blocRegistre, texteSourcesMemoires, valeurInterne } from '../src/generation/base_memoires';
 import {
   A_COMPLETER, VARIABLES_CALCULEES, adapterRubrique, appliquerModifications, articleEtNom,
   chapitresPourAssistant, chargerMemoireType, condenserParSelection, dateDebutMarche, decouperSousParties, delaiDuDce, donneesBesoin,
-  evaluerCondition, exigencesParRubrique, extraireValeursImposees, fidelite, fondementRepriseDce, frequenceReunionsDce,
+  evaluerCondition, exigencesParRubrique, extraireValeursImposees, fidelite, fondementRepriseDce, frequenceReunionsDce, lireRegistre,
   planMemoireType, preparerMemoireType, publierMemoire, publierRubrique, publierSchema, publiposter, rechercherRubriques,
   reordonnerSousParties, rubriqueV1, rubriquesDeV1, sectionsPourAssistant, validerMemoireType,
   type AppelModele, type ContexteMarche, type MemoireType, type Variables,
@@ -334,6 +335,12 @@ describe('Indicateurs, plan et variables', () => {
     const texte = (dce: string) => publierMemoire(preparerMemoireType({ analyse: { clientName: 'Site' }, dce }, { memoireType: mt })).find((r) => r.id === 'b4_equipements')!.texte!;
     expect(texte(DCE_NORMANDIE)).not.toContain('ATEX');
     expect(texte(`${DCE_NORMANDIE}\nLe site comporte des zones ATEX.`)).toContain('lampes conformes ATEX');
+  });
+
+  it('prix horaire (information interne de GSS) : jamais transmis à la rédaction', () => {
+    expect(valeurInterne('prix_horaire')).toMatch(/22 à 30 € HT/);
+    for (const t of [blocRegistre(), blocRegistre(true), texteSourcesMemoires()]) expect(t).not.toMatch(/22 à 30|€ HT de l.heure/);
+    expect(lireRegistre().some((e) => e.cle === 'prix_horaire')).toBe(false);
   });
 
   it('la référence du secteur du client passe en tête des références', () => {

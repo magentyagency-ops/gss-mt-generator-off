@@ -1927,6 +1927,29 @@
    "source_retenue": "Réponse de GSS (1er octobre 2026)",
    "statut": "confirmee",
    "valeurs_anterieures_differentes": []
+  },
+  {
+   "cle": "prix_horaire",
+   "libelle": "Prix horaire de vente (information interne)",
+   "categorie": "interne",
+   "valeurs": [
+    {
+     "valeur": "22 à 30 € HT de l'heure, variable selon les marchés",
+     "client": "Réponse de GSS",
+     "document": "reponses_gss_2026-10-01.md",
+     "date": "2026-10",
+     "page": null,
+     "citation": "Prix : variable selon les marchés, de 22 à 30 € HT de l'heure",
+     "reponse_gss": true
+    }
+   ],
+   "valeur_retenue": "22 à 30 € HT de l'heure, variable selon les marchés",
+   "date_retenue": "2026-10",
+   "source_retenue": "Réponse de GSS (1er octobre 2026)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": [],
+   "interne": true,
+   "usage": "décomposition justificative du prix uniquement ; jamais écrit dans un texte du mémoire"
   }
  ]
 }

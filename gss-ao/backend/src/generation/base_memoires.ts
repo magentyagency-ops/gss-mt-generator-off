@@ -50,6 +50,8 @@ interface InfoRegistre {
   source_retenue: string;
   statut: 'confirmee' | 'a_confirmer';
   valeurs_anterieures_differentes: string[];
+  /** Information interne de GSS (ex. prix horaire) : jamais transmise aux rédactions ni écrite dans un mémoire. */
+  interne?: boolean;
 }
 
 let cache: { passages: PassageMemoire[]; vecteurs: Float32Array[]; registre: InfoRegistre[] } | null = null;
@@ -68,6 +70,9 @@ function charger() {
     });
     let registre: InfoRegistre[] = [];
     try { registre = JSON.parse(fs.readFileSync(path.join(DIR, 'registre_informations.json'), 'utf-8')).informations || []; } catch { /* registre absent */ }
+    // Informations internes (prix horaire, réservé à la décomposition justificative du prix) : jamais chargées pour
+    // la rédaction (registre transmis, garde-fous, confirmations) ; lues seulement par valeurInterne().
+    registre = registre.filter((e) => !e.interne);
     cache = { passages, vecteurs, registre };
     console.log(`[BaseMemoires] ${passages.length} passage(s) de mémoires GSS chargés, ${registre.length} information(s) au registre.`);
   } catch (e: any) {
@@ -370,6 +375,19 @@ export function marcheHorsNormandie(analyse: any, dce: string): boolean {
   if (!codes.length) return false;
   const normands = codes.filter((d) => ['14', '27', '50', '61', '76'].includes(d)).length;
   return normands < codes.length / 2;
+}
+
+/**
+ * Information INTERNE du registre (ex. « prix_horaire » : 22 à 30 € HT de l'heure, variable selon les marchés), réservée à
+ * la décomposition justificative du prix : jamais écrite dans un texte du mémoire. '' si inconnue.
+ */
+export function valeurInterne(cle: string): string {
+  try {
+    const infos: InfoRegistre[] = JSON.parse(fs.readFileSync(path.join(DIR, 'registre_informations.json'), 'utf-8')).informations || [];
+    return infos.find((e) => e.interne && e.cle === cle)?.valeur_retenue || '';
+  } catch {
+    return '';
+  }
 }
 
 /** Valeur la plus récente d'une information du registre (clé du catalogue), ou '' si inconnue. */
