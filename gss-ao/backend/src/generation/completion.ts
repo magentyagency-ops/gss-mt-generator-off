@@ -332,6 +332,70 @@ Renvoie {"questions": [{"cle": "...", "question": "...", "groupe": "..."}]} avec
 }
 
 /**
+ * Questions des emplacements du cadre, précisées sans modèle :
+ * - champ d'un bloc de coordonnées (« Prénom, Nom », « Adresse électronique »…) : la question reprend le libellé du
+ *   bloc du cadre (« Contact comptable »), sinon trois blocs de contacts posent des questions identiques et ambiguës ;
+ * - cases d'un même tableau (lignes « plage | profil | en service : … | rotation : … ») : une seule question et un seul
+ *   groupe pour tout le tableau, avec la question globale du même champ qui les recoupe (dimensionnement, effectifs) ;
+ * - questions identiques : un seul groupe (GSS n'y répond qu'une fois).
+ */
+export function preciserQuestionsCadre(
+  elements: ElementACompleter[],
+  signets: Array<{ cle: string; champ: number; contexte: string; environnement: string }>,
+  blocDuChamp: (champ: number) => string = () => '',
+): void {
+  const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const CHAMP_CONTACT = /^(?:pr[ée]nom|nom\b|num[ée]ro|t[ée]l[ée]phone|portable|adresse (?:[ée]lectronique|mail|e-?mail)|courriel|e-?mail|fonction)/i;
+  const signet = new Map(signets.map((x) => [x.cle, x]));
+  for (const el of elements) {
+    const s = signet.get(el.cle);
+    if (!s) continue;
+    const champ = (/^([^:|\[]{2,70}?)\s*:\s*\[À COMPLÉTER\]/.exec(s.contexte) || [])[1]?.trim();
+    if (!champ || !CHAMP_CONTACT.test(champ)) continue;
+    let bloc = blocDuChamp(s.champ).trim();
+    if (!bloc) {
+      const avant = s.environnement.slice(0, Math.max(0, s.environnement.lastIndexOf(PLACEHOLDER)));
+      bloc = [...avant.matchAll(/((?:Contact|Interlocuteur|R[ée]f[ée]rent|Correspondant|Responsable)[^:.;|]{0,40}?)\s*:/g)]
+        .map((m) => m[1].trim()).filter((b) => !CHAMP_CONTACT.test(b)).pop() || '';
+    }
+    if (!bloc) continue;
+    el.question = `Cadre de réponse, « ${bloc.replace(/\s*:\s*$/, '')} » : ${champ.replace(/(?<![A-ZÀ-Ý])[A-ZÀ-Ý](?![A-ZÀ-Ý])/g, (c) => c.toLowerCase())} à indiquer ?`;
+    el.groupe = norm(`${bloc} ${champ}`);
+  }
+  // Cases d'un même tableau (au moins deux cases du même champ dans des lignes à colonnes « | »).
+  const cases = new Map<number, ElementACompleter[]>();
+  for (const el of elements) {
+    const s = signet.get(el.cle);
+    if (s && (s.contexte.match(/\|/g) || []).length >= 2) (cases.get(s.champ) ?? cases.set(s.champ, []).get(s.champ)!).push(el);
+  }
+  for (const [champ, l] of cases) {
+    if (l.length < 2) continue;
+    const lignes = l.map((el) => signet.get(el.cle)!.contexte.split('|').map((x) => x.trim()));
+    const premieres = [...new Set(lignes.map((c) => c[0]).filter(Boolean))];
+    const secondes = [...new Set(lignes.map((c) => (c.length > 3 ? c[1] : '')).filter(Boolean))];
+    const colonnes = [...new Set(lignes.flatMap((c) => c.filter((x) => /\[(?:À COMPLÉTER|…)\]/.test(x)).map((x) => x.replace(/\s*:?\s*\[(?:À COMPLÉTER|…)\]\s*/g, '').trim()).filter(Boolean)))];
+    const groupe = `tableau du champ ${champ}`;
+    const question = `Tableau du cadre de réponse (${premieres.join(' ; ')}${secondes.length ? ` — ${secondes.join(', ')}` : ''}) : pour chaque ligne, ${colonnes.length ? colonnes.join(' et ') : 'la valeur attendue'} ?`;
+    for (const el of l) { el.question = question; el.groupe = groupe; }
+    // Question globale du même champ qui recoupe le tableau (dimensionnement, effectifs par plage) : même groupe.
+    for (const el of elements) {
+      const s = signet.get(el.cle);
+      if (s && s.champ === champ && !l.includes(el) && /dimensionnement|effectifs? (?:propos|par)|nombre d.agents|par plage|par profil/i.test(`${s.contexte} ${el.question}`)) {
+        el.question = question; el.groupe = groupe;
+      }
+    }
+  }
+  // Questions identiques : un seul groupe.
+  const parQuestion = new Map<string, string>();
+  for (const el of elements) {
+    const k = norm(el.question);
+    if (!k) continue;
+    if (parQuestion.has(k)) el.groupe = parQuestion.get(k)!;
+    else { el.groupe = el.groupe || k; parQuestion.set(k, el.groupe); }
+  }
+}
+
+/**
  * Adapte une même information à plusieurs phrases (emplacements d'un même groupe) : pour chacune, le
  * fragment exact qui remplace « [À COMPLÉTER] » en gardant la phrase correcte.
  */

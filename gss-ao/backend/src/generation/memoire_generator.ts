@@ -6,7 +6,7 @@ import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce }
 import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque } from './themes';
-import { poserSignets, poserSignetsChamps, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE } from './completion';
+import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE } from './completion';
 import {
   chargerMemoireType, preparerMemoireType, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite,
@@ -5302,6 +5302,12 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       for (const el of elementsACompleter) if (REPERE_TECHNIQUE.test(el.question)) el.question = `Information à fournir pour compléter : « ${el.contexte.replace(REPERE_TECHNIQUE, '').trim()} »`;
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Formulation des questions par emplacement indisponible : ${e?.message || e}`);
+    }
+    // Contacts : libellé du bloc du cadre dans la question ; cases d'un tableau : une question ; doublons : un groupe.
+    try {
+      preciserQuestionsCadre(elementsACompleter, signets, (champ) => (descriptors.find((x) => x.id === champ)?.context.match(/Groupe:\s*"([^"]*)"/) || [])[1] || '');
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Précision des questions du cadre indisponible : ${e?.message || e}`);
     }
 
     // 7 quater. Schémas GSS validés sous les réponses développées (retour GSS : visuels non réutilisés).
