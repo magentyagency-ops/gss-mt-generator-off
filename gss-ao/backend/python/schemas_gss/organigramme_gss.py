@@ -2,12 +2,18 @@
 Par défaut : contenu repris à l'identique de l'image organigramme.png utilisée jusqu'ici. Avec un
 fichier JSON en second argument, l'organigramme est dessiné d'après l'organigramme GSS de référence
 (annuaire « Personnes » + registre des mémoires) : {"tete": {"nom", "fonctions"}, "n2": [{"nom",
-"fonctions", "exploitation"}], "n3": [{"nom", "fonction", "equipe"}]}."""
+"fonctions", "exploitation"}], "n3": [{"nom", "fonction", "equipe"}]}.
+
+Thème (variable GSS_THEME, voir themes_gss.py) et format (option --format page|paysage, paysage par défaut) :
+  · paysage : ce dessin, aux couleurs et à la police du thème (identique à l'origine pour « gss-2026-09 ») ;
+  · page : 1 schéma = 1 page A4 portrait, dessiné dans le thème (moteur_page/organigramme.py), mêmes libellés.
+Usage : python3 organigramme_gss.py sortie.svg [donnees.json] [--format page|paysage]"""
 import json
 import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gss_lib import Svg, carte, trait, fleche  # noqa: E402
+import themes_gss  # noqa: E402
 
 DEFAUT = {
     "tete": {"nom": "MARCHANI Adil", "fonctions": ["Directeur d'agence", "Responsable de marché"]},
@@ -76,9 +82,26 @@ def organigramme(d=None):
     return svg
 
 
+def organigramme_theme(d=None, fmt="paysage", theme=None):
+    """Organigramme dans le thème : format page (portrait, moteur_page) ou paysage (ce dessin aux couleurs du thème)."""
+    theme = theme or themes_gss.theme_actif()
+    if themes_gss.format_effectif(theme, fmt) == "page":
+        from moteur_page import theme as th_page
+        from moteur_page.organigramme import organigramme as organigramme_page
+        th_page.utiliser(theme, "page")
+        return organigramme_page(d or DEFAUT).rendu()
+    return themes_gss.recolorer(organigramme(d), theme)
+
+
 if __name__ == "__main__":
-    out = sys.argv[1] if len(sys.argv) > 1 else "organigramme_gss.svg"
-    donnees = json.load(open(sys.argv[2], encoding="utf-8")) if len(sys.argv) > 2 else None
-    svg = organigramme(donnees)  # calculé avant d'ouvrir le fichier : jamais de fichier vide en cas d'erreur
+    args = sys.argv[1:]
+    fmt = "paysage"
+    if "--format" in args:
+        i = args.index("--format")
+        fmt = args[i + 1] if i + 1 < len(args) else fmt
+        del args[i:i + 2]
+    out = args[0] if args else "organigramme_gss.svg"
+    donnees = json.load(open(args[1], encoding="utf-8")) if len(args) > 1 else None
+    svg = organigramme_theme(donnees, fmt)  # calculé avant d'ouvrir le fichier : jamais de fichier vide en cas d'erreur
     open(out, "w", encoding="utf-8").write(svg)
     print(out)

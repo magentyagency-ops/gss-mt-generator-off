@@ -1,0 +1,1154 @@
+{
+ "_format": {
+  "description": "Thèmes de style du mémoire technique GSS (schémas + pages), repris de la planche de l'agent design (refonte 2026-10). Lus par themes_gss.py et moteur_page/theme.py (moteur de schémas Python) et par src/generation/themes.ts (pages Marp, format court, images du cadre). Les chemins de polices sont relatifs au dossier python/schemas_gss. Changer de style = une seule valeur : la variable d'environnement GSS_THEME, sinon « style_par_defaut ». « gss-2026-09 » (retour_arriere) redonne exactement le rendu d'avant la refonte.",
+  "roles": "Clés de rôle identiques au moteur GSS (bleu, orange, rouge, vert, sable, or, creme, sombre) : fonce = aplats porteurs de texte (texte « sur_fonce ») et texte coloré sur fond clair, vif = traits, pictogrammes et numéros, clair = fonds teintés. Le sens GSS de chaque rôle est rappelé dans « role_gss ».",
+  "carte": "entete : bande_titre (titre blanc dans un bandeau plein) | filet_haut | barre_gauche | aucun ; icone.mode : dans_bande | nu | pastille_teinte | tuile_contour | disque_plein ; icone.graisse : thin | light | regular | bold | duotone | fill.",
+  "pictogrammes": "Phosphor Icons 2.1.1 (licence MIT) + 5 dessins maison au même gabarit (moteur/pictos) ; le nom GSS du pictogramme (velo, bouclier, talkie…) ne change pas.",
+  "licences": "Polices sous SIL Open Font License 1.1 (fichiers LICENCE-*.txt dans polices/), embarquables.",
+  "contrastes": "Toutes les paires texte / fond utilisées sont contrôlées au chargement de ce fichier par outils/construire_themes.py : 4,5:1 au moins pour le texte, 3:1 pour les éléments graphiques.",
+  "formats": "page : toile A4 portrait des pages de schéma (1 schéma = 1 page, moteur_page) ; paysage : toile 1200 × 660 des schémas placés dans le texte (format court, cadre imposé, ancienne mise en page), dessinée par le moteur d'origine puis remise aux couleurs et à la police du thème (themes_gss.recolorer)."
+ },
+ "style_par_defaut": "marine",
+ "retour_arriere": {
+  "id": "gss-2026-09",
+  "nom": "Palette GSS validée le 25/09/2026 (thème de retour arrière)",
+  "note": "Rendu par le moteur d'origine (backend/python/schemas_gss, format paysage 1200 × 660) et par gss-theme.css actuel, sans aucun changement : ces valeurs sont recopiées ici pour mémoire.",
+  "schemas": {
+   "FOND": "#D9D9D9",
+   "CONTOUR": "#484545",
+   "TEXTE": "#463A2F",
+   "NOIR": "#000000",
+   "CLAIR": "#F5F5DE",
+   "SURF": "#FBFAF4",
+   "GRIS": "#7A726F",
+   "LIEN": "#9A928E",
+   "DATE": "#B9423C",
+   "POLICE": "Lexend, 'Arial Rounded MT Bold', Arial, sans-serif",
+   "ROLES": {
+    "bleu": [
+     "#6298C0",
+     "#1D49A7"
+    ],
+    "vert": [
+     "#B8CCB1",
+     "#377E3F"
+    ],
+    "rouge": [
+     "#E78E83",
+     "#DD4E49"
+    ],
+    "orange": [
+     "#F0D3A3",
+     "#E99842"
+    ],
+    "sable": [
+     "#ECDEC2",
+     "#47494B"
+    ],
+    "or": [
+     "#E5CA97",
+     "#47494B"
+    ],
+    "creme": [
+     "#F5F5DE",
+     "#47494B"
+    ],
+    "sombre": [
+     "#484545",
+     "#2E2B2B"
+    ]
+   },
+   "FONCE": {
+    "bleu": "#1D49A7",
+    "vert": "#377E3F",
+    "rouge": "#DD4E49",
+    "orange": "#E99842",
+    "sable": "#8A7550",
+    "or": "#8A7550",
+    "creme": "#8A817C",
+    "sombre": "#484545"
+   }
+  },
+  "pages": {
+   "fond": "#D9D9D9",
+   "bandeau": "#494545",
+   "titres": "#DC2626",
+   "couverture": "dégradé #111827 → #DC2626",
+   "polices": "Inter, Outfit (Google Fonts)"
+  }
+ },
+ "formats": {
+  "page": {
+   "W": 1000,
+   "H": 1270,
+   "note": "Page de schéma A4 portrait : toile 1000 × 1270 affichée sur 180 × 228,6 mm (1 px = 0,18 mm ; 20 px ≈ 10 pt), soit 77 % de la hauteur de la page."
+  },
+  "paysage": {
+   "W": 1200,
+   "H": 660,
+   "note": "Schéma placé dans le texte (format court, cadre imposé, ancienne mise en page « un schéma sous chaque page ») : toile du moteur d'origine, couleurs et police du thème."
+  }
+ },
+ "styles": {
+  "marine": {
+   "id": "marine",
+   "nom": "Marine & signal",
+   "accroche": "Le bleu marine des institutions, un orange « signal » pour guider l'œil",
+   "principe": "Le code visuel de la sécurité et du service public : un bleu marine profond pour la structure, des bandeaux pleins qui portent les titres en blanc, un orange signal réservé aux numéros d'étapes, aux flèches de lecture et aux chiffres clés. Cartes nettes, angles peu arrondis, pictogrammes blancs dans les bandeaux.",
+   "forces": [
+    "Couleurs franches qui ressortent : chaque bloc porte son titre dans un bandeau plein",
+    "Crédible auprès des acheteurs publics et privés (codes de l'uniforme et des institutions)",
+    "L'orange signal trace le sens de lecture (numéros, flèches) sans surcharger",
+    "Contrastes AA partout ; s'imprime bien, y compris en noir et blanc"
+   ],
+   "limites": [
+    "Plus d'encre que les styles clairs (bandeaux pleins)",
+    "Le rouge du logo GSS n'est plus la couleur dominante (logo conservé dans l'en-tête marine)"
+   ],
+   "usage": "Tous les mémoires techniques, publics et privés",
+   "polices": {
+    "titre": {
+     "famille": "IBM Plex Sans",
+     "repli": "sans-serif",
+     "fichiers": {
+      "500": "polices/IBMPlexSans-500.ttf",
+      "600": "polices/IBMPlexSans-600.ttf",
+      "700": "polices/IBMPlexSans-700.ttf"
+     },
+     "licence": "polices/LICENCE-IBMPlexSans-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&display=swap"
+    },
+    "texte": {
+     "famille": "IBM Plex Sans",
+     "repli": "sans-serif",
+     "fichiers": {
+      "400": "polices/IBMPlexSans-400.ttf",
+      "500": "polices/IBMPlexSans-500.ttf",
+      "600": "polices/IBMPlexSans-600.ttf",
+      "700": "polices/IBMPlexSans-700.ttf"
+     },
+     "licence": "polices/LICENCE-IBMPlexSans-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+    },
+    "chiffres": {
+     "famille": "IBM Plex Sans",
+     "repli": "sans-serif",
+     "fichiers": {
+      "600": "polices/IBMPlexSans-600.ttf",
+      "700": "polices/IBMPlexSans-700.ttf"
+     },
+     "licence": "polices/LICENCE-IBMPlexSans-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@600;700&display=swap"
+    }
+   },
+   "typo": {
+    "titre_graisse": 600,
+    "texte_graisse": 400,
+    "chiffres_graisse": 700,
+    "interligne_titre": 1.16,
+    "interligne_texte": 1.34,
+    "interlettrage_titre": 0,
+    "echelle_titre": 1.0,
+    "echelle_texte": 1.0
+   },
+   "couleurs": {
+    "fond_page": "#FFFFFF",
+    "fond_schema": "#FFFFFF",
+    "encre": "#0F1E33",
+    "encre_2": "#3E4C60",
+    "encre_3": "#5B687C",
+    "filet": "#D5DDE8",
+    "surface": "#FFFFFF",
+    "surface_2": "#F2F5F9",
+    "carte_fond": "#F3F6FA",
+    "accent": "#E85D15",
+    "accent_texte": "#B54708",
+    "structure": "#0B2545",
+    "sur_structure": "#FFFFFF",
+    "lien": "#0B2545",
+    "fleche": "#E85D15"
+   },
+   "roles": {
+    "bleu": {
+     "fonce": "#1F5FBF",
+     "vif": "#1F5FBF",
+     "clair": "#E8EFFA",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "contrôle"
+    },
+    "orange": {
+     "fonce": "#B54708",
+     "vif": "#E85D15",
+     "clair": "#FEEFE5",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "action"
+    },
+    "rouge": {
+     "fonce": "#B42318",
+     "vif": "#D92D20",
+     "clair": "#FDECEA",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "déclencheur / non-conformité"
+    },
+    "vert": {
+     "fonce": "#0E7A50",
+     "vif": "#13955F",
+     "clair": "#E4F4EC",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "issue"
+    },
+    "sable": {
+     "fonce": "#1D3A63",
+     "vif": "#1D3A63",
+     "clair": "#E9EFF6",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "structure"
+    },
+    "or": {
+     "fonce": "#0B2545",
+     "vif": "#0B2545",
+     "clair": "#E5EBF3",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "structure (tête)"
+    },
+    "creme": {
+     "fonce": "#4F5F77",
+     "vif": "#4F5F77",
+     "clair": "#EEF2F7",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "neutre"
+    },
+    "sombre": {
+     "fonce": "#0B2545",
+     "vif": "#0B2545",
+     "clair": "#E5EBF3",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "bandeau"
+    }
+   },
+   "carte": {
+    "entete": "bande_titre",
+    "rayon": 6,
+    "bordure": 0,
+    "couleur_bordure": "#D5DDE8",
+    "ombre": {
+     "dy": 3,
+     "flou": 10,
+     "couleur": "#0B2545",
+     "opacite": 0.1
+    },
+    "remplissage": "carte_fond",
+    "epaisseur_filet": 0,
+    "epaisseur_barre": 0,
+    "lueur": false,
+    "icone": {
+     "mode": "dans_bande",
+     "graisse": "bold"
+    },
+    "centrer_titre": false
+   },
+   "bandeau": {
+    "mode": "plein",
+    "rayon": 6
+   },
+   "fleches": {
+    "couleur": "#E85D15",
+    "epaisseur": 4,
+    "pointe": "triangle",
+    "taille": 16
+   },
+   "liens": {
+    "couleur": "#9AAAC0",
+    "epaisseur": 2.5,
+    "noeud": 7
+   },
+   "etiquettes": {
+    "mode": "plein"
+   },
+   "numeros": {
+    "mode": "carre"
+   },
+   "puces": {
+    "forme": "carre"
+   },
+   "coche": {
+    "mode": "plein"
+   },
+   "motif_fond": null,
+   "logo": "original",
+   "pages": {
+    "--gss-fond-page": "#FFFFFF",
+    "--gss-encre": "#0F1E33",
+    "--gss-encre-2": "#3E4C60",
+    "--gss-encre-3": "#5B687C",
+    "--gss-filet": "#D5DDE8",
+    "--gss-accent": "#E85D15",
+    "--gss-accent-texte": "#B54708",
+    "--gss-structure": "#0B2545",
+    "--gss-encadre-fond": "#F2F5F9",
+    "--gss-encadre-filet": "#E85D15",
+    "--gss-tableau-tete": "#0B2545",
+    "--gss-tableau-tete-texte": "#FFFFFF",
+    "--gss-tableau-ligne": "#F2F5F9",
+    "--gss-police-titre": "'IBM Plex Sans', sans-serif",
+    "--gss-police-texte": "'IBM Plex Sans', sans-serif",
+    "--gss-titre-graisse": "600",
+    "--gss-entete-fond": "#0B2545",
+    "--gss-entete-texte": "#FFFFFF",
+    "--gss-entete-filet": "#E85D15",
+    "--gss-titre": "#0B2545",
+    "--gss-titre-filet": "#E85D15",
+    "--gss-couverture-fond": "#0B2545",
+    "--gss-couverture-texte": "#FFFFFF",
+    "--gss-couverture-accent": "#F26A21",
+    "--gss-intercalaire-fond": "#0B2545",
+    "--gss-intercalaire-texte": "#FFFFFF",
+    "--gss-intercalaire-numero": "#F26A21"
+   }
+  },
+  "graphite": {
+   "id": "graphite",
+   "nom": "Graphite & rouge GSS",
+   "accroche": "L'identité GSS en version éditoriale : graphite, blanc et le rouge du logo",
+   "principe": "Une mise en page de rapport annuel : fond blanc, graphite pour la structure, le rouge du logo GSS comme unique couleur d'appel (grands numéros, chiffres clés, filets). Titres en caractères étroits de signalétique, filets épais en tête de carte, pictogrammes au trait : la hiérarchie se lit d'un coup d'œil.",
+   "forces": [
+    "Fait du rouge et du gris du logo GSS un vrai système graphique",
+    "Très haut de gamme, éditorial, aéré",
+    "Économe en encre (fonds blancs, couleur ponctuelle)",
+    "Grands numéros rouges : l'ordre de lecture saute aux yeux"
+   ],
+   "limites": [
+    "Moins de couleur que le marine : repose sur la typographie et les filets",
+    "Le rouge sert à la fois de couleur de marque et d'alerte (à doser)"
+   ],
+   "usage": "Tous marchés ; idéal pour asseoir l'image de marque GSS",
+   "polices": {
+    "titre": {
+     "famille": "Barlow Condensed",
+     "repli": "sans-serif",
+     "fichiers": {
+      "500": "polices/BarlowCondensed-500.ttf",
+      "600": "polices/BarlowCondensed-600.ttf",
+      "700": "polices/BarlowCondensed-700.ttf"
+     },
+     "licence": "polices/LICENCE-BarlowCondensed-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&display=swap"
+    },
+    "texte": {
+     "famille": "Barlow",
+     "repli": "sans-serif",
+     "fichiers": {
+      "400": "polices/Barlow-400.ttf",
+      "500": "polices/Barlow-500.ttf",
+      "600": "polices/Barlow-600.ttf",
+      "700": "polices/Barlow-700.ttf"
+     },
+     "licence": "polices/LICENCE-Barlow-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap"
+    },
+    "chiffres": {
+     "famille": "Barlow Condensed",
+     "repli": "sans-serif",
+     "fichiers": {
+      "600": "polices/BarlowCondensed-600.ttf",
+      "700": "polices/BarlowCondensed-700.ttf"
+     },
+     "licence": "polices/LICENCE-BarlowCondensed-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&display=swap"
+    }
+   },
+   "typo": {
+    "titre_graisse": 600,
+    "texte_graisse": 400,
+    "chiffres_graisse": 700,
+    "interligne_titre": 1.06,
+    "interligne_texte": 1.32,
+    "interlettrage_titre": 0.01,
+    "echelle_titre": 1.2,
+    "echelle_texte": 1.02
+   },
+   "couleurs": {
+    "fond_page": "#FFFFFF",
+    "fond_schema": "#FFFFFF",
+    "encre": "#1C1F23",
+    "encre_2": "#474D55",
+    "encre_3": "#656B73",
+    "filet": "#D9DBDE",
+    "surface": "#FFFFFF",
+    "surface_2": "#F3F3F1",
+    "carte_fond": "#F3F3F1",
+    "accent": "#E2141B",
+    "accent_texte": "#C4121A",
+    "structure": "#1C1F23",
+    "sur_structure": "#FFFFFF",
+    "lien": "#1C1F23",
+    "fleche": "#1C1F23"
+   },
+   "roles": {
+    "bleu": {
+     "fonce": "#2C4A6B",
+     "vif": "#35577D",
+     "clair": "#E8EDF2",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "contrôle"
+    },
+    "orange": {
+     "fonce": "#AD5200",
+     "vif": "#C9650E",
+     "clair": "#FBF1E1",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "action"
+    },
+    "rouge": {
+     "fonce": "#C4121A",
+     "vif": "#E2141B",
+     "clair": "#FCE9E9",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "déclencheur / non-conformité"
+    },
+    "vert": {
+     "fonce": "#1F6340",
+     "vif": "#2A7D50",
+     "clair": "#E5F1EA",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "issue"
+    },
+    "sable": {
+     "fonce": "#2B3036",
+     "vif": "#2B3036",
+     "clair": "#EFEFEC",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "structure"
+    },
+    "or": {
+     "fonce": "#1C1F23",
+     "vif": "#1C1F23",
+     "clair": "#EAEAE7",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "structure (tête)"
+    },
+    "creme": {
+     "fonce": "#565D66",
+     "vif": "#565D66",
+     "clair": "#F3F3F1",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "neutre"
+    },
+    "sombre": {
+     "fonce": "#1C1F23",
+     "vif": "#1C1F23",
+     "clair": "#EAEAE7",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "bandeau"
+    }
+   },
+   "carte": {
+    "entete": "filet_haut",
+    "rayon": 0,
+    "bordure": 0,
+    "couleur_bordure": "#D9DBDE",
+    "ombre": null,
+    "remplissage": "carte_fond",
+    "epaisseur_filet": 8,
+    "epaisseur_barre": 0,
+    "lueur": false,
+    "icone": {
+     "mode": "nu",
+     "graisse": "light"
+    },
+    "centrer_titre": false
+   },
+   "bandeau": {
+    "mode": "plein_filet",
+    "rayon": 0
+   },
+   "fleches": {
+    "couleur": "#1C1F23",
+    "epaisseur": 3,
+    "pointe": "chevron",
+    "taille": 15
+   },
+   "liens": {
+    "couleur": "#1C1F23",
+    "epaisseur": 2,
+    "noeud": 6
+   },
+   "etiquettes": {
+    "mode": "contour"
+   },
+   "numeros": {
+    "mode": "grand"
+   },
+   "puces": {
+    "forme": "tiret"
+   },
+   "coche": {
+    "mode": "trait"
+   },
+   "motif_fond": null,
+   "logo": "original",
+   "pages": {
+    "--gss-fond-page": "#FFFFFF",
+    "--gss-encre": "#1C1F23",
+    "--gss-encre-2": "#474D55",
+    "--gss-encre-3": "#656B73",
+    "--gss-filet": "#D9DBDE",
+    "--gss-accent": "#E2141B",
+    "--gss-accent-texte": "#C4121A",
+    "--gss-structure": "#1C1F23",
+    "--gss-encadre-fond": "#F3F3F1",
+    "--gss-encadre-filet": "#E2141B",
+    "--gss-tableau-tete": "#1C1F23",
+    "--gss-tableau-tete-texte": "#FFFFFF",
+    "--gss-tableau-ligne": "#F3F3F1",
+    "--gss-police-titre": "'Barlow Condensed', sans-serif",
+    "--gss-police-texte": "'Barlow', sans-serif",
+    "--gss-titre-graisse": "600",
+    "--gss-entete-fond": "#1C1F23",
+    "--gss-entete-texte": "#FFFFFF",
+    "--gss-entete-filet": "#E2141B",
+    "--gss-titre": "#1C1F23",
+    "--gss-titre-filet": "#E2141B",
+    "--gss-couverture-fond": "#1C1F23",
+    "--gss-couverture-texte": "#FFFFFF",
+    "--gss-couverture-accent": "#E2141B",
+    "--gss-intercalaire-fond": "#FFFFFF",
+    "--gss-intercalaire-texte": "#1C1F23",
+    "--gss-intercalaire-numero": "#E2141B"
+   }
+  },
+  "conseil": {
+   "id": "conseil",
+   "nom": "Pétrole conseil",
+   "accroche": "Blanc, gris et une seule couleur d'accent : la clarté d'un rapport de cabinet de conseil",
+   "principe": "La sobriété des grands cabinets : beaucoup de blanc, des gris neutres et une seule couleur d'accent, un bleu pétrole, pour la structure. Les couleurs de rôle n'apparaissent qu'en barre latérale et sur les pictogrammes. Filets fins, alignements stricts, aucune ombre.",
+   "forces": [
+    "Le plus lisible et le plus « analytique » des cinq",
+    "Très économe en encre, parfait à l'impression",
+    "Moderne et sobre : met en valeur le contenu, pas le décor",
+    "Accent pétrole très différent de l'existant et des concurrents"
+   ],
+   "limites": [
+    "Moins d'impact visuel à distance (couleurs en petites touches)",
+    "Peut paraître froid pour les marchés d'accueil ou d'événementiel"
+   ],
+   "usage": "Acheteurs publics exigeants, industrie, tertiaire",
+   "polices": {
+    "titre": {
+     "famille": "Source Sans 3",
+     "repli": "sans-serif",
+     "fichiers": {
+      "600": "polices/SourceSans3-600.ttf",
+      "700": "polices/SourceSans3-700.ttf"
+     },
+     "licence": "polices/LICENCE-SourceSans3-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@600;700&display=swap"
+    },
+    "texte": {
+     "famille": "Source Sans 3",
+     "repli": "sans-serif",
+     "fichiers": {
+      "400": "polices/SourceSans3-400.ttf",
+      "600": "polices/SourceSans3-600.ttf",
+      "700": "polices/SourceSans3-700.ttf"
+     },
+     "licence": "polices/LICENCE-SourceSans3-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap"
+    },
+    "chiffres": {
+     "famille": "Source Sans 3",
+     "repli": "sans-serif",
+     "fichiers": {
+      "700": "polices/SourceSans3-700.ttf"
+     },
+     "licence": "polices/LICENCE-SourceSans3-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@700&display=swap"
+    }
+   },
+   "typo": {
+    "titre_graisse": 700,
+    "texte_graisse": 400,
+    "chiffres_graisse": 700,
+    "interligne_titre": 1.12,
+    "interligne_texte": 1.32,
+    "interlettrage_titre": 0,
+    "echelle_titre": 1.06,
+    "echelle_texte": 1.08
+   },
+   "couleurs": {
+    "fond_page": "#FFFFFF",
+    "fond_schema": "#FFFFFF",
+    "encre": "#111418",
+    "encre_2": "#48525E",
+    "encre_3": "#646E7A",
+    "filet": "#DCE1E6",
+    "surface": "#FFFFFF",
+    "surface_2": "#F5F7F8",
+    "carte_fond": "#FFFFFF",
+    "accent": "#00857A",
+    "accent_texte": "#006B62",
+    "structure": "#00675F",
+    "sur_structure": "#FFFFFF",
+    "lien": "#8A94A3",
+    "fleche": "#00857A"
+   },
+   "roles": {
+    "bleu": {
+     "fonce": "#2B5AA6",
+     "vif": "#2B5AA6",
+     "clair": "#EBF0F9",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "contrôle"
+    },
+    "orange": {
+     "fonce": "#B45309",
+     "vif": "#D97706",
+     "clair": "#FEF3E4",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "action"
+    },
+    "rouge": {
+     "fonce": "#B42318",
+     "vif": "#D92D20",
+     "clair": "#FDEDEB",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "déclencheur / non-conformité"
+    },
+    "vert": {
+     "fonce": "#3B7A22",
+     "vif": "#4C9A2A",
+     "clair": "#EDF6E8",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "issue"
+    },
+    "sable": {
+     "fonce": "#00675F",
+     "vif": "#00857A",
+     "clair": "#E3F2F0",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "structure"
+    },
+    "or": {
+     "fonce": "#00524C",
+     "vif": "#00675F",
+     "clair": "#DDEFEC",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "structure (tête)"
+    },
+    "creme": {
+     "fonce": "#4B5563",
+     "vif": "#7A8390",
+     "clair": "#F2F4F6",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "neutre"
+    },
+    "sombre": {
+     "fonce": "#1F2933",
+     "vif": "#1F2933",
+     "clair": "#E9ECEF",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "bandeau"
+    }
+   },
+   "carte": {
+    "entete": "barre_gauche",
+    "rayon": 4,
+    "bordure": 1.4,
+    "couleur_bordure": "#DCE1E6",
+    "ombre": null,
+    "remplissage": "carte_fond",
+    "epaisseur_filet": 0,
+    "epaisseur_barre": 7,
+    "lueur": false,
+    "icone": {
+     "mode": "pastille_teinte",
+     "graisse": "regular"
+    },
+    "centrer_titre": false
+   },
+   "bandeau": {
+    "mode": "teinte_barre",
+    "rayon": 4
+   },
+   "fleches": {
+    "couleur": "#00857A",
+    "epaisseur": 2.6,
+    "pointe": "triangle",
+    "taille": 13
+   },
+   "liens": {
+    "couleur": "#9AA3AF",
+    "epaisseur": 2,
+    "noeud": 6
+   },
+   "etiquettes": {
+    "mode": "teinte"
+   },
+   "numeros": {
+    "mode": "cercle_contour"
+   },
+   "puces": {
+    "forme": "rond"
+   },
+   "coche": {
+    "mode": "teinte"
+   },
+   "motif_fond": null,
+   "logo": "encre",
+   "pages": {
+    "--gss-fond-page": "#FFFFFF",
+    "--gss-encre": "#111418",
+    "--gss-encre-2": "#48525E",
+    "--gss-encre-3": "#646E7A",
+    "--gss-filet": "#DCE1E6",
+    "--gss-accent": "#00857A",
+    "--gss-accent-texte": "#006B62",
+    "--gss-structure": "#00675F",
+    "--gss-encadre-fond": "#F5F7F8",
+    "--gss-encadre-filet": "#00857A",
+    "--gss-tableau-tete": "#00524C",
+    "--gss-tableau-tete-texte": "#FFFFFF",
+    "--gss-tableau-ligne": "#F5F7F8",
+    "--gss-police-titre": "'Source Sans 3', sans-serif",
+    "--gss-police-texte": "'Source Sans 3', sans-serif",
+    "--gss-titre-graisse": "700",
+    "--gss-entete-fond": "#FFFFFF",
+    "--gss-entete-texte": "#111418",
+    "--gss-entete-filet": "#00857A",
+    "--gss-titre": "#111418",
+    "--gss-titre-filet": "#00857A",
+    "--gss-couverture-fond": "#FFFFFF",
+    "--gss-couverture-texte": "#111418",
+    "--gss-couverture-accent": "#00857A",
+    "--gss-intercalaire-fond": "#00675F",
+    "--gss-intercalaire-texte": "#FFFFFF",
+    "--gss-intercalaire-numero": "#BFE6E1"
+   }
+  },
+  "sombre": {
+   "id": "sombre",
+   "nom": "Nuit supervision",
+   "accroche": "L'univers du poste de contrôle : fond nuit, lignes lumineuses",
+   "principe": "L'esthétique d'un centre de supervision : fond bleu nuit, cartes en verre sombre, couleurs de rôle lumineuses (cyan, ambre, rouge, vert) sur les filets, les pictogrammes et les numéros. Évoque la vidéosurveillance, les outils numériques et la réactivité.",
+   "forces": [
+    "Impact maximal à l'écran et en soutenance orale",
+    "Couleurs très lumineuses, contraste élevé (texte clair sur fond nuit)",
+    "Image technologique : outils numériques, télésurveillance, PTI"
+   ],
+   "limites": [
+    "Coûteux et lourd à l'impression : à réserver à la version écran ou à la soutenance",
+    "Moins adapté aux longues pages de texte"
+   ],
+   "usage": "Soutenances orales, version écran, marchés à forte composante technologique",
+   "polices": {
+    "titre": {
+     "famille": "Space Grotesk",
+     "repli": "sans-serif",
+     "fichiers": {
+      "500": "polices/SpaceGrotesk-500.ttf",
+      "600": "polices/SpaceGrotesk-600.ttf",
+      "700": "polices/SpaceGrotesk-700.ttf"
+     },
+     "licence": "polices/LICENCE-SpaceGrotesk-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap"
+    },
+    "texte": {
+     "famille": "Manrope",
+     "repli": "sans-serif",
+     "fichiers": {
+      "400": "polices/Manrope-400.ttf",
+      "500": "polices/Manrope-500.ttf",
+      "600": "polices/Manrope-600.ttf",
+      "700": "polices/Manrope-700.ttf"
+     },
+     "licence": "polices/LICENCE-Manrope-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"
+    },
+    "chiffres": {
+     "famille": "Space Grotesk",
+     "repli": "sans-serif",
+     "fichiers": {
+      "600": "polices/SpaceGrotesk-600.ttf",
+      "700": "polices/SpaceGrotesk-700.ttf"
+     },
+     "licence": "polices/LICENCE-SpaceGrotesk-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&display=swap"
+    }
+   },
+   "typo": {
+    "titre_graisse": 600,
+    "texte_graisse": 400,
+    "chiffres_graisse": 700,
+    "interligne_titre": 1.14,
+    "interligne_texte": 1.38,
+    "interlettrage_titre": 0,
+    "echelle_titre": 1.0,
+    "echelle_texte": 0.98
+   },
+   "couleurs": {
+    "fond_page": "#0A1020",
+    "fond_schema": "#0A1020",
+    "encre": "#E8EEF8",
+    "encre_2": "#AFBFD5",
+    "encre_3": "#8796AF",
+    "filet": "#22314F",
+    "surface": "#111A2E",
+    "surface_2": "#0E1628",
+    "carte_fond": "#111A2E",
+    "accent": "#22C5F0",
+    "accent_texte": "#22C5F0",
+    "structure": "#94A9CF",
+    "sur_structure": "#0A1020",
+    "lien": "#3E5D8F",
+    "fleche": "#22C5F0"
+   },
+   "roles": {
+    "bleu": {
+     "fonce": "#3AC8F2",
+     "vif": "#3AC8F2",
+     "clair": "#0F2A3E",
+     "sur_fonce": "#0A1020",
+     "role_gss": "contrôle"
+    },
+    "orange": {
+     "fonce": "#FFB020",
+     "vif": "#FFB020",
+     "clair": "#2E2410",
+     "sur_fonce": "#0A1020",
+     "role_gss": "action"
+    },
+    "rouge": {
+     "fonce": "#FF5A6A",
+     "vif": "#FF5A6A",
+     "clair": "#36141D",
+     "sur_fonce": "#0A1020",
+     "role_gss": "déclencheur / non-conformité"
+    },
+    "vert": {
+     "fonce": "#2EE59D",
+     "vif": "#2EE59D",
+     "clair": "#0C2E24",
+     "sur_fonce": "#0A1020",
+     "role_gss": "issue"
+    },
+    "sable": {
+     "fonce": "#94A9CF",
+     "vif": "#94A9CF",
+     "clair": "#172238",
+     "sur_fonce": "#0A1020",
+     "role_gss": "structure"
+    },
+    "or": {
+     "fonce": "#C3D0E8",
+     "vif": "#C3D0E8",
+     "clair": "#1A2640",
+     "sur_fonce": "#0A1020",
+     "role_gss": "structure (tête)"
+    },
+    "creme": {
+     "fonce": "#8094B5",
+     "vif": "#8094B5",
+     "clair": "#141E33",
+     "sur_fonce": "#0A1020",
+     "role_gss": "neutre"
+    },
+    "sombre": {
+     "fonce": "#22C5F0",
+     "vif": "#22C5F0",
+     "clair": "#122036",
+     "sur_fonce": "#0A1020",
+     "role_gss": "bandeau"
+    }
+   },
+   "carte": {
+    "entete": "filet_haut",
+    "rayon": 12,
+    "bordure": 1.3,
+    "couleur_bordure": "#25365A",
+    "ombre": null,
+    "remplissage": "carte_fond",
+    "epaisseur_filet": 4,
+    "epaisseur_barre": 0,
+    "lueur": true,
+    "icone": {
+     "mode": "tuile_contour",
+     "graisse": "duotone"
+    },
+    "centrer_titre": false
+   },
+   "bandeau": {
+    "mode": "verre",
+    "rayon": 12
+   },
+   "fleches": {
+    "couleur": "#22C5F0",
+    "epaisseur": 2.6,
+    "pointe": "triangle",
+    "taille": 13
+   },
+   "liens": {
+    "couleur": "#3E5D8F",
+    "epaisseur": 2,
+    "noeud": 6
+   },
+   "etiquettes": {
+    "mode": "contour"
+   },
+   "numeros": {
+    "mode": "mono"
+   },
+   "puces": {
+    "forme": "losange"
+   },
+   "coche": {
+    "mode": "contour"
+   },
+   "motif_fond": "points",
+   "logo": "original",
+   "pages": {
+    "--gss-fond-page": "#0A1020",
+    "--gss-encre": "#E8EEF8",
+    "--gss-encre-2": "#AFBFD5",
+    "--gss-encre-3": "#8796AF",
+    "--gss-filet": "#22314F",
+    "--gss-accent": "#22C5F0",
+    "--gss-accent-texte": "#22C5F0",
+    "--gss-structure": "#94A9CF",
+    "--gss-encadre-fond": "#0E1628",
+    "--gss-encadre-filet": "#22C5F0",
+    "--gss-tableau-tete": "#C3D0E8",
+    "--gss-tableau-tete-texte": "#0A1020",
+    "--gss-tableau-ligne": "#0E1628",
+    "--gss-police-titre": "'Space Grotesk', sans-serif",
+    "--gss-police-texte": "'Manrope', sans-serif",
+    "--gss-titre-graisse": "600",
+    "--gss-entete-fond": "#0E1628",
+    "--gss-entete-texte": "#E8EEF8",
+    "--gss-entete-filet": "#22C5F0",
+    "--gss-titre": "#FFFFFF",
+    "--gss-titre-filet": "#22C5F0",
+    "--gss-couverture-fond": "#0A1020",
+    "--gss-couverture-texte": "#FFFFFF",
+    "--gss-couverture-accent": "#22C5F0",
+    "--gss-intercalaire-fond": "#0A1020",
+    "--gss-intercalaire-texte": "#FFFFFF",
+    "--gss-intercalaire-numero": "#22C5F0"
+   }
+  },
+  "premium": {
+   "id": "premium",
+   "nom": "Ivoire & cuivre",
+   "accroche": "Ivoire, cuivre et bordeaux : l'élégance d'un service haut de gamme",
+   "principe": "Une palette chaude et feutrée : fond ivoire, texte expresso, cuivre pour la structure, bordeaux pour les alertes, bleu pétrole pour le contrôle. Titres en caractères à empattements, cartes douces aux angles arrondis, pictogrammes dans des médaillons pleins.",
+   "forces": [
+    "Forte valeur perçue : évoque l'accueil et le service haut de gamme",
+    "Chaleureux et humain, se distingue nettement des concurrents",
+    "Couleurs profondes qui ressortent sur l'ivoire"
+   ],
+   "limites": [
+    "Moins « sécurité » que le marine ou le graphite",
+    "Fond ivoire : rendu à valider sur l'imprimante de GSS"
+   ],
+   "usage": "Accueil, hôtellerie, luxe, tertiaire haut de gamme, événementiel",
+   "polices": {
+    "titre": {
+     "famille": "Fraunces",
+     "repli": "serif",
+     "fichiers": {
+      "500": "polices/Fraunces-500.ttf",
+      "600": "polices/Fraunces-600.ttf",
+      "700": "polices/Fraunces-700.ttf"
+     },
+     "licence": "polices/LICENCE-Fraunces-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&display=swap"
+    },
+    "texte": {
+     "famille": "DM Sans",
+     "repli": "sans-serif",
+     "fichiers": {
+      "400": "polices/DMSans-400.ttf",
+      "500": "polices/DMSans-500.ttf",
+      "600": "polices/DMSans-600.ttf",
+      "700": "polices/DMSans-700.ttf"
+     },
+     "licence": "polices/LICENCE-DMSans-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap"
+    },
+    "chiffres": {
+     "famille": "Fraunces",
+     "repli": "serif",
+     "fichiers": {
+      "600": "polices/Fraunces-600.ttf",
+      "700": "polices/Fraunces-700.ttf"
+     },
+     "licence": "polices/LICENCE-Fraunces-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&display=swap"
+    }
+   },
+   "typo": {
+    "titre_graisse": 600,
+    "texte_graisse": 400,
+    "chiffres_graisse": 600,
+    "interligne_titre": 1.12,
+    "interligne_texte": 1.38,
+    "interlettrage_titre": 0,
+    "echelle_titre": 1.0,
+    "echelle_texte": 0.98
+   },
+   "couleurs": {
+    "fond_page": "#F7F2EA",
+    "fond_schema": "#F7F2EA",
+    "encre": "#2A1F1A",
+    "encre_2": "#58483D",
+    "encre_3": "#6E5D51",
+    "filet": "#E5DACA",
+    "surface": "#FFFDF9",
+    "surface_2": "#F1E8DA",
+    "carte_fond": "#FFFDF9",
+    "accent": "#B8672E",
+    "accent_texte": "#94501F",
+    "structure": "#7A5A33",
+    "sur_structure": "#FFFDF9",
+    "lien": "#C9A97E",
+    "fleche": "#A0602C"
+   },
+   "roles": {
+    "bleu": {
+     "fonce": "#1F4F66",
+     "vif": "#2A6A87",
+     "clair": "#E3EDF0",
+     "sur_fonce": "#FFFDF9",
+     "role_gss": "contrôle"
+    },
+    "orange": {
+     "fonce": "#94501F",
+     "vif": "#B8672E",
+     "clair": "#F6E8DB",
+     "sur_fonce": "#FFFDF9",
+     "role_gss": "action"
+    },
+    "rouge": {
+     "fonce": "#8E2230",
+     "vif": "#A3283A",
+     "clair": "#F4E2E3",
+     "sur_fonce": "#FFFDF9",
+     "role_gss": "déclencheur / non-conformité"
+    },
+    "vert": {
+     "fonce": "#4A6636",
+     "vif": "#5E7F45",
+     "clair": "#E9EFE2",
+     "sur_fonce": "#FFFDF9",
+     "role_gss": "issue"
+    },
+    "sable": {
+     "fonce": "#7A5A33",
+     "vif": "#A07A4C",
+     "clair": "#F1E8DA",
+     "sur_fonce": "#FFFDF9",
+     "role_gss": "structure"
+    },
+    "or": {
+     "fonce": "#5E4426",
+     "vif": "#A07A4C",
+     "clair": "#EFE3CF",
+     "sur_fonce": "#FFFDF9",
+     "role_gss": "structure (tête)"
+    },
+    "creme": {
+     "fonce": "#62524A",
+     "vif": "#8A786A",
+     "clair": "#F4EEE4",
+     "sur_fonce": "#FFFDF9",
+     "role_gss": "neutre"
+    },
+    "sombre": {
+     "fonce": "#2A1F1A",
+     "vif": "#2A1F1A",
+     "clair": "#EFE6DA",
+     "sur_fonce": "#FFFDF9",
+     "role_gss": "bandeau"
+    }
+   },
+   "carte": {
+    "entete": "aucun",
+    "rayon": 20,
+    "bordure": 0,
+    "couleur_bordure": "#E5DACA",
+    "ombre": {
+     "dy": 6,
+     "flou": 18,
+     "couleur": "#5A3A1A",
+     "opacite": 0.09
+    },
+    "remplissage": "carte_fond",
+    "epaisseur_filet": 0,
+    "epaisseur_barre": 0,
+    "lueur": false,
+    "icone": {
+     "mode": "disque_plein",
+     "graisse": "regular"
+    },
+    "centrer_titre": true
+   },
+   "bandeau": {
+    "mode": "plein",
+    "rayon": 20
+   },
+   "fleches": {
+    "couleur": "#A0602C",
+    "epaisseur": 2.6,
+    "pointe": "chevron",
+    "taille": 14
+   },
+   "liens": {
+    "couleur": "#C9A97E",
+    "epaisseur": 2,
+    "noeud": 6
+   },
+   "etiquettes": {
+    "mode": "teinte"
+   },
+   "numeros": {
+    "mode": "serif"
+   },
+   "puces": {
+    "forme": "rond"
+   },
+   "coche": {
+    "mode": "disque"
+   },
+   "motif_fond": null,
+   "logo": "original",
+   "pages": {
+    "--gss-fond-page": "#F7F2EA",
+    "--gss-encre": "#2A1F1A",
+    "--gss-encre-2": "#58483D",
+    "--gss-encre-3": "#6E5D51",
+    "--gss-filet": "#E5DACA",
+    "--gss-accent": "#B8672E",
+    "--gss-accent-texte": "#94501F",
+    "--gss-structure": "#7A5A33",
+    "--gss-encadre-fond": "#F1E8DA",
+    "--gss-encadre-filet": "#B8672E",
+    "--gss-tableau-tete": "#5E4426",
+    "--gss-tableau-tete-texte": "#FFFDF9",
+    "--gss-tableau-ligne": "#F1E8DA",
+    "--gss-police-titre": "'Fraunces', serif",
+    "--gss-police-texte": "'DM Sans', sans-serif",
+    "--gss-titre-graisse": "600",
+    "--gss-entete-fond": "#2A1F1A",
+    "--gss-entete-texte": "#FFFDF9",
+    "--gss-entete-filet": "#B8672E",
+    "--gss-titre": "#2A1F1A",
+    "--gss-titre-filet": "#B8672E",
+    "--gss-couverture-fond": "#2A1F1A",
+    "--gss-couverture-texte": "#FFFDF9",
+    "--gss-couverture-accent": "#C98A4B",
+    "--gss-intercalaire-fond": "#F1E8DA",
+    "--gss-intercalaire-texte": "#2A1F1A",
+    "--gss-intercalaire-numero": "#B8672E"
+   }
+  }
+ }
+}

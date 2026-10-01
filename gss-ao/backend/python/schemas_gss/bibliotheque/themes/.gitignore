@@ -1,0 +1,4 @@
+# Cache des schémas de la bibliothèque redessinés par thème (rendu_schemas.py, mode « redessiner ») :
+# reconstruit automatiquement, jamais versionné.
+*
+!.gitignore

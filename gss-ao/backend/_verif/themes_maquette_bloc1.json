@@ -1,0 +1,47 @@
+{
+ "description": "Maquette illustrative du bloc 1 (agent design, CCTP Centre Henri Becquerel), non validée par GSS : sert seulement à montrer la mise en page du bloc 1 dans le rendu de test hors ligne (en génération réelle, ce bloc est rédigé par le modèle).",
+ "rubrique": {
+  "id": "b1_comprehension",
+  "titre": "Notre compréhension de votre besoin",
+  "texte": "Le Centre Henri Becquerel nous consulte pour les missions de sécurité incendie et de sûreté de ses sites rouennais, dans le cadre d'un accord-cadre de 3 ans. La prestation s'exerce sur 22 520 m² : le bâtiment de soins de la rue d'Amiens (Becquerel 2), qui abrite le PC sécurité et l'accueil, le bâtiment CHB5 de la rue Edouard Adam, la crèche de la rue Mollien et le plateau de consultation de la route de Lyons. Un nouveau bâtiment de cinq niveaux, d'environ 20 000 m², ouvrira au premier trimestre 2027.\n\n## Le périmètre de la prestation demandée\n\n| Poste | Horaires | Qualification | Missions |\n|---|---|---|---|\n| PC sécurité | 24 h/24, 7 j/7 | SSIAP 2 | Alarmes incendie, vidéosurveillance, passes et clés, main courante, rondes de prévention et ronde technique journalière |\n| Poste d'accueil | 20 h – 7 h, tous les soirs | SSIAP 1 | Levées de doute, accueil des secours, premiers secours, transfert horizontal des malades, intrusions |\n| Renfort SSIAP | À la demande du CHB | SSIAP 1 / ADS | Mêmes missions que le poste d'accueil |\n\nS'y ajoutent les prestations exceptionnelles sur bon de commande (délai de prévenance de 48 heures ouvrées) et la reprise du personnel affecté au marché.\n\n## Vos attentes et nos engagements\n\n- **Continuité de service** : remplacement immédiat d'un agent absent, renfort mobilisable en 2 heures dans un rayon de 20 km. Notre réponse : notre dispositif de remplacement d'un agent absent (bloc 5).\n- **Qualifications à jour** : SSIAP, SST, habilitation électrique H0-B0, carte professionnelle. Notre réponse : le suivi des recyclages de chaque agent (bloc 3).\n- **Contrôle et traçabilité** : contrôles au moins une fois par mois de nuit et une fois par mois le week-end de jour, environ 50 puis 120 pointeaux. Notre réponse : nos trois niveaux de contrôle et notre contrôleur de rondes (blocs 4 et 5).\n- **Pilotage** : un interlocuteur unique, une réunion de suivi au minimum tous les mois, des plannings transmis 10 jours avant le début du mois. Notre réponse : notre interlocuteur unique et nos réunions de suivi (blocs 3 et 5).\n\n## Les points de vigilance identifiés et nos réponses\n\n- **Un établissement de soins** : confidentialité des données patients et des protocoles de sûreté, transfert horizontal et évacuation des malades (article U43). Notre réponse : des consignes du site intégrées au livre des missions et consignes (bloc 4).\n- **Un site qui s'agrandit en 2027** : nouveau bâtiment de cinq niveaux, pointeaux portés d'environ 50 à 120. Notre réponse : un circuit de ronde adapté à chaque évolution du site (bloc 4).\n- **La prise de poste** : formation en tuilage sur un poste de nuit et un poste de jour le week-end, QCM et fiche d'intégration avant titularisation. Notre réponse : notre procédure d'intégration d'un nouvel agent (bloc 5).\n\n## Notre réponse en un process\n\n- **Votre besoin** : PC sécurité 24 h/24 et accueil de 20 h à 7 h.\n- **Vos enjeux** : Continuité de service, confidentialité, nouveau bâtiment en 2027.\n- **Notre dispositif** : Équipe SSIAP dédiée, formée au site, renfort mobilisable en 2 heures.\n- **Notre pilotage** : Interlocuteur unique, contrôles de nuit et de week-end, réunion mensuelle.\n- **Votre résultat** : Continuité de service, conformité au CCTP, traçabilité de chaque intervention.",
+  "schema": {
+   "source": "process_besoin",
+   "gabarit": "flux",
+   "titre": "Notre réponse à votre besoin, en un process",
+   "params": {
+    "etapes": [
+     {
+      "titre": "Votre besoin",
+      "texte": "PC sécurité 24 h/24 et accueil de 20 h à 7 h",
+      "icone": "hopital",
+      "role": "rouge"
+     },
+     {
+      "titre": "Vos enjeux",
+      "texte": "Continuité de service, confidentialité, nouveau bâtiment en 2027",
+      "icone": "alerte",
+      "role": "rouge"
+     },
+     {
+      "titre": "Notre dispositif",
+      "texte": "Équipe SSIAP dédiée, formée au site, renfort mobilisable en 2 heures",
+      "icone": "groupe",
+      "role": "orange"
+     },
+     {
+      "titre": "Notre pilotage",
+      "texte": "Interlocuteur unique, contrôles de nuit et de week-end, réunion mensuelle",
+      "icone": "check",
+      "role": "bleu"
+     },
+     {
+      "titre": "Votre résultat",
+      "texte": "Continuité de service, conformité au CCTP, traçabilité de chaque intervention",
+      "icone": "bouclier",
+      "role": "vert"
+     }
+    ]
+   }
+  }
+ }
+}

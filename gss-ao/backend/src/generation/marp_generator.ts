@@ -4,6 +4,7 @@ import { spawnSync } from 'child_process';
 import type { PooledIllustration, SlideContext } from './image_service';
 import { D2Service } from './d2_service';
 import { organigrammeSvg } from './organigramme';
+import { themeActif, estRetourArriere, feuilleMarp, imagesTheme } from './themes';
 
 /** Illustrations attribuées, indexées par clé de slide (unicité globale garantie amont). */
 export type SlideAssignments = Map<string, PooledIllustration>;
@@ -15,11 +16,23 @@ export type SlideSchemas = Map<string, string>;
 const LEXEND_PATH = path.resolve(__dirname, '../../python/schemas_gss/polices/Lexend.ttf');
 const ORGANIGRAMME_GSS_PATH = path.resolve(__dirname, '../../python/schemas_gss/organigramme_gss.svg');
 
-/** Organigramme GSS en SVG sur une ligne, identifiants préfixés (null si absent). */
-function lireOrganigrammeGss(): string | null {
+/** Organigramme GSS en SVG sur une ligne, identifiants préfixés (null si absent). Thème de la refonte : organigramme
+ *  au format page (1 schéma = 1 page A4 portrait) ; retour arrière : organigramme d'origine. */
+function lireOrganigrammeGss(theme: string = themeActif()): string | null {
   try {
+    if (!estRetourArriere(theme)) {
+      const svg = organigrammeSvg('page', theme);
+      if (svg) {
+        return svg
+          .replace(/id="([^"]+)"/g, (_m, id) => `id="org-${id}"`)
+          .replace(/url\(#([^)]+)\)/g, (_m, id) => `url(#org-${id})`)
+          .replace(/(<svg\b[^>]*?) width="[\d.]+" height="[\d.]+"/, '$1 width="100%" preserveAspectRatio="xMidYMid meet"')
+          .replace(/\s*\n\s*/g, ' ')
+          .trim();
+      }
+    }
     // Organigramme dessiné d'après l'organigramme GSS de référence (mêmes personnes que le texte).
-    return (organigrammeSvg() ?? fs.readFileSync(ORGANIGRAMME_GSS_PATH, 'utf-8'))
+    return (organigrammeSvg('paysage', theme) ?? fs.readFileSync(ORGANIGRAMME_GSS_PATH, 'utf-8'))
       .replace(/id="([^"]+)"/g, (_m, id) => `id="org-${id}"`)
       .replace(/url\(#([^)]+)\)/g, (_m, id) => `url(#org-${id})`)
       .replace(/width="1200" height="\d+"/, 'width="100%" preserveAspectRatio="xMidYMid meet"')
@@ -39,6 +52,9 @@ const MAX_WORDS_PER_SLIDE = 170;
  *  texte serait repoussé hors de la page : on coupe avant. */
 const MAX_LINES_PER_SLIDE = 19;
 const CHARS_PER_LINE = 90;
+/** Limites d'une page de texte SANS schéma dessous (mise en page « 1 à 2 pages de texte, puis 1 page de schéma ») :
+ *  thèmes de la refonte (corps de 10 pt) et thème d'origine (corps de 15 px, marges plus grandes). */
+const LIMITES_TEXTE_SEUL = { refonte: { mots: 400, lignes: 40 }, origine: { mots: 280, lignes: 28 } };
 /** Path to Marp assets (CSS + logo) bundled with the backend. */
 const MARP_ASSETS_DIR = path.resolve(__dirname, 'marp');
 
@@ -64,7 +80,7 @@ function cleanTextForMarp(raw: string): string {
  * Split a long text block into chunks of ~MAX_WORDS_PER_SLIDE words,
  * splitting on paragraph boundaries (\n\n) when possible.
  */
-function splitIntoSlideChunks(text: string): string[] {
+function splitIntoSlideChunks(text: string, limites: { mots: number; lignes: number } = { mots: MAX_WORDS_PER_SLIDE, lignes: MAX_LINES_PER_SLIDE }): string[] {
   const paragraphs = text
     .split(/\n{2,}/)
     .map((p) => p.trim())
@@ -79,11 +95,11 @@ function splitIntoSlideChunks(text: string): string[] {
   // Un bloc plus haut qu'une slide (longue liste sans ligne vide) est scindé par groupes de lignes.
   for (let i = 0; i < paragraphs.length; i++) {
     const lignes = paragraphs[i].split('\n');
-    if (lignes.length > 1 && lineCount(paragraphs[i]) > MAX_LINES_PER_SLIDE) {
+    if (lignes.length > 1 && lineCount(paragraphs[i]) > limites.lignes) {
       const groupes: string[] = [];
       let g: string[] = [];
       for (const l of lignes) {
-        if (g.length && lineCount([...g, l].join('\n')) > MAX_LINES_PER_SLIDE) { groupes.push(g.join('\n')); g = []; }
+        if (g.length && lineCount([...g, l].join('\n')) > limites.lignes) { groupes.push(g.join('\n')); g = []; }
         g.push(l);
       }
       if (g.length) groupes.push(g.join('\n'));
@@ -115,10 +131,10 @@ function splitIntoSlideChunks(text: string): string[] {
       const next = paragraphs[i + 1];
       const blockWords = paraWords + (next && !isHeading(next) ? wordCount(next) : 0);
       const blockLines = lineCount(para) + (next && !isHeading(next) ? lineCount(next) : 0);
-      if (currentWords + blockWords > MAX_WORDS_PER_SLIDE || currentLines + blockLines > MAX_LINES_PER_SLIDE) {
+      if (currentWords + blockWords > limites.mots || currentLines + blockLines > limites.lignes) {
         flush();
       }
-    } else if ((currentWords + paraWords > MAX_WORDS_PER_SLIDE || currentLines + lineCount(para) > MAX_LINES_PER_SLIDE) && current.trim()) {
+    } else if ((currentWords + paraWords > limites.mots || currentLines + lineCount(para) > limites.lignes) && current.trim()) {
       flush();
     }
 
@@ -136,6 +152,17 @@ function slideKeyOf(chapterIdx: number, sectionIdx: number, chunkIdx: number): s
   return `${chapterIdx}_${sectionIdx}_${chunkIdx}`;
 }
 
+/** Découpage du texte d'une rubrique : pages plus pleines quand son schéma a sa propre page. */
+function limitesSection(section: AssembleSection, theme: string): { mots: number; lignes: number } | undefined {
+  if (!section.schemaPleinePage) return undefined;
+  return estRetourArriere(theme) ? LIMITES_TEXTE_SEUL.origine : LIMITES_TEXTE_SEUL.refonte;
+}
+
+/** Titre d'une page de schéma : une ligne, sans balise. */
+function titreSchema(t?: string): string {
+  return String(t || '').replace(/[\r\n]+/g, ' ').replace(/[<>]/g, '').replace(/^#+\s*/, '').trim();
+}
+
 export interface AssembleSection {
   title: string;
   text: string;
@@ -145,6 +172,12 @@ export interface AssembleSection {
   d2SvgFileName?: string;
   /** Photos ajoutées à la rubrique avec l'assistant de modification : une page par photo, après le texte. */
   photos?: Array<{ chemin: string; legende?: string }>;
+  /**
+   * Mise en page « 1 à 2 pages de texte, puis 1 page de schéma » (1 schéma = 1 page, en grand) : le schéma de la
+   * rubrique (SVG sur une ligne, identifiants uniques, format page du moteur de schémas) et son titre-message. Les
+   * pages de texte de la rubrique n'ont alors plus de schéma dessous.
+   */
+  schemaPleinePage?: { titre?: string; svg: string };
 }
 
 export interface AssembleChapter {
@@ -175,12 +208,12 @@ export class MarpGenerator {
    * de section) avec leur clé stable. Utilisé en amont pour attribuer les images
    * selon le contexte : `buildMarkdown` recalcule EXACTEMENT les mêmes clés.
    */
-  public static enumerateContentSlides(chapters: AssembleChapter[]): SlideContext[] {
+  public static enumerateContentSlides(chapters: AssembleChapter[], theme: string = themeActif()): SlideContext[] {
     const slides: SlideContext[] = [];
     chapters.forEach((chapter, ci) => {
       if (!chapter.sections || chapter.sections.length === 0) return;
       chapter.sections.forEach((section, si) => {
-        const chunks = splitIntoSlideChunks(cleanTextForMarp(section.text));
+        const chunks = splitIntoSlideChunks(cleanTextForMarp(section.text), limitesSection(section, theme));
         chunks.forEach((chunk, k) => {
           slides.push({ key: slideKeyOf(ci, si, k), title: section.title, text: chunk });
         });
@@ -199,7 +232,10 @@ export class MarpGenerator {
     cover: CoverInfo = {},
     assignments: SlideAssignments = new Map(),
     schemas: SlideSchemas = new Map(),
+    opts: { theme?: string } = {},
   ): Promise<{ filePath: string; markdownPath: string }> {
+    // Thème de style (themes.ts) : celui du mémoire déjà rendu s'il est fourni, sinon GSS_THEME / style par défaut.
+    const theme = themeActif(opts.theme);
     // Write markdown + copy assets to a temp working directory
     const workDir = path.join(this.outputDir, `marp_work_${Date.now()}`);
     fs.mkdirSync(workDir, { recursive: true });
@@ -211,7 +247,15 @@ export class MarpGenerator {
     // Check if css exists
     const cssSrc = path.join(MARP_ASSETS_DIR, 'gss-theme.css');
     if (fs.existsSync(cssSrc)) {
-      fs.copyFileSync(cssSrc, cssPath);
+      if (estRetourArriere(theme)) {
+        fs.copyFileSync(cssSrc, cssPath);
+      } else {
+        // Variables du thème, polices embarquées (aucune dépendance réseau) et mise en page de la refonte.
+        fs.writeFileSync(cssPath, feuilleMarp(theme, fs.readFileSync(cssSrc, 'utf-8')), 'utf-8');
+        for (const image of imagesTheme(theme)) {
+          if (fs.existsSync(image)) fs.copyFileSync(image, path.join(workDir, path.basename(image)));
+        }
+      }
     } else {
       console.warn(`[MarpGenerator] Warning: CSS file not found at ${cssSrc}`);
     }
@@ -231,7 +275,7 @@ export class MarpGenerator {
     // Traitement et compilation des schémas D2 pour chaque section (doit être fait AVANT buildMarkdown)
     await this.processD2Diagrams(chapters, mediaDst, cover.client || 'Client');
 
-    const markdown = this.buildMarkdown(chapters, cover, assignments, schemas);
+    const markdown = this.buildMarkdown(chapters, cover, assignments, schemas, theme);
     const mdPath = path.join(workDir, 'memoire_template.md');
     fs.writeFileSync(mdPath, markdown, 'utf-8');
 
@@ -448,8 +492,12 @@ export class MarpGenerator {
     cover: CoverInfo = {},
     assignments: SlideAssignments = new Map(),
     schemas: SlideSchemas = new Map(),
+    theme: string = themeActif(),
   ): string {
     const lines: string[] = [];
+    // Thèmes de la refonte : ouverture de bloc numérotée avec ses rubriques, organigramme et schémas en pleine page.
+    // Retour arrière (« gss-2026-09 ») : Markdown identique à celui d'avant les thèmes.
+    const refonte = !estRetourArriere(theme);
 
     // ── Frontmatter ──
     lines.push('---');
@@ -512,8 +560,10 @@ export class MarpGenerator {
         tocItemCount++;
 
         // Split TOC across pages if it gets too long (~18 items per page)
-        if (tocPages[tocPages.length - 1].length >= 18) {
-          tocPages.push([]);
+        if (tocPages[tocPages.length - 1].length >= (refonte ? 28 : 18)) {
+          // Thèmes de la refonte (corps de texte plus petit) : 28 lignes par page, et la page suivante reprend la ligne
+          // du chapitre en cours (sinon la sous-rubrique qui l'ouvre serait lue comme un bloc de code).
+          tocPages.push(refonte && idx < titresToc.length - 1 ? [chapterLine] : []);
         }
       });
     }
@@ -550,14 +600,26 @@ export class MarpGenerator {
       lines.push('<!-- _class: intercalaire -->');
       lines.push(`<!-- _header: "" -->`);
       lines.push('');
+      if (refonte) {
+        // Ouverture de bloc (planche de l'agent design) : numéro du bloc en grand, comme au sommaire.
+        lines.push(`<div class="gss-bloc-numero">${String(this.romanToNumber(chapter.key)).padStart(2, '0')}</div>`);
+        lines.push('');
+      }
       lines.push(`# ${chapter.title.toUpperCase()}`);
       lines.push('');
+      if (refonte) {
+        // … puis les rubriques du bloc, dans l'ordre et avec les titres du sommaire.
+        const echapper = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const titresBloc = [...chapter.sections.map((sec) => sec.title), ...((chapter.key === 'I' || chapter.key === '1') && this.getReferencesSlides().length ? ['Ils nous font confiance'] : [])];
+        lines.push(`<ul class="gss-bloc-rubriques">${titresBloc.map((t) => `<li>${echapper(t)}</li>`).join('')}</ul>`);
+        lines.push('');
+      }
 
       // Sections
       chapter.sections.forEach((section, si) => {
         const headerTitle = section.title.toUpperCase();
         const cleanedText = cleanTextForMarp(section.text);
-        const chunks = splitIntoSlideChunks(cleanedText);
+        const chunks = splitIntoSlideChunks(cleanedText, limitesSection(section, theme));
 
         for (let i = 0; i < chunks.length; i++) {
           const chunk = chunks[i];
@@ -567,6 +629,8 @@ export class MarpGenerator {
           lines.push(chunk);
           lines.push('');
 
+          // Rubrique dont le schéma a sa propre page : aucun schéma sous le texte (1 schéma = 1 page).
+          if (section.schemaPleinePage) continue;
           const schemaGss = schemas.get(slideKeyOf(ci, si, i));
           if (schemaGss) {
             // Un schéma GSS par page, à l'emplacement réservé à l'illustration (sous le texte).
@@ -599,6 +663,24 @@ export class MarpGenerator {
           }
         }
 
+        // Page de schéma (1 à 2 pages de texte, puis 1 page de schéma) : le titre-message du schéma, puis le schéma
+        // en grand, sans autre texte (toile portrait du moteur de schémas, au moins 70 % de la hauteur de la page).
+        if (section.schemaPleinePage?.svg) {
+          lines.push('---');
+          lines.push('<!-- _class: schema -->');
+          lines.push(`<!-- header: "${headerTitle}" -->`);
+          lines.push('');
+          const titre = titreSchema(section.schemaPleinePage.titre);
+          if (titre) {
+            lines.push(`## ${titre}`);
+            lines.push('');
+          }
+          lines.push('<div class="schema-page">');
+          lines.push(section.schemaPleinePage.svg.replace(/\s*\n\s*/g, ' ').trim());
+          lines.push('</div>');
+          lines.push('');
+        }
+
         // Photos ajoutées par l'utilisateur (assistant de modification) : une page par photo, à la suite
         // du texte de la rubrique. Sans photo, rien ne change.
         for (const photo of section.photos || []) {
@@ -620,8 +702,19 @@ export class MarpGenerator {
 
         // Organigramme GSS (section encadrement) : dessiné dans le design validé des schémas GSS,
         // contenu identique à l'ancienne image organigramme.png. Intégré dans la page (police Lexend).
-        const organigramme = section.id === 'b_encadrement' ? lireOrganigrammeGss() : null;
-        if (organigramme) {
+        // Rubrique qui a déjà son schéma en pleine page (mémoire type) : pas d'organigramme en plus.
+        const organigramme = section.id === 'b_encadrement' && !section.schemaPleinePage ? lireOrganigrammeGss(theme) : null;
+        if (organigramme && refonte) {
+          // Thème de la refonte : l'organigramme est une page de schéma (format page, en grand).
+          lines.push('---');
+          lines.push('<!-- _class: schema -->');
+          lines.push(`<!-- header: "${headerTitle}" -->`);
+          lines.push('');
+          lines.push('<div class="schema-page">');
+          lines.push(organigramme);
+          lines.push('</div>');
+          lines.push('');
+        } else if (organigramme) {
           lines.push('---');
           lines.push(`<!-- header: "${headerTitle}" -->`);
           lines.push('');

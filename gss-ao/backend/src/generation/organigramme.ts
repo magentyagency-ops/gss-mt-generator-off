@@ -5,6 +5,8 @@
 // dessiné avec les MÊMES personnes que le texte : annuaire « Personnes » + registre des mémoires
 // (organigrammeGss). Sans cela, le schéma figé omettait des responsables cités dans le texte.
 // En cas d'échec, le schéma d'origine (organigramme_gss.svg) est conservé.
+// Thème de style (themes.ts) : format « page » (1 schéma = 1 page A4 portrait) ou « paysage » (dans le texte, cadre
+// imposé, format court), dessiné dans le thème ; « gss-2026-09 » : organigramme d'origine, à l'identique.
 
 import fs from 'fs';
 import os from 'os';
@@ -12,10 +14,27 @@ import path from 'path';
 import crypto from 'crypto';
 import { spawnSync } from 'child_process';
 import { rolesOrganigramme } from './base_memoires';
+import { themeActif, estRetourArriere, envTheme, RETOUR_ARRIERE, FormatSchema } from './themes';
 
 const MOTEUR = path.resolve(__dirname, '../../python/schemas_gss');
 const STATIQUE = path.join(MOTEUR, 'organigramme_gss.svg');
 let courant: string | null = null;
+/** Données de l'organigramme de référence (null : organigramme par défaut du moteur). */
+let donneesCourantes: any | null = null;
+
+/** Empreinte du moteur et des thèmes : un organigramme déjà dessiné est refait quand elle change. */
+let empreinte: string | null = null;
+function empreinteMoteur(): string {
+  if (!empreinte) {
+    const h = crypto.createHash('sha1');
+    for (const f of ['themes/themes.json', 'themes_gss.py', 'organigramme_gss.py', 'gss_lib.py', 'gabarits.py', 'moteur_page/organigramme.py',
+      'moteur_page/gss_lib.py', 'moteur_page/gabarits.py', 'moteur_page/theme.py', 'moteur_page/pictos.py']) {
+      try { h.update(fs.readFileSync(path.join(MOTEUR, f))); } catch { h.update('-'); }
+    }
+    empreinte = h.digest('hex').slice(0, 10);
+  }
+  return empreinte;
+}
 
 const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const mots = (t: string) => norm(t).split(/[^a-z]+/).filter((w) => w.length >= 3);
@@ -57,6 +76,7 @@ export function actualiserOrganigramme(referents: string): void {
   try {
     const d = donneesOrganigramme(referents);
     if (!d) return;
+    donneesCourantes = d;
     const cle = crypto.createHash('sha1').update(JSON.stringify(d)).digest('hex').slice(0, 12);
     const svg = path.join(os.tmpdir(), `gss-organigramme-${cle}.svg`);
     if (!fs.existsSync(svg) || !fs.statSync(svg).size) {
@@ -64,7 +84,7 @@ export function actualiserOrganigramme(referents: string): void {
       fs.writeFileSync(json, JSON.stringify(d), 'utf-8');
       const win = process.platform === 'win32';
       const q = (x: string) => (win ? `"${x}"` : x);
-      const r = spawnSync(win ? 'py' : 'python3', [q(path.join(MOTEUR, 'organigramme_gss.py')), q(svg), q(json)], { encoding: 'utf-8', timeout: 60_000, shell: win });
+      const r = spawnSync(win ? 'py' : 'python3', [q(path.join(MOTEUR, 'organigramme_gss.py')), q(svg), q(json)], { encoding: 'utf-8', timeout: 60_000, shell: win, env: envTheme(RETOUR_ARRIERE) });
       fs.rmSync(json, { force: true });
       if (r.status !== 0 || !fs.existsSync(svg) || !fs.statSync(svg).size) { fs.rmSync(svg, { force: true }); console.warn(`[Organigramme] Schéma non redessiné (${(r.stderr || '').slice(0, 200)}) : organigramme d'origine conservé.`); return; }
     }
@@ -74,8 +94,42 @@ export function actualiserOrganigramme(referents: string): void {
   }
 }
 
-/** SVG de l'organigramme à insérer (celui de référence s'il a été dessiné, sinon l'original). */
-export function organigrammeSvg(): string | null {
+/** Organigramme dessiné dans un thème de la refonte (null en cas d'échec). */
+function organigrammeTheme(theme: string, format: FormatSchema): string | null {
+  try {
+    const d = donneesCourantes;
+    const cle = crypto.createHash('sha1').update(JSON.stringify([d, theme, format, empreinteMoteur()])).digest('hex').slice(0, 12);
+    const svg = path.join(os.tmpdir(), `gss-organigramme-${theme}-${format}-${cle}.svg`);
+    if (!fs.existsSync(svg) || !fs.statSync(svg).size) {
+      const win = process.platform === 'win32';
+      const q = (x: string) => (win ? `"${x}"` : x);
+      const args = [q(path.join(MOTEUR, 'organigramme_gss.py')), q(svg)];
+      const json = path.join(os.tmpdir(), `gss-organigramme-${theme}-${format}-${cle}.json`);
+      if (d) { fs.writeFileSync(json, JSON.stringify(d), 'utf-8'); args.push(q(json)); }
+      args.push('--format', format);
+      const r = spawnSync(win ? 'py' : 'python3', args, { encoding: 'utf-8', timeout: 60_000, shell: win, env: envTheme(theme) });
+      fs.rmSync(json, { force: true });
+      if (r.status !== 0 || !fs.existsSync(svg) || !fs.statSync(svg).size) {
+        fs.rmSync(svg, { force: true });
+        console.warn(`[Organigramme] Organigramme non dessiné dans le thème ${theme} (${(r.stderr || r.error?.message || '').slice(0, 200)}) : organigramme d'origine.`);
+        return null;
+      }
+    }
+    return fs.readFileSync(svg, 'utf-8');
+  } catch (e: any) {
+    console.warn(`[Organigramme] Organigramme non dessiné dans le thème ${theme} (${e?.message || e}) : organigramme d'origine.`);
+    return null;
+  }
+}
+
+/** SVG de l'organigramme à insérer (celui de référence s'il a été dessiné, sinon l'original), dans le thème :
+ *  format « page » (pleine page) ou « paysage » (dans le texte). Retour arrière : exactement l'organigramme d'origine. */
+export function organigrammeSvg(format: FormatSchema = 'paysage', theme?: string | null): string | null {
+  const t = themeActif(theme);
+  if (!estRetourArriere(t)) {
+    const svg = organigrammeTheme(t, format);
+    if (svg) return svg;
+  }
   if (courant) return courant;
   try { return fs.readFileSync(STATIQUE, 'utf-8'); } catch { return null; }
 }

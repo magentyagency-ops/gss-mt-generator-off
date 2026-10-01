@@ -9,11 +9,26 @@ gabarits.py, police Lexend, règle de couleur par rôle). Ce script :
   2. dessine le schéma (tout débordement de texte est refusé par le moteur) ;
   3. en secours, choisit un schéma validé de la bibliothèque GSS pour la même section.
 
+THÈME (forme seulement : textes, contrôles et choix du gabarit inchangés) : variable d'environnement GSS_THEME,
+sinon le style par défaut de themes/themes.json (« marine », style recommandé par l'agent design) ; voir
+themes_gss.py. « gss-2026-09 » (retour arrière) redonne exactement les SVG d'avant les thèmes.
+FORMAT (champ « format » de la requête) :
+  · « paysage » (par défaut) : schéma placé dans le texte, toile 1200 × 660 du moteur d'origine, aux couleurs et
+    à la police du thème ;
+  · « page » : 1 schéma = 1 page A4 portrait (toile 1000 × 1270, 77 % de la hauteur de la page), moteur_page.
+
 Entrée (stdin, JSON) :
-  {"mode": "rendre", "schemas": [{"id", "gabarit", "params", "source", "titre_section"}]}
+  {"mode": "rendre", "format"?, "schemas": [{"id", "gabarit", "params", "source", "titre_section"}]}
   {"mode": "bibliotheque", "demandes": [{"id", "section", "texte", "exclure": [...]}]}
+  {"mode": "redessiner", "format"?, "ids"?: [...], "forcer"?: false}
+      schémas de la bibliothèque (180) redessinés dans le thème actif, depuis bibliotheque/specs.json (format page)
+      ou aux couleurs du thème (format paysage) ; cache par thème (bibliotheque/themes/<thème>/<format>) ; les
+      textes de chaque schéma redessiné sont contrôlés : identiques à l'original, sinon schéma d'origine aux
+      couleurs du thème.
 Sortie (stdout, JSON) :
-  {"resultats": [{"id", "ok", "svg" | "erreurs", "bibliotheque_id"?}]}
+  {"resultats": [{"id", "ok", "svg" | "erreurs", "bibliotheque_id"?, "source"?}]}
+En ligne de commande : python3 rendu_schemas.py --redessiner [--theme T] [--format page|paysage] [--ids A,B]
+  [--forcer] [--rapport fichier.json] — remplit le cache et affiche le bilan.
 """
 import gzip
 import json
@@ -21,12 +36,16 @@ import os
 import re
 import sys
 import unicodedata
+from functools import lru_cache
 
 ICI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ICI)
 
 import gss_lib  # noqa: E402
 import gabarits as G  # noqa: E402
+import themes_gss  # noqa: E402
+
+THEME = themes_gss.theme_actif()
 
 ROLES = {"bleu", "orange", "rouge", "vert", "sable", "creme", "or"}
 ICONES = set(gss_lib.ICONES)
@@ -207,8 +226,9 @@ def _centre(v):
     return (_txt(v.get("titre"), "centre.titre", 40), _txt(v.get("sous_titre"), "centre.sous_titre", 60, False))
 
 
-def construire(gabarit, p):
-    """Valide la structure et appelle le gabarit validé correspondant."""
+def construire(gabarit, p, G=G):
+    """Valide la structure et appelle le gabarit validé correspondant (G : moteur d'origine, ou moteur_page
+    pour le format page ; mêmes noms et mêmes paramètres)."""
     _exiger(isinstance(p, dict), "« params » doit être un objet.")
     if gabarit == "grille":
         items = [_carte(d, "cartes") for d in _liste(p.get("cartes"), "cartes", 3, 9)]
@@ -448,21 +468,62 @@ def _jalons(v):
     return v
 
 
-def rendre(sp):
+# ── Moteur selon le thème et le format ──────────────────────────────────────
+@lru_cache(maxsize=None)
+def _moteur_page():
+    """Gabarits du format page (A4 portrait) dans le thème actif."""
+    from moteur_page import theme as th_page, gabarits as gabarits_page
+    th_page.utiliser(THEME, "page")
+    return gabarits_page
+
+
+def _format(fmt):
+    return themes_gss.format_effectif(THEME, fmt)
+
+
+def _deborde(e):
+    """Débordement de texte : moteur d'origine ou moteur page (même message à l'IA)."""
+    if isinstance(e, gss_lib.Deborde):
+        return True
+    try:
+        from moteur_page.gss_lib import Deborde as DebordePage
+    except Exception:  # noqa: BLE001
+        return False
+    return isinstance(e, DebordePage)
+
+
+def finaliser_page(svg, prefixe):
+    """Format page : toile pleine page (pas de recadrage), identifiants préfixés, largeur fluide."""
+    p = re.sub(r"[^a-zA-Z0-9]", "", prefixe)
+    svg = re.sub(r'id="([^"]+)"', lambda m: f'id="{p}-{m.group(1)}"', svg)
+    svg = re.sub(r'url\(#([^)]+)\)', lambda m: f'url(#{p}-{m.group(1)})', svg)
+    svg = re.sub(r'(<svg\b[^>]*?) width="[\d.]+" height="[\d.]+"', r'\1 width="100%" preserveAspectRatio="xMidYMid meet"',
+                 svg, count=1)
+    return re.sub(r"\s*\n\s*", " ", svg).strip()
+
+
+def rendre(sp, fmt="paysage"):
     ident = sp.get("id", "s")
+    fmt = _format(fmt)
     try:
         params = _jalons(sp.get("params") or {})
         erreurs = controler_fond(params, sp.get("source", ""), sp.get("titre_section", ""))
         if erreurs:
             return {"id": ident, "ok": False, "erreurs": erreurs[:12]}
+        if fmt == "page":
+            svg = construire(sp.get("gabarit"), params, _moteur_page()).rendu()
+            return {"id": ident, "ok": True, "svg": finaliser_page(svg, "s" + ident)}
         svg = construire(sp.get("gabarit"), params).rendu()
-        return {"id": ident, "ok": True, "svg": finaliser(svg, "s" + ident)}
+        return {"id": ident, "ok": True, "svg": finaliser(themes_gss.recolorer(svg, THEME), "s" + ident)}
     except Invalide as e:
         return {"id": ident, "ok": False, "erreurs": [str(e)]}
     except gss_lib.Deborde:
         return {"id": ident, "ok": False, "erreurs": [
             "Un texte ne tient pas dans son cadre : raccourcis les libellés (moins de mots) ou réduis le nombre d'éléments."]}
     except Exception as e:  # noqa: BLE001
+        if _deborde(e):
+            return {"id": ident, "ok": False, "erreurs": [
+                "Un texte ne tient pas dans son cadre : raccourcis les libellés (moins de mots) ou réduis le nombre d'éléments."]}
         return {"id": ident, "ok": False, "erreurs": [f"Spécification incorrecte : {type(e).__name__} {e}"[:300]]}
 
 
@@ -486,16 +547,134 @@ def bibliotheque(demandes):
         x = max(cands, key=score)
         utilises.add(x["id"])
         svg = open(os.path.join(ICI, "bibliotheque", x["id"] + ".svg"), encoding="utf-8").read()
-        out.append({"id": d["id"], "ok": True, "bibliotheque_id": x["id"], "svg": finaliser(svg, "b" + d["id"])})
+        out.append({"id": d["id"], "ok": True, "bibliotheque_id": x["id"],
+                    "svg": finaliser(themes_gss.recolorer(svg, THEME), "b" + d["id"])})
     return out
 
 
+# ── Bibliothèque redessinée dans le thème (cache par thème) ──────────────────
+def _decoder(o):
+    """Encodage de specs.json : {"__tuple__": [...]} et {"__dict__": [[clé, valeur], ...]}."""
+    if isinstance(o, list):
+        return [_decoder(v) for v in o]
+    if isinstance(o, dict):
+        if set(o) == {"__tuple__"}:
+            return tuple(_decoder(v) for v in o["__tuple__"])
+        if set(o) == {"__dict__"}:
+            return {_decoder(k): _decoder(v) for k, v in o["__dict__"]}
+        return {k: _decoder(v) for k, v in o.items()}
+    return o
+
+
+@lru_cache(maxsize=None)
+def _specs():
+    d = json.load(open(os.path.join(ICI, "bibliotheque", "specs.json"), encoding="utf-8"))
+    return {sp["id"]: sp for sp in d["schemas"]}
+
+
+def _dessiner_page(sp):
+    GP = _moteur_page()
+    if sp["gabarit"] == "compose":
+        f = getattr(GP, "COMPOSES", {}).get(sp["id"])
+        if f is None:
+            raise Invalide(f"schéma composé sans version page : {sp['id']}")
+        return f().rendu()
+    return getattr(GP, sp["gabarit"])(*_decoder(sp["params"]["args"]), **_decoder(sp["params"]["kwargs"])).rendu()
+
+
+def redessiner(ids=None, fmt="page", forcer=False):
+    """Schémas de la bibliothèque dans le thème actif : SVG bruts (comme les fichiers de bibliotheque/), lus dans le
+    cache du thème ou redessinés. Format page : redessin depuis specs.json, textes contrôlés (identiques à
+    l'original) ; en cas d'écart ou d'échec, le schéma d'origine aux couleurs du thème (source « repli_paysage »).
+    Format paysage : schéma d'origine aux couleurs et à la police du thème. Retour arrière : schéma d'origine."""
+    fmt = _format(fmt)
+    if not ids:
+        ids = [x["id"] for x in json.load(open(os.path.join(ICI, "bibliotheque", "index.json"), encoding="utf-8"))]
+    retour = themes_gss.est_retour(THEME)
+    cache = None if retour else themes_gss.dossier_cache(THEME, fmt)
+    out = []
+    for ident in ids:
+        if not re.fullmatch(r"[A-Za-z0-9-]+", str(ident)):
+            out.append({"id": ident, "ok": False, "erreurs": [f"Identifiant de schéma invalide : {ident}"]})
+            continue
+        try:
+            origine = open(os.path.join(ICI, "bibliotheque", f"{ident}.svg"), encoding="utf-8").read()
+        except OSError:
+            out.append({"id": ident, "ok": False, "erreurs": [f"Schéma absent de la bibliothèque : {ident}"]})
+            continue
+        if retour:
+            out.append({"id": ident, "ok": True, "svg": origine, "source": "origine"})
+            continue
+        f = os.path.join(cache, f"{ident}.svg") if cache else None
+        if f and not forcer and os.path.exists(f):
+            out.append({"id": ident, "ok": True, "svg": open(f, encoding="utf-8").read(), "source": "cache"})
+            continue
+        r = {"id": ident, "ok": True}
+        if fmt == "paysage":
+            svg, r["source"] = themes_gss.recolorer(origine, THEME), "recoloration"
+        else:
+            try:
+                sp = _specs().get(ident)
+                if sp is None:
+                    raise Invalide("spécification absente de bibliotheque/specs.json")
+                svg = _dessiner_page(sp)
+                ctl = themes_gss.comparer_textes(svg, origine)
+                if not ctl["ok"]:
+                    raise Invalide("textes différents de l'original : "
+                                   + json.dumps({k: v for k, v in ctl.items() if k != "ok"}, ensure_ascii=False)[:400])
+                r["source"] = "redessin"
+            except Exception as e:  # noqa: BLE001
+                print(f"[rendu_schemas] {ident} : redessin au format page impossible ({type(e).__name__} {e}) ; "
+                      "schéma d'origine aux couleurs du thème.", file=sys.stderr)
+                svg, r["source"], r["erreurs"] = themes_gss.recolorer(origine, THEME), "repli_paysage", [str(e)[:400]]
+        if f:
+            try:
+                themes_gss.ecrire(f, svg)
+            except OSError:
+                pass
+        r["svg"] = svg
+        out.append(r)
+    return out
+
+
+def _cli_redessiner(argv):
+    global THEME
+    opts = {"--theme": None, "--format": "page", "--ids": None, "--rapport": None}
+    i = 0
+    while i < len(argv):
+        if argv[i] in opts and i + 1 < len(argv):
+            opts[argv[i]] = argv[i + 1]
+            i += 2
+        else:
+            i += 1
+    if opts["--theme"]:
+        THEME = themes_gss.theme_actif(opts["--theme"])
+        _moteur_page.cache_clear()
+    ids = [x for x in (opts["--ids"] or "").split(",") if x] or None
+    res = redessiner(ids, opts["--format"], "--forcer" in argv)
+    sources = {}
+    for r in res:
+        sources[r.get("source", "erreur")] = sources.get(r.get("source", "erreur"), 0) + 1
+    bilan = {"theme": THEME, "format": _format(opts["--format"]), "schemas": len(res),
+             "ok": sum(1 for r in res if r.get("ok")), "sources": sources,
+             "dossier_cache": None if themes_gss.est_retour(THEME) else themes_gss.dossier_cache(THEME, _format(opts["--format"])),
+             "replis_ou_erreurs": [{"id": r["id"], "erreurs": r.get("erreurs")} for r in res
+                                   if not r.get("ok") or r.get("source") == "repli_paysage"]}
+    if opts["--rapport"]:
+        json.dump(bilan, open(opts["--rapport"], "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    print(json.dumps(bilan, ensure_ascii=False, indent=1))
+
+
 def main():
+    if "--redessiner" in sys.argv[1:]:
+        return _cli_redessiner(sys.argv[1:])
     req = json.load(sys.stdin)
     if req.get("mode") == "bibliotheque":
         res = bibliotheque(req.get("demandes") or [])
+    elif req.get("mode") == "redessiner":
+        res = redessiner(req.get("ids") or None, req.get("format") or "page", bool(req.get("forcer")))
     else:
-        res = [rendre(sp) for sp in req.get("schemas") or []]
+        res = [rendre(sp, req.get("format") or "paysage") for sp in req.get("schemas") or []]
     sys.stdout.write(json.dumps({"resultats": res}, ensure_ascii=False))
 
 

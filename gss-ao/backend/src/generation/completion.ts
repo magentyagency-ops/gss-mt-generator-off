@@ -24,6 +24,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getSettings } from '../core/config';
 import { reglagesIA } from '../core/modeles_ia';
 import { personnesDuRole, retirerCommentairesInternes } from './base_memoires';
+import { RETOUR_ARRIERE } from './themes';
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const RESPONSE_DIR = path.resolve(__dirname, '../../response');
@@ -67,6 +68,9 @@ export interface EtatCompletion {
     photos?: Record<string, Array<{ chemin: string; legende?: string }>>;
     /** Format court imposé par le RC (nombre de pages maximum et plan) : une partie par point du plan. */
     court?: { pagesMax: number; plan: Array<{ id: string; title: string; attendu?: string }>; source?: string };
+    /** Thème de style du rendu (themes.ts) : une recomposition garde le même rendu. Absent (état écrit avant les
+     *  thèmes) : « gss-2026-09 », le rendu de l'époque. */
+    theme?: string;
   };
   /** Cadre imposé : réponses rédigées par GSS (signets GSS_CH_n), les seules que l'assistant peut modifier. */
   champs?: Array<{ cle: string; libelle: string }>;
@@ -425,8 +429,10 @@ export async function recomposerPdf(etat: EtatCompletion): Promise<string> {
   const gen = new MemoireGenerator();
   const propres: Record<string, string> = {};
   for (const [id, t] of Object.entries(etat.libre!.sections)) propres[id] = t.replace(REPERE_RE, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  // Même thème que le rendu d'origine (schémas déjà construits réutilisés) ; état d'avant les thèmes : retour arrière.
+  const theme = etat.libre!.theme || RETOUR_ARRIERE;
   if (etat.libre!.court) {
-    const r = await gen.rendreCourtDepuisSections(propres, etat.libre!.court, etat.libre!.cover, etat.libre!.schemas || {});
+    const r = await gen.rendreCourtDepuisSections(propres, etat.libre!.court, etat.libre!.cover, etat.libre!.schemas || {}, theme);
     return r.filePath;
   }
   const res = await gen.rendreDepuisSections(propres, etat.dossierId, {
@@ -434,6 +440,7 @@ export async function recomposerPdf(etat: EtatCompletion): Promise<string> {
     schemas: new Map(Object.entries(etat.libre!.schemas || {})),
     ajouts: etat.libre!.ajouts,
     photos: etat.libre!.photos,
+    theme,
   });
   etat.libre!.schemas = Object.fromEntries(res.schemas);
   return res.filePath;

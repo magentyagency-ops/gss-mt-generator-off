@@ -1,0 +1,294 @@
+/* Mise en page des thèmes de la refonte 2026-10 (« Marine & signal » par défaut, et les autres styles de
+   python/schemas_gss/themes/themes.json), d'après la planche de l'agent design : fond blanc, bandeau d'en-tête plein,
+   titres à filet d'accent, couverture et ouvertures de bloc pleines, page de schéma pleine page.
+   Ajoutée par src/generation/themes.ts APRÈS gss-theme.css et les variables --gss-… du thème : elle ne s'applique
+   jamais au thème de retour arrière « gss-2026-09 ». Forme seulement : aucun texte n'est ajouté ni modifié. */
+
+section {
+  font-size: 13.4px;
+  line-height: 1.5;
+  padding: 27mm 15mm 18mm 15mm;
+  /* Le texte commence en haut de la page (le thème Marp par défaut centre le contenu verticalement). */
+  align-content: start;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* En-tête : bandeau plein, logo à gauche, titre de la rubrique à droite, filet d'accent. */
+header {
+  height: 16mm;
+  padding: 0 15mm 0 84mm;
+  justify-content: flex-end;
+  text-align: right;
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  border-bottom: 0.9mm solid var(--gss-entete-filet);
+}
+header::after {
+  left: 15mm;
+  top: 2.6mm;
+  width: 13mm;
+  height: 10mm;
+  background-image: var(--gss-logo-entete, url('logogss.png'));
+}
+header::before {
+  content: "GLOBAL SECURITY SERVICES";
+  position: absolute;
+  left: 31mm;
+  top: 0;
+  height: 16mm;
+  display: flex;
+  align-items: center;
+  font-size: 0.95em;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--gss-entete-texte);
+}
+
+/* Titres : couleur de structure, filet court d'accent sous le titre principal. */
+h1 {
+  font-weight: var(--gss-titre-graisse);
+  font-size: 1.9em;
+  line-height: 1.15;
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 7mm;
+}
+h1::after {
+  content: "";
+  display: block;
+  width: 18mm;
+  height: 1.1mm;
+  background: var(--gss-titre-filet);
+  margin-top: 3mm;
+}
+h2 {
+  font-size: 1.3em;
+  font-weight: var(--gss-titre-graisse);
+  line-height: 1.25;
+  margin-top: 6mm;
+  margin-bottom: 2.4mm;
+}
+h3 {
+  font-size: 1.1em;
+  font-weight: var(--gss-titre-graisse);
+  line-height: 1.3;
+  margin-top: 4mm;
+  margin-bottom: 1.6mm;
+}
+h4, h5, h6 {
+  font-weight: var(--gss-titre-graisse);
+}
+p {
+  line-height: 1.55;
+  margin-bottom: 2.6mm;
+}
+ul, ol {
+  margin-top: 1.6mm;
+  margin-bottom: 3mm;
+  padding-left: 6mm;
+}
+li {
+  line-height: 1.5;
+  margin-bottom: 1.4mm;
+}
+li::marker {
+  color: var(--gss-accent);
+}
+strong {
+  font-weight: 600;
+}
+
+/* Encadré et tableaux. */
+.box {
+  border-left-width: 1.2mm;
+  border-radius: 0;
+  padding: 3.2mm 4.2mm;
+}
+section table {
+  /* Pleine largeur (le thème Marp par défaut affiche les tableaux en bloc, à la largeur de leur contenu). */
+  display: table;
+  width: 100%;
+  font-size: 0.88em;
+}
+section table th {
+  border: none;
+  padding: 2mm 2.4mm;
+  letter-spacing: 0.02em;
+}
+section table td {
+  border: none;
+  border-bottom: 0.25mm solid var(--gss-filet);
+  padding: 1.8mm 2.4mm;
+}
+
+/* Pied de page : filet, numéro de page. */
+section::before {
+  display: block;
+  content: "";
+  position: absolute;
+  left: 15mm;
+  right: 15mm;
+  bottom: 13mm;
+  border-top: 0.25mm solid var(--gss-filet);
+}
+section::after {
+  bottom: 7mm;
+  right: 15mm;
+  font-size: 0.72em;
+  font-weight: 600;
+  color: var(--gss-encre-3);
+}
+
+/* Couverture : aplat du thème, logo, marque, puis « mémoire technique », objet du marché, acheteur. */
+section.lead {
+  text-align: left;
+  justify-content: flex-end;
+  align-items: flex-start;
+  padding: 40mm 22mm 58mm 18mm;
+}
+section.lead::before {
+  left: 18mm;
+  right: auto;
+  top: 20mm;
+  bottom: auto;
+  width: 30mm;
+  height: 24mm;
+  border: none;
+  background: var(--gss-logo-couverture, url('logogss.png')) left center / contain no-repeat;
+}
+section.lead::after {
+  color: var(--gss-couverture-texte);
+  opacity: 0.55;
+}
+section.lead h1 {
+  position: absolute;
+  left: 54mm;
+  top: 23mm;
+  margin: 0;
+  font-size: 1.15em;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+}
+section.lead h1::after {
+  display: none;
+}
+section.lead h2 {
+  position: absolute;
+  left: 54mm;
+  top: 31mm;
+  margin: 0;
+  font-size: 0.8em;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  color: var(--gss-couverture-accent) !important;
+}
+section.lead h3 {
+  margin: 0 0 4mm 0;
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0.32em;
+  color: var(--gss-couverture-accent) !important;
+}
+section.lead h4 {
+  margin: 0;
+  font-size: 2.35em;
+  line-height: 1.1;
+  font-weight: 700;
+}
+section.lead h4::after {
+  content: "";
+  display: block;
+  width: 26mm;
+  height: 1.6mm;
+  margin-top: 9mm;
+  background: var(--gss-couverture-accent);
+}
+section.lead h5 {
+  margin: 8mm 0 0 0;
+  font-size: 1.45em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+/* Ouverture de bloc : numéro du bloc en grand, titre, rubriques du bloc. */
+section.intercalaire {
+  color: var(--gss-intercalaire-texte);
+  text-align: left;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 40mm 22mm 30mm 18mm;
+}
+section.intercalaire::before {
+  display: none;
+}
+section.intercalaire::after {
+  color: var(--gss-intercalaire-texte);
+  opacity: 0.55;
+}
+section.intercalaire h1 {
+  font-size: 2.5em;
+  line-height: 1.12;
+  margin: 0 0 12mm 0;
+}
+section.intercalaire h1::after {
+  background: var(--gss-intercalaire-numero);
+  width: 26mm;
+  height: 1.6mm;
+  margin-top: 8mm;
+}
+section.intercalaire .gss-bloc-numero {
+  font-family: var(--gss-police-titre);
+  font-size: 118pt;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--gss-intercalaire-numero);
+  margin: 0 0 10mm 0;
+}
+section.intercalaire ul.gss-bloc-rubriques {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+}
+section.intercalaire ul.gss-bloc-rubriques li {
+  position: relative;
+  margin: 0;
+  padding: 2.4mm 0 2.4mm 8mm;
+  font-size: 1.05em;
+  line-height: 1.3;
+  border-top: 0.3mm solid var(--gss-intercalaire-filet, rgba(255, 255, 255, 0.16));
+}
+section.intercalaire ul.gss-bloc-rubriques li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 3.9mm;
+  width: 2.4mm;
+  height: 2.4mm;
+  background: var(--gss-intercalaire-numero);
+}
+
+/* Page de schéma : 1 schéma = 1 page, en grand (toile portrait 1000 × 1270 sur toute la largeur utile). */
+section.schema {
+  padding-top: 24mm;
+  padding-bottom: 14mm;
+}
+section.schema h2 {
+  font-size: 1.62em;
+  line-height: 1.15;
+  margin: 0 0 4.5mm 0;
+}
+section.schema h2::after {
+  content: "";
+  display: block;
+  width: 18mm;
+  height: 1.1mm;
+  background: var(--gss-titre-filet);
+  margin-top: 2.6mm;
+}
+section.schema .schema-page svg {
+  max-height: 232mm;
+}

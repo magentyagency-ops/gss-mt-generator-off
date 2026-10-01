@@ -5,6 +5,7 @@ import { SchemaService, PageSchema } from './schema_service';
 import { insererSchemasReponses, choisir as choisirSchemasGss } from './visuels_cadre';
 import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt } from './format_court';
 import { actualiserOrganigramme } from './organigramme';
+import { themeActif } from './themes';
 import { poserSignets, poserSignetsChamps, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter } from './completion';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes } from './base_memoires';
 import fs from 'fs';
@@ -6103,7 +6104,7 @@ RÈGLES DE FORME (rendu Marp) :
     try {
       ecrireEtat({
         dossierId, mode: 'libre', fichier: result.filePath, majLe: '', elements: elementsLibres, reponsesTraitees: [],
-        libre: { sections: sectionsReperes, schemas: Object.fromEntries(schemasRendus || []), cover: coverRendu },
+        libre: { sections: sectionsReperes, schemas: Object.fromEntries(schemasRendus || []), cover: coverRendu, theme: themeActif() },
         demande: this.demandeParticuliere?.demande || undefined,
       });
     } catch (e: any) {
@@ -6536,7 +6537,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     try {
       ecrireEtat({
         dossierId, mode: 'libre', fichier: rendu.filePath, majLe: '', elements, reponsesTraitees: [],
-        libre: { sections, schemas, cover, court: { pagesMax: format.pagesMax, plan, source: format.source } },
+        libre: { sections, schemas, cover, court: { pagesMax: format.pagesMax, plan, source: format.source }, theme: themeActif() },
         demande: this.demandeParticuliere?.demande || undefined,
       });
     } catch (e: any) {
@@ -6553,6 +6554,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     court: { pagesMax: number; plan: PartieCourte[] },
     cover: any,
     schemas: Record<string, string> = {},
+    theme?: string,
   ): Promise<{ filePath: string; pages: number }> {
     const parties = court.plan
       .filter((p) => (sections[p.id] || '').trim())
@@ -6563,7 +6565,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
         schema: schemas[`${p.id}#court`] ?? schemas[`${p.id}#court#organigramme`],
         garder: !!schemas[`${p.id}#court#organigramme`],
       }));
-    const r = await rendreFormatCourt(parties, cover || {}, court.pagesMax, this.responseDir);
+    const r = await rendreFormatCourt(parties, cover || {}, court.pagesMax, this.responseDir, theme);
     return { filePath: r.filePath, pages: r.pages };
   }
 
@@ -6807,9 +6809,12 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       ajouts?: Array<{ id: string; chapter: string; title: string; apres?: string }>;
       /** Photos ajoutées aux rubriques (assistant de modification), par id de rubrique. */
       photos?: Record<string, Array<{ chemin: string; legende?: string }>>;
+      /** Thème de style du mémoire déjà rendu (état) ; à défaut, GSS_THEME / style par défaut (themes.ts). */
+      theme?: string;
     } = {},
   ): Promise<{ filePath: string; schemas: Map<string, string>; cover: any }> {
     const onProgress = opts.onProgress;
+    const theme = themeActif(opts.theme);
     const ordreChapitre = (ch: string): Array<{ id: string; chapter: string; title: string }> => {
       const liste: Array<{ id: string; chapter: string; title: string }> = AI_SECTIONS_B.filter((s) => s.chapter === ch);
       for (const a of (opts.ajouts || []).filter((x) => x.chapter === ch)) {
@@ -6856,7 +6861,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const existants = opts.schemas;
     const aConstruire = existants ? pages.filter((p) => !existants.has(stable(p))) : pages;
     const nouveaux = aConstruire.length
-      ? await new SchemaService().construirePourPages(aConstruire, (msg) => onProgress?.(93, msg))
+      ? await new SchemaService().construirePourPages(aConstruire, (msg) => onProgress?.(93, msg), { theme })
       : new Map<string, string>();
     const schemas = new Map<string, string>();
     const schemasStables = new Map<string, string>();
@@ -6868,7 +6873,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     // Le rendu Marp/Chromium est bloquant et peut durer plusieurs minutes : on signale l'étape.
     onProgress?.(95, `Rendu du PDF (${schemas.size} schéma(s))…`);
     const generator = new MarpGenerator(this.responseDir);
-    const result = await generator.generatePdf(chapters, cover, new Map(), schemas);
+    const result = await generator.generatePdf(chapters, cover, new Map(), schemas, { theme });
 
     return { filePath: result.filePath, schemas: schemasStables, cover };
   }

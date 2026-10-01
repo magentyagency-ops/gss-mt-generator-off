@@ -1,0 +1,1557 @@
+{
+ "description": "Entrées de référence des harnais de thèmes (générées par themes_fixtures_gen.ts, DCE Becquerel, aucun appel OpenAI).",
+ "referents": "MARCHANI Adil — Directeur d'agence / Responsable de marché\nLEMELE Fabrice — Responsable d'exploitation\nDUHAMEL Leo — Responsable administratif\nVATTIER Marie — Responsable qualité\nFE Lilian — Responsable Commerciale\nALAMAT Ramzi — Responsable Unité mobile\nPODKOLZIN Sergeï — Responsable Cynophile\nOTMANI Abed — Responsable Incendie",
+ "cover": {
+  "client": "Centre Henri Becquerel",
+  "title": "Missions de sécurité incendie et sûreté",
+  "ref": "2026-DAGSE-10",
+  "objet": "Missions de sécurité incendie et sûreté"
+ },
+ "chapters": [
+  {
+   "key": "I",
+   "title": "Présentation de la société et conformité",
+   "sections": [
+    {
+     "id": "b_presentation",
+     "title": "Notre catalogue de prestations",
+     "text": "Pour le Centre Henri Becquerel, nous mobilisons en priorité les profils suivants : nos agents de sécurité incendie (SSIAP) et nos agents de sûreté.\n\n**Nos agents de sécurité incendie (SSIAP)**\nNos agents de sécurité incendie sont des acteurs essentiels de la prévention des risques. Ils disposent tous de la qualification SSIAP et sont formés à prévenir un incendie, à mettre en sécurité un bâtiment, ainsi qu'à intervenir et à s'organiser en cas d'incendie. Selon vos besoins, plusieurs profils vous sont proposés :\n- le SSIAP 1, agent de sécurité incendie ;\n- le SSIAP 2, chef d'équipe d'agents incendie ;\n- le SSIAP 3, chef de service de sécurité incendie.\n\n**Nos agents de sûreté**\nNos agents de sûreté, qualifiés et expérimentés, mettent leur savoir-faire à votre disposition selon vos besoins. Qu'il s'agisse de rondes de surveillance, de contrôle d'accès ou d'intervention, nos agents mettent en application vos consignes.\n\n**Nos agents cynophiles**\nNos agents cynophiles, ou « maîtres-chiens », travaillent en tandem avec leur animal, dont ils maîtrisent le dressage. Ils mettent leurs compétences et leurs qualifications à votre service pour sécuriser les biens et les personnes, par leur présence et leurs contrôles, par des rondes ou par des opérations de filtrage. L'atout principal de la présence du chien est d'apporter un élément dissuasif supplémentaire.\n\n**Nos agents rondiers intervenants**\nNos agents « rondiers intervenants » réalisent des rondes de surveillance de site et des rondes de contrôle, interviennent sur alarme et mettent les lieux en sécurité à la suite d'un incident. Ils disposent d'un équipement spécifique qui leur permet d'être réactifs et en communication constante avec les équipes et les clients. Ils sont formés à tout type de contexte afin de gérer au mieux l'imprévu.\n\n**Nos agents d'accueil**\nLes agents d'accueil occupent une place primordiale : celle du premier contact avec le client ou le visiteur. Ils sont en quelque sorte la vitrine de l'entreprise ; il est donc essentiel qu'ils fassent preuve de dynamisme, de capacité d'adaptation et de courtoisie. Ce poste demande une réelle polyvalence : ils accueillent et orientent le public, et effectuent aussi certaines tâches administratives.\n\n**Nos experts qualité**\nNos experts qualité sont à même de diagnostiquer vos besoins en sécurité et de vous conseiller la solution sur mesure qui vous conviendra le mieux. Ils contrôlent également les prestations de nos agents de terrain afin de maintenir un haut niveau d'exigence.\n\n**Nos préventeurs**\nNos préventeurs diagnostiquent vos besoins en sécurité incendie et en sûreté et vous conseillent la solution sur mesure la mieux adaptée : gestion des prestataires, veille réglementaire, analyse des risques (sûreté et sécurité), rédaction des permis de travail, suivi de chantier, support HSE.\n\n**Nos animations**\n- Exercice d'équipier de première intervention (EPI) : cette animation est essentielle pour intervenir en sécurité face à un départ de feu dans l'entreprise. Une intervention rapide et proportionnée limite l'impact pour l'entreprise et ses salariés ; le maintien et l'actualisation des compétences sont primordiaux pour garantir des équipiers opérationnels.\n- Exercice d'équipier de seconde intervention (ESI) : cette animation permet de garder un niveau de compétence opérationnel. Elle met en pratique les procédures de protection des personnes et des installations et peut être personnalisée selon vos procédures. Nos animateurs ESI sont issus d'un cycle de formation du CNPP.\n- Animation sauveteur secouriste du travail (SST) : ces animations permettent aux personnes qualifiées SST ou PSC1 de garder une compétence opérationnelle accrue. Les mises en situation sont ciblées selon vos risques et la nature de votre activité."
+    },
+    {
+     "id": "b_encadrement",
+     "title": "Notre organigramme",
+     "text": "- Directeur d'agence, responsable de marché et dirigeant de l'entreprise : MARCHANI Adil\n- Responsables d'exploitation : LEMELE Fabrice, PORCHAIRE Laurent et DA SILVA Luis\n- Responsable administratif : DUHAMEL Leo\n- Responsable qualité : VATTIER Marie\n- Responsable commercial : DA SILVA Luis\n- Responsable unité mobile : ALAMAT Ramzi\n- Responsable cynophile : PODKOLZIN Sergeï\n- Responsable incendie : ATTOU Nesrine\n- Responsable RH : KANTE Rokia"
+    },
+    {
+     "id": "b_engagement_rse",
+     "title": "Notre engagement écologique : des déplacements et un numérique plus sobres",
+     "text": "Nous avons conscience qu'aujourd'hui le climat et le respect de la nature sont un enjeu primordial. Il est essentiel de changer nos habitudes et de tendre vers un impact minimal ; cette démarche n'est pas incompatible avec l'activité professionnelle, bien au contraire. À notre échelle, nous avons mis en place des actions concrètes dans notre fonctionnement d'entreprise.\n\n**Les transports**\n- Nous encourageons nos salariés, lorsque la nature de leur vacation le permet, à se rendre sur leur site en transports en commun ou à vélo.\n- Lors d'événements où plusieurs agents se rendent sur le même site, nous organisons systématiquement des départs du bureau en covoiturage, afin de réduire le nombre de véhicules mobilisés.\n- Nos rondiers contrôleurs utilisent beaucoup leurs véhicules de fonction, puisque leur mission est de se déplacer sur tous les sites : nous budgétons le remplacement, à terme, de notre flotte par une flotte 100 % électrique.\n- Pour les rondiers intervenants, qui effectuent de nombreux petits et moyens trajets entre leurs lieux de rondes, nous utilisons l'application Mapo : en renseignant avant la vacation les adresses des sites et leurs contraintes (horaires, durée…), l'application calcule un itinéraire et un ordre de déplacement optimisés. L'agent gagne du temps et le nombre de kilomètres parcourus diminue significativement.\n- Nous avons réorganisé nos modes de travail en optimisant les plages de présence et en favorisant le télétravail, ce qui réduit considérablement les trajets de nos collaborateurs sédentaires (principalement l'équipe administrative).\n- Nous organisons de plus en plus nos réunions internes et nos réunions avec nos clients en visioconférence, là aussi pour réduire les trajets en voiture.\n\n**Le numérique**\n- Nous utilisons le moteur de recherche Ecosia, qui reverse 80 % de ses gains publicitaires à des programmes de reforestation, notamment au Brésil, en Indonésie et au Burkina Faso : un arbre est planté toutes les 45 recherches, ce qui permet de mesurer sa propre contribution.\n- Nous nous rapprochons autant que possible du zéro papier : nos mains courantes papier ont été remplacées par des mains courantes électroniques ; nous communiquons en interne essentiellement par mail ou par Dropbox et n'imprimons plus de documents.\n- Tous nos collaborateurs sont sensibilisés au tri régulier de leur boîte mail : la surcharge des données sauvegardées est néfaste pour l'environnement, et nous ne conservons que ce qui est nécessaire."
+    }
+   ]
+  },
+  {
+   "key": "II",
+   "title": "Moyens humains",
+   "sections": [
+    {
+     "id": "b_recrutement_formation",
+     "title": "Nos formations internes",
+     "text": "Nous proposons à nos collaborateurs des formations complémentaires à leurs formations de base, afin d'améliorer leur efficacité sur le terrain. Nous les actualisons régulièrement et sommes toujours disposés à en ajouter de nouvelles si la mission l'exige ; selon les besoins du site, nous dispensons aux agents les formations nécessaires.\n\n**Les formations techniques** portent sur l'utilisation du matériel que nous mettons à disposition de nos agents et de nos chefs de site :\n- le logiciel de main courante Trackforce : présentation de l'application, utilisation de la tablette, prises et fins de service, prise en compte des missions et des consignes, rédaction des rapports, enregistrement des rondes ;\n- le logiciel de planification Comète, pour nos encadrants et nos responsables de site : présentation de l'application, utilisation sur tablette, fonctions de planification, d'affectation des agents aux vacations et d'envoi des plannings ;\n- l'informatique : sur certains sites, nos agents travaillent sur un outil informatique ; nos formations portent sur Word, Excel, la navigation internet, la messagerie ou des logiciels spécifiques, comme ceux des badgeuses ;\n- les moyens de communication, qui varient selon les sites et leurs particularités (site en sous-sol…) : talkies-walkies, oreillettes, PTI ;\n- les systèmes de vidéosurveillance : lorsque le site en est équipé, nous formons nos agents à une utilisation ciblée du système du site : présentation du système, repérage d'une situation suspecte, suivi d'un individu en vidéo, traitement des images, communication avec l'équipe terrain.\n\n**Les formations à la gestion du public** accompagnent nos agents dans leurs missions au contact du public : éléments de langage, remise à niveau en français, gestion des conflits, exfiltration d'un individu, identification des situations à désamorcer, gestion d'une attaque terroriste.\n- Remise à niveau en français : certains agents ont de grandes compétences en sécurité mais manquent d'aisance en communication. Après une évaluation de leur niveau, la formation travaille la compréhension, le vocabulaire courant et l'orthographe courante : à son issue, l'agent sait s'exprimer et se faire comprendre, tenir une conversation et rédiger un rapport.\n- Gestion des conflits : sur les sites qui accueillent du public, les agents peuvent être confrontés à des situations conflictuelles ; leur mission est de maintenir une situation sereine et la sécurité des biens et des personnes. Le module aborde la notion de légitime défense, les phases du conflit, l'entrée en contact, l'attitude d'écoute, le désamorçage des blocages, l'identification des individus « supports », la construction d'une réponse claire, la technique de prise de parole et la posture physique.\n- Attaque terroriste : le contexte actuel impose de considérer l'éventualité d'une attaque terroriste. Ce module travaille les gestes et postures à adopter selon les directives du gouvernement : connaissance géographique du site (sorties, caches…), connaissance des procédures d'alerte, connaissance de la procédure de mise en sécurité, techniques de désarmement et de diversion."
+    },
+    {
+     "id": "b_dispositif_absence",
+     "title": "Le remplacement d'un agent absent : absence non prévue",
+     "text": "Il arrive aussi que nous ayons à gérer une absence non prévue, lorsque l'agent n'est pas en mesure de nous prévenir. Nous avons mis au point une organisation interne pour pallier toute absence de dernière minute, et donc tout « poste vide » :\n- nos agents font leur prise de service auprès de leur responsable de site 15 minutes avant le début de la prestation ;\n- si le responsable de site n'a pas reçu de prise de service 10 minutes avant le début de la prestation, il appelle l'agent et mobilise automatiquement l'agent d'astreinte, qui est sur site en 60 minutes maximum ;\n- l'agent d'astreinte fait sa prise de service à son arrivée sur site, auprès du responsable de site et sur la main courante.\n\nOrganiser les prises de service internes 15 minutes avant la vacation réduit considérablement le délai de mobilisation de l'agent d'astreinte et nous fait gagner en réactivité."
+    }
+   ]
+  },
+  {
+   "key": "III",
+   "title": "Moyens opérationnels et matériels",
+   "sections": [
+    {
+     "id": "b_rondes",
+     "title": "Le contrôleur de rondes",
+     "text": "De nombreux sites nécessitent des rondes de surveillance, de levée de doute ou d'ouverture et de fermeture. Il est essentiel de pouvoir vérifier que ces rondes sont bien effectuées, entièrement et correctement : c'est le rôle du contrôleur de ronde. Les rondes sont balisées par des pointeaux disposés aux endroits clés du parcours convenu avec le Centre Henri Becquerel, puis nommés et enregistrés dans le logiciel de main courante. Lorsque l'agent passe et scanne un pointeau, l'étape de ronde est aussitôt consignée dans la main courante et consultable sur le tableau de bord. L'agent comme le client s'assurent ainsi que la ronde a été effectuée dans son intégralité."
+    },
+    {
+     "id": "b_moyens_materiels",
+     "title": "Les moyens techniques : la communication",
+     "text": "La communication est au cœur des missions de l'agent de sécurité : il doit pouvoir alerter, rendre compte et communiquer en permanence avec le reste de l'équipe. Selon la nature de leur mission et leurs besoins, nos agents disposent :\n- de **talkies-walkies et d'oreillettes** : les talkies-walkies permettent aux agents de communiquer d'un point à l'autre du site et de coordonner leurs actions ; les oreillettes apportent la discrétion, lorsque les agents doivent communiquer sans être entendus des personnes à proximité ;\n- d'une **tablette équipée de la main courante électronique Trackforce**, qui permet de remplir la main courante facilement et au client de la consulter en temps réel ;\n- d'un **téléphone portable** : notre organisation prévoit une ligne téléphonique d'astreinte dédiée au site ; les agents disposent donc sur place d'un téléphone, ou de plusieurs si nécessaire."
+    }
+   ]
+  },
+  {
+   "key": "IV",
+   "title": "Organisation, qualité et continuité",
+   "sections": [
+    {
+     "id": "b_suivi_qualite",
+     "title": "Contrôle 1 : le contrôle de fond (responsable de site)",
+     "text": "Ce premier niveau de contrôle, réalisé une fois par mois par le responsable de site, vérifie la maîtrise des missions par les agents en place. Les points de contrôle sont les suivants :\n- **Maîtrise des notions professionnelles** : question aléatoire sur le contenu des diplômes des agents (quels sont les différents dispositifs d'extinction ? qu'est-ce que le triangle du feu ?…) et mise en situation (vous constatez qu'une personne est inconsciente sur le site : quel est votre ordre d'alerte ?).\n- **Maîtrise des consignes du site** : question aléatoire sur les consignes (quel est le circuit de ronde ? quel numéro d'astreinte prévenir ?…) et mise en situation (lors de votre ronde, vous constatez un départ de feu au niveau du 4e pointeau : quelle est votre procédure ?).\n- **Respect des horaires** : vérification des prises et fins de service.\n- **Réalisation des missions** : respect des consignes permanentes et ponctuelles, bonne réalisation des missions confiées, bonne connaissance des notions apprises lors des recyclages.\n\nCes points de contrôle sont précisés et ciblés selon les besoins du site, et évoluent avec eux. Le responsable de site envoie son rapport de contrôle à l'équipe encadrante."
+    },
+    {
+     "id": "b_organisation",
+     "title": "La mise en place d'une prestation",
+     "text": "La mise en place d'une prestation est une étape cruciale pour le bon déroulement d'une mission. Un référent est présent pour guider l'agent, lui transmettre les consignes et faire le lien avec les interlocuteurs du site. Elle se déroule en quatre étapes :\n1. **Positionnement** : le chef de poste ou le référent met en place chaque agent sur sa zone d'action ; son périmètre est clairement défini avant le début de la vacation.\n2. **Consignes** : le référent remet à l'agent sa fiche de poste et ses consignes, consignées dans le LMC ; il vérifie qu'elles sont bien comprises et bien prises en compte, et répond aux questions de l'agent.\n3. **Matériel** : avant le début de la prestation, le référent vérifie que l'agent est en tenue et dispose de tout l'équipement nécessaire (tenue complète, talkie-walkie, carte professionnelle…) ; il fournit au besoin les éléments manquants ou défaillants.\n4. **Accompagnement** : le référent gère les prises de service sur place et reste présent pendant une partie de la première vacation, pour accompagner l'agent dans la réalisation de ses missions et répondre à ses interrogations."
+    }
+   ]
+  }
+ ],
+ "pages": [
+  {
+   "key": "0_0_0",
+   "sectionId": "b_presentation",
+   "sectionTitle": "Notre catalogue de prestations",
+   "text": "Pour le Centre Henri Becquerel, nous mobilisons en priorité les profils suivants : nos agents de sécurité incendie \\(SSIAP\\) et nos agents de sûreté.\n\n**Nos agents de sécurité incendie \\(SSIAP\\)**\nNos agents de sécurité incendie sont des acteurs essentiels de la prévention des risques. Ils disposent tous de la qualification SSIAP et sont formés à prévenir un incendie, à mettre en sécurité un bâtiment, ainsi qu'à intervenir et à s'organiser en cas d'incendie. Selon vos besoins, plusieurs profils vous sont proposés :\n- le SSIAP 1, agent de sécurité incendie ;\n- le SSIAP 2, chef d'équipe d'agents incendie ;\n- le SSIAP 3, chef de service de sécurité incendie.\n\n**Nos agents de sûreté**\nNos agents de sûreté, qualifiés et expérimentés, mettent leur savoir-faire à votre disposition selon vos besoins. Qu'il s'agisse de rondes de surveillance, de contrôle d'accès ou d'intervention, nos agents mettent en application vos consignes."
+  },
+  {
+   "key": "0_0_1",
+   "sectionId": "b_presentation",
+   "sectionTitle": "Notre catalogue de prestations",
+   "text": "**Nos agents cynophiles**\nNos agents cynophiles, ou « maîtres-chiens », travaillent en tandem avec leur animal, dont ils maîtrisent le dressage. Ils mettent leurs compétences et leurs qualifications à votre service pour sécuriser les biens et les personnes, par leur présence et leurs contrôles, par des rondes ou par des opérations de filtrage. L'atout principal de la présence du chien est d'apporter un élément dissuasif supplémentaire.\n\n**Nos agents rondiers intervenants**\nNos agents « rondiers intervenants » réalisent des rondes de surveillance de site et des rondes de contrôle, interviennent sur alarme et mettent les lieux en sécurité à la suite d'un incident. Ils disposent d'un équipement spécifique qui leur permet d'être réactifs et en communication constante avec les équipes et les clients. Ils sont formés à tout type de contexte afin de gérer au mieux l'imprévu."
+  },
+  {
+   "key": "0_0_2",
+   "sectionId": "b_presentation",
+   "sectionTitle": "Notre catalogue de prestations",
+   "text": "**Nos agents d'accueil**\nLes agents d'accueil occupent une place primordiale : celle du premier contact avec le client ou le visiteur. Ils sont en quelque sorte la vitrine de l'entreprise ; il est donc essentiel qu'ils fassent preuve de dynamisme, de capacité d'adaptation et de courtoisie. Ce poste demande une réelle polyvalence : ils accueillent et orientent le public, et effectuent aussi certaines tâches administratives.\n\n**Nos experts qualité**\nNos experts qualité sont à même de diagnostiquer vos besoins en sécurité et de vous conseiller la solution sur mesure qui vous conviendra le mieux. Ils contrôlent également les prestations de nos agents de terrain afin de maintenir un haut niveau d'exigence.\n\n**Nos préventeurs**\nNos préventeurs diagnostiquent vos besoins en sécurité incendie et en sûreté et vous conseillent la solution sur mesure la mieux adaptée : gestion des prestataires, veille réglementaire, analyse des risques \\(sûreté et sécurité\\), rédaction des permis de travail, suivi de chantier, support HSE."
+  },
+  {
+   "key": "0_0_3",
+   "sectionId": "b_presentation",
+   "sectionTitle": "Notre catalogue de prestations",
+   "text": "**Nos animations**\n- Exercice d'équipier de première intervention \\(EPI\\) : cette animation est essentielle pour intervenir en sécurité face à un départ de feu dans l'entreprise. Une intervention rapide et proportionnée limite l'impact pour l'entreprise et ses salariés ; le maintien et l'actualisation des compétences sont primordiaux pour garantir des équipiers opérationnels.\n- Exercice d'équipier de seconde intervention \\(ESI\\) : cette animation permet de garder un niveau de compétence opérationnel. Elle met en pratique les procédures de protection des personnes et des installations et peut être personnalisée selon vos procédures. Nos animateurs ESI sont issus d'un cycle de formation du CNPP.\n- Animation sauveteur secouriste du travail \\(SST\\) : ces animations permettent aux personnes qualifiées SST ou PSC1 de garder une compétence opérationnelle accrue. Les mises en situation sont ciblées selon vos risques et la nature de votre activité."
+  },
+  {
+   "key": "0_1_0",
+   "sectionId": "b_encadrement",
+   "sectionTitle": "Notre organigramme",
+   "text": "- Directeur d'agence, responsable de marché et dirigeant de l'entreprise : MARCHANI Adil\n- Responsables d'exploitation : LEMELE Fabrice, PORCHAIRE Laurent et DA SILVA Luis\n- Responsable administratif : DUHAMEL Leo\n- Responsable qualité : VATTIER Marie\n- Responsable commercial : DA SILVA Luis\n- Responsable unité mobile : ALAMAT Ramzi\n- Responsable cynophile : PODKOLZIN Sergeï\n- Responsable incendie : ATTOU Nesrine\n- Responsable RH : KANTE Rokia"
+  },
+  {
+   "key": "0_2_0",
+   "sectionId": "b_engagement_rse",
+   "sectionTitle": "Notre engagement écologique : des déplacements et un numérique plus sobres",
+   "text": "Nous avons conscience qu'aujourd'hui le climat et le respect de la nature sont un enjeu primordial. Il est essentiel de changer nos habitudes et de tendre vers un impact minimal ; cette démarche n'est pas incompatible avec l'activité professionnelle, bien au contraire. À notre échelle, nous avons mis en place des actions concrètes dans notre fonctionnement d'entreprise."
+  },
+  {
+   "key": "0_2_1",
+   "sectionId": "b_engagement_rse",
+   "sectionTitle": "Notre engagement écologique : des déplacements et un numérique plus sobres",
+   "text": "**Les transports**\n- Nous encourageons nos salariés, lorsque la nature de leur vacation le permet, à se rendre sur leur site en transports en commun ou à vélo.\n- Lors d'événements où plusieurs agents se rendent sur le même site, nous organisons systématiquement des départs du bureau en covoiturage, afin de réduire le nombre de véhicules mobilisés.\n- Nos rondiers contrôleurs utilisent beaucoup leurs véhicules de fonction, puisque leur mission est de se déplacer sur tous les sites : nous budgétons le remplacement, à terme, de notre flotte par une flotte 100 % électrique.\n- Pour les rondiers intervenants, qui effectuent de nombreux petits et moyens trajets entre leurs lieux de rondes, nous utilisons l'application Mapo : en renseignant avant la vacation les adresses des sites et leurs contraintes \\(horaires, durée…\\), l'application calcule un itinéraire et un ordre de déplacement optimisés. L'agent gagne du temps et le nombre de kilomètres parcourus diminue significativement.\n- Nous avons réorganisé nos modes de travail en optimisant les plages de présence et en favorisant le télétravail, ce qui réduit considérablement les trajets de nos collaborateurs sédentaires \\(principalement l'équipe administrative\\)."
+  },
+  {
+   "key": "0_2_2",
+   "sectionId": "b_engagement_rse",
+   "sectionTitle": "Notre engagement écologique : des déplacements et un numérique plus sobres",
+   "text": "- Nous organisons de plus en plus nos réunions internes et nos réunions avec nos clients en visioconférence, là aussi pour réduire les trajets en voiture.\n\n**Le numérique**\n- Nous utilisons le moteur de recherche Ecosia, qui reverse 80 % de ses gains publicitaires à des programmes de reforestation, notamment au Brésil, en Indonésie et au Burkina Faso : un arbre est planté toutes les 45 recherches, ce qui permet de mesurer sa propre contribution.\n- Nous nous rapprochons autant que possible du zéro papier : nos mains courantes papier ont été remplacées par des mains courantes électroniques ; nous communiquons en interne essentiellement par mail ou par Dropbox et n'imprimons plus de documents.\n- Tous nos collaborateurs sont sensibilisés au tri régulier de leur boîte mail : la surcharge des données sauvegardées est néfaste pour l'environnement, et nous ne conservons que ce qui est nécessaire."
+  },
+  {
+   "key": "1_0_0",
+   "sectionId": "b_recrutement_formation",
+   "sectionTitle": "Nos formations internes",
+   "text": "Nous proposons à nos collaborateurs des formations complémentaires à leurs formations de base, afin d'améliorer leur efficacité sur le terrain. Nous les actualisons régulièrement et sommes toujours disposés à en ajouter de nouvelles si la mission l'exige ; selon les besoins du site, nous dispensons aux agents les formations nécessaires."
+  },
+  {
+   "key": "1_0_1",
+   "sectionId": "b_recrutement_formation",
+   "sectionTitle": "Nos formations internes",
+   "text": "**Les formations techniques** portent sur l'utilisation du matériel que nous mettons à disposition de nos agents et de nos chefs de site :\n- le logiciel de main courante Trackforce : présentation de l'application, utilisation de la tablette, prises et fins de service, prise en compte des missions et des consignes, rédaction des rapports, enregistrement des rondes ;\n- le logiciel de planification Comète, pour nos encadrants et nos responsables de site : présentation de l'application, utilisation sur tablette, fonctions de planification, d'affectation des agents aux vacations et d'envoi des plannings ;\n- l'informatique : sur certains sites, nos agents travaillent sur un outil informatique ; nos formations portent sur Word, Excel, la navigation internet, la messagerie ou des logiciels spécifiques, comme ceux des badgeuses ;\n- les moyens de communication, qui varient selon les sites et leurs particularités \\(site en sous-sol…\\) : talkies-walkies, oreillettes, PTI ;\n- les systèmes de vidéosurveillance : lorsque le site en est équipé, nous formons nos agents à une utilisation ciblée du système du site : présentation du système, repérage d'une situation suspecte, suivi d'un individu en vidéo, traitement des images, communication avec l'équipe terrain."
+  },
+  {
+   "key": "1_0_2",
+   "sectionId": "b_recrutement_formation",
+   "sectionTitle": "Nos formations internes",
+   "text": "**Les formations à la gestion du public** accompagnent nos agents dans leurs missions au contact du public : éléments de langage, remise à niveau en français, gestion des conflits, exfiltration d'un individu, identification des situations à désamorcer, gestion d'une attaque terroriste.\n- Remise à niveau en français : certains agents ont de grandes compétences en sécurité mais manquent d'aisance en communication. Après une évaluation de leur niveau, la formation travaille la compréhension, le vocabulaire courant et l'orthographe courante : à son issue, l'agent sait s'exprimer et se faire comprendre, tenir une conversation et rédiger un rapport.\n- Gestion des conflits : sur les sites qui accueillent du public, les agents peuvent être confrontés à des situations conflictuelles ; leur mission est de maintenir une situation sereine et la sécurité des biens et des personnes. Le module aborde la notion de légitime défense, les phases du conflit, l'entrée en contact, l'attitude d'écoute, le désamorçage des blocages, l'identification des individus « supports », la construction d'une réponse claire, la technique de prise de parole et la posture physique."
+  },
+  {
+   "key": "1_0_3",
+   "sectionId": "b_recrutement_formation",
+   "sectionTitle": "Nos formations internes",
+   "text": "- Attaque terroriste : le contexte actuel impose de considérer l'éventualité d'une attaque terroriste. Ce module travaille les gestes et postures à adopter selon les directives du gouvernement : connaissance géographique du site \\(sorties, caches…\\), connaissance des procédures d'alerte, connaissance de la procédure de mise en sécurité, techniques de désarmement et de diversion."
+  },
+  {
+   "key": "1_1_0",
+   "sectionId": "b_dispositif_absence",
+   "sectionTitle": "Le remplacement d'un agent absent : absence non prévue",
+   "text": "Il arrive aussi que nous ayons à gérer une absence non prévue, lorsque l'agent n'est pas en mesure de nous prévenir. Nous avons mis au point une organisation interne pour pallier toute absence de dernière minute, et donc tout « poste vide » :\n- nos agents font leur prise de service auprès de leur responsable de site 15 minutes avant le début de la prestation ;\n- si le responsable de site n'a pas reçu de prise de service 10 minutes avant le début de la prestation, il appelle l'agent et mobilise automatiquement l'agent d'astreinte, qui est sur site en 60 minutes maximum ;\n- l'agent d'astreinte fait sa prise de service à son arrivée sur site, auprès du responsable de site et sur la main courante.\n\nOrganiser les prises de service internes 15 minutes avant la vacation réduit considérablement le délai de mobilisation de l'agent d'astreinte et nous fait gagner en réactivité."
+  },
+  {
+   "key": "2_0_0",
+   "sectionId": "b_rondes",
+   "sectionTitle": "Le contrôleur de rondes",
+   "text": "De nombreux sites nécessitent des rondes de surveillance, de levée de doute ou d'ouverture et de fermeture. Il est essentiel de pouvoir vérifier que ces rondes sont bien effectuées, entièrement et correctement : c'est le rôle du contrôleur de ronde. Les rondes sont balisées par des pointeaux disposés aux endroits clés du parcours convenu avec le Centre Henri Becquerel, puis nommés et enregistrés dans le logiciel de main courante. Lorsque l'agent passe et scanne un pointeau, l'étape de ronde est aussitôt consignée dans la main courante et consultable sur le tableau de bord. L'agent comme le client s'assurent ainsi que la ronde a été effectuée dans son intégralité."
+  },
+  {
+   "key": "2_1_0",
+   "sectionId": "b_moyens_materiels",
+   "sectionTitle": "Les moyens techniques : la communication",
+   "text": "La communication est au cœur des missions de l'agent de sécurité : il doit pouvoir alerter, rendre compte et communiquer en permanence avec le reste de l'équipe. Selon la nature de leur mission et leurs besoins, nos agents disposent :\n- de **talkies-walkies et d'oreillettes** : les talkies-walkies permettent aux agents de communiquer d'un point à l'autre du site et de coordonner leurs actions ; les oreillettes apportent la discrétion, lorsque les agents doivent communiquer sans être entendus des personnes à proximité ;\n- d'une **tablette équipée de la main courante électronique Trackforce**, qui permet de remplir la main courante facilement et au client de la consulter en temps réel ;\n- d'un **téléphone portable** : notre organisation prévoit une ligne téléphonique d'astreinte dédiée au site ; les agents disposent donc sur place d'un téléphone, ou de plusieurs si nécessaire."
+  },
+  {
+   "key": "3_0_0",
+   "sectionId": "b_suivi_qualite",
+   "sectionTitle": "Contrôle 1 : le contrôle de fond (responsable de site)",
+   "text": "Ce premier niveau de contrôle, réalisé une fois par mois par le responsable de site, vérifie la maîtrise des missions par les agents en place. Les points de contrôle sont les suivants :\n- **Maîtrise des notions professionnelles** : question aléatoire sur le contenu des diplômes des agents \\(quels sont les différents dispositifs d'extinction ? qu'est-ce que le triangle du feu ?…\\) et mise en situation \\(vous constatez qu'une personne est inconsciente sur le site : quel est votre ordre d'alerte ?\\).\n- **Maîtrise des consignes du site** : question aléatoire sur les consignes \\(quel est le circuit de ronde ? quel numéro d'astreinte prévenir ?…\\) et mise en situation \\(lors de votre ronde, vous constatez un départ de feu au niveau du 4e pointeau : quelle est votre procédure ?\\).\n- **Respect des horaires** : vérification des prises et fins de service.\n- **Réalisation des missions** : respect des consignes permanentes et ponctuelles, bonne réalisation des missions confiées, bonne connaissance des notions apprises lors des recyclages."
+  },
+  {
+   "key": "3_0_1",
+   "sectionId": "b_suivi_qualite",
+   "sectionTitle": "Contrôle 1 : le contrôle de fond (responsable de site)",
+   "text": "Ces points de contrôle sont précisés et ciblés selon les besoins du site, et évoluent avec eux. Le responsable de site envoie son rapport de contrôle à l'équipe encadrante."
+  },
+  {
+   "key": "3_1_0",
+   "sectionId": "b_organisation",
+   "sectionTitle": "La mise en place d'une prestation",
+   "text": "La mise en place d'une prestation est une étape cruciale pour le bon déroulement d'une mission. Un référent est présent pour guider l'agent, lui transmettre les consignes et faire le lien avec les interlocuteurs du site. Elle se déroule en quatre étapes :\n1. **Positionnement** : le chef de poste ou le référent met en place chaque agent sur sa zone d'action ; son périmètre est clairement défini avant le début de la vacation.\n2. **Consignes** : le référent remet à l'agent sa fiche de poste et ses consignes, consignées dans le LMC ; il vérifie qu'elles sont bien comprises et bien prises en compte, et répond aux questions de l'agent.\n3. **Matériel** : avant le début de la prestation, le référent vérifie que l'agent est en tenue et dispose de tout l'équipement nécessaire \\(tenue complète, talkie-walkie, carte professionnelle…\\) ; il fournit au besoin les éléments manquants ou défaillants.\n4. **Accompagnement** : le référent gère les prises de service sur place et reste présent pendant une partie de la première vacation, pour accompagner l'agent dans la réalisation de ses missions et répondre à ses interrogations."
+  }
+ ],
+ "reponses_cadre": [
+  {
+   "cle": "GSS_CH_1",
+   "question": "Décrivez les rondes de surveillance, le contrôleur de rondes et les pointeaux",
+   "texte": "De nombreux sites nécessitent des rondes de surveillance, de levée de doute ou d'ouverture et de fermeture. Il est essentiel de pouvoir vérifier que ces rondes sont bien effectuées, entièrement et correctement : c'est le rôle du contrôleur de ronde. Les rondes sont balisées par des pointeaux disposés aux endroits clés du parcours convenu avec le Centre Henri Becquerel, puis nommés et enregistrés dans le logiciel de main courante. Lorsque l'agent passe et scanne un pointeau, l'étape de ronde est aussitôt consignée dans la main courante et consultable sur le tableau de bord. L'agent comme le client s'assurent ainsi que la ronde a été effectuée dans son intégralité."
+  },
+  {
+   "cle": "GSS_CH_2",
+   "question": "Composition des équipes et organisation hiérarchique de l'encadrement",
+   "texte": "Organisation hiérarchique de GSS pour le marché."
+  }
+ ],
+ "parties_court": [
+  {
+   "titre": "Notre catalogue de prestations",
+   "texte": "Pour le Centre Henri Becquerel, nous mobilisons en priorité les profils suivants : nos agents de sécurité incendie (SSIAP) et nos agents de sûreté.\n\n**Nos agents de sécurité incendie (SSIAP)**\nNos agents de sécurité incendie sont des acteurs essentiels de la prévention des risques. Ils disposent tous de la qualification SSIAP et sont formés à prévenir un incendie, à mettre en sécurité un bâtiment, ainsi qu'à intervenir et à s'organiser en cas d'incendie. Selon vos besoins, plusieurs profils vous sont proposés :\n- le SSIAP 1, agent de sécurité incendie ;\n- le SSIAP 2, chef d'équipe d'agents incendie ;\n- le SSIAP 3, chef de service de sécurité incendie.\n\n**Nos agents de sûreté**\nNos agents de sûreté, qualifiés et expérimentés, mettent leur savoir-faire à votre disposition selon vos besoins. Qu'il s'agisse de rondes de surveillance, de contrôle d'accès ou d'intervention, nos agents mettent en application vos consignes.\n\n**Nos agents cynophiles**\nNos agents cynophiles, ou « maîtres-chiens », travaillent en tandem avec leur animal, dont ils maîtrisent le dressage. Ils mettent leurs compétences et leurs qualifications à votre service pour sécuriser les biens et les personnes, par leur présence et leurs contrôles, par des rondes ou par des opérations de filtrage. L'atout principal de la présence du chien est d'apporter un élément dissuasif supplémentaire.\n\n**Nos agents rondiers intervenants**\nNos agents « rondiers intervenants » réalisent des rondes de surveillance de site et des rondes de contrôle, interviennent sur alarme et mettent les lieux en sécurité à la suite d'un incident. Ils disposent d'un équipement spécifique qui leur permet d'être réactifs et en communication constante avec les équipes et les clients. Ils sont formés à tout type de contexte afin de gérer au mieux l'imprévu.\n\n**Nos agents d'accueil**\nLes agents d'accueil occupent une place primordiale : celle du premier contact avec le client ou le visiteur. Ils sont en quelque sorte la vitrine de l'entreprise ; il est donc essentiel qu'ils fassent preuve de dynamisme, de capacité d'adaptation et de courtoisie. Ce poste demande une réelle polyvalence : ils accueillent et orientent le public, et effectuent aussi certaines tâches administratives.\n\n**Nos experts qualité**\nNos experts qualité sont à même de diagnostiquer vos besoins en sécurité et de vous conseiller la solution sur mesure qui vous conviendra le mieux. Ils contrôlent également les prestations de nos agents de terrain afin de maintenir un haut niveau d'exigence.\n\n**Nos préventeurs**\nNos préventeurs diagnostiquent vos besoins en sécurité "
+  },
+  {
+   "titre": "Le contrôleur de rondes",
+   "texte": "De nombreux sites nécessitent des rondes de surveillance, de levée de doute ou d'ouverture et de fermeture. Il est essentiel de pouvoir vérifier que ces rondes sont bien effectuées, entièrement et correctement : c'est le rôle du contrôleur de ronde. Les rondes sont balisées par des pointeaux disposés aux endroits clés du parcours convenu avec le Centre Henri Becquerel, puis nommés et enregistrés dans le logiciel de main courante. Lorsque l'agent passe et scanne un pointeau, l'étape de ronde est aussitôt consignée dans la main courante et consultable sur le tableau de bord. L'agent comme le client s'assurent ainsi que la ronde a été effectuée dans son intégralité."
+  },
+  {
+   "titre": "Contrôle 1 : le contrôle de fond (responsable de site)",
+   "texte": "Ce premier niveau de contrôle, réalisé une fois par mois par le responsable de site, vérifie la maîtrise des missions par les agents en place. Les points de contrôle sont les suivants :\n- **Maîtrise des notions professionnelles** : question aléatoire sur le contenu des diplômes des agents (quels sont les différents dispositifs d'extinction ? qu'est-ce que le triangle du feu ?…) et mise en situation (vous constatez qu'une personne est inconsciente sur le site : quel est votre ordre d'alerte ?).\n- **Maîtrise des consignes du site** : question aléatoire sur les consignes (quel est le circuit de ronde ? quel numéro d'astreinte prévenir ?…) et mise en situation (lors de votre ronde, vous constatez un départ de feu au niveau du 4e pointeau : quelle est votre procédure ?).\n- **Respect des horaires** : vérification des prises et fins de service.\n- **Réalisation des missions** : respect des consignes permanentes et ponctuelles, bonne réalisation des missions confiées, bonne connaissance des notions apprises lors des recyclages.\n\nCes points de contrôle sont précisés et ciblés selon les besoins du site, et évoluent avec eux. Le responsable de site envoie son rapport de contrôle à l'équipe encadrante."
+  }
+ ],
+ "blocs": [
+  {
+   "cle": "I",
+   "titre": "Notre compréhension de votre besoin",
+   "rubriques": []
+  },
+  {
+   "cle": "II",
+   "titre": "Présentation de GSS",
+   "rubriques": [
+    {
+     "id": "b2_catalogue",
+     "titre": "Notre catalogue de prestations",
+     "texte": "Pour le Centre Henri Becquerel, nous mobilisons en priorité les profils suivants : nos agents de sécurité incendie (SSIAP) et nos agents de sûreté.\n\n**Nos agents de sécurité incendie (SSIAP)**\nNos agents de sécurité incendie sont des acteurs essentiels de la prévention des risques. Ils disposent tous de la qualification SSIAP et sont formés à prévenir un incendie, à mettre en sécurité un bâtiment, ainsi qu'à intervenir et à s'organiser en cas d'incendie. Selon vos besoins, plusieurs profils vous sont proposés :\n- le SSIAP 1, agent de sécurité incendie ;\n- le SSIAP 2, chef d'équipe d'agents incendie ;\n- le SSIAP 3, chef de service de sécurité incendie.\n\n**Nos agents de sûreté**\nNos agents de sûreté, qualifiés et expérimentés, mettent leur savoir-faire à votre disposition selon vos besoins. Qu'il s'agisse de rondes de surveillance, de contrôle d'accès ou d'intervention, nos agents mettent en application vos consignes.\n\n**Nos agents cynophiles**\nNos agents cynophiles, ou « maîtres-chiens », travaillent en tandem avec leur animal, dont ils maîtrisent le dressage. Ils mettent leurs compétences et leurs qualifications à votre service pour sécuriser les biens et les personnes, par leur présence et leurs contrôles, par des rondes ou par des opérations de filtrage. L'atout principal de la présence du chien est d'apporter un élément dissuasif supplémentaire.\n\n**Nos agents rondiers intervenants**\nNos agents « rondiers intervenants » réalisent des rondes de surveillance de site et des rondes de contrôle, interviennent sur alarme et mettent les lieux en sécurité à la suite d'un incident. Ils disposent d'un équipement spécifique qui leur permet d'être réactifs et en communication constante avec les équipes et les clients. Ils sont formés à tout type de contexte afin de gérer au mieux l'imprévu.\n\n**Nos agents d'accueil**\nLes agents d'accueil occupent une place primordiale : celle du premier contact avec le client ou le visiteur. Ils sont en quelque sorte la vitrine de l'entreprise ; il est donc essentiel qu'ils fassent preuve de dynamisme, de capacité d'adaptation et de courtoisie. Ce poste demande une réelle polyvalence : ils accueillent et orientent le public, et effectuent aussi certaines tâches administratives.\n\n**Nos experts qualité**\nNos experts qualité sont à même de diagnostiquer vos besoins en sécurité et de vous conseiller la solution sur mesure qui vous conviendra le mieux. Ils contrôlent également les prestations de nos agents de terrain afin de maintenir un haut niveau d'exigence.\n\n**Nos préventeurs**\nNos préventeurs diagnostiquent vos besoins en sécurité incendie et en sûreté et vous conseillent la solution sur mesure la mieux adaptée : gestion des prestataires, veille réglementaire, analyse des risques (sûreté et sécurité), rédaction des permis de travail, suivi de chantier, support HSE.\n\n**Nos animations**\n- Exercice d'équipier de première intervention (EPI) : cette animation est essentielle pour intervenir en sécurité face à un départ de feu dans l'entreprise. Une intervention rapide et proportionnée limite l'impact pour l'entreprise et ses salariés ; le maintien et l'actualisation des compétences sont primordiaux pour garantir des équipiers opérationnels.\n- Exercice d'équipier de seconde intervention (ESI) : cette animation permet de garder un niveau de compétence opérationnel. Elle met en pratique les procédures de protection des personnes et des installations et peut être personnalisée selon vos procédures. Nos animateurs ESI sont issus d'un cycle de formation du CNPP.\n- Animation sauveteur secouriste du travail (SST) : ces animations permettent aux personnes qualifiées SST ou PSC1 de garder une compétence opérationnelle accrue. Les mises en situation sont ciblées selon vos risques et la nature de votre activité.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "I-PRE-01",
+      "fond": "AO RNE.pdf p.9-12 (pages catalogue)"
+     }
+    },
+    {
+     "id": "b2_organigramme",
+     "titre": "Notre organigramme",
+     "texte": "- Directeur d'agence, responsable de marché et dirigeant de l'entreprise : MARCHANI Adil\n- Responsables d'exploitation : LEMELE Fabrice, PORCHAIRE Laurent et DA SILVA Luis\n- Responsable administratif : DUHAMEL Leo\n- Responsable qualité : VATTIER Marie\n- Responsable commercial : DA SILVA Luis\n- Responsable unité mobile : ALAMAT Ramzi\n- Responsable cynophile : PODKOLZIN Sergeï\n- Responsable incendie : ATTOU Nesrine\n- Responsable RH : KANTE Rokia",
+     "schema": {
+      "source": "organigramme",
+      "origine": "python/schemas_gss/organigramme_gss.py (annuaire « Personnes » + registre)",
+      "fond": "AO RNE.pdf p.13 (organigramme)"
+     }
+    },
+    {
+     "id": "b2_identite",
+     "titre": "Notre identité réglementaire",
+     "texte": "- Dénomination : Global Security Services (GSS), PME.\n- Siège et agence qui exécute le marché : 76 rue d'Elbeuf, 76100 Rouen.\n- SIRET : 805 295 516 00019.\n- Autorisation d'exercer délivrée par le CNAPS : AUT-076-2114-02-12-20140458592, obtenue le 12 février 2015.\n- Agrément dirigeant CNAPS : M. MARCHANI Adil, AGD-076-2114-01-28-20140458593.\n- Effectif : 320 salariés, dont 215 en Seine-Maritime (76) et 65 dans l'Eure (27).\n- Démarche qualité : certification ISO 9001 en cours, prévue fin 2026.\n- Sous-traitance : GSS n'envisage pas de recourir à la sous-traitance pour les prestations fixes ou supplémentaires.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "I-AGR-01"
+     }
+    },
+    {
+     "id": "b2_implantation",
+     "titre": "Notre implantation",
+     "texte": "Notre siège et notre agence sont situés 76 rue d'Elbeuf, à Rouen. Nos agents sont présents sur le quart nord-ouest, et plus précisément sur l'ensemble de la région Normandie : sur nos 320 salariés, 215 travaillent en Seine-Maritime et 65 dans l'Eure. Nos agents d'astreinte sont répartis géographiquement afin de pouvoir intervenir rapidement sur n'importe quel site ; ce système d'astreinte dédié nous permet de réagir efficacement aux situations d'urgence. Nos agents d'astreinte peuvent ainsi intervenir en moins de 2 heures sur n'importe quel site normand. Nous disposons d'une astreinte de 5 véhicules pour la région rouennaise.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "chiffres",
+      "titre": "Une entreprise implantée en Normandie",
+      "params": {
+       "chiffres": [
+        {
+         "valeur": "320",
+         "libelle": "Salariés",
+         "role": "sable",
+         "icone": "groupe"
+        },
+        {
+         "valeur": "215",
+         "libelle": "En Seine-Maritime",
+         "role": "bleu",
+         "icone": "lieu"
+        },
+        {
+         "valeur": "65",
+         "libelle": "Dans l'Eure",
+         "role": "bleu",
+         "icone": "lieu"
+        },
+        {
+         "valeur": "5",
+         "libelle": "Véhicules d'astreinte pour la région rouennaise",
+         "role": "orange",
+         "icone": "voiture"
+        }
+       ]
+      },
+      "origine": "registre (effectifs, véhicules d'astreinte)"
+     }
+    },
+    {
+     "id": "b2_valeurs",
+     "titre": "Nos valeurs",
+     "texte": "Trois mots d'ordre fondent notre façon de travailler et nos exigences de qualité ; toutes nos démarches professionnelles s'efforcent d'être en adéquation avec ces valeurs.\n\n- **Écoute** : l'écoute est primordiale dans les métiers de service. Elle permet de s'approcher au plus près du besoin du client ; dans le management, elle permet aussi de pérenniser les équipes et d'être au plus près de leurs besoins, de leurs difficultés et de leurs projets.\n- **Respect** : la sécurité est un métier de contact. Pour faciliter les échanges, le respect envers ses interlocuteurs est fondamental ; cette valeur fait partie intégrante du secteur de la sécurité, où l'on attend d'un agent le respect des procédures et des institutions.\n- **Flexibilité** : la sécurité est un service. Nous nous devons de tout mettre en œuvre pour répondre à vos besoins, ce qui est souvent synonyme de réactivité et de flexibilité.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "I-PRE-04"
+     }
+    },
+    {
+     "id": "b2_ecologie_mobilite_numerique",
+     "titre": "Notre engagement écologique : des déplacements et un numérique plus sobres",
+     "texte": "Nous avons conscience qu'aujourd'hui le climat et le respect de la nature sont un enjeu primordial. Il est essentiel de changer nos habitudes et de tendre vers un impact minimal ; cette démarche n'est pas incompatible avec l'activité professionnelle, bien au contraire. À notre échelle, nous avons mis en place des actions concrètes dans notre fonctionnement d'entreprise.\n\n**Les transports**\n- Nous encourageons nos salariés, lorsque la nature de leur vacation le permet, à se rendre sur leur site en transports en commun ou à vélo.\n- Lors d'événements où plusieurs agents se rendent sur le même site, nous organisons systématiquement des départs du bureau en covoiturage, afin de réduire le nombre de véhicules mobilisés.\n- Nos rondiers contrôleurs utilisent beaucoup leurs véhicules de fonction, puisque leur mission est de se déplacer sur tous les sites : nous budgétons le remplacement, à terme, de notre flotte par une flotte 100 % électrique.\n- Pour les rondiers intervenants, qui effectuent de nombreux petits et moyens trajets entre leurs lieux de rondes, nous utilisons l'application Mapo : en renseignant avant la vacation les adresses des sites et leurs contraintes (horaires, durée…), l'application calcule un itinéraire et un ordre de déplacement optimisés. L'agent gagne du temps et le nombre de kilomètres parcourus diminue significativement.\n- Nous avons réorganisé nos modes de travail en optimisant les plages de présence et en favorisant le télétravail, ce qui réduit considérablement les trajets de nos collaborateurs sédentaires (principalement l'équipe administrative).\n- Nous organisons de plus en plus nos réunions internes et nos réunions avec nos clients en visioconférence, là aussi pour réduire les trajets en voiture.\n\n**Le numérique**\n- Nous utilisons le moteur de recherche Ecosia, qui reverse 80 % de ses gains publicitaires à des programmes de reforestation, notamment au Brésil, en Indonésie et au Burkina Faso : un arbre est planté toutes les 45 recherches, ce qui permet de mesurer sa propre contribution.\n- Nous nous rapprochons autant que possible du zéro papier : nos mains courantes papier ont été remplacées par des mains courantes électroniques ; nous communiquons en interne essentiellement par mail ou par Dropbox et n'imprimons plus de documents.\n- Tous nos collaborateurs sont sensibilisés au tri régulier de leur boîte mail : la surcharge des données sauvegardées est néfaste pour l'environnement, et nous ne conservons que ce qui est nécessaire.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "I-RSE-02",
+      "remarque": "Titres + pictogrammes (transports en commun, vélo, covoiturage, flotte électrique, télétravail, visioconférence) : forme appréciée par le dirigeant (page 27 du mémoire envoyé)."
+     }
+    },
+    {
+     "id": "b2_ecologie_energie_recyclage",
+     "titre": "Notre engagement écologique : énergie, recyclage et déchets",
+     "texte": "**Les économies d'énergie**\nNous veillons au respect de bonnes pratiques dans nos locaux :\n- éteindre les lumières, les ordinateurs et le chauffage le soir avant de quitter les bureaux ;\n- ne pas allumer les lumières des bureaux en journée lorsque l'éclairage naturel suffit ;\n- fermer les robinets pendant le lavage des mains ;\n- utiliser des piles rechargeables, notamment pour les lampes torches ;\n- entretenir régulièrement nos véhicules.\nNous avons également remplacé les ampoules classiques par des ampoules basse consommation.\n\n**Un réel engagement**\nAu-delà des gestes du quotidien, nous donnons une dimension particulière à l'écologie dans l'exercice de notre activité : nous avons tous un rôle à jouer. Cela passe par exemple par le choix de nos partenaires et de nos fournisseurs, dont nous regardons la propre sensibilité écologique. Nous avons également à cœur de sensibiliser nos collaborateurs : c'est en adoptant les bons gestes sur son lieu de travail que l'on pourra plus facilement les adopter sur son lieu de vie.\n\n**Le recyclage de nos tenues**\nLe matériel que nous mettons à disposition de nos agents a une durée de vie limitée : nous veillons à ce que leurs tenues soient régulièrement changées, par souci d'une présentation irréprochable. Or les vêtements professionnels sont plus difficiles à recycler que des vêtements classiques : ils sont souvent floqués d'un logo d'entreprise ou composés de matières combinées. Nous avons noué un partenariat novateur avec l'entreprise Triethic, qui collecte les tenues professionnelles usagées et les recycle selon trois filières :\n- le réemploi : après retrait des broderies (logo) et de toute identification professionnelle, puis remise en état, le vêtement est réemployé ;\n- l'effilochage : les vêtements sont triés par couleur et par matière, puis effilochés et retissés ;\n- le combustible : les matières non réutilisables et non dangereuses servent de combustible, ce qui réduit la consommation d'énergies fossiles et l'enfouissement de déchets.\n\n**Nos déchets au bureau**\n- Un espace de tri sélectif, équipé des différentes poubelles, permet à tous les collaborateurs de trier leurs déchets correctement et facilement.\n- Nous avons considérablement réduit notre consommation de papier ; les documents imprimés qui ne servent plus sont réutilisés comme papier brouillon.\n- Un bac à compost recueille les déchets alimentaires.\n- Pour la pause café, nous utilisons des capsules recyclables issues du commerce équitable, et chaque collaborateur utilise sa propre tasse : aucun gobelet en plastique ou en carton à usage unique.\n- Notre matériel électronique non utilisé se voit offrir une seconde vie : nous le donnons à des associations de recyclage et de réparation.\n\nÀ l'heure où les questions écologiques sont centrales et où nous avons tous un rôle à jouer, il nous tient à cœur de valoriser les actions menées par nos collaborateurs et de maîtriser les circuits dans lesquels nos déchets sont dirigés.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "I-RSE-04"
+     }
+    },
+    {
+     "id": "b2_references_intro",
+     "titre": "Ils nous ont fait confiance",
+     "texte": "Nous vous présentons une partie des enseignes et des organismes qui nous ont fait, et nous font, confiance en nous confiant la sécurité de leurs sites, ainsi que l'expérience que nous y avons acquise. Nous n'avons retenu qu'un nombre limité de références par secteur d'activité et décrivons, pour chacune, les missions types d'un site en particulier. Nous commençons par le secteur le plus proche du vôtre : les sites de santé.",
+     "schema": null
+    },
+    {
+     "id": "b2_ref_sante",
+     "titre": "Référence — les sites de santé",
+     "texte": "**Les sites de santé**\n**Site : Centre hospitalier du Rouvray — Saint-Étienne-du-Rouvray (76800)**\nEffectif : 2 agents. Amplitude horaire : 20 h – 6 h.\nNos missions : rondes de sécurité incendie ; gestion et suivi du SSI ; rondes de sûreté dans les différentes zones du site ; gestion des moyens d'accès ; renfort du personnel d'accueil et orientation du public.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "I-REF-11"
+     }
+    },
+    {
+     "id": "b2_ref_distribution",
+     "titre": "Référence — la distribution",
+     "texte": "**La distribution**\nDans le secteur de la distribution, nous travaillons régulièrement avec différentes enseignes, comme Carrefour et Leclerc. La distribution est un secteur particulier et très complet en matière d'exigences de compétences : les besoins sont très diversifiés, du fait du contact avec la clientèle du magasin et avec les équipes de vente et de gestion. L'agent de sécurité fait le lien entre toutes les zones et toutes les activités de la zone commerciale. Il doit posséder un grand sens de l'observation et de la concentration, être attentif au comportement des clients et repérer rapidement un comportement suspect. Il doit également faire preuve d'une dissuasion mesurée pour rester dans une démarche commerciale.\n\n**Site : Hyper Leclerc, Brico Leclerc et Jardi Leclerc — Saint-Étienne-du-Rouvray (76800)**\nEffectif : 13 agents. Amplitude horaire : 24 h/24, 7 j/7.\nNos missions : prévenir et empêcher le vol de marchandises ; escorter les caisses lors des changements ; rondes d'ouverture et de fermeture ; gestion du relais transport de fonds ; vidéosurveillance du magasin ; gestion et orientation des entrées du public ; gestion des livraisons des fournisseurs ; réception des livraisons par camion ; contrôle des installations incendie ; surveillance nocturne des zones de parking ; installation des systèmes antivol sur les articles onéreux ; réarmement de la centrale de lavage en cas de panne ; relevés nocturnes de température du matériel de froid.\n\nNous donnons une vraie consistance et un suivi aux missions de nos agents en proposant une remontée d'indicateurs : un suivi chiffré et analysé de certaines actions, comme le nombre d'interpellations, le nombre de vols, le nombre de rondes effectuées ou le nombre d'incidents de température. Ces analyses permettent, à nous comme au client, de mettre en place des actions pour faire évoluer la prestation.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "I-REF-03"
+     }
+    },
+    {
+     "id": "b2_ref_collectivite",
+     "titre": "Référence — les mairies",
+     "texte": "**Les mairies**\nLes prestations qui nous sont confiées par les mairies sont de deux natures : la surveillance des bâtiments municipaux d'une part, la gestion de la sécurité événementielle d'autre part. Notre équipe encadrante crée des liens étroits avec les équipes des communes avec lesquelles nous travaillons : pour l'événementiel, il est important de bien cerner les attentes de nos partenaires afin d'y répondre de façon pertinente. En travaillant régulièrement ensemble, nous connaissons bien les prérogatives des communes et pouvons les orienter sur les nouveautés en matière de sécurité : nous travaillons en synergie pour réaliser une prestation de qualité. Pour la surveillance des bâtiments municipaux, nous mettons en place une équipe pérenne, qui a une parfaite connaissance des lieux et des équipes techniques de la mairie, afin d'assurer à la fois une surveillance pointue des installations incendie et une grande réactivité lors des interventions sur alarme.\n\n**Site : cinéma, théâtre et bâtiments communaux — Port-Jérôme-sur-Seine (76330)**\nEffectif : 2 à 30 agents. Amplitude horaire : variable.\nMissions cinéma et spectacles : filtrer les entrées du cinéma et de la salle de spectacle ; réaliser des rondes de surveillance et des rondes de surveillance incendie pendant les séances et les spectacles.\nMissions événementielles : filtrer et compter les entrées et les sorties lors des événements de la commune ; organiser la surveillance de sûreté et de sécurité pendant les événements ; réaliser des rondes de contrôle des installations de sécurité incendie ; réaliser des rondes de surveillance des installations événementielles après la fermeture au public et veiller à la non-dégradation du matériel.\nMissions de surveillance des bâtiments : intervenir sur alarme lorsqu'une alarme d'un bâtiment municipal se déclenche ; effectuer régulièrement des rondes de vérification du matériel incendie et du matériel d'alerte.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "I-REF-04"
+     }
+    },
+    {
+     "id": "b2_ref_industrie",
+     "titre": "Référence — les sites industriels",
+     "texte": "**Les sites industriels**\nDifférentes structures industrielles nous ont confié leurs besoins en sécurité. Ce secteur est particulier et très intéressant par sa diversité : chaque site présente des besoins différents selon sa configuration, la nature de son activité ou sa production. Notre rôle est de nous tenir toujours à la pointe des normes de sécurité dans ce domaine et de maintenir nos équipes en formation permanente. Nos équipes sur place font preuve d'une grande rigueur et de discrétion.\n\n**Site : Schneider Electric — Beaumont-le-Roger (27170)**\nEffectif : 8 agents. Amplitude horaire : 24 h/24, 7 j/7.\nNos missions : sécurisation du site ; rondes de surveillance ; filtrage des entrées et des sorties ; gestion des moyens d'accès ; gestion des accès des livraisons ; gestion des accès des entreprises extérieures intervenantes ; intervention sur alarme ; vérification des installations électriques ; mission de prévention des risques ; formation SST et pompier des salariés du site.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "I-REF-05"
+     }
+    },
+    {
+     "id": "b2_ref_enseignement",
+     "titre": "Référence — les écoles, universités et facultés",
+     "texte": "**Les écoles, universités et facultés**\nNous sommes régulièrement sollicités pour des missions de sécurité au sein d'établissements scolaires, d'enseignement et de formation professionnelle, comme le CESI ou l'Université de Rouen. Ces missions sont de natures très différentes : surveillance humaine de locaux de type collège ou lycée, en cas de système d'alarme défaillant ou à la suite de dégradations, mais aussi partenariats plus ancrés, dans lesquels nous assurons des missions d'accueil, de prévention et de gestion humaine. Nos agents sont formés à interagir avec le personnel enseignant et une population étudiante : ils mettent l'accent sur la communication, avec une certaine fermeté, et font preuve de polyvalence et d'adaptabilité.\n\n**Site : CESI, campus d'enseignement supérieur — Rouen, Caen, Lille**\nEffectif : 5 à 15 agents. Amplitude horaire : 7 h 30 – 20 h.\nNos missions : accueil des étudiants et des intervenants externes ; accueil des entreprises extérieures et réception des commandes ; gestion du pôle accueil ; mise en place des badges et création des accès ; gestion du prêt de matériel informatique aux étudiants ; gestion de la circulation sur la zone de parking ; gestion du courrier et des colis à l'accueil ; renseignement et orientation des intervenants ; rondes de vérification du respect du règlement intérieur ; accompagnement des exercices d'évacuation incendie ; formation du personnel aux bonnes pratiques de sécurité et de prévention ; rondes de vérification du matériel incendie ; gestion des événements du campus (portes ouvertes, fêtes étudiantes, remises de diplômes…) ; participation à la démarche d'amélioration de la sécurité ; intervention sur alarme.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "I-REF-06"
+     }
+    },
+    {
+     "id": "b2_ref_banque",
+     "titre": "Référence — les établissements bancaires",
+     "texte": "**Les établissements bancaires**\nNous sommes régulièrement sollicités pour des missions de sécurité au sein d'établissements bancaires : sécurisation d'une agence pendant les heures d'ouverture, ou pendant des interventions d'entreprises extérieures. Les agents en place doivent faire preuve d'une bonne communication, comme sur tout site accueillant du public, et respecter les procédures internes du groupe bancaire.\n\n**Site : agence CIC — Amiens (80000)**\nEffectif : 2 agents. Amplitude horaire : 8 h – 17 h.\nNos missions : sécurisation de l'agence ; accueil des entreprises intervenantes pendant les travaux ; rondes de vérification du matériel incendie ; intervention sur alarme.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "fiche",
+      "titre": "Référence : les établissements bancaires",
+      "params": {
+       "nom": "Agence CIC",
+       "lieu": "Amiens, 80000",
+       "icone": "banque",
+       "secteur": "Banque",
+       "chiffres": [
+        {
+         "valeur": "2",
+         "libelle": "Agents"
+        },
+        {
+         "valeur": "8 h – 17 h",
+         "libelle": "Amplitude horaire"
+        }
+       ],
+       "missions": [
+        "Sécurisation de l'agence",
+        "Accueil des entreprises intervenantes pendant les travaux",
+        "Rondes de vérification du matériel incendie",
+        "Intervention sur alarme"
+       ]
+      },
+      "origine": "bibliothèque I-REF-07, sans la mission Covid « Vérification du respect des gestes barrières »"
+     }
+    },
+    {
+     "id": "b2_ref_institutionnel",
+     "titre": "Référence — les institutionnels",
+     "texte": "**Les institutionnels**\nNous accompagnons depuis plusieurs années différents acteurs institutionnels de notre territoire, comme la CAF et la Région Normandie. Travailler à leurs côtés nous a permis d'enrichir notre savoir-faire, notre savoir-être et nos procédures, et d'être en mesure d'intervenir avec pertinence sur un siège social : sur ce type de site, la représentation, la posture et les compétences doivent être particulièrement affirmées et visibles.\n\n**Site : siège de la Région Normandie — Abbaye aux Dames, Caen (14000)**\nEffectif : 20 agents.\nNous accompagnons la Région Normandie à la fois pour sécuriser ses sièges de Rouen et de Caen et pour sécuriser, lors de dysfonctionnements, les établissements scolaires placés sous sa responsabilité.\nNos missions : gardiennage des bâtiments administratifs et des lycées ; rondes de sécurité incendie ; vérification des installations incendie ; rondes de surveillance ; vérification des accès et des issues de secours ; accompagnement des intervenants lors de travaux ; levée de doute en cas d'alarme ; accueil, filtrage et orientation du public ; secours à la personne ; renfort et gestion de la sécurité lors d'événements ponctuels ; rondes SSIAP dans les internats de la Région.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "I-REF-08"
+     }
+    },
+    {
+     "id": "b2_ref_sport",
+     "titre": "Référence — les sites et événements sportifs",
+     "texte": "**Les sites et événements sportifs**\nNous intervenons également dans le milieu sportif, à travers des partenariats réguliers, comme avec le club de football Quevilly Rouen Métropole (QRM), mais aussi sur sollicitation pour des événements sportifs ponctuels. Ces missions mettent en œuvre notre capacité à mobiliser nos équipes en nombre pour un événement ponctuel, à organiser ces événements et à nous adapter.\n\n**Site : Quevilly Rouen Métropole — stade Diochon, Rouen**\nEffectif : 40 agents.\nChez ce partenaire organisateur d'événements sportifs, nous gérons tout type d'événement et de prestation de sûreté et de sécurité. Nos missions : rondes de sécurité incendie ; gestion et suivi du SSI ; rondes de sûreté dans les différentes zones du site ; gestion des moyens d'accès ; filtrage du public ; sécurisation des accès ; renfort du personnel d'accueil et orientation du public.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "I-REF-09"
+     }
+    }
+   ]
+  },
+  {
+   "cle": "III",
+   "titre": "Nos moyens humains",
+   "rubriques": [
+    {
+     "id": "b3_adequation",
+     "titre": "L'adéquation de nos moyens humains avec votre besoin",
+     "texte": "**L'équipe dédiée au Centre Henri Becquerel**\nAprès avoir analysé les besoins de la mission, nous avons construit une organisation de terrain et constitué l'équipe suivante :\n\n| Catégorie de personnel | Qualification | Nombre | Observations |\n|---|---|---|---|\n| Chef d'équipe de sécurité incendie | SSIAP 2 | [À COMPLÉTER] | |\n| Agent de sécurité incendie | SSIAP 1 | [À COMPLÉTER] | |\n| Agent de sécurité | CQP APS | [À COMPLÉTER] | |\n\nNous mettons en place une équipe de [À COMPLÉTER] agents titulaires, qui assurent les missions de façon régulière. Dans le même temps, nous nous assurons de disposer d'une équipe suppléante de [À COMPLÉTER] agents formés au site, afin de pouvoir intervenir en cas d'absence des titulaires (maladie, congés payés…) ou de besoin supplémentaire. Les agents de l'équipe dédiée sont titulaires des diplômes suivants : SSIAP 2, SSIAP 1, CQP APS, SST, PSC1 et habilitation électrique H0B0.\n\n**La stabilité des équipes**\nNous privilégions la stabilité sur les sites fixes, tout en maintenant un léger roulement : les agents acquièrent ainsi une très bonne connaissance du site et de vraies compétences, sans laisser de mauvaises habitudes s'installer.\n\n**Les ressources de GSS**\nDerrière l'équipe dédiée, GSS mobilise l'ensemble de ses ressources :\n\n| Catégorie de personnel | Qualification | Nombre |\n|---|---|---|\n| Agents SSIAP 1 | SSIAP 1 | 185 |\n| Agents SSIAP 2 | SSIAP 1 – SSIAP 2 | 28 |\n| Agents SSIAP 3 | SSIAP 1 – 2 – 3 | 2 |\n| Contrôleurs | Manager | 35 |\n| Agents cynophiles | CQP – CQP cynophile | 27 |\n| Responsable qualité | Licence | 1 |\n| Responsables d'exploitation | CQP – SSIAP 1 | 5 |\n| Coordinateurs sécurité | CQP – SSIAP 1 – 2 – 3 | 5 |\n| Ressources humaines | Master RH | 4 |\n| Comptables | BP comptabilité | 2 |\n| Responsables RSE | Master RH | 2 |\n\nAu total, GSS compte 320 salariés, dont 215 en Seine-Maritime et 65 dans l'Eure. Pour les renforts ponctuels, nous disposons d'un vivier de 500 agents validés par nos équipes, dont 100 mobilisables en 48 heures.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "chiffres",
+      "titre": "Une équipe dédiée, adossée à toutes les ressources de GSS",
+      "params": {
+       "chiffres": [
+        {
+         "valeur": "320",
+         "libelle": "Salariés de GSS",
+         "role": "sable",
+         "icone": "groupe"
+        },
+        {
+         "valeur": "185",
+         "libelle": "Agents SSIAP 1",
+         "role": "rouge",
+         "icone": "extincteur"
+        },
+        {
+         "valeur": "35",
+         "libelle": "Contrôleurs",
+         "role": "bleu",
+         "icone": "loupe"
+        },
+        {
+         "valeur": "500",
+         "libelle": "Agents validés pour les renforts ponctuels",
+         "role": "vert",
+         "icone": "check"
+        }
+       ]
+      },
+      "origine": "AO RNE p.36 (tableau d'adéquation) ; remplace II-HUM-14 (chiffres propres à l'Université de Rouen Normandie)"
+     }
+    },
+    {
+     "id": "b3_formation_ads",
+     "titre": "Formations et certifications : l'agent de sécurité (CQP APS)",
+     "texte": "Tous nos agents de sécurité disposent du CQP APS (certificat de qualification professionnelle d'agent de prévention et de sécurité). Ils sont formés aux savoirs et savoir-faire suivants.\n\n- **La déontologie de la sécurité** : nos agents sont sensibilisés au code de déontologie en vigueur dans le secteur, qui leur rappelle leurs devoirs d'acteurs de la sécurité, de la confidentialité à la dignité en passant par le respect du public.\n- **Les services publics de la police et de la gendarmerie** : nos agents connaissent le fonctionnement de la police nationale et de la gendarmerie, afin de mieux interagir avec elles en cas de nécessité.\n- **Le cadre légal** : nos agents connaissent le cadre légal de la profession (lois, articles et décrets d'application relatifs à son exercice : moralité, matériels, procédures) ainsi que les articles du code civil et du code pénal relatifs au respect de la vie privée et du droit de propriété, au flagrant délit, à la légitime défense, à la non-assistance à personne en péril, aux atteintes à l'intégrité physique, à la mise en danger d'autrui et aux atteintes aux intérêts fondamentaux de la nation et à l'autorité de l'État.\n- **L'armement** : nos agents sont formés à la classification des armes, à leur définition et à leur destination, aux conditions d'armement, de port et de transport d'armes, ainsi qu'aux règles relatives à leur acquisition et à leur détention.\n- **La palpation de sécurité** : mesure de sûreté destinée à s'assurer qu'une personne ne porte pas sur elle d'objet dangereux pour elle-même ou pour autrui, elle consiste à appliquer les mains par-dessus les vêtements et les accessoires portés (parapluie, coiffe, gants…) afin de déceler la présence de tout objet susceptible d'être dangereux. Elle est toujours effectuée par une personne du même sexe que la personne qui en fait l'objet. Nos agents ont reçu sur ce point une formation complémentaire au CQP.\n- **Le contrôle des effets personnels** : il se limite à une vérification visuelle des effets personnels (sacs à main, sacs à dos…).\n- **L'accueil et le contrôle d'accès** : nos agents savent définir le périmètre du contrôle d'accès, contrôler les parkings et les sites publics et privés, et filtrer les véhicules.\n- **L'analyse des comportements et la gestion des conflits** : repérer et analyser un comportement conflictuel, en déterminer l'origine et le type ; mettre en œuvre les outils pour résoudre le conflit (traiter une agression verbale, gérer les émotions des personnes en présence, maîtriser les techniques verbales, les postures et les gestes adaptés) ; utiliser ces outils pour prévenir les conflits.\n- **L'incendie** : nos agents savent analyser un feu (causes, effets, classes et propagation) ; ils connaissent les systèmes de détection automatique et les tableaux de signalisation incendie, les dispositifs d'extinction et le processus d'acquittement d'une alarme restreinte.\n- **Le secourisme** : nos agents sont formés aux premiers secours : protéger, examiner, alerter ou faire alerter, secourir.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "II-HUM-01"
+     }
+    },
+    {
+     "id": "b3_formation_ssiap_a",
+     "titre": "Formations et certifications : l'agent SSIAP 1 (le feu, la sécurité incendie, les moyens de secours)",
+     "texte": "Nous disposons au sein de notre équipe d'agents de sécurité SSIAP 1 (service de sécurité incendie et d'assistance à personnes). Ils sont formés aux notions suivantes.\n\n**Le feu et ses conséquences**\nNos agents SSIAP 1 maîtrisent les notions relatives au feu : la propagation, le comportement au feu des produits et des matériaux, les différentes classes de feu, le triangle du feu, qui théorise le fonctionnement d'un feu, la fumée et ses dangers, ainsi que les agents extincteurs.\n\n**La sécurité incendie**\nNos agents SSIAP 1 savent classer les établissements dans leurs différentes catégories (ERP, établissement recevant du public ; IGH, immeuble de grande hauteur…) et en connaissent les fondamentaux de sécurité. Ils sont formés à la desserte des bâtiments : isolement par rapport au voisinage, façades accessibles, voies engins et voies échelles. Ils connaissent les différents types de cloisonnement destinés à isoler les risques (traditionnel, par secteur ou par compartimentage), l'évacuation du public et sa gestion, les différentes voies d'évacuation et les dispositions particulières, comme l'évacuation des personnes handicapées. En matière de désenfumage, ils savent gérer un dispositif de déclenchement et son entretien, et connaissent les dispositifs de désenfumage mécanique et naturel.\n\n**Les moyens de secours**\nNos agents SSIAP 1 sont formés :\n- aux moyens d'extinction : robinets d'incendie armés (RIA), déversoirs ponctuels (surtout utilisés dans les ERP particuliers), éléments de construction irrigués (validés par une commission de sécurité), bouches et poteaux d'incendie, colonnes sèches ou en charge, installations d'extinction automatique, appareils mobiles de type extincteur et tout autre moyen de secours (réserve de sable, couvertures…) ;\n- aux moyens destinés à faciliter l'action des sapeurs-pompiers : plan schématique de l'établissement affiché, espace d'attente sécurisé, dispositifs de commande de sécurité, organes de coupure des sources d'énergie ;\n- au système de sécurité incendie (SSI), qui comprend le système d'alarme, le système de mise en sécurité incendie et le système de détection incendie ;\n- au système d'alerte, c'est-à-dire tout dispositif permettant de donner l'alerte efficacement, comme une ligne téléphonique reliée directement aux sapeurs-pompiers ou un avertisseur d'incendie privé.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "II-HUM-06"
+     }
+    },
+    {
+     "id": "b3_formation_ssiap_b",
+     "titre": "Formations et certifications : l'agent SSIAP 1 (installations techniques, SSI, missions au quotidien)",
+     "texte": "**Les installations techniques**\nLe risque électrique est l'une des principales causes d'incendie dans les établissements recevant du public : les installations électriques sont donc un point important de la formation de nos agents. Les objectifs de sécurité sont de maintenir l'alimentation des installations de sécurité et d'éviter que les installations électriques ne présentent des risques d'éclosion et de propagation d'un incendie. Nos agents sont ainsi formés au maintien de l'alimentation des installations de sécurité, à l'évacuation en cas de défaillance, aux dispositifs de coupure d'urgence, aux différents types de sources électriques (groupe électrogène, batteries d'accumulateurs) et à leurs normes de sécurité, aux conducteurs électriques et aux vérifications techniques des installations électriques.\nNos agents SSIAP 1 savent également identifier les différents appareils élévateurs (ascenseurs, nacelles, monte-charges, escaliers mécaniques) et connaissent leurs dispositifs de secours ainsi que les dispositifs particuliers destinés aux personnes handicapées.\nLes installations fixes d'extinction automatique (IFEA) sont des réseaux de canalisations situés dans les zones à risques ou là où la réglementation l'exige ; elles détectent l'incendie, déclenchent l'alerte et éteignent ou contiennent l'incendie. Nos agents sont formés à leur principe de fonctionnement, à leurs éléments constitutifs, comme les têtes de sprinkler, à leurs différents types ainsi qu'à leur vérification et à leur entretien.\nNos agents connaissent enfin les colonnes sèches, alimentées par les sapeurs-pompiers à leur arrivée par des raccords à chaque étage, et les colonnes humides, en permanence chargées en eau, nécessaires seulement dans certains ERP particuliers ou dans les IGH. Ils savent quelles vérifications incombent au responsable du bâtiment, aux organismes spécialisés et à eux-mêmes, notamment la vérification visuelle : présence du bouchon de fermeture et de sa chaînette, présence des scellés plombs sur les bouchons d'obturation des raccords à chaque niveau, signalisation et accessibilité des raccords à chaque étage, état de la robinetterie, absence de résidus ou de corps étrangers dans la canalisation.\n\n**Le système de sécurité incendie (SSI)**\nLe SSI comprend le système de détection incendie et le système de mise en sécurité incendie (SMSI : désenfumage, évacuation, compartimentage…). Il se décline en catégories A, B, C, D et E, déterminées selon les besoins de l'établissement : plus l'établissement est sensible, plus le SSI est perfectionné. L'agent SSIAP 1 connaît les zones du site et en maîtrise les limites géographiques : zones de détection, zones de mise en sécurité, zones de diffusion d'alarme, zones de désenfumage et zones de compartimentage.\n\n**Le rôle et les missions de l'agent SSIAP 1**\n- La main courante : nos agents tiennent à jour la main courante du site, véritable journal de bord, qui consigne les événements de sécurité survenus (début d'incendie, intrusion…), les prises et fins de service, les heures de chaque ronde et, le cas échéant, les anomalies constatées, ainsi que tout dysfonctionnement du matériel de sécurité. Elle doit être intelligible et synthétique et ne contenir que des faits précis et clairs, sans place pour l'interprétation ou l'hypothèse. Si un fait nécessite une explication plus complète, l'agent y annexe un rapport.\n- Le registre de sécurité : document distinct de la main courante mais tout aussi important, il mentionne les noms, diplômes et dates de recyclage des agents SSIAP, les vérifications du chauffage, de l'électricité et du gaz, les vérifications des moyens de secours, ainsi que les dates de passage des commissions de sécurité et leurs rapports.\n- Les rondes : la ronde de sécurité consiste à parcourir un itinéraire déterminé à l'avance dans l'enceinte de l'établissement afin de vérifier l'absence d'anomalie pouvant avoir une incidence sur la sécurité ; le parcours tient compte des points névralgiques de l'établissement. Cœur de métier de l'agent, elle mobilise toute son attention pour détecter en temps réel le moindre dysfonctionnement. Avant de partir, l'agent se munit d'un moyen de communication ; toute anomalie détectée est consignée dans la main courante.\n- L'appel et l'accueil des services de secours : en cas de sinistre, l'agent alerte les services publics et demande leur intervention, par le téléphone urbain, un avertisseur d'incendie privé ou une ligne reliée directement au traitement de l'alerte des sapeurs-pompiers. Il transmet des informations précises : l'identification de l'appelant, l'adresse et le numéro de l'établissement, la nature du sinistre et sa localisation, la présence ou non de victimes, les risques éventuels, les accès à privilégier et le protocole d'accueil des secours. Il connaît parfaitement le site : à l'arrivée des secours, il rejoint le premier chef de détachement, le guide à travers l'établissement et l'informe des zones à risques et des différents accès. Il tient sa hiérarchie informée de l'évolution du sinistre.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "II-HUM-17"
+     }
+    },
+    {
+     "id": "b3_formation_secourisme",
+     "titre": "Formations et certifications : habilitation électrique, SST et PSC1",
+     "texte": "**L'habilitation électrique HOB0 (personnel non électricien)**\nNos agents sont formés à la protection des travailleurs dans les établissements qui mettent en œuvre des courants électriques : le contexte réglementaire de la protection contre le danger électrique (décret du 14 novembre 1988), le phénomène électrique, les dangers de l'électricité, les mesures de prévention et de protection contre l'électrisation, la publication UTE C 18-510, les indices IP et IK et la norme NF C 15-100.\n\n**Le sauveteur secouriste du travail (SST)**\nLa formation SST prépare le sauveteur secouriste du travail à intervenir rapidement et efficacement lors d'un accident du travail dans l'établissement. Elle donne les connaissances nécessaires pour porter les premiers secours et adopter la bonne conduite en attendant l'arrivée des secours. Face à un accident du travail, le SST est capable de :\n- connaître le mécanisme de l'accident (danger, situation dangereuse, phénomène dangereux, dommage, risque…) et les principes de base de la prévention ;\n- connaître l'alerte aux populations ;\n- identifier les dangers, réels ou supposés, d'une situation donnée et repérer les personnes qui pourraient y être exposées ;\n- informer son responsable hiérarchique ou les personnes chargées de la prévention dans l'établissement des situations dangereuses repérées ;\n- effectuer les gestes appropriés à l'état de la victime, après avoir déterminé, à partir de l'examen préalable, l'action à mener et le résultat à atteindre.\n\n**La prévention et secours civiques de niveau 1 (PSC1)**\nFormation de secourisme plus poussée que le SST, le PSC1 aborde des situations plus diversifiées : malaise et alerte, plaies et protection, brûlures, traumatismes, hémorragies, obstruction des voies aériennes, perte de connaissance, arrêt cardiaque et alerte aux populations.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "II-HUM-12"
+     }
+    },
+    {
+     "id": "b3_formations_internes",
+     "titre": "Nos formations internes",
+     "texte": "Nous proposons à nos collaborateurs des formations complémentaires à leurs formations de base, afin d'améliorer leur efficacité sur le terrain. Nous les actualisons régulièrement et sommes toujours disposés à en ajouter de nouvelles si la mission l'exige ; selon les besoins du site, nous dispensons aux agents les formations nécessaires.\n\n**Les formations techniques** portent sur l'utilisation du matériel que nous mettons à disposition de nos agents et de nos chefs de site :\n- le logiciel de main courante Trackforce : présentation de l'application, utilisation de la tablette, prises et fins de service, prise en compte des missions et des consignes, rédaction des rapports, enregistrement des rondes ;\n- le logiciel de planification Comète, pour nos encadrants et nos responsables de site : présentation de l'application, utilisation sur tablette, fonctions de planification, d'affectation des agents aux vacations et d'envoi des plannings ;\n- l'informatique : sur certains sites, nos agents travaillent sur un outil informatique ; nos formations portent sur Word, Excel, la navigation internet, la messagerie ou des logiciels spécifiques, comme ceux des badgeuses ;\n- les moyens de communication, qui varient selon les sites et leurs particularités (site en sous-sol…) : talkies-walkies, oreillettes, PTI ;\n- les systèmes de vidéosurveillance : lorsque le site en est équipé, nous formons nos agents à une utilisation ciblée du système du site : présentation du système, repérage d'une situation suspecte, suivi d'un individu en vidéo, traitement des images, communication avec l'équipe terrain.\n\n**Les formations à la gestion du public** accompagnent nos agents dans leurs missions au contact du public : éléments de langage, remise à niveau en français, gestion des conflits, exfiltration d'un individu, identification des situations à désamorcer, gestion d'une attaque terroriste.\n- Remise à niveau en français : certains agents ont de grandes compétences en sécurité mais manquent d'aisance en communication. Après une évaluation de leur niveau, la formation travaille la compréhension, le vocabulaire courant et l'orthographe courante : à son issue, l'agent sait s'exprimer et se faire comprendre, tenir une conversation et rédiger un rapport.\n- Gestion des conflits : sur les sites qui accueillent du public, les agents peuvent être confrontés à des situations conflictuelles ; leur mission est de maintenir une situation sereine et la sécurité des biens et des personnes. Le module aborde la notion de légitime défense, les phases du conflit, l'entrée en contact, l'attitude d'écoute, le désamorçage des blocages, l'identification des individus « supports », la construction d'une réponse claire, la technique de prise de parole et la posture physique.\n- Attaque terroriste : le contexte actuel impose de considérer l'éventualité d'une attaque terroriste. Ce module travaille les gestes et postures à adopter selon les directives du gouvernement : connaissance géographique du site (sorties, caches…), connaissance des procédures d'alerte, connaissance de la procédure de mise en sécurité, techniques de désarmement et de diversion.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "II-REC-04"
+     }
+    },
+    {
+     "id": "b3_recrutement",
+     "titre": "Notre procédure de recrutement",
+     "texte": "Chez GSS, la qualité des profils de nos agents est primordiale : nous accordons au recrutement une importance toute particulière. Nous sélectionnons des profils dans notre vivier interne ou auprès de nos partenaires, puis nous suivons quatre étapes.\n\n1. **Premier entretien, par téléphone** : prise de contact, demande d'informations complémentaires au CV, présentation du poste (rappel du salaire, des missions…). Cet entretien permet de jauger la compatibilité du candidat avec la mission et de lui donner des précisions sur le poste.\n2. **Vérifications** : vérification des informations générales, des diplômes et de la validité de la carte professionnelle, et si besoin des références mises en avant par le candidat.\n3. **Second entretien, dans nos locaux** : entretien en face à face, mise en situation et tests de connaissances générales en sécurité. Nous formons ensuite l'agent recruté, mais nous vérifions dès cette étape qu'il détient les connaissances attestées par ses certifications (CQP, SSIAP…).\n4. **Formalités administratives** : signature du contrat de travail, lecture et signature du règlement intérieur, remise du code de déontologie de la sécurité.\n\nEn matière de recrutement, nous travaillons en partenariat avec quatre organismes : France Travail, la Mission locale, le CEPIC et le centre de formation IFESSU.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "flux",
+      "titre": "Quatre étapes pour recruter nos agents",
+      "params": {
+       "etapes": [
+        {
+         "titre": "Premier entretien",
+         "texte": "Par téléphone : prise de contact et présentation du poste",
+         "role": "bleu",
+         "icone": "tel"
+        },
+        {
+         "titre": "Vérifications",
+         "texte": "Diplômes et validité de la carte professionnelle",
+         "role": "orange",
+         "icone": "carte_pro"
+        },
+        {
+         "titre": "Second entretien",
+         "texte": "Dans nos locaux : mise en situation et tests",
+         "role": "orange",
+         "icone": "reunion"
+        },
+        {
+         "titre": "Formalités administratives",
+         "texte": "Contrat de travail, règlement intérieur, code de déontologie",
+         "role": "vert",
+         "icone": "document"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/RECRUTEMENT/METHODE DE RECRUTEMENT 1.pdf"
+     }
+    },
+    {
+     "id": "b3_politique_formation",
+     "titre": "Nos valeurs managériales : notre politique de formation",
+     "texte": "Nous pensons qu'une entreprise se doit d'accompagner ses salariés tout au long de leur parcours pour avancer, se renouveler, voire se réinventer. Cela passe d'abord par la formation.\n\n- **Le recyclage des diplômes** : nous veillons à ce que nos agents recyclent leurs diplômes dans les délais : le SST tous les 2 ans, l'habilitation électrique HOB0 tous les 3 ans et le SSIAP tous les 3 ans. Ces recyclages mettent à jour leurs connaissances et actualisent leur savoir-faire.\n- **L'évolution** : nous encourageons nos agents à passer le diplôme supérieur à celui qu'ils détiennent ; il est important pour un collaborateur de se sentir capable et en évolution. Nous encourageons toujours un agent de sécurité à passer le SSIAP 1, comme nous encourageons un agent SSIAP 1 à passer le SSIAP 2.\n- **Le français technique** : certains agents détiennent de réelles compétences mais sont freinés dans leur évolution par une maîtrise approximative du français ; nous leur proposons des formations en français afin qu'ils maîtrisent un français technique, communiquent correctement avec nos interlocuteurs et puissent évoluer.\n- **Nos partenaires de formation** : nous travaillons avec OPCALIA et avec l'IFESSU (Institut de formation et d'équipement en sécurité, santé et soins d'urgence), qui propose de nombreuses formations et recyclages, des plus généraux (SST, SSIAP 1…) aux plus spécialisés (palpation de sécurité, évacuation d'ascenseurs…).\n- **Les formations internes** : nous mettons à jour les connaissances de nos agents sur de nouveaux outils, comme la main courante électronique, ou sur des sujets comme la relation clientèle.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "II-REC-05"
+     }
+    },
+    {
+     "id": "b3_valeurs_sociales",
+     "titre": "Nos valeurs managériales : égalité des chances, reconnaissance et management de proximité",
+     "texte": "**L'égalité des chances et la non-discrimination**\nL'article L.1132-1 du code du travail interdit d'écarter une personne d'une procédure de recrutement ou de l'accès à un stage ou à une période de formation, et de sanctionner, de licencier ou de soumettre un salarié à une mesure discriminatoire, directe ou indirecte, notamment en matière de rémunération, de formation, de reclassement, d'affectation, de qualification, de classification, de promotion professionnelle, de mutation ou de renouvellement de contrat, en raison notamment de son origine, de son sexe, de ses mœurs, de son orientation sexuelle, de son âge, de sa situation de famille ou de sa grossesse, de ses caractéristiques génétiques, de son appartenance ou de sa non-appartenance, vraie ou supposée, à une ethnie, une nation ou une prétendue race, de ses opinions politiques, de ses activités syndicales ou mutualistes, de ses convictions religieuses, de son apparence physique, de son nom de famille, de son état de santé ou de son handicap. Nous respectons cette disposition lors de nos entretiens, tout au long de la procédure de recrutement et tout au long de notre collaboration avec nos agents, et nous veillons en permanence à maintenir une réelle diversité dans nos équipes.\n\n**Le système de primes et gratifications**\nDans notre démarche de qualité de service, nous nous attachons à stabiliser nos équipes : nous souhaitons que nos collaborateurs s'investissent pleinement dans leurs missions et s'épanouissent dans notre structure. Nous avons mis en place une prime de fin d'année qui récompense nos agents selon leur efficacité sur le terrain, d'après des critères précis : la ponctualité, le respect des procédures et l'appréciation du client. Par ailleurs, toutes les heures supplémentaires sont payées en fin de mois, et non lissées sur le trimestre.\n\n**Un management de proximité**\nToujours pour stabiliser nos équipes et favoriser l'épanouissement de chacun, nous pratiquons un management de proximité : faire vivre la culture d'entreprise dans notre façon de gérer nos équipes et tout mettre en œuvre pour concilier harmonieusement la vie professionnelle et la vie personnelle de nos agents. Nous offrons par exemple un cadeau de naissance pour tout congé de paternité ou de maternité et des cadeaux de fin d'année, nous facilitons les avances sur salaire à la demande de l'agent et nous restons en communication étroite avec nos agents pour tenir compte, dans la planification, de leurs impératifs familiaux. Nos encadrants ont au cœur de leurs missions de se rendre régulièrement sur le terrain pour rencontrer physiquement nos agents : les missions de sécurité se déroulent par définition hors de nos bureaux, et nous veillons à ce que nos agents se sentent liés au reste des équipes. Nous constatons que ce management fondé sur le respect et la communication limite le turn-over et renforce l'implication de nos agents dans leurs missions.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "I-RSE-10"
+     }
+    },
+    {
+     "id": "b3_interlocuteur_unique",
+     "titre": "Un interlocuteur unique",
+     "texte": "Notre organisation interne garantit à nos clients un système d'interlocuteur unique. Par souci d'efficacité, de suivi et de réactivité, il nous paraît primordial de simplifier les échanges et d'optimiser le suivi des relations entre nos équipes et le client. Nous proposons donc un numéro unique et un interlocuteur unique dédié au marché, relayé sur place par un référent de site.\n\nPour le marché du Centre Henri Becquerel, votre interlocuteur unique est :\n- Interlocuteur unique : MARCHANI Adil, directeur d'agence et responsable de marché ;\n- Numéro unique : 06 58 06 32 25 ;\n- Mail unique : contact@gss-securite.fr.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "grille",
+      "titre": "Un seul interlocuteur, un seul numéro, un seul mail",
+      "params": {
+       "cartes": [
+        {
+         "titre": "Un interlocuteur unique",
+         "texte": "MARCHANI Adil, dédié au marché",
+         "role": "bleu",
+         "icone": "personne"
+        },
+        {
+         "titre": "Un numéro unique",
+         "texte": "06 58 06 32 25",
+         "role": "orange",
+         "icone": "tel"
+        },
+        {
+         "titre": "Un mail unique",
+         "role": "orange",
+         "icone": "mail"
+        },
+        {
+         "titre": "Un référent de site",
+         "texte": "Relayé sur place",
+         "role": "vert",
+         "icone": "lieu"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/INTERLOCUTEUR UNIQUE/INTERLOCUTEUR UNIQUE.pdf"
+     }
+    },
+    {
+     "id": "b3_reprise_personnel",
+     "titre": "La reprise du personnel en place",
+     "texte": "Dans le cadre de l'intégration d'un nouveau marché, la question de la reprise du personnel est très importante. Lorsque la reprise du personnel figure dans les conditions du marché, nous organisons une réunion sur ce point avec le Centre Henri Becquerel, nous respectons nos obligations légales, reprenons le personnel sur le même site et appliquons notre procédure d'intégration d'un nouveau marché. Cette reprise s'effectue conformément à l'article L. 1224-1 du Code du travail et à l'accord du 5 mars 2002 relatif à la reprise du personnel, modifié par l'avenant du 28 janvier 2011.\n\nTaux de reprise du personnel en place : [À COMPLÉTER]. Les agents repris suivent la même intégration que tout agent (formation théorique à partir du LMC, dotation du paquetage, planification) et sont contrôlés comme les autres dès le premier contrôle de mise en place, à J+7.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "II-REP-01",
+      "fond": "SLIDE REP AO/NOUVEAU MARCHE/GESTION D'UN NOUVEAU MARCHE 4.pdf"
+     }
+    }
+   ]
+  },
+  {
+   "cle": "IV",
+   "titre": "Nos moyens matériels et opérationnels",
+   "rubriques": [
+    {
+     "id": "b4_tenues",
+     "titre": "Les tenues",
+     "texte": "Nous mettons à disposition de nos équipes plusieurs types de tenues, selon les missions effectuées. Toutes sont choisies pour être les plus confortables et de la meilleure qualité possible, et toutes sont floquées aux couleurs de Global Security Services.\n\n- **La tenue costume** des agents de sécurité, surtout pour les prestations sur des sites tertiaires (banques…), de distribution (grands magasins…) ou d'administrations : pantalon de costume noir, chemise blanche, veste de costume noire, cravate noire, chaussures de sécurité de ville noires et, éventuellement, une parka.\n- **La tenue d'intervention** des agents de sécurité, pour les rondes, les interventions, la surveillance de sites… : pantalon treillis, chaussures de sécurité, tee-shirt, pull-over, vêtement de pluie et parka de sécurité pour la saison hivernale. Avec l'accord de notre interlocuteur, nous y ajoutons un gilet pare-lame, qui protège l'agent en cas d'agression à l'arme blanche.\n- **La tenue des agents SSIAP** (catégories 1, 2 ou 3), qui doit être rapidement identifiable par le public : polo, polaire, pantalon treillis et parka.\n\nPour le Centre Henri Becquerel, nos agents porteront la tenue des agents SSIAP et, pour les agents de sécurité, la tenue d'intervention.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "II-TEN-01"
+     }
+    },
+    {
+     "id": "b4_tenues_reglementaires",
+     "titre": "Des tenues conformes à l'arrêté du 18 juillet 2023",
+     "texte": "Depuis le 1er octobre 2024, les entreprises de sécurité privée doivent fournir à leurs agents des tenues conformes à l'arrêté du 18 juillet 2023, qui prévoit :\n- une identification claire des agents : ils portent de façon apparente leur numéro d'identification individuel et les éléments d'identification communs définis par l'arrêté, afin d'éviter toute confusion avec les forces de l'ordre et de permettre au public de reconnaître facilement les agents de sécurité autorisés ;\n- un marquage officiel sur la poitrine, en haut à gauche : le numéro d'identification individuel, en caractères de type Arial 36, sur une bande de 54 mm × 15 mm, en caractères noirs sur fond blanc ou blancs sur fond noir. Ce numéro correspond aux sept derniers chiffres du numéro unique figurant sur la carte professionnelle délivrée par le Conseil national des activités privées de sécurité (CNAPS). En dessous figure un insigne reproduisant la dénomination ou le sigle de l'entreprise, d'une taille au moins égale à un carré de 50 mm de côté ;\n- au dos, la mention « SÉCURITÉ PRIVÉE », sur une ligne, centrée, en majuscules rétroréfléchissantes de type Arial 76, blanches sur fond noir.\n\nDès l'annonce de cet arrêté, nous avons fait le choix de ne pas attendre l'échéance et de doter nos agents de tenues déjà réglementaires sur nos nouveaux sites.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "II-TEN-05"
+     }
+    },
+    {
+     "id": "b4_communication",
+     "titre": "Les moyens techniques : la communication",
+     "texte": "La communication est au cœur des missions de l'agent de sécurité : il doit pouvoir alerter, rendre compte et communiquer en permanence avec le reste de l'équipe. Selon la nature de leur mission et leurs besoins, nos agents disposent :\n- de **talkies-walkies et d'oreillettes** : les talkies-walkies permettent aux agents de communiquer d'un point à l'autre du site et de coordonner leurs actions ; les oreillettes apportent la discrétion, lorsque les agents doivent communiquer sans être entendus des personnes à proximité ;\n- d'une **tablette équipée de la main courante électronique Trackforce**, qui permet de remplir la main courante facilement et au client de la consulter en temps réel ;\n- d'un **téléphone portable** : notre organisation prévoit une ligne téléphonique d'astreinte dédiée au site ; les agents disposent donc sur place d'un téléphone, ou de plusieurs si nécessaire.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "III-MAT-02"
+     }
+    },
+    {
+     "id": "b4_pti",
+     "titre": "Les moyens techniques : la protection du travailleur isolé (PTI)",
+     "texte": "Nos agents peuvent être équipés d'un système de protection du travailleur isolé (PTI), destiné en particulier aux agents rondiers : lorsqu'ils sont seuls sur site, ils doivent pouvoir être secourus en cas de problème (agression, malaise, chute, accident…). Nous utilisons l'application Beepiz, installée sur le téléphone de l'agent ; elle nous permet aussi de suivre la bonne réalisation de la prestation et de nous assurer de la sécurité de nos agents seuls sur site.\n\nSi le téléphone reste en position horizontale plus d'un certain nombre de secondes, une alerte est lancée automatiquement vers notre numéro d'astreinte ; l'agent peut aussi déclencher l'alerte lui-même en pressant un bouton. La procédure est alors la suivante :\n1. L'astreinte appelle directement l'agent. S'il répond et que tout va bien (fausse alerte), la procédure s'arrête.\n2. Si l'agent ne répond pas, le rondier d'astreinte se rend sur place, en 45 minutes au maximum.\n3. Si l'agent est en difficulté, l'astreinte prévient les secours et applique la procédure adaptée (ordre d'alerte, gestion d'une victime…). Si l'agent doit être évacué, le rondier sécurise le site à sa place jusqu'à la relève.\n\nLe rondier rédige un rapport sur la main courante et envoie un rapport par mail au Centre Henri Becquerel.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "arbre",
+      "titre": "Alarme PTI : l'astreinte réagit aussitôt",
+      "params": {
+       "racine": {
+        "titre": "Alarme PTI",
+        "texte": "L'astreinte appelle directement l'agent",
+        "role": "rouge",
+        "icone": "alerte"
+       },
+       "branches": [
+        {
+         "titre": "L'agent répond",
+         "texte": "Tout va bien : la procédure s'arrête",
+         "role": "vert",
+         "icone": "check"
+        },
+        {
+         "titre": "L'agent ne répond pas",
+         "texte": "Le rondier d'astreinte se rend sur place",
+         "role": "orange",
+         "icone": "voiture"
+        },
+        {
+         "titre": "L'agent est en difficulté",
+         "texte": "L'astreinte prévient les secours",
+         "role": "rouge",
+         "icone": "sirene"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/PROCEDURE/GESTION D'UNE INTERVENTION ALARME PTI 1.pdf"
+     }
+    },
+    {
+     "id": "b4_vehicules",
+     "titre": "Les moyens techniques : les transports",
+     "texte": "Nos agents et nos encadrants se déplacent en permanence dans le cadre de leurs missions : la qualité des moyens mis à leur disposition est déterminante pour leur confort de travail, leur efficacité et leur rapidité.\n\n- **Les véhicules** : nos encadrants et nos contrôleurs effectuent leurs contrôles et leurs visites sur site en véhicules aux couleurs de GSS. Nous disposons en outre d'une astreinte de 5 véhicules pour la région rouennaise, en plus des véhicules dédiés aux sites : si un véhicule est immobilisé pour une réparation, un véhicule d'astreinte est déployé sur le site afin de ne pas impacter la prestation. Tous nos véhicules sont géolocalisés.\n- **Les moyens de ronde** : nos agents effectuent souvent des rondes sur des sites très étendus. Nous adaptons toujours au mieux la méthode : à pied, en voiture ou, lorsque la ronde nécessite un moyen intermédiaire, à vélo ou en trottinette électriques, que nous mettons à disposition de nos agents.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "I-IMP-05"
+     }
+    },
+    {
+     "id": "b4_equipements",
+     "titre": "Les moyens techniques : équipements de protection et de sûreté",
+     "texte": "- **Le gilet pare-lame** : le risque d'agression à l'arme blanche est élevé. Sur les sites dits sensibles, nos agents peuvent porter un gilet pare-lame, léger et discret sous la tenue, qui les protège contre d'éventuelles attaques au couteau.\n- **La lampe torche** : nos agents de nuit disposent de lampes torches, qui leur permettent d'effectuer toutes les vérifications visuelles pendant leurs rondes.\n- **Le détecteur de métaux** : dans le contexte du plan Vigipirate, nos agents sont souvent chargés de gérer des flux de public ; ils peuvent alors utiliser des détecteurs de métaux pour sécuriser les entrées du site.\n- **Le compteur à main** : toujours pour la gestion des flux de public, nos agents disposent de compteurs à main afin de compter les entrées et de respecter les jauges autorisées.\n- **Le drone de contrôle** : dans certaines situations, nous pouvons proposer une surveillance par drone, sous couvert d'une autorisation préfectorale ; elle donne aux agents une vision globale du site et leur permet de localiser rapidement une problématique et d'y répondre.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "III-MAT-01"
+     }
+    },
+    {
+     "id": "b4_planification",
+     "titre": "La planification",
+     "texte": "La planification est un pôle primordial de notre organisation : elle nous permet d'anticiper, d'organiser et de limiter tout aléa. Nous travaillons avec le logiciel Comète, choisi pour sa notoriété dans le secteur de la sécurité, ses interfaces parfaitement adaptées à nos besoins et la fiabilité de son éditeur. Tous nos responsables de site sont formés à son utilisation et gèrent chacun leur planification : ce sont eux qui connaissent le mieux les besoins de leur site.\n\nComète nous permet de nous adapter très facilement en cas de modification de dernière minute ou de commande supplémentaire, tout en garantissant le respect du code du travail et de la convention collective des entreprises de prévention et de sécurité, dont les obligations sont intégrées au logiciel. Il nous donne une vision en temps réel des prises et fins de service, génère la facturation à partir des heures planifiées et nous apporte plus de rigueur dans le suivi des visites médicales, des formations et des recyclages obligatoires. Son extension Comète Link nous permet d'envoyer en temps réel de nouvelles consignes ou des modifications de consignes, ce qui est très efficace pour les missions des rondiers intervenants sur alarme.\n\nNotre calendrier de planification :\n- J-10 : envoi des plannings du mois suivant ;\n- J-7 : validation des plannings par les agents, avec accusé de réception ;\n- J-3 : envoi des plannings au Centre Henri Becquerel ;\n- en cas de commande supplémentaire ou de modification : envoi du nouveau planning à l'agent et au Centre Henri Becquerel.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "frise",
+      "titre": "Des plannings validés avant chaque mois",
+      "params": {
+       "jalons": [
+        {
+         "date": "J-10",
+         "titre": "Envoi des plannings",
+         "texte": "Plannings du mois suivant",
+         "role": "bleu"
+        },
+        {
+         "date": "J-7",
+         "titre": "Validation par les agents",
+         "texte": "Avec accusé de réception",
+         "role": "orange"
+        },
+        {
+         "date": "J-3",
+         "titre": "Envoi au client",
+         "texte": "Plannings du mois suivant transmis",
+         "role": "vert"
+        },
+        {
+         "titre": "Modification",
+         "texte": "Nouveau planning envoyé à l'agent et au client",
+         "role": "rouge"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/PLANNIFICATION/GESTION DES PLANNINGS 1.pdf"
+     }
+    },
+    {
+     "id": "b4_main_courante",
+     "titre": "La main courante électronique",
+     "texte": "La main courante est un outil essentiel à la bonne réalisation des prestations : elle retrace l'activité de nos agents et constitue le journal du site en matière de sûreté et de sécurité. Pour notre suivi, c'est notre « matière première » : les informations qui y sont consignées mettent en lumière des besoins ou des évolutions à mettre en place, et valorisent les missions de nos agents.\n\nEn 2024, nous avons remplacé la main courante papier par une main courante électronique, Trackforce, déployée sur tous nos sites, et formé nos agents à son utilisation sur tablette. Elle apporte :\n- **la ponctualité** : les agents enregistrent leurs prises et fins de service sur la tablette dédiée au site ; une alerte est émise en cas d'absence ou de retard de prise de service ;\n- **la géolocalisation** : la prise de service est géolocalisée, ce qui constitue une première strate de contrôle ; nous suivons en temps réel la présence de nos agents sur site, nous savons qui est disponible au plus près en cas d'urgence, et une alerte est émise si l'agent sort de sa zone de surveillance ;\n- **la réactivité** : l'agent envoie en temps réel ses rapports sur les événements de sa vacation, qu'il peut illustrer de photos ou de vidéos ; l'équipe encadrante contrôle ainsi le contenu des événements remontés, et le Centre Henri Becquerel peut, s'il le souhaite, être destinataire de ces rapports et consulter à tout moment le compte rendu de la main courante ;\n- **la qualité** : les événements sont catégorisés et génèrent des statistiques ; plus les rapports sont détaillés, plus nous disposons de matière à analyser (nombre d'entrées, d'incidents, de rondes effectuées…). Ces rapports forment une base de données que nous analysons régulièrement pour établir un bilan qualité trimestriel.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "grille",
+      "titre": "La main courante électronique : quatre atouts",
+      "params": {
+       "cartes": [
+        {
+         "titre": "Ponctualité",
+         "texte": "Prises et fins de service, alerte en cas d'absence ou de retard",
+         "role": "bleu",
+         "icone": "horloge"
+        },
+        {
+         "titre": "Localisation",
+         "texte": "Présence des agents sur site en temps réel",
+         "role": "bleu",
+         "icone": "lieu"
+        },
+        {
+         "titre": "Réactivité",
+         "texte": "Rapports en temps réel",
+         "role": "orange",
+         "icone": "tablette"
+        },
+        {
+         "titre": "Qualité",
+         "texte": "Événements catégorisés et statistiques",
+         "role": "vert",
+         "icone": "graphique"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/MAIN COURANTE/OUTIL DE CONTROLE TRACK FORCE 1.pdf"
+     }
+    },
+    {
+     "id": "b4_rondes",
+     "titre": "Le contrôleur de rondes",
+     "texte": "De nombreux sites nécessitent des rondes de surveillance, de levée de doute ou d'ouverture et de fermeture. Il est essentiel de pouvoir vérifier que ces rondes sont bien effectuées, entièrement et correctement : c'est le rôle du contrôleur de ronde. Les rondes sont balisées par des pointeaux disposés aux endroits clés du parcours convenu avec le Centre Henri Becquerel, puis nommés et enregistrés dans le logiciel de main courante. Lorsque l'agent passe et scanne un pointeau, l'étape de ronde est aussitôt consignée dans la main courante et consultable sur le tableau de bord. L'agent comme le client s'assurent ainsi que la ronde a été effectuée dans son intégralité.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "III-RON-02"
+     }
+    },
+    {
+     "id": "b4_moyens_acces",
+     "titre": "La gestion des moyens d'accès",
+     "texte": "Nous accordons une importance toute particulière à la gestion des clés : la gestion des moyens d'accès d'un site est une réelle responsabilité, encadrée par notre procédure.\n- **Réception** : chaque clé ou ensemble de moyens d'accès reçoit un scellé de sécurité numéroté ; sa prise en charge est inscrite sur un registre papier et sur le registre numérique de la main courante Trackforce, avec l'intitulé correspondant. Chaque moyen d'accès est placé dans une pochette numérotée (porte-clés, bague) avant d'être confié à l'agent affecté au site ; celui-ci dispose dans son véhicule d'une valise de transport sécurisée.\n- **Passation** : toute circulation d'un moyen d'accès est inscrite dans la main courante.\n- **Vérifications** : nous vérifions chaque semaine les mises à jour du registre ainsi que les moyens d'accès eux-mêmes, notamment les badges électroniques (validité, piles) ; le chef de site vérifie en outre chaque trimestre la bonne tenue du registre.\n- **Incidents** : une main courante interne est consacrée aux moyens d'accès ; nos agents y signalent tout incident, par exemple un changement de barillet non signalé ou une serrure abîmée.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "flux",
+      "titre": "Clés et badges : une procédure tracée",
+      "params": {
+       "etapes": [
+        {
+         "titre": "Réception",
+         "texte": "Scellé de sécurité numéroté",
+         "role": "bleu",
+         "icone": "cle"
+        },
+        {
+         "titre": "Prise en charge",
+         "texte": "Registre papier et registre numérique",
+         "role": "bleu",
+         "icone": "document"
+        },
+        {
+         "titre": "Pochette numérotée",
+         "texte": "Avant d'être confié à l'agent",
+         "role": "orange",
+         "icone": "cadenas"
+        },
+        {
+         "titre": "Passation",
+         "texte": "Toute circulation inscrite dans la main courante",
+         "role": "orange",
+         "icone": "echange"
+        },
+        {
+         "titre": "Vérifications",
+         "texte": "Chaque semaine, et chaque trimestre par le chef de site",
+         "role": "vert",
+         "icone": "check"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/MOYENS D'ACCES/SECURISATION DES MOYENS D'ACCES 1.pdf"
+     }
+    },
+    {
+     "id": "b4_accueil_filtrage",
+     "titre": "Nos missions types sur un site qui accueille du public",
+     "texte": "Sur un site qui accueille du public, nos missions types sont les suivantes.\n\n**Ouverture et fermeture du site** : vérification des issues de secours et contrôle visuel de sécurité (encombrement des passages, extincteur dégoupillé…) ; mise en place des barrières extérieures de protection ; vérification des abords du bâtiment et signalement de toute anomalie.\n\n**Gestion des entrées** : filtrage des entrées ; refus d'accès aux personnes en état d'ébriété ou au comportement inadapté (énervement excessif, violence…) ; vérification visuelle des sacs et des manteaux ; gestion des flux à l'entrée pour respecter les jauges à l'intérieur ; orientation du public et réponse aux demandes simples ; gestion des entrées prioritaires (personnes en situation de handicap…).\n\n**Contrôle intérieur** : rondes de contrôle dans les zones d'accueil et les bureaux ; posture rassurante, par une présence forte ; en cas d'incivilité, l'agent se rapproche de la zone de conflit pour protéger le personnel ou toute personne en danger, avec une présence dissuasive mais maîtrisée pour éviter toute escalade, désamorce au maximum la situation et raccompagne l'individu à l'extérieur si son comportement ne s'apaise pas ; interposition systématique entre la personne agressive et la personne agressée pour empêcher toute agression verbale ou physique ; appel aux forces de l'ordre en cas de danger ou de menace non maîtrisable ; prise en charge des malaises et des chutes : gestes de premiers secours et alerte du SAMU.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "III-ACC-01"
+     }
+    },
+    {
+     "id": "b4_lmc",
+     "titre": "Le livre des missions et consignes (LMC)",
+     "texte": "Chaque site dispose de son LMC (livre des missions et consignes), un classeur à la disposition des agents sur place. Il reprend le tronc commun des procédures à suivre par l'agent, les procédures propres au site selon ses particularités, ainsi que les numéros d'urgence. Il est étoffé au fur et à mesure que les besoins du site évoluent. Les agents peuvent ainsi se référer à des procédures précises, validées par le chef de site et par le Centre Henri Becquerel. Le LMC fait gagner en efficacité : en cas d'incident, l'agent sait exactement quoi faire et dans quel ordre, sans place pour l'erreur ou l'hésitation.\n\nLe LMC contient aussi la fiche de poste de chaque agent : horaires, prise de service (vérification de la tenue complète et du matériel, prise de service sur la main courante), zone d'activité et points à tenir, missions et posture attendue. Le référent la remet à l'agent lors de la mise en place, et l'agent reçoit sa fiche de consignes par le logiciel Comète en même temps que sa planification.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "IV-ORG-01"
+     }
+    },
+    {
+     "id": "b4_proc_ordre_alerte",
+     "titre": "Notre socle de procédures : l'ordre d'alerte en cas d'incident",
+     "texte": "Nous rappelons régulièrement à nos agents l'ordre d'alerte en cas d'incident : cette procédure hiérarchise les démarches afin d'être le plus efficace possible, et une liste prédéterminée permet à l'agent de ne rien négliger.\n1. Priorité absolue : si la nature de l'incident l'exige, prévenir les secours concernés (forces de l'ordre, SAMU, sapeurs-pompiers).\n2. Une fois l'alerte donnée, prévenir l'encadrement de GSS, afin de signaler l'incident en temps réel ; selon les procédures fixées avec le Centre Henri Becquerel, GSS envoie un rapport ou déclenche une autre procédure validée avec lui.\n3. Prévenir l'interlocuteur du site désigné en début de marché, afin de l'informer en temps réel.\n\nIl s'agit d'un ordre d'alerte courant, que nous restons disposés à adapter aux besoins du Centre Henri Becquerel.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "flux",
+      "titre": "L'ordre d'alerte : trois appels, dans cet ordre",
+      "params": {
+       "etapes": [
+        {
+         "titre": "Les secours",
+         "texte": "Forces de l'ordre, SAMU, sapeurs-pompiers",
+         "role": "rouge",
+         "icone": "sirene"
+        },
+        {
+         "titre": "L'encadrement de GSS",
+         "texte": "Signaler l'incident en temps réel",
+         "role": "orange",
+         "icone": "tel"
+        },
+        {
+         "titre": "L'interlocuteur du site",
+         "texte": "L'informer en temps réel",
+         "role": "bleu",
+         "icone": "personne"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/PROCEDURE/ORDRE ALERTE INCIDENT 1.pdf"
+     }
+    },
+    {
+     "id": "b4_proc_incendie",
+     "titre": "Notre socle de procédures : la gestion d'un incendie",
+     "texte": "Lors du déclenchement de l'alarme incendie, l'agent appelle immédiatement les sapeurs-pompiers. Une fois l'alerte donnée, il évalue l'importance de l'incident :\n- incident mineur, comme un feu de poubelle : l'agent utilise les moyens d'extinction à proximité pour maîtriser l'incident ;\n- incident majeur : l'agent suit la procédure prévue pour le site dans le plan de prévention : il limite la propagation du feu, par exemple en fermant les portes coupe-feu et en utilisant le matériel prévu, organise l'évacuation du site selon les consignes, puis se met à la disposition des sapeurs-pompiers pour leur communiquer les informations sur l'organisation du bâtiment et ses équipements.\n\nDans les deux cas, l'agent rédige un rapport d'incident sur la main courante et un rapport écrit est envoyé par mail au Centre Henri Becquerel ; un rapport est également transmis aux services de secours.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "arbre",
+      "titre": "Alarme incendie : alerter, évaluer, agir",
+      "params": {
+       "racine": {
+        "titre": "Alarme incendie",
+        "texte": "L'agent appelle les sapeurs-pompiers",
+        "role": "rouge",
+        "icone": "feu"
+       },
+       "branches": [
+        {
+         "titre": "Incident mineur",
+         "texte": "Moyens d'extinction à proximité",
+         "role": "orange",
+         "icone": "extincteur"
+        },
+        {
+         "titre": "Incident majeur",
+         "texte": "Limiter la propagation, évacuer, informer les sapeurs-pompiers",
+         "role": "rouge",
+         "icone": "pompier"
+        },
+        {
+         "titre": "Dans les deux cas",
+         "texte": "Rapport d'incident et rapport écrit par mail",
+         "role": "bleu",
+         "icone": "document"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/PROCEDURE/GESTION D'UN INCENDIE 1.pdf"
+     }
+    },
+    {
+     "id": "b4_proc_victime",
+     "titre": "Notre socle de procédures : la gestion d'une victime",
+     "texte": "Tous nos agents sont formés au sauvetage secourisme du travail (SST) : ils sont donc aptes à porter secours à une victime. Notre procédure interne reprend les étapes de la prise en charge :\n1. **Sécuriser** la ou les personnes impliquées, afin de ne pas aggraver la situation et de limiter les blessures.\n2. **Analyser** la situation et l'état de la victime.\n3. **Alerter** ou faire alerter les services de secours et, si besoin, rester en ligne pour que les secours guident l'agent.\n4. **Appliquer** les gestes de premiers secours jusqu'à la prise en charge par les secours.\n\nL'agent rédige un rapport sur la main courante et envoie un rapport par mail au Centre Henri Becquerel.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "chevrons",
+      "titre": "Secourir une victime en quatre gestes",
+      "params": {
+       "etapes": [
+        {
+         "titre": "Sécuriser",
+         "texte": "La ou les personnes impliquées",
+         "role": "rouge"
+        },
+        {
+         "titre": "Analyser",
+         "texte": "La situation et l'état de la victime",
+         "role": "orange"
+        },
+        {
+         "titre": "Alerter",
+         "texte": "Les services de secours",
+         "role": "orange"
+        },
+        {
+         "titre": "Appliquer",
+         "texte": "Les gestes de premiers secours",
+         "role": "vert"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/PROCEDURE/GESTION D'UNE VICTIME 1.pdf"
+     }
+    },
+    {
+     "id": "b4_proc_intrusion",
+     "titre": "Notre socle de procédures : la gestion d'une intrusion",
+     "texte": "Nous entendons par intrusion le fait d'entrer illégitimement sur un site dont l'accès est interdit ou limité, par exemple pendant les heures de fermeture ou lorsque l'accès est réservé à certaines personnes (salariés, entreprises intervenantes…). Lorsque l'agent détecte l'intrusion, de visu, par une alarme ou par le constat d'un accès ouvert, il localise d'abord l'intrus. Puis, si la situation le permet, il l'invite à justifier de sa présence et le raccompagne à l'extérieur du site s'il est coopératif ; dans le cas contraire, il fait appel aux forces de l'ordre, sécurise le site en attendant leur arrivée et se tient à leur disposition pour toute information.\n\nQuelle que soit l'issue, l'agent rédige obligatoirement un rapport d'incident sur la main courante, puis un rapport écrit envoyé par mail au Centre Henri Becquerel.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "arbre",
+      "titre": "Intrusion : localiser, faire justifier, sécuriser",
+      "params": {
+       "racine": {
+        "titre": "Détection d'une intrusion",
+        "texte": "L'agent localise d'abord l'intrus",
+        "role": "rouge",
+        "icone": "alerte"
+       },
+       "branches": [
+        {
+         "titre": "Intrus coopératif",
+         "texte": "L'agent le raccompagne à l'extérieur du site",
+         "role": "vert",
+         "icone": "porte"
+        },
+        {
+         "titre": "Intrus non coopératif",
+         "texte": "Forces de l'ordre, site sécurisé",
+         "role": "rouge",
+         "icone": "sirene"
+        },
+        {
+         "titre": "Quelle que soit l'issue",
+         "texte": "Rapport d'incident et rapport écrit par mail",
+         "role": "bleu",
+         "icone": "document"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/PROCEDURE/GESTION D'UNE INTRUSION 1.pdf"
+     }
+    },
+    {
+     "id": "b4_proc_individu_suspect",
+     "titre": "Notre socle de procédures : la gestion d'un individu suspect",
+     "texte": "L'agent peut repérer un individu au comportement suspect. Sa première action est d'aller à son contact et de l'inviter à justifier de sa présence et de ses motifs sur le site.\n- Tout est en ordre : l'échange a levé le doute.\n- L'individu n'a pas à être sur le site : l'agent lui demande de quitter le site. S'il accepte, l'agent le raccompagne jusqu'à la sortie ; s'il refuse, l'agent fait appel aux forces de l'ordre, reste auprès de l'individu jusqu'à leur arrivée et se met à leur disposition pour leur rendre compte des faits.\n\nLorsque l'individu est invité à quitter le site, l'agent rédige un rapport d'incident sur la main courante et un rapport écrit est envoyé par mail au Centre Henri Becquerel.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "arbre",
+      "titre": "Individu suspect : lever le doute",
+      "params": {
+       "racine": {
+        "titre": "Individu suspect",
+        "texte": "L'agent l'invite à justifier de sa présence",
+        "role": "orange",
+        "icone": "oeil"
+       },
+       "branches": [
+        {
+         "titre": "Tout est en ordre",
+         "texte": "L'échange a levé le doute",
+         "role": "vert",
+         "icone": "check"
+        },
+        {
+         "titre": "Il accepte de quitter le site",
+         "texte": "L'agent le raccompagne jusqu'à la sortie",
+         "role": "orange",
+         "icone": "porte"
+        },
+        {
+         "titre": "Il refuse",
+         "texte": "Appel aux forces de l'ordre",
+         "role": "rouge",
+         "icone": "sirene"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/PROCEDURE/GESTION D'UN INDIVIDU SUSPECT 1.pdf"
+     }
+    },
+    {
+     "id": "b4_proc_perturbateur",
+     "titre": "Notre socle de procédures : la gestion d'un élément perturbateur",
+     "texte": "Un élément perturbateur est un individu dont le comportement inapproprié perturbe le bon fonctionnement du site ; notre procédure vise à gérer la situation le plus efficacement et le plus rapidement possible. L'agent demande d'abord à l'individu de quitter le site.\n- S'il accepte, l'agent le raccompagne jusqu'à la sortie.\n- S'il refuse, l'agent fait appel aux forces de l'ordre, reste auprès de lui jusqu'à leur arrivée et se met à leur disposition pour leur rendre compte des faits.\n\nDans les deux cas, l'agent rédige un rapport d'incident sur la main courante et un rapport écrit est envoyé par mail au Centre Henri Becquerel.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "arbre",
+      "titre": "Élément perturbateur : faire quitter le site",
+      "params": {
+       "racine": {
+        "titre": "Élément perturbateur",
+        "texte": "L'agent lui demande de quitter le site",
+        "role": "orange",
+        "icone": "alerte"
+       },
+       "branches": [
+        {
+         "titre": "S'il accepte",
+         "texte": "L'agent le raccompagne jusqu'à la sortie",
+         "role": "vert",
+         "icone": "porte"
+        },
+        {
+         "titre": "S'il refuse",
+         "texte": "Appel aux forces de l'ordre",
+         "role": "rouge",
+         "icone": "sirene"
+        },
+        {
+         "titre": "Dans les deux cas",
+         "texte": "Rapport d'incident et rapport écrit par mail",
+         "role": "bleu",
+         "icone": "document"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/PROCEDURE/GESTION D'UN ELEMENT PERTURBATEUR.pdf"
+     }
+    }
+   ]
+  },
+  {
+   "cle": "V",
+   "titre": "Organisation et contrôle des prestations",
+   "rubriques": [
+    {
+     "id": "b5_controle_trois_niveaux",
+     "titre": "Le suivi qualité : trois niveaux de contrôle",
+     "texte": "Notre activité consiste, par nature, à mettre des agents de sécurité à disposition sur des sites déportés. Au-delà des compétences professionnelles et de la rigueur de nos agents de terrain, la valeur ajoutée de notre offre réside dans l'encadrement de leur mission : nous nous efforçons d'être présents pour nos agents, afin de comprendre les besoins du site, et pour nos clients, afin de comprendre leurs attentes. Concrètement, nous organisons trois niveaux de contrôle, qui nous permettent de suivre au plus près nos agents, leurs missions et l'évolution des besoins :\n- **Contrôle 1 — le contrôle de fond de la prestation**, réalisé une fois par mois par le responsable de site : il porte sur la maîtrise des missions et des consignes par les agents ;\n- **Contrôle 2 — le contrôle technique de la prestation**, réalisé par nos contrôleurs de façon inopinée, une à trois fois par mois selon les besoins du site : tenue, main courante, locaux ;\n- **Contrôle 3 — le contrôle global de la prestation**, réalisé par le responsable qualité, généralement une fois par trimestre ; si la mission nécessite un suivi plus étroit, cette fréquence est augmentée.\n\nSur un trimestre type, le site du Centre Henri Becquerel reçoit ainsi chaque mois un contrôle planifié du responsable de site et un à trois contrôles inopinés de nos contrôleurs, et, dans le trimestre, le contrôle global du responsable qualité. Notre démarche de certification ISO 9001 est en cours ; la certification est prévue fin 2026.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "matrice",
+      "titre": "Trois niveaux de contrôle, chaque trimestre",
+      "params": {
+       "lignes": [
+        "Contrôle planifié (responsable de site)",
+        "Contrôle inopiné (contrôleurs)",
+        "Contrôle global (responsable qualité)"
+       ],
+       "colonnes": [
+        "Mois 1",
+        "Mois 2",
+        "Mois 3"
+       ],
+       "cellules": [
+        [
+         "✓",
+         "✓",
+         "✓"
+        ],
+        [
+         "✓",
+         "✓",
+         "✓"
+        ],
+        [
+         "",
+         "",
+         "✓"
+        ]
+       ]
+      },
+      "origine": "SLIDE REP AO/SUIVI QUALITE ET CONTROLES/SUIVI CONTROLE DES PRESTATIONS 1.pdf"
+     }
+    },
+    {
+     "id": "b5_controle_fond",
+     "titre": "Contrôle 1 : le contrôle de fond (responsable de site)",
+     "texte": "Ce premier niveau de contrôle, réalisé une fois par mois par le responsable de site, vérifie la maîtrise des missions par les agents en place. Les points de contrôle sont les suivants :\n- **Maîtrise des notions professionnelles** : question aléatoire sur le contenu des diplômes des agents (quels sont les différents dispositifs d'extinction ? qu'est-ce que le triangle du feu ?…) et mise en situation (vous constatez qu'une personne est inconsciente sur le site : quel est votre ordre d'alerte ?).\n- **Maîtrise des consignes du site** : question aléatoire sur les consignes (quel est le circuit de ronde ? quel numéro d'astreinte prévenir ?…) et mise en situation (lors de votre ronde, vous constatez un départ de feu au niveau du 4e pointeau : quelle est votre procédure ?).\n- **Respect des horaires** : vérification des prises et fins de service.\n- **Réalisation des missions** : respect des consignes permanentes et ponctuelles, bonne réalisation des missions confiées, bonne connaissance des notions apprises lors des recyclages.\n\nCes points de contrôle sont précisés et ciblés selon les besoins du site, et évoluent avec eux. Le responsable de site envoie son rapport de contrôle à l'équipe encadrante.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "IV-QUA-01"
+     }
+    },
+    {
+     "id": "b5_controle_technique",
+     "titre": "Contrôle 2 : le contrôle technique (contrôleurs)",
+     "texte": "Pour ce deuxième niveau de contrôle, nos contrôleurs effectuent des contrôles inopinés, une à trois fois par mois sur un même site, de jour comme de nuit, et se concentrent sur l'aspect technique de la prestation :\n- **La tenue** : tenue complète, entretenue et présentable ; badge et carte professionnelle à jour ; bonne présentation de l'agent (aspect physique, hygiène, allure générale).\n- **La main courante** : soin apporté au matériel (tablette, chargeur…) ; régularité des rapports ; qualité du contenu et de l'expression ; maîtrise des pièces jointes.\n- **Les locaux** : bonne tenue du poste de sécurité et des lieux de pause ; bon état du matériel mis à disposition (sanitaires, four à micro-ondes…) ; respect des lieux où l'agent effectue sa mission.\n\nCes points de contrôle sont eux aussi précisés et ciblés selon les besoins du site.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "IV-QUA-02"
+     }
+    },
+    {
+     "id": "b5_controle_global",
+     "titre": "Contrôle 3 : le contrôle global et le dossier bilan (responsable qualité)",
+     "texte": "Le troisième niveau de contrôle est assuré par le responsable qualité, qui se rend sur site et contrôle l'équipe en place lors de réunions qualité, une fois par trimestre. Le responsable qualité et l'interlocuteur désigné par le Centre Henri Becquerel y font le point sur la prestation dans son ensemble, à partir d'un dossier produit par GSS :\n- **Les équipes** : récapitulatif des équipes, analyse et bilan des contrôles effectués, retour du Centre Henri Becquerel sur les équipes.\n- **Les missions** : récapitulatif des missions, indicateurs (nombre de rondes, nombre d'anomalies…), évolution éventuelle des consignes, retour du Centre Henri Becquerel sur le suivi des missions.\n\nÀ l'issue de la réunion, le responsable qualité envoie un dossier bilan et, selon les sujets abordés, propose des actions correctives en réponse aux éventuelles problématiques rencontrées.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "IV-QUA-03"
+     }
+    },
+    {
+     "id": "b5_outils_suivi",
+     "titre": "Le logiciel de contrôle des prestations",
+     "texte": "Au cœur de notre suivi, le logiciel controlmaster nous permet de contrôler nos agents pendant la réalisation de la prestation : chaque contrôle est saisi dans l'application, qui génère le rapport de contrôle. Il nous aide au suivi des contrôles des prestations et à l'évaluation des connaissances des agents sur site.\n\nNos logiciels (main courante électronique, planification, protection du travailleur isolé, contrôle des prestations) sont simples d'utilisation et facilement déployés sur site ; une formation est prévue pour le Centre Henri Becquerel, afin de faciliter leur utilisation et de lui permettre de recevoir toutes les informations nécessaires.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "IV-QUA-05"
+     }
+    },
+    {
+     "id": "b5_procedure_inopine",
+     "titre": "La procédure de contrôle inopiné",
+     "texte": "Nos contrôles, réalisés par les contrôleurs comme par les responsables de site, donnent lieu à une procédure précise :\n1. **Contrôle inopiné** : s'il est satisfaisant, il est validé.\n2. **Contrôle insatisfaisant, puis entretien** : nous planifions un entretien avec l'agent pour lui présenter le compte rendu de contrôle et les lacunes constatées ; nous échangeons sur les points de progression et, selon le besoin, lui dispensons une formation adaptée.\n3. **Nouveau contrôle inopiné** : s'il est satisfaisant, il valide la correction ; l'entretien et la formation ont permis à l'agent de corriger ses lacunes.\n4. **Nouveau contrôle insatisfaisant, puis remplacement de l'agent**, en concertation avec le Centre Henri Becquerel (responsable de site). Le nouvel agent est lui aussi contrôlé.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "flux",
+      "titre": "Contrôle inopiné : corriger, puis vérifier",
+      "params": {
+       "etapes": [
+        {
+         "titre": "Contrôle inopiné",
+         "texte": "S'il est satisfaisant, il est validé",
+         "role": "bleu",
+         "icone": "loupe"
+        },
+        {
+         "titre": "Entretien",
+         "texte": "Compte rendu présenté à l'agent et lacunes constatées",
+         "role": "orange",
+         "icone": "reunion"
+        },
+        {
+         "titre": "Formation adaptée",
+         "texte": "Selon le besoin",
+         "role": "orange",
+         "icone": "diplome"
+        },
+        {
+         "titre": "Nouveau contrôle inopiné",
+         "texte": "Satisfaisant : il valide la correction",
+         "role": "bleu",
+         "icone": "check"
+        },
+        {
+         "titre": "Remplacement de l'agent",
+         "texte": "Si le nouveau contrôle est insatisfaisant",
+         "role": "rouge",
+         "icone": "echange"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/SUIVI QUALITE ET CONTROLES/PROCEDURE CONTROLE INOPINE 1.pdf"
+     }
+    },
+    {
+     "id": "b5_controle_nuit",
+     "titre": "Le contrôle des vacations de nuit",
+     "texte": "Les vacations de nuit font l'objet d'un contrôle spécifique en quatre étapes :\n1. **Positionnement** : vérification que l'agent est positionné au bon endroit, avec l'aide de la géolocalisation continue de la main courante électronique.\n2. **Missions** : vérification que les missions et les consignes sont bien comprises et bien appliquées.\n3. **Support et renfort** : coordination des équipes en cas de besoin, gestion des prises de service et des passations de consignes.\n4. **Accompagnement** : accompagnement des équipes en cas d'événement exceptionnel ; rappels et accompagnement dans la gestion des vacations de nuit (gestion de la fatigue…).",
+     "schema": {
+      "source": "spec",
+      "gabarit": "chevrons",
+      "titre": "Les vacations de nuit, contrôlées en quatre étapes",
+      "params": {
+       "etapes": [
+        {
+         "titre": "Positionnement",
+         "texte": "L'agent est positionné au bon endroit",
+         "role": "bleu"
+        },
+        {
+         "titre": "Missions",
+         "texte": "Consignes bien comprises et bien appliquées",
+         "role": "orange"
+        },
+        {
+         "titre": "Support et renfort",
+         "texte": "Coordination des équipes en cas de besoin",
+         "role": "orange"
+        },
+        {
+         "titre": "Accompagnement",
+         "texte": "Gestion de la fatigue et des événements exceptionnels",
+         "role": "vert"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/SUIVI QUALITE ET CONTROLES/CONTROLE VACATION 1.pdf"
+     }
+    },
+    {
+     "id": "b5_reunions_indicateurs",
+     "titre": "Les réunions de suivi et la remontée des indicateurs",
+     "texte": "**Les réunions de suivi**\nAutre axe primordial de notre suivi qualité, les réunions de suivi sont mensuelles ou trimestrielles selon la nature et les besoins du site. Pour le Centre Henri Becquerel, les réunions de suivi ont lieu au minimum chaque mois. Elles permettent de faire le point sur les profils d'agents, les ajustements d'équipe, les modifications de consignes, les projets de changement sur le site, la planification des événements à venir, les axes d'évolution des missions et les besoins à venir en matériel. Elles font le trait d'union entre les représentants du Centre Henri Becquerel et nos agents, et nous permettent de prendre en compte régulièrement les éléments à faire évoluer, donc d'être réactifs. Nous y remontons les événements importants consignés dans la main courante et les éventuelles problématiques qu'ils révèlent.\n\n**La remontée des indicateurs**\nNous missionnons nos agents pour collecter des données réelles et concrètes de terrain : par exemple, le nombre d'entrées sur le site, compté à l'aide d'un compteur manuel et noté en fin de journée sur la main courante, l'évolution des incivilités ou le nombre de rondes effectuées par jour. Ces indicateurs sont analysés par le responsable de site, et nous présentons un rapport de ces données et de leur interprétation, mensuel ou trimestriel selon les besoins du site. Ils valorisent le travail de nos agents sur le terrain ; ils permettent surtout au Centre Henri Becquerel de suivre l'impact et l'efficacité des prestations mises en place, et parfois d'ajuster rapidement une prestation.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "IV-QUA-04"
+     }
+    },
+    {
+     "id": "b5_equipe_controle",
+     "titre": "L'équipe de contrôle affectée au marché",
+     "texte": "Nous vous présentons les collaborateurs de GSS chargés des missions de contrôle du marché du Centre Henri Becquerel.\n\n**Les responsables de site — le contrôle de fond**\nChaque site a une équipe dédiée, au sein de laquelle un agent est nommé responsable de site : il fait le lien au quotidien entre l'équipe terrain et l'équipe encadrante de GSS. Étant lui-même en poste sur le site, il veille chaque jour à la bonne marche de la prestation ; il alerte l'équipe encadrante des besoins qui apparaissent entre deux contrôles (remplacement d'un talkie-walkie, élément de tenue manquant…), afin qu'elle y remédie rapidement ; une fois par mois, il effectue le contrôle de fond des agents de son équipe (maîtrise des consignes et des compétences) et envoie son rapport à l'équipe encadrante.\n\n**Le contrôle technique**\n- PORCHAIRE Laurent, responsable d'exploitation — qualifications : SST, HOB0, CQP, SSIAP 1 ; savoir-faire : sens du relationnel, expérience du terrain, capacité managériale, capacité d'adaptation, capacité de décision, respect des procédures ; missions : contrôle des agents, suivi des clients, management des équipes, prospection commerciale ; basé à Rouen, permis B, véhiculé.\n- DA SILVA Luis, responsable d'exploitation — qualifications : SST, HOB0, CQP, SSIAP 1 ; savoir-faire : gestion du stress, travail en équipe, gestion des conflits, capacité d'adaptation, expérience du terrain, construction et coordination d'une équipe ; missions : contrôle des agents, remise et suivi des équipements, planification, coordination événementielle ; basé à Rouen, permis B, véhiculé.\n\n**Le contrôle global**\nVATTIER Marie, responsable qualité : lors des réunions trimestrielles, elle se rend sur site et contrôle l'équipe en place ; elle dresse avec le client le bilan du trimestre écoulé et produit un rapport qualité ; elle présente également l'offre commerciale aux nouveaux clients, ou son évolution aux clients existants. Basée à Rouen, permis B, véhiculée.",
+     "schema": {
+      "source": "bibliotheque",
+      "ref": "II-ENC-10",
+      "remarque": "Les trois fiches profils de la bibliothèque (II-ENC-01, II-ENC-02, II-ENC-03) peuvent être jointes en annexe (1 fiche = 1 page), comme dans AO RNE p.107-109."
+     }
+    },
+    {
+     "id": "b5_remplacement_prevu",
+     "titre": "Le remplacement d'un agent absent : absence prévue",
+     "texte": "Nous prêtons une attention toute particulière aux absences : il peut arriver que nos agents ne puissent pas assurer leurs vacations, pour diverses raisons (maladie, accident, panne de véhicule…). C'est un imprévu que nous analysons le plus précisément possible, afin que nos prestations n'en souffrent pas. Nous distinguons deux types d'absence.\n\nPour l'absence prévue, notre procédure interne est la suivante :\n- si l'agent prévient de son absence au moins 24 heures avant le début de la prestation, nous replanifions en interne, en le remplaçant par l'agent au profil le plus proche, déjà formé au site ;\n- si l'agent prévient de son absence moins de 24 heures avant le début de la prestation, nous mobilisons un agent d'astreinte.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "arbre",
+      "titre": "Absence prévue : un remplaçant déjà formé au site",
+      "params": {
+       "racine": {
+        "titre": "L'agent prévient de son absence",
+        "role": "orange",
+        "icone": "tel"
+       },
+       "branches": [
+        {
+         "titre": "Au moins 24 heures avant",
+         "texte": "Remplacement par un agent déjà formé au site",
+         "role": "vert",
+         "icone": "calendrier"
+        },
+        {
+         "titre": "Moins de 24 heures avant",
+         "texte": "Nous mobilisons un agent d'astreinte",
+         "role": "rouge",
+         "icone": "voiture"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/ABSENCE ET RETARD/REMPLACEMENT D'UN AGENT 1.pdf"
+     }
+    },
+    {
+     "id": "b5_remplacement_imprevu",
+     "titre": "Le remplacement d'un agent absent : absence non prévue",
+     "texte": "Il arrive aussi que nous ayons à gérer une absence non prévue, lorsque l'agent n'est pas en mesure de nous prévenir. Nous avons mis au point une organisation interne pour pallier toute absence de dernière minute, et donc tout « poste vide » :\n- nos agents font leur prise de service auprès de leur responsable de site 15 minutes avant le début de la prestation ;\n- si le responsable de site n'a pas reçu de prise de service 10 minutes avant le début de la prestation, il appelle l'agent et mobilise automatiquement l'agent d'astreinte, qui est sur site en 60 minutes maximum ;\n- l'agent d'astreinte fait sa prise de service à son arrivée sur site, auprès du responsable de site et sur la main courante.\n\nOrganiser les prises de service internes 15 minutes avant la vacation réduit considérablement le délai de mobilisation de l'agent d'astreinte et nous fait gagner en réactivité.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "flux",
+      "titre": "Absence non prévue : aucun poste vide",
+      "params": {
+       "etapes": [
+        {
+         "titre": "Prise de service",
+         "texte": "15 minutes avant le début de la prestation",
+         "role": "bleu",
+         "icone": "horloge"
+        },
+        {
+         "titre": "Pas de prise de service",
+         "texte": "10 minutes avant : appel de l'agent, l'astreinte est mobilisée",
+         "role": "rouge",
+         "icone": "alerte"
+        },
+        {
+         "titre": "Agent d'astreinte sur site",
+         "texte": "Prise de service sur la main courante",
+         "role": "vert",
+         "icone": "check"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/ABSENCE ET RETARD/REMPLACEMENT D'UN AGENT 3.pdf ; AO RNE p.112 (remplace II-ABS-01, dont le délai de 60 minutes n'est valable qu'en Normandie)"
+     }
+    },
+    {
+     "id": "b5_nouveau_marche",
+     "titre": "L'intégration d'un nouveau marché",
+     "texte": "Pour chaque nouveau marché, nous procédons toujours de la même manière, selon un rétroplanning qui court de 30 jours avant à 30 jours après le début du marché : il nous faut en général un mois pour nous préparer et préparer nos agents, puis un mois de recul et d'observation pour valider définitivement l'équipe.\n- **J-30 — réunion sur site** : collecte des éventuelles informations manquantes, désignation du chef de site et communication de ses missions, validation du choix des agents déployés sur le site.\n- **De J-30 à J-15 — préparation** : élaboration du LMC (livre des missions et consignes) et du plan de prévention, qui doivent être en place pour le début du marché ; formation théorique des équipes, qui doivent maîtriser toutes les procédures du site ; élaboration des plannings, pour valider une organisation pérenne ; commande et flocage des paquetages (tenue, badge, chaussures, lampe torche…).\n- **J-15 — deuxième réunion sur site** : présentation du LMC terminé au Centre Henri Becquerel et installation du matériel dédié à la mission (main courante, talkies-walkies, pointeaux de ronde…).\n- **Jour J — première vacation** : mise en place des agents en présence du chef de site et du responsable qualité ; chaque agent reçoit sa fiche de consignes par le logiciel Comète en même temps que sa planification.\n- **J+7 — premier contrôle** : le chef de site contrôle la bonne tenue des agents, le respect des consignes et la bonne marche générale de la prestation.\n- **J+15 — réunion de bilan des deux premières semaines**, avec le chef de site et le Centre Henri Becquerel, pour ajuster rapidement certains détails.\n- **J+30 — réunion de bilan du premier mois**, avec le Centre Henri Becquerel, le chef de site et le responsable qualité : ce recul permet de valider l'équipe et d'identifier ensemble des perspectives d'évolution.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "frise",
+      "titre": "Un nouveau marché, de J-30 à J+30",
+      "params": {
+       "jalons": [
+        {
+         "date": "J-30",
+         "titre": "Réunion sur site",
+         "texte": "Chef de site, choix des agents",
+         "role": "bleu"
+        },
+        {
+         "date": "J-30 à J-15",
+         "titre": "Préparation",
+         "texte": "LMC, plan de prévention, formation, plannings",
+         "role": "orange"
+        },
+        {
+         "date": "J-15",
+         "titre": "Deuxième réunion sur site",
+         "texte": "LMC terminé, matériel installé",
+         "role": "orange"
+        },
+        {
+         "date": "Jour J",
+         "titre": "Première vacation",
+         "texte": "Mise en place des agents",
+         "role": "orange"
+        },
+        {
+         "date": "J+7",
+         "titre": "Premier contrôle",
+         "texte": "Tenue, consignes, bonne marche",
+         "role": "bleu"
+        },
+        {
+         "date": "J+15",
+         "titre": "Bilan des deux premières semaines",
+         "texte": "Ajuster rapidement certains détails",
+         "role": "bleu"
+        },
+        {
+         "date": "J+30",
+         "titre": "Bilan du premier mois",
+         "texte": "Valider l'équipe",
+         "role": "vert"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/NOUVEAU MARCHE/GESTION D'UN NOUVEAU MARCHE 1.pdf"
+     }
+    },
+    {
+     "id": "b5_mise_en_place",
+     "titre": "La mise en place d'une prestation",
+     "texte": "La mise en place d'une prestation est une étape cruciale pour le bon déroulement d'une mission. Un référent est présent pour guider l'agent, lui transmettre les consignes et faire le lien avec les interlocuteurs du site. Elle se déroule en quatre étapes :\n1. **Positionnement** : le chef de poste ou le référent met en place chaque agent sur sa zone d'action ; son périmètre est clairement défini avant le début de la vacation.\n2. **Consignes** : le référent remet à l'agent sa fiche de poste et ses consignes, consignées dans le LMC ; il vérifie qu'elles sont bien comprises et bien prises en compte, et répond aux questions de l'agent.\n3. **Matériel** : avant le début de la prestation, le référent vérifie que l'agent est en tenue et dispose de tout l'équipement nécessaire (tenue complète, talkie-walkie, carte professionnelle…) ; il fournit au besoin les éléments manquants ou défaillants.\n4. **Accompagnement** : le référent gère les prises de service sur place et reste présent pendant une partie de la première vacation, pour accompagner l'agent dans la réalisation de ses missions et répondre à ses interrogations.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "chevrons",
+      "titre": "La mise en place d'une prestation, en quatre étapes",
+      "params": {
+       "etapes": [
+        {
+         "titre": "Positionnement",
+         "texte": "Chaque agent sur sa zone d'action",
+         "role": "bleu"
+        },
+        {
+         "titre": "Consignes",
+         "texte": "Fiche de poste et consignes du LMC",
+         "role": "orange"
+        },
+        {
+         "titre": "Matériel",
+         "texte": "Tenue complète et équipement nécessaire",
+         "role": "orange"
+        },
+        {
+         "titre": "Accompagnement",
+         "texte": "Le référent reste présent pendant la première vacation",
+         "role": "vert"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/MISE EN PLACE/MISE EN PLACE PRESTATION 1.pdf"
+     }
+    },
+    {
+     "id": "b5_nouvel_agent",
+     "titre": "L'intégration d'un nouvel agent",
+     "texte": "L'intégration d'un nouvel agent sur un site est une étape importante : il doit être opérationnel le plus rapidement possible, sans perturber l'équilibre de l'équipe ni l'organisation établie, mais au contraire en l'enrichissant. Nous suivons pour cela un rétroplanning :\n1. **Sélection du profil** : après avoir déterminé les besoins du site, nous sélectionnons le meilleur profil d'agent.\n2. **Formation théorique** : à partir du LMC, l'agent étudie les consignes et les procédures exigées sur le site.\n3. **Formation pratique** sur le terrain avec le chef de site, pendant 1 à 3 jours selon les besoins du site : l'agent voit et apprend les procédures et les consignes en situation réelle.\n4. **Première vacation** : une fois formé, l'agent est planifié et intègre le site.\n5. **Évaluation, puis validation** : après environ 3 jours sur site (J+3), le chef de site évalue l'agent sur le terrain ; c'est après une évaluation favorable que l'agent est validé par le chef de site et par le Centre Henri Becquerel.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "flux",
+      "titre": "Un nouvel agent opérationnel rapidement",
+      "params": {
+       "etapes": [
+        {
+         "titre": "Sélection du profil",
+         "texte": "Le meilleur profil d'agent",
+         "role": "bleu",
+         "icone": "personne"
+        },
+        {
+         "titre": "Formation théorique",
+         "texte": "Consignes et procédures du LMC",
+         "role": "orange",
+         "icone": "document"
+        },
+        {
+         "titre": "Formation pratique",
+         "texte": "1 à 3 jours avec le chef de site",
+         "role": "orange",
+         "icone": "groupe"
+        },
+        {
+         "titre": "Première vacation",
+         "texte": "L'agent intègre le site",
+         "role": "orange",
+         "icone": "lieu"
+        },
+        {
+         "titre": "Évaluation, puis validation",
+         "texte": "À J+3, par le chef de site et le client",
+         "role": "vert",
+         "icone": "check"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/NOUVEL AGENT/INTEGRATION NOUVEL AGENT 1.pdf"
+     }
+    },
+    {
+     "id": "b5_evenementiel",
+     "titre": "Le dispositif événementiel",
+     "texte": "Nous travaillons depuis plusieurs années sur des événements ponctuels ou récurrents (concerts, marathons, spectacles, manifestations culturelles en plein air) accueillant des flux importants, de 1 000 à 50 000 participants par jour. Nous avons mis au point un rétroplanning type qui nous permet d'aborder chaque événement en étant préparés et efficaces. Il se déroule sur les 30 jours qui précèdent l'événement ; en cas d'urgence, nous pouvons le réduire selon le besoin du client.\n- **Réception du besoin (J-30)** : le client nous transmet son besoin : date, nature de l'événement, nombre d'agents, consignes générales.\n- **Préparation** : mobilisation des agents, préparation des tenues et du matériel. Pour l'événementiel, nous disposons d'un vivier de 500 agents validés par nos équipes et référencés sur une application : nous y créons le besoin (date, nombre de places) et les agents disponibles s'inscrivent. Nous sommes ainsi en mesure de mobiliser 100 agents en 48 heures.\n- **Réunion préparatoire (J-15)** : avec le client, nous affinons le besoin, recueillons les consignes générales et particulières et arrêtons définitivement le dispositif : nombre d'agents, enjeux de l'événement, postes à tenir.\n- **Plan d'action** : nous déterminons quel agent tiendra quel poste selon les besoins et les profils, ainsi que le déroulé de l'événement ; nous rédigeons les fiches de consignes et établissons les documents officiels (contrats de travail et DPAE).\n- **Jour J — mise en place** : l'équipe encadrante, dont un membre de l'équipe RH, accueille les agents sur place et vérifie les prises de service, les contrats (correctement établis et signés), les DPAE, la carte professionnelle de chaque agent (à jour et bien visible), les tenues (complètes, entretenues et réglementaires) et le matériel, dont le bon fonctionnement a été vérifié en amont (charge des talkies-walkies…). Le coordinateur réalise un briefing général (déroulé de l'événement, enjeux, attentes, postures attendues, plan d'action), puis reste sur place pour superviser l'événement. Sur les grands dispositifs, nous prévoyons 1 responsable pour 10 agents, et chaque agent est géolocalisé et horodaté.\n- **Débriefing (vers J+3)** : analyse de la main courante et du rapport du coordinateur, points forts et axes d'amélioration. Chaque événement est unique et enrichit nos procédures et nos plans d'action.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "frise",
+      "titre": "Un événement préparé sur 30 jours",
+      "params": {
+       "jalons": [
+        {
+         "date": "J-30",
+         "titre": "Réception du besoin",
+         "texte": "Date, nature de l'événement, nombre d'agents",
+         "role": "bleu"
+        },
+        {
+         "titre": "Préparation",
+         "texte": "Mobilisation des agents, tenues et matériel",
+         "role": "orange"
+        },
+        {
+         "date": "J-15",
+         "titre": "Réunion préparatoire",
+         "texte": "Dispositif arrêté avec le client",
+         "role": "orange"
+        },
+        {
+         "titre": "Plan d'action",
+         "texte": "Postes, fiches de consignes, contrats de travail",
+         "role": "orange"
+        },
+        {
+         "date": "Jour J",
+         "titre": "Mise en place",
+         "texte": "Briefing général et supervision sur place",
+         "role": "orange"
+        },
+        {
+         "date": "J+3",
+         "titre": "Débriefing",
+         "texte": "Points forts et axes d'amélioration",
+         "role": "vert"
+        }
+       ]
+      },
+      "origine": "AO RNE.pdf p.121"
+     }
+    },
+    {
+     "id": "b5_commande_supplementaire",
+     "titre": "La gestion d'une commande supplémentaire",
+     "texte": "Il peut arriver que le Centre Henri Becquerel ait besoin d'une prestation supplémentaire, non prévue ou de dernière minute. Nous procédons ainsi :\n1. **Réception du bon de commande**.\n2. **Récapitulatif des besoins** : nous prenons contact avec le Centre Henri Becquerel pour établir un récapitulatif aussi précis que possible, car le délai est souvent réduit et nous devons être en place très rapidement.\n3. **Planification** du ou des agents nécessaires, en général des agents d'astreinte.\n4. **Envoi** du planning au Centre Henri Becquerel, et du planning accompagné de la fiche de consignes aux agents mobilisés.\n\nSelon l'urgence, les agents sont en place dans un délai de 1 h à 24 h. Les prestations supplémentaires sont contrôlées selon le même dispositif que les prestations habituelles.",
+     "schema": {
+      "source": "spec",
+      "gabarit": "flux",
+      "titre": "Une commande supplémentaire, traitée en quatre temps",
+      "params": {
+       "etapes": [
+        {
+         "titre": "Réception du bon de commande",
+         "texte": "Prestation supplémentaire ou de dernière minute",
+         "role": "rouge",
+         "icone": "document"
+        },
+        {
+         "titre": "Récapitulatif des besoins",
+         "texte": "Aussi précis que possible",
+         "role": "orange",
+         "icone": "loupe"
+        },
+        {
+         "titre": "Planification",
+         "texte": "En général des agents d'astreinte",
+         "role": "orange",
+         "icone": "calendrier"
+        },
+        {
+         "titre": "Envoi",
+         "texte": "Planning et fiche de consignes aux agents",
+         "role": "vert",
+         "icone": "mail"
+        }
+       ]
+      },
+      "origine": "SLIDE REP AO/PROCEDURE/GESTION D'UNE COMMANDE SUPPLEMENTAIRE 1.pdf"
+     }
+    }
+   ]
+  }
+ ]
+}

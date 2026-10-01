@@ -4,6 +4,7 @@ import { spawn, spawnSync } from 'child_process';
 import OpenAI from 'openai';
 import { getSettings } from '../core/config';
 import { reglagesIA, prefixeEnCache } from '../core/modeles_ia';
+import { themeActif, estRetourArriere, envTheme, schemasBibliotheque, FormatSchema } from './themes';
 
 /**
  * Schémas GSS du mémoire technique : UN schéma par page de contenu.
@@ -122,13 +123,16 @@ function findPythonBin(): string | null {
 const MOTS = /[A-Za-zÀ-ÖØ-öø-ÿŒœ]+/g;
 const motsDe = (t: string) => new Set((t.toLowerCase().match(MOTS) || []).filter((w) => w.length >= 4));
 
-/** Préfixe les identifiants internes du SVG (plusieurs schémas dans un même document). */
-function finaliserSvg(svg: string, prefixe: string): string {
+/** Préfixe les identifiants internes du SVG (plusieurs schémas dans un même document). Toile paysage (1200 × 660) ou
+ *  page (format page du thème) : largeur fluide. Sert aussi à préparer le schéma d'une page de schéma
+ *  (AssembleSection.schemaPleinePage) à partir d'un SVG de la bibliothèque (themes.schemasBibliotheque). */
+export function finaliserSvg(svg: string, prefixe: string): string {
   const p = prefixe.replace(/[^a-zA-Z0-9]/g, '');
   return svg
     .replace(/id="([^"]+)"/g, (_m, id) => `id="${p}-${id}"`)
     .replace(/url\(#([^)]+)\)/g, (_m, id) => `url(#${p}-${id})`)
     .replace('width="1200" height="660"', 'width="100%" preserveAspectRatio="xMidYMid meet"')
+    .replace(/(<svg\b[^>]*?) width="[\d.]+" height="[\d.]+"/, '$1 width="100%" preserveAspectRatio="xMidYMid meet"')
     .replace(/\s*\n\s*/g, ' ')
     .trim();
 }
@@ -138,7 +142,7 @@ function finaliserSvg(svg: string, prefixe: string): string {
  * section en priorité, meilleur recouvrement de vocabulaire avec la page, jamais deux fois le
  * même dans un mémoire. Les schémas propres à un marché (chiffres d'un client) sont exclus.
  */
-function secoursBibliotheque(pages: PageSchema[]): Map<string, string> {
+function secoursBibliotheque(pages: PageSchema[], format: FormatSchema = 'paysage', theme: string = themeActif()): Map<string, string> {
   const out = new Map<string, string>();
   let index: any[] = [];
   try {
@@ -151,6 +155,7 @@ function secoursBibliotheque(pages: PageSchema[]): Map<string, string> {
   const DATE_OU_SECTEUR = /covid|hydroalcool|gestes barri|pass sanitaire|magasin|caisse|transport de fonds|antivol|prospection|commercial/i;
   const dispo = index.filter((x) => x.reutilisable && !/covid|hydroalcool|gestes barri|pass sanitaire/i.test(`${x.titre} ${x.texte}`));
   const utilises = new Set<string>();
+  const choix: Array<{ page: PageSchema; id: string }> = [];
   for (const p of pages) {
     const mots = motsDe(`${p.sectionTitle} ${p.text}`);
     const score = (x: any) => [...motsDe(`${x.titre} ${x.texte}`)].filter((w) => mots.has(w)).length;
@@ -162,22 +167,27 @@ function secoursBibliotheque(pages: PageSchema[]): Map<string, string> {
         && !DATE_OU_SECTEUR.test(`${x.titre} ${x.texte}`) && score(x) >= 3);
     }
     if (!cands.length) continue;
-    const choix = cands.reduce((a, b) => (score(b) > score(a) ? b : a));
-    utilises.add(choix.id);
+    const retenu = cands.reduce((a, b) => (score(b) > score(a) ? b : a));
+    utilises.add(retenu.id);
+    choix.push({ page: p, id: retenu.id });
+  }
+  // Thème de style : schémas de la bibliothèque redessinés dans le thème (format demandé) ; retour arrière : originaux.
+  const themes = estRetourArriere(theme) ? null : schemasBibliotheque(choix.map((c) => c.id), format, theme);
+  for (const { page: p, id } of choix) {
     try {
-      const svg = fs.readFileSync(path.join(MOTEUR_DIR, 'bibliotheque', `${choix.id}.svg`), 'utf-8');
+      const svg = themes?.get(id) ?? fs.readFileSync(path.join(MOTEUR_DIR, 'bibliotheque', `${id}.svg`), 'utf-8');
       out.set(p.key, finaliserSvg(svg, `b${p.key}`));
     } catch (e: any) {
-      console.error(`[SchemaService] Schéma ${choix.id} illisible : ${e?.message || e}`);
+      console.error(`[SchemaService] Schéma ${id} illisible : ${e?.message || e}`);
     }
   }
   return out;
 }
 
-/** Appelle le moteur Python (stdin JSON → stdout JSON), sans bloquer la boucle d'événements. */
-function appelMoteur(python: string, requete: object): Promise<Resultat[]> {
+/** Appelle le moteur Python (stdin JSON → stdout JSON), sans bloquer la boucle d'événements, dans le thème donné. */
+function appelMoteur(python: string, requete: object, theme: string = themeActif()): Promise<Resultat[]> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(python, [SCRIPT], { stdio: ['pipe', 'pipe', 'pipe'], shell: process.platform === 'win32' });
+    const proc = spawn(python, [SCRIPT], { stdio: ['pipe', 'pipe', 'pipe'], shell: process.platform === 'win32', env: envTheme(theme) });
     let out = '';
     let err = '';
     const timer = setTimeout(() => { proc.kill(); reject(new Error('Moteur de schémas : délai dépassé')); }, 180_000);
@@ -212,8 +222,12 @@ export class SchemaService {
     if (!this.python) console.error('[SchemaService] Python introuvable : schémas de la bibliothèque GSS uniquement.');
   }
 
-  /** Construit un schéma par page. Renvoie la carte clé de slide → SVG (une ligne, identifiants uniques). */
-  public async construirePourPages(pages: PageSchema[], onProgress?: (msg: string) => void): Promise<Map<string, string>> {
+  /** Construit un schéma par page. Renvoie la carte clé de slide → SVG (une ligne, identifiants uniques).
+   *  opts.format : « paysage » (par défaut, schéma sous le texte) ou « page » (1 schéma = 1 page A4 portrait) ;
+   *  opts.theme : thème de style (par défaut GSS_THEME / style par défaut, voir themes.ts). */
+  public async construirePourPages(pages: PageSchema[], onProgress?: (msg: string) => void, opts: { format?: FormatSchema; theme?: string } = {}): Promise<Map<string, string>> {
+    const format: FormatSchema = opts.format === 'page' ? 'page' : 'paysage';
+    const theme = themeActif(opts.theme);
     const resultat = new Map<string, string>();
     const aSecourir: PageSchema[] = [];
 
@@ -228,7 +242,7 @@ export class SchemaService {
     await parLots([...parSection.values()], CONCURRENCE, async (groupe) => {
       const utilises: string[] = [];
       for (const page of groupe) {
-        const r = await this.construireUne(page, utilises);
+        const r = await this.construireUne(page, utilises, format, theme);
         if (r) {
           resultat.set(page.key, r.svg);
           utilises.push(r.gabarit);
@@ -242,13 +256,13 @@ export class SchemaService {
 
     if (aSecourir.length > 0) {
       console.warn(`[SchemaService] ${aSecourir.length} page(s) sans schéma conforme → schéma validé de la bibliothèque GSS.`);
-      for (const [k, svg] of secoursBibliotheque(aSecourir)) resultat.set(k, svg);
+      for (const [k, svg] of secoursBibliotheque(aSecourir, format, theme)) resultat.set(k, svg);
     }
     console.log(`[SchemaService] ${resultat.size}/${pages.length} page(s) illustrée(s) (${pages.length - aSecourir.length} schéma(s) construits, ${aSecourir.length} issus de la bibliothèque).`);
     return resultat;
   }
 
-  private async construireUne(page: PageSchema, dejaUtilises: string[]): Promise<{ svg: string; gabarit: string } | null> {
+  private async construireUne(page: PageSchema, dejaUtilises: string[], format: FormatSchema = 'paysage', theme: string = themeActif()): Promise<{ svg: string; gabarit: string } | null> {
     if (!this.openai || !this.python) return null;
     const messages: any[] = [
       { role: 'system', content: SYSTEM_PROMPT.replace('__ICONES__', ICONES.join(', ')) },
@@ -297,8 +311,9 @@ export class SchemaService {
       try {
         [r] = await appelMoteur(this.python, {
           mode: 'rendre',
+          format,
           schemas: [{ id: page.key, gabarit: spec?.gabarit, params: spec?.params, source: page.text, titre_section: page.sectionTitle }],
-        });
+        }, theme);
       } catch (e: any) {
         console.error(`[SchemaService] ${page.key} : moteur de schémas en échec (${e?.message || e}).`);
         return null;
