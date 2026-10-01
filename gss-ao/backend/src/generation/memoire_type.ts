@@ -879,12 +879,12 @@ const CALCULS: Record<string, Calculateur> = {
     if (!e || !v || aConfirmerRegistre(e) || (total && v > total)) return { valeur: null };
     return { valeur: String(v), source: 'registre effectif_agents_securite' };
   },
-  // Statut de PME : réponse de GSS au registre (« oui » / « non ») ; à défaut, mention du mémoire type à confirmer.
+  // Statut de PME : réponse de GSS au registre (« oui » / « non ») ; à défaut, rien n'est imprimé (380 salariés
+  // dépassent le seuil de 250) et la question est posée à GSS (section {{#si STATUT_PME}} du texte).
   STATUT_PME: (c) => {
     const e = c.registre.find((x) => x.cle === 'statut_pme');
     if (e) return /^\s*(?:oui|pme)\b/i.test(e.valeur_retenue) ? { valeur: 'PME', source: `registre statut_pme (${e.source_retenue}, ${e.date_retenue})` } : { valeur: null };
-    const def = c.mt.variables.STATUT_PME;
-    return def?.valeur_gss ? { valeur: def.valeur_gss, source: def.origine, aConfirmer: def.a_confirmer } : { valeur: null };
+    return { valeur: null, question: c.mt.variables.STATUT_PME?.a_confirmer };
   },
   EFFECTIF_TOTAL: (c) => depuisRegistre(c, 'effectif_total', nombreDe),
   EFFECTIF_76: (c) => depuisRegistre(c, 'effectif_departement_76', nombreDe),
