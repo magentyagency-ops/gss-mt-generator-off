@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { horairesImposes, marcheHorsNormandie, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme } from './base_memoires';
+import { horairesImposes, marcheHorsNormandie, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -1747,7 +1747,7 @@ export function consigneAdaptation(rubrique: RubriqueMemoireType, texte: string,
     ctx.analyseCompacte ? `ANALYSE DU MARCHÉ :\n${ctx.analyseCompacte}` : '',
     ctx.perimetre ? `PÉRIMÈTRE RÉEL DU MARCHÉ (d'après le CCTP) :\n${ctx.perimetre}` : '',
     ctx.registre ? `INFORMATIONS GSS :\n${ctx.registre}` : '',
-    ctx.horsNormandie ? "MARCHÉ HORS DE NORMANDIE : aucun délai d'intervention, d'astreinte ou de remplacement chiffré, sauf s'il est imposé par le DCE." : '',
+    ctx.horsNormandie ? `MARCHÉ HORS DE NORMANDIE : ${ZONE_GSS} (aucune ville d'agence à inventer) ; aucun délai d'intervention, d'astreinte ou de remplacement chiffré, sauf s'il est imposé par le DCE.` : '',
   ].filter(Boolean).join('\n\n');
   const exigences = (ctx.exigences || []).map((e) => `- ${e.exigence}${e.criticite ? ` [${e.criticite}]` : ''}`).join('\n');
   const obligations = (ctx.obligations || []).map((o) => `- « ${o} »`).join('\n');

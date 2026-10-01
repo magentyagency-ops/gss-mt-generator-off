@@ -18,6 +18,13 @@ import path from 'path';
  */
 
 const DIR = path.resolve(__dirname, '../../python/base_memoires');
+/**
+ * Zone d'intervention de GSS (réponse de GSS du 1er octobre 2026) : siège à Rouen, équipes et astreinte présentes sur
+ * toute la moitié nord de la France. Sert aux marchés hors Normandie (Île-de-France, Essonne…) : présence des équipes et
+ * de l'astreinte, sans ville d'agence ni délai chiffré qui n'ont pas été donnés.
+ */
+export const ZONE_GSS = "les équipes et l'astreinte de GSS sont présentes sur toute la moitié nord de la France, de Nantes à Lille et jusqu'à Reims";
+
 /** Au-delà de ce délai, une information variable est réutilisée mais soumise à confirmation. */
 const FRAICHEUR_MOIS = 12;
 const CATEGORIES_VARIABLES = new Set(['effectifs', 'organisation', 'coordonnees', 'moyens', 'certifications', 'delais', 'partenaires']);
@@ -150,7 +157,7 @@ export function blocRegistre(horsNormandie = false): string {
     return `- ${e.libelle} : ${e.valeur_retenue} [source : ${e.source_retenue}, ${e.date_retenue}]${aConfirmer ? ` [À CONFIRMER${raison}]` : ''}`;
   });
   const avertissement = horsNormandie
-    ? "\nCE MARCHÉ EST HORS DE LA ZONE D'INTERVENTION HABITUELLE DE GSS (Normandie) : n'annonce AUCUN délai chiffré d'astreinte, d'intervention, de remplacement ou de mise en place repris d'anciens marchés (ex. 60 minutes, 1 h à 24 h) ; décris l'organisation et demande le délai à GSS."
+    ? `\nCE MARCHÉ EST HORS DE NORMANDIE (siège et implantation historique de GSS) : ${ZONE_GSS} ; présente cette présence, sans inventer de ville d'agence. N'annonce AUCUN délai chiffré d'astreinte, d'intervention, de remplacement ou de mise en place repris d'anciens marchés normands (ex. 60 minutes, 1 h à 24 h) ; décris l'organisation et demande le délai à GSS.`
     : '';
   return '\n\nREGISTRE DES INFORMATIONS GSS (valeur la plus récente connue de chaque information qui peut évoluer) :\n' + lignes.join('\n') + avertissement;
 }
@@ -383,7 +390,7 @@ export const REGLES_REUTILISATION = `RÈGLES DE RÉUTILISATION DES MÉMOIRES GSS
 - Chiffres GSS : reprends-les À L'IDENTIQUE (fréquences, délais, effectifs, durées) — ne les arrondis pas, ne les élargis pas (« deux à trois fois par mois » ne devient jamais « une à trois fois »).
 - Effectifs GSS : n'utilise QUE les valeurs du REGISTRE (jamais les chiffres d'autres documents plus anciens) et cite toujours les mêmes dans tout le document ; un nombre d'agents ne dépasse jamais l'effectif total ; une valeur incohérente marquée [À CONFIRMER] n'est pas citée.
 - Personnes et rôles : utilise UNIQUEMENT l'ORGANIGRAMME GSS DE RÉFÉRENCE, identique dans tout le document (mêmes personnes pour un même rôle, même rôle pour une même personne).
-- Implantation : GSS est implanté à Rouen (Normandie). Les délais d'intervention, d'astreinte, de mobilisation, de remplacement ou de mise en place d'une commande (ex. « 1 h à 24 h ») figurant dans le registre ou les mémoires ont été pris pour des marchés normands : pour un site situé dans une autre région, ne les présente pas comme un engagement ; décris l'organisation prévue (renforts, prépositionnement, relais local) sans chiffre inventé et demande le délai à GSS (consultation / [À COMPLÉTER]).
+- Implantation : GSS a son siège à Rouen (Normandie) ; ${ZONE_GSS} (à présenter pour un site hors Normandie, sans inventer de ville d'agence). Les délais d'intervention, d'astreinte, de mobilisation, de remplacement ou de mise en place d'une commande (ex. « 1 h à 24 h ») figurant dans le registre ou les mémoires ont été pris pour des marchés normands : pour un site situé dans une autre région, ne les présente pas comme un engagement ; décris l'organisation prévue (renforts, prépositionnement, relais local) sans chiffre inventé et demande le délai à GSS (consultation / [À COMPLÉTER]).
 - Contenu daté ou étranger au marché : ne reprends jamais les mesures Covid (gestes barrières, pass sanitaire, gel hydroalcoolique) ni un contenu propre à un autre secteur (magasin, caisses, transport de fonds, événementiel) s'il ne concerne pas ce marché. « Pôle emploi » s'appelle désormais « France Travail ».
 - Le document est destiné à l'ACHETEUR : n'y écris JAMAIS de commentaire interne ou de diagnostic sur les manques (« à ce stade », « n'est pas établi », « la documentation fournie ne comporte pas », « reste à confirmer », « devra être confirmé », « selon les éléments disponibles »…). Une information manquante se signale uniquement par le marqueur prévu (consultation / [À COMPLÉTER]). Si une visite du site est obligatoire, elle est réputée faite : jamais de futur « après la visite ».
 - Reprise du personnel : le fondement est l'accord de reprise de la convention collective de la prévention-sécurité (IDCC 1351), sauf autre indication du DCE ; ne cite jamais l'article L1224-1 du Code du travail pour une simple perte de marché, et n'aborde pas la reprise quand la prestation est ponctuelle (bons de commande).

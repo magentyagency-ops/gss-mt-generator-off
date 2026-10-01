@@ -62,7 +62,7 @@
  ],
  "indicateurs": {
   "HORS_NORMANDIE": {
-   "description": "Site du marché hors de Normandie (zone d'intervention habituelle de GSS) : aucun délai normand repris.",
+   "description": "Site du marché hors de Normandie (siège et implantation historique de GSS) : les équipes et l'astreinte de GSS couvrent toute la moitié nord de la France (de Nantes à Lille et jusqu'à Reims), mais aucun délai normand n'est repris.",
    "calcul": "hors_normandie"
   },
   "SURVEILLANCE": {
@@ -1064,7 +1064,7 @@
    "condition": "IMPLANTATION_DEMANDEE",
    "condition_texte": "si le DCE interroge l'implantation, l'agence locale ou la proximité (les délais ne sont cités que si le site est en Normandie)",
    "priorite": 2,
-   "texte": "Notre siège et notre agence sont situés 15 place de la Verrerie, à Rouen. Nos agents sont présents sur le quart nord-ouest, et plus précisément sur l'ensemble de la région Normandie : sur nos {{EFFECTIF_TOTAL}} salariés, {{EFFECTIF_76}} travaillent en Seine-Maritime et {{EFFECTIF_27}} dans l'Eure. {{#si !HORS_NORMANDIE}}Nos agents d'astreinte sont répartis géographiquement afin de pouvoir intervenir rapidement sur n'importe quel site ; ce système d'astreinte dédié nous permet de réagir efficacement aux situations d'urgence. Nos agents d'astreinte peuvent ainsi intervenir en {{DELAI_ASTREINTE_NORMANDIE}} sur n'importe quel site normand. {{/si}}Nous disposons d'une astreinte de {{VEHICULES_ASTREINTE}} véhicules pour la région rouennaise.",
+   "texte": "Notre siège et notre agence sont situés 15 place de la Verrerie, à Rouen. Nos équipes et notre astreinte sont présentes sur toute la moitié nord de la France, de Nantes à Lille et jusqu'à Reims, et plus précisément sur l'ensemble de la région Normandie : sur nos {{EFFECTIF_TOTAL}} salariés, {{EFFECTIF_76}} travaillent en Seine-Maritime et {{EFFECTIF_27}} dans l'Eure. {{#si !HORS_NORMANDIE}}Nos agents d'astreinte sont répartis géographiquement afin de pouvoir intervenir rapidement sur n'importe quel site ; ce système d'astreinte dédié nous permet de réagir efficacement aux situations d'urgence. Nos agents d'astreinte peuvent ainsi intervenir en {{DELAI_ASTREINTE_NORMANDIE}} sur n'importe quel site normand. {{/si}}Nous disposons d'une astreinte de {{VEHICULES_ASTREINTE}} véhicules pour la région rouennaise.",
    "sous_parties": [],
    "schema": {
     "source": "spec",
@@ -1119,7 +1119,8 @@
     "base_memoires.json — GSS - Region Normandie - lot 1.pdf p.45 (passage 7429abce135a1621)",
     "registre_informations.json — adresse_siege, effectif_total, effectif_departement_76, effectif_departement_27, vehicules_astreinte",
     "base_memoires.json — GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf p.8 (passage 2ed5fbc2b6d4bb51)",
-    "faits_gss.md — Identité ; Outils et moyens (délais normands)"
+    "faits_gss.md — Identité ; Outils et moyens (délais normands)",
+    "Réponse de GSS (2026-10-01) : équipes et astreinte présentes sur toute la moitié nord, de Nantes à Lille et jusqu'à Reims (remplace « le quart nord-ouest »)"
    ],
    "a_confirmer": [
     "Délai « moins de 2 heures sur n'importe quel site » : valeur de 2024 (Région Normandie lot 1), absente du registre"

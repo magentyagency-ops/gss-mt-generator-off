@@ -1217,6 +1217,27 @@
    ]
   },
   {
+   "cle": "zone_intervention",
+   "libelle": "Zone d'intervention (équipes et astreinte)",
+   "categorie": "organisation",
+   "valeurs": [
+    {
+     "valeur": "Toute la moitié nord de la France, de Nantes à Lille et jusqu'à Reims (équipes et astreinte GSS)",
+     "client": "Réponse de GSS",
+     "document": "reponses_gss_2026-10-01.md",
+     "date": "2026-10",
+     "page": null,
+     "citation": "présence des équipes et astreinte GSS sur toute la moitié nord, de Nantes à Lille et jusqu'à Reims",
+     "reponse_gss": true
+    }
+   ],
+   "valeur_retenue": "Toute la moitié nord de la France, de Nantes à Lille et jusqu'à Reims (équipes et astreinte GSS)",
+   "date_retenue": "2026-10",
+   "source_retenue": "Réponse de GSS (1er octobre 2026)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": []
+  },
+  {
    "cle": "autorisation_cnaps",
    "libelle": "Numéro d'autorisation d'exercer CNAPS",
    "categorie": "identite",

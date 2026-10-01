@@ -17,6 +17,7 @@ import {
   chargerMemoireType, normaliser, rechercherRubriques,
   type DonneesBesoin, type ExigenceMatrice, type MemoireType, type PlanMemoireType,
 } from './memoire_type';
+import { ZONE_GSS } from './base_memoires';
 
 export const PLACEHOLDER_V2 = '[À COMPLÉTER]';
 
@@ -518,7 +519,7 @@ export function consigneComprehension(d: DonneesBesoin, o: {
     `- Horaires imposés par le CCTP (cités mot pour mot) :\n${liste(d.horaires)}`,
     `- Obligations chiffrées du CCTP (citées mot pour mot) :\n${liste(d.obligations)}`,
     d.enjeux.length ? `- Enjeux relevés par l'analyse du DCE : ${d.enjeux.join(' ; ')}` : '',
-    d.horsNormandie ? "- MARCHÉ HORS DE NORMANDIE (GSS est implanté à Rouen) : aucun délai d'intervention, d'astreinte ou de remplacement chiffré, sauf s'il est imposé par le DCE." : '',
+    d.horsNormandie ? `- MARCHÉ HORS DE NORMANDIE (siège de GSS à Rouen ; ${ZONE_GSS}, sans ville d'agence à inventer) : aucun délai d'intervention, d'astreinte ou de remplacement chiffré, sauf s'il est imposé par le DCE.` : '',
     d.amorce ? `- Première phrase (déjà rédigée, à reprendre telle quelle en tête du texte) : ${d.amorce}` : '',
   ].filter(Boolean).join('\n');
   const user = [
@@ -554,7 +555,7 @@ export function consigneProposition(groupe: GroupeNouveau, o: { client?: string;
     `SUJET DE LA QUESTION : ${groupe.sujet}`,
     o.bloc ? `BLOC DU MÉMOIRE QUI ACCUEILLE LA RÉPONSE : ${o.bloc}` : '',
     `EXIGENCES DU DCE À TRAITER :\n${groupe.exigences.map((e) => `- ${e.exigence}${e.reponseGss ? `\n  (élément GSS connu : ${e.reponseGss})` : ''}`).join('\n')}`,
-    o.horsNormandie ? "MARCHÉ HORS DE NORMANDIE : aucun délai d'intervention, d'astreinte ou de remplacement chiffré, sauf s'il est imposé par le DCE." : '',
+    o.horsNormandie ? `MARCHÉ HORS DE NORMANDIE : ${ZONE_GSS} (aucune ville d'agence à inventer) ; aucun délai d'intervention, d'astreinte ou de remplacement chiffré, sauf s'il est imposé par le DCE.` : '',
     o.perimetre ? `PÉRIMÈTRE RÉEL DU MARCHÉ :\n${o.perimetre}` : '',
     o.analyse ? `ANALYSE DU MARCHÉ :\n${o.analyse}` : '',
     o.sources ? `SOURCES GSS :\n${o.sources}` : '',
