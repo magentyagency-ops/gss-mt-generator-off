@@ -6642,7 +6642,9 @@ RÈGLES DE FORME (rendu Marp) :
     // jamais des redites à retirer (ils disparaissaient tous, génération réelle ign 12 et 13).
     await this.dedoublonnerRubriques(sections, rubriquesDoc, [...fixes, ...(b1 ? [b1.id] : [])]);
     progres(74, 'Cohérence avec les exigences chiffrées et les horaires du CCTP…');
-    await this.corrigerContradictions(sections, rubriquesDoc, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))]);
+    // Valeurs habituelles de GSS dont l'engagement renforcé n'est dû que si le DCE l'exige (indicateur faux) : protégées.
+    const proteges = Object.values(mt.variables).filter((v) => v.valeur_gss && v.valeur_si_exige && v.indicateur_exige && !prep.indicateurs[v.indicateur_exige]).map((v) => v.valeur_gss!);
+    await this.corrigerContradictions(sections, rubriquesDoc, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))], proteges);
     await this.verifierHoraires(sections, rubriquesDoc, dceContext);
     await this.engagementsChiffresManquants(sections, rubriquesDoc, dceContext);
     limiterRappelsSite(sections, rubriquesDoc.map((x) => x.id));
@@ -7203,7 +7205,7 @@ Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "tex
    * inférieure au minimum imposé, délai plus long que le maximum…) est reformulée pour s'aligner sur
    * l'exigence. Seuls les remplacements retrouvés MOT POUR MOT sont appliqués. Étape non bloquante.
    */
-  private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>): Promise<void> {
+  private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>, proteges: string[] = []): Promise<void> {
     const ids = rubriques.map((r) => r.id).filter((id) => (sections[id] || '').trim());
     // Une rubrique à la fois, avec les exigences chiffrées qui lui sont attribuées (contexte court : résultat stable).
     // Chaque rubrique est confrontée à TOUTES les exigences (une contradiction se trouve souvent hors de la
@@ -7228,6 +7230,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
       for (const c of JSON.parse(r || '{}').corrections || []) {
         const id = idLot, extrait = String(c?.extrait || ''), remplacement = String(c?.remplacement || '').trim();
         if (!ids.includes(id) || extrait.length < 12 || !remplacement || /⟦AC:|CONSULTATION REQUISE/i.test(extrait) || !sections[id].includes(extrait)) continue;
+        // Pratique de GSS gardée quand le DCE n'exige rien (« une à trois fois par mois » : contrôles inopinés non exigés).
+        if (proteges.some((x) => extrait.includes(x) && !remplacement.includes(x))) continue;
         sections[id] = sections[id].replace(extrait, remplacement);
         n++;
       }
