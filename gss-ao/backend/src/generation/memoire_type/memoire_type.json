@@ -530,11 +530,12 @@
   },
   "DELAI_ASTREINTE_NORMANDIE": {
    "description": "Délai d'intervention des agents d'astreinte sur un site normand",
-   "origine": "Registre delai_astreinte « 60 MINUTES MAXI » (Université de Rouen Normandie, 2026-06). Remplace « moins de 2 heures » (Région Normandie lot 1, 2024-05)",
+   "origine": "Région Normandie lot 1 (2024-05) p.45 : astreinte régionale « en moins de 2 h sur n'importe quel site ». Le « 60 MINUTES MAXI » du registre delai_astreinte est le délai de remplacement d'un agent absent sur son site (schéma ABSENCE NON PRÉVUE), repris par DELAI_ASTREINTE seulement",
    "type": "texte",
    "si_absente": "vide",
-   "valeur_gss": "60 minutes maximum",
-   "normandie_seulement": true
+   "valeur_gss": "moins de 2 heures",
+   "normandie_seulement": true,
+   "a_confirmer": "Confirmer le délai d'intervention des agents d'astreinte sur n'importe quel site normand — valeur utilisée dans le mémoire : moins de 2 heures (Région Normandie lot 1, 2024-05). Le délai de 60 minutes maximum ne concerne que le remplacement d'un agent absent sur son site"
   },
   "DELAI_PTI": {
    "description": "Délai d'arrivée sur place après une alarme PTI sans réponse",
@@ -1142,7 +1143,9 @@
     "faits_gss.md — Identité ; Outils et moyens (délais normands)",
     "Réponse de GSS (2026-10-01) : équipes et astreinte présentes sur toute la moitié nord, de Nantes à Lille et jusqu'à Reims (remplace « le quart nord-ouest »)"
    ],
-   "a_confirmer": [],
+   "a_confirmer": [
+    "Délai « moins de 2 heures sur n'importe quel site » : engagement d'astreinte régionale de 2024 (Région Normandie lot 1, p.45), non reconfirmé par GSS"
+   ],
    "ancienne_rubrique": "b_implantation",
    "anciennes_rubriques": [
     "b_implantation"
@@ -1151,7 +1154,7 @@
     "« Avec près de 200 agents sur la zone » (2024-05) remplacé par les effectifs du registre (380 salariés selon la réponse de GSS du 2026-10-01 ; 215 / 65, 2026-04)",
     "Délai « en moins de 2 h » isolé dans un fragment réservé à la Normandie",
     "Promesse d'intervention rapide « sur n'importe quel site » et délai de 2 heures réservés à un site en Normandie (hors Normandie, GSS n'annonce aucun délai).",
-    "Délai d'astreinte normand « moins de 2 heures » (2024) remplacé par « 60 minutes maximum » (mémoire Université de Rouen Normandie, 2026-06, plus récent ; non confirmé par GSS)"
+    "Délai d'astreinte normand : « moins de 2 heures sur n'importe quel site » (Région Normandie lot 1, 2024-05, p.45) rétabli ; les « 60 minutes maximum » (registre delai_astreinte) sont le délai de remplacement d'un agent absent sur son site et restent dans b5_remplacement_imprevu"
    ],
    "longueur_mots": 94
   },
