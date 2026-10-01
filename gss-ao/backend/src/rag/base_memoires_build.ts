@@ -126,8 +126,29 @@ async function extraireFaits(openai: OpenAI, fichierTextes: string) {
     }
     console.log(`${d.client} : ${gardes}/${faits.length} information(s) vérifiée(s).`);
   }
+  reprendreReponsesGss(registre);
   consolider(registre);
   ecrireRegistre(registre);
+}
+
+/** Champs propres au registre (hors extraction) conservés d'une reconstruction à l'autre. */
+const CHAMPS_CONSERVES = ['interne', 'usage', 'remarque'];
+
+/**
+ * Réponses de l'équipe GSS (valeurs « reponse_gss », ex. réponses du 1er octobre 2026) et informations sans mémoire
+ * source (internes, zone d'intervention…) : reprises du registre existant lors d'une reconstruction, car elles ne
+ * figurent dans aucun mémoire (règle 1 du LISEZMOI : la réponse de GSS prime).
+ */
+function reprendreReponsesGss(registre: Record<string, any>) {
+  let ancien: any[] = [];
+  try { ancien = JSON.parse(fs.readFileSync(path.join(DIR, 'registre_informations.json'), 'utf-8')).informations || []; } catch { return; }
+  for (const e of ancien) {
+    const reponses = (e.valeurs || []).filter((v: any) => v.reponse_gss);
+    if (!reponses.length && !CHAMPS_CONSERVES.some((k) => e[k] !== undefined)) continue;
+    const cible = (registre[e.cle] ||= { cle: e.cle, libelle: e.libelle, categorie: e.categorie, valeurs: [] });
+    cible.valeurs.push(...reponses);
+    for (const k of CHAMPS_CONSERVES) if (e[k] !== undefined) cible[k] = e[k];
+  }
 }
 
 /**
@@ -171,7 +192,8 @@ function consolider(registre: Record<string, any>) {
     // changement : seul compte un NOM ou un CHIFFRE différent.
     const generique = (v: string) => !nombres(v) && !/[A-Z]{2,}|[A-Z][a-z]+\s+[A-Z]/.test(v.replace(/^(Mr|Mme)\s+/, ''));
     const ecarts = anciennes.filter((v: any) => !recentes.some((r) => equiv(r.valeur, v.valeur)) && !generique(v.valeur));
-    e.statut = ecarts.length ? 'a_confirmer' : 'confirmee';
+    // Valeur donnée par l'équipe GSS (réponse datée) : elle prime, l'information est confirmée.
+    e.statut = ecarts.length && !recentes.some((r) => r.reponse_gss) ? 'a_confirmer' : 'confirmee';
     e.valeurs_anterieures_differentes = [...new Map(ecarts.map((v: any) => [cle(v.valeur), `${v.valeur} (${v.client}, ${v.date})`])).values()];
   }
 }
@@ -193,7 +215,10 @@ function ecrireRegistre(registre: Record<string, any>) {
     // Reconsolide le registre existant sans nouvel appel IA.
     const r = JSON.parse(fs.readFileSync(path.join(DIR, 'registre_informations.json'), 'utf-8'));
     const reg: Record<string, any> = {};
-    for (const e of r.informations) reg[e.cle] = { cle: e.cle, libelle: e.libelle, categorie: e.categorie, valeurs: e.valeurs };
+    for (const e of r.informations) {
+      reg[e.cle] = { cle: e.cle, libelle: e.libelle, categorie: e.categorie, valeurs: e.valeurs };
+      for (const k of CHAMPS_CONSERVES) if (e[k] !== undefined) reg[e.cle][k] = e[k];
+    }
     consolider(reg);
     ecrireRegistre(reg);
     return;

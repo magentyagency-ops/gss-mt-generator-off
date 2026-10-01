@@ -19,6 +19,10 @@ les nouvelles réponses (contenu, structure, exemples, tableaux) au lieu de tout
 3. Si l'information a changé d'un mémoire à l'autre, ou si sa dernière source a plus de 12 mois,
    elle est utilisée **et** remontée à GSS dans les « consultations requises » pour confirmation.
    La réponse de l'équipe est enregistrée datée et prime aux générations suivantes.
+4. Une réponse de GSS s'enregistre dans le registre comme une valeur datée portant `"reponse_gss": true`
+   (ex. réponses du 1er octobre 2026, document `reponses_gss_2026-10-01.md`) : l'information est alors confirmée,
+   et une reconstruction du registre la conserve. Une information marquée `"interne": true` (ex. `prix_horaire`)
+   n'est jamais transmise à la rédaction ni écrite dans un mémoire.
 
 ## Ajouter un mémoire GSS
 
