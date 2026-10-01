@@ -977,6 +977,15 @@
    "categorie": "moyens",
    "valeurs": [
     {
+     "valeur": "Peugeot 208 ; Renault Zoé",
+     "client": "Réponse de GSS",
+     "document": "reponses_gss_2026-10-01.md",
+     "date": "2026-10",
+     "page": null,
+     "citation": "véhicules des encadrants : Peugeot 208 et Renault Zoé",
+     "reponse_gss": true
+    },
+    {
      "valeur": "Peugeot 3008",
      "client": "Université de Rouen Normandie",
      "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
@@ -1025,12 +1034,16 @@
      "citation": "Nos encadrants et contrôleurs effectuent leurs contrôles et visites sur site en véhicules aux couleurs de GSS."
     }
    ],
-   "valeur_retenue": "Peugeot 3008",
-   "date_retenue": "2026-06",
-   "source_retenue": "Université de Rouen Normandie",
-   "statut": "a_confirmer",
+   "valeur_retenue": "Peugeot 208 ; Renault Zoé",
+   "date_retenue": "2026-10",
+   "source_retenue": "Réponse de GSS (1er octobre 2026)",
+   "statut": "confirmee",
    "valeurs_anterieures_differentes": [
+    "Peugeot 3008 (Université de Rouen Normandie, 2026-06)",
     "Peugeot 208 aux couleurs de GSS (Université de Rouen Normandie (cadre lots 1-2-3), 2026-04)",
+    "Peugeot 3008 (CAF du Val-de-Marne, 2026-04)",
+    "véhicules aux couleurs de GSS (Région Normandie (lot 1), 2024-05)",
+    "véhicules aux couleurs de GSS (Région Normandie (lot 2), 2024-05)",
     "véhicules aux couleurs de GSS (Région Normandie (lot 3), 2024-05)"
    ]
   },
@@ -1039,6 +1052,15 @@
    "libelle": "Délai d'intervention sur alarme PTI",
    "categorie": "delais",
    "valeurs": [
+    {
+     "valeur": "45 minutes",
+     "client": "Réponse de GSS",
+     "document": "reponses_gss_2026-10-01.md",
+     "date": "2026-10",
+     "page": null,
+     "citation": "délai d'intervention sur alarme PTI : 45 min",
+     "reponse_gss": true
+    },
     {
      "valeur": "45 minutes",
      "client": "Université de Rouen Normandie",
@@ -1081,11 +1103,13 @@
     }
    ],
    "valeur_retenue": "45 minutes",
-   "date_retenue": "2026-06",
-   "source_retenue": "Université de Rouen Normandie",
-   "statut": "a_confirmer",
+   "date_retenue": "2026-10",
+   "source_retenue": "Réponse de GSS (1er octobre 2026)",
+   "statut": "confirmee",
    "valeurs_anterieures_differentes": [
     "moins de 20 minutes (CAF (2025), 2025-10)",
+    "moins de 30 minutes (Région Normandie (lot 1), 2024-05)",
+    "moins de 30 minutes (Région Normandie (lot 2), 2024-05)",
     "moins de 30 minutes (Région Normandie (lot 3), 2024-05)"
    ]
   },
@@ -1279,6 +1303,15 @@
    "valeurs": [
     {
      "valeur": "06 58 06 32 25",
+     "client": "Réponse de GSS",
+     "document": "reponses_gss_2026-10-01.md",
+     "date": "2026-10",
+     "page": null,
+     "citation": "téléphones : 09 62 21 24 75 et 06 58 06 32 25",
+     "reponse_gss": true
+    },
+    {
+     "valeur": "06 58 06 32 25",
      "client": "Université de Rouen Normandie (cadre lots 1-2-3)",
      "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
      "date": "2026-04",
@@ -1303,12 +1336,36 @@
     }
    ],
    "valeur_retenue": "06 58 06 32 25",
-   "date_retenue": "2026-04",
-   "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
-   "statut": "a_confirmer",
+   "date_retenue": "2026-10",
+   "source_retenue": "Réponse de GSS (1er octobre 2026)",
+   "statut": "confirmee",
    "valeurs_anterieures_differentes": [
+    "06.58.06.32.25 ; 02.35.89.09.92 (Région Normandie (lot 1), 2024-05)",
     "06.58.06.32.25 ; 02.35.89.09.92 (Région Normandie (lot 2), 2024-05)"
-   ]
+   ],
+   "remarque": "Numéro unique de l'interlocuteur (dirigeant, mobile). Le numéro fixe est 09 62 21 24 75 (telephone_fixe) ; le 02 35 89 09 92 (2024) n'est plus utilisé."
+  },
+  {
+   "cle": "telephone_fixe",
+   "libelle": "Numéro de téléphone fixe de GSS",
+   "categorie": "coordonnees",
+   "valeurs": [
+    {
+     "valeur": "09 62 21 24 75",
+     "client": "Réponse de GSS",
+     "document": "reponses_gss_2026-10-01.md",
+     "date": "2026-10",
+     "page": null,
+     "citation": "téléphones : 09 62 21 24 75 et 06 58 06 32 25",
+     "reponse_gss": true
+    }
+   ],
+   "valeur_retenue": "09 62 21 24 75",
+   "date_retenue": "2026-10",
+   "source_retenue": "Réponse de GSS (1er octobre 2026)",
+   "statut": "confirmee",
+   "valeurs_anterieures_differentes": [],
+   "remarque": "Remplace le 02 35 89 09 92 cité en 2024 (Région Normandie)."
   },
   {
    "cle": "email_contact",
@@ -1590,6 +1647,15 @@
    "valeurs": [
     {
      "valeur": "J-10",
+     "client": "Réponse de GSS",
+     "document": "reponses_gss_2026-10-01.md",
+     "date": "2026-10",
+     "page": null,
+     "citation": "envoi des plannings : J-10",
+     "reponse_gss": true
+    },
+    {
+     "valeur": "J-10",
      "client": "CAF du Val-de-Marne",
      "document": "GSS - CAF du Val-de-Marne.pdf",
      "date": "2026-04",
@@ -1630,11 +1696,12 @@
     }
    ],
    "valeur_retenue": "J-10",
-   "date_retenue": "2026-04",
-   "source_retenue": "CAF du Val-de-Marne",
-   "statut": "a_confirmer",
+   "date_retenue": "2026-10",
+   "source_retenue": "Réponse de GSS (1er octobre 2026)",
+   "statut": "confirmee",
    "valeurs_anterieures_differentes": [
     "J-15 (Région Normandie (lot 1), 2024-05)",
+    "J-15 des plannings du mois suivant (Région Normandie (lot 2), 2024-05)",
     "J-15 des plannings du mois suivant (Région Normandie (lot 3), 2024-05)"
    ]
   },
@@ -1674,6 +1741,15 @@
    "categorie": "delais",
    "valeurs": [
     {
+     "valeur": "45 minutes",
+     "client": "Réponse de GSS",
+     "document": "reponses_gss_2026-10-01.md",
+     "date": "2026-10",
+     "page": null,
+     "citation": "délai d'intervention du rondier sur alarme : 45 min",
+     "reponse_gss": true
+    },
+    {
      "valeur": "60 MINUTES MAXI",
      "client": "CAF (2025)",
      "document": "GSS - CAF 2025.pdf",
@@ -1690,11 +1766,12 @@
      "citation": "le rondier se rend sur place en moins de 30 minutes."
     }
    ],
-   "valeur_retenue": "60 MINUTES MAXI",
-   "date_retenue": "2025-10",
-   "source_retenue": "CAF (2025)",
-   "statut": "a_confirmer",
+   "valeur_retenue": "45 minutes",
+   "date_retenue": "2026-10",
+   "source_retenue": "Réponse de GSS (1er octobre 2026)",
+   "statut": "confirmee",
    "valeurs_anterieures_differentes": [
+    "60 MINUTES MAXI (CAF (2025), 2025-10)",
     "moins de 30 minutes (Région Normandie (lot 1), 2024-05)"
    ]
   },

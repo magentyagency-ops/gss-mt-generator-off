@@ -868,7 +868,7 @@
   "section": "b_moyens_materiels",
   "titre": "Notre flotte de véhicules",
   "source": "M",
-  "texte": "Peugeot 3008 Aux couleurs de GSS, pour nos encadrants et contrôleurs Vélos électriques Pour les rondes des sites les plus étendus Trottinettes électriques Pour les rondes des sites les plus étendus",
+  "texte": "Peugeot 208 et Renault Zoé Aux couleurs de GSS, pour nos encadrants et contrôleurs Vélos électriques Pour les rondes des sites les plus étendus Trottinettes électriques Pour les rondes des sites les plus étendus",
   "reutilisable": false
  },
  {
@@ -876,7 +876,7 @@
   "section": "b_moyens_materiels",
   "titre": "Notre flotte de véhicules",
   "source": "L",
-  "texte": "208 Peugeot aux couleurs de GSS pour nos encadrants et contrôleurs 5 véhicules d'astreinte sur la région rouennaise 100 % de nos véhicules géolocalisés",
+  "texte": "208 et Zoé Peugeot et Renault aux couleurs de GSS pour nos encadrants et contrôleurs 5 véhicules d'astreinte sur la région rouennaise 100 % de nos véhicules géolocalisés",
   "reutilisable": false
  },
  {
@@ -1100,7 +1100,7 @@
   "section": "b_telesurveillance",
   "titre": "Délais d'intervention",
   "source": "L, S",
-  "texte": "45 et 60 minutes : délais du marché de l'Université de Rouen Normandie 0 min 15 min 30 minutes Rondier d'astreinte sur site après un signal de télésurveillance 45 minutes Elbeuf, Saint-Étienne-du-Rouvray, Mont-Saint-Aignan, Rouen 60 minutes Évreux",
+  "texte": "45 et 60 minutes : délais du marché de l'Université de Rouen Normandie 0 min 15 min 30 min 45 minutes Rondier d'astreinte sur site après un signal de télésurveillance 45 minutes Elbeuf, Saint-Étienne-du-Rouvray, Mont-Saint-Aignan, Rouen 60 minutes Évreux",
   "reutilisable": false
  },
  {

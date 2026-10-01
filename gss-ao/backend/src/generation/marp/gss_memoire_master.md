@@ -1288,7 +1288,7 @@ Nos agents et encadrants ont besoin en permanence de se déplacer dans le cadre 
 
 **LES VEHICULES**
 
-Nos encadrants et contrôleurs effectuent leurs contrôles et visites sur site en Peugeot 3008 aux couleurs de GSS.
+Nos encadrants et contrôleurs effectuent leurs contrôles et visites sur site en Peugeot 208 et Renault Zoé aux couleurs de GSS.
 
 Nos agents sont souvent en charge d’effectuer des rondes sur des sites très conséquents en termes de distance. Nous ajustons toujours au mieux la méthode utilisée. Ces rondes peuvent se faire à pied, en voiture, mais certaines rondes nécessitent	un	moyen intermédiaire. Nous mettons donc à disposition de nos agents des vélos et trottinettes électriques
 ---

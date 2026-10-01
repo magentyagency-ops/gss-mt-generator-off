@@ -12519,7 +12519,7 @@
     "args": [
      [
       {
-       "titre": "Peugeot 3008",
+       "titre": "Peugeot 208 et Renault Zoé",
        "texte": "Aux couleurs de GSS, pour nos encadrants et contrôleurs",
        "icone": "voiture",
        "role": "sable"
@@ -12545,7 +12545,7 @@
    "params_nommes": {
     "items": [
      {
-      "titre": "Peugeot 3008",
+      "titre": "Peugeot 208 et Renault Zoé",
       "texte": "Aux couleurs de GSS, pour nos encadrants et contrôleurs",
       "icone": "voiture",
       "role": "sable"
@@ -12565,7 +12565,7 @@
     ],
     "hauteur_max": 300
    },
-   "appel_python": "grille([{'titre': 'Peugeot 3008', 'texte': 'Aux couleurs de GSS, pour nos encadrants et contrôleurs', 'icone': 'voiture', 'role': 'sable'}, {'titre': 'Vélos électriques', 'texte': 'Pour les rondes des sites les plus étendus', 'icone': 'velo', 'role': 'sable'}, {'titre': 'Trottinettes électriques', 'texte': 'Pour les rondes des sites les plus étendus', 'icone': 'trottinette', 'role': 'sable'}], hauteur_max=300)",
+   "appel_python": "grille([{'titre': 'Peugeot 208 et Renault Zoé', 'texte': 'Aux couleurs de GSS, pour nos encadrants et contrôleurs', 'icone': 'voiture', 'role': 'sable'}, {'titre': 'Vélos électriques', 'texte': 'Pour les rondes des sites les plus étendus', 'icone': 'velo', 'role': 'sable'}, {'titre': 'Trottinettes électriques', 'texte': 'Pour les rondes des sites les plus étendus', 'icone': 'trottinette', 'role': 'sable'}], hauteur_max=300)",
    "roles": [
     "sable"
    ],
@@ -12575,7 +12575,7 @@
     "trottinette"
    ],
    "textes_svg": [
-    "Peugeot 3008",
+    "Peugeot 208 et Renault Zoé",
     "Aux couleurs de GSS, pour nos",
     "encadrants et contrôleurs",
     "Vélos électriques",
@@ -12585,7 +12585,7 @@
     "Pour les rondes des sites les plus",
     "étendus"
    ],
-   "texte_index": "Peugeot 3008 Aux couleurs de GSS, pour nos encadrants et contrôleurs Vélos électriques Pour les rondes des sites les plus étendus Trottinettes électriques Pour les rondes des sites les plus étendus",
+   "texte_index": "Peugeot 208 et Renault Zoé Aux couleurs de GSS, pour nos encadrants et contrôleurs Vélos électriques Pour les rondes des sites les plus étendus Trottinettes électriques Pour les rondes des sites les plus étendus",
    "_controle_extraction": "identique"
   },
   {
@@ -12604,8 +12604,8 @@
     "args": [
      [
       {
-       "valeur": "208",
-       "label": "Peugeot aux couleurs de GSS pour nos encadrants et contrôleurs",
+       "valeur": "208 et Zoé",
+       "label": "Peugeot et Renault aux couleurs de GSS pour nos encadrants et contrôleurs",
        "icone": "voiture",
        "role": "sable"
       },
@@ -12628,8 +12628,8 @@
    "params_nommes": {
     "tuiles": [
      {
-      "valeur": "208",
-      "label": "Peugeot aux couleurs de GSS pour nos encadrants et contrôleurs",
+      "valeur": "208 et Zoé",
+      "label": "Peugeot et Renault aux couleurs de GSS pour nos encadrants et contrôleurs",
       "icone": "voiture",
       "role": "sable"
      },
@@ -12647,7 +12647,7 @@
      }
     ]
    },
-   "appel_python": "chiffres([{'valeur': '208', 'label': 'Peugeot aux couleurs de GSS pour nos encadrants et contrôleurs', 'icone': 'voiture', 'role': 'sable'}, {'valeur': '5', 'label': \"véhicules d'astreinte sur la région rouennaise\", 'icone': 'voiture', 'role': 'orange'}, {'valeur': '100 %', 'label': 'de nos véhicules géolocalisés', 'icone': 'lieu', 'role': 'sable'}])",
+   "appel_python": "chiffres([{'valeur': '208 et Zoé', 'label': 'Peugeot et Renault aux couleurs de GSS pour nos encadrants et contrôleurs', 'icone': 'voiture', 'role': 'sable'}, {'valeur': '5', 'label': \"véhicules d'astreinte sur la région rouennaise\", 'icone': 'voiture', 'role': 'orange'}, {'valeur': '100 %', 'label': 'de nos véhicules géolocalisés', 'icone': 'lieu', 'role': 'sable'}])",
    "roles": [
     "sable",
     "orange"
@@ -12657,16 +12657,17 @@
     "lieu"
    ],
    "textes_svg": [
-    "208",
-    "Peugeot aux couleurs de GSS pour",
-    "nos encadrants et contrôleurs",
+    "208 et Zoé",
+    "Peugeot et Renault aux couleurs de",
+    "GSS pour nos encadrants et",
+    "contrôleurs",
     "5",
     "véhicules d'astreinte sur la région",
     "rouennaise",
     "100 %",
     "de nos véhicules géolocalisés"
    ],
-   "texte_index": "208 Peugeot aux couleurs de GSS pour nos encadrants et contrôleurs 5 véhicules d'astreinte sur la région rouennaise 100 % de nos véhicules géolocalisés",
+   "texte_index": "208 et Zoé Peugeot et Renault aux couleurs de GSS pour nos encadrants et contrôleurs 5 véhicules d'astreinte sur la région rouennaise 100 % de nos véhicules géolocalisés",
    "_controle_extraction": "identique"
   },
   {
@@ -15287,11 +15288,11 @@
      "min",
      [
       {
-       "val": 30,
-       "titre": "30 minutes",
+       "val": 45,
+       "titre": "45 minutes",
        "texte": "Rondier d'astreinte sur site après un signal de télésurveillance",
        "role": "orange",
-       "w": 300,
+       "w": 290,
        "h": 128
       },
       {
@@ -15307,7 +15308,7 @@
        "titre": "60 minutes",
        "texte": "Évreux",
        "role": "bleu",
-       "w": 240,
+       "w": 170,
        "h": 110
       }
      ]
@@ -15322,11 +15323,11 @@
     "unite": "min",
     "marqueurs": [
      {
-      "val": 30,
-      "titre": "30 minutes",
+      "val": 45,
+      "titre": "45 minutes",
       "texte": "Rondier d'astreinte sur site après un signal de télésurveillance",
       "role": "orange",
-      "w": 300,
+      "w": 290,
       "h": 128
      },
      {
@@ -15342,14 +15343,14 @@
       "titre": "60 minutes",
       "texte": "Évreux",
       "role": "bleu",
-      "w": 240,
+      "w": 170,
       "h": 110
      }
     ],
     "pas_grad": 15,
     "note": "45 et 60 minutes : délais du marché de l'Université de Rouen Normandie"
    },
-   "appel_python": "jauge(60, 'min', [{'val': 30, 'titre': '30 minutes', 'texte': \"Rondier d'astreinte sur site après un signal de télésurveillance\", 'role': 'orange', 'w': 300, 'h': 128}, {'val': 45, 'titre': '45 minutes', 'texte': 'Elbeuf, Saint-Étienne-du-Rouvray, Mont-Saint-Aignan, Rouen', 'role': 'bleu', 'w': 320, 'h': 128}, {'val': 60, 'titre': '60 minutes', 'texte': 'Évreux', 'role': 'bleu', 'w': 240, 'h': 110}], pas_grad=15, note=\"45 et 60 minutes : délais du marché de l'Université de Rouen Normandie\")",
+   "appel_python": "jauge(60, 'min', [{'val': 45, 'titre': '45 minutes', 'texte': \"Rondier d'astreinte sur site après un signal de télésurveillance\", 'role': 'orange', 'w': 290, 'h': 128}, {'val': 45, 'titre': '45 minutes', 'texte': 'Elbeuf, Saint-Étienne-du-Rouvray, Mont-Saint-Aignan, Rouen', 'role': 'bleu', 'w': 320, 'h': 128}, {'val': 60, 'titre': '60 minutes', 'texte': 'Évreux', 'role': 'bleu', 'w': 170, 'h': 110}], pas_grad=15, note=\"45 et 60 minutes : délais du marché de l'Université de Rouen Normandie\")",
    "roles": [
     "orange",
     "bleu"
@@ -15359,7 +15360,8 @@
     "45 et 60 minutes : délais du marché de l'Université de Rouen Normandie",
     "0 min",
     "15 min",
-    "30 minutes",
+    "30 min",
+    "45 minutes",
     "Rondier d'astreinte sur site après",
     "un signal de télésurveillance",
     "45 minutes",
@@ -15368,7 +15370,7 @@
     "60 minutes",
     "Évreux"
    ],
-   "texte_index": "45 et 60 minutes : délais du marché de l'Université de Rouen Normandie 0 min 15 min 30 minutes Rondier d'astreinte sur site après un signal de télésurveillance 45 minutes Elbeuf, Saint-Étienne-du-Rouvray, Mont-Saint-Aignan, Rouen 60 minutes Évreux",
+   "texte_index": "45 et 60 minutes : délais du marché de l'Université de Rouen Normandie 0 min 15 min 30 min 45 minutes Rondier d'astreinte sur site après un signal de télésurveillance 45 minutes Elbeuf, Saint-Étienne-du-Rouvray, Mont-Saint-Aignan, Rouen 60 minutes Évreux",
    "_controle_extraction": "identique"
   },
   {

@@ -459,7 +459,7 @@
   },
   "TEL_INTERLOCUTEUR": {
    "description": "Numéro unique",
-   "origine": "registre telephone_contact (à confirmer)",
+   "origine": "registre telephone_contact (06 58 06 32 25, confirmé par GSS le 2026-10-01 ; fixe : 09 62 21 24 75)",
    "type": "texte",
    "si_absente": "a_completer",
    "registre": "telephone_contact",
@@ -522,7 +522,7 @@
   },
   "DELAI_PTI": {
    "description": "Délai d'arrivée sur place après une alarme PTI sans réponse",
-   "origine": "délai imposé par le CCTP ; sinon registre delai_intervention_pti en Normandie seulement",
+   "origine": "délai imposé par le CCTP ; sinon registre delai_intervention_pti (45 minutes, confirmé par GSS le 2026-10-01) en Normandie seulement",
    "type": "texte",
    "si_absente": "vide",
    "registre": "delai_intervention_pti",
@@ -530,7 +530,7 @@
   },
   "DELAI_INTERVENTION_ALARME": {
    "description": "Délai d'arrivée du rondier après l'appel de la télésurveillance",
-   "origine": "délai imposé par le CCTP ; sinon registre delai_intervention_alarme en Normandie seulement",
+   "origine": "délai imposé par le CCTP ; sinon registre delai_intervention_alarme (45 minutes, confirmé par GSS le 2026-10-01) en Normandie seulement",
    "type": "texte",
    "si_absente": "vide",
    "registre": "delai_intervention_alarme",
@@ -538,7 +538,7 @@
   },
   "DELAI_ENVOI_PLANNINGS": {
    "description": "Jalon d'envoi des plannings du mois suivant",
-   "origine": "registre envoi_plannings (J-10, à confirmer)",
+   "origine": "registre envoi_plannings (J-10, confirmé par GSS le 2026-10-01)",
    "type": "texte",
    "si_absente": "a_completer",
    "registre": "envoi_plannings",
@@ -2634,11 +2634,11 @@
     "base_memoires.json — GSS - CAF du Val-de-Marne.pdf p.66 (passage 166b9b926475291d)",
     "base_memoires.json — GSS - MIN de Rouen - cadre.pdf p.5 (passage 7910c704437dcb4e)",
     "registre_informations.json — interlocuteur_unique, telephone_contact, email_contact",
-    "faits_gss.md — Identité (dirigeant, interlocuteur unique)"
+    "faits_gss.md — Identité (dirigeant, interlocuteur unique)",
+    "Réponse de GSS (2026-10-01) : téléphones 09 62 21 24 75 (fixe) et 06 58 06 32 25 (numéro unique de l'interlocuteur)"
    ],
    "a_confirmer": [
-    "Identité de l'interlocuteur unique : MARCHANI Adil, 06 58 06 32 25 (registre, faits_gss.md) ou VATTIER Marie, 06 25 73 94 58 (mémoire type AO RNE 2026-06, CAF du Val-de-Marne 2026-04) — choix par marché dans l'assistant",
-    "Numéro 06 58 06 32 25 « à confirmer » selon faits_gss.md"
+    "Identité de l'interlocuteur unique : MARCHANI Adil, 06 58 06 32 25 (registre, faits_gss.md) ou VATTIER Marie, 06 25 73 94 58 (mémoire type AO RNE 2026-06, CAF du Val-de-Marne 2026-04) — choix par marché dans l'assistant"
    ],
    "ancienne_rubrique": "b_encadrement",
    "anciennes_rubriques": [
@@ -2871,11 +2871,10 @@
     "SLIDE REP AO/PROCEDURE/GESTION D'UNE INTERVENTION ALARME PTI 2.pdf",
     "base_memoires.json — GSS - Gardiennage des sites metropolitains - lot 1.pdf p.25",
     "registre_informations.json — application_pti, delai_intervention_pti",
-    "faits_gss.md — Outils et moyens ; délais normands"
+    "faits_gss.md — Outils et moyens ; délais normands",
+    "Réponse de GSS (2026-10-01) : délai d'intervention sur alarme PTI 45 minutes ; PTI Beepiz relié à l'astreinte de GSS"
    ],
-   "a_confirmer": [
-    "Délai PTI : 45 minutes (AO RNE, registre « à confirmer ») ; 30 minutes (slide PTI, Région Normandie 2024) ; « moins de 20 minutes » (CAF 2025 selon le registre)"
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_moyens_materiels",
    "anciennes_rubriques": [
     "b_moyens_materiels",
@@ -2891,7 +2890,7 @@
    "condition": "toujours",
    "condition_texte": "toujours (vélos et trottinettes cités seulement si le CCTP n'impose pas des rondes à pied ; astreinte véhicules : région rouennaise)",
    "priorite": 3,
-   "texte": "Nos agents et nos encadrants se déplacent en permanence dans le cadre de leurs missions : la qualité des moyens mis à leur disposition est déterminante pour leur confort de travail, leur efficacité et leur rapidité.\n\n- **Les véhicules** : nos encadrants et nos contrôleurs effectuent leurs contrôles et leurs visites sur site en véhicules aux couleurs de GSS. Nous disposons en outre d'une astreinte de {{VEHICULES_ASTREINTE}} véhicules pour la région rouennaise, en plus des véhicules dédiés aux sites : si un véhicule est immobilisé pour une réparation, un véhicule d'astreinte est déployé sur le site afin de ne pas impacter la prestation. Tous nos véhicules sont géolocalisés.\n{{#si !RONDES_A_PIED}}- **Les moyens de ronde** : nos agents effectuent souvent des rondes sur des sites très étendus. Nous adaptons toujours au mieux la méthode : à pied, en voiture ou, lorsque la ronde nécessite un moyen intermédiaire, à vélo ou en trottinette électriques, que nous mettons à disposition de nos agents.{{/si}}",
+   "texte": "Nos agents et nos encadrants se déplacent en permanence dans le cadre de leurs missions : la qualité des moyens mis à leur disposition est déterminante pour leur confort de travail, leur efficacité et leur rapidité.\n\n- **Les véhicules** : nos encadrants et nos contrôleurs effectuent leurs contrôles et leurs visites sur site en Peugeot 208 et Renault Zoé aux couleurs de GSS. Nous disposons en outre d'une astreinte de {{VEHICULES_ASTREINTE}} véhicules pour la région rouennaise, en plus des véhicules dédiés aux sites : si un véhicule est immobilisé pour une réparation, un véhicule d'astreinte est déployé sur le site afin de ne pas impacter la prestation. Tous nos véhicules sont géolocalisés.\n{{#si !RONDES_A_PIED}}- **Les moyens de ronde** : nos agents effectuent souvent des rondes sur des sites très étendus. Nous adaptons toujours au mieux la méthode : à pied, en voiture ou, lorsque la ronde nécessite un moyen intermédiaire, à vélo ou en trottinette électriques, que nous mettons à disposition de nos agents.{{/si}}",
    "sous_parties": [],
    "schema": {
     "source": "bibliotheque",
@@ -2910,16 +2909,14 @@
     "base_memoires.json — GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf p.8 (passage 2ed5fbc2b6d4bb51, e757cb3374664fb4)",
     "registre_informations.json — vehicules_astreinte, vehicules_encadrement"
    ],
-   "a_confirmer": [
-    "Modèle des véhicules des encadrants (Peugeot 3008 ou 208) si GSS souhaite le citer"
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_moyens_materiels",
    "anciennes_rubriques": [
     "b_moyens_materiels",
     "b_implantation"
    ],
    "nettoyage": [
-    "Modèle du véhicule non cité (« Peugeot 3008 » dans AO RNE et le registre « à confirmer », « Peugeot 208 » dans le cadre Université 2026-04) : formulation de la slide « véhicules aux couleurs de GSS »",
+    "Modèle des véhicules des encadrants : Peugeot 208 et Renault Zoé (réponse de GSS du 2026-10-01 ; « Peugeot 3008 » d'AO RNE et « Peugeot 208 » seul du cadre Université 2026-04 remplacés)",
     "Astreinte de 5 véhicules et géolocalisation ajoutées depuis le registre et le cadre Université de Rouen Normandie (2026-04)"
    ],
    "longueur_mots": 152
@@ -3026,11 +3023,10 @@
     "SLIDE REP AO/PLANNIFICATION/GESTION DES PLANNINGS 1.pdf",
     "SLIDE REP AO/PLANNIFICATION/GESTION DES PLANNINGS 2.pdf",
     "base_memoires.json — GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf p.26 (passage 209bdd4e88cf2244)",
-    "registre_informations.json — logiciel_planification, envoi_plannings"
+    "registre_informations.json — logiciel_planification, envoi_plannings",
+    "Réponse de GSS (2026-10-01) : envoi des plannings à J-10"
    ],
-   "a_confirmer": [
-    "Délai d'envoi des plannings : J-10 (AO RNE, CAF du Val-de-Marne 2026-04, registre « à confirmer ») ou J-15 (slide, Région Normandie 2024) ; un délai imposé par le CCTP prime"
-   ],
+   "a_confirmer": [],
    "ancienne_rubrique": "b_planning",
    "anciennes_rubriques": [
     "b_planning"
@@ -3841,10 +3837,10 @@
     "SLIDE REP AO/PROCEDURE/GESTION D'UNE INTERVENTION ALARME 3.pdf",
     "base_memoires.json — GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf p.25-26 (passage b76a87d61413dc66, 1b71c0b4f505284f, 209bdd4e88cf2244)",
     "registre_informations.json — delai_intervention_alarme",
-    "faits_gss.md — Outils et moyens ; délais normands"
+    "faits_gss.md — Outils et moyens ; délais normands",
+    "Réponse de GSS (2026-10-01) : délai d'intervention du rondier sur alarme 45 minutes (Normandie ; hors Normandie, délai du CCTP ou question à GSS)"
    ],
    "a_confirmer": [
-    "Délai d'intervention : « moins de 30 minutes » (slides, Région Normandie 2024) ; « 60 minutes maximum » (CAF 2025, registre « à confirmer ») ; 45 ou 60 minutes selon le site (cadre Université de Rouen Normandie 2026-04)",
     "Partenaire de télésurveillance : ERYMA (slide ALARME 3) ou Delta (slide ALARME 2)"
    ],
    "ancienne_rubrique": "b_telesurveillance",
@@ -5290,7 +5286,7 @@
       "sources": "cadre MIN de Rouen (2025-10) p.5"
      }
     ],
-    "remarque": "Choisi par GSS pour chaque marché dans l'assistant."
+    "remarque": "Choisi par GSS pour chaque marché dans l'assistant. Téléphones confirmés par GSS le 2026-10-01 : 09 62 21 24 75 (fixe, remplace le numéro de 2024) et 06 58 06 32 25."
    },
    {
     "sujet": "Délai d'envoi des plannings",
@@ -5304,7 +5300,7 @@
       "sources": "slide PLANNIFICATION 1 ; Région Normandie (2024-05)"
      }
     ],
-    "remarque": ""
+    "remarque": "Tranché par GSS le 2026-10-01 : J-10."
    },
    {
     "sujet": "Délai PTI (arrivée sur place si l'agent ne répond pas)",
@@ -5322,7 +5318,7 @@
       "sources": "CAF 2025 (selon le registre)"
      }
     ],
-    "remarque": "Délais valables en Normandie uniquement."
+    "remarque": "Délais valables en Normandie uniquement. Tranché par GSS le 2026-10-01 : 45 minutes."
    },
    {
     "sujet": "Délai d'intervention du rondier sur alarme (télésurveillance)",
@@ -5344,7 +5340,7 @@
       "sources": "mémoire Université de Rouen Normandie (2026-06) p.7, pages « Notre offre sur mesure » — contredit le cadre du même marché"
      }
     ],
-    "remarque": "Délais valables en Normandie uniquement."
+    "remarque": "Délais valables en Normandie uniquement. Tranché par GSS le 2026-10-01 : 45 minutes (les 45/60 minutes par site restent propres au marché de l'Université de Rouen Normandie)."
    },
    {
     "sujet": "Partenaire de télésurveillance",
@@ -5422,7 +5418,7 @@
       "sources": "slide MATERIEL COMMUNICATION 3 ; Région Normandie (2024-05)"
      }
     ],
-    "remarque": ""
+    "remarque": "Tranché par GSS le 2026-10-01 : Peugeot 208 et Renault Zoé."
    },
    {
     "sujet": "Astreinte",

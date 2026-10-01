@@ -4,9 +4,10 @@
 <rect x="40.0" y="200.0" width="348.0" height="260.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
 <clipPath id="cb21"><rect x="40.0" y="200.0" width="348.0" height="260.0" rx="22"/></clipPath><rect x="40.0" y="200.0" width="348.0" height="58.0" fill="#ECDEC2" clip-path="url(#cb21)"/>
 <circle cx="214.0" cy="258.0" r="30.0" fill="#FBFAF4"/><circle cx="214.0" cy="258.0" r="24.0" fill="#8A7550"/><g transform="translate(214.0,258.0) scale(0.828)" fill="none" stroke="#FFFFFF" stroke-width="2.90" stroke-linecap="round" stroke-linejoin="round"><path d="M-15,4 L-15,-1 L-10,-8 L10,-8 L15,-1 L15,4 z"/><circle cx="-8" cy="6" r="3.5"/><circle cx="8" cy="6" r="3.5"/></g>
-<text x="214.0" y="347.0" font-size="64" font-weight="800" fill="#463A2F" text-anchor="middle">208</text>
-<text x="214.0" y="399.2" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">Peugeot aux couleurs de GSS pour</text>
-<text x="214.0" y="422.3" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">nos encadrants et contrôleurs</text>
+<text x="214.0" y="341.9" font-size="58" font-weight="800" fill="#463A2F" text-anchor="middle">208 et Zoé</text>
+<text x="214.0" y="384.7" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">Peugeot et Renault aux couleurs de</text>
+<text x="214.0" y="407.8" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">GSS pour nos encadrants et</text>
+<text x="214.0" y="430.9" font-size="17" font-weight="400" fill="#463A2F" text-anchor="middle">contrôleurs</text>
 <rect x="422.0" y="200.0" width="348.0" height="260.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
 <clipPath id="cb22"><rect x="422.0" y="200.0" width="348.0" height="260.0" rx="22"/></clipPath><rect x="422.0" y="200.0" width="348.0" height="58.0" fill="#F0D3A3" clip-path="url(#cb22)"/>
 <circle cx="596.0" cy="258.0" r="30.0" fill="#FBFAF4"/><circle cx="596.0" cy="258.0" r="24.0" fill="#E99842"/><g transform="translate(596.0,258.0) scale(0.828)" fill="none" stroke="#FFFFFF" stroke-width="2.90" stroke-linecap="round" stroke-linejoin="round"><path d="M-15,4 L-15,-1 L-10,-8 L10,-8 L15,-1 L15,4 z"/><circle cx="-8" cy="6" r="3.5"/><circle cx="8" cy="6" r="3.5"/></g>

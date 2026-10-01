@@ -8,15 +8,16 @@
 <line x1="345.0" y1="322" x2="345.0" y2="338" stroke="#484545" stroke-width="2.5"/>
 <text x="345.0" y="374.0" font-size="13" font-weight="600" fill="#5B5451" text-anchor="middle">15 min</text>
 <line x1="600.0" y1="322" x2="600.0" y2="338" stroke="#484545" stroke-width="2.5"/>
+<text x="600.0" y="374.0" font-size="13" font-weight="600" fill="#5B5451" text-anchor="middle">30 min</text>
 <line x1="855.0" y1="322" x2="855.0" y2="338" stroke="#484545" stroke-width="2.5"/>
 <line x1="1110.0" y1="322" x2="1110.0" y2="338" stroke="#484545" stroke-width="2.5"/>
-<path d="M600.0,278.0 L600.0,308.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="600.0" cy="330" r="15" fill="#F0D3A3" filter="url(#od)"/>
-<rect x="450.0" y="144.0" width="300.0" height="128.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
-<clipPath id="cb110"><rect x="450.0" y="144.0" width="300.0" height="128.0" rx="22"/></clipPath><rect x="450.0" y="144.0" width="300.0" height="12.0" fill="#F0D3A3" clip-path="url(#cb110)"/>
-<text x="600.0" y="192.9" font-size="20" font-weight="700" fill="#463A2F" text-anchor="middle">30 minutes</text>
-<text x="600.0" y="225.1" font-size="16" font-weight="400" fill="#463A2F" text-anchor="middle">Rondier d'astreinte sur site après</text>
-<text x="600.0" y="246.8" font-size="16" font-weight="400" fill="#463A2F" text-anchor="middle">un signal de télésurveillance</text>
+<path d="M855.0,278.0 L855.0,308.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="855.0" cy="330" r="15" fill="#F0D3A3" filter="url(#od)"/>
+<rect x="710.0" y="144.0" width="290.0" height="128.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb110"><rect x="710.0" y="144.0" width="290.0" height="128.0" rx="22"/></clipPath><rect x="710.0" y="144.0" width="290.0" height="12.0" fill="#F0D3A3" clip-path="url(#cb110)"/>
+<text x="855.0" y="192.9" font-size="20" font-weight="700" fill="#463A2F" text-anchor="middle">45 minutes</text>
+<text x="855.0" y="225.1" font-size="16" font-weight="400" fill="#463A2F" text-anchor="middle">Rondier d'astreinte sur site après</text>
+<text x="855.0" y="246.8" font-size="16" font-weight="400" fill="#463A2F" text-anchor="middle">un signal de télésurveillance</text>
 <path d="M855.0,352.0 L855.0,398.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="855.0" cy="330" r="15" fill="#6298C0" filter="url(#od)"/>
 <rect x="695.0" y="400.0" width="320.0" height="128.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
@@ -26,8 +27,8 @@
 <text x="855.0" y="502.8" font-size="16" font-weight="400" fill="#463A2F" text-anchor="middle">Mont-Saint-Aignan, Rouen</text>
 <path d="M1110.0,278.0 L1110.0,308.0" fill="none" stroke="#9A928E" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="1110.0" cy="330" r="15" fill="#6298C0" filter="url(#od)"/>
-<rect x="938.0" y="162.0" width="240.0" height="110.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
-<clipPath id="cb112"><rect x="938.0" y="162.0" width="240.0" height="110.0" rx="22"/></clipPath><rect x="938.0" y="162.0" width="240.0" height="12.0" fill="#6298C0" clip-path="url(#cb112)"/>
-<text x="1058.0" y="212.8" font-size="20" font-weight="700" fill="#463A2F" text-anchor="middle">60 minutes</text>
-<text x="1058.0" y="244.9" font-size="16" font-weight="400" fill="#463A2F" text-anchor="middle">Évreux</text>
+<rect x="1008.0" y="162.0" width="170.0" height="110.0" rx="22" fill="#FBFAF4" filter="url(#od)"/>
+<clipPath id="cb112"><rect x="1008.0" y="162.0" width="170.0" height="110.0" rx="22"/></clipPath><rect x="1008.0" y="162.0" width="170.0" height="12.0" fill="#6298C0" clip-path="url(#cb112)"/>
+<text x="1093.0" y="212.8" font-size="20" font-weight="700" fill="#463A2F" text-anchor="middle">60 minutes</text>
+<text x="1093.0" y="244.9" font-size="16" font-weight="400" fill="#463A2F" text-anchor="middle">Évreux</text>
 </svg>

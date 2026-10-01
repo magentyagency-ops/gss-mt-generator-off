@@ -315,7 +315,7 @@ describe('Indicateurs, plan et variables', () => {
     expect(defaut.INTERLOCUTEUR_UNIQUE.valeur).toBe('MARCHANI Adil');
     expect(defaut.FONCTION_INTERLOCUTEUR.valeur).toBe("directeur d'agence et responsable de marché");
     expect(defaut.TEL_INTERLOCUTEUR.valeur).toBe('06 58 06 32 25');
-    expect(defaut.TEL_INTERLOCUTEUR.aConfirmer).toMatch(/^Confirmer/);
+    expect(defaut.TEL_INTERLOCUTEUR.aConfirmer).toBeUndefined(); // numéro confirmé par GSS le 2026-10-01
     const choix = preparerMemoireType({ analyse: { clientName: 'Site' }, dce: DCE_NORMANDIE, choix: { variables: { INTERLOCUTEUR_UNIQUE: 'VATTIER Marie' } } }, { memoireType: mt }).variables;
     expect(choix.INTERLOCUTEUR_UNIQUE.valeur).toBe('VATTIER Marie');
     expect(choix.TEL_INTERLOCUTEUR.valeur).toBeNull();
