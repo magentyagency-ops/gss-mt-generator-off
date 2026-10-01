@@ -2287,8 +2287,35 @@
     }
    ],
    "schema": {
-    "source": "bibliotheque",
-    "ref": "II-HUM-11"
+    "source": "spec",
+    "gabarit": "grille",
+    "titre": "La protection rapprochée — TFP A3P",
+    "params": {
+     "cartes": [
+      {
+       "titre": "Prévention des risques",
+       "role": "bleu",
+       "icone": "bouclier"
+      },
+      {
+       "titre": "Escorte sécurisée",
+       "role": "orange",
+       "icone": "voiture"
+      },
+      {
+       "titre": "Neutralisation des menaces",
+       "role": "rouge",
+       "icone": "alerte"
+      },
+      {
+       "titre": "Coordination",
+       "texte": "Avec les services de sécurité",
+       "role": "vert",
+       "icone": "talkie"
+      }
+     ]
+    },
+    "origine": "bibliothèque II-HUM-11 (mêmes quatre missions), sans la mention « Global Security Protection », contraire à la règle « pas de sous-traitance »"
    },
    "mots_cles": [
     "protection rapprochée",
