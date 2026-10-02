@@ -16,7 +16,7 @@ import {
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
-  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces,
+  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, FORMALITES_OFFRE, questionFormalite,
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, planSelonRC, passagesPlanImpose, controlerProposition,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
@@ -7159,7 +7159,9 @@ RÈGLES DE FORME (rendu Marp) :
     const { parRubrique, nouvelles: nouvellesMatrice } = exigencesParRubrique(mt, plan, matrice);
     const tri = trierNouvelles(mt, plan, nouvellesMatrice);
     for (const [id, l] of Object.entries(tri.rattachees)) (parRubrique[id] ||= []).push(...l);
-    const { groupes, ecartees } = grouperNouvelles(tri.nouvelles, 6);
+    // Formalités de l'offre (visite obligatoire, cadre de réponse à joindre…) : jamais une rubrique, une question à GSS.
+    const formalitesOffre = tri.nouvelles.filter((e) => FORMALITES_OFFRE.test(`${e.sujet || ''} ${e.exigence}`));
+    const { groupes, ecartees } = grouperNouvelles(tri.nouvelles.filter((e) => !formalitesOffre.includes(e)), 6);
     const besoin = donneesBesoin(prep, ctxBase);
 
     // ── 4. Adaptation ciblée des rubriques « adapte » (et des rubriques fixes visées par la demande particulière) ──
@@ -7301,13 +7303,14 @@ RÈGLES DE FORME (rendu Marp) :
       ...alertesAcheteurs,
       ...questionsCouverture,
       ...questionsRC,
+      ...formalitesOffre.map(questionFormalite),
       ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie),
       // Publipostage : valeurs du registre à confirmer, passages retirés faute de valeur (délai hors Normandie…).
       ...publiees.flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)]).flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
     ]);
     for (const r of matrice) {
       if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence) && !enProposition.has(r)
-        && !exigenceTraitee(r.exigence, Object.values(sections).join('\n\n'))) consultations.add(r.exigence.trim());
+        && !exigenceTraitee(r.exigence, Object.values(sections).join('\n\n'))) consultations.add(FORMALITES_OFFRE.test(r.exigence) ? questionFormalite(r) : r.exigence.trim());
     }
     for (const e of ecartees) if (!PIECES_OFFRE.test(e.exigence)) consultations.add(`Exigence du DCE sans réponse dans le mémoire : ${e.exigence.trim()}`);
     const { enPlace, enLigne } = poserReperes(sections, rubriquesDoc.map((r) => r.id), 0);
@@ -8467,7 +8470,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     // 8 au plus par partie, et au plus 6 engagements ajoutés : la place va d'abord au texte de GSS (génération réelle imm :
     // sans plafond, les engagements occupaient 31 % du mémoire).
     const exigencesDe: Record<string, any[]> = Object.fromEntries(plan.map((p) => [p.id, rep.parPartie[p.id].flatMap((id) => parRubrique[id] || [])]));
-    const nouvellesCourt = tri.nouvelles.filter((e) => e?.exigence && !PIECES_OFFRE.test(e.exigence) && !PIECES_ADMINISTRATIVES.test(`${e.sujet || ''} ${e.exigence}`));
+    const formalitesCourt = tri.nouvelles.filter((e) => e?.exigence && FORMALITES_OFFRE.test(`${e.sujet || ''} ${e.exigence}`));
+    const nouvellesCourt = tri.nouvelles.filter((e) => e?.exigence && !PIECES_OFFRE.test(e.exigence) && !PIECES_ADMINISTRATIVES.test(`${e.sujet || ''} ${e.exigence}`) && !formalitesCourt.includes(e));
     for (const e of nouvellesCourt) exigencesDe[partiePourTexte(plan, `${e.sujet || ''} ${e.exigence}`).id].push(e);
     const questionsCouverture = new Set<string>();
     const reqsCouverture = (pid: string) => {
@@ -8612,12 +8616,12 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
 
     // ── 8. Points à compléter (même logique que le format court d'avant) ──
     const consultations = new Set<string>([
-      ...alerteCadreAbsent(dceContext), ...commentairesRetires, ...questionsCouverture, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie),
+      ...alerteCadreAbsent(dceContext), ...commentairesRetires, ...questionsCouverture, ...formalitesCourt.map(questionFormalite), ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie),
       ...publiees.filter((p) => toutesRetenues.includes(p.id)).flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)])
         .flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
     ]);
     // Exigence en écart mais traitée dans le texte final (engagement de couverture, proposition) : pas de question à GSS.
-    for (const r of matrice) if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence) && !exigenceTraitee(r.exigence, Object.values(sections).join('\n\n'))) consultations.add(r.exigence.trim());
+    for (const r of matrice) if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence) && !exigenceTraitee(r.exigence, Object.values(sections).join('\n\n'))) consultations.add(FORMALITES_OFFRE.test(r.exigence) ? questionFormalite(r) : r.exigence.trim());
     const markerRe = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
     const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
     let nRepere = 0;

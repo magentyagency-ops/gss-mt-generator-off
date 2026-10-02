@@ -549,6 +549,21 @@ export function grouperNouvelles(nouvelles: ExigenceMatrice[], max = 6): { group
   };
 }
 
+/**
+ * Formalité de constitution de l'offre, hors mémoire technique (citedia 341 : « Cette visite obligatoire aura lieu le 7
+ * Octobre 2026 », « cadre de réponse obligatoire du lot 2 » devenus des rubriques, avec « La visite obligatoire des lieux a
+ * été effectuée le 7 octobre 2026 » et « L'attestation… est jointe à l'offre », faits inventés) : visite obligatoire et
+ * attestation de visite, cadre de réponse à joindre, pièce dont l'absence rend l'offre irrégulière. Jamais une rubrique
+ * proposée : une question à GSS dans les consultations (questionFormalite).
+ */
+export const FORMALITES_OFFRE = /visites? (?:obligatoires?|pr[ée]alables?)|visites? (?:des (?:lieux|sites)|de (?:site|reconnaissance))[^.]{0,60}(?:obligatoire|pr[ée]alable|avant (?:la remise|le d[ée]p[ôo]t)|candidats?|soumissionnaires?)|(?:attestation|certificat|bon)s? de visite|cadres? de r[ée]ponse (?:obligatoires?|par lot|du lot|joint|à (?:joindre|compl[ée]ter|remplir|renseigner|fournir|remettre))|(?:joindre|compl[ée]ter|remplir|renseigner|fournir|remettre)[^.]{0,30}cadres? de r[ée]ponse|offre[^.]{0,60}(?:irr[ée]guli[èe]re|irrecevable)|sous peine (?:de rejet|d.irr[ée]gularit[ée]|d.irrecevabilit[ée])/i;
+
+/** Question exacte posée à GSS pour une formalité de l'offre (hors mémoire technique). */
+export function questionFormalite(e: { sujet?: string; exigence: string }): string {
+  const x = String(e.exigence || '').replace(/\s+/g, ' ').trim().replace(/[.;:\s]+$/, '');
+  return `Formalité de l'offre, hors mémoire technique (aucune rubrique n'est rédigée) : « ${x.length > 300 ? `${x.slice(0, 300).replace(/\s+\S*$/, '')}…` : x} ». GSS l'a-t-elle prévue, et joindra-t-elle à son offre la pièce demandée ?`;
+}
+
 /** Identifiant d'une proposition (« q_controle_des_cles »), unique dans le plan. */
 export function idProposition(sujet: string, existants: Set<string>): string {
   const base = `q_${normaliser(sujet).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'question'}`;
@@ -1463,6 +1478,9 @@ Réponds UNIQUEMENT par un objet JSON : {"titre": "…", "texte": "…"}`;
  *    retirée et l'écart devient une question à GSS (parc_expo 202 : « au minimum 10 000 000 € » présentés comme les
  *    garanties de GSS, alors que sa RC professionnelle Hiscox est de 300 000 €).
  */
+/** Fait accompli ou pièce jointe affirmés dans une proposition de l'IA (« a été effectuée », « est jointe à l'offre »). */
+const FAIT_ACCOMPLI = /\bvisites?\b[^.]{0,80}\b(?:a|ont) (?:d[ée]j[àa] )?été (?:effectu|r[ée]alis|men|organis|faite?s?)|\b(?:a|ont|avons) (?:d[ée]j[àa] )?(?:effectu[ée]|r[ée]alis[ée]|men[ée]|fait|particip[ée](?: [àa])?)\b[^.]{0,40}\bvisites?\b|\bvisit[ée] (?:le|les) (?:site|lieux|locaux|parcs?)\b|\b(?:est|sont) (?:jointe?s?|annex[ée]e?s?) (?:à|au|en|dans) (?:l['’]offre|annexe|notre (?:offre|dossier)|le dossier|la pr[ée]sente)|\bci-jointe?s?\b/i;
+
 export function controlerProposition(texte: string, montantsGss: string[] = []): { texte: string; retirees: string[]; questions: string[] } {
   const retirees: string[] = [];
   const questions: string[] = [];
@@ -1486,6 +1504,13 @@ export function controlerProposition(texte: string, montantsGss: string[] = []):
     const gardees = corps.split(/(?<=[.!?])\s+/).filter((ph) => {
       if (INTERDIT.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion ||= /\[À COMPLÉTER\]/.test(ph); return false; }
       if (/\b(?:si|lorsque|quand|dont|notamment)\s*:?\s*\[À COMPLÉTER\]\s*[.;]?\s*$/i.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion = true; return false; }
+      // Fait accompli ou pièce jointe affirmés par GSS sans source (citedia 341 : « La visite obligatoire des lieux a été
+      // effectuée le 7 octobre 2026 », « L'attestation… est jointe à l'offre ») : retiré, demandé à GSS.
+      if (FAIT_ACCOMPLI.test(ph)) {
+        retirees.push(ph.trim());
+        questions.push(`Une proposition de réponse affirmait un fait que vos documents ne contiennent pas (« ${ph.replace(/[*_]/g, '').trim().slice(0, 240)} ») : est-il exact, et à quelle date ?`);
+        return false;
+      }
       const montants = ph.match(/\d[\d\s\u00a0\u202f.,]*\s*(?:€|euros?\b)/gi) || [];
       if (montants.length && /assur|garanti|sinistre|couvert|couverture/i.test(ph) && montants.some((m) => !gss.has(montant(m)))) {
         retirees.push(ph.trim());
