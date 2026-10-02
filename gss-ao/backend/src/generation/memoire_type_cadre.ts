@@ -1370,6 +1370,42 @@ export function completerMailUnique(texte: string, mail: string): { texte: strin
   return { texte: sortie, complete };
 }
 
+/** Colonne de tableau qui attend une donnée (nom, prénom, date, numéro, nombre…), jamais un paragraphe (T4-COH-2). */
+export const COLONNE_VALEUR = /^(?:noms?|pr[ée]noms?|noms? et pr[ée]noms?|pr[ée]noms? et noms?|dates?(?:\s.*)?|n°.*|num[ée]ros?(?:\s.*)?|nombres?(?:\s.*)?|quantit[ée]s?|effectifs?|t[ée]l[ée]phones?|e-?mails?|courriels?|adresses?(?:\s.*)?|validit[ée].*|fonctions?|qualit[ée]s?|matricules?|carte professionnelle.*)$/i;
+
+/** Colonne d'une case de tableau du cadre (contexte « Colonne: "Formations suivies par les agents / NOM" » → « NOM »). */
+export function colonneCase(contexte: string): string {
+  return (((/Colonne:\s*"([^"]*)"/.exec(String(contexte || '')) || [])[1] || '').split('/').pop() || '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Réponse développée placée sous un tableau du cadre (havre2 361, 3.4 « Les formations suivies par les agents ») : un
+ * « [À COMPLÉTER] » seul en tête de réponse (sans libellé, d'où la question vague « Quelle information faut-il écrire… »)
+ * et les pseudo-lignes de tableau qui recopient ses colonnes (« NOM : [À COMPLÉTER] ; Prénom : [À COMPLÉTER] ; Date :
+ * [À COMPLÉTER]. ») sont retirés : le tableau porte déjà ces cases, chacune avec sa question.
+ */
+export function sansPseudoTableau(texte: string): { texte: string; retires: number } {
+  let retires = 0;
+  const VIDE = /^\s*[^:;\n]{1,60}?\s*:\s*\[À COMPLÉTER\]\s*[.;]?\s*$/;
+  let lignes = String(texte || '').split('\n').filter((l) => {
+    const segs = l.split(/\s*;\s*/).filter((x) => x.trim());
+    const vides = segs.filter((x) => VIDE.test(x)).length;
+    const courts = segs.every((x) => /^\s*[^:]{1,60}:\s*.{0,120}$/.test(x));
+    if (segs.length >= 2 && vides >= 2 && courts) { retires++; return false; }
+    return true;
+  });
+  // « [À COMPLÉTER] » seul en tête d'une réponse qui a du contenu ensuite (collé ou non à la phrase suivante).
+  const premier = lignes.findIndex((l) => l.trim());
+  if (premier >= 0) {
+    const l = lignes[premier];
+    const m = /^\s*\[À COMPLÉTER\]\s*[.;:]?\s*(?=\S|$)/.exec(l);
+    const reste = [l.slice(m ? m[0].length : 0), ...lignes.slice(premier + 1)].join('\n').trim();
+    if (m && reste.length >= 40) { lignes[premier] = l.slice(m[0].length); retires++; if (!lignes[premier].trim()) lignes.splice(premier, 1); }
+  }
+  lignes = lignes.filter((l, i, a) => !(i > 0 && !l.trim() && !a[i - 1].trim()));
+  return { texte: lignes.join('\n').trim(), retires };
+}
+
 // ─── Cadre imposé : contrôle déterministe des faits nouveaux ─────────────────────────────────────
 
 export interface SourcesFaitsCadre {

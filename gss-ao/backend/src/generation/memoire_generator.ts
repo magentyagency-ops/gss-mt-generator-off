@@ -22,7 +22,7 @@ import {
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, type Dimensionnement } from './dimensionnement';
 import {
-  type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, phrasesThematiques, completerParThematiques, completerMailUnique, textesSchemaSvg, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
+  type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, phrasesThematiques, completerParThematiques, completerMailUnique, COLONNE_VALEUR, colonneCase, sansPseudoTableau, textesSchemaSvg, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
@@ -4121,7 +4121,7 @@ Renvoie un JSON valide :
       const bareme = getElementText(scoreCell).replace(/[_.…]+/g, ' ').replace(/\s+/g, ' ').trim();
       const fd = addField({
         type: 'text', kind: 'answer', lineCount: 1, grille: true,
-        context: `Section: "${currentHeading}" | Question: "${question}"${sous && gridParent ? ` | Critère: "${gridParent}"` : ''} | Barème: "${bareme}"`,
+        context: `Section: "${sectionAffichee()}" | Question: "${question}"${sous && gridParent ? ` | Critère: "${gridParent}"` : ''} | Barème: "${bareme}"`,
       });
       // Réponse écrite sous le libellé : dans le paragraphe vide final de la cellule, sinon un nouveau.
       const last = paras[paras.length - 1];
@@ -4152,6 +4152,10 @@ Renvoie un JSON valide :
     };
 
     let sectionPropre = '';
+    // Titre de section écrit dans le contexte d'un champ : jamais un repère « [CHAMP_n] » (titre réduit à une cellule déjà
+    // détectée, R4-1 : rouen_univ, « [champ_24] » donné comme libellé des réponses à relire et transmis au modèle) ; la
+    // détection des zones, elle, garde le titre brut.
+    const sectionAffichee = () => currentHeading.replace(/\[CHAMP_\d+\]/gi, '').replace(/\s+/g, ' ').trim() || sectionPropre || currentHeading;
     const walkDOM = (node: any, inDrawing: boolean) => {
       if (node.nodeType !== 1) return;
       const localName = node.localName;
@@ -4163,10 +4167,7 @@ Renvoie un JSON valide :
         if (localName === 'p') {
           const pText = getElementText(node).trim();
           if (isHeadingParagraph(node)) {
-            // Titre réduit à un repère « [CHAMP_n] » (cellule déjà détectée) : le titre précédent reste (R4-1 : rouen_univ,
-            // « [champ_24] » donné comme libellé des réponses à relire et transmis au modèle comme titre de section).
-            const titreReel = pText.replace(/\[CHAMP_\d+\]/gi, '').replace(/\s+/g, ' ').trim();
-            if (titreReel) currentHeading = titreReel;
+            currentHeading = pText;
             // Titre réel (sans repère « [CHAMP_n] » d'une cellule déjà détectée) : libellé de section des cellules.
             if (pText.replace(/\[CHAMP_\d+\]/g, '').trim()) sectionPropre = pText.replace(/\[CHAMP_\d+\]/g, '').trim();
             recentParagraphs.length = 0;
@@ -4223,7 +4224,7 @@ Renvoie un JSON valide :
                 filledCells.add(cInfo.cell);
                 const cellContext = getTableCellContext(cInfo.cell, node);
                 const nearbyCtx = recentParagraphs.length > 0 ? ` | Contexte proche: "${recentParagraphs.slice(-2).join(' / ')}"` : '';
-                const fd = addField({ type: 'text', kind: 'table', context: `Section: "${sectionPropre || currentHeading}" | Tableau: ${cellContext}${nearbyCtx}` });
+                const fd = addField({ type: 'text', kind: 'table', context: `Section: "${sectionPropre || sectionAffichee()}" | Tableau: ${cellContext}${nearbyCtx}` });
                 let p = findLocalNameChild(cInfo.cell, 'p') || getElementsWithLocalName(cInfo.cell, 'p')[0];
                 if (!p) { p = xmlDoc.createElementNS(WNS, 'w:p'); cInfo.cell.appendChild(p); }
                 const r = xmlDoc.createElementNS(WNS, 'w:r');
@@ -4279,7 +4280,7 @@ Renvoie un JSON valide :
                 const label = (cbLabels[i] || '').trim();
                 addField({
                   type: b.type, element: b.element, kind: 'checkbox',
-                  context: `Section: "${currentHeading}" | Case à cocher — option: "${label}"${pre ? ` | Intitulé: "${pre}"` : ''}`
+                  context: `Section: "${sectionAffichee()}" | Case à cocher — option: "${label}"${pre ? ` | Intitulé: "${pre}"` : ''}`
                 });
               });
             }
@@ -4299,7 +4300,7 @@ Renvoie un JSON valide :
                 while ((match = regex.exec(text)) !== null) {
                   const label = cbOptions[boxSeq] || '';
                   boxSeq++;
-                  const ctx = `Section: "${currentHeading}" | Case à cocher — option: "${label}"${cbPreamble ? ` | Intitulé: "${cbPreamble}"` : ''}`;
+                  const ctx = `Section: "${sectionAffichee()}" | Case à cocher — option: "${label}"${cbPreamble ? ` | Intitulé: "${cbPreamble}"` : ''}`;
                   const fd = addField({ type: 'text', kind: 'checkbox', context: ctx });
                   out = out.replace(match[0], `[CHAMP_${fd.id}]`); replaced = true;
                 }
@@ -4309,7 +4310,7 @@ Renvoie un JSON valide :
 
             // Libellé d'identité seul (« Raison sociale », « Siret ») : réponse courte sur la même ligne.
             if (IDENTITE_SEULE.test(fullText)) {
-              const fd = addField({ type: 'text', kind: 'answer', lineCount: 1, context: `Section: "${currentHeading}" | Question: "${fullText.replace(/:\s*$/, '')}"${groupeContact ? ` | Groupe: "${groupeContact}"` : ''}` });
+              const fd = addField({ type: 'text', kind: 'answer', lineCount: 1, context: `Section: "${sectionAffichee()}" | Question: "${fullText.replace(/:\s*$/, '')}"${groupeContact ? ` | Groupe: "${groupeContact}"` : ''}` });
               const r = xmlDoc.createElementNS(WNS, 'w:r');
               const t = xmlDoc.createElementNS(WNS, 'w:t');
               t.setAttribute('xml:space', 'preserve');
@@ -4335,7 +4336,7 @@ Renvoie un JSON valide :
                 // question précédente et recevait une réponse décalée.
                 const ctxLabel = inlineLabel || lastQuestionText || recentParagraphs.slice(-1)[0] || (!/^introduction/i.test(currentHeading) ? currentHeading : '');
                 const nearby = recentParagraphs.length ? ` | Contexte: "${recentParagraphs.slice(-2).join(' / ')}"` : '';
-                const fd = addField({ type: 'text', kind: 'answer', lineCount: 1, context: `Section: "${currentHeading}" | Question: "${ctxLabel}"${nearby}` });
+                const fd = addField({ type: 'text', kind: 'answer', lineCount: 1, context: `Section: "${sectionAffichee()}" | Question: "${ctxLabel}"${nearby}` });
                 placeOrClearDotted(node, fd.id);
                 openAnswerField = fd;
                 if (!inlineLabel) lastQuestionText = ''; // question consommée
@@ -4365,7 +4366,7 @@ Renvoie un JSON valide :
                 // Question suivie d'un espace de réponse fait de lignes vides (cadres « par rubriques »,
                 // ex. Cour d'appel de Rouen) : zone de réponse développée. Sans cette règle, toutes les
                 // rubriques notées de ce type de cadre restaient vides.
-                const fd = addField({ type: 'text', kind: 'answer', lineCount: vides, vide: true, grille: true, context: `Section: "${currentHeading}" | Question: "${libelle}"` });
+                const fd = addField({ type: 'text', kind: 'answer', lineCount: vides, vide: true, grille: true, context: `Section: "${sectionAffichee()}" | Question: "${libelle}"` });
                 const r = xmlDoc.createElementNS(WNS, 'w:r');
                 const t = xmlDoc.createElementNS(WNS, 'w:t');
                 t.textContent = `[CHAMP_${fd.id}]`;
@@ -4391,7 +4392,7 @@ Renvoie un JSON valide :
                 // le libellé qui la précède (havre1 : « Organisation et traitement des commandes » restait vide).
                 const description = CONSIGNE_DESCRIPTION.test(lastQuestionText);
                 const intitule = description && recentParagraphs.length >= 2 ? `${recentParagraphs[recentParagraphs.length - 2].replace(/\s*:\s*$/, '')} — ${lastQuestionText}` : lastQuestionText;
-                const fd = addField({ type: 'text', kind: 'answer', lineCount: description ? Math.max(3, vides) : 1, context: `Section: "${currentHeading}" | Question: "${intitule.replace(/"/g, "'")}"` });
+                const fd = addField({ type: 'text', kind: 'answer', lineCount: description ? Math.max(3, vides) : 1, context: `Section: "${sectionAffichee()}" | Question: "${intitule.replace(/"/g, "'")}"` });
                 const r = xmlDoc.createElementNS(WNS, 'w:r');
                 const t = xmlDoc.createElementNS(WNS, 'w:t');
                 t.textContent = `[CHAMP_${fd.id}]`;
@@ -4498,6 +4499,9 @@ Renvoie un JSON valide :
       // Les mots-codes de champs de formulaire Word ne doivent pas polluer l'inférence ni le prompt
       const cleanCtx = f.context.replace(/FORM(CHECKBOX|TEXT|DROPDOWN)/gi, ' ').replace(/\s{2,}/g, ' ').trim();
       let hint = inferFieldHint(cleanCtx);
+      // Case de tableau dont la colonne attend une donnée (NOM, Prénom, Date, N°…) : valeur courte, jamais une phrase
+      // (havre2 361 : une phrase sur les premiers secours écrite dans la case « NOM » de la ligne SST, T4-COH-2).
+      if (f.kind === 'table' && COLONNE_VALEUR.test(colonneCase(cleanCtx))) hint = '[VALEUR COURTE]';
       if (f.kind === 'checkbox') hint = '[CASE A COCHER]';
       if (f.grille) hint = '[PARAGRAPHE]';
       // Une zone de réponse étalée sur plusieurs lignes appelle un paragraphe développé,
@@ -5385,6 +5389,11 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       const delais = delaisHorsNormandie(interditsDce(fondementReprise(voixDeGss(recopie.texte), dceContext), dceContext), dceContext, horsNormandieCadre);
       // Étiquette « … : » restée sans contenu, phrases répétées dans le même champ : retirées.
       r.value = nettoyerChampCadre(delais.texte).trim() || (retires.length || delais.retires.length || recopie.retires.length ? '[À COMPLÉTER]' : r.value);
+      // Réponse développée sous un tableau : ni « [À COMPLÉTER] » seul en tête, ni pseudo-lignes du tableau (T4-COH-2).
+      if (d.kind !== 'table' && String(r.value).length > 120) {
+        const pt = sansPseudoTableau(String(r.value));
+        if (pt.retires) { r.value = pt.texte; console.log(`[MemoireGenerator] Champ ${r.id} : ${pt.retires} pseudo-ligne(s) de tableau ou repère seul retiré(s).`); }
+      }
       // Cas pratique : cases « en service : [À COMPLÉTER] | rotation : [À COMPLÉTER] » remplies avec le dispositif proposé.
       if (dimensionnementCadre) r.value = remplirCasPratique(String(r.value), dimensionnementCadre).texte;
       // Sujet que GSS traite dans le mémoire type, resté « [À COMPLÉTER] » après la rédaction (ca_normandie 241, 2.2 :
@@ -5764,7 +5773,10 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
           }
           // Case du tableau des autorisations CNAPS (date de l'agrément dirigeant, fin de validité) : donnée de GSS à fournir
           // avant la remise, jamais une case vidée sans question (D7).
-          if (d.kind === 'table' && !/Ligne:\s*"[^"]*(?:autorisation|agr[ée]ment)[^"]*(?:dirigeant|entreprise)/i.test(d.context)) {
+          // Une case qui attend une donnée de GSS (colonne NOM, Prénom, Date… d'une ligne nommée : « SST », « C.Q.P.A.D.S. »)
+          // garde aussi son repère et sa question (T4-COH-2) ; les autres cases restent vides.
+          if (d.kind === 'table' && !/Ligne:\s*"[^"]*(?:autorisation|agr[ée]ment)[^"]*(?:dirigeant|entreprise)/i.test(d.context)
+            && !(COLONNE_VALEUR.test(colonneCase(d.context)) && /Ligne:\s*"\s*[A-Za-zÀ-ÿ]/.test(d.context) && /formation|dipl[ôo]me|qualification|SST|CQP|SSIAP|agent|personnel/i.test(d.context))) {
             valById.set(d.id, '');
             console.log(`[MemoireGenerator] [À COMPLÉTER] retiré pour cellule de tableau (CHAMP_${d.id})`);
             continue;

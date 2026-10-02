@@ -49,3 +49,21 @@ describe('fiches techniques demandées à GSS (T4-COH-5)', () => {
     expect(questionDonneeGss("À demander à l'acheteur : pouvez-vous transmettre les fiches techniques du SSI existant ?")).toMatch(/^À demander à l'acheteur/);
   });
 });
+
+import { sansPseudoTableau, COLONNE_VALEUR, colonneCase } from '../src/generation/memoire_type_cadre';
+
+/** Tour 4 (T4-COH-2) : tableau « Formations suivies par les agents » de havre2. */
+describe('cadre : cases de valeur et réponse sous un tableau (T4-COH-2)', () => {
+  it('les colonnes NOM, Prénom, Date attendent une donnée', () => {
+    for (const c of ['Colonne: "Formations suivies par les agents / NOM" | Ligne: "SST"', 'Colonne: "Formations suivies par les agents / Prénom"', 'Colonne: "Formations suivies par les agents / Date"', 'Colonne: "Autorisation CNAPS / N° de l’agrément"']) expect(COLONNE_VALEUR.test(colonneCase(c))).toBe(true);
+    expect(COLONNE_VALEUR.test(colonneCase('Colonne: "Moyens / Description des modalités"'))).toBe(false);
+  });
+  it('« [À COMPLÉTER] » seul en tête et pseudo-lignes du tableau retirés', () => {
+    const t = '[À COMPLÉTER]Autorisation d’exercer de l’entreprise : GLOBAL SECURITY SERVICES (GSS), autorisation CNAPS n° AUT-076.\nNOM : [À COMPLÉTER] ; Prénom : [À COMPLÉTER] ; Date : [À COMPLÉTER].\nIntitulé de la formation : SST (Sauveteur secouriste du travail) ; NOM : [À COMPLÉTER] ; Prénom : [À COMPLÉTER] ; Date : [À COMPLÉTER].\nTous nos agents de sécurité disposent du CQP APS.';
+    const r = sansPseudoTableau(t);
+    expect(r.texte).toBe('Autorisation d’exercer de l’entreprise : GLOBAL SECURITY SERVICES (GSS), autorisation CNAPS n° AUT-076.\nTous nos agents de sécurité disposent du CQP APS.');
+    expect(r.retires).toBe(3);
+    // Une phrase avec une seule donnée à compléter reste.
+    expect(sansPseudoTableau('Date de fin de validité : [À COMPLÉTER]. Tous nos agents disposent du CQP APS et sont formés au SST.').retires).toBe(0);
+  });
+});
