@@ -187,6 +187,55 @@ export function nouveauT(xmlDoc: any, s: string): any {
   return t;
 }
 
+/** Premier numéro des emplacements de la grille de candidature (hors champs du cadre). */
+export const CHAMP_GRILLE_CANDIDATURE = 990000;
+
+/**
+ * Grille « Éléments de candidature » d'un cadre (vitry 351 : « 2025 : ….. dont ….. cadres », « 2025 : ….. € »,
+ * « 2025 – Dénomination sociale (public ou privé) / – n° de téléphone du contact / - Montant annuel HT ») : chaque donnée
+ * de GSS laissée en pointillés reçoit un « [À COMPLÉTER] » et une question exacte à GSS (effectif moyen, cadres, chiffre
+ * d'affaires HT, référence de l'année), jamais à l'acheteur ; aucune donnée n'est inventée. Les emplacements sont marqués
+ * « [À COMPLÉTER]n » avec n = CHAMP_GRILLE_CANDIDATURE + rang de la question (signets posés ensuite par poserSignets).
+ * Renvoie les questions, dans l'ordre.
+ */
+export function completerGrilleCandidature(xmlDoc: any): string[] {
+  const questions: string[] = [];
+  const texte = (n: any) => elements(n, 't').map((t: any) => t.textContent || '').join('');
+  const marque = (q: string) => { questions.push(q); return `${PLACEHOLDER}${CHAMP_GRILLE_CANDIDATURE + questions.length - 1}`; };
+  const POINTS = '(?:…|\\.){2,}';
+  const tables = elements(xmlDoc, 'tbl').filter((tbl: any) => /chiffre d.affaires|effectifs? moyens|r[ée]f[ée]rences? professionnelles|capacit[ée] (?:technique|professionnelle|financi[èe]re)/i.test(texte(tbl)));
+  for (const tbl of tables) {
+    for (const cellule of elements(tbl, 'tc')) {
+      let annee = '';
+      for (const p of elements(cellule, 'p')) {
+        const ts = elements(p, 't');
+        if (!ts.length) continue;
+        const t = ts.map((x: any) => x.textContent || '').join('');
+        if (t.includes(PLACEHOLDER)) continue;
+        let m: RegExpExecArray | null;
+        let nouveau = '';
+        if ((m = new RegExp(`^(\\s*((?:19|20)\\d{2})\\s*:\\s*)${POINTS}(\\s*dont\\s*)${POINTS}(\\s*cadres?\\s*)$`, 'i').exec(t))) {
+          nouveau = `${m[1]}${marque(`Éléments de candidature : quel était l'effectif moyen annuel de GSS en ${m[2]} ?`)}${m[3]}${marque(`Éléments de candidature : combien de cadres GSS comptait-elle en ${m[2]} (part de l'encadrement) ?`)}${m[4]}`;
+        } else if ((m = new RegExp(`^(\\s*((?:19|20)\\d{2})\\s*:\\s*)${POINTS}(\\s*(?:€|euros?)?\\s*(?:HT)?\\s*)$`, 'i').exec(t))) {
+          nouveau = `${m[1]}${marque(`Éléments de candidature : quel a été le chiffre d'affaires HT de GSS pour l'exercice ${m[2]} ?`)}${m[3]}`;
+        } else if ((m = /^\s*((?:19|20)\d{2})\s*[-–—]\s*d[ée]nomination sociale[^:]*?\s*$/i.exec(t))) {
+          annee = m[1];
+          nouveau = `${t.replace(/\s+$/, '')} : ${marque(`Éléments de candidature, référence ${annee} : quel établissement client (dénomination sociale, public ou privé) faut-il citer ?`)}`;
+        } else if (annee && /^\s*[-–—]\s*n°\s*de\s*t[ée]l[ée]phone[^:]*?\s*$/i.test(t)) {
+          nouveau = `${t.replace(/\s+$/, '')} : ${marque(`Éléments de candidature, référence ${annee} : quel est le numéro de téléphone du contact dans cet établissement ?`)}`;
+        } else if (annee && /^\s*[-–—]\s*montant annuel(?: HT)?\s*$/i.test(t)) {
+          nouveau = `${t.replace(/\s+$/, '')} : ${marque(`Éléments de candidature, référence ${annee} : quel est le montant annuel HT de cette prestation ?`)}`;
+        }
+        if (!nouveau) continue;
+        ts[0].textContent = nouveau;
+        ts[0].setAttribute('xml:space', 'preserve');
+        for (const x of ts.slice(1)) x.textContent = '';
+      }
+    }
+  }
+  return questions;
+}
+
 /**
  * Isole chaque « [À COMPLÉTER] » marqué par le générateur dans son propre run, entouré d'un signet
  * GSS_AC_n. Retourne, dans l'ordre du document, le champ d'origine et le contexte de chaque emplacement.

@@ -378,6 +378,20 @@ export function montantsRegistre(): string[] {
 }
 
 /**
+ * Question sur une donnée de GSS (références, chiffre d'affaires, effectif moyen, part de l'encadrement) : jamais « À
+ * demander à l'acheteur » (vitry 351 : « À demander à l'acheteur : quelle était la dénomination sociale de l'établissement
+ * client concerné en 2023 ? », retirée des questions envoyées à l'équipe de GSS). Le préfixe est retiré.
+ */
+export function questionDonneeGss(question: string): string {
+  const q = String(question || '');
+  const m = /^\s*À demander à l['’]acheteur\s*:\s*/i.exec(q);
+  if (!m) return q;
+  const reste = q.slice(m[0].length);
+  if (!/chiffre d['’]affaires|d[ée]nomination sociale|montant annuel(?: HT)?|part de l['’]encadrement|effectifs? moyens?|nombre de cadres|r[ée]f[ée]rences? (?:professionnelles|clients?|de GSS|de l['’]ann[ée]e)|[ée]tablissement client/i.test(reste)) return q;
+  return reste.charAt(0).toUpperCase() + reste.slice(1);
+}
+
+/**
  * Question à GSS sans les données CNAPS déjà connues du registre (havre2 341 : « Pour l'autorisation d'exercer du
  * dirigeant, quels sont le numéro, la date d'obtention et la date de fin de validité ? » alors que le numéro AGD est
  * imprimé dans le même tableau). Le numéro de l'autorisation de l'entreprise (AUT) ou de l'agrément du dirigeant (AGD),

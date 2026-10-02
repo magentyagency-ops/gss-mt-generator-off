@@ -6,7 +6,7 @@ import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce, 
 import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque, estRetourArriere } from './themes';
-import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements } from './completion';
+import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements } from './completion';
 import {
   chargerMemoireType, preparerMemoireType, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
@@ -28,7 +28,7 @@ import {
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides,
 } from './memoire_type_cadre';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -3119,7 +3119,8 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
   private async consoliderAvecSourcesBrut(liste: string[]): Promise<Array<{ question: string; sources: number[] }>> {
     // Données CNAPS déjà connues du registre (numéros AUT et AGD, date d'obtention de l'autorisation) : jamais redemandées,
     // même dans une question fusionnée (havre2 341, T3C-8).
-    const connues = (l: Array<{ question: string; sources: number[] }>) => l.map((q) => ({ ...q, question: sansDonneesCnapsConnues(q.question) || '' })).filter((q) => q.question);
+    // Donnée de GSS (référence, chiffre d'affaires, effectif) : posée à GSS, jamais « À demander à l'acheteur » (vitry 351).
+    const connues = (l: Array<{ question: string; sources: number[] }>) => l.map((q) => ({ ...q, question: questionDonneeGss(sansDonneesCnapsConnues(q.question) || '') })).filter((q) => q.question);
     return connues(await this.consoliderAvecSourcesFusion(liste));
   }
 
@@ -3148,6 +3149,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
 - Une demande « Confirmer … — dernière valeur connue : … » porte sur UNE information (un responsable, un effectif, un outil…) : ne la fusionne qu'avec des demandes sur cette MÊME information.
 - Une demande qui ne peut être renseignée que par l'ACHETEUR (données qu'il doit transmettre, ses préférences, ses choix) commence par « À demander à l'acheteur : ».
 - La validation par GSS de ce que propose le mémoire (dimensionnement, organisation, délais) est une question pour GSS, jamais « à demander à l'acheteur ».
+- Les références de GSS (dénomination de l'établissement client, contact, montant), son chiffre d'affaires, ses effectifs et ses cadres sont des questions pour GSS, jamais « à demander à l'acheteur ».
 - Ne redemande jamais une donnée déjà écrite dans une demande ou connue de GSS (numéro d'autorisation AUT ou d'agrément AGD du CNAPS) : en fusionnant, reprends seulement les données réellement demandées.
 - Une phrase par question, sans Markdown.
 - Pour chaque question, indique dans "sources" les numéros des demandes qu'elle regroupe.
@@ -4343,7 +4345,9 @@ Renvoie un JSON valide :
     // barème, limite de pages). Sans cela, ces rubriques restaient entièrement vides.
     {
       // (« Critère démarche environnementale – sur 100 points » : critère nommé, sans numéro.)
-      const DEBUT_RUBRIQUE = /^(?:sous[-\s]?crit[eè]res?|crit[eè]res?)\s*n?°?\s*\d|^\d+(?:\.\d+)*\s*[-–—.)]\s*\S|^crit[eè]re\b[^;]{3,120}?[-–—]\s*sur\s+\d+\s*points?\b/i;
+      // Une année suivie d'un tiret (vitry : « 2023 - Dénomination sociale (public ou privé) », grille de candidature) n'est
+      // pas un titre numéroté.
+      const DEBUT_RUBRIQUE = /^(?:sous[-\s]?crit[eè]res?|crit[eè]res?)\s*n?°?\s*\d|^(?!(?:19|20)\d{2}\s*[-–—])\d+(?:\.\d+)*\s*[-–—.)]\s*\S|^crit[eè]re\b[^;]{3,120}?[-–—]\s*sur\s+\d+\s*points?\b/i;
       // Mentions de forme d'une rubrique (limite de pages, annexes autorisées) : ce n'est pas une attente de contenu.
       const FORME_RUBRIQUE = /^(?:\d+|une?)\s+pages?\b|pages?\s+maximum|^nombre de pages?\b|^annexes?\s+(?:autoris|autorit)|^maximum\s+\d+\s+pages?/i;
       const EMPLACEMENT = /^(?:proposition|r[ée]ponse)s?\s+du\s+(?:soumissionnaire|candidat|titulaire)|^votre\s+r[ée]ponse|^r[ée]ponse\s+du\s+candidat/i;
@@ -5929,6 +5933,10 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
 
     // 7 ter. Emplacements à compléter : un signet par « [À COMPLÉTER] », avec l'information attendue.
     const champsRediges = poserSignetsChamps(xmlDoc);
+    // Grille « Éléments de candidature » laissée en pointillés (effectifs, cadres, chiffre d'affaires, références) : un
+    // emplacement et une question exacte à GSS par donnée (vitry 351).
+    const questionsGrilleCandidature = completerGrilleCandidature(xmlDoc);
+    if (questionsGrilleCandidature.length) console.log(`[MemoireGenerator] Grille de candidature : ${questionsGrilleCandidature.length} donnée(s) de GSS à compléter, une question chacune.`);
     const signets = poserSignets(xmlDoc);
     const occurrenceParChamp = new Map<number, number>();
     const elementsACompleter: ElementACompleter[] = signets.map(({ cle, champ, contexte }) => {
@@ -5985,6 +5993,15 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       preciserQuestionsCadre(elementsACompleter, signets, (champ) => (descriptors.find((x) => x.id === champ)?.context.match(/Groupe:\s*"([^"]*)"/) || [])[1] || '');
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Précision des questions du cadre indisponible : ${e?.message || e}`);
+    }
+    // Grille de candidature : la question exacte de chaque donnée, posée à GSS (jamais à l'acheteur), une par emplacement.
+    for (const el of elementsACompleter) {
+      const champ = signets.find((x) => x.cle === el.cle)?.champ ?? -1;
+      const q = champ >= CHAMP_GRILLE_CANDIDATURE ? questionsGrilleCandidature[champ - CHAMP_GRILLE_CANDIDATURE] : undefined;
+      if (!q) continue;
+      el.question = q;
+      el.groupe = `grille candidature ${champ}`;
+      el.pourAcheteur = false;
     }
 
     // 7 quater. Schémas GSS validés sous les réponses développées (retour GSS : visuels non réutilisés).
@@ -6122,6 +6139,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
             }), ...confirmationsGss], { dce: dceContext, horsNormandie: marcheHorsNormandie(analysisData, dceContext) })
             : [...aCompleter, ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))]),
         ].map((c) => (/p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(c) ? 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».' : c).replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean).map(questionExacte)),
+        // Grille de candidature : une question exacte par donnée de GSS (effectif, cadres, chiffre d'affaires, référence).
+        ...questionsGrilleCandidature,
         // Une ligne par réponse à relire ou à valider (même intitulé possible : une ligne chacune, comme le premier message).
         ...[...propositionsCadre.entries()].filter(([id]) => champsRediges.includes(id)).sort((a, b) => a[0] - b[0]).map(([, c]) => c),
       ],
