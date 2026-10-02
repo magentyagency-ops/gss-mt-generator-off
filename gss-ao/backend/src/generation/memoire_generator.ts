@@ -17,7 +17,7 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, FORMALITES_OFFRE, questionFormalite,
-  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, planSelonRC, passagesPlanImpose, controlerProposition,
+  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, planSelonRC, passagesPlanImpose, controlerProposition,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, type Dimensionnement } from './dimensionnement';
@@ -7646,6 +7646,13 @@ RÈGLES DE FORME (rendu Marp) :
     consultationList.push(...avisSecours);
     // Propositions de réponse de l'IA : signalées APRÈS les éléments (jamais envoyées à l'équipe comme des questions).
     for (const a of ajouts) consultationList.push(`Proposition de réponse à valider (question nouvelle du DCE) : ${a.title}`);
+    // Engagements rédigés par l'IA d'après le CCTP (contrôle de couverture) : signalés à GSS par rubrique, comme en format
+    // court (D5, T4C-10 : caen 471, 37 engagements sur 17 rubriques, aucun signalé).
+    const engagementsIA = Object.entries(sections).map(([id, t]) => {
+      const i = t.indexOf(ENGAGEMENTS);
+      return { id, n: i < 0 ? 0 : (t.slice(i).match(/^\s*[-*•]\s+\S/gm) || []).length };
+    }).filter((x) => x.n > 0);
+    for (const x of engagementsIA) consultationList.push(`Engagements à valider (exigences du CCTP rédigées par l'IA) : « ${titreDe(x.id)} » — ${x.n} engagement${x.n > 1 ? 's' : ''}`);
     if (consultationList.length) {
       console.warn(`[MemoireGenerator] ⚠ ${consultationList.length} consultation(s) GSS :\n- ${consultationList.join('\n- ')}`);
       progres(86, `⚠ ${consultationList.length} information(s) à obtenir ou à valider auprès de GSS : ${consultationList.slice(0, 3).join(' ; ')}${consultationList.length > 3 ? '…' : ''}`);
@@ -7676,6 +7683,12 @@ RÈGLES DE FORME (rendu Marp) :
       } catch (e: any) {
         console.warn(`[MemoireGenerator] Message des propositions non préparé (${e?.message || e}).`);
       }
+    }
+    // Engagements rédigés par l'IA (exigences du CCTP) : annoncés dans le premier message, à valider ou modifier (D5).
+    if (engagementsIA.length) {
+      const texteEng = messageEngagements(engagementsIA.map((x) => ({ titre: titreDe(x.id), n: x.n })));
+      if (etat.conversation?.length) etat.conversation[0].texte = `${etat.conversation[0].texte}\n\n${texteEng}`;
+      else etat.conversation = [{ role: 'assistant', texte: texteEng, date: new Date().toISOString() }];
     }
     // Dimensionnement proposé (D5) : annoncé dans le premier message de l'assistant, à valider ou modifier.
     if (ctxBase.dimensionnement?.titulaires) {

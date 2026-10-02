@@ -1985,7 +1985,20 @@ export function exigencesParRubrique(mt: MemoireType, plan: PlanMemoireType, mat
   };
   for (const e of matrice || []) {
     if (!e?.exigence || PIECES_OFFRE.test(e.exigence)) continue;
-    if (e.rubrique && ids.includes(e.rubrique)) { placer(e.rubrique, e); continue; }
+    if (e.rubrique && ids.includes(e.rubrique)) {
+      // Rubrique de la matrice sans aucun lien lexical avec l'exigence alors qu'une rubrique du plan en a un net (caen 471 :
+      // la fin du marché sous « l'agent SSIAP 1 », la mobilisation sur sinistre sous « Le dispositif événementiel », les
+      // prestations ponctuelles sous « Le contrôle de nuit », la discrétion sous « égalité des chances ») : la rubrique
+      // du thème de l'exigence (T4C-9).
+      const r0 = mt.rubriques.find((x) => x.id === e.rubrique);
+      const texte = `${e.sujet || ''} ${e.exigence}`;
+      if (r0 && scoreRubrique(r0, texte) === 0) {
+        const meilleur = rechercherRubriques(mt, texte, 1, ids.filter((id) => id !== e.rubrique && admise(id, e)))[0];
+        if (meilleur && meilleur.score >= 1) { ajouter(meilleur.id, e); continue; }
+      }
+      placer(e.rubrique, e);
+      continue;
+    }
     const candidates = e.rubrique && mt.correspondance_v1[e.rubrique] ? mt.correspondance_v1[e.rubrique].filter((x) => ids.includes(x)) : [];
     if (candidates.length) {
       const meilleur = rechercherRubriques(mt, e.exigence, 1, candidates)[0];

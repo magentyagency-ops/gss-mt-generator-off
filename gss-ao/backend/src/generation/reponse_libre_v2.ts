@@ -1753,6 +1753,18 @@ export function texteSecoursBesoin(d: DonneesBesoin, perimetre = ''): string {
  * Premier message de l'assistant (conversation de l'état) : les propositions de réponse de l'IA aux questions
  * nouvelles du DCE, avec leur page, et la façon de les valider, de les modifier ou de les supprimer.
  */
+/** Premier message de l'assistant (réponse libre) : engagements rédigés par l'IA d'après le CCTP, par rubrique (D5, T4C-10). */
+export function messageEngagements(rubriques: Array<{ titre: string; n: number }>): string {
+  if (!rubriques.length) return '';
+  const total = rubriques.reduce((t, r) => t + r.n, 0);
+  return [
+    `J'ai ajouté ${total === 1 ? 'un engagement rédigé' : `${total} engagements rédigés`} d'après le cahier des charges, sous « Nos engagements sur les exigences du cahier des charges », pour les exigences que le mémoire type ne traitait pas encore. À relire avant la remise :`,
+    ...rubriques.map((r) => `- « ${r.titre} » : ${r.n} engagement${r.n > 1 ? 's' : ''}`),
+    '',
+    'Pour chacun, vous pouvez le valider tel quel, le modifier (« Dans la rubrique …, remplace l\'engagement sur … par … ») ou le supprimer (« Dans la rubrique …, supprime l\'engagement sur … »).',
+  ].join('\n');
+}
+
 export function messagePropositions(propositions: Array<{ titre: string; page?: number }>): string {
   if (!propositions.length) return '';
   const n = propositions.length;

@@ -3393,7 +3393,10 @@
     "consignes",
     "fiche de poste",
     "procédures du site",
-    "registre des consignes"
+    "registre des consignes",
+    "confidentialité",
+    "obligation de discrétion",
+    "discrétion"
    ],
    "sources": [
     "AO RNE.pdf p.92",
@@ -4702,7 +4705,12 @@
     "consignes",
     "matériel",
     "accompagnement",
-    "première vacation"
+    "première vacation",
+    "fin du marché",
+    "fin de marché",
+    "nouveau prestataire",
+    "nouveau titulaire",
+    "réversibilité"
    ],
    "sources": [
     "AO RNE.pdf p.117-118",
@@ -4925,7 +4933,10 @@
     "prestation ponctuelle",
     "prestation exceptionnelle",
     "renfort",
-    "délai de prévenance"
+    "délai de prévenance",
+    "prestations ponctuelles",
+    "prestations exceptionnelles",
+    "à la demande"
    ],
    "sources": [
     "SLIDE REP AO/PROCEDURE/GESTION D'UNE COMMANDE SUPPLEMENTAIRE 1.pdf",
