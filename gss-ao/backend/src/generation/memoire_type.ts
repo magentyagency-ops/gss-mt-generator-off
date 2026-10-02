@@ -2006,6 +2006,29 @@ export interface OptionsModifications {
   titresTraites?: string[];
   /** Sujet étroit de la rubrique adaptée (sujet_ajouts) : un ajout hors de ce sujet est refusé. */
   sujetAjouts?: { exige?: RegExp; exclut?: RegExp } | null;
+  /** Sujets des délais de GSS publipostés dans la rubrique ({{DELAI_PTI}} → « pti » ; null : délai propre à GSS, sans
+   *  sujet du DCE) : un délai de la rubrique n'est remplacé que par le délai que le DCE impose pour l'un de ces sujets. */
+  sujetsDelais?: Array<string | null>;
+}
+
+/** Sujet du DCE de chaque délai publiposté (delaiDuDce) ; null : délai propre à GSS que le DCE ne remplace jamais. */
+export const SUJET_VARIABLE_DELAI: Record<string, string | null> = {
+  DELAI_ASTREINTE: 'remplacement', DELAI_PTI: 'pti', DELAI_INTERVENTION_ALARME: 'alarme',
+  DELAI_COMMANDE_SUPPLEMENTAIRE: 'commande', DELAI_DEFAILLANCE_SSI: 'ssi', DELAI_ASTREINTE_NORMANDIE: null,
+};
+
+/** Sujets des délais publipostés d'un texte du mémoire type (« {{DELAI_PTI}} » → ['pti']). */
+export function sujetsDelaisDuGabarit(gabarit: string): Array<string | null> {
+  const out: Array<string | null> = [];
+  for (const m of String(gabarit || '').matchAll(/\{\{(DELAI_[A-Z_]+)\}\}/g)) {
+    if (m[1] in SUJET_VARIABLE_DELAI && !out.includes(SUJET_VARIABLE_DELAI[m[1]])) out.push(SUJET_VARIABLE_DELAI[m[1]]);
+  }
+  return out;
+}
+
+/** Délais d'un texte, normalisés (« 45 min » → « 45 minutes »). */
+function delaisDe(t: string): string[] {
+  return [...String(t || '').matchAll(/(?<![\d,.])(\d{1,3})\s*(minutes?|mn|min|heures?|h)(?![\wÀ-ÿ])/gi)].map((m) => normaliserDelai(`${m[1]} ${m[2]}`));
 }
 
 const MOTS_VIDES_TITRE = new Set(['notre', 'nos', 'votre', 'vos', 'dans', 'pour', 'avec', 'des', 'les', 'une', 'aux', 'sur', 'par', 'leur', 'leurs', 'cas', 'place', 'tout', 'tous', 'toute']);
@@ -2149,6 +2172,16 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     m.par = sansCovidEnumere(m.par!);
     const refus = refusTexteNouveau(m.par!, m.extrait, o);
     if (refus) { refusees.push({ ...m, raison: refus }); continue; }
+    // Délai de GSS publiposté (caen 441, b4_pti : « en 45 minutes au maximum » → « en 30 minutes au maximum », le 30 du
+    // CCTP portant sur l'intervention sur alarme) : remplacé seulement par le délai que le DCE impose pour le MÊME sujet.
+    if (o.sujetsDelais?.length) {
+      const retires = delaisDe(m.extrait).filter((d) => !delaisDe(m.par!).includes(d));
+      const nouveaux = delaisDe(m.par!).filter((d) => !delaisDe(m.extrait).includes(d));
+      if (retires.length && nouveaux.length) {
+        const imposes = o.sujetsDelais.filter((x): x is string => !!x).map((x) => delaiDuDce(o.dce || '', x as keyof typeof SUJETS_DELAI)).filter(Boolean);
+        if (!nouveaux.every((d) => imposes.includes(d))) { refusees.push({ ...m, raison: 'délai de GSS remplacé par un délai que le DCE n\'impose pas pour ce sujet' }); continue; }
+      }
+    }
     // Échéance postérieure au démarrage (« dans le mois suivant la prise d'effet ») placée dans une phase d'avant le
     // jour J (« De J-30 à J-15 ») : contresens du rétroplanning.
     const ligne = t.slice(t.lastIndexOf('\n', pos[0].debut - 1) + 1, t.indexOf('\n', pos[0].fin) < 0 ? t.length : t.indexOf('\n', pos[0].fin));
@@ -2464,7 +2497,7 @@ export async function adapterRubrique(rubrique: RubriqueMemoireType, textePublip
     return sortie(reference, true, `appel au modèle impossible : ${e?.message || e}`);
   }
   if (!mods || typeof mods !== 'object') return sortie(reference, true, 'réponse du modèle illisible');
-  const opts: OptionsModifications = { ...options, dce: ctx.dce, reference, sujetAjouts: options.sujetAjouts ?? sujetDeRubrique(rubrique) };
+  const opts: OptionsModifications = { ...options, dce: ctx.dce, reference, sujetAjouts: options.sujetAjouts ?? sujetDeRubrique(rubrique), sujetsDelais: options.sujetsDelais ?? sujetsDelaisDuGabarit(rubrique.texte || '') };
   const tout = appliquerModifications(reference, mods, opts);
   const fid = (t: string) => fidelite(reference, t, 0.8, ctx.dce || '');
   if (fid(tout.texte) >= seuil) return sortie(tout.texte, false, undefined, tout.appliquees, tout.refusees);
@@ -2524,6 +2557,14 @@ Réponds UNIQUEMENT par un objet JSON : {"valeurs":[{"variable":"NOM","valeur":"
     if (!cibles.includes(nom)) { refusees.push({ variable: nom, raison: 'variable non imposable' }); continue; }
     if (!valeur || !citation) { refusees.push({ variable: nom, raison: 'valeur ou citation absente' }); continue; }
     if (!dceNorm.includes(normaliser(citation).replace(/[^a-z0-9']+/g, ' ').trim())) { refusees.push({ variable: nom, raison: 'citation introuvable dans le DCE' }); continue; }
+    // Délai d'un sujet (DELAI_PTI) cité d'une phrase d'un autre sujet (intervention sur alarme) : refusé.
+    const sujetV = SUJET_VARIABLE_DELAI[nom];
+    if (sujetV !== undefined) {
+      const def = sujetV ? SUJETS_DELAI[sujetV] : null;
+      if (!def || !def.sujet.test(citation) || def.exclure?.test(citation) || (def.objet?.test(citation) && !def.personnel?.test(citation))) {
+        refusees.push({ variable: nom, raison: 'citation d\'un autre sujet que celui du délai' }); continue;
+      }
+    }
     const nombresCitation = new Set(nombresDe(citation));
     const etrangers = nombresDe(valeur).filter((n) => !nombresCitation.has(n));
     if (etrangers.length) { refusees.push({ variable: nom, raison: `chiffre absent de la citation (${etrangers.join(', ')})` }); continue; }
