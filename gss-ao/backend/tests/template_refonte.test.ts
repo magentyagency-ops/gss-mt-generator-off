@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import PizZip from 'pizzip';
 
 // Clé factice : aucun appel LLM avec dossierId='export' (cover en repli),
@@ -26,7 +28,17 @@ const SAMPLE: AssembleChapter[] = [
   },
 ];
 
+// Fond injecté quand le maître n'en porte pas (Refonte V1, fd3b63e).
 const BACKGROUND_HEX = 'E5E5E5';
+// Maître de référence : depuis juin 2026 (7fd93ed, après « fix: grey background » 9cb2d3b), AO RNE.docx
+// porte son propre fond gris (<w:background w:color="D8D8D8" …>), que le générateur conserve tel quel
+// (garde « pas de second <w:background> » présente depuis fd3b63e).
+const MAITRE = path.resolve(__dirname, '../Template/Mémoire technique/AO RNE.docx');
+const fondDuMaitre = (): string | null => {
+  const xml = new PizZip(fs.readFileSync(MAITRE)).file('word/document.xml')!.asText().slice(0, 20_000);
+  return xml.match(/<w:background\b[^>]*\bw:color="([0-9A-Fa-f]{6})"/)?.[1] ?? null;
+};
+const nbFonds = (xml: string) => (xml.match(/<w:background\b/g) || []).length;
 
 function openDocx(filePath: string): PizZip {
   expect(fs.existsSync(filePath)).toBe(true);
@@ -46,16 +58,50 @@ describe('Refonte template DOCX (format préservation AO RNE + refonte V1)', () 
     generatedData = res.generatedData;
   });
 
-  it('applique un fond gris uniforme E5E5E5 + active son affichage', () => {
-    expect(documentXml).toContain(`<w:background w:color="${BACKGROUND_HEX}"`);
+  it('applique un fond gris uniforme (celui du maître, conservé) + active son affichage', () => {
+    const fond = fondDuMaitre();
+    expect(fond).toBe('D8D8D8');
+    expect(nbFonds(documentXml)).toBe(1);
+    expect(documentXml).toContain(`<w:background w:color="${fond}"`);
+    expect(documentXml).not.toContain(`<w:background w:color="${BACKGROUND_HEX}"`);
     const settings = zip.file('word/settings.xml')!.asText();
     expect(settings).toContain('displayBackgroundShape');
+    // Le compte rendu cite le fond réellement appliqué.
+    expect(generatedData.mode).toContain(`#${fond}`);
   });
 
+  it('maître sans fond : injecte le fond gris uniforme E5E5E5 + active son affichage', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'maitre-sans-fond-'));
+    try {
+      const z = new PizZip(fs.readFileSync(MAITRE));
+      z.file('word/document.xml', z.file('word/document.xml')!.asText().replace(/<w:background\b[^>]*\/>/, ''));
+      z.file('word/settings.xml', z.file('word/settings.xml')!.asText().replace(/<w:displayBackgroundShape\/>/g, ''));
+      fs.mkdirSync(path.join(dir, 'Mémoire technique'));
+      fs.writeFileSync(path.join(dir, 'Mémoire technique', 'AO RNE.docx'), z.generate({ type: 'nodebuffer' }));
+      const gen = new MemoireGenerator() as any;
+      gen.templateDir = dir;
+      const res = await gen.assembleFromSections('export', SAMPLE, { refonte: true });
+      const out = openDocx(res.filePath);
+      const xml = out.file('word/document.xml')!.asText();
+      expect(nbFonds(xml)).toBe(1);
+      expect(xml).toContain(`<w:background w:color="${BACKGROUND_HEX}"`);
+      expect(out.file('word/settings.xml')!.asText()).toContain('displayBackgroundShape');
+      expect(res.generatedData.mode).toContain(`#${BACKGROUND_HEX}`);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it("conserve le bandeau d'en-tête et le titre injecté sur les pages dupliquées", () => {
-    // le titre de section injecté est présent (zone de titre / textbox conservée)
-    expect(documentXml).toContain('Reprise du personnel en place');
-    expect(documentXml).toContain('Qualifications des agents');
+    // le titre de section injecté est présent dans la zone de titre (textbox conservée), en
+    // MAJUSCULES comme les titres du maître (setSectionHeading, c35db86 « fix: generate from template text »)
+    const titres = (documentXml.match(/<w:txbxContent>[\s\S]*?<\/w:txbxContent>/g) || [])
+      .map((tx) => (tx.match(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g) || []).map((t) => t.replace(/<[^>]+>/g, '')).join(''));
+    expect(titres).toContain('REPRISE DU PERSONNEL EN PLACE');
+    expect(titres).toContain('QUALIFICATIONS DES AGENTS');
+    // le corps de chaque section est injecté sous son titre
+    expect(documentXml).toContain("GSS organise la reprise du personnel conformément à l'article L1224-1.");
+    expect(documentXml).toContain('Nos agents sont titulaires du CQP APS et SSIAP.');
     // le bandeau d'en-tête (textbox) du maître reste présent dans le document
     expect(documentXml).toContain('txbxContent');
   });

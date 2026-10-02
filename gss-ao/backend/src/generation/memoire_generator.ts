@@ -5551,7 +5551,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     const xmlDoc = parser.parseFromString(documentXmlFile.asText(), 'text/xml');
 
     // Refonte V1 — fond gris uniforme : <w:background> en 1er enfant du document +
-    // activation du rendu via <w:displayBackgroundShape/> dans settings.xml.
+    // activation du rendu via <w:displayBackgroundShape/> dans settings.xml. Un fond déjà posé par le
+    // maître (AO RNE.docx porte son propre gris D8D8D8 depuis juin 2026) est conservé tel quel.
     if (refonte) {
       const docEl = xmlDoc.documentElement;
       if (docEl && !findLocalNameChild(docEl, 'background')) {
@@ -5568,6 +5569,9 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         }
       }
     }
+
+    // Couleur de fond réellement appliquée (celle du maître si elle existe), pour le compte rendu.
+    const fondApplique = refonte ? (findLocalNameChild(xmlDoc.documentElement, 'background')?.getAttribute('w:color') || BACKGROUND_COLOR) : '';
 
     // 2. Personnalisation du client (couverture/sommaire) sur le document + en-têtes/pieds.
     if (clientName) {
@@ -5683,13 +5687,13 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     const outputPath = path.join(this.responseDir, outputFileName);
     fs.writeFileSync(outputPath, buf);
 
-    console.log(`[MemoireGenerator] AO RNE personnalisé : ${inserted} page(s) ajoutée(s), ${spreads.length} page(s)-modèle, refonte=${refonte} (fond gris ${refonte ? BACKGROUND_COLOR : 'off'}, ${stats.imagesRemoved} image(s) de fond retirée(s)), client="${clientName || '(non personnalisé)'}" → ${outputPath}`);
+    console.log(`[MemoireGenerator] AO RNE personnalisé : ${inserted} page(s) ajoutée(s), ${spreads.length} page(s)-modèle, refonte=${refonte} (fond gris ${refonte ? fondApplique : 'off'}, ${stats.imagesRemoved} image(s) de fond retirée(s)), client="${clientName || '(non personnalisé)'}" → ${outputPath}`);
 
     return {
       filePath: outputPath,
       generatedData: {
         mode: refonte
-          ? `Refonte V1 : fond gris uniforme #${BACKGROUND_COLOR} + bandeau conservé + images de fond retirées des pages dupliquées`
+          ? `Refonte V1 : fond gris uniforme #${fondApplique} + bandeau conservé + images de fond retirées des pages dupliquées`
           : 'AO RNE préservé (design intact) + pages dupliquées',
         client: clientName || '(non personnalisé)',
         pages_ajoutees: String(inserted),
