@@ -842,6 +842,9 @@ export function casseDuDce(nom: string, dce: string): string {
   return ok && sortie !== nom ? sortie : '';
 }
 
+/** Service d'un acheteur (direction, pôle, bureau, service des achats…), jamais l'acheteur lui-même. */
+const SERVICE_ACHETEUR = /^(?:sous[- ]direction|direction|p[ôo]le|bureau|mission|service\s+(?:des\s+|de\s+la\s+|du\s+|d['’]\s*)?(?:achats?|march[ée]s|commande|juridique|finances?|affaires)|d[ée]partement\s+(?:des\s+|de\s+la\s+|du\s+)(?:achats?|march[ée]s|commande))(?![a-zà-ÿ])/i;
+
 /**
  * Formes de l'acheteur pour le publipostage (consigne 2 : on remplace le nom, sans l'alourdir).
  * - forme longue : chaque entité coordonnée prend son article (« … (ENPC) et l'Institut national … (IGN) ») ;
@@ -881,7 +884,11 @@ export function formesClient(nom: string, dce = ''): { long: string; court?: { a
   // pas un second acheteur.
   {
     const usageSigle = (/\(([A-Z]{2,6}(?:\s+(?:de|du|des|d['’])\s*[A-ZÀ-Ý][\wÀ-ÿ'’-]*)?)\)/.exec(principal) || [])[1];
-    if (usageSigle) {
+    // Groupement dont chaque entité a son sigle (ign : « École … (ENPC) et Institut … (IGN), pour … ») : la première
+    // parenthèse n'est pas le sigle d'usage de l'acheteur ; la règle des sigles des entités, plus bas, donne
+    // « l'ENPC et l'IGN » au pluriel.
+    const siglesEntites = entites.map((e) => (/\(([A-Z][A-Z0-9&.\-]{1,11})\s*[,)]/.exec(e) || [])[1] || '');
+    if (usageSigle && !(entites.length > 1 && siglesEntites.every(Boolean))) {
       const nDce = (normaliser(dce).match(new RegExp(`(?:^|[^a-z0-9])(?:l'|le |la |du |de l'|au |a l'|les |des )${echapper(normaliser(usageSigle))}(?![a-z0-9])`, 'g')) || []).length;
       const art = articleEtNom(usageSigle, dce).article || articleSigle(usageSigle.split(/\s+/)[0], '');
       if (nDce >= 2 && art) return { long, court: { article: art, nom: usageSigle, genre: '' } };
@@ -891,7 +898,12 @@ export function formesClient(nom: string, dce = ''): { long: string; court?: { a
   // administratif régional de Rouen / BOP Normand (cours d'appel de Rouen et de Caen) », 11 fois dans le cadre) : forme
   // courte = l'entité, par son sigle quand le DCE l'emploie (« le SAR de Rouen »), sinon son nom.
   if (entites.length === 1 && !suite && /\s[–—-]\s/.test(principal)) {
-    const entite = principal.split(/\s[–—-]\s/).pop()!.split(/\s+\/\s+|\s*\(/)[0].trim();
+    let entite = principal.split(/\s[–—-]\s/).pop()!.split(/\s+\/\s+|\s*\(/)[0].trim();
+    // Service de l'acheteur après le tiret (« Ville du Havre - Direction de la commande publique », « CHU de Rouen –
+    // Direction des achats », en capitales aussi) : ce n'est pas l'acheteur ; la forme courte est la tutelle (« la Ville
+    // du Havre », « le CHU de Rouen »). Un service qui est lui-même l'acheteur (« Service administratif régional de
+    // Rouen ») reste la forme courte.
+    if (SERVICE_ACHETEUR.test(entite)) entite = principal.split(/\s[–—-]\s/)[0].trim();
     const m = /^(.+?)\s+((?:de|du|des|d['’])\s*[A-ZÀ-Ý][\wÀ-ÿ'’-]*(?:\s+(?:et|de|du|des)\s+[A-ZÀ-Ý][\wÀ-ÿ'’-]*)*)$/.exec(entite);
     const tete = m ? m[1] : entite;
     const lieu = m ? m[2] : '';
