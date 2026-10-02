@@ -119,6 +119,17 @@ const texteDocx = (f: string) => new PizZip(fs.readFileSync(f)).file('word/docum
       if (absentes.length) anomalie(`${absentes.length} ligne(s) d'identité de la référence absente(s) : ${absentes.slice(0, 3).join(' | ')}`);
     }
     if (/\{\{|Non communiqué/.test(texte)) anomalie('variable {{…}} ou « Non communiqué » dans le docx');
+    // Tour 2 (T2C-4) : chaque partie limitée en pages (« 1 page maximum ») tient sa limite, hauteur estimée sur le docx
+    // (titres, questions, réponses, schémas insérés ; estimation calibrée sur le rendu Word de ca_normandie 221). Pour un
+    // contrôle par rendu Word : _verif/t2c4_mesure.ts et la conversion PDF de Word.
+    {
+      const zipDocx = new PizZip(fs.readFileSync(r.filePath));
+      const xml = zipDocx.file('word/document.xml')!.asText();
+      const g = cadreMT.geometrieCadre(xml, zipDocx.file('word/styles.xml')?.asText() || '');
+      const paras = cadreMT.paragraphesCadre(xml);
+      res.parties_limitees = cadreMT.partiesDuDocument(paras).map((pt) => ({ titre: pt.titre, limite: pt.pages, pages: Math.round(cadreMT.hauteurPartie(paras, pt.debut, pt.fin, g) / g.hauteurPt * 100) / 100 }));
+      for (const pt of res.parties_limitees) if (pt.pages > pt.limite) anomalie(`partie « ${pt.titre} » : ${pt.pages} page(s) estimée(s) pour ${pt.limite} autorisée(s)`);
+    }
     // Correction 3 : aucune phrase du mémoire type reprise deux fois ; schémas insérés ; premier message de l'assistant.
     const phrasesMT = new Set(Object.values(publies).flatMap((t) => cadreMT.texteBrut(t).split(/(?<=[.!?])\s+|\n+/)).map((x) => x.trim()).filter((x) => x.split(/\s+/).length >= 12));
     const doublons = [...phrasesMT].filter((ph) => texte.split(ph).length > 2);

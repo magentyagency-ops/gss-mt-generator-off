@@ -29,7 +29,7 @@ export function dimensions(buf: Buffer): { w: number; h: number } | null {
  * Insère une photo (paragraphe centré + légende) dans le .docx, juste après `apres` (un paragraphe) ou,
  * à défaut, à la fin du document. Ajoute l'image au fichier et ses déclarations (relation, type).
  */
-export function insererPhotoDocx(zip: PizZip, xmlDoc: any, piece: { nom: string; chemin: string }, legende: string, apres: any | null, n: number): void {
+export function insererPhotoDocx(zip: PizZip, xmlDoc: any, piece: { nom: string; chemin: string }, legende: string, apres: any | null, n: number, hauteurMax?: number): void {
   const buf = fs.readFileSync(piece.chemin);
   const dim = dimensions(buf);
   if (!dim) throw new Error(`Format d'image non pris en charge : ${piece.nom} (JPEG ou PNG attendu).`);
@@ -47,20 +47,9 @@ export function insererPhotoDocx(zip: PizZip, xmlDoc: any, piece: { nom: string;
     zip.file('[Content_Types].xml', ct.replace('<Types ', '<Types ').replace(/(<Types[^>]*>)/, `$1<Default Extension="${ext}" ContentType="image/${ext}"/>`));
   }
 
-  // Taille : largeur du texte (15,5 cm) ou, dans un tableau, largeur de la cellule ; hauteur ≤ 11 cm ;
-  // proportions conservées.
-  const MAX_H = 3960000;
-  let MAX_W = 5580000;
-  let cellule = apres?.parentNode;
-  while (cellule && cellule.localName !== 'tc') cellule = cellule.parentNode;
-  const tcW = cellule ? elements(cellule, 'tcW')[0] : null;
-  if (tcW && (tcW.getAttribute('w:type') || 'dxa') === 'dxa') {
-    const largeur = Number(tcW.getAttribute('w:w')) * 635 - 250000;   // twips → EMU, moins les marges de cellule
-    if (largeur > 1000000) MAX_W = Math.min(MAX_W, largeur);
-  }
-  let cx = MAX_W;
-  let cy = Math.round(cx * dim.h / dim.w);
-  if (cy > MAX_H) { cx = Math.round(cx * MAX_H / cy); cy = MAX_H; }
+  // Taille : largeur du texte (15,5 cm) ou, dans un tableau, largeur de la cellule ; hauteur ≤ 11 cm (ou `hauteurMax`,
+  // partie du cadre limitée en pages) ; proportions conservées.
+  const { cx, cy } = tailleImageDocx(dim, apres, hauteurMax);
   const idDoc = 5000 + n + Math.floor(Math.random() * 1000);
   const nomXml = piece.nom.replace(/[<>&"]/g, '');
   const fragment = `<w:body xmlns:w="${W_NS}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`
@@ -81,6 +70,29 @@ export function insererPhotoDocx(zip: PizZip, xmlDoc: any, piece: { nom: string;
     const imp = xmlDoc.importNode(nd, true);
     if (suivant) parent.insertBefore(imp, suivant); else parent.appendChild(imp);
   }
+}
+
+/** Taille (EMU) d'une image insérée après `apres` : largeur du texte ou de la cellule, hauteur ≤ 11 cm et ≤ `hauteurMax`. */
+function tailleImageDocx(dim: { w: number; h: number }, apres: any | null, hauteurMax?: number): { cx: number; cy: number } {
+  const MAX_H = hauteurMax && hauteurMax > 0 ? Math.min(3960000, hauteurMax) : 3960000;
+  let MAX_W = 5580000;
+  let cellule = apres?.parentNode;
+  while (cellule && cellule.localName !== 'tc') cellule = cellule.parentNode;
+  const tcW = cellule ? elements(cellule, 'tcW')[0] : null;
+  if (tcW && (tcW.getAttribute('w:type') || 'dxa') === 'dxa') {
+    const largeur = Number(tcW.getAttribute('w:w')) * 635 - 250000;   // twips → EMU, moins les marges de cellule
+    if (largeur > 1000000) MAX_W = Math.min(MAX_W, largeur);
+  }
+  let cx = MAX_W;
+  let cy = Math.round(cx * dim.h / dim.w);
+  if (cy > MAX_H) { cx = Math.round(cx * MAX_H / cy); cy = MAX_H; }
+  return { cx, cy };
+}
+
+/** Hauteur (EMU) qu'aurait une image PNG ou JPEG insérée après `apres` (0 si format inconnu). */
+export function hauteurImageDocx(buf: Buffer, apres: any | null): number {
+  const dim = dimensions(buf);
+  return dim ? tailleImageDocx(dim, apres).cy : 0;
 }
 
 /** Paragraphe qui contient le signet d'une réponse. */

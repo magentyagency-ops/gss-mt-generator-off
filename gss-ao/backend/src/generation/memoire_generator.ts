@@ -22,7 +22,7 @@ import {
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, type Dimensionnement } from './dimensionnement';
 import {
-  type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp,
+  type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
@@ -4515,6 +4515,12 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const repriseParChamp = new Map<number, { ids: string[]; fidelite: number; brute?: number }>();
     /** Schéma de process de la compréhension du besoin, inséré sous la réponse qui le reprend (consigne 3). */
     const svgComprehension = new Map<number, string>();
+    /** Puces d'engagement ajoutées par la couverture du CCTP, par champ (parties limitées en pages). */
+    const ajoutsCouvertureCadre = new Map<number, string[]>();
+    /** Hauteur maximale (EMU) des schémas par réponse, et place partagée des parties limitées en pages. */
+    const hauteurSchemaMax = new Map<string, number>();
+    const placeSchemas = new Map<string, { resteEmu: number }>();
+    let partiesAjustees: Array<{ titre: string; section: string; pages: number; ids: number[] }> = [];
     /** Texte « Notre compréhension de votre besoin » (rédigé une seule fois, d'après le DCE), pour les questions de compréhension. */
     let comprehensionP: Promise<{ id: string; titre: string; texte: string; svg?: string } | null> | null = null;
     const comprehensionCadre = () => (comprehensionP ||= (async () => {
@@ -5175,8 +5181,16 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       const developpeesCadre = replacements
         .filter((r) => { const d = descriptors.find((x) => x.id === r.id); return d && d.kind !== 'checkbox' && String(r.value ?? '').length >= 400; })
         .map((r) => ({ id: r.id, question: ((descriptors.find((x) => x.id === r.id)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').slice(0, 300), value: String(r.value ?? '') }));
+      const avantCouverture = new Map(developpeesCadre.map((x) => [x.id, x.value] as const));
       await this.couvertureCadre(developpeesCadre, dceContext, analysisData, horsNormandieCadre);
-      for (const x of developpeesCadre) { const r = replacements.find((y) => y.id === x.id); if (r) r.value = x.value; }
+      for (const x of developpeesCadre) {
+        const r = replacements.find((y) => y.id === x.id);
+        if (r) r.value = x.value;
+        // Puces ajoutées par la couverture : premières retirées d'une partie limitée en pages trop longue.
+        const avant = new Set(String(avantCouverture.get(x.id) || '').split('\n').map((l) => l.trim()));
+        const ajouts = x.value.split('\n').filter((l) => l.trim() && !avant.has(l.trim()));
+        if (ajouts.length) ajoutsCouvertureCadre.set(x.id, ajouts);
+      }
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Couverture du CCTP (cadre) indisponible : ${e?.message || e}`);
     }
@@ -5632,6 +5646,43 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       // return { status: 'incomplete', missingFields: missingInfo };
     }
 
+    // 5 ter. Parties limitées en pages (« 1 page maximum ») : hauteur de chaque partie estimée sur le document (titres et
+    // questions du cadre, réponses, schéma de la compréhension) ; une partie trop longue est ramenée à sa limite par des
+    // retraits de passages entiers, signalés à GSS (ca_normandie 221 : partie 1 débordant sur une deuxième page).
+    try {
+      const documentXml = new XMLSerializer().serializeToString(xmlDoc);
+      const stylesXml = zip.file('word/styles.xml')?.asText() || '';
+      const g = geometrieCadre(documentXml, stylesXml);
+      const [idComp, svgComp] = [...svgComprehension.entries()][0] || [];
+      const valeurs = new Map(replacements.filter((r) => descriptors.find((d) => d.id === r.id)?.kind !== 'checkbox').map((r) => [r.id, String(r.value ?? '')] as const));
+      const aj = ajusterPartiesLimitees({
+        documentXml, stylesXml, valeurs,
+        comprehension: idComp !== undefined && svgComp ? { id: idComp, hauteurPt: hauteurSchemaPt(svgComp, g.largeurPt) } : null,
+        ajoutsCouverture: ajoutsCouvertureCadre,
+      });
+      partiesAjustees = aj.parties;
+      for (const r of replacements) if (aj.valeurs.has(r.id)) r.value = aj.valeurs.get(r.id)!;
+      for (const p of aj.parties) {
+        const partageee = { resteEmu: Math.round(p.restePt * 12700) };
+        for (const id of p.ids) {
+          if (id === idComp && p.imageComprehensionPt !== undefined) hauteurSchemaMax.set(`GSS_CH_${id}`, Math.round(p.imageComprehensionPt * 12700));
+          else placeSchemas.set(`GSS_CH_${id}`, partageee);
+        }
+        const libellePartie = `${p.titre}${p.titre.includes(p.section) ? '' : ` (${p.section})`}`;
+        console.log(`[MemoireGenerator] Partie « ${libellePartie} » : ${(p.avantPt / (p.budgetPt / p.pages)).toFixed(2)} → ${(p.apresPt / (p.budgetPt / p.pages)).toFixed(2)} page(s) estimée(s) pour ${p.pages} autorisée(s)${p.retires.length ? `, ${p.retires.length} passage(s) retiré(s)` : ''}${p.imageComprehensionPt !== undefined ? `, schéma de la compréhension ${Math.round(p.imageComprehensionPt / 28.35 * 10) / 10} cm de haut au plus` : ''}.`);
+        if (p.retires.length) {
+          confirmationsGss.add(`Partie « ${libellePartie} » : pour tenir dans ${p.pages === 1 ? '1 page' : `${p.pages} pages`}, ${p.retires.length === 1 ? 'ce passage n\'a pas été repris' : `ces ${p.retires.length} passages n'ont pas été repris`} : ${p.retires.map((x) => `« ${x.texte.length > 140 ? `${x.texte.slice(0, 140).replace(/\s+\S*$/, '')}…` : x.texte} »`).join(' ; ')}. Faut-il en rétablir un à la place d'un autre ?`);
+          for (const id of new Set(p.retires.filter((x) => x.origine === 'memoire_type').map((x) => x.id))) {
+            const libelle = ((descriptors.find((d) => d.id === id)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || `Champ ${id}`).replace(/\s+/g, ' ').slice(0, 160);
+            propositionsCadre.set(id, `Réponse à relire (mémoire type de GSS repris en partie pour tenir dans la limite de ${p.pages === 1 ? '1 page' : `${p.pages} pages`}) : ${libelle}`);
+          }
+        }
+        if (p.depasse) confirmationsGss.add(`Partie « ${libellePartie} » : elle dépasse encore la limite de ${p.pages === 1 ? '1 page' : `${p.pages} pages`} fixée par l'acheteur. Quels passages faut-il retirer avant la remise ?`);
+      }
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Contrôle des parties limitées en pages indisponible : ${e?.message || e}`);
+    }
+
     // 6. Apply replacements in the DOM
     let applied = 0;
     replacements.forEach((rep: any) => {
@@ -5855,10 +5906,27 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         // Champ de valeur (« Effectif … (transmis pour information) ») : jamais de schéma dessous.
         .filter((x) => (x.texte.length >= 600 && !champValeur(x.question)) || x.svgId === 'comprehension' || !!x.svgId?.startsWith('demande_'));
       await schemasSelonDce(developpees, dceContext);
-      const nSchemas = await insererSchemasReponses(zip, xmlDoc, developpees, { seulementReprise: !!repriseMT, vocabulaire: vocabulaireSchemas(dceContext) });
+      const nSchemas = await insererSchemasReponses(zip, xmlDoc, developpees, { seulementReprise: !!repriseMT, vocabulaire: vocabulaireSchemas(dceContext), hauteurMax: hauteurSchemaMax, places: placeSchemas });
       if (nSchemas) console.log(`[MemoireGenerator] ${nSchemas} schéma(s) GSS inséré(s) sous les réponses.`);
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Schémas GSS non insérés (non bloquant) : ${e?.message || e}`);
+    }
+
+    // Contrôle final des parties limitées en pages, sur le document complet (réponses et schémas insérés).
+    try {
+      if (partiesAjustees.length) {
+        const documentXml = new XMLSerializer().serializeToString(xmlDoc);
+        const g = geometrieCadre(documentXml, zip.file('word/styles.xml')?.asText() || '');
+        const paras = paragraphesCadre(documentXml);
+        for (const p of partiesDuDocument(paras)) {
+          const h = hauteurPartie(paras, p.debut, p.fin, g);
+          const budget = p.pages * g.hauteurPt;
+          console.log(`[MemoireGenerator] Partie « ${p.titre} » : ${(h / g.hauteurPt).toFixed(2)} page(s) estimée(s) sur le document final pour ${p.pages} autorisée(s).`);
+          if (h > budget) confirmationsGss.add(`Partie « ${p.titre}${p.titre.includes(p.section) ? '' : ` (${p.section})`} » : elle dépasse la limite de ${p.pages === 1 ? '1 page' : `${p.pages} pages`} fixée par l'acheteur. Quels passages faut-il retirer avant la remise ?`);
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Contrôle final des parties limitées en pages indisponible : ${e?.message || e}`);
     }
 
     // 8. Serialize and save (jamais de document si le crédit OpenAI s'est épuisé en cours de génération)

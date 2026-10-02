@@ -10,7 +10,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import PizZip from 'pizzip';
-import { insererPhotoDocx, paragrapheDuChamp } from './docx_images';
+import { insererPhotoDocx, paragrapheDuChamp, hauteurImageDocx } from './docx_images';
 import { organigrammeSvg } from './organigramme';
 import { themeActif, estRetourArriere, schemasBibliotheque, fontFaceTheme } from './themes';
 import { dessinerSpecs } from './schema_service';
@@ -160,7 +160,13 @@ export async function rendrePng(svgs: string[], theme: string = themeActif()): P
  * Insère sous les réponses développées du cadre le schéma GSS le plus pertinent. Renvoie le nombre de
  * schémas insérés. Les signets GSS_CH_n doivent déjà être posés.
  */
-export async function insererSchemasReponses(zip: PizZip, xmlDoc: any, reponses: ReponseCadre[], options: { seulementReprise?: boolean; vocabulaire?: Array<[string, string]> } = {}): Promise<number> {
+export async function insererSchemasReponses(zip: PizZip, xmlDoc: any, reponses: ReponseCadre[], options: {
+  seulementReprise?: boolean; vocabulaire?: Array<[string, string]>;
+  /** Hauteur maximale de l'image (EMU) par réponse (schéma de la compréhension d'une partie limitée en pages). */
+  hauteurMax?: Map<string, number>;
+  /** Place restante (EMU), partagée entre les réponses d'une partie limitée en pages : un schéma plus haut n'est pas inséré. */
+  places?: Map<string, { resteEmu: number }>;
+} = {}): Promise<number> {
   const theme = themeActif();
   const choix = choisir(reponses, theme, options);
   if (!choix.length) return 0;
@@ -171,13 +177,23 @@ export async function insererSchemasReponses(zip: PizZip, xmlDoc: any, reponses:
     const para = png ? paragrapheDuChamp(xmlDoc, c.cle) : null;
     if (!png || !para) return;
     try {
-      insererPhotoDocx(zip, xmlDoc, { nom: `Schéma GSS ${c.id}`, chemin: png }, '', para, 500 + i);
-      n++;
+      const place = options.places?.get(c.cle);
+      const hauteur = place ? hauteurImageDocx(fs.readFileSync(png), para) : 0;
+      if (place && hauteur + LIGNE_EMU > place.resteEmu) {
+        console.log(`[MemoireGenerator] Schéma ${c.id} non inséré sous ${c.cle} : partie limitée en pages, place insuffisante.`);
+      } else {
+        insererPhotoDocx(zip, xmlDoc, { nom: `Schéma GSS ${c.id}`, chemin: png }, '', para, 500 + i, options.hauteurMax?.get(c.cle));
+        if (place) place.resteEmu -= hauteur + LIGNE_EMU;
+        n++;
+      }
     } catch { /* image non insérable : ignorée */ }
     fs.rmSync(png, { force: true });
   });
   return n;
 }
+
+/** Une ligne de texte du cadre (14 points), en EMU : paragraphe de l'image. */
+const LIGNE_EMU = 14 * 12700;
 
 /**
  * Tuiles d'un schéma de la bibliothèque contraires à une exigence du DCE (même règle que les conditions du mémoire

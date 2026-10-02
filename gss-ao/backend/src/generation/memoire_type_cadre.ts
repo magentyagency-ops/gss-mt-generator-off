@@ -1145,3 +1145,304 @@ export function controlerFaitsNouveauxCadre(valeur: string, contexte: string, s:
   }
   return { texte: texte || '[À COMPLÉTER]', questions };
 }
+
+// ─── Cadre .docx : parties limitées en pages (« 1 page maximum ») ────────────────────────────────
+
+/** Géométrie de la page du cadre (estimation sans rendu, en points). */
+export interface GeometrieCadre {
+  /** Caractères par ligne de texte (police du style Normal, largeur de texte de la page). */
+  carParLigne: number;
+  /** Hauteur d'une ligne de texte. */
+  lignePt: number;
+  /** Hauteur et largeur utiles de la page (marges retirées). */
+  hauteurPt: number;
+  largeurPt: number;
+}
+
+/**
+ * Géométrie de la page du cadre d'après le document et ses styles : format et marges de la première section, taille de
+ * police et interligne du style Normal (sinon valeurs par défaut du document). Largeur moyenne d'un caractère : 0,40 em ;
+ * hauteur de ligne : 1,4 fois la police en interligne simple (police Marianne du cadre ca_normandie, rendu Word du
+ * 2 octobre 2026 : 111 à 113 caractères par ligne et 50 lignes par page à 10 points).
+ */
+export function geometrieCadre(documentXml: string, stylesXml = ''): GeometrieCadre {
+  const doc = String(documentXml || '');
+  const attr = (el: string, nom: string, defaut: number) => { const m = new RegExp(`w:${nom}="(\\d+)"`).exec(el); return m ? Number(m[1]) : defaut; };
+  const pgSz = (/<w:pgSz\b[^>]*\/?>/.exec(doc) || [''])[0];
+  const pgMar = (/<w:pgMar\b[^>]*\/?>/.exec(doc) || [''])[0];
+  const largeurPt = (attr(pgSz, 'w', 11906) - attr(pgMar, 'left', 1417) - attr(pgMar, 'right', 1417)) / 20;
+  const hauteurPt = (attr(pgSz, 'h', 16838) - attr(pgMar, 'top', 1417) - attr(pgMar, 'bottom', 1417)) / 20;
+  const styles = String(stylesXml || '');
+  const normal = (/<w:style\b[^>]*w:styleId="Normal"[^>]*>([\s\S]*?)<\/w:style>/.exec(styles) || ['', ''])[1];
+  const defauts = (/<w:docDefaults>([\s\S]*?)<\/w:docDefaults>/.exec(styles) || ['', ''])[1];
+  const sz = Number((/<w:sz w:val="(\d+)"/.exec(normal) || /<w:sz w:val="(\d+)"/.exec(defauts) || ['', '22'])[1]);
+  const espacement = (/<w:spacing\b[^>]*\/?>/.exec(normal) || /<w:spacing\b[^>]*\/?>/.exec(defauts) || [''])[0];
+  const auto = !/w:lineRule="(?:exact|atLeast)"/.test(espacement);
+  const ligne = attr(espacement, 'line', 240);
+  const police = sz / 2;
+  const lignePt = auto ? police * 1.4 * (ligne / 240) : Math.max(police * 1.2, ligne / 20);
+  return { carParLigne: Math.max(30, Math.floor(largeurPt / (police * 0.4))), lignePt, hauteurPt, largeurPt };
+}
+
+/** Lignes occupées par une ligne de texte (retour à la ligne au mot, comme Word). */
+function lignesDeLigne(ligne: string, n: number): number {
+  const mots = String(ligne || '').trim().split(/\s+/).filter(Boolean);
+  let lignes = 1, cur = 0;
+  for (const m of mots) {
+    if (!cur) cur = m.length;
+    else if (cur + 1 + m.length <= n) cur += 1 + m.length;
+    else { lignes++; cur = m.length; }
+  }
+  return lignes;
+}
+
+/** Lignes occupées par un texte du cadre (une ligne vide compte une ligne ; une ligne longue, ses retours à la ligne). */
+export function lignesTexte(texte: string, g: GeometrieCadre): number {
+  return String(texte || '').split('\n').reduce((s, l) => s + lignesDeLigne(l, g.carParLigne), 0);
+}
+
+/** Paragraphe du corps du cadre : texte (retours à la ligne <w:br/> en « \n »), images, espacements et champs qu'il porte. */
+export interface ParagrapheCadre { texte: string; imagePt: number; espacePt: number; champs: number[]; finsChamps: number[] }
+
+const entites = (t: string) => t.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+
+/**
+ * Paragraphes du corps du document, dans l'ordre. Un champ est repéré par son repère « [CHAMP_n] » (avant l'écriture des
+ * réponses) ou par le signet de sa réponse « GSS_CH_n » (après) ; `finsChamps` : fin du signet de la réponse.
+ */
+export function paragraphesCadre(documentXml: string): ParagrapheCadre[] {
+  const doc = String(documentXml || '');
+  const corps = doc.slice(Math.max(0, doc.indexOf('<w:body')));
+  const signets = new Map<string, number>();
+  for (const m of corps.matchAll(/<w:bookmarkStart\b[^>]*>/g)) {
+    const id = (/w:id="([^"]+)"/.exec(m[0]) || [])[1];
+    const champ = (/w:name="GSS_CH_(\d+)"/.exec(m[0]) || [])[1];
+    if (id && champ) signets.set(id, Number(champ));
+  }
+  const out: ParagrapheCadre[] = [];
+  for (const m of corps.matchAll(/<w:p(?=[\s>])[^>]*>([\s\S]*?)<\/w:p>/g)) {
+    const p = m[1];
+    let texte = '';
+    for (const t of p.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>|<w:br\b[^>]*\/>|<w:cr\/>|<w:tab\/>/g)) {
+      if (t[1] !== undefined) texte += entites(t[1]);
+      else if (/^<w:tab/.test(t[0])) texte += '    ';
+      else if (!/w:type="page"/.test(t[0])) texte += '\n';
+    }
+    const imagePt = [...p.matchAll(/<wp:extent\b[^>]*\bcy="(\d+)"/g)].reduce((s, x) => s + Number(x[1]) / 12700, 0);
+    const sp = (/<w:spacing\b[^>]*\/?>/.exec((/<w:pPr>[\s\S]*?<\/w:pPr>/.exec(p) || [''])[0]) || [''])[0];
+    const espacePt = (Number((/w:before="(\d+)"/.exec(sp) || [])[1] || 0) + Number((/w:after="(\d+)"/.exec(sp) || [])[1] || 0)) / 20;
+    const champs = [...texte.matchAll(/\[CHAMP_(\d+)\]/g)].map((x) => Number(x[1]));
+    for (const b of p.matchAll(/<w:bookmarkStart\b[^>]*>/g)) { const c = (/w:name="GSS_CH_(\d+)"/.exec(b[0]) || [])[1]; if (c) champs.push(Number(c)); }
+    const finsChamps = [...p.matchAll(/<w:bookmarkEnd\b[^>]*w:id="([^"]+)"/g)].map((x) => signets.get(x[1])).filter((x): x is number => x !== undefined);
+    out.push({ texte, imagePt, espacePt, champs, finsChamps });
+  }
+  return out;
+}
+
+/** Partie du cadre limitée en pages, repérée dans le document : titre, mention de la limite, paragraphes et champs. */
+export interface PartieDocument { titre: string; section: string; pages: number; debut: number; fin: number; ids: number[] }
+
+/**
+ * Parties du cadre limitées en pages, repérées dans le document : une mention seule sur sa ligne « N page(s) maximum »
+ * (ou « N pages maximum pour le 5.2 », qui vaut pour la sous-partie 5.2 seule) ouvre une partie, du titre qui la précède
+ * jusqu'au titre de la partie limitée suivante (dernière partie : jusqu'à sa dernière réponse), sans les paragraphes vides
+ * de fin. Une limite « par site » n'est pas mesurable sur le document : ignorée.
+ */
+export function partiesDuDocument(paras: ParagrapheCadre[]): PartieDocument[] {
+  const norme = (t: string) => t.replace(/\s+/g, ' ').trim();
+  const marques = paras.map((p, k) => ({ k, m: /^((\d+|une?)\s+pages?\s+maximum)(?:\s+pour\s+(?:le|la|les)\s+(\d+(?:\.\d+)*))?$/i.exec(norme(p.texte)) }))
+    .filter((x): x is { k: number; m: RegExpExecArray } => !!x.m);
+  const titreAvant = (k: number) => { for (let j = k - 1; j >= Math.max(0, k - 4); j--) if (paras[j].texte.trim()) return j; return k; };
+  const out: PartieDocument[] = [];
+  marques.forEach(({ k, m }, i) => {
+    const suivante = marques[i + 1];
+    const borne = suivante ? titreAvant(suivante.k) - 1 : paras.length - 1;
+    let debut = titreAvant(k);
+    if (m[3]) {
+      const sous = paras.findIndex((p, j) => j > k && j <= borne && norme(p.texte).startsWith(m[3]));
+      if (sous < 0) return;
+      debut = sous;
+    }
+    const aChamp = (p: ParagrapheCadre) => p.champs.length > 0 || p.finsChamps.length > 0;
+    let fin = borne;
+    if (!suivante) { fin = -1; for (let j = borne; j > k; j--) if (aChamp(paras[j])) { fin = j; break; } if (fin < 0) return; }
+    while (fin > debut && !paras[fin].texte.trim() && !paras[fin].imagePt) fin--;
+    const ids = [...new Set(paras.slice(debut, fin + 1).flatMap((p) => p.champs))];
+    if (!ids.length) return;
+    out.push({ titre: norme(paras[debut].texte), section: norme(paras[k].texte), pages: /^\d+$/.test(m[2]) ? Number(m[2]) : 1, debut, fin, ids });
+  });
+  return out;
+}
+
+/** Hauteur (points) des paragraphes `debut`…`fin`, réponses remplacées par `valeurs`, images réservées `images` (par champ). */
+export function hauteurPartie(paras: ParagrapheCadre[], debut: number, fin: number, g: GeometrieCadre, valeurs: Map<number, string> = new Map(), images: Map<number, number> = new Map()): number {
+  let h = 0;
+  for (let k = debut; k <= fin; k++) {
+    const p = paras[k];
+    const texte = p.texte.replace(/\[CHAMP_(\d+)\]/g, (x, n) => (valeurs.has(Number(n)) ? valeurs.get(Number(n))! : ''));
+    const image = p.imagePt + p.champs.reduce((s, id) => s + (images.get(id) || 0), 0);
+    h += (image && !texte.trim() ? image : lignesTexte(texte, g) * g.lignePt + image) + p.espacePt;
+  }
+  return h;
+}
+
+/** Ligne d'un tableau de GSS écrit en lignes « A : B : C » (équipe dédiée, périmètre) : jamais retirée seule. Trois
+ *  cellules au moins, courtes (une phrase qui contient deux « : » n'en est pas une). */
+export function ligneTableau(l: string): boolean {
+  const cellules = String(l || '').replace(/^\s*[•\-*]\s*/, '').split(/\s:\s/);
+  return cellules.length >= 3 && cellules.slice(0, -1).every((c) => c.trim().length > 0 && c.length <= 60 && !/[.!?;]\s/.test(c)) && cellules[cellules.length - 1].length <= 160;
+}
+
+/**
+ * Réduction de la réponse « compréhension du besoin » d'une partie limitée en pages (ca_normandie 221 : partie 1
+ * « 1 page maximum » débordant sur la page suivante) : lignes retirées entières, jamais réécrites, jusqu'à ce que
+ * `assez(texte)` soit vrai, dans l'ordre : engagements ajoutés par la couverture du CCTP (puces qui ne sont ni une attente
+ * ni un point de vigilance), points de vigilance puis attentes au-delà de trois, paragraphes libres entre le premier
+ * (l'acheteur et son marché) et le dernier (conclusion reprise par le schéma), points de vigilance puis attentes au-delà
+ * de deux. Renvoie le texte et les lignes retirées (signalées à GSS).
+ */
+export function reduireComprehensionCadre(texte: string, assez: (t: string) => boolean): { texte: string; retirees: string[] } {
+  const lignes = String(texte || '').split('\n');
+  const puce = (l: string) => /^\s*[•\-*]\s/.test(l);
+  const vigilance = (l: string) => puce(l) && /point de vigilance/i.test(l.slice(0, 40));
+  const attente = (l: string) => puce(l) && /ce que vous attendez|vos attentes|attente/i.test(l.slice(0, 40));
+  const indices = (f: (l: string) => boolean) => lignes.map((l, k) => k).filter((k) => f(lignes[k]));
+  const libres = indices((l) => !!l.trim() && !puce(l) && !/:\s*$/.test(l.trim()) && !ligneTableau(l));
+  const ordre: number[] = [];
+  const ajouter = (ks: number[]) => { for (const k of ks) if (!ordre.includes(k)) ordre.push(k); };
+  ajouter(indices((l) => puce(l) && !vigilance(l) && !attente(l)).reverse());
+  ajouter(indices(vigilance).slice(3).reverse());
+  ajouter(indices(attente).slice(3).reverse());
+  ajouter(libres.slice(1, -1).reverse());
+  ajouter(indices(vigilance).slice(2).reverse());
+  ajouter(indices(attente).slice(2).reverse());
+  const otees = new Set<number>();
+  const composer = () => {
+    const gardees = lignes.filter((_, k) => !otees.has(k));
+    // Sous-titre « … : » resté sans contenu : retiré avec son contenu.
+    return gardees.filter((l, k) => !(/:\s*$/.test(l.trim()) && !puce(l) && !(gardees[k + 1] || '').trim()))
+      .join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  };
+  const retirees: string[] = [];
+  for (const k of ordre) {
+    if (assez(composer())) break;
+    otees.add(k);
+    retirees.push(lignes[k].replace(/^\s*[•\-*]\s*/, '').trim());
+  }
+  return { texte: composer(), retirees };
+}
+
+/** Résultat de l'ajustement d'une partie limitée en pages. */
+export interface AjustementPartie {
+  section: string;
+  titre: string;
+  pages: number;
+  ids: number[];
+  budgetPt: number;
+  avantPt: number;
+  apresPt: number;
+  /** Passages retirés (champ, texte), dans l'ordre des retraits. */
+  retires: Array<{ id: number; texte: string; origine: 'comprehension' | 'couverture' | 'memoire_type' }>;
+  /** Hauteur maximale de l'image réservée au schéma de la compréhension (points), si la partie le porte. */
+  imageComprehensionPt?: number;
+  /** Place restante pour d'autres schémas dans la partie (points). */
+  restePt: number;
+  depasse: boolean;
+}
+
+/**
+ * Ajustement des parties du cadre limitées en pages (consigne du cadre « Veillez à respecter le nombre de pages indiqué ») :
+ * hauteur de chaque partie estimée sur le document (titres, questions et réponses du cadre, retours à la ligne, images),
+ * le schéma de la compréhension du besoin compté à sa hauteur. Partie trop longue : passages retirés entiers, jamais
+ * réécrits, dans l'ordre (1) compréhension du besoin (reduireComprehensionCadre), (2) puces d'engagement ajoutées par la
+ * couverture du CCTP (dernière réponse d'abord), (3) schéma de la compréhension réduit jusqu'à 70 % de sa hauteur,
+ * (4) dernières lignes du texte de GSS des autres réponses (la plus longue d'abord ; jamais la première ligne d'une
+ * réponse, ni une ligne de tableau). Les autres schémas de la partie ne sont insérés que dans la place restante.
+ */
+export function ajusterPartiesLimitees(o: {
+  documentXml: string;
+  stylesXml?: string;
+  valeurs: Map<number, string>;
+  /** Champ qui reçoit le schéma de la compréhension, et sa hauteur naturelle (points). */
+  comprehension?: { id: number; hauteurPt: number } | null;
+  /** Puces ajoutées par la couverture du CCTP, par champ (texte de la ligne, puce comprise). */
+  ajoutsCouverture?: Map<number, string[]>;
+  /** Marge de sécurité (points) retirée du budget. */
+  margePt?: number;
+}): { valeurs: Map<number, string>; parties: AjustementPartie[] } {
+  const g = geometrieCadre(o.documentXml, o.stylesXml || '');
+  const paras = paragraphesCadre(o.documentXml);
+  const valeurs = new Map(o.valeurs);
+  const parties: AjustementPartie[] = [];
+  for (const partie of partiesDuDocument(paras)) {
+    const b = partie;
+    const budgetPt = partie.pages * g.hauteurPt - (o.margePt ?? g.lignePt);
+    const comp = o.comprehension && partie.ids.includes(o.comprehension.id) ? o.comprehension : null;
+    let imagePt = comp ? comp.hauteurPt : 0;
+    const images = () => (comp ? new Map([[comp.id, imagePt + g.lignePt]]) : new Map<number, number>());
+    const hauteur = (v: Map<number, string> = valeurs) => hauteurPartie(paras, b.debut, b.fin, g, v, images());
+    const avantPt = hauteur();
+    const retires: AjustementPartie['retires'] = [];
+    const tient = () => hauteur() <= budgetPt;
+    // (1) Compréhension du besoin.
+    if (!tient() && comp && valeurs.has(comp.id)) {
+      const r = reduireComprehensionCadre(valeurs.get(comp.id)!, (t) => hauteur(new Map(valeurs).set(comp.id, t)) <= budgetPt);
+      valeurs.set(comp.id, r.texte);
+      r.retirees.forEach((t) => retires.push({ id: comp.id, texte: t, origine: 'comprehension' }));
+    }
+    // (2) Engagements ajoutés par la couverture du CCTP.
+    for (const id of [...partie.ids].reverse()) {
+      for (const ajout of [...(o.ajoutsCouverture?.get(id) || [])].reverse()) {
+        if (tient()) break;
+        const v = valeurs.get(id) || '';
+        const lignes = v.split('\n');
+        const k = lignes.map((l) => l.trim()).lastIndexOf(ajout.trim());
+        if (k < 0) continue;
+        lignes.splice(k, 1);
+        valeurs.set(id, lignes.join('\n').replace(/\n{3,}/g, '\n\n').trim());
+        retires.push({ id, texte: ajout.replace(/^\s*[•\-*]\s*/, '').trim(), origine: 'couverture' });
+      }
+    }
+    // (3) Schéma de la compréhension réduit (70 % de sa hauteur au plus).
+    if (!tient() && comp) {
+      const exces = hauteur() - budgetPt;
+      imagePt = Math.max(comp.hauteurPt * 0.7, comp.hauteurPt - exces);
+    }
+    // (4) Texte de GSS des autres réponses : dernières lignes, la réponse la plus longue d'abord.
+    const autres = partie.ids.filter((id) => id !== comp?.id && valeurs.has(id));
+    for (let garde = 0; !tient() && garde < 400; garde++) {
+      const candidats = autres.map((id) => {
+        const lignes = (valeurs.get(id) || '').split('\n');
+        const premiere = lignes.findIndex((l) => l.trim());
+        let k = lignes.length - 1;
+        while (k > premiere && (!lignes[k].trim() || ligneTableau(lignes[k]))) k--;
+        return { id, lignes, k: k > premiere ? k : -1, taille: lignesTexte(lignes.join('\n'), g) };
+      }).filter((c) => c.k >= 0).sort((a, b2) => b2.taille - a.taille);
+      if (!candidats.length) break;
+      const c = candidats[0];
+      const texte = c.lignes[c.k];
+      c.lignes.splice(c.k, 1);
+      // Sous-titre « … : » resté sans contenu à la fin : retiré aussi.
+      while (c.lignes.length > 1 && (!c.lignes[c.lignes.length - 1].trim() || /:\s*$/.test(c.lignes[c.lignes.length - 1].trim()))) c.lignes.pop();
+      valeurs.set(c.id, c.lignes.join('\n').replace(/\n{3,}/g, '\n\n').trim());
+      retires.push({ id: c.id, texte: texte.replace(/^\s*[•\-*]\s*/, '').trim(), origine: 'memoire_type' });
+    }
+    const apresPt = hauteur();
+    parties.push({
+      section: partie.section, titre: b.titre, pages: partie.pages, ids: partie.ids, budgetPt, avantPt, apresPt, retires,
+      ...(comp ? { imageComprehensionPt: imagePt } : {}), restePt: Math.max(0, budgetPt - apresPt), depasse: apresPt > budgetPt,
+    });
+  }
+  return { valeurs, parties };
+}
+
+/** Hauteur (points) d'un schéma SVG inséré à la largeur du texte du cadre (15,5 cm au plus, 11 cm de haut au plus). */
+export function hauteurSchemaPt(svg: string, largeurPt: number): number {
+  const s = String(svg || '');
+  const vb = /viewBox="\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)\s*"/.exec(s);
+  const w = vb ? Number(vb[1]) : Number((/\bwidth="([\d.]+)/.exec(s) || [])[1] || 0);
+  const h = vb ? Number(vb[2]) : Number((/\bheight="([\d.]+)/.exec(s) || [])[1] || 0);
+  if (!w || !h) return 0;
+  const largeur = Math.min(largeurPt, 5580000 / 12700);
+  return Math.min(3960000 / 12700, largeur * h / w);
+}
