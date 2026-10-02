@@ -358,7 +358,7 @@ export function questionDimensionnement(d: Dimensionnement): string {
 
 /** Bloc des consignes de rédaction (cadre imposé) : les chiffres proposés, à reprendre tels quels. */
 export function texteDimensionnement(d: Dimensionnement): string {
-  const l: string[] = ['', '', 'DIMENSIONNEMENT PROPOSÉ PAR GSS (calculé à partir des postes et des horaires du DCE ; proposition que GSS validera — reprends ces chiffres EXACTEMENT là où l\'effectif, le nombre d\'agents, de maîtres-chiens, d\'équipes ou les rotations sont demandés, au lieu d\'écrire [À COMPLÉTER]) :'];
+  const l: string[] = ['', '', 'DIMENSIONNEMENT PROPOSÉ PAR GSS (calculé à partir des postes et des horaires du DCE ; proposition que GSS validera en interne : n\'écris jamais dans le texte que ces chiffres sont proposés, à valider ou à confirmer — reprends ces chiffres EXACTEMENT là où l\'effectif, le nombre d\'agents, de maîtres-chiens, d\'équipes ou les rotations sont demandés, au lieu d\'écrire [À COMPLÉTER]) :'];
   for (const x of d.profils) l.push(x.observation ? `- ${x.profil} (${x.qualification}) : ${pluriel(x.titulaires, 'titulaire')} (${x.observation})` : `- ${x.profil} (${x.qualification}) : ${fr(x.heuresSemaine)} h par semaine, ${fr(x.heuresAn)} h par an, soit ${fr(x.etp)} ETP → ${pluriel(x.titulaires, 'titulaire')}${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}${simultanesTexte(x)}`);
   if (d.profils.length) l.push(`- Équipe dédiée : ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} ; équipe suppléante formée au site : ${pluriel(d.suppleants, 'agent', 'agents')}.`);
   // Cadre de l'université de Rouen (génération réelle rouen_univ 15) : « Nombre total d'agents … dédiés en ETP » laissé à
@@ -367,7 +367,7 @@ export function texteDimensionnement(d: Dimensionnement): string {
   const etp = d.profils.filter((x) => !x.observation).reduce((a, x) => a + x.etp, 0);
   if (etp > 0) l.push(`- Total des postes : ${fr(etp)} ETP (à reprendre là où un nombre d'agents en ETP est demandé).`);
   if (d.profils.length) l.push(`- Tableau des moyens humains par site : une cellule par site, au même format pour toutes (postes et horaires du CCTP pour ce site), sans répartir l'équipe suppléante entre les sites (elle se cite une seule fois, pour tout le marché).`);
-  for (const m of d.misesEnSituation || []) l.push(`- ${m.libelle} (proposition de GSS à valider) : ${dispositifMiseEnSituation(m)}. Reprends ces nombres EXACTEMENT dans la réponse à cette mise en situation (nombre d'agents, catégories de personnel, PIF, détecteurs de métaux).`);
+  for (const m of d.misesEnSituation || []) l.push(`- ${m.libelle} (dispositif de GSS) : ${dispositifMiseEnSituation(m)}. Reprends ces nombres EXACTEMENT dans la réponse à cette mise en situation (nombre d'agents, catégories de personnel, PIF, détecteurs de métaux). N'écris jamais dans la réponse que ce dispositif est « proposé », « à valider » ou à confirmer : cette validation est interne à GSS.`);
   if (d.casPratique.length) {
     l.push(`- Cas pratique (effectif en service et effectif nécessaire pour la rotation, vacations de ${VACATION_MAX_H} heures au plus) :`);
     for (const x of d.casPratique) l.push(`  • ${x.plage} | ${x.profil} | en service : ${x.enService} | rotation : ${x.rotation}${x.justification ? ` — ${x.justification}` : ''}`);
