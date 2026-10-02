@@ -1352,6 +1352,24 @@ export function plafonnerEngagements(texte: string, max: number): string {
   return `${texte.slice(0, m.index)}\n## Nos engagements sur les exigences du cahier des charges\n\n${puces.slice(0, max).join('\n')}`;
 }
 
+/**
+ * Canal écrit du point d'entrée unique (T4C-8, rouen_univ 472 : « … le recours complémentaire à un courriel, une
+ * application dédiée ou un extranet est [À COMPLÉTER] » alors que le mémoire type de GSS donne « Mail unique :
+ * contact@gss-securite.fr ») : la phrase laissée à compléter sur le courriel est remplacée par la ligne de GSS.
+ * `mail` vient du texte de GSS (rubrique b3_interlocuteur_unique) ; '' : rien n'est fait.
+ */
+export function completerMailUnique(texte: string, mail: string): { texte: string; complete: boolean } {
+  const m = String(mail || '').trim();
+  if (!m || !/@/.test(m)) return { texte, complete: false };
+  let complete = false;
+  const sortie = String(texte || '').split('\n').map((ligne) => ligne.split(/(?<=[.!?])\s+/).map((ph) => {
+    if (!/\[À COMPLÉTER\]/.test(ph) || !/courriel|e-?mail|\bmail\b|adresse (?:électronique|mail)|extranet/i.test(ph)) return ph;
+    complete = true;
+    return `Mail unique : ${m}.`;
+  }).join(' ')).join('\n');
+  return { texte: sortie, complete };
+}
+
 // ─── Cadre imposé : contrôle déterministe des faits nouveaux ─────────────────────────────────────
 
 export interface SourcesFaitsCadre {
@@ -1390,7 +1408,11 @@ export function controlerFaitsNouveauxCadre(valeur: string, contexte: string, s:
   let v = String(valeur || '');
   if (!v.trim() || /^\s*\[À COMPLÉTER\]\.?\s*$/.test(v)) return { texte: v, questions };
   const ctxN = normaliser(contexte || '');
-  const libelle = ((contexte || '').match(/Question:\s*"([^"]*)"/) || [])[1]?.replace(/\s+/g, ' ').trim().slice(0, 120) || '';
+  // Libellé de la question, sinon celui de la section (une question réduite à « : » n'est pas un libellé : T4C-7).
+  const net = (x: string) => String(x || '').replace(/\[CHAMP_\d+\]/gi, '').replace(/(?:[_.…]\s*){3,}/g, ' ').replace(/\s+/g, ' ').replace(/^[\s:;,.–—-]+|[\s:;,.–—-]+$/g, '').trim();
+  const libQ = net(((contexte || '').match(/Question:\s*"([^"]*)"/) || [])[1] || '');
+  const libS = net(((contexte || '').match(/Section:\s*"([^"]*)"/) || [])[1] || '');
+  const libelle = (/\p{L}{3}/u.test(libQ) ? libQ : /\p{L}{3}/u.test(libS) ? libS : '').slice(0, 120);
   // Apostrophe, trait d'union ou espace indifférents entre les parties d'un mot (« Crit’Air » = « CRIT AIR » du DCE).
   const dansSources = (mot: string, src: string) => new RegExp(`(?<![a-z0-9])${normaliser(mot).split(/['‘´\s-]+/).filter(Boolean).map(echapperRx).join("[\\s'-]?")}(?![a-z0-9])`).test(src);
 
@@ -1416,7 +1438,24 @@ export function controlerFaitsNouveauxCadre(valeur: string, contexte: string, s:
   }
 
   // Partenaire de télésurveillance cité (ERYMA ou Delta, choix de GSS par marché) : gardé, mais à confirmer.
-  if (s.questionPartenaire && /\b(?:ERYMA|Delta)\b/.test(v)) questions.push(s.questionPartenaire);
+  const partenaire = !!s.questionPartenaire && /\b(?:ERYMA|Delta)\b/.test(v);
+  if (partenaire) questions.push(s.questionPartenaire!);
+  // Question exacte sur un passage écarté (T4C-7 : jamais « À confirmer par GSS (champ « : ») : … » emballé dans « Quelle
+  // réponse GSS apporte-t-elle… ») ; le passage qui cite le partenaire rejoint la question du partenaire.
+  let partenaireFusionne = false;
+  const question = (cite: string, faits: string[], retire: boolean): string => {
+    const f = [...new Set(faits)];
+    const base = `${libelle ? `Réponse « ${libelle} »` : 'Réponse du cadre'} : ${retire ? `la phrase « ${cite} » a été retirée` : `la valeur « ${cite} » n'a pas été écrite`} (${f.join(', ')} : absent${f.length > 1 ? 's' : ''} du DCE, du mémoire type, des mémoires et du registre de GSS).`;
+    const parPartenaire = partenaire && !partenaireFusionne && /\b(?:ERYMA|Delta)\b/.test(cite);
+    const certif = f.some((x) => /APSAD|certifi/i.test(x));
+    if (parPartenaire) {
+      const k = questions.indexOf(s.questionPartenaire!);
+      if (k >= 0) questions.splice(k, 1);
+      partenaireFusionne = true;
+      return `${base} ${s.questionPartenaire}${certif ? ' Quelle certification de sa station de télésurveillance faut-il indiquer ?' : ''}`;
+    }
+    return `${base} Faut-il ${retire ? 'l\'écrire' : 'l\'indiquer'}, et avec quelle information exacte ?`;
+  };
 
   // 2. Faits nouveaux par phrase (ou par ligne).
   const court = v.length <= 200;
@@ -1440,7 +1479,7 @@ export function controlerFaitsNouveauxCadre(valeur: string, contexte: string, s:
   if (court) {
     const m = motifs(v);
     if (m.length) {
-      questions.push(`À confirmer par GSS${libelle ? ` (champ « ${libelle} »)` : ''} : « ${v.replace(/\s+/g, ' ').trim()} » — ${[...new Set(m)].join(', ')} absent(s) du DCE, du mémoire type, des mémoires et du registre de GSS.`);
+      questions.push(question(v.replace(/\s+/g, ' ').trim(), m, false));
       return { texte: '[À COMPLÉTER]', questions };
     }
     return { texte: v, questions };
@@ -1457,7 +1496,7 @@ export function controlerFaitsNouveauxCadre(valeur: string, contexte: string, s:
       questions.push(`Proposition à valider${libelle ? ` (champ « ${libelle} »)` : ''} : « ${RELAIS_CYNOPHILE} » remplace « ${ph.replace(/\s+/g, ' ').trim()} » (${[...new Set(m)].join(', ')} absent(s) des sources de GSS).`);
       return RELAIS_CYNOPHILE;
     }
-    questions.push(`À confirmer par GSS${libelle ? ` (champ « ${libelle} »)` : ''}, retiré de la réponse : « ${ph.replace(/\s+/g, ' ').trim()} » — ${[...new Set(m)].join(', ')} absent(s) du DCE, du mémoire type, des mémoires et du registre de GSS.`);
+    questions.push(question(ph.replace(/\s+/g, ' ').trim(), m, true));
     return null;
   }).filter((ph): ph is string => ph !== null).join(' ')).join('\n').replace(/\s*;\s*$/gm, '.').replace(/\n{3,}/g, '\n\n').trim();
   // La réponse ne dit rien du chien alors que la mise en situation le demande : proposition ajoutée, à valider.

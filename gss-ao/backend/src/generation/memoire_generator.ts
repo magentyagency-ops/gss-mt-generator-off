@@ -22,7 +22,7 @@ import {
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, type Dimensionnement } from './dimensionnement';
 import {
-  type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, phrasesThematiques, completerParThematiques, textesSchemaSvg, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
+  type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, phrasesThematiques, completerParThematiques, completerMailUnique, textesSchemaSvg, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
@@ -3221,6 +3221,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
 - Une demande qui ne peut être renseignée que par l'ACHETEUR (données qu'il doit transmettre, ses préférences, ses choix) commence par « À demander à l'acheteur : ».
 - La validation par GSS de ce que propose le mémoire (dimensionnement, organisation, délais) est une question pour GSS, jamais « à demander à l'acheteur ».
 - Les références de GSS (dénomination de l'établissement client, contact, montant), son chiffre d'affaires, ses effectifs et ses cadres sont des questions pour GSS, jamais « à demander à l'acheteur ».
+- Les fiches techniques, notices ou documentations des moyens du soumissionnaire (« insérer ici les fiches techniques » : moyens de communication, contrôle de rondes, main courante) sont celles de GSS : question pour GSS, jamais « à demander à l'acheteur ».
 - Ne redemande jamais une donnée déjà écrite dans une demande ou connue de GSS (numéro d'autorisation AUT ou d'agrément AGD du CNAPS) : en fusionnant, reprends seulement les données réellement demandées.
 - Une phrase par question, sans Markdown.
 - Pour chaque question, indique dans "sources" les numéros des demandes qu'elle regroupe.
@@ -4162,7 +4163,10 @@ Renvoie un JSON valide :
         if (localName === 'p') {
           const pText = getElementText(node).trim();
           if (isHeadingParagraph(node)) {
-            currentHeading = pText;
+            // Titre réduit à un repère « [CHAMP_n] » (cellule déjà détectée) : le titre précédent reste (R4-1 : rouen_univ,
+            // « [champ_24] » donné comme libellé des réponses à relire et transmis au modèle comme titre de section).
+            const titreReel = pText.replace(/\[CHAMP_\d+\]/gi, '').replace(/\s+/g, ' ').trim();
+            if (titreReel) currentHeading = titreReel;
             // Titre réel (sans repère « [CHAMP_n] » d'une cellule déjà détectée) : libellé de section des cellules.
             if (pText.replace(/\[CHAMP_\d+\]/g, '').trim()) sectionPropre = pText.replace(/\[CHAMP_\d+\]/g, '').trim();
             recentParagraphs.length = 0;
@@ -5072,11 +5076,15 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
           const retenus = referencesPrincipales(referencesRetenues(candidats, data.reference));
           // Intitulé de la rubrique du cadre (titre de section) quand la « question » n'est qu'un paragraphe de consigne
           // (havre1 : « Le renvoi vers un rapport général… est à proscrire » au lieu de « Mesures et initiatives sociétales »).
-          const sectionChamp = ((f.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '').replace(/\s+/g, ' ').trim();
+          const sectionChamp = ((f.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '').replace(/\[CHAMP_\d+\]/gi, '').replace(/\s+/g, ' ').trim();
           const consigneSeule = !!sectionChamp && sectionChamp !== (questionMT || '').trim() && !/^\d/.test((questionMT || '').trim())
             && (!/[a-zà-ÿ]/.test(sectionChamp) || /^(?:le renvoi|cela peut|le soumissionnaire|le candidat|le prestataire|il est demand|il convient)/i.test((questionMT || '').trim()));
           const titreSection = /[a-zà-ÿ]/.test(sectionChamp) ? sectionChamp : sectionChamp.charAt(0) + sectionChamp.slice(1).toLowerCase();
-          const libelle = libelleQuestionCadre(consigneSeule ? titreSection : questionMT || `Champ ${f.id}`);
+          const libelleBrut = libelleQuestionCadre(consigneSeule ? titreSection : questionMT || `Champ ${f.id}`);
+          // Jamais un repère interne comme libellé : l'intitulé de la question, sinon celui du champ.
+          const libelle = /\[?champ_\d+\]?/i.test(libelleBrut) || !/\p{L}{3}/u.test(libelleBrut)
+            ? libelleQuestionCadre((questionMT || '').replace(/\[CHAMP_\d+\]/gi, '').trim() || intitulePrincipal(((f.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').replace(/\[CHAMP_\d+\]/gi, '')) || `Champ ${f.id}`)
+            : libelleBrut;
           if (retenus.length) {
             // Consigne 5 et décision D7 : le texte de GSS repris EXACTEMENT, à 90 % au moins. Réponse du modèle sous ce
             // seuil : nouvel essai strict (recopie mot pour mot), gardé s'il est plus fidèle. Puis la réponse est recalée
@@ -5382,6 +5390,10 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       // Sujet que GSS traite dans le mémoire type, resté « [À COMPLÉTER] » après la rédaction (ca_normandie 241, 2.2 :
       // renfort urgent hors astreinte) : la phrase publipostée de GSS, sans question.
       if (repriseMT) {
+        // Courriel du point d'entrée unique laissé à compléter : la ligne « Mail unique » du mémoire type de GSS (T4C-8).
+        const mailGss = (/Mail unique\s*:\s*([^\s;]+@[^\s;]+?)\.?\s*$/m.exec(String(repriseMT.mt.rubriques.find((x) => x.id === 'b3_interlocuteur_unique')?.texte || '')) || [])[1] || '';
+        const mail = completerMailUnique(String(r.value), mailGss);
+        if (mail.complete) { r.value = mail.texte; console.log(`[MemoireGenerator] Champ ${r.id} : courriel du point d'entrée unique repris du mémoire type (${mailGss}).`); }
         const theme = completerParThematiques(String(r.value), phrasesThematiques(repriseMT.textes));
         if (theme.completes.length) { r.value = theme.texte; console.log(`[MemoireGenerator] Champ ${r.id} : ${theme.completes.length} repère(s) remplacé(s) par la phrase du mémoire type (${theme.completes.join(' ; ')}).`); }
       }
@@ -5989,6 +6001,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
 
     // 7 bis. Liste des champs restés « [À COMPLÉTER] » APRÈS garde-fous (fidèle au document remis)
     // → transformés en QUESTIONS à compléter, remontées comme notification (comme le no-template).
+    /** Champ de chaque libellé de la liste (consultations : la question précise des emplacements du champ, T4C-7). */
+    const champDuLibelle = new Map<string, number>();
     const aCompleter: string[] = replacements
       .filter((r: any) => /\[À COMPLÉTER\]/.test(String(r.value)))
       .flatMap((r: any) => {
@@ -6001,7 +6015,9 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         const label = (m ? m.slice(1).find(Boolean) : '') || ctx.replace(/\s*\|\s*Contexte proche:.*$/, '').trim();
         // Bloc de contacts : « Contact comptable — Prénom, Nom » (sinon trois questions identiques, sans le contact visé).
         const groupe = (ctx.match(/Groupe:\s*"([^"]*)"/) || [])[1];
-        return (groupe && label ? `${groupe} — ${label}` : label || `Champ ${r.id}`).trim();
+        const l = (groupe && label ? `${groupe} — ${label}` : label || `Champ ${r.id}`).trim();
+        if (!champDuLibelle.has(l)) champDuLibelle.set(l, r.id);
+        return l;
       })
       .filter((s: string, i: number, arr: string[]) => Boolean(s) && arr.indexOf(s) === i);
     if (aCompleter.length) {
@@ -6070,6 +6086,11 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       preciserQuestionsCadre(elementsACompleter, signets, (champ) => (descriptors.find((x) => x.id === champ)?.context.match(/Groupe:\s*"([^"]*)"/) || [])[1] || '');
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Précision des questions du cadre indisponible : ${e?.message || e}`);
+    }
+    // Donnée de GSS (fiches techniques de ses équipements, références, chiffre d'affaires…) : posée à GSS (T4-COH-5).
+    for (const el of elementsACompleter) {
+      const q = questionDonneeGss(el.question);
+      if (q !== el.question) { el.question = q; el.pourAcheteur = false; }
     }
     // Grille de candidature : la question exacte de chaque donnée, posée à GSS (jamais à l'acheteur), une par emplacement.
     for (const el of elementsACompleter) {
@@ -6156,16 +6177,18 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     fs.writeFileSync(outputPath, buf);
 
     console.log(`[MemoireGenerator] Successfully generated ${outputPath}`);
+    /** Intitulé d'un champ rédigé (état de complétion, consultations). */
+    const champsEtatLibelle = (id: number): string => {
+      const d = descriptors.find((x) => x.id === id);
+      const m = d?.context.match(/Question:\s*"([^"]*)"|Tableau:\s*(.+?)(?:\s*\|\s*Contexte proche:|$)/);
+      const section = (d?.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '';
+      const net = (x: string) => x.replace(/\[CHAMP_\d+\]/gi, '').replace(/(?:[_.…]\s*){3,}/g, ' ').replace(/\s+/g, ' ').trim();
+      const sec = net(section);
+      const libelle = net((m ? m.slice(1).find(Boolean) : '') || section || '') || `Réponse ${id}`;
+      return libelleChampEtat(sec, libelle);
+    };
     try {
-      const champsEtat = champsRediges.map((id) => {
-        const d = descriptors.find((x) => x.id === id);
-        const m = d?.context.match(/Question:\s*"([^"]*)"|Tableau:\s*(.+?)(?:\s*\|\s*Contexte proche:|$)/);
-        const section = (d?.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '';
-        const net = (x: string) => x.replace(/\[CHAMP_\d+\]/g, '').replace(/(?:[_.…]\s*){3,}/g, ' ').replace(/\s+/g, ' ').trim();
-        const sec = net(section);
-        const libelle = net((m ? m.slice(1).find(Boolean) : '') || section || '') || `Réponse ${id}`;
-        return { cle: `GSS_CH_${id}`, libelle: libelleChampEtat(sec, libelle) };
-      });
+      const champsEtat = champsRediges.map((id) => ({ cle: `GSS_CH_${id}`, libelle: champsEtatLibelle(id) }));
       // Premier message de l'assistant : propositions de réponse et réponses à relire, validables ou modifiables (D5).
       // Aucun repère technique (« GSS_CH_n ») montré à GSS : l'assistant retrouve chaque réponse par son libellé.
       const aRelire = [...propositionsCadre.entries()].filter(([id]) => champsRediges.includes(id)).sort((a, b) => a[0] - b[0]);
@@ -6215,12 +6238,21 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
               const precises = [...new Set(elementsACompleter.filter((el) => signets.find((x) => x.cle === el.cle)?.champ === champ).map((el) => el.question).filter((x) => x && !questionsVaguesGrille.has(x)))];
               return precises.length ? precises : [q];
             }), ...confirmationsGss], { dce: dceContext, horsNormandie: marcheHorsNormandie(analysisData, dceContext) })
-            : [...aCompleter, ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))]),
-        ].map((c) => (/p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(c) ? 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».' : c).replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean).map(questionExacte)),
+            // Champ hors grille : la question précise de chacun de ses emplacements (« En complément du téléphone, utilisez-
+            // vous un courriel… ? »), jamais le seul libellé du cadre (« Si oui est-ce un courriel… ? », T4C-7).
+            : [...aCompleter.flatMap((q) => {
+              const champ = champDuLibelle.get(q);
+              if (champ === undefined) return [q];
+              const precises = [...new Set(elementsACompleter.filter((el) => el.statut === 'ouvert' && signets.find((x) => x.cle === el.cle)?.champ === champ).map((el) => el.question).filter(Boolean))];
+              return precises.length ? precises : [q];
+            }), ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))]),
+        ].map((c) => (/p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(c) ? 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».' : c).replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean).map(questionDonneeGss).map(questionExacte)),
         // Grille de candidature : une question exacte par donnée de GSS (effectif, cadres, chiffre d'affaires, référence).
         ...questionsGrilleCandidature,
-        // Une ligne par réponse à relire ou à valider (même intitulé possible : une ligne chacune, comme le premier message).
-        ...[...propositionsCadre.entries()].filter(([id]) => champsRediges.includes(id)).sort((a, b) => a[0] - b[0]).map(([, c]) => c),
+        // Une ligne par réponse à relire ou à valider ; jamais un repère interne (« [champ_24] ») : l'intitulé du champ ;
+        // deux lignes identiques n'en font qu'une.
+        ...new Set([...propositionsCadre.entries()].filter(([id]) => champsRediges.includes(id)).sort((a, b) => a[0] - b[0])
+          .map(([id, c]) => c.replace(/\[?champ_\d+\]?/gi, () => libelleQuestionCadre(champsEtatLibelle(id)) || `réponse ${id}`))),
       ],
     };
   }
