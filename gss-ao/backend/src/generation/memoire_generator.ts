@@ -1225,6 +1225,14 @@ const CHAPTER_ORDER_B = ['I', 'II', 'III', 'IV'];
 // des taux distincts… »). Une prestation qui cite seulement le bordereau reste un engagement (Becquerel : « renforts
 // exceptionnels commandés sur la base du BPU avec un délai de prévenance de 48 heures ouvrées »).
 export const PIECES_OFFRE = /acte d.engagement|bordereau de prix|(?:compl[ée]t|rempli|renseign|chiffr|joindr|fourni)[^.]{0,40}(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)|(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)[^.]{0,30}(?:compl[ée]t|rempli|renseign)|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?/i;
+/**
+ * Forme de comparaison d'un texte (cadre : garde-fous et libellés) : minuscules, sans accents, apostrophes typographiques
+ * (’ ‘ ʼ) ramenées à « ' » et espaces insécables à l'espace (rouen_univ 472 : « Prime de fin d’année » rédigée avec ’ était
+ * retirée comme « invention » alors que le mémoire type l'écrit avec « ' »).
+ */
+export function normComparaison(s: string): string {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’‘ʼ]/g, "'").replace(/[  ]/g, ' ');
+}
 /** Libellés écrits sans modèle dans les cellules d'identité d'un cadre (tableau des autorisations CNAPS, signataire). */
 const LIBELLES_IDENTITE_DETERMINISTES = 'Surveillance humaine et gardiennage (activités privées de sécurité, livre VI du CSI, Code de la sécurité intérieure) ; Dirigeant d\u2019entreprise de surveillance et de gardiennage ; Dirigeant de GLOBAL SECURITY SERVICES';
 
@@ -3940,7 +3948,7 @@ Renvoie un JSON valide :
     const isDottedOnly = (s: string) => s.trim().length >= 5 && /^[_.\-…\s]+$/.test(s);
     const hasDottedRun = (s: string) => DOT_RUN.test(s);
     const stripDots = (s: string) => s.replace(DOT_RUN_G, ' ').trim();
-    const normCtx = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const normCtx = normComparaison;
     const isIdentityCtx = (ctx: string) =>
       /adresse|denomination|raison sociale|candidat|cnaps|siret|siren|agrement|certification|\bstation\b|\bdate\b|n°|numero|delai|minute|intervenant|taux|effectif|\betp\b|telephone|email|mail|coordonnees|soussigne|agissant|qualite de|\bnom\b|prenom|fonction/.test(normCtx(ctx));
     // Libellés d'identité seuls sur leur ligne (« Raison sociale », « Siret ») : réponse courte à côté.
