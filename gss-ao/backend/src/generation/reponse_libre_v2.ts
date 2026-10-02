@@ -463,7 +463,7 @@ export function poserReperes(sections: Record<string, string>, ordre: string[], 
 
 // ─── Questions nouvelles du DCE ──────────────────────────────────────────────────────────────────
 
-const PIECES_OU_PENALITES = /acte d.engagement|bordereau de prix|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?|p[ée]nalit|plafonnement|r[ée]vision des prix|facturation|paiement|garantie financi|assurance responsabilit/i;
+const PIECES_OU_PENALITES = /acte d.engagement|bordereau de prix|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?|p[ée]nalit|plafonnement|r[ée]vision des prix|facturation|paiement|garantie financi|assurance responsabilit|\bassurances?\b(?!\s+(?:qualit|de (?:la )?qualit|s[ée]curit))|attestations? d.assurance|garanties? (?:financi|souscrite)|contrat d.assurance|\bsinistres?\b/i;
 
 /**
  * Exigences que la matrice déclare « nouvelles » : une recherche lexicale sur les mots-clés du mémoire type les
@@ -486,6 +486,9 @@ export function trierNouvelles(mt: MemoireType, plan: PlanMemoireType, nouvelles
 
 const MOTS_VIDES = new Set(['dans', 'pour', 'avec', 'sans', 'sous', 'chez', 'entre', 'leur', 'leurs', 'cette', 'votre', 'notre', 'des', 'les', 'une', 'aux', 'par', 'sur', 'est', 'sont', 'doit', 'doivent', 'titulaire', 'prestataire', 'candidat', 'site', 'sites']);
 const motsSujet = (t: string) => new Set(normaliser(t).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 4 && !MOTS_VIDES.has(w)));
+
+/** Mot ramené au singulier (« attestations » → « attestation », « travaux » → « travau » : racine commune suffisante). */
+const singulier = (w: string) => (w.length > 4 ? w.replace(/[sx]$/, '') : w);
 
 export interface GroupeNouveau { sujet: string; theme: string; exigences: ExigenceMatrice[] }
 
@@ -528,9 +531,10 @@ export function grouperNouvelles(nouvelles: ExigenceMatrice[], max = 6): { group
   const groupes: Array<GroupeNouveau & { mots: Set<string> }> = [];
   for (const e of nouvelles) {
     const sujet = String(e.sujet || '').trim() || e.exigence.split(/[.;:]/)[0].slice(0, 80);
-    const mots = motsSujet(sujet);
+    // Mots ramenés au singulier (« Attestations d'assurance » et « Attestation d'assurance » : un seul sujet, parc_expo 202).
+    const mots = new Set([...motsSujet(sujet)].map(singulier));
     const g = groupes.find((x) => {
-      if (normaliser(x.sujet) === normaliser(sujet)) return true;
+      if (normaliser(x.sujet) === normaliser(sujet) || [...mots].join(' ') === [...x.mots].join(' ')) return true;
       // Au moins deux mots du sujet en commun (un seul mot, souvent générique — « entretien », « gestion » — ne suffit pas).
       const communs = [...mots].filter((w) => x.mots.has(w)).length;
       return communs >= 2 && communs / Math.min(mots.size || 1, x.mots.size || 1) >= 0.5;
@@ -1180,8 +1184,57 @@ export const CONSIGNE_PROPOSITION = `Tu rédiges, pour GSS (Global Security Serv
 - Une donnée indispensable inconnue : écris [À COMPLÉTER] à sa place et ajoute sur sa propre ligne [CONSULTATION REQUISE : <donnée précise à obtenir de GSS>].
 - Aucun commentaire interne (« non précisé », « à confirmer », « selon la documentation », « GSS indique »…), jamais « proposition » ni « à valider » dans le texte : c'est la réponse de GSS à l'acheteur.
 - Pas d'article L. 1224-1 si le DCE ne le cite pas ; aucun montant de pénalité ; jamais de Covid ; un agent de sécurité ne contrôle pas l'identité.
+- GSS ne sous-traite pas et n'a pas recours à l'intérim : n'en parle jamais, même au conditionnel. Un montant, un numéro de contrat ou un nom d'assureur de GSS vient uniquement du registre ; un seuil exigé par le DCE n'est jamais présenté comme la garantie de GSS. Ne pose pas de question sur une donnée que le registre donne déjà.
 "titre" : le titre de la rubrique, 8 mots au plus, dans le vocabulaire du DCE.
 Réponds UNIQUEMENT par un objet JSON : {"titre": "…", "texte": "…"}`;
+
+/**
+ * Contrôle sans modèle d'une proposition de réponse (questions nouvelles, D5) avant de la placer dans le mémoire :
+ *  - phrase ou question qui cite la sous-traitance ou l'intérim, même au conditionnel (faits_gss.md : GSS ne sous-traite
+ *    pas, n'a pas recours à l'intérim ; parc_expo 202 : « Si une sous-traitance devait être mise en place… ») : retirée ;
+ *  - amorce sans objet terminée par un repère (« … couvrant la date de commencement des prestations si : [À COMPLÉTER]. ») :
+ *    retirée avec sa question ;
+ *  - montant de garantie (assurance, sinistre) qui n'est pas un montant de GSS (`montantsGss`, registre) : la phrase est
+ *    retirée et l'écart devient une question à GSS (parc_expo 202 : « au minimum 10 000 000 € » présentés comme les
+ *    garanties de GSS, alors que sa RC professionnelle Hiscox est de 300 000 €).
+ */
+export function controlerProposition(texte: string, montantsGss: string[] = []): { texte: string; retirees: string[]; questions: string[] } {
+  const retirees: string[] = [];
+  const questions: string[] = [];
+  const montant = (x: string) => x.replace(/[\s\u00a0\u202f.]/g, '').replace(/euros?/i, '€');
+  const gss = new Set(montantsGss.map(montant));
+  const INTERDIT = /sous[- ]?trait|int[ée]rim/i;
+  const lignes = String(texte || '').split('\n');
+  const out: string[] = [];
+  for (let i = 0; i < lignes.length; i++) {
+    const l = lignes[i];
+    const consultation = /^\s*\[CONSULTATION REQUISE\s*:/i.exec(l);
+    if (consultation) {
+      if (INTERDIT.test(l)) { retirees.push(l.trim()); continue; }
+      out.push(l);
+      continue;
+    }
+    if (/^\s*(?:#|\|)/.test(l) || !l.trim()) { out.push(l); continue; }
+    const puce = (/^\s*(?:[-*•]|\d+[.)])\s+/.exec(l) || [''])[0];
+    const corps = l.slice(puce.length);
+    let retireAvecQuestion = false;
+    const gardees = corps.split(/(?<=[.!?])\s+/).filter((ph) => {
+      if (INTERDIT.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion ||= /\[À COMPLÉTER\]/.test(ph); return false; }
+      if (/\b(?:si|lorsque|quand|dont|notamment)\s*:?\s*\[À COMPLÉTER\]\s*[.;]?\s*$/i.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion = true; return false; }
+      const montants = ph.match(/\d[\d\s\u00a0\u202f.,]*\s*(?:€|euros?\b)/gi) || [];
+      if (montants.length && /assur|garanti|sinistre|couvert|couverture/i.test(ph) && montants.some((m) => !gss.has(montant(m)))) {
+        retirees.push(ph.trim());
+        questions.push(`Une proposition de réponse annonçait des garanties d'assurance qui ne sont pas celles de votre registre (« ${ph.replace(/[*_]/g, '').trim().slice(0, 240)} ») : quels montants de garantie votre assurance couvre-t-elle pour ce marché ?`);
+        return false;
+      }
+      return true;
+    });
+    // Question qui suit une phrase retirée (repère [À COMPLÉTER] retiré avec elle) : retirée aussi.
+    if (retireAvecQuestion && /^\s*\[CONSULTATION REQUISE\s*:/i.test(lignes[i + 1] || '')) { retirees.push(lignes[i + 1].trim()); i++; }
+    if (gardees.length) out.push(`${puce}${gardees.join(' ')}`);
+  }
+  return { texte: out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/(^|\n)(#{2,4} [^\n]+)\n+(?=#{2,4} |$)/g, '$1').trim(), retirees, questions };
+}
 
 /** Messages de la rédaction d'une proposition de réponse à une question nouvelle (consigne fixe en premier). */
 export function consigneProposition(groupe: GroupeNouveau, o: { client?: string; bloc?: string; sources?: string; regles?: string; perimetre?: string; horsNormandie?: boolean; analyse?: string }): Array<{ role: 'system' | 'user'; content: string }> {

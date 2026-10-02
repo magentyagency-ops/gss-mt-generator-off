@@ -17,7 +17,7 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces,
-  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, planSelonRC, passagesPlanImpose,
+  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, planSelonRC, passagesPlanImpose, controlerProposition,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, type Dimensionnement } from './dimensionnement';
@@ -28,7 +28,7 @@ import {
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation,
 } from './memoire_type_cadre';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, montantsRegistre } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -7012,6 +7012,7 @@ RÈGLES DE FORME (rendu Marp) :
         if (!p) { ecartees.push(...g.exigences); return; }
         const id = idProposition(g.sujet, idsPris);
         sections[id] = p.texte;
+        alertesAcheteurs.push(...p.questions);
         if (p.acheteurs.length) alertesAcheteurs.push(`Proposition de réponse « ${p.titre} » : elle cite ${p.acheteurs.join(', ')}, acheteur(s) d'un ancien mémoire de GSS. Vérifiez qu'il s'agit bien d'une référence et non du destinataire (à corriger via l'assistant avant la remise).`);
         g.exigences.forEach((e) => enProposition.add(e));
         propositions[i] = { id, chapter: cle, title: p.titre, apres: bloc.rubriques[bloc.rubriques.length - 1], proposition: true, sujet: g.sujet };
@@ -7055,7 +7056,7 @@ RÈGLES DE FORME (rendu Marp) :
     progres(74, 'Cohérence avec les exigences chiffrées et les horaires du CCTP…');
     // Valeurs habituelles de GSS dont l'engagement renforcé n'est dû que si le DCE l'exige (indicateur faux) : protégées.
     const proteges = Object.values(mt.variables).filter((v) => v.valeur_gss && v.valeur_si_exige && v.indicateur_exige && !prep.indicateurs[v.indicateur_exige]).map((v) => v.valeur_gss!);
-    await this.corrigerContradictions(sections, rubriquesDoc, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))], proteges);
+    await this.corrigerContradictions(sections, rubriquesDoc, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))], proteges, questionsCouverture);
     await this.verifierHoraires(sections, rubriquesDoc, dceContext);
     await this.engagementsChiffresManquants(sections, rubriquesDoc, dceContext);
     limiterRappelsSite(sections, rubriquesDoc.map((x) => x.id));
@@ -7349,7 +7350,7 @@ RÈGLES DE FORME (rendu Marp) :
   private async proposerReponse(
     g: GroupeNouveau,
     o: { client?: string; bloc?: string; perimetre?: string; horsNormandie?: boolean; analyse?: string; registre?: string; gssDocs: Record<string, string>; availableCategories: string[]; demande?: string },
-  ): Promise<{ titre: string; texte: string; acheteurs: string[] } | null> {
+  ): Promise<{ titre: string; texte: string; acheteurs: string[]; questions: string[] } | null> {
     const requete = `${g.sujet}. ${g.exigences.map((e) => e.exigence).join(' ')}`.slice(0, 2000);
     let memoires = '';
     try {
@@ -7388,8 +7389,17 @@ RÈGLES DE FORME (rendu Marp) :
       }
       if (acheteurs.length) console.warn(`[MemoireGenerator] Proposition « ${g.sujet} » : ancien(s) acheteur(s) cité(s) (${acheteurs.join(', ')}), signalé à GSS.`);
     }
+    // Contrôle sans modèle : sous-traitance ou intérim (même au conditionnel), amorce « … si : [À COMPLÉTER] », montant
+    // de garantie qui n'est pas celui du registre de GSS (parc_expo 202) : phrases retirées, écart demandé à GSS.
+    const ctrl = controlerProposition(texte, montantsRegistre());
+    if (ctrl.retirees.length) console.log(`[MemoireGenerator] Proposition « ${g.sujet} » : ${ctrl.retirees.length} phrase(s) retirée(s) (sous-traitance, amorce sans objet ou garantie qui n'est pas celle de GSS).`);
+    texte = ctrl.texte;
+    if (texte.split(/\s+/).length < 60) {
+      console.warn(`[MemoireGenerator] Proposition « ${g.sujet} » non retenue (trop courte après contrôle).`);
+      return null;
+    }
     const titre = court(rep?.titre, 80) || `${g.sujet.charAt(0).toUpperCase()}${g.sujet.slice(1)}`;
-    return { titre, texte, acheteurs };
+    return { titre, texte, acheteurs, questions: ctrl.questions };
   }
 
   /**
@@ -7642,7 +7652,7 @@ Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "tex
    * inférieure au minimum imposé, délai plus long que le maximum…) est reformulée pour s'aligner sur
    * l'exigence. Seuls les remplacements retrouvés MOT POUR MOT sont appliqués. Étape non bloquante.
    */
-  private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>, proteges: string[] = []): Promise<void> {
+  private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>, proteges: string[] = [], questions?: Set<string>): Promise<void> {
     const ids = rubriques.map((r) => r.id).filter((id) => (sections[id] || '').trim());
     // Une rubrique à la fois, avec les exigences chiffrées qui lui sont attribuées (contexte court : résultat stable).
     // Chaque rubrique est confrontée à TOUTES les exigences (une contradiction se trouve souvent hors de la
@@ -7669,6 +7679,15 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
         if (!ids.includes(id) || extrait.length < 12 || !remplacement || /⟦AC:|CONSULTATION REQUISE/i.test(extrait) || !sections[id].includes(extrait)) continue;
         // Pratique de GSS gardée quand le DCE n'exige rien (« une à trois fois par mois » : contrôles inopinés non exigés).
         if (proteges.some((x) => extrait.includes(x) && !remplacement.includes(x))) continue;
+        // Fait de GSS (montant d'assurance, numéro de contrat, valeur du registre) : jamais remplacé par le seuil du DCE ;
+        // l'écart est demandé à GSS (parc_expo 202 : RC professionnelle Hiscox 300 000 € devenue « 10 000 000 € »).
+        const motif = motifRefusAlignement(extrait, remplacement);
+        if (motif) {
+          console.warn(`[MemoireGenerator] Cohérence ${id} avec le CCTP : remplacement refusé (${motif}) : « ${extrait.slice(0, 100)} ».`);
+          const exigence = String(c?.exigence || '').replace(/\s+/g, ' ').trim();
+          if (questions && exigence) questions.add(`Le DCE exige : « ${exigence.replace(/[.\s]+$/, '').slice(0, 300)} ». Le mémoire indique la valeur de GSS : « ${extrait.replace(/[*_#]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)} ». Disposez-vous d'une garantie ou d'une valeur conforme à cette exigence (extension, attestation), et laquelle faut-il écrire ?`);
+          continue;
+        }
         sections[id] = sections[id].replace(extrait, remplacement);
         n++;
       }
@@ -8334,7 +8353,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       sections[id] = delais.texte;
     }
     progres(70, 'Cohérence avec les exigences chiffrées et les horaires du CCTP…');
-    await this.corrigerContradictions(sections, plan, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))]);
+    await this.corrigerContradictions(sections, plan, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))], [], questionsCouverture);
     await this.verifierHoraires(sections, plan, dceContext);
     await this.engagementsChiffresManquants(sections, plan, dceContext);
     const remarquesCourt = await this.remarquesCahierDesCharges(dceContext);

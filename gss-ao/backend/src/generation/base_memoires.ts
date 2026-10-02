@@ -326,6 +326,32 @@ export function acheteursCites(texte: string, client = ''): string[] {
   return cites.filter((c) => !cites.some((d) => d !== c && d.startsWith(`${c} `)));
 }
 
+/** Montants en euros du registre de GSS (garanties d'assurance, prix) : seuls montants qu'un texte peut attribuer à GSS. */
+export function montantsRegistre(): string[] {
+  return charger().registre.flatMap((e) => String(e.valeur_retenue || '').match(/\d[\d\s\u00a0\u202f.,]*\s*(?:€|euros?\b)/gi) || []);
+}
+
+/**
+ * Remplacement proposé par une passe d'alignement sur le CCTP (corrigerContradictions) qui toucherait un fait de GSS :
+ * montant en euros (garanties d'assurance), numéro de contrat ou d'autorisation, valeur du registre. Le seuil exigé par le
+ * DCE n'est pas la garantie réelle de GSS (parc_expo 202 : RC professionnelle Hiscox 300 000 € réécrite « au minimum
+ * 10 000 000 € par sinistre ») : le remplacement est refusé et l'écart devient une question à GSS. Renvoie '' si admis.
+ */
+export function motifRefusAlignement(extrait: string, remplacement: string): string {
+  const montants = (t: string) => (String(t || '').match(/\d[\d\s\u00a0\u202f.,]*\s*(?:€|euros?\b|k€|M€)/gi) || []).map((x) => x.replace(/[\s\u00a0\u202f.]/g, '').replace(/euros?/i, '€')).sort().join('|');
+  if (montants(extrait) && montants(extrait) !== montants(remplacement)) return 'montant de GSS';
+  const numeros = (t: string) => String(t || '').match(/\b[A-Z]{2,}[A-Z0-9-]*\d{4,}[A-Z0-9-]*\b/g) || [];
+  if (numeros(extrait).some((x) => !String(remplacement).includes(x))) return 'numéro de contrat ou d\'autorisation de GSS';
+  const n = (t: string) => normTxt(String(t || '')).replace(/\s+/g, ' ');
+  const ext = n(extrait), rem = n(remplacement);
+  for (const e of charger().registre) {
+    for (const v of String(e.valeur_retenue || '').split(';').map((x) => n(x).trim()).filter((x) => x.length >= 6 && x.length <= 80 && /\d/.test(x))) {
+      if (ext.includes(v) && !rem.includes(v)) return `valeur du registre de GSS (${e.libelle || e.cle})`;
+    }
+  }
+  return '';
+}
+
 /**
  * Noms d'un autre marché cités dans un texte (question à GSS, valeur d'un champ) : anciens acheteurs de GSS
  * (acheteursCites) et références clients de GSS que le DCE ne cite pas. Une question « Confirmer le délai de mobilisation
