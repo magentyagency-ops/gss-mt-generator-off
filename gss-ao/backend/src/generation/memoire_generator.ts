@@ -26,7 +26,7 @@ import {
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
-  controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation,
+  controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides,
 } from './memoire_type_cadre';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, montantsRegistre } from './base_memoires';
 import fs from 'fs';
@@ -4855,6 +4855,11 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
               }
             }
             rec.texte = nettoyerReponseCadre(rec.texte);
+            // Sous-titre resté sans texte (ca_normandie 221, 2.2 « Besoin urgent de renfort hors astreinte ») : la phrase de GSS
+            // qui traite ce sujet (rubriques reprises ici ou dans une autre réponse), sinon « [À COMPLÉTER] » demandé à GSS.
+            const sousTitres = completerSousTitresVides(rec.texte, [...retenus, ...renvois]);
+            if (sousTitres.completes.length) console.log(`[MemoireGenerator] ${label} : sous-titre(s) sans texte complété(s) par le mémoire type (${sousTitres.completes.join(' ; ')}).`);
+            rec.texte = sousTitres.texte;
             if (rec.texte !== String(value)) {
               console.log(`[MemoireGenerator] ${label} : réponse recalée sur le mémoire type (${retenus.map((c) => c.id).join(', ')}), fidélité ${rec.fideliteAvant.toFixed(2)} → ${rec.fidelite.toFixed(2)} (${rec.reformulees} phrase(s) reformulée(s) rétablie(s), ${rec.reinserees} remise(s), ${rec.bribesRetirees} bribe(s) et ${rec.ajoutsRetires} ajout(s) retiré(s)).`);
               value = rec.texte;

@@ -223,7 +223,7 @@ describe('Cadre imposé : texte de référence du mémoire type', () => {
     expect(a.candidats.get(34)!.map((x) => [x.cle, x.id])).toEqual([['R1', 'b4_communication'], ['R2', 'b4_pti']]);
     expect(a.candidats.get(33)).toEqual([]);
     expect(a.candidats.get(36)).toEqual([]);
-    expect(a.renvois.get(36)).toEqual([{ titre: 'b4_communication', libelle: '4.2 Fiches techniques' }]);
+    expect(a.renvois.get(36)).toEqual([{ titre: 'b4_communication', libelle: '4.2 Fiches techniques', texte: 'Texte.' }]);
     expect(blocRenvois(a.renvois.get(33)!)).toMatch(/voir notre réponse à la question/);
     expect(blocRenvois([])).toBe('');
   });
@@ -339,5 +339,30 @@ describe('tour 1 : réponse 3.4 de havre1', () => {
     const c = (id: string, score: number) => ({ cle: id, id, titre: id, texte: '', score });
     expect(referencesPrincipales([c('b2_identite', 0.5), c('b3_formation_ads', 0.7), c('b3_adequation', 0.6)]).map((x) => x.id)).toEqual(['b3_formation_ads']);
     expect(referencesPrincipales([c('a', 0.7), c('b', 0.68), c('c', 0.67)]).map((x) => x.id)).toEqual(['a', 'b']);
+  });
+});
+
+import { completerSousTitresVides, estSousTitreCadre } from '../src/generation/memoire_type_cadre';
+/** Tour 2 (T2C-2, ca_normandie 221, 2.2) : un sous-titre n'est jamais imprimé sans texte. */
+describe('sous-titre sans texte (cadre)', () => {
+  const src = [{ texte: "Nous mettons en place une équipe de 83 agents titulaires.\nPour les renforts ponctuels, nous disposons d'un vivier de 500 agents validés par nos équipes, dont 100 mobilisables en 48 heures." }];
+  for (const cas of ['**Pérennité**\nTexte.\n\n**Besoin urgent de renfort hors astreinte**\n[À COMPLÉTER]', '## Pérennité\nTexte.\n\n## Besoin urgent de renfort hors astreinte\n\n[À COMPLÉTER]', 'Pérennité des effectifs\nTexte.\n\nBesoin urgent de renfort hors astreinte\n[À COMPLÉTER]']) {
+    it(`garde le repère sous le sous-titre puis le remplit par la phrase de GSS : ${cas.slice(0, 30)}`, () => {
+      const n = nettoyerReponseCadre(cas);
+      expect(n).toMatch(/renfort hors astreinte\**\n+\[À COMPLÉTER\]/);
+      const r = completerSousTitresVides(n, src);
+      expect(r.texte).toMatch(/vivier de 500 agents/);
+      expect(r.texte).not.toMatch(/\[À COMPLÉTER\]/);
+    });
+  }
+  it('sans phrase de GSS sur le sujet : le repère reste (question à GSS)', () => {
+    expect(completerSousTitresVides('**Remise des clés**', src).texte).toBe('**Remise des clés**\n[À COMPLÉTER]');
+  });
+  it('un « [À COMPLÉTER] » isolé au milieu d’un texte rédigé reste retiré (havre1 181)', () => {
+    expect(nettoyerReponseCadre('Texte rédigé.\n[À COMPLÉTER]\nSuite.')).toBe('Texte rédigé.\nSuite.');
+  });
+  it('une ligne « libellé : valeur » n’est pas un sous-titre', () => {
+    expect(estSousTitreCadre('Taux de reprise : 100 %')).toBe(false);
+    expect(estSousTitreCadre('Besoin urgent de renfort hors astreinte')).toBe(true);
   });
 });

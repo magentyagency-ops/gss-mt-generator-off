@@ -453,7 +453,7 @@ export function candidatsReference(mt: MemoireType, textes: Record<string, strin
  */
 export function attribuerRubriques(champs: Array<{ id: number; libelle: string; candidats: CandidatReference[] }>): {
   candidats: Map<number, CandidatReference[]>;
-  renvois: Map<number, Array<{ titre: string; libelle: string }>>;
+  renvois: Map<number, Array<{ titre: string; libelle: string; texte?: string }>>;
 } {
   const ordre = new Map(champs.map((c, i) => [c.id, i]));
   const paires = champs.flatMap((c) => c.candidats.map((x) => ({ champ: c.id, x })))
@@ -461,12 +461,12 @@ export function attribuerRubriques(champs: Array<{ id: number; libelle: string; 
   const titulaire = new Map<string, number>();
   for (const p of paires) if (!titulaire.has(p.x.id)) titulaire.set(p.x.id, p.champ);
   const candidats = new Map<number, CandidatReference[]>();
-  const renvois = new Map<number, Array<{ titre: string; libelle: string }>>();
+  const renvois = new Map<number, Array<{ titre: string; libelle: string; texte?: string }>>();
   for (const c of champs) {
     const gardes = c.candidats.filter((x) => titulaire.get(x.id) === c.id).map((x, i) => ({ ...x, cle: `R${i + 1}` }));
     candidats.set(c.id, gardes);
     const ailleurs = c.candidats.filter((x) => titulaire.get(x.id) !== c.id)
-      .map((x) => ({ titre: x.titre, libelle: champs.find((d) => d.id === titulaire.get(x.id))?.libelle || '' }));
+      .map((x) => ({ titre: x.titre, libelle: champs.find((d) => d.id === titulaire.get(x.id))?.libelle || '', texte: x.texte }));
     if (ailleurs.length) renvois.set(c.id, ailleurs);
   }
   return { candidats, renvois };
@@ -531,6 +531,16 @@ export function referencesPrincipales(retenus: CandidatReference[]): CandidatRef
  * répétée, et « [À COMPLÉTER] » qui redemande juste après la même donnée (« Date de délivrance et date de fin de
  * validité : [À COMPLÉTER]. » puis « Date de fin de validité : [À COMPLÉTER]. »).
  */
+/** Ligne de sous-titre d'une réponse du cadre (« **Pérennité des effectifs** », « ## … », ligne courte sans ponctuation finale). */
+export function estSousTitreCadre(ligne: string): boolean {
+  const t = String(ligne || '').trim();
+  if (!t || /^(?:[•\-*]|\d+[.)])\s/.test(t) || /\[À COMPLÉTER\]|\[CONSULTATION/.test(t)) return false;
+  if (/^#{1,4}\s+\S/.test(t) || /^\*\*[^*]+\*\*:?$/.test(t)) return true;
+  // Ligne « libellé : valeur » (« Taux de reprise : 100 % », pseudo-tableau « A : B : C ») : jamais un sous-titre.
+  if (/:\s*\S/.test(t)) return false;
+  return t.length <= 90 && /^[A-ZÀ-Ý]/.test(t) && !/[.;!?»)]$/.test(t) && t.split(/\s+/).length <= 12;
+}
+
 export function nettoyerReponseCadre(texte: string): string {
   const lignes = String(texte || '').split('\n');
   const out: string[] = [];
@@ -539,8 +549,11 @@ export function nettoyerReponseCadre(texte: string): string {
   const autres = lignes.filter((l) => l.trim() && !/^\[À COMPLÉTER\][.;]?$/.test(l.trim())).length;
   for (const l of lignes) {
     const t = l.trim();
-    // « [À COMPLÉTER] » seul sur sa ligne au milieu d'une réponse rédigée (havre1 181, 3.4) : sans objet, retiré.
-    if (/^\[À COMPLÉTER\][.;]?$/.test(t) && autres > 0) continue;
+    // « [À COMPLÉTER] » seul sur sa ligne au milieu d'une réponse rédigée (havre1 181, 3.4) : sans objet, retiré ; sauf
+    // sous un sous-titre (ca_normandie 221, 2.2 : « Besoin urgent de renfort hors astreinte » restait imprimé sans texte) :
+    // le repère reste, la donnée est demandée à GSS.
+    const precedente = [...out].reverse().find((x) => x.trim()) || '';
+    if (/^\[À COMPLÉTER\][.;]?$/.test(t) && autres > 0 && !estSousTitreCadre(precedente)) continue;
     if (/^(?:[•\-*]|\d+[.)])\s+[^:]{2,80}:\s*$/.test(t)) {
       // Puce de libellé sans contenu : rien ne la suit, ou la ligne suivante n'est pas une puce (fin de liste).
       const i = lignes.indexOf(l);
@@ -561,6 +574,43 @@ export function nettoyerReponseCadre(texte: string): string {
     out.push(l);
   }
   return out.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
+/**
+ * Sous-titre d'une réponse du cadre resté sans texte (suivi d'un « [À COMPLÉTER] » seul, d'un autre sous-titre ou de la fin) :
+ * rempli avec la phrase du mémoire type de GSS qui traite ce sujet dans les textes fournis (rubriques reprises ou déjà
+ * reprises dans une autre réponse), au moins deux mots porteurs du sous-titre en commun (ca_normandie 221, 2.2 : « Besoin
+ * urgent de renfort hors astreinte » ← « Pour les renforts ponctuels, nous disposons d'un vivier de 500 agents… »). Sans
+ * phrase de GSS, le sous-titre reçoit « [À COMPLÉTER] » (donnée demandée à GSS) : jamais un sous-titre seul.
+ */
+export function completerSousTitresVides(texte: string, sources: Array<{ texte?: string }>): { texte: string; completes: string[] } {
+  const VIDES_ST = new Set(['besoin', 'moyen', 'moyens', 'mise', 'oeuvre', 'description', 'gestion', 'organisation', 'politique', 'personnel', 'service', 'prestation', 'mesure', 'mesures']);
+  const racines = (t: string) => new Set(normaliser(t).replace(/[^a-z ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 5 && !VIDES_ST.has(w)).map((w) => w.replace(/s$/, '').slice(0, 7)));
+  const phrases = sources.flatMap((s) => String(s.texte || '').split('\n')).filter((l) => l.trim() && !estSousTitreCadre(l) && !/\[À COMPLÉTER\]|\{\{/.test(l))
+    .flatMap((l) => l.replace(/^\s*(?:[•\-*]|\d+[.)])\s+/, '').split(/(?<=[.!?])\s+/)).map((p) => p.trim()).filter((p) => p.split(/\s+/).length >= 6);
+  const lignes = String(texte || '').split('\n');
+  const completes: string[] = [];
+  for (let i = 0; i < lignes.length; i++) {
+    if (!estSousTitreCadre(lignes[i])) continue;
+    let j = i + 1;
+    while (j < lignes.length && !lignes[j].trim()) j++;
+    const repere = j < lignes.length && /^\s*\[À COMPLÉTER\][.;]?\s*$/.test(lignes[j]);
+    const vide = j >= lignes.length || repere || estSousTitreCadre(lignes[j]);
+    if (!vide) continue;
+    const cible = racines(lignes[i].replace(/[#*]/g, ''));
+    let meilleure = '', score = 0, exaequo = 0;
+    for (const p of phrases) {
+      const r = racines(p);
+      const n = [...cible].filter((w) => r.has(w)).length;
+      if (n > score) { score = n; meilleure = p; exaequo = 0; } else if (n === score && n > 0 && p !== meilleure) exaequo++;
+    }
+    // Deux mots porteurs en commun, ou un seul s'il ne désigne qu'une phrase des textes de GSS.
+    const valeur = score >= 2 || (score === 1 && !exaequo) ? meilleure : '[À COMPLÉTER]';
+    if (valeur !== '[À COMPLÉTER]') completes.push(lignes[i].trim());
+    if (repere) lignes[j] = valeur;
+    else lignes.splice(i + 1, 0, valeur);
+  }
+  return { texte: lignes.join('\n'), completes };
 }
 
 /** Repères « R1 »… cités par le modèle, limités aux candidats fournis. */
