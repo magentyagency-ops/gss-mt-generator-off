@@ -29,6 +29,11 @@ export interface ProfilDimensionne {
   heuresAn: number;
   etp: number;
   titulaires: number;
+  /**
+   * Nombre d'agents présents EN MÊME TEMPS sur un poste de ce profil, cité dans le DCE (havre2 : « le déploiement de 2
+   * agents de sécurité (ADS) sur une heure ») : plancher des titulaires (un seul titulaire ne tient pas un poste à deux).
+   */
+  simultanes?: number;
   /** Observation du tableau quand l'effectif ne vient pas d'heures hebdomadaires (cas pratique). */
   observation?: string;
 }
@@ -91,6 +96,23 @@ function citationDansDce(citation: string, dceMots: string): boolean {
   return false;
 }
 
+const NOMBRES_EN_LETTRES: Record<string, number> = { deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, neuf: 9, dix: 10 };
+
+/**
+ * Nombre d'agents présents en même temps sur le poste (`agents_simultanes` relevé par le modèle), gardé seulement s'il
+ * est écrit dans la citation du DCE devant un intitulé de personnel (« 2 agents de sécurité », « deux ADS », « 3 SSIAP
+ * 1 ») ; 1 sinon.
+ */
+export function agentsSimultanes(valeur: unknown, citation: string): number {
+  const n = Number(valeur);
+  if (!Number.isInteger(n) || n < 2 || n > 50) return 1;
+  const c = normaliser(String(citation || '')).replace(/[^a-z0-9]+/g, ' ');
+  const lettres = Object.keys(NOMBRES_EN_LETTRES).find((k) => NOMBRES_EN_LETTRES[k] === n);
+  const nb = lettres ? `(?:${n}|${lettres})` : String(n);
+  const personnel = String.raw`(?:agents?|ads|ssiap|personnes?|maitres? chiens?|chefs?|operateurs?|hotes(?:ses)?|rondiers?|vigiles?|gardiens?|surveillants?|intervenants?)`;
+  return new RegExp(String.raw`(?:^|\s)${nb}\s+(?:[a-z]+\s+){0,2}?${personnel}(?:\s|$)`).test(` ${c} `) ? n : 1;
+}
+
 const nombre = (x: unknown): number | null => {
   const n = Number(String(x ?? '').replace(',', '.').replace(/[^\d.]/g, ''));
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -148,7 +170,10 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     // facturables, le DQE les heures réellement estimées), pris seulement si ce nombre figure dans le DCE.
     const hh = nombre(p?.heures_hebdo);
     const hebdoDuDce = !!hh && new RegExp(`(?<![\\d,.])${hh}(?![\\d,.])`).test(dce);
-    let hs = hebdoDuDce ? hh : plages.length ? heuresSemaine(plages) : 0;
+    // Agents présents en même temps (« 2 agents de sécurité (ADS) sur une heure ») : les plages sont celles du poste,
+    // les heures à couvrir sont multipliées par ce nombre ; le volume du DQE est déjà le total du poste.
+    const simultanes = agentsSimultanes(p?.agents_simultanes, String(p?.citation || ''));
+    let hs = hebdoDuDce ? hh : plages.length ? Math.round(heuresSemaine(plages) * simultanes * 100) / 100 : 0;
     if (!hs || hs > 24 * 7 * 6) continue;
     const ha = nombre(p?.heures_an);
     const anDuDce = !!ha && new RegExp(`(?<![\\d,.])${ha}(?![\\d,.])`).test(dce.replace(/(\d)[\s  ](?=\d{3}\b)/g, '$1'));
@@ -171,12 +196,15 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     x.heuresAn += heuresAn;
     const lieu = String(p?.lieu || '').trim();
     if (lieu && !x.lieux.includes(lieu)) x.lieux.push(lieu);
+    if (simultanes > 1) x.simultanes = Math.max(x.simultanes || 1, simultanes);
     profils.set(cle, x);
   }
   for (const x of profils.values()) {
     if (x.observation !== undefined) continue;
     x.etp = Math.round((x.heuresAn / BASE_ETP) * 100) / 100;
-    x.titulaires = Math.max(1, Math.ceil(x.etp - 0.05));
+    // Plancher : le nombre d'agents présents en même temps sur un poste de ce profil (havre2 : 0,68 ETP mais 2 ADS
+    // ensemble à la fermeture des jardins → 2 titulaires).
+    x.titulaires = Math.max(x.simultanes || 1, Math.ceil(x.etp - 0.05));
   }
   const titulaires = [...profils.values()].reduce((s, x) => s + x.titulaires, 0);
   const suppleants = titulaires ? Math.max(2, Math.ceil(titulaires * PART_SUPPLEANTS)) : 0;
@@ -274,6 +302,8 @@ export function effectifProfil(n: number, profil: string): string {
 }
 
 const fr = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
+/** « ; 2 agents en même temps sur le poste » : le plancher qui fixe le nombre de titulaires au-delà du calcul en ETP. */
+const simultanesTexte = (x: ProfilDimensionne) => (x.simultanes && x.simultanes > 1 ? ` ; ${x.simultanes} agents en même temps sur le poste` : '');
 const pluriel = (n: number, s: string, p = `${s}s`) => `${n} ${n > 1 ? p : s}`;
 
 /** Catégorie de personnel du tableau de l'équipe dédiée (vocabulaire du mémoire type), d'après le profil du DCE. */
@@ -299,11 +329,12 @@ export function lignesEquipe(d: Dimensionnement): string {
     const y = lignes.get(cle);
     if (!y) { lignes.set(cle, { ...x, lieux: [...x.lieux], categorie }); continue; }
     y.titulaires += x.titulaires;
+    if (x.simultanes) y.simultanes = Math.max(y.simultanes || 1, x.simultanes);
     y.heuresSemaine = Math.round((y.heuresSemaine + x.heuresSemaine) * 100) / 100;
     y.etp = Math.round((y.etp + x.etp) * 100) / 100;
     for (const l of x.lieux) if (!y.lieux.includes(l)) y.lieux.push(l);
   }
-  return [...lignes.values()].map((x) => `| ${x.categorie} | ${x.qualification} | ${x.titulaires} | ${x.observation || `${fr(x.heuresSemaine)} h par semaine${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}, soit ${fr(x.etp)} ETP`} |`).join('\n');
+  return [...lignes.values()].map((x) => `| ${x.categorie} | ${x.qualification} | ${x.titulaires} | ${x.observation || `${fr(x.heuresSemaine)} h par semaine${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}, soit ${fr(x.etp)} ETP${simultanesTexte(x)}`} |`).join('\n');
 }
 
 /** Phrase de synthèse du dispositif d'un cas pratique, plage par plage. */
@@ -319,7 +350,7 @@ export function syntheseCasPratique(d: Dimensionnement): string {
 export function questionDimensionnement(d: Dimensionnement): string {
   const parts: string[] = [];
   if (d.profils.length && !d.profils.some((x) => x.observation)) {
-    parts.push(`équipe dédiée de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} (${d.profils.map((x) => `${normaliser(categorieDe(x.profil)) === normaliser(x.profil) ? categorieDe(x.profil) : `${x.profil} (${categorieDe(x.profil).toLowerCase()})`} : ${pluriel(x.titulaires, 'titulaire')} pour ${fr(x.heuresSemaine)} h par semaine`).join(' ; ')}, base de 1 607 heures par an et par ETP) et équipe suppléante de ${pluriel(d.suppleants, 'agent formé', 'agents formés')} au site`);
+    parts.push(`équipe dédiée de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} (${d.profils.map((x) => `${normaliser(categorieDe(x.profil)) === normaliser(x.profil) ? categorieDe(x.profil) : `${x.profil} (${categorieDe(x.profil).toLowerCase()})`} : ${pluriel(x.titulaires, 'titulaire')} pour ${fr(x.heuresSemaine)} h par semaine${simultanesTexte(x)}`).join(' ; ')}, base de 1 607 heures par an et par ETP) et équipe suppléante de ${pluriel(d.suppleants, 'agent formé', 'agents formés')} au site`);
   }
   if (d.casPratique.length) parts.push(`dispositif du cas pratique (${syntheseCasPratique(d)} ; vacations de ${VACATION_MAX_H} heures au plus)${d.titulaires ? `, d'où une équipe de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} (${d.profils.map((x) => effectifProfil(x.titulaires, x.profil)).join(', ')}) et une équipe suppléante de ${pluriel(d.suppleants, 'agent', 'agents')}` : ''}`);
   return `Proposition à valider : dimensionnement calculé à partir des postes et des horaires du DCE — ${parts.join(' ; ')}. GSS valide ces effectifs ou les modifie dans l'assistant.`;
@@ -328,7 +359,7 @@ export function questionDimensionnement(d: Dimensionnement): string {
 /** Bloc des consignes de rédaction (cadre imposé) : les chiffres proposés, à reprendre tels quels. */
 export function texteDimensionnement(d: Dimensionnement): string {
   const l: string[] = ['', '', 'DIMENSIONNEMENT PROPOSÉ PAR GSS (calculé à partir des postes et des horaires du DCE ; proposition que GSS validera — reprends ces chiffres EXACTEMENT là où l\'effectif, le nombre d\'agents, de maîtres-chiens, d\'équipes ou les rotations sont demandés, au lieu d\'écrire [À COMPLÉTER]) :'];
-  for (const x of d.profils) l.push(x.observation ? `- ${x.profil} (${x.qualification}) : ${pluriel(x.titulaires, 'titulaire')} (${x.observation})` : `- ${x.profil} (${x.qualification}) : ${fr(x.heuresSemaine)} h par semaine, ${fr(x.heuresAn)} h par an, soit ${fr(x.etp)} ETP → ${pluriel(x.titulaires, 'titulaire')}${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}`);
+  for (const x of d.profils) l.push(x.observation ? `- ${x.profil} (${x.qualification}) : ${pluriel(x.titulaires, 'titulaire')} (${x.observation})` : `- ${x.profil} (${x.qualification}) : ${fr(x.heuresSemaine)} h par semaine, ${fr(x.heuresAn)} h par an, soit ${fr(x.etp)} ETP → ${pluriel(x.titulaires, 'titulaire')}${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}${simultanesTexte(x)}`);
   if (d.profils.length) l.push(`- Équipe dédiée : ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} ; équipe suppléante formée au site : ${pluriel(d.suppleants, 'agent', 'agents')}.`);
   // Cadre de l'université de Rouen (génération réelle rouen_univ 15) : « Nombre total d'agents … dédiés en ETP » laissé à
   // « [À COMPLÉTER] » et cellules par site au format variable (« 8 titulaires + 6 agents formés » pour un site, postes du
@@ -414,7 +445,8 @@ export const CONSIGNE_DIMENSIONNEMENT = `Tu lis le DCE d'un marché de sécurit�
    - "profil" : intitulé court du poste dans les mots du DCE (ex. « SSIAP 2 », « SSIAP 1 », « Agent de sécurité ADS », « Agent de sécurité SSIAP 1 – CQP APS »), sans le nombre d'agents (« 2 agents » sous « Gardiennage de surveillance » : « Agent de sécurité ») ;
    - "qualification" : qualification exigée (ex. « SSIAP 2 », « CQP APS – SSIAP 1 ») ;
    - "lieu" : bâtiment ou site, si le DCE le précise ;
-   - "plages" : chaque plage horaire hebdomadaire, {"jours": ["lundi", …], "debut": "07:00", "fin": "19:00"} (une plage de nuit finit le lendemain : "debut": "19:00", "fin": "07:00") ; ignore les jours fériés ;
+   - "agents_simultanes" : le nombre d'agents présents EN MÊME TEMPS sur ce poste, tel qu'il est écrit dans la citation (« le déploiement de 2 agents de sécurité (ADS) sur une heure » → 2 ; « 1 SSIAP 1 » → 1) ; 1 si le DCE ne le précise pas ;
+   - "plages" : chaque plage horaire hebdomadaire DU POSTE, {"jours": ["lundi", …], "debut": "07:00", "fin": "19:00"} (une plage de nuit finit le lendemain : "debut": "19:00", "fin": "07:00") ; ignore les jours fériés ; ne répète pas une plage pour chaque agent (leur nombre est dans "agents_simultanes") ;
    - "heures_hebdo" : le volume hebdomadaire total si le DCE (DQE, BPU) le donne en heures pour ce poste, sinon null ;
    - "heures_an" : le volume annuel en heures si le DCE le donne, sinon null ;
    - "citation" : la phrase ou la ligne du DCE d'où vient le poste, recopiée mot pour mot.
@@ -433,7 +465,7 @@ Réponds UNIQUEMENT par un objet JSON : {"postes": [...], "cas_pratique": {...} 
 /** Paragraphe du premier message de l'assistant : le dimensionnement proposé, à valider ou à modifier avant la remise. */
 export function messageDimensionnement(d: Dimensionnement): string {
   const l: string[] = ['J\'ai aussi proposé les effectifs, calculés à partir des postes et des horaires du cahier des charges (à relire avant la remise) :'];
-  for (const x of d.profils) l.push(x.observation ? `- ${x.profil} : ${pluriel(x.titulaires, 'titulaire')} (${x.observation}) ;` : `- ${x.profil} : ${fr(x.heuresSemaine)} h par semaine, soit ${fr(x.etp)} ETP → ${pluriel(x.titulaires, 'titulaire')} ;`);
+  for (const x of d.profils) l.push(x.observation ? `- ${x.profil} : ${pluriel(x.titulaires, 'titulaire')} (${x.observation}) ;` : `- ${x.profil} : ${fr(x.heuresSemaine)} h par semaine, soit ${fr(x.etp)} ETP → ${pluriel(x.titulaires, 'titulaire')}${simultanesTexte(x)} ;`);
   if (d.profils.length) l.push(`- équipe dédiée de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} et équipe suppléante de ${pluriel(d.suppleants, 'agent formé', 'agents formés')} au site ;`);
   for (const m of d.misesEnSituation || []) l.push(`- ${m.libelle.charAt(0).toLowerCase()}${m.libelle.slice(1)} : ${dispositifMiseEnSituation(m)} ;`);
   for (const p of [...new Set(d.casPratique.map((x) => x.plage))]) l.push(`- cas pratique, ${p} : ${d.casPratique.filter((x) => x.plage === p && x.enService > 0).map((x) => `${effectifProfil(x.enService, x.profil)} (rotation ${x.rotation})`).join(', ') || 'aucun agent'} ;`);
