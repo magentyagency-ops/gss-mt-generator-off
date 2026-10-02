@@ -602,3 +602,12 @@ describe('Plan, assistant, exigences et sous-parties', () => {
     expect(p1.exclues.every((e) => mt.rubriques.find((r) => r.id === e.id)!.condition !== 'toujours')).toBe(true);
   });
 });
+
+describe('tour 1 (B1) : ajout après un sous-titre en gras', () => {
+  it('jamais collé au sous-titre', () => {
+    const t = '**Le contrôle global**\nLe responsable qualité vérifie la prestation chaque mois.\n\nSuite du texte.';
+    const r = appliquerModifications(t, { ajouts: [{ apres: '**Le contrôle global**', texte: 'Le site est visité avant la première intervention.', motif: 'x' }] });
+    expect(r.texte).not.toMatch(/\*\*Le contrôle global\*\* Le site/);
+    expect(r.texte).toContain('chaque mois.\n\nLe site est visité');
+  });
+});

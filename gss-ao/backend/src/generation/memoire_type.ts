@@ -2021,6 +2021,16 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
           t = `${t.slice(0, finListe).trimEnd()}\n\n${m.par}${finListe < t.length ? `\n\n${t.slice(finListe).replace(/^\n+/, '')}` : ''}`;
         }
       } else {
+        // Sous-titre en gras seul sur sa ligne (« **Le contrôle global** ») : l'ajout n'est jamais collé au sous-titre
+        // (ifits 171) ; il forme son propre paragraphe après le paragraphe qui suit le sous-titre.
+        if (/^\s*(?:#{2,4}\s+.+|\*\*[^*]+\*\*\s*:?)\s*$/.test(t.slice(debutLigne, finLigne))) {
+          const finPara = t.indexOf('\n\n', finLigne + 1);
+          const coupePara = finPara < 0 ? t.length : finPara;
+          t = `${t.slice(0, coupePara).trimEnd()}\n\n${m.par}${coupePara < t.length ? `\n\n${t.slice(coupePara).replace(/^\n+/, '')}` : ''}`;
+          nAjouts++;
+          appliquees.push(m);
+          continue;
+        }
         // Insertion à la fin de la phrase (ou de la ligne) qui contient l'extrait.
         const suite = t.slice(pos[0].fin);
         const fin = /[.!?](?=\s|$)|\n/.exec(suite);

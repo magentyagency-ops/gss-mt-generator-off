@@ -324,3 +324,19 @@ Pour l'Université de Rouen Normandie, nos agents porteront la tenue d'intervent
     expect(motsMaxChamp('Question: "Moyens humains"')).toBeUndefined();
   });
 });
+
+import { nettoyerReponseCadre, referencesPrincipales } from '../src/generation/memoire_type_cadre';
+describe('tour 1 : réponse 3.4 de havre1', () => {
+  it('puce de libellé vide, ligne répétée et [À COMPLÉTER] redemandé retirés', () => {
+    const t = '• Autorisation d’exercer : AUT-076.\n• Autorisation entreprise :\n\nDate de délivrance et date de fin de validité : [À COMPLÉTER].\nDate de fin de validité : [À COMPLÉTER].\nLes tenues :\n• La tenue costume.';
+    const r = nettoyerReponseCadre(t);
+    expect(r).not.toContain('Autorisation entreprise :');
+    expect(r.match(/\[À COMPLÉTER\]/g)).toHaveLength(1);
+    expect(r).toContain('Les tenues :\n• La tenue costume.');
+  });
+  it('au plus deux rubriques, de score voisin', () => {
+    const c = (id: string, score: number) => ({ cle: id, id, titre: id, texte: '', score });
+    expect(referencesPrincipales([c('b2_identite', 0.5), c('b3_formation_ads', 0.7), c('b3_adequation', 0.6)]).map((x) => x.id)).toEqual(['b3_formation_ads']);
+    expect(referencesPrincipales([c('a', 0.7), c('b', 0.68), c('c', 0.67)]).map((x) => x.id)).toEqual(['a', 'b']);
+  });
+});

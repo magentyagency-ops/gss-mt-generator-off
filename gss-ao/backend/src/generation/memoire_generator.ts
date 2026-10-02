@@ -22,7 +22,7 @@ import {
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, type Dimensionnement } from './dimensionnement';
 import {
-  candidatsReference, blocReference, referencesRetenues, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp,
+  candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
@@ -290,6 +290,13 @@ function cellAtGrid(row: any, gridCol: number): { text: string; span: number } {
     col += span;
   }
   return { text: '', span: 1 };
+}
+
+/** Cellule qui continue une fusion verticale (w:vMerge sans w:val="restart"). */
+function fusionVerticale(cell: any): boolean {
+  const tcPr = findLocalNameChild(cell, 'tcPr');
+  const vm = tcPr ? findLocalNameChild(tcPr, 'vMerge') : null;
+  return !!vm && (vm.getAttribute('w:val') || 'continue') !== 'restart';
 }
 
 function getTableCellContext(cell: any, tr: any): string {
@@ -1179,6 +1186,44 @@ const CHAPTER_ORDER_B = ['I', 'II', 'III', 'IV'];
 // des taux distincts… »). Une prestation qui cite seulement le bordereau reste un engagement (Becquerel : « renforts
 // exceptionnels commandés sur la base du BPU avec un délai de prévenance de 48 heures ouvrées »).
 export const PIECES_OFFRE = /acte d.engagement|bordereau de prix|(?:compl[ée]t|rempli|renseign|chiffr|joindr|fourni)[^.]{0,40}(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)|(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)[^.]{0,30}(?:compl[ée]t|rempli|renseign)|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?/i;
+/** Libellés écrits sans modèle dans les cellules d'identité d'un cadre (tableau des autorisations CNAPS, signataire). */
+const LIBELLES_IDENTITE_DETERMINISTES = 'Surveillance humaine et gardiennage (activités privées de sécurité, livre VI du CSI, Code de la sécurité intérieure) ; Dirigeant d\u2019entreprise de surveillance et de gardiennage ; Dirigeant de GLOBAL SECURITY SERVICES';
+
+/**
+ * Question exacte à GSS (D7) : une demande qui n'est ni une question ni une tâche de validation (« Pour un agent
+ * cynophile affecté, le chien doit être tenu en laisse… », « durée du marché prévue aux pièces contractuelles ») est
+ * présentée comme l'exigence du DCE à laquelle GSS doit répondre, avec une vraie question.
+ */
+export function questionExacte(q: string): string {
+  const t = String(q || '').replace(/\s+/g, ' ').trim();
+  if (!t || /\?\s*(?:\([^)]*\))?\s*$/.test(t)) return t;
+  if (/^(?:Proposition|Réponse à relire|Confirmer|À confirmer|À demander à l.acheteur|Délai proposé|Marché hors Normandie|Exigence du (?:DCE|CCTP)|Information à fournir|Valeur à fournir|Partie|Rubrique|Champ|Organigramme|Télésurveillance|Implantation|Référence|Remplacements|GSS est-elle|Nombre|Taux|Fiche|Liste|Joindre|Fournir|Indiquer|Préciser|Transmettre|Quel|Quelle|Combien|Comment)\b/i.test(t)) return t;
+  return `Exigence du DCE à laquelle le mémoire doit répondre : « ${t.replace(/[.;]\s*$/, '')} ». Comment GSS y répond-elle (moyen, délai ou document à indiquer) ?`;
+}
+
+/**
+ * Éléments à compléter d'un document, sans doublon (T1C-13) : une même question sans emplacement n'est posée qu'une fois ;
+ * des emplacements qui attendent la même donnée forment un groupe (la réponse les remplit tous) ; chaque question est
+ * une question exacte (questionExacte).
+ */
+export function elementsSansDoublon(elements: ElementACompleter[]): ElementACompleter[] {
+  const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const vus = new Map<string, ElementACompleter>();
+  const out: ElementACompleter[] = [];
+  for (const e of elements) {
+    if (e.statut === 'ouvert' && !/^Proposition à valider/i.test(e.question)) e.question = questionExacte(e.question);
+    const k = norm(e.question);
+    const deja = vus.get(k);
+    if (deja && e.statut === 'ouvert' && deja.statut === 'ouvert') {
+      if (!e.reperes?.length && !/^GSS_AC/.test(e.cle)) continue;
+      e.groupe ||= deja.groupe || deja.cle;
+      deja.groupe ||= e.groupe;
+    } else vus.set(k, e);
+    out.push(e);
+  }
+  return out;
+}
+
 /**
  * Puce d'engagement (contrôle de couverture, obligations chiffrées) qui ne peut pas être remise à l'acheteur : pièce de
  * l'offre, pénalité, phrase sur le mémoire lui-même au lieu d'une réponse (« GSS indiquera… », « GSS précise dans le
@@ -3642,6 +3687,8 @@ Renvoie un JSON valide :
     const IDENTITE_SEULE = /^(raison sociale|siret|siren|d[ée]nomination(?: sociale)?(?: du candidat)?|nom du (?:candidat|soumissionnaire)|nom commercial|adresse(?: du si[èe]ge)?|t[ée]l[ée]phone|t[ée]l\.?|courriel|e-?mail|adresse [ée]lectronique|je soussign[ée]e?|agissant en qualit[ée] de|pr[ée]nom,? (?:et )?nom|nom,? (?:et )?pr[ée]nom|num[ée]ro de t[ée]l[ée]phone(?:\s*\([^)]{1,40}\))?)\s*:?\s*$/i;
     // Bloc de contacts (« Contact comptable : » puis « Prénom, Nom : », « Téléphone : »…) : le libellé du bloc
     // accompagne chaque champ, sinon les trois blocs recevaient la même réponse (et les doublons étaient vidés).
+    /** Consigne entre parenthèses qui demande une description (« (le soumissionnaire décrit ci-dessous les modalités…) : »). */
+    const CONSIGNE_DESCRIPTION = /^\(?\s*le (?:soumissionnaire|candidat|titulaire|prestataire) (?:d[ée]crit|d[ée]taille|pr[ée]cise|pr[ée]sente|indique)\b/i;
     const GROUPE_CONTACT = /^(?:contact|interlocuteur|correspondant|r[ée]f[ée]rent|responsable)\b[^:]{0,60}:\s*$/i;
     let groupeContact = '';
     // Bloc signature / cachet : ses lignes vides ne sont pas une zone de réponse.
@@ -3775,6 +3822,7 @@ Renvoie un JSON valide :
       r.appendChild(t); para.appendChild(r);
     };
 
+    let sectionPropre = '';
     const walkDOM = (node: any, inDrawing: boolean) => {
       if (node.nodeType !== 1) return;
       const localName = node.localName;
@@ -3787,6 +3835,8 @@ Renvoie un JSON valide :
           const pText = getElementText(node).trim();
           if (isHeadingParagraph(node)) {
             currentHeading = pText;
+            // Titre réel (sans repère « [CHAMP_n] » d'une cellule déjà détectée) : libellé de section des cellules.
+            if (pText.replace(/\[CHAMP_\d+\]/g, '').trim()) sectionPropre = pText.replace(/\[CHAMP_\d+\]/g, '').trim();
             recentParagraphs.length = 0;
             lastQuestionText = '';
             openAnswerField = null;
@@ -3833,11 +3883,15 @@ Renvoie un JSON valide :
               // La 1re cellule d'une ligne est la colonne LIBELLÉ (intitulé de la ligne) : on ne la
               // remplit jamais, même vide, pour ne pas écraser/inventer un en-tête de ligne.
               if (cellIdx === 0) return;
+              // Cellule fusionnée verticalement avec celle du dessus (w:vMerge sans « restart ») : elle appartient à l'en-tête
+              // ou à la cellule supérieure, jamais une case à remplir (havre1 : valeurs écrites dans le sous-en-tête du tableau
+              // CNAPS « Date d'obtention | Date de fin de validité »).
+              if (fusionVerticale(cInfo.cell)) return;
               if (cInfo.isEmpty && !filledCells.has(cInfo.cell)) {
                 filledCells.add(cInfo.cell);
                 const cellContext = getTableCellContext(cInfo.cell, node);
                 const nearbyCtx = recentParagraphs.length > 0 ? ` | Contexte proche: "${recentParagraphs.slice(-2).join(' / ')}"` : '';
-                const fd = addField({ type: 'text', kind: 'table', context: `Section: "${currentHeading}" | Tableau: ${cellContext}${nearbyCtx}` });
+                const fd = addField({ type: 'text', kind: 'table', context: `Section: "${sectionPropre || currentHeading}" | Tableau: ${cellContext}${nearbyCtx}` });
                 let p = findLocalNameChild(cInfo.cell, 'p') || getElementsWithLocalName(cInfo.cell, 'p')[0];
                 if (!p) { p = xmlDoc.createElementNS(WNS, 'w:p'); cInfo.cell.appendChild(p); }
                 const r = xmlDoc.createElementNS(WNS, 'w:r');
@@ -3988,10 +4042,10 @@ Renvoie un JSON valide :
                 lastQuestionText = '';
               } else if (lastQuestionText && lastQuestionText.trimEnd().endsWith(':') && !SIGNATURE.test(lastQuestionText)
                 // « Éléments de réponse attendus : » introduit une liste, ce n'est pas un champ à remplir.
-                && !/attendus?\s*:|ci-dessous\s*:|suivants?\s*:|notamment\s*:|comprenant\s*:/i.test(lastQuestionText)
+                && (CONSIGNE_DESCRIPTION.test(lastQuestionText) || !/attendus?\s*:|ci-dessous\s*:|suivants?\s*:|notamment\s*:|comprenant\s*:/i.test(lastQuestionText))
                 // « Contact pour les commandes : » suivi de « Nom : …… » : ce sont les lignes suivantes qu'on remplit.
                 // (Jamais pour un libellé de donnée : « Date d'obtention de l'autorisation : » reste un champ.)
-                && !(!/date|n°|num[ée]ro|\bnom\b|adresse|t[ée]l[ée]phone|courriel|mail|siret|montant|effectif|d[ée]lai|autorisation|agr[ée]ment/i.test(lastQuestionText) && (() => {
+                && !(!CONSIGNE_DESCRIPTION.test(lastQuestionText) && !/date|n°|num[ée]ro|\bnom\b|adresse|t[ée]l[ée]phone|courriel|mail|siret|montant|effectif|d[ée]lai|autorisation|agr[ée]ment/i.test(lastQuestionText) && (() => {
                   for (let sib = node.nextSibling; sib; sib = sib.nextSibling) {
                     if (sib.nodeType !== 1 || sib.localName !== 'p') continue;
                     const tx = getElementText(sib).trim();
@@ -4000,8 +4054,12 @@ Renvoie un JSON valide :
                   }
                   return false;
                 })())) {
-                // paragraphe vide juste après un libellé "… :"
-                const fd = addField({ type: 'text', kind: 'answer', lineCount: 1, context: `Section: "${currentHeading}" | Question: "${lastQuestionText}"` });
+                // paragraphe vide juste après un libellé "… :" ; consigne de description (« (le soumissionnaire décrit
+                // ci-dessous les modalités de prise des commandes…) : » suivie de lignes vides) : réponse développée, avec
+                // le libellé qui la précède (havre1 : « Organisation et traitement des commandes » restait vide).
+                const description = CONSIGNE_DESCRIPTION.test(lastQuestionText);
+                const intitule = description && recentParagraphs.length >= 2 ? `${recentParagraphs[recentParagraphs.length - 2].replace(/\s*:\s*$/, '')} — ${lastQuestionText}` : lastQuestionText;
+                const fd = addField({ type: 'text', kind: 'answer', lineCount: description ? Math.max(3, vides) : 1, context: `Section: "${currentHeading}" | Question: "${intitule.replace(/"/g, "'")}"` });
                 const r = xmlDoc.createElementNS(WNS, 'w:r');
                 const t = xmlDoc.createElementNS(WNS, 'w:t');
                 t.textContent = `[CHAMP_${fd.id}]`;
@@ -4046,9 +4104,17 @@ Renvoie un JSON valide :
       const cleCritere = (t: string) => { const m = /^(sous[-\s]?crit[eè]res?|crit[eè]res?)\s*n?°?\s*(\d+)/i.exec(t); return m ? `${/^sous/i.test(m[1]) ? 's' : 'c'}${m[2]}` : ''; };
       const debuts = textes.map((t, i) => (t && t.length < 250 && DEBUT_RUBRIQUE.test(t) ? i : -1)).filter((i) => i >= 0)
         .filter((i, k, tous) => !(k > 0 && cleCritere(textes[i]) && cleCritere(textes[i]) === cleCritere(textes[tous[k - 1]])));
+      // Titre de section en capitales hors tableau (« MOYENS TECHNIQUES », « MOYENS HUMAINS ») : fin de la rubrique qui le
+      // précède (havre1 : la réponse « 3.4 » était écrite sous le titre « MOYENS TECHNIQUES », avant « 4.1 »).
+      const titreSection = (i: number) => {
+        const t = textes[i];
+        return !!t && t.length <= 80 && /[A-ZÀ-Ý]{3}/.test(t) && !/[a-zà-ÿ]/.test(t.replace(/\[CHAMP_\d+\]/g, '')) && !/\[CHAMP_/.test(t)
+          && !getParentWithLocalName(paras[i], 'tc') && t.replace(/[^A-Za-zÀ-ÿ]/g, '').length >= 6;
+      };
       for (let k = 0; k < debuts.length; k++) {
         const deb = debuts[k];
-        const fin = k + 1 < debuts.length ? debuts[k + 1] : paras.length;
+        let fin = k + 1 < debuts.length ? debuts[k + 1] : paras.length;
+        for (let i = deb + 1; i < fin; i++) if (titreSection(i)) { fin = i; break; }
         const zone = textes.slice(deb, fin);
         if (zone.some((t) => /\[CHAMP_\d+\]/.test(t) && developpe(t))) continue;
         const contenu = zone.slice(1).filter((t) => t && !FORME_RUBRIQUE.test(t));
@@ -4501,6 +4567,19 @@ INTERDITS : recopier la valeur d'une AUTRE colonne/site ; inventer une donnée f
       // d'inventer/de répondre « [À COMPLÉTER] ». (Pas pour un [PARAGRAPHE] : on laisse rédiger.)
       // Cellule d'un tableau d'autorisations : la COLONNE dit quelle donnée écrire (la ligne « Autorisation
       // entreprise » ne veut pas dire que chaque cellule reçoit le n° CNAPS).
+      // Tableau des autorisations CNAPS (havre1) : ligne « Autorisation dirigeant » → dirigeant et son agrément AGD ;
+      // ligne « Autorisation entreprise » → dénomination, autorisation AUT et sa date (registre, valeurs confirmées).
+      if (isTableCell && /autorisation|agr[ée]ment/i.test(rowCell) && /dirigeant|entreprise|soci[ée]t[ée]/i.test(rowCell)) {
+        const dirigeantLigne = /dirigeant/i.test(rowCell);
+        const nomDirigeant = (valeurRegistre('dirigeant') || '').trim().split(/\s+/).map((m, i) => (i === 0 ? m.toUpperCase() : m.charAt(0).toUpperCase() + m.slice(1).toLowerCase())).join(' ');
+        const val = /^\s*nom\b/i.test(colCell) ? (dirigeantLigne ? nomDirigeant : 'GLOBAL SECURITY SERVICES')
+          : /n°|num[ée]ro/i.test(colCell) && /agr[ée]ment|autorisation/i.test(colCell) ? valeurRegistre(dirigeantLigne ? 'agrement_dirigeant' : 'autorisation_cnaps')
+          : /d[ée]livrance|obtention/i.test(colCell) && !/validit/i.test(colCell) ? (dirigeantLigne ? valeurRegistre('date_agrement_dirigeant') || '[À COMPLÉTER]' : valeurRegistre('date_autorisation_cnaps'))
+          // Dates encore inconnues (question posée une seule fois à GSS, questions_gss_une_fois) : reportées au registre,
+          // elles sont écrites dans tous les cadres.
+          : /validit|expir/i.test(colCell) ? valeurRegistre(dirigeantLigne ? 'fin_validite_agrement_dirigeant' : 'fin_validite_autorisation_cnaps') || '[À COMPLÉTER]' : '';
+        if (val) { replacements.push({ id: f.id, value: val }); return; }
+      }
       if (isTableCell && /activit/i.test(colCell) && /autorisation|cnaps|agr[ée]ment|dirigeant/i.test(`${rowCell} ${f.context}`)) {
         replacements.push({ id: f.id, value: /dirigeant/i.test(rowCell) ? 'Dirigeant d\u2019entreprise de surveillance et de gardiennage' : 'Surveillance humaine et gardiennage (activités privées de sécurité, livre VI du CSI)' });
         return;
@@ -4648,8 +4727,15 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
         }
         // Réponse développée : texte du mémoire type repris (fidélité contrôlée), sinon proposition de l'IA à valider.
         if (developpee && value !== undefined && value !== null && String(value).trim()) {
-          const retenus = referencesRetenues(candidats, data.reference);
-          const libelle = (questionMT || `Champ ${f.id}`).replace(/\s+/g, ' ').slice(0, 160);
+          // Une rubrique principale (et au plus une seconde de score voisin) : jamais trois rubriques mêlées (havre1, 3.4).
+          const retenus = referencesPrincipales(referencesRetenues(candidats, data.reference));
+          // Intitulé de la rubrique du cadre (titre de section) quand la « question » n'est qu'un paragraphe de consigne
+          // (havre1 : « Le renvoi vers un rapport général… est à proscrire » au lieu de « Mesures et initiatives sociétales »).
+          const sectionChamp = ((f.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '').replace(/\s+/g, ' ').trim();
+          const consigneSeule = !!sectionChamp && sectionChamp !== (questionMT || '').trim() && !/^\d/.test((questionMT || '').trim())
+            && (!/[a-zà-ÿ]/.test(sectionChamp) || /^(?:le renvoi|cela peut|le soumissionnaire|le candidat|le prestataire|il est demand|il convient)/i.test((questionMT || '').trim()));
+          const titreSection = /[a-zà-ÿ]/.test(sectionChamp) ? sectionChamp : sectionChamp.charAt(0) + sectionChamp.slice(1).toLowerCase();
+          const libelle = (consigneSeule ? titreSection : questionMT || `Champ ${f.id}`).replace(/\s+/g, ' ').slice(0, 160);
           if (retenus.length) {
             // Consigne 5 et décision D7 : le texte de GSS repris EXACTEMENT, à 90 % au moins. Réponse du modèle sous ce
             // seuil : nouvel essai strict (recopie mot pour mot), gardé s'il est plus fidèle. Puis la réponse est recalée
@@ -4676,6 +4762,7 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
                 return;
               }
             }
+            rec.texte = nettoyerReponseCadre(rec.texte);
             if (rec.texte !== String(value)) {
               console.log(`[MemoireGenerator] ${label} : réponse recalée sur le mémoire type (${retenus.map((c) => c.id).join(', ')}), fidélité ${rec.fideliteAvant.toFixed(2)} → ${rec.fidelite.toFixed(2)} (${rec.reformulees} phrase(s) reformulée(s) rétablie(s), ${rec.reinserees} remise(s), ${rec.bribesRetirees} bribe(s) et ${rec.ajoutsRetires} ajout(s) retiré(s)).`);
               value = rec.texte;
@@ -4688,8 +4775,12 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
           } else if (comprehension) {
             propositionsCadre.set(f.id, `Réponse à relire (compréhension du besoin rédigée d'après le DCE) : ${libelle}`);
           } else if (renvois.length) {
-            // Le texte de GSS sur ce sujet est repris dans une autre réponse, à laquelle celle-ci renvoie.
-            propositionsCadre.delete(f.id);
+            // Le texte de GSS sur ce sujet est repris dans une autre réponse, à laquelle celle-ci renvoie. Une réponse qui
+            // ajoute autour du renvoi des phrases rédigées par l'IA (havre1 21 : 3.3, 4.2, 4.4, 110 à 150 mots) n'est pas
+            // le texte de GSS : elle est signalée à relire (consultations et premier message de l'assistant, D5).
+            const horsRenvoi = String(value).split(/(?<=[.!?])\s+|\n+/).filter((ph) => !/voir notre r[ée]ponse|notre r[ée]ponse (?:à|a) la question/i.test(ph)).join(' ');
+            if ((horsRenvoi.match(/[\wÀ-ÿ'’-]+/g) || []).length > 15) propositionsCadre.set(f.id, `Réponse à relire (texte rédigé par l'IA autour d'un renvoi à une autre réponse) : ${libelle}`);
+            else propositionsCadre.delete(f.id);
           } else {
             propositionsCadre.set(f.id, `Proposition de réponse à valider (question que le mémoire type de GSS ne traite pas) : ${libelle}`);
           }
@@ -4976,7 +5067,9 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     // retiré (phrase d'une réponse longue), avec une question à GSS ; le numéro unique ne va qu'avec l'interlocuteur unique.
     const textesMT = Object.values(repriseMT?.textes || {}).join(' ');
     const sourcesFaits: SourcesFaitsCadre = {
-      toutes: normaliser(`${identiteText}${effectifText} ${analysisJson} ${dceContext} ${gssDocContext} ${referentsContext} ${texteSourcesMemoires()} ${this.texteDemande()} ${textesMT}`),
+      // Libellés écrits par les remplissages déterministes d'identité (activité CNAPS, qualité du signataire) : ce sont des
+      // faits de GSS, jamais des « faits nouveaux » (havre1 : « livre VI du CSI » remplacé par « [À COMPLÉTER] » et posé à GSS).
+      toutes: normaliser(`${identiteText}${effectifText} ${analysisJson} ${dceContext} ${gssDocContext} ${referentsContext} ${texteSourcesMemoires()} ${this.texteDemande()} ${textesMT} ${LIBELLES_IDENTITE_DETERMINISTES}`),
       gss: normaliser(`${gssDocContext} ${texteSourcesMemoires()} ${this.texteDemande()} ${textesMT}`),
       telephoneUnique: valeurRegistre('telephone_contact') || undefined,
       interlocuteurUnique: (valeurRegistre('dirigeant') || '').trim().split(/\s+/)[0] || undefined,
@@ -5236,7 +5329,9 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
             console.log(`[MemoireGenerator] [À COMPLÉTER] retiré d'une ligne de continuation (CHAMP_${d.id})`);
             continue;
           }
-          if (d.kind === 'table') {
+          // Case du tableau des autorisations CNAPS (date de l'agrément dirigeant, fin de validité) : donnée de GSS à fournir
+          // avant la remise, jamais une case vidée sans question (D7).
+          if (d.kind === 'table' && !/Ligne:\s*"[^"]*(?:autorisation|agr[ée]ment)[^"]*(?:dirigeant|entreprise)/i.test(d.context)) {
             valById.set(d.id, '');
             console.log(`[MemoireGenerator] [À COMPLÉTER] retiré pour cellule de tableau (CHAMP_${d.id})`);
             continue;
@@ -5249,7 +5344,10 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         const sig = dedupSig(d.context);
         const set = seenVal.get(sig) ?? seenVal.set(sig, new Set()).get(sig)!;
         const nv = normCtx(v);
-        if (set.has(nv)) { valById.set(d.id, ''); console.log(`[MemoireGenerator] Doublon vidé: CHAMP_${d.id} (même contexte/valeur)`); continue; }
+        // Coordonnées d'un contact : la même personne peut être le contact de l'exécution et celui des commandes (havre1 :
+        // coordonnées du contact pour les commandes vidées comme « doublon » de celles du contact d'exécution).
+        const coordonnees = /Question:\s*"[^"]*(?:coordonn|t[ée]l[ée]phone|e-?mail|courriel|adresse)/i.test(d.context);
+        if (set.has(nv) && !coordonnees) { valById.set(d.id, ''); console.log(`[MemoireGenerator] Doublon vidé: CHAMP_${d.id} (même contexte/valeur)`); continue; }
         set.add(nv);
         // Quasi-doublon dans la MÊME zone (lignes d'une même question/zone) → vidé.
         const ws = sigWords(v);
@@ -5478,7 +5576,15 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       }));
       for (const el of elementsACompleter) { const q = precises.get(el.cle); if (q) { el.question = q.question; el.groupe = q.groupe; } }
       // Aucune question ne cite un repère technique (« le champ GSS_AC_3 ») : question d'après la phrase de l'emplacement.
-      for (const el of elementsACompleter) if (REPERE_TECHNIQUE.test(el.question)) el.question = `Information à fournir pour compléter : « ${el.contexte.replace(REPERE_TECHNIQUE, '').trim()} »`;
+      for (const el of elementsACompleter) if (REPERE_TECHNIQUE.test(el.question)) el.question = `Information à fournir pour compléter : « ${el.contexte.replace(REPERE_TECHNIQUE, '').trim()} »`;
+      // Question générique (« Quelle donnée précise doit figurer dans le passage laissé vide… ? », « … la partie manquante du
+      // mémoire technique relative au site concerné ? », havre1 21) : elle cite la question du cadre et la phrase exacte.
+      for (const el of elementsACompleter) {
+        if (!/laiss[ée]e? vide|partie manquante|passage manquant|donn[ée]e pr[ée]cise doit figurer|information manquante/i.test(el.question)) continue;
+        const champ = signets.find((s) => s.cle === el.cle)?.champ;
+        const libelleCadre = ((descriptors.find((x) => x.id === champ)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+        el.question = `Quelle information faut-il écrire${libelleCadre ? ` dans la réponse à « ${libelleCadre} »` : ''}, à la place de « [À COMPLÉTER] » dans la phrase « ${el.contexte.replace(REPERE_TECHNIQUE, '').replace(/\s+/g, ' ').trim().slice(0, 220)} » ?`;
+      }
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Formulation des questions par emplacement indisponible : ${e?.message || e}`);
     }
@@ -5570,7 +5676,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         ...(dimRepris ? [...(aRelire.length ? [''] : []), messageDimensionnement(dimensionnementCadre!)] : []),
       ].join('\n') }] : undefined;
       ecrireEtat({
-        dossierId, mode: 'cadre', fichier: outputPath, majLe: '', elements: elementsACompleter, reponsesTraitees: [],
+        dossierId, mode: 'cadre', fichier: outputPath, majLe: '', elements: elementsSansDoublon(elementsACompleter), reponsesTraitees: [],
         champs: champsEtat, demande: this.demandeParticuliere?.demande || undefined, conversation,
       });
     } catch (e: any) {
@@ -5590,12 +5696,13 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         })))
       },
       // Grille de notation : chaque sous-critère signale ses manques → fusion des questions en doublon.
-      consultations: [
+      // Aucun repère technique (« [CHAMP_14] ») ni doublon dans les questions remises à GSS (havre1 21).
+      consultations: [...new Set([
         ...(descriptors.some((d) => d.grille)
           ? await this.consoliderConsultations([...aCompleter, ...confirmationsGss])
           : [...aCompleter, ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))]),
         ...[...propositionsCadre.entries()].filter(([id]) => champsRediges.includes(id)).sort((a, b) => a[0] - b[0]).map(([, c]) => c),
-      ],
+      ].map((c) => c.replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean))],
     };
   }
 
@@ -6593,7 +6700,7 @@ RÈGLES DE FORME (rendu Marp) :
     const { schemas: schemasRendus, cover: coverRendu, ...result } = rendu;
     try {
       ecrireEtat({
-        dossierId, mode: 'libre', fichier: result.filePath, majLe: '', elements: elementsLibres, reponsesTraitees: [],
+        dossierId, mode: 'libre', fichier: result.filePath, majLe: '', elements: elementsSansDoublon(elementsLibres), reponsesTraitees: [],
         libre: { sections: sectionsReperes, schemas: Object.fromEntries(schemasRendus || []), cover: coverRendu, theme: themeActif() },
         demande: this.demandeParticuliere?.demande || undefined,
       });
@@ -6816,7 +6923,8 @@ RÈGLES DE FORME (rendu Marp) :
     progres(70, 'Contrôle des répétitions entre rubriques…');
     // Le bloc 1 annonce ce que les blocs 2 à 5 développent (consigne 3) : ses attentes et points de vigilance ne sont
     // jamais des redites à retirer (ils disparaissaient tous, génération réelle ign 12 et 13).
-    await this.dedoublonnerRubriques(sections, rubriquesDoc, [...fixes, ...(b1 ? [b1.id] : [])]);
+    await this.dedoublonnerRubriques(sections, rubriquesDoc, [...fixes, ...(b1 ? [b1.id] : [])],
+      Object.fromEntries(publiees.filter((p) => p.mode === 'adapte' && p.texte).map((p) => [p.id, p.texte!])));
     progres(74, 'Cohérence avec les exigences chiffrées et les horaires du CCTP…');
     // Valeurs habituelles de GSS dont l'engagement renforcé n'est dû que si le DCE l'exige (indicateur faux) : protégées.
     const proteges = Object.values(mt.variables).filter((v) => v.valeur_gss && v.valeur_si_exige && v.indicateur_exige && !prep.indicateurs[v.indicateur_exige]).map((v) => v.valeur_gss!);
@@ -6945,6 +7053,7 @@ RÈGLES DE FORME (rendu Marp) :
       else etat.conversation = [{ role: 'assistant', texte: texteDim, date: new Date().toISOString() }];
     }
     try {
+      etat.elements = elementsSansDoublon(etat.elements);
       ecrireEtat(etat);
     } catch (e: any) {
       console.warn(`[MemoireGenerator] État de complétion non enregistré (non bloquant) : ${e?.message || e}`);
@@ -7562,7 +7671,7 @@ Renvoie UNIQUEMENT un objet JSON : {"puces": [{"rubrique": "identifiant", "texte
    * (jamais un repère ⟦AC:n⟧, jamais un chiffre exigé par le CCTP propre à la rubrique), puis les
    * sous-titres restés vides sont supprimés. Étape non bloquante.
    */
-  private async dedoublonnerRubriques(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, intouchables: string[] = []): Promise<void> {
+  private async dedoublonnerRubriques(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, intouchables: string[] = [], references: Record<string, string> = {}): Promise<void> {
     const ids = rubriques.map((r) => r.id).filter((id) => (sections[id] || '').trim());
     if (ids.length < 2) return;
     const r = await this.callOpenAI([
@@ -7583,8 +7692,14 @@ Renvoie UNIQUEMENT un objet JSON : {"suppressions": [{"id": "rubrique où retire
       for (const s of Array.isArray(liste) ? liste : []) {
         const id = String(s?.id || ''), extrait = String(s?.extrait || '').trim(), garde = String(s?.garde || '');
         if (!ids.includes(id) || intouchables.includes(id) || id === garde || !ids.includes(garde) || extrait.length < 30 || /⟦AC:|CONSULTATION REQUISE/i.test(extrait)) continue;
+        // Extrait qui traverse une fin de ligne ou un sous-titre en gras : jamais retiré (ifits 171 : sous-titres collés).
+        if (/\n|\*\*/.test(extrait)) continue;
         const t = sections[id];
         if (!t.includes(extrait)) continue;
+        // Rubrique « à adapter » : son texte de référence GSS publiposté ne s'élague jamais (D7) ; seuls les ajouts de
+        // l'adaptation et du contrôle de couverture peuvent être retirés (ifits 171 : 42 % du texte de GSS restant).
+        const ref = references[id];
+        if (ref && fidelite(extrait, ref) >= 0.8) continue;
         // La phrase suivante renvoie à celle-ci (« Ces vacations… », « Elle constitue… ») : on la garde, sinon
         // la suivante devient orpheline.
         const suite = t.slice(t.indexOf(extrait) + extrait.length).replace(/^[\s.;:]+/, '');
@@ -7596,6 +7711,7 @@ Renvoie UNIQUEMENT un objet JSON : {"suppressions": [{"id": "rubrique où retire
         // Sous-titres restés sans contenu.
         nouveau = nouveau.replace(/^#{2,4}\s+.+\n+(?=#{2,4}\s|$(?![\s\S]))/gm, '').replace(/\n{3,}/g, '\n\n').trim();
         if (nouveau.split(/\s+/).length < 120) continue; // jamais au point de vider la rubrique
+        if (ref && fidelite(ref, nouveau) < SEUIL_FIDELITE) continue; // contrôle final de la fidélité (D7)
         sections[id] = nouveau;
         n++;
       }
@@ -7822,7 +7938,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
 
     try {
       ecrireEtat({
-        dossierId, mode: 'libre', fichier: rendu.filePath, majLe: '', elements, reponsesTraitees: [],
+        dossierId, mode: 'libre', fichier: rendu.filePath, majLe: '', elements: elementsSansDoublon(elements), reponsesTraitees: [],
         libre: { sections, schemas, cover, court: { pagesMax: format.pagesMax, plan, source: format.source }, theme: themeActif() },
         demande: this.demandeParticuliere?.demande || undefined,
       });
@@ -8236,7 +8352,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     }
     try {
       ecrireEtat({
-        dossierId, mode: 'libre', fichier: rendu.filePath, majLe: '', elements, reponsesTraitees: [],
+        dossierId, mode: 'libre', fichier: rendu.filePath, majLe: '', elements: elementsSansDoublon(elements), reponsesTraitees: [],
         libre: { sections, schemas, cover, court: { pagesMax: format.pagesMax, plan, source: format.source }, theme: themeActif(), ...(ajoutsCourt.length ? { ajouts: ajoutsCourt } : {}) },
         demande: this.demandeParticuliere?.demande || undefined, conversation,
       });

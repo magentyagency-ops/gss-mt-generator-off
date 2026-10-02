@@ -515,6 +515,51 @@ CONSIGNE PRIORITAIRE (elle prime sur toutes les consignes de rédaction ci-dessu
 `;
 }
 
+/**
+ * Rubriques du mémoire type reprises dans une même réponse du cadre : la principale (meilleur score pour la question) et,
+ * au plus, une seconde de score voisin. Plus de rubriques mêlées en un seul texte (havre1 21, réponse 3.4 : identité,
+ * adéquation des moyens et formation ADS collées, tableau des effectifs nationaux pour une question sur les formations).
+ */
+export function referencesPrincipales(retenus: CandidatReference[]): CandidatReference[] {
+  if (retenus.length <= 1) return retenus;
+  const tries = retenus.slice().sort((a, b) => b.score - a.score || (b.lexical ?? 0) - (a.lexical ?? 0));
+  return tries.filter((c, i) => i === 0 || (i === 1 && c.score >= tries[0].score - 0.05));
+}
+
+/**
+ * Nettoyage d'une réponse du cadre après recalage : puce de libellé sans valeur (« • Autorisation entreprise : »), ligne
+ * répétée, et « [À COMPLÉTER] » qui redemande juste après la même donnée (« Date de délivrance et date de fin de
+ * validité : [À COMPLÉTER]. » puis « Date de fin de validité : [À COMPLÉTER]. »).
+ */
+export function nettoyerReponseCadre(texte: string): string {
+  const lignes = String(texte || '').split('\n');
+  const out: string[] = [];
+  const vues = new Set<string>();
+  const mots = (l: string) => new Set(normaliser(l.split(':')[0]).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length > 2));
+  for (const l of lignes) {
+    const t = l.trim();
+    if (/^(?:[•\-*]|\d+[.)])\s+[^:]{2,80}:\s*$/.test(t)) {
+      // Puce de libellé sans contenu : rien ne la suit, ou la ligne suivante n'est pas une puce (fin de liste).
+      const i = lignes.indexOf(l);
+      const suivante = lignes[i + 1] ?? '';
+      if (!suivante.trim() || !/^\s*(?:[•\-*]|\d+[.)])\s/.test(suivante)) continue;
+    }
+    const n = normaliser(t).replace(/\s+/g, ' ');
+    if (n && n.length > 12 && vues.has(n)) continue;
+    if (/\[À COMPLÉTER\]/.test(t) && out.length) {
+      const prec = out[out.length - 1].trim();
+      if (/\[À COMPLÉTER\]/.test(prec)) {
+        const a = mots(prec);
+        const b = mots(t);
+        if (b.size && [...b].every((w) => a.has(w))) continue;
+      }
+    }
+    if (n) vues.add(n);
+    out.push(l);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
 /** Repères « R1 »… cités par le modèle, limités aux candidats fournis. */
 export function referencesRetenues(candidats: CandidatReference[], valeur: unknown): CandidatReference[] {
   const l = (Array.isArray(valeur) ? valeur : typeof valeur === 'string' ? valeur.split(/[\s,;]+/) : []).map((x) => String(x || '').trim().toUpperCase());
@@ -603,8 +648,11 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   type Item = { brut: string; mots: string[]; ref?: number; ajout?: boolean };
   type Ligne = { items: Item[] };
   const PUCE = /^\s*(?:[•\-*]|\d+[.)])\s+/;
+  // Découpage en phrases sans couper après « : » : « - Dénomination : Global Security Services » reste une seule phrase
+  // (havre1 : libellés séparés de leur valeur puis remis à côté d'une autre phrase, « • Dénomination : Autorisation
+  // d'exercer… », « • Autorisation entreprise : » vide). Une ligne qui finit par « : » reste un sous-titre.
   const decouper = (t: string) => String(t || '').replace(/\r/g, '').split('\n')
-    .map((l) => l.trim() ? l.split(/(?<=[.!?;:])\s+/).filter((x) => x.trim()) : []);
+    .map((l) => l.trim() ? l.split(/(?<=[.!?;])\s+/).filter((x) => x.trim()) : []);
   // Phrases de GSS (référence), ligne par ligne.
   const lignesRef = decouper(reference);
   const ref: Array<{ brut: string; mots: string[]; ligne: number }> = [];

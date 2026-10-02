@@ -5226,6 +5226,10 @@
     "question": "GSS est-elle une PME au sens européen (moins de 250 salariés, et chiffre d'affaires de 50 M€ au plus ou bilan de 43 M€ au plus) ? L'effectif est de 380 salariés ; tant que GSS n'a pas répondu, le mémoire n'imprime aucune mention « PME ». Répondre Oui ou Non (la mention de la dénomination et la case « PME » des cadres de réponse en dépendent)."
    },
    {
+    "rubrique": "b2_identite",
+    "question": "Autorisation CNAPS et agrément dirigeant : quelle est la date de fin de validité de l'autorisation d'exercer de GSS (AUT-076-2114-02-12-20140458592, délivrée le 12/02/2015), et quelles sont les dates de délivrance et de fin de validité de l'agrément dirigeant de MARCHANI Adil (AGD-076-2114-01-28-20140458593) ? Les tableaux des autorisations CNAPS des cadres de réponse les demandent ; une fois connues, elles sont écrites dans tous les cadres."
+   },
+   {
     "rubrique": "b2_implantation",
     "variable": "DELAI_ASTREINTE_NORMANDIE",
     "question": "Astreinte en Normandie : quel délai d'intervention des agents d'astreinte sur n'importe quel site normand faut-il annoncer : moins de 2 heures (Région Normandie, 2024, valeur utilisée aujourd'hui) ou 60 minutes maximum (Université de Rouen Normandie, 2026, délai qui semble viser le remplacement d'un agent absent sur son site) ?"
