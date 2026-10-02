@@ -35,17 +35,22 @@ class Deborde(Exception):
 
 
 # ── Mesure du texte ───────────────────────────────────────────────────────────
+# Moteur de mise en forme simple imposé : c'est celui du Mac (Pillow sans raqm). Un Pillow de serveur Linux avec raqm
+# mesurerait sinon les textes autrement, et les contrôles de débordement faits sur le Mac ne vaudraient plus.
+MOTEUR_TEXTE_SIMPLE = ImageFont.Layout.BASIC if hasattr(ImageFont, "Layout") else ImageFont.LAYOUT_BASIC  # Pillow < 9.1 : constante
+
+
 @lru_cache(maxsize=None)
 def _police(taille, poids):
     """Police de mesure. Graisse réglée sur la police variable ; si le Pillow/FreeType du serveur ne
     gère pas les polices variables, repli sur l'instance fixe de même graisse (métriques identiques)."""
     try:
-        f = ImageFont.truetype(os.path.join(ICI, "polices", "Lexend.ttf"), max(1, round(taille * 4)))
+        f = ImageFont.truetype(os.path.join(ICI, "polices", "Lexend.ttf"), max(1, round(taille * 4)), layout_engine=MOTEUR_TEXTE_SIMPLE)
         f.set_variation_by_axes([poids])
         return f
     except Exception:  # noqa: BLE001
         fixe = min((400, 500, 600, 700, 800), key=lambda w: abs(w - poids))
-        return ImageFont.truetype(os.path.join(ICI, "polices", f"Lexend-{fixe}.ttf"), max(1, round(taille * 4)))
+        return ImageFont.truetype(os.path.join(ICI, "polices", f"Lexend-{fixe}.ttf"), max(1, round(taille * 4)), layout_engine=MOTEUR_TEXTE_SIMPLE)
 
 
 def largeur(t, taille, poids=400):
