@@ -1,11 +1,11 @@
-import { MarpGenerator, AssembleChapter, AssembleSection } from './marp_generator';
+import { MarpGenerator, AssembleChapter, AssembleSection, decouperPagesTexte } from './marp_generator';
 import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema, dessinerSpecs, finaliserSvg } from './schema_service';
 import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce, phraseContraireAuDce } from './visuels_cadre';
 import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
-import { themeActif, schemasBibliotheque } from './themes';
+import { themeActif, schemasBibliotheque, estRetourArriere } from './themes';
 import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE } from './completion';
 import {
   chargerMemoireType, preparerMemoireType, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
@@ -16,7 +16,7 @@ import {
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
-  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin,
+  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages,
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
@@ -6681,6 +6681,11 @@ RÈGLES DE FORME (rendu Marp) :
         analyse: analyseResumee, demande: await demandeMT.consigne(b1.id, b1.titre),
       });
       sections[b1.id] = remarques ? `${c.texte.trim()}\n\n${remarques}` : c.texte;
+      // 1 à 2 pages d'explication (consigne 3) : la rédaction qui dépasse sa limite de mots est ramenée à 2 pages, sans modèle.
+      if (!estRetourArriere(themeActif())) {
+        const r = reduireBesoinAPages(sections[b1.id], (t) => decouperPagesTexte(t).length);
+        if (r.retirees.length) { sections[b1.id] = r.texte; console.log(`[MemoireGenerator] Compréhension du besoin : ${r.retirees.length} ligne(s) retirée(s) pour tenir en 2 pages de texte.`); }
+      }
       titresSchemas[b1.id] = c.titre;
       if (c.svg) schemasGeneres.set(CLE_SCHEMA(b1.id), c.svg);
       if (c.secours) avisSecours.push(`Rubrique « ${b1.titre} » : rédaction automatique indisponible, texte construit à partir des données du DCE, à relire et compléter.`);
@@ -6718,6 +6723,14 @@ RÈGLES DE FORME (rendu Marp) :
     progres(62, 'Contrôle de couverture des exigences du CCTP…');
     const aCouvrir = plan.rubriques.filter((r) => r.mode !== 'besoin' && sections[r.id] && parRubrique[r.id]?.length).map((r) => r.id);
     await enParallele(aCouvrir, 4, async (id) => { sections[id] = await this.completerCouverture(sections[id], parRubrique[id], id); });
+    // Postes du CCTP déjà présentés dans le tableau du périmètre du bloc 1 : leurs puces de couverture ne sont pas redites
+    // ailleurs (génération réelle ign 15 : 5 pages de texte pour « L'adéquation de nos moyens humains », consignes 3 et 6).
+    if (b1 && sections[b1.id]) {
+      for (const id of aCouvrir) {
+        const r = sansRediteDuPerimetre(sections[id], sections[b1.id]);
+        if (r.retirees.length) { sections[id] = r.texte; console.log(`[MemoireGenerator] Rubrique ${id} : ${r.retirees.length} engagement(s) déjà présenté(s) dans le périmètre du bloc 1 retiré(s).`); }
+      }
+    }
 
     // ── 8. Filtres de chaque rubrique : commentaires internes et délais hors Normandie (remontés en consultations) ──
     const commentairesRetires = new Set<string>();
@@ -6813,6 +6826,14 @@ RÈGLES DE FORME (rendu Marp) :
       return i < 0 ? sansRecopieCctp(t, dceContext).texte : `${sansRecopieCctp(t.slice(0, i), dceContext).texte.trimEnd()}\n\n${t.slice(i)}`;
     };
     for (const id of Object.keys(sections)) sections[id] = voixDeGss(sansRecopie(id, nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext))));
+    // 1 à 2 pages d'explication par rubrique (consignes 3 et 6) : puces de couverture au-delà retirées, texte de GSS intact.
+    if (!estRetourArriere(themeActif())) {
+      for (const id of Object.keys(sections)) {
+        if (id === b1?.id) continue;
+        const r = plafonnerEngagementsPages(sections[id], (t) => decouperPagesTexte(t.replace(REPERE_RE, '')).length);
+        if (r.retirees.length) { sections[id] = r.texte; console.log(`[MemoireGenerator] Rubrique ${id} : ${r.retirees.length} engagement(s) non repris pour tenir en 2 pages de texte : ${r.retirees.map((x) => x.slice(0, 80)).join(' ; ')}.`); }
+      }
+    }
     const consultationList = elementsLibres.filter((e) => e.statut === 'ouvert').map((e) => e.question);
     consultationList.push(...avisSecours);
     // Propositions de réponse de l'IA : signalées APRÈS les éléments (jamais envoyées à l'équipe comme des questions).

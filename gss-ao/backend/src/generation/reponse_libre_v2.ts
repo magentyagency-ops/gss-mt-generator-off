@@ -582,6 +582,129 @@ export function defautsEtapesBesoin(etapes: Array<{ titre?: string; texte?: stri
  * chiffrées ; une exigence déjà citée dans le bloc (mêmes chiffres, ou 60 % de ses mots) n'est pas reprise. Chaque
  * puce renvoie à la rubrique du mémoire qui la développe quand la matrice l'y rattache.
  */
+/**
+ * Engagements de couverture (« ## Nos engagements sur les exigences du cahier des charges ») qui ne font que redire une
+ * ligne du tableau « Le périmètre de la prestation demandée » du bloc 1 (même site, même poste, mêmes horaires et même
+ * qualification, aucun autre chiffre) : retirés de la rubrique, le bloc 1 les présente déjà (génération réelle ign 15 :
+ * 9 postes du CCTP redits en puces dans « L'adéquation de nos moyens humains », 5 pages de texte au lieu de 1 à 2,
+ * consignes 3 et 6). Une puce qui apporte un autre chiffre (relève, ouverture à 6 h, fermeture à 21 h) est gardée ;
+ * le sous-titre est retiré s'il ne reste aucune puce.
+ */
+export function sansRediteDuPerimetre(texte: string, besoin: string): { texte: string; retirees: string[] } {
+  const TITRE = /\n*## Nos engagements sur les exigences du cahier des charges\n+/;
+  const m = TITRE.exec(texte);
+  if (!m) return { texte, retirees: [] };
+  const i = besoin.search(/^##\s+Le périmètre de la prestation demandée/m);
+  if (i < 0) return { texte, retirees: [] };
+  const lignesTableau = besoin.slice(i).split('\n').slice(1).filter((l) => /^\s*\|/.test(l) && !/^\s*\|[\s:|-]+\|\s*$/.test(l));
+  if (lignesTableau.length < 2) return { texte, retirees: [] };
+  // Chiffres porteurs : heures (« 7h00 », « 7 h » → 7), niveaux, échelons, coefficients ; les « 00 » des minutes ne comptent pas.
+  const chiffres = (t: string) => new Set((normaliser(t).replace(/(\d{1,2})\s*h\s*00\b/g, '$1 h').match(/\d+/g) || []).filter((x) => !/^0+$/.test(x)).map((x) => String(Number(x))));
+  const mots = (t: string) => normaliser(t).split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
+  const lignes = lignesTableau.slice(1).map((l) => {
+    const cellules = l.split('|').map((c) => c.trim()).filter((c, k, a) => k > 0 && k < a.length - 1);
+    return {
+      chiffres: chiffres(l),
+      site: mots(cellules[0] || '').filter((w) => w.length >= 5 && !/^(?:batiment|campus|site|poste|accueil)$/.test(w)),
+      poste: mots(cellules[1] || '').filter((w) => /^(?:ssiap|ads|aps|cqp|agent|chef|rondier|cynophile|maitre|sst|pse1?)$/.test(w)).slice(0, 1),
+    };
+  }).filter((l) => l.site.length && l.poste.length && l.chiffres.size >= 2);
+  if (!lignes.length) return { texte, retirees: [] };
+  const avant = texte.slice(0, m.index);
+  const apres = texte.slice(m.index + m[0].length);
+  const retirees: string[] = [];
+  const gardees = apres.split('\n').filter((l) => {
+    if (!/^\s*[-*•]\s/.test(l)) return true;
+    const c = chiffres(l);
+    if (c.size < 3) return true;
+    const n = mots(l);
+    const redite = lignes.some((r) => [...c].every((x) => r.chiffres.has(x)) && r.site.some((w) => n.includes(w)) && r.poste.every((w) => n.includes(w)));
+    if (redite) retirees.push(l.replace(/^\s*[-*•]\s*/, '').trim());
+    return !redite;
+  });
+  if (!retirees.length) return { texte, retirees };
+  const reste = gardees.join('\n').trim();
+  return { texte: /^\s*[-*•]\s/m.test(reste) ? `${avant.trimEnd()}\n\n## Nos engagements sur les exigences du cahier des charges\n\n${reste}` : `${avant.trimEnd()}${reste ? `\n\n${reste}` : ''}`, retirees };
+}
+
+/**
+ * Rubrique « 1 à 2 pages d'explication, puis 1 page de schéma » (consignes 3 et 6) : quand les puces ajoutées par le
+ * contrôle de couverture (« ## Nos engagements sur les exigences du cahier des charges ») font dépasser 2 pages de texte,
+ * les puces sont retirées jusqu'à tenir dans 2 pages, en commençant par les plus longues sans chiffre (listes de missions
+ * recopiées du CCTP), puis les plus longues ; le texte de GSS n'est jamais touché (génération réelle ign 15 :
+ * « L'adéquation de nos moyens humains » sur 5 pages de texte). `pages` mesure le texte comme le rendu.
+ */
+export function plafonnerEngagementsPages(texte: string, pages: (t: string) => number, maxPages = 2): { texte: string; retirees: string[] } {
+  const TITRE = '## Nos engagements sur les exigences du cahier des charges';
+  const i = texte.indexOf(TITRE);
+  if (i < 0 || pages(texte) <= maxPages) return { texte, retirees: [] };
+  const avant = texte.slice(0, i).trimEnd();
+  const lignes = texte.slice(i + TITRE.length).split('\n');
+  const puces = lignes.map((l, k) => ({ l, k })).filter((x) => /^\s*[-*•]\s/.test(x.l));
+  const ordre = puces.slice().sort((a, b) => (/\d/.test(a.l) ? 1 : 0) - (/\d/.test(b.l) ? 1 : 0) || b.l.length - a.l.length);
+  const retirees: string[] = [];
+  const otees = new Set<number>();
+  const composer = () => {
+    const reste = lignes.filter((_, k) => !otees.has(k)).join('\n').trim();
+    return /^\s*[-*•]\s/m.test(reste) ? `${avant}\n\n${TITRE}\n\n${reste}` : `${avant}${reste ? `\n\n${reste}` : ''}`;
+  };
+  let t = texte;
+  for (const p of ordre) {
+    if (pages(t) <= maxPages) break;
+    otees.add(p.k);
+    retirees.push(p.l.replace(/^\s*[-*•]\s*/, '').trim());
+    t = composer();
+  }
+  return { texte: t, retirees };
+}
+
+/**
+ * Bloc « Notre compréhension de votre besoin » tenu en 1 à 2 pages d'explication (consigne 3 : « 1 schéma et 1 à 2 pages
+ * d'explication ») quand la rédaction dépasse sa limite de mots (génération réelle ign 14 : 908 mots pour 700 demandés,
+ * 3 pages de texte). Retraits sans modèle, une ligne à la fois, jusqu'à tenir dans `maxPages` : d'abord les paragraphes
+ * libres qui suivent les puces (récapitulatif du schéma), puis les phrases libres du périmètre après le tableau (de la plus
+ * longue à la plus courte), puis les puces au-delà du minimum (4 attentes, 3 points de vigilance, en partant de la fin),
+ * enfin les lignes du contexte au-delà des deux premières. Le tableau, les sous-titres et l'amorce restent.
+ */
+export function reduireBesoinAPages(texte: string, pages: (t: string) => number, maxPages = 2, minimum = { attentes: 4, vigilance: 3 }): { texte: string; retirees: string[] } {
+  if (pages(texte) <= maxPages) return { texte, retirees: [] };
+  const lignes = texte.split('\n');
+  const section = (k: number) => {
+    for (let j = k; j >= 0; j--) { const m = /^##\s+(.+)$/.exec(lignes[j]); if (m) return m[1]; }
+    return '';
+  };
+  const PUCE = /^\s*[-*•]\s/;
+  const libre = (l: string) => l.trim() && !/^\s*(?:#|\|)/.test(l) && !PUCE.test(l);
+  const candidats: number[][] = [[], [], [], [], []];
+  const parSection: Record<string, number[]> = {};
+  lignes.forEach((l, k) => {
+    const sec = section(k);
+    (parSection[sec] ||= []).push(k);
+    if (/^Vos attentes|^Les points de vigilance/i.test(sec) && libre(l)) candidats[0].push(k);
+    else if (/^Le périmètre/i.test(sec) && libre(l) && lignes.slice(0, k).some((x, j) => /^\s*\|/.test(x) && section(j) === sec)) candidats[1].push(k);
+  });
+  candidats[1].sort((a, b) => lignes[b].length - lignes[a].length);
+  for (const [cle, min, rang] of [[/^Vos attentes/i, minimum.attentes, 2], [/^Les points de vigilance/i, minimum.vigilance, 3]] as Array<[RegExp, number, number]>) {
+    const sec = Object.keys(parSection).find((x) => cle.test(x));
+    const puces = sec ? parSection[sec].filter((k) => PUCE.test(lignes[k])) : [];
+    candidats[rang].push(...puces.slice(min).reverse());
+  }
+  const contexte = Object.keys(parSection).find((x) => /^Votre contexte/i.test(x));
+  if (contexte) candidats[4].push(...parSection[contexte].filter((k) => libre(lignes[k])).slice(2).reverse());
+  const otees = new Set<number>();
+  const composer = () => lignes.filter((_, k) => !otees.has(k)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  let t = texte;
+  const retirees: string[] = [];
+  for (const k of candidats.flat()) {
+    if (pages(t) <= maxPages) break;
+    otees.add(k);
+    retirees.push(lignes[k].trim());
+    t = composer();
+  }
+  return { texte: t, retirees };
+}
+
+
 export function completerBesoinMinimum(
   texte: string,
   sources: Array<{ exigence: string; rubrique?: string; criticite?: string }>,

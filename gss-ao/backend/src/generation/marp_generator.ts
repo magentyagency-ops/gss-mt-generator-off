@@ -95,15 +95,20 @@ function cleanTextForMarp(raw: string): string {
 function lignesParagraphe(p: string, limites: LimitesPage): number {
   const caracteres = limites.caracteres ?? CHARS_PER_LINE;
   const ligneTableau = limites.ligneTableau;
-  return p.split('\n').reduce((n, l) => {
-    if (ligneTableau === undefined) return n + Math.max(1, Math.ceil(l.length / caracteres));
-    if (/^\s*\|[\s:|-]+\|\s*$/.test(l)) return n;
-    // Ligne de tableau : hauteur relevée dans Chromium sur les tableaux des réponses libres v2 (becquerel, caen, ign) :
-    // ≈ 0,7 ligne de marges de cellule + 0,87 ligne par ligne repliée (≈ 90 caractères de Markdown par ligne repliée) ;
-    // l'ancien poids (1,8 × lignes de 105 caractères) comptait 3,6 lignes pour une ligne de tableau qui en fait 2,4.
-    if (/^\s*\|/.test(l)) return n + 0.75 + 0.9 * Math.max(1, Math.ceil(l.length / 90));
-    return n + Math.max(1, Math.ceil(l.length / caracteres));
-  }, 0) * (/^#{1,6}\s/.test(p) ? 1.5 : 1) + 0.7;
+  // Mise en page v2 de la refonte : seule la ligne de sous-titre pèse 1,5 ligne. Un sous-titre suivi de son texte sans
+  // ligne vide (« ## Votre contexte et votre site\nL'École… ») multipliait tout le paragraphe par 1,5 (tableau compris) :
+  // la compréhension du besoin de l'IGN (génération réelle ign 15) occupait 4 pages de texte au lieu de 2 (consigne 3).
+  if (ligneTableau !== undefined) {
+    return p.split('\n').reduce((n, l) => {
+      if (/^\s*\|[\s:|-]+\|\s*$/.test(l)) return n;
+      // Ligne de tableau : hauteur relevée dans Chromium sur les tableaux des réponses libres v2 (becquerel, caen, ign) :
+      // ≈ 0,7 ligne de marges de cellule + 0,87 ligne par ligne repliée (≈ 90 caractères de Markdown par ligne repliée) ;
+      // l'ancien poids (1,8 × lignes de 105 caractères) comptait 3,6 lignes pour une ligne de tableau qui en fait 2,4.
+      if (/^\s*\|/.test(l)) return n + 0.75 + 0.9 * Math.max(1, Math.ceil(l.length / 90));
+      return n + Math.max(1, Math.ceil(l.length / caracteres)) * (/^#{1,6}\s/.test(l) ? 1.5 : 1);
+    }, 0) + 0.7;
+  }
+  return p.split('\n').reduce((n, l) => n + Math.max(1, Math.ceil(l.length / caracteres)), 0) * (/^#{1,6}\s/.test(p) ? 1.5 : 1) + 0.7;
 }
 
 /** Lignes estimées d'un texte (somme de ses paragraphes). */
@@ -121,6 +126,11 @@ const SEUIL_PAGE_ORPHELINE = 0.25;
 const SEUIL_RUBRIQUE_COURTE = 1 / 3;
 const MARGE_PAGE_SERREE = 1.1;
 
+/** Découpage d'un texte de rubrique en pages de texte seules (mise en page v2 de la refonte), pour les contrôles. */
+export function decouperPagesTexte(texte: string, retourArriere = false): string[] {
+  return splitIntoSlideChunks(texte, retourArriere ? LIMITES_TEXTE_SEUL.origine : LIMITES_TEXTE_SEUL.refonte);
+}
+
 function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots: MAX_WORDS_PER_SLIDE, lignes: MAX_LINES_PER_SLIDE }): string[] {
   const paragraphs = text
     .split(/\n{2,}/)
@@ -134,11 +144,20 @@ function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots: MAX_W
   // Un bloc plus haut qu'une slide (longue liste sans ligne vide) est scindé par groupes de lignes.
   for (let i = 0; i < paragraphs.length; i++) {
     const lignes = paragraphs[i].split('\n');
-    if (lignes.length > 1 && lineCount(paragraphs[i]) > limites.lignes) {
+    // Mise en page v2 de la refonte : aussi un bloc de plus de mots qu'une page (longue liste de puces courtes).
+    const tropDeMots = limites.ligneTableau !== undefined && wordCount(paragraphs[i]) > limites.mots;
+    if (lignes.length > 1 && (lineCount(paragraphs[i]) > limites.lignes || tropDeMots)) {
       const groupes: string[] = [];
       let g: string[] = [];
+      // Mise en page v2 de la refonte : le premier groupe laisse la place du sous-titre qui le précède, sinon le
+      // sous-titre restait seul sur sa page (« Nos engagements sur les exigences du cahier des charges », ign 15 p. 42).
+      const titre = limites.ligneTableau !== undefined && i > 0 && isHeading(paragraphs[i - 1]);
+      const reserve = titre ? lineCount(paragraphs[i - 1]) : 0;
+      const reserveMots = titre ? wordCount(paragraphs[i - 1]) : 0;
+      const motsMax = limites.ligneTableau !== undefined ? limites.mots : Infinity;
       for (const l of lignes) {
-        if (g.length && lineCount([...g, l].join('\n')) > limites.lignes) { groupes.push(g.join('\n')); g = []; }
+        const essai = [...g, l].join('\n');
+        if (g.length && (lineCount(essai) > limites.lignes - (groupes.length ? 0 : reserve) || wordCount(essai) > motsMax - (groupes.length ? 0 : reserveMots))) { groupes.push(g.join('\n')); g = []; }
         g.push(l);
       }
       if (g.length) groupes.push(g.join('\n'));
@@ -167,7 +186,9 @@ function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots: MAX_W
       // Un titre ne doit JAMAIS rester seul en bas d'une slide : on le garde collé au paragraphe
       // qui le suit. Si le bloc « titre + son 1er paragraphe » ne tient pas sur la slide en cours,
       // on coupe AVANT le titre pour qu'il ouvre la slide suivante avec son contenu.
-      const next = paragraphs[i + 1];
+      // Mise en page v2 de la refonte : un sous-titre suivi de son texte dans le même paragraphe (« ## Le périmètre…\n| … »)
+      // a déjà son contenu ; le paragraphe suivant n'a pas à tenir avec lui sur la même page.
+      const next = limites.ligneTableau !== undefined && para.includes('\n') ? undefined : paragraphs[i + 1];
       const blockWords = paraWords + (next && !isHeading(next) ? wordCount(next) : 0);
       const blockLines = lineCount(para) + (next && !isHeading(next) ? lineCount(next) : 0);
       if (currentWords + blockWords > limites.mots || currentLines + blockLines > limites.lignes) {
