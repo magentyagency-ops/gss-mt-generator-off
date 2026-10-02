@@ -48,6 +48,16 @@ describe('Parties du cadre limitées en pages (T2C-4)', () => {
     ]);
   });
 
+  it('la dernière partie limitée s’arrête au titre de la partie suivante, limitée ou non (ca_normandie 241)', () => {
+    const cadre = doc([
+      p('6 – Organisation pendant la phase de prise en charge'), p('3 pages maximum'), p('Organisation de la prise en charge'), p('[CHAMP_7]'),
+      p('7 – Mise en œuvre de la responsabilité environnementale'), p('Nombre de page libre'), p('Éco-gestes'), p('[CHAMP_8]'),
+    ]);
+    expect(partiesDuDocument(paragraphesCadre(cadre)).map((x) => [x.titre, x.ids])).toEqual([['6 – Organisation pendant la phase de prise en charge', [7]]]);
+    const cadre2 = doc([p('4 – Suivi'), p('8 pages maximum'), p('[CHAMP_1]'), p('5 – Moyens matériels'), p('1 page par site pour le 5.1'), p('5.1 – Description'), p('[CHAMP_2]')]);
+    expect(partiesDuDocument(paragraphesCadre(cadre2)).map((x) => [x.titre, x.ids])).toEqual([['4 – Suivi', [1]]]);
+  });
+
   it('une partie trop longue est ramenée à sa limite, passages retirés entiers dans l’ordre prévu, tableau gardé', () => {
     const valeurs = new Map<number, string>([[1, comprehension], [2, equipe], [3, methodo], [4, 'Texte.'], [5, 'Texte.'], [6, 'Texte.']]);
     const g = geometrieCadre(CADRE, styles);
