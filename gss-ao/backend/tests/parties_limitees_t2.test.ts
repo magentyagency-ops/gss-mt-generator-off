@@ -1,7 +1,7 @@
 // Tour 2 (T2C-4) : parties du cadre limitées en pages (ca_normandie 221 : partie 1 « 1 page maximum » débordant sur une
 // deuxième page). Hauteur estimée sur le document, retraits de passages entiers signalés, schéma de la compréhension borné.
 import { describe, it, expect } from 'vitest';
-import { ajusterPartiesLimitees, partiesDuDocument, paragraphesCadre, geometrieCadre, hauteurPartie, ligneTableau, reduireComprehensionCadre, hauteurSchemaPt } from '../src/generation/memoire_type_cadre';
+import { ajusterPartiesLimitees, partiesDuDocument, paragraphesCadre, geometrieCadre, hauteurPartie, ligneTableau, reduireComprehensionCadre, hauteurSchemaPt, textesSchemaSvg } from '../src/generation/memoire_type_cadre';
 
 const p = (t: string) => `<w:p><w:r><w:t xml:space="preserve">${t}</w:t></w:r></w:p>`;
 const styles = '<w:styles><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="20"/></w:rPr></w:style></w:styles>';
@@ -108,6 +108,20 @@ describe('Parties du cadre limitées en pages (T2C-4)', () => {
     expect(r.retirees).toEqual(['GSS réalise les rondes toutes les trois heures.']);
     // Un seul point de vigilance : jamais retiré (au moins deux gardés).
     expect(reduireComprehensionCadre(r.texte, () => false).texte).toContain('Point de vigilance : A');
+  });
+
+  it('ca_normandie 241 : attentes « citation — réponse » gardées avant les engagements ajoutés, ligne de tableau longue et ligne du schéma jamais retirées', () => {
+    expect(ligneTableau('Agent de sécurité : 1 ADS : 20 : 613,77 h par semaine (Cour d’appel de Caen, Tribunal judiciaire de Caen, Tribunal de proximité de Vire, Tribunal judiciaire de Lisieux, Conseil de prud’hommes de Caen, Tribunal de commerce de Caen, Tribunal judiciaire de Coutances), soit 19,86 ETP')).toBe(true);
+    const t = ['Le SAR de Rouen lance le marché.', '', 'Vos attentes et nos engagements :',
+      '• « main courante tenue en temps réel » — réponse : main courante électronique consultable par le RSEM.',
+      '• « Au moins deux fois par jour pour les rondes extérieures » — réponse : planification et contrôleur de rondes.',
+      '• « délai maximum de 20 minutes » pour la levée de doute — réponse : procédure d’intervention sur alarme.',
+      '• GSS réalise les rondes intérieures au moins toutes les trois heures.'].join('\n');
+    const svg = '<svg><text>Votre résultat</text><text>Au moins deux fois par</text><text>jour pour les rondes</text><text>extérieures</text></svg>';
+    expect(textesSchemaSvg(svg)).toEqual(['Votre résultat Au moins deux fois par jour pour les rondes extérieures']);
+    const r1 = reduireComprehensionCadre(t, (x) => x.split('\n').length <= 5);
+    expect(r1.retirees[0]).toBe('GSS réalise les rondes intérieures au moins toutes les trois heures.');
+    expect(r1.texte).toContain('« main courante tenue en temps réel »');
   });
 
   it('hauteur d’un schéma paysage à la largeur du texte, bornée à 11 cm', () => {

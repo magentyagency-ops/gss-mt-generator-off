@@ -1375,7 +1375,38 @@ export function hauteurPartie(paras: ParagrapheCadre[], debut: number, fin: numb
  *  cellules au moins, courtes (une phrase qui contient deux « : » n'en est pas une). */
 export function ligneTableau(l: string): boolean {
   const cellules = String(l || '').replace(/^\s*[•\-*]\s*/, '').split(/\s:\s/);
-  return cellules.length >= 3 && cellules.slice(0, -1).every((c) => c.trim().length > 0 && c.length <= 60 && !/[.!?;]\s/.test(c)) && cellules[cellules.length - 1].length <= 160;
+  // Dernière cellule (observations) de toute longueur : liste des sites (ca_normandie 241 : « Agent de sécurité : ADS : 20 :
+  // 613,77 h par semaine (Cour d'appel de Caen, Tribunal judiciaire de Caen, …), soit 19,86 ETP »).
+  return cellules.length >= 3 && cellules.slice(0, -1).every((c) => c.trim().length > 0 && c.length <= 60 && !/[.!?;]\s/.test(c));
+}
+
+/** Ligne qu'un ajustement de longueur ne retire jamais : ligne de tableau, effectif de l'équipe (« équipe de 83 agents titulaires »). */
+function ligneEssentielle(l: string): boolean {
+  return ligneTableau(l) || /\b(?:\d+\s+agents?\s+titulaires|[ée]quipe (?:d[ée]di[ée]e |suppl[ée]ante )?de \d+ agents?)\b/i.test(l);
+}
+
+/** Mots porteurs (5 lettres au moins) d'un texte. */
+/** Suites de cinq mots consécutifs d'un texte (mots normalisés). */
+function suitesDeMots(t: string): Set<string> {
+  const m = normaliser(String(t || '')).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean);
+  const out = new Set<string>();
+  for (let i = 0; i + 5 <= m.length; i++) out.add(m.slice(i, i + 5).join(' '));
+  return out;
+}
+
+/** Ligne qui porte le texte d'une étape du schéma (cinq mots consécutifs en commun) : jamais retirée. */
+function ligneDuSchema(l: string, etapes: string[]): boolean {
+  if (!etapes.length) return false;
+  const schema = new Set(etapes.flatMap((e) => [...suitesDeMots(e)]));
+  return [...suitesDeMots(l)].some((x) => schema.has(x));
+}
+
+/** Texte d'un schéma SVG, éléments <text> réunis dans l'ordre (une étape écrite sur plusieurs lignes reste d'un tenant). */
+export function textesSchemaSvg(svg: string): string[] {
+  const t = [...String(svg || '').matchAll(/<text\b[^>]*>([\s\S]*?)<\/text>/g)]
+    .map((m) => m[1].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim())
+    .filter(Boolean).join(' ');
+  return t ? [t] : [];
 }
 
 /**
@@ -1386,11 +1417,13 @@ export function ligneTableau(l: string): boolean {
  * (l'acheteur et son marché) et le dernier (conclusion reprise par le schéma), points de vigilance puis attentes au-delà
  * de deux. Renvoie le texte et les lignes retirées (signalées à GSS).
  */
-export function reduireComprehensionCadre(texte: string, assez: (t: string) => boolean): { texte: string; retirees: string[] } {
+export function reduireComprehensionCadre(texte: string, assez: (t: string) => boolean, protegee: (l: string) => boolean = () => false): { texte: string; retirees: string[] } {
   const lignes = String(texte || '').split('\n');
   const puce = (l: string) => /^\s*[•\-*]\s/.test(l);
   const vigilance = (l: string) => puce(l) && /point de vigilance/i.test(l.slice(0, 40));
-  const attente = (l: string) => puce(l) && /ce que vous attendez|vos attentes|attente/i.test(l.slice(0, 40));
+  // Attente : « Ce que vous attendez : … → notre réponse : … » ou citation du DCE « « … » — réponse : … » (ca_normandie 241 :
+  // ces attentes étaient prises pour des engagements ajoutés et retirées toutes en premier).
+  const attente = (l: string) => puce(l) && !vigilance(l) && (/ce que vous attendez|vos attentes|attente/i.test(l.slice(0, 40)) || /^\s*[•\-*]\s*«/.test(l) || /→\s*notre r[ée]ponse|[—–-]\s*r[ée]ponse\s*:/i.test(l));
   const indices = (f: (l: string) => boolean) => lignes.map((l, k) => k).filter((k) => f(lignes[k]));
   const libres = indices((l) => !!l.trim() && !puce(l) && !/:\s*$/.test(l.trim()) && !ligneTableau(l));
   const ordre: number[] = [];
@@ -1411,6 +1444,7 @@ export function reduireComprehensionCadre(texte: string, assez: (t: string) => b
   const retirees: string[] = [];
   for (const k of ordre) {
     if (assez(composer())) break;
+    if (protegee(lignes[k])) continue;
     otees.add(k);
     retirees.push(lignes[k].replace(/^\s*[•\-*]\s*/, '').trim());
   }
@@ -1454,6 +1488,8 @@ export function ajusterPartiesLimitees(o: {
   ajoutsCouverture?: Map<number, string[]>;
   /** Marge de sécurité (points) retirée du budget. */
   margePt?: number;
+  /** Textes des étapes du schéma de la compréhension : les lignes qui les portent ne sont jamais retirées. */
+  etapesSchema?: string[];
 }): { valeurs: Map<number, string>; parties: AjustementPartie[] } {
   const g = geometrieCadre(o.documentXml, o.stylesXml || '');
   const paras = paragraphesCadre(o.documentXml);
@@ -1471,7 +1507,7 @@ export function ajusterPartiesLimitees(o: {
     const tient = () => hauteur() <= budgetPt;
     // (1) Compréhension du besoin.
     if (!tient() && comp && valeurs.has(comp.id)) {
-      const r = reduireComprehensionCadre(valeurs.get(comp.id)!, (t) => hauteur(new Map(valeurs).set(comp.id, t)) <= budgetPt);
+      const r = reduireComprehensionCadre(valeurs.get(comp.id)!, (t) => hauteur(new Map(valeurs).set(comp.id, t)) <= budgetPt, (l) => ligneEssentielle(l) || ligneDuSchema(l, o.etapesSchema || []));
       valeurs.set(comp.id, r.texte);
       r.retirees.forEach((t) => retires.push({ id: comp.id, texte: t, origine: 'comprehension' }));
     }
@@ -1500,7 +1536,7 @@ export function ajusterPartiesLimitees(o: {
         const lignes = (valeurs.get(id) || '').split('\n');
         const premiere = lignes.findIndex((l) => l.trim());
         let k = lignes.length - 1;
-        while (k > premiere && (!lignes[k].trim() || ligneTableau(lignes[k]))) k--;
+        while (k > premiere && (!lignes[k].trim() || ligneEssentielle(lignes[k]))) k--;
         return { id, lignes, k: k > premiere ? k : -1, taille: lignesTexte(lignes.join('\n'), g) };
       }).filter((c) => c.k >= 0).sort((a, b2) => b2.taille - a.taille);
       if (!candidats.length) break;
