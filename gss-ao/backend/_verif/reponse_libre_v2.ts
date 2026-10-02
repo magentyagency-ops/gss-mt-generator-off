@@ -82,6 +82,19 @@ const mt: any = memoireType;
 const publierOrigine = mt.publierMemoire;
 mt.publierMemoire = (...args: any[]) => { const r = publierOrigine(...args); for (const p of r) if (p.texte) publies[p.id] = p.texte; return r; };
 
+// ── Schémas de process du bloc 1 dessinés (T2C-1) : étape vide ou tronquée, texte qui redit le titre, titres quasi
+//    identiques, renvoi « bloc n » = anomalie. ──
+const schemasBloc1: any[] = [];
+{
+  const ss: any = require('../src/generation/schema_service');
+  const dessinerOrigine = ss.dessinerSpecs;
+  ss.dessinerSpecs = async (specs: any[], ...autres: any[]) => {
+    const r = await dessinerOrigine(specs, ...autres);
+    for (const s of specs) if (/b1_comprehension/.test(String(s.id)) && r?.get?.(s.id)?.ok) schemasBloc1.push({ gabarit: s.gabarit, params: s.params });
+    return r;
+  };
+}
+const { anomaliesSchemaBloc1 } = require('../src/generation/reponse_libre_v2');
 const ACHETEURS: Record<string, RegExp> = {
   imm: /Montsouris|Nouvel IMM/, etampes1: /[ÉE]tampes/, cstb: /CSTB/, becquerel: /Becquerel/, s2e: /Seine-Eure|S2E/, fontainebleau: /Fontainebleau/,
   caen: /ACOSS|URSSAF/, ign: /\bIGN\b|ENPC/, ifsem: /IFSeM/, ifits: /IFITS|Théodore Simon/, citedia: /Citédia|Citedia/, havre1: /Havre/, vitry: /Vitry/,
@@ -250,6 +263,8 @@ async function main() {
   bilan.version = etat.libre?.version;
   bilan.plan = etat.libre!.plan!.blocs.map((b) => `${b.cle}. ${b.titre} (${b.rubriques.length})`);
   bilan.structure = structure(markdowns[markdowns.length - 1], etat);
+  for (const sp of schemasBloc1) for (const a of anomaliesSchemaBloc1(sp)) bilan.structure.anomalies.push(`étape vide ou tronquée dans le schéma du bloc 1 : ${a}`);
+  bilan.schemas_bloc1 = schemasBloc1.map((sp) => sp.params.etapes.map((e: any) => `${e.titre} / ${e.texte || '∅'}`).join(' → '));
   bilan.textes = controlesTexte(pages.join('\n'), etat);
   bilan.mesures = await mesurer(markdowns[markdowns.length - 1], etat.libre!.theme!);
   bilan.mesures.sous_70 = bilan.mesures.schemas.filter((s: any) => s.hauteur < 0.7);

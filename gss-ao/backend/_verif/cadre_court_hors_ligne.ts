@@ -65,6 +65,19 @@ const publies: Record<string, string> = {};
 const mtm: any = memoireType;
 const publierOrigine = mtm.publierMemoire;
 mtm.publierMemoire = (...args: any[]) => { const r = publierOrigine(...args); for (const p of r) if (p.texte) publies[p.id] = p.texte; return r; };
+// ── Schémas de process du bloc 1 dessinés (T2C-1) : étape vide ou tronquée, texte qui redit le titre, titres quasi
+//    identiques, renvoi « bloc n » = anomalie. ──
+const schemasBloc1: any[] = [];
+{
+  const ss: any = require('../src/generation/schema_service');
+  const dessinerOrigine = ss.dessinerSpecs;
+  ss.dessinerSpecs = async (specs: any[], ...autres: any[]) => {
+    const r = await dessinerOrigine(specs, ...autres);
+    for (const s of specs) if (/b1_comprehension/.test(String(s.id)) && r?.get?.(s.id)?.ok) schemasBloc1.push({ gabarit: s.gabarit, params: s.params });
+    return r;
+  };
+}
+const { anomaliesSchemaBloc1 } = require('../src/generation/reponse_libre_v2');
 const journalLog: string[] = [];
 const logOrigine = console.log.bind(console);
 console.log = (...a: any[]) => { const l = a.map(String).join(' '); if (/Mémoire type|Format court|Adaptation|Condensation|répartition|sélection/i.test(l)) journalLog.push(l); logOrigine(...a); };
@@ -84,6 +97,7 @@ const texteDocx = (f: string) => new PizZip(fs.readFileSync(f)).file('word/docum
   try { r = await new MemoireGenerator().generate(id); } catch (e: any) { erreur = String(e?.stack || e).slice(0, 1500); }
   const res: any = { corpus, duree_s: Math.round((Date.now() - t0) / 1000), erreur, anomalies: [] as string[] };
   const anomalie = (x: string) => res.anomalies.push(x);
+  for (const sp of schemasBloc1) for (const a of anomaliesSchemaBloc1(sp)) anomalie(`étape vide ou tronquée dans le schéma du bloc 1 : ${a}`);
   let etat: any = null;
   try { etat = JSON.parse(fs.readFileSync(etatF, 'utf-8')); } catch { anomalie('état de complétion absent'); }
   res.consultations = r?.consultations || [];

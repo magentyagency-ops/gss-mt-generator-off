@@ -8,7 +8,8 @@ const V = '/private/tmp/claude-501/-Users-stanislastolegano-GSS-Version-Finale/8
   textes.push(['sous-titres seuls', '## Le périmètre de la prestation demandée\n\nTexte.\n\n## Vos attentes et nos engagements\n\nTexte.\n\n## Les points de vigilance identifiés et nos réponses\n\nTexte.']);
   for (const [nom, texte] of textes) {
     const spec = specSecoursBesoin(texte);
-    if (!spec) { ko++; console.log('KO', nom, 'aucune spécification'); continue; }
+    // Tour 2 (T2C-1) : sans aucune phrase de résultat dans le texte, pas de schéma plutôt qu'une étape « Votre résultat » vide.
+    if (!spec) { if (nom !== 'sous-titres seuls') ko++; console.log(nom === 'sous-titres seuls' ? 'OK ' : 'KO', nom, 'aucune spécification'); continue; }
     const r = (await dessinerSpecs([{ id: 'b1_comprehension', gabarit: spec.gabarit, params: spec.params, source: texte, titre_section: 'Notre compréhension de votre besoin' } as any], 'page')).get('b1_comprehension');
     const etapes = spec.params.etapes.map((e: any) => `${e.titre} [${e.role}]${e.texte ? ` : ${e.texte}` : ''}`);
     const ok = !!r?.ok && spec.params.etapes.length === 4 && spec.params.etapes[3].role === 'vert';
