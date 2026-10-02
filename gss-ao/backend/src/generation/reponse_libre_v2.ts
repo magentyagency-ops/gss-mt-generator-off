@@ -830,6 +830,9 @@ export function citationsCoherentes(texte: string): { texte: string; retirees: n
     const m = /^(\s*[-*•]\s+\*\*[^*]+\*\*)\s*\(\s*«\s*([^»]+?)\s*»\s*\)(\s*:\s*)(.*)$/.exec(ligne);
     if (!m) return /^\s*[-*•]\s+\*\*/.test(ligne) ? minuscule(ligne) : ligne;
     const contenu = m[4].split('→')[0];
+    // Attente écrite seulement dans la citation (« **Ce que vous attendez** (« … ») : → notre réponse : … ») : la citation
+    // devient le contenu de la puce, jamais retirée (génération réelle ign 16 : deux puces « Ce que vous attendez : → … »).
+    if (!contenu.trim()) return minuscule(`${m[1]}${m[3]}${m[2].replace(/[.;\s]+$/, '')} ${m[4].trim()}`);
     const c = racines(m[2]);
     const lie = [...racines(contenu)].some((w) => c.has(w));
     if (lie) return minuscule(ligne);
@@ -840,7 +843,7 @@ export function citationsCoherentes(texte: string): { texte: string; retirees: n
 }
 
 /** Mots qui ne terminent pas un titre coupé (« Le périmètre de la » → « Le périmètre »). */
-const MOTS_OUTILS = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'l', 'd', 'et', 'ou', 'à', 'au', 'aux', 'en', 'pour', 'par', 'avec', 'sur', 'sous', 'dans', 'un', 'une', 'nos', 'vos', 'notre', 'votre', 'son', 'sa', 'ses', 'leur', 'leurs', 'ce', 'cette', 'ces', 'qui', 'que']);
+const MOTS_OUTILS = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'l', 'd', 'et', 'ou', 'à', 'au', 'aux', 'en', 'pour', 'par', 'avec', 'sur', 'sous', 'dans', 'un', 'une', 'nos', 'vos', 'notre', 'votre', 'son', 'sa', 'ses', 'leur', 'leurs', 'ce', 'cette', 'ces', 'qui', 'que', 'entre', 'selon', 'sans', 'chez', 'vers', 'lors', 'dont']);
 
 /** Titre d'étape coupé à la limite du gabarit sur un mot plein (sans mot outil pendant en fin de titre). */
 function titreEtape(t: unknown, max: number): string {
@@ -848,6 +851,59 @@ function titreEtape(t: unknown, max: number): string {
   let mots = court(t, max).split(' ');
   if (mots.join(' ') !== entier) while (mots.length > 1 && MOTS_OUTILS.has(mots[mots.length - 1].toLowerCase().replace(/['’]$/, ''))) mots = mots.slice(0, -1);
   return mots.join(' ');
+}
+
+/**
+ * Schéma de secours du bloc « compréhension » construit sur son CONTENU (consigne 3 : « on pense à ça, puis à ça, pour
+ * arriver à ça ») quand les étapes du modèle sont refusées deux fois : les points de vigilance puis les attentes du texte
+ * (« X → notre réponse : Y ») deviennent les étapes (titre = X coupé sur un mot plein, texte = Y sans le renvoi au bloc),
+ * puis une étape verte « Votre résultat ». Génération réelle ign 16 : le secours par sous-titres donnait un schéma
+ * « Votre contexte → Le périmètre → Vos attentes → Les points de vigilance », qui n'apporte rien. null : moins de 3 puces.
+ */
+export function specSecoursPuces(texte: string): { gabarit: string; params: any } | null {
+  const puces = (titre: RegExp) => {
+    const partie = String(texte || '').split(/^(?=##\s)/m).find((p) => titre.test(p)) || '';
+    return partie.split('\n').map((l) => /^\s*[-*•]\s+\*\*[^*]+\*\*(?:\s*\([^)]*\))?\s*:\s*(.+?)\s*→\s*notre réponse\s*:\s*(.+)$/.exec(l))
+      .filter((m): m is RegExpExecArray => !!m && m[1].trim().length > 3)
+      .map((m) => ({ x: m[1].trim(), y: m[2].replace(/\s*\((?:[^()]*\bblocs?\b)[^)]*\)?.*$/i, '').replace(/,?\s*(?:développée?s?|traitée?s?)\s+(?:au|aux|dans les?)\s+blocs?\s+[\d\s,et]+\.?$/i, '').replace(/,?\s*blocs?\s+[\d\s,et]+\.?$/i, '').replace(/[.;]\s*$/, '').trim() }));
+  };
+  const vigilance = puces(/^##\s+Les points de vigilance/i);
+  const attentes = puces(/^##\s+Vos attentes/i);
+  // Trois étapes distinctes (titre et texte jamais répétés : le moteur refuse un élément en double).
+  const choix: Array<{ x: string; y: string }> = [];
+  for (const c of [...vigilance.slice(0, 2), ...attentes, ...vigilance.slice(2)]) {
+    if (choix.length >= 3) break;
+    if (choix.some((d) => normaliser(d.y) === normaliser(c.y) || normaliser(d.x) === normaliser(c.x))) continue;
+    choix.push(c);
+  }
+  if (choix.length < 3) return null;
+  // Titre nominal : le groupe nominal qui précède le premier verbe (« La continuité doit toujours s'opérer… » → « La
+  // continuité » ; « Les rondes techniques cessent… » → « Les rondes techniques »), coupé sur un mot plein.
+  const VERBE = /^(?:est|sont|doit|doivent|peut|peuvent|a|ont|exigen?t?|exige|cessen?t?|cesse|restent|reste|varien?t?|varie|imposen?t?|impose|prévoi(?:t|ent)|porten?t?|porte|assuren?t?|assure|se|s['’]\S*|fai(?:t|s)|font|demanden?t?|demande|nécessiten?t?|nécessite|impliquen?t?|implique|sera|seront|intervien(?:t|nent)|requiert|requièrent)$/i;
+  const nominal = (x: string) => {
+    const mots = x.split(/\s+/);
+    const k = mots.findIndex((m, i) => i > 0 && VERBE.test(m));
+    const gn = k > 0 ? mots.slice(0, k).join(' ') : x;
+    return titreEtape(gn.split(/\s+/).length >= 2 || k < 0 ? gn : x, 34);
+  };
+  const etapes: Array<{ titre: string; texte?: string; role?: string }> = choix.map((c, i) => {
+    const titre = nominal(c.x);
+    // Texte de 86 caractères au plus, coupé de préférence à la fin d'une proposition (virgule, « et ») plutôt qu'en plein groupe.
+    let y = c.y.charAt(0).toUpperCase() + c.y.slice(1);
+    if (y.length > 86) {
+      const coupe = Math.max(y.lastIndexOf(', ', 86), y.lastIndexOf(' et ', 86));
+      y = coupe >= 40 ? y.slice(0, coupe) : titreEtape(y, 86);
+    }
+    return { titre: titre.charAt(0).toUpperCase() + titre.slice(1), texte: y, role: i < 2 ? 'rouge' : 'bleu' };
+  });
+  // Résultat : la phrase de conclusion du texte (dernière ligne libre, 86 caractères au plus), sinon la première réponse.
+  const libres = String(texte || '').split('\n').map((l) => l.trim()).filter((l) => l && !/^(?:#|\||[-*•]\s)/.test(l));
+  const conclusion = (libres[libres.length - 1] || '').replace(/\*\*/g, '').replace(/[.;]\s*$/, '');
+  const dejaEcrits = new Set(etapes.map((e) => normaliser(String(e.texte || ''))));
+  const resultat = [conclusion.length <= 86 ? conclusion : '', ...attentes.map((a) => a.y)]
+    .map((x) => titreEtape(x, 86)).find((x) => x && !dejaEcrits.has(normaliser(x))) || '';
+  etapes.push({ titre: 'Votre résultat', ...(resultat ? { texte: resultat } : {}), role: 'vert' });
+  return specProcessBesoin(etapes, 'flux');
 }
 
 /**

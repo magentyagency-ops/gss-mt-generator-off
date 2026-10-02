@@ -16,7 +16,7 @@ import {
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
-  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee,
+  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces,
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
@@ -7055,6 +7055,9 @@ RÈGLES DE FORME (rendu Marp) :
       const defautsCorriges = defautsEtapesBesoin(etapesCorrigees);
       schema = defautsCorriges.length ? { erreurs: defautsCorriges } : await dessiner(specProcessBesoin(etapesCorrigees, 'flux'));
     }
+    if (!schema.svg) console.warn(`[MemoireGenerator] Compréhension du besoin : étapes du schéma refusées (${schema.erreurs.slice(0, 3).join(' | ')}) ; schéma de secours d'après les points de vigilance et les attentes.`);
+    // Secours sur le contenu (points de vigilance et attentes du texte), puis sur les sous-titres.
+    if (!schema.svg) schema = await dessiner(specSecoursPuces(texte));
     if (!schema.svg) schema = await dessiner(specSecoursBesoin(texte));
     if (!schema.svg) console.warn(`[MemoireGenerator] Compréhension du besoin : schéma de process non dessiné (${schema.erreurs.slice(0, 3).join(' | ')}) ; construit au rendu d'après le texte.`);
     return { texte, titre, svg: schema.svg, secours };
