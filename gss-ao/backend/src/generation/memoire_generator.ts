@@ -1179,6 +1179,37 @@ const CHAPTER_ORDER_B = ['I', 'II', 'III', 'IV'];
 // des taux distincts… »). Une prestation qui cite seulement le bordereau reste un engagement (Becquerel : « renforts
 // exceptionnels commandés sur la base du BPU avec un délai de prévenance de 48 heures ouvrées »).
 export const PIECES_OFFRE = /acte d.engagement|bordereau de prix|(?:compl[ée]t|rempli|renseign|chiffr|joindr|fourni)[^.]{0,40}(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)|(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)[^.]{0,30}(?:compl[ée]t|rempli|renseign)|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?/i;
+/**
+ * Puce d'engagement (contrôle de couverture, obligations chiffrées) qui ne peut pas être remise à l'acheteur : pièce de
+ * l'offre, pénalité, phrase sur le mémoire lui-même au lieu d'une réponse (« GSS indiquera… », « GSS précise dans le
+ * mémoire technique le nombre de contrôleurs » : ifits 171, critères notés 2-1b et 2-1c sans réponse), fait que
+ * faits_gss.md interdit (sous-traitance, intérim, Covid : fontainebleau 21, « GSS forme les agents sous-traitants… » alors
+ * que GSS ne sous-traite pas) ou exigence conditionnelle qui ne s'applique pas à GSS (« en cas de recours à… »). L'exigence
+ * reste alors traitée par les questions à GSS (écart non couvert). Renvoie le motif du refus, ou '' si la puce est gardée.
+ */
+export function motifRefusEngagement(x: string): string {
+  const t = String(x || '');
+  if (PIECES_OFFRE.test(t)) return 'pièce de l\'offre';
+  if (/p[ée]nalit|plafonnement/i.test(t)) return 'pénalité';
+  if (/\b(?:indiquera|précisera|détaillera|déterminera|communiquera ultérieurement|fournira|transmettra)\b/i.test(t)) return 'engagement futur sans réponse';
+  if (/\b(?:pr[ée]cise|indique|d[ée]taille|communique|fournit|transmet|mentionne|pr[ée]sente|renseigne)(?:ra)?\b[^.]{0,60}\b(?:le nombre|les effectifs|l.effectif|dans (?:le|son|ce|notre) m[ée]moire|dans (?:l.|son |notre )offre|ult[ée]rieurement)/i.test(t)
+    || /dans (?:le|son|ce|notre) m[ée]moire technique/i.test(t)) return 'phrase sur le mémoire, sans réponse';
+  if (/sous[- ]?trait|int[ée]rim|covid/i.test(t)) return 'fait interdit (faits_gss.md)';
+  if (/\ben cas de recours\b|\bsi (?:GSS|le titulaire) (?:recourt|fait appel)/i.test(t)) return 'exigence conditionnelle qui ne s\'applique pas à GSS';
+  return '';
+}
+
+/** Question à GSS tirée d'une puce refusée parce qu'elle parle du mémoire au lieu de répondre (« GSS précise le nombre
+ *  de contrôleurs affectés au site » → « Combien de contrôleurs seront affectés au site ? »). */
+export function questionDEngagement(x: string): string {
+  const t = String(x || '').replace(/^[-•]\s*/, '').trim();
+  const m = /\ble nombre (d['’]|de |des )(.+?)\s*\.?$/i.exec(t);
+  if (m) {
+    const reste = m[2].replace(/\s+(?:dans|pour) (?:le|son|ce|notre) m[ée]moire(?: technique)?/i, '').replace(/\baffect[ée]s\b/, 'seront affectés').replace(/\bpr[ée]sents\b/, 'seront présents').trim();
+    return `Combien ${m[1].toLowerCase() === 'des ' ? 'de ' : m[1].toLowerCase()}${reste} ? (exigence du CCTP à laquelle le mémoire doit répondre par un nombre)`;
+  }
+  return `Exigence du CCTP à laquelle le mémoire ne répond pas encore (donnée à fournir par GSS) : ${t}`;
+}
 /** Rubriques et chapitres de la réponse libre (lecture seule, pour l'assistant de modification). */
 export { AI_SECTIONS_B as SECTIONS_REPONSE_LIBRE, CHAPTER_TITLES_B as CHAPITRES_REPONSE_LIBRE };
 
@@ -6758,7 +6789,8 @@ RÈGLES DE FORME (rendu Marp) :
     // ── 7. Couverture : une exigence qu'une rubrique ne traite pas devient un engagement (puce) ──
     progres(62, 'Contrôle de couverture des exigences du CCTP…');
     const aCouvrir = plan.rubriques.filter((r) => r.mode !== 'besoin' && sections[r.id] && parRubrique[r.id]?.length).map((r) => r.id);
-    await enParallele(aCouvrir, 4, async (id) => { sections[id] = await this.completerCouverture(sections[id], parRubrique[id], id); });
+    const questionsCouverture = new Set<string>();
+    await enParallele(aCouvrir, 4, async (id) => { sections[id] = await this.completerCouverture(sections[id], parRubrique[id], id, false, questionsCouverture); });
     // Postes du CCTP déjà présentés dans le tableau du périmètre du bloc 1 : leurs puces de couverture ne sont pas redites
     // ailleurs (génération réelle ign 15 : 5 pages de texte pour « L'adéquation de nos moyens humains », consignes 3 et 6).
     if (b1 && sections[b1.id]) {
@@ -6802,6 +6834,7 @@ RÈGLES DE FORME (rendu Marp) :
       ...alerteCadreAbsent(dceContext),
       ...commentairesRetires,
       ...alertesAcheteurs,
+      ...questionsCouverture,
       ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie),
       // Publipostage : valeurs du registre à confirmer, passages retirés faute de valeur (délai hors Normandie…).
       ...publiees.flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)]).flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
@@ -7262,7 +7295,7 @@ RÈGLES DE FORME (rendu Marp) :
    * Contrôle de couverture d'une rubrique : chaque exigence du CCTP qui lui est attribuée et qu'elle ne traite pas
    * explicitement devient une puce d'engagement (chiffre exact du CCTP), en fin de rubrique. Étape non bloquante.
    */
-  private async completerCouverture(text: string, chapterReqs: any[], sectionId: string, horsNormandie = false): Promise<string> {
+  private async completerCouverture(text: string, chapterReqs: any[], sectionId: string, horsNormandie = false, questions?: Set<string>): Promise<string> {
     // Hors Normandie, GSS n'annonce aucun délai qui ne vient pas du CCTP (même règle que le registre, base_memoires.ts).
     const regleDelais = horsNormandie ? ` CE MARCHÉ EST HORS DE NORMANDIE : n'écris AUCUN délai chiffré (astreinte, intervention, remplacement, mobilisation) qui ne figure pas mot pour mot dans l'exigence du CCTP ; jamais un délai repris d'un ancien marché normand (ex. 60 minutes).` : '';
     try {
@@ -7270,9 +7303,11 @@ RÈGLES DE FORME (rendu Marp) :
         { role: 'system', content: `On te donne le texte d'une rubrique de mémoire technique et une liste numérotée d'exigences du CCTP. Pour chaque exigence qui n'est PAS traitée explicitement dans le texte (avec son chiffre s'il y en a un), rédige UNE puce d'engagement de GSS, factuelle, qui reprend l'exigence avec son chiffre exact (sans montant de pénalité, sans inventer de moyen absent de la « réponse GSS connue » ; si GSS n'a pas de réponse connue, engage GSS à respecter l'exigence telle qu'écrite). Jamais « s'engage à confirmer » ni « s'engage à formaliser » : écris l'engagement lui-même. Une exigence déjà traitée dans le texte, même formulée autrement, n'est PAS reprise. Ne cite jamais le numéro d'une exigence. Ignore les exigences qui portent sur la composition du dossier de l'offre (pièces à remettre, nombre de pages du mémoire, visite, signature) : elles ne s'écrivent pas dans le mémoire. Pas de numéro en tête de puce. Renvoie UNIQUEMENT un objet JSON : {"puces": ["…"]} (liste vide si tout est couvert).${regleDelais}` },
         { role: 'user', content: `TEXTE :\n${text}\n\nEXIGENCES :\n${chapterReqs.map((r: any, k: number) => `${k + 1}. ${r.exigence} (réponse GSS connue : ${r.reponseGss || '—'})`).join('\n')}` },
       ], 0.1, `Couverture ${sectionId}`, true);
-      const puces = (JSON.parse(verif || '{}').puces || []).map((x: any) => String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, '')).filter((x: string) => x && !PIECES_OFFRE.test(x) && !/p[ée]nalit|plafonnement/i.test(x)
-        // « GSS indiquera / précisera dans le mémoire… » : ce n'est pas une réponse (la donnée est demandée à GSS).
-        && !/\b(?:indiquera|précisera|détaillera|déterminera|communiquera ultérieurement)\b/i.test(x));
+      // « GSS indiquera / précise dans le mémoire… », sous-traitance, pièces de l'offre : jamais remis (motifRefusEngagement).
+      // Une puce qui parle du mémoire au lieu de répondre (« GSS précise le nombre de contrôleurs ») devient une question à GSS.
+      const brutes = (JSON.parse(verif || '{}').puces || []).map((x: any) => String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, '')).filter(Boolean);
+      for (const x of brutes) if (questions && /sans réponse/.test(motifRefusEngagement(x))) questions.add(questionDEngagement(x));
+      const puces = brutes.filter((x: string) => !motifRefusEngagement(x));
       if (puces.length) {
         text = `${text.trim()}\n\n## Nos engagements sur les exigences du cahier des charges\n\n${puces.map((x: string) => `- ${x.replace(/^[-•]\s*/, '')}`).join('\n')}`;
         console.log(`[MemoireGenerator] Rubrique ${sectionId} : ${puces.length} exigence(s) du CCTP ajoutée(s) après contrôle de couverture.`);
@@ -7490,8 +7525,7 @@ Renvoie UNIQUEMENT un objet JSON : {"puces": [{"rubrique": "identifiant", "texte
         const texte = String(p?.texte || '').trim().replace(/^[-•]\s*/, '');
         // Procédure et administratif du marché (consigne du prompt), contrôlés sans modèle : facturation et paiement
         // (« GSS s'engage à ce que la dernière facture puisse être différée », génération réelle ign 12).
-        if (!ids.includes(id) || texte.length < 15 || PIECES_OFFRE.test(texte) || /p[ée]nalit|plafonnement|factur|paiement|imput[ée]e?s? [àa] GSS/i.test(texte)
-          || /\b(?:indiquera|précisera|détaillera|déterminera|communiquera ultérieurement)\b/i.test(texte)) continue;
+        if (!ids.includes(id) || texte.length < 15 || motifRefusEngagement(texte) || /factur|paiement|imput[ée]e?s? [àa] GSS/i.test(texte)) continue;
         (parRubrique.get(id) ?? parRubrique.set(id, []).get(id)!).push(texte);
       }
       for (const [id, puces] of parRubrique) {
@@ -7701,9 +7735,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
             { role: 'system', content: `On te donne une partie de mémoire technique et une liste numérotée d'exigences du CCTP. Pour chaque exigence qui n'est PAS traitée explicitement dans le texte (avec son chiffre s'il y en a un), rédige UNE puce d'engagement de GSS, courte et factuelle, avec le chiffre exact (sans pénalité, sans inventer de moyen absent de la « réponse GSS connue » ; si GSS n'a pas de réponse connue, engage GSS à respecter l'exigence telle qu'écrite). Jamais « s'engage à confirmer » ni « s'engage à formaliser » : écris l'engagement lui-même. Une exigence déjà traitée dans le texte, même formulée autrement, n'est PAS reprise. Ne cite jamais le numéro d'une exigence. Ignore les exigences qui portent sur la composition du dossier de l'offre (pièces à remettre, nombre de pages du mémoire, visite, signature) : elles ne s'écrivent pas dans le mémoire. Pas de numéro en tête de puce. Renvoie UNIQUEMENT un objet JSON : {"puces": ["…"]} (liste vide si tout est couvert).` },
             { role: 'user', content: `TEXTE :\n${texte}\n\nEXIGENCES :\n${reqs.map((r: any, k: number) => `${k + 1}. ${r.exigence} (réponse GSS connue : ${r.reponseGss || '—'})`).join('\n')}` },
           ], 0.1, `Couverture ${p.id}`, true);
-          const puces = (JSON.parse(verif || '{}').puces || []).map((x: any) => String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, '')).filter((x: string) => x && !PIECES_OFFRE.test(x) && !/p[ée]nalit|plafonnement/i.test(x)
-            // « GSS indiquera / précisera dans le mémoire… » : ce n'est pas une réponse (la donnée est demandée à GSS).
-            && !/\b(?:indiquera|précisera|détaillera|déterminera|communiquera ultérieurement)\b/i.test(x));
+          // « GSS indiquera / précise dans le mémoire… », sous-traitance, pièces de l'offre : jamais remis (motifRefusEngagement).
+          const puces = (JSON.parse(verif || '{}').puces || []).map((x: any) => String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, '')).filter((x: string) => x && !motifRefusEngagement(x));
           if (puces.length) texte = `${texte.trim()}\n\n## Engagements sur les exigences du cahier des charges\n\n${puces.map((x: string) => `- ${x.replace(/^[-•]\s*/, '')}`).join('\n')}`;
         } catch { /* contrôle facultatif */ }
       }
@@ -7885,6 +7918,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const exigencesDe: Record<string, any[]> = Object.fromEntries(plan.map((p) => [p.id, rep.parPartie[p.id].flatMap((id) => parRubrique[id] || [])]));
     const nouvellesCourt = tri.nouvelles.filter((e) => e?.exigence && !PIECES_OFFRE.test(e.exigence) && !PIECES_ADMINISTRATIVES.test(`${e.sujet || ''} ${e.exigence}`));
     for (const e of nouvellesCourt) exigencesDe[partiePourTexte(plan, `${e.sujet || ''} ${e.exigence}`).id].push(e);
+    const questionsCouverture = new Set<string>();
     const reqsCouverture = (pid: string) => {
       const rang = (e: any) => (/bloquant/i.test(e.criticite || '') ? 0 : /\d/.test(e.exigence) ? 1 : 2);
       return exigencesDe[pid].filter((e: any) => e?.exigence && !PIECES_OFFRE.test(e.exigence) && !PIECES_ADMINISTRATIVES.test(e.exigence))
@@ -7994,7 +8028,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       }
       // Contrôle de couverture conservé : une exigence du CCTP que la partie ne traite pas devient un engagement.
       const reqs = reqsCouverture(p.id);
-      if (texte && reqs.length) texte = plafonnerEngagements(nettoyerEngagements(await this.completerCouverture(texte, reqs, p.id, horsNormandie)), 6);
+      if (texte && reqs.length) texte = plafonnerEngagements(nettoyerEngagements(await this.completerCouverture(texte, reqs, p.id, horsNormandie, questionsCouverture)), 6);
       sections[p.id] = texte.trim();
     }
     for (const g of grouperNouvelles(nouvellesCourt, 6).groupes) {
@@ -8027,7 +8061,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
 
     // ── 8. Points à compléter (même logique que le format court d'avant) ──
     const consultations = new Set<string>([
-      ...alerteCadreAbsent(dceContext), ...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie),
+      ...alerteCadreAbsent(dceContext), ...commentairesRetires, ...questionsCouverture, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie),
       ...publiees.filter((p) => toutesRetenues.includes(p.id)).flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)])
         .flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
     ]);

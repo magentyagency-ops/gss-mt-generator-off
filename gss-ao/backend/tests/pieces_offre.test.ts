@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PIECES_OFFRE } from '../src/generation/memoire_generator';
+import { PIECES_OFFRE, motifRefusEngagement } from '../src/generation/memoire_generator';
 
 /** Tour 1 (R1-2) : seule une phrase qui parle de remplir ou chiffrer une pièce financière est écartée ; un engagement de
  *  service qui cite le bordereau (Becquerel, 48 heures ouvrées) reste dans le mémoire et dans les exigences. */
@@ -16,5 +16,29 @@ describe('PIECES_OFFRE', () => {
   it('garde les pièces de l’offre déjà écartées avant la refonte', () => {
     expect(PIECES_OFFRE.test('Le mémoire technique limité à 20 pages')).toBe(true);
     expect(PIECES_OFFRE.test('Acte d’engagement signé')).toBe(true);
+  });
+});
+
+/** Tour 1 (T1C-02, B7) : puces d'engagement jamais remises. */
+describe('motifRefusEngagement', () => {
+  it('refuse les phrases sur le mémoire et les faits interdits', () => {
+    expect(motifRefusEngagement('GSS précise le nombre d’agents présents au centre de permanence.')).not.toBe('');
+    expect(motifRefusEngagement('GSS précise dans le mémoire technique le nombre de contrôleurs affectés au site.')).not.toBe('');
+    expect(motifRefusEngagement('GSS indiquera les effectifs.')).not.toBe('');
+    expect(motifRefusEngagement('GSS forme les agents sous-traitants aux consignes et pratiques de l’EPCF et n’affecte que des agents ainsi formés.')).not.toBe('');
+    expect(motifRefusEngagement('En cas de recours à un tiers, GSS forme ses agents.')).not.toBe('');
+  });
+  it('garde un engagement de service', () => {
+    expect(motifRefusEngagement('GSS transmet le planning mensuel au plus tard 15 jours avant le début du mois.')).toBe('');
+    expect(motifRefusEngagement('Les agents sont formés aux consignes et pratiques de l’EPCF avant toute affectation.')).toBe('');
+    expect(motifRefusEngagement('- GSS répond aux prestations exceptionnelles de renfort commandées sur la base du BPU par bon de commande avec un délai de prévenance de 48 heures ouvrées.')).toBe('');
+  });
+});
+
+import { questionDEngagement } from '../src/generation/memoire_generator';
+describe('questionDEngagement', () => {
+  it('formule une question exacte', () => {
+    expect(questionDEngagement('GSS précise dans le mémoire technique le nombre de contrôleurs affectés au site.')).toMatch(/^Combien de contrôleurs seront affectés au site \?/);
+    expect(questionDEngagement('GSS précise le nombre d’agents présents au centre de permanence.')).toMatch(/^Combien d’agents seront présents au centre de permanence \?/);
   });
 });
