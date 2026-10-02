@@ -19,5 +19,6 @@ aptPkgs = [
   "fonts-noto-color-emoji",
   "python3",
   "python3-pip",
-  "python3-pil"
+  "python3-pil",
+  "poppler-utils"
 ]
