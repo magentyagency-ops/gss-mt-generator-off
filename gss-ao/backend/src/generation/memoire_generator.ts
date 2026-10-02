@@ -1260,7 +1260,22 @@ export function questionExacte(q: string): string {
   const exigence = /^Exigence du (DCE|CCTP)( sans réponse dans le mémoire| à laquelle le mémoire (?:doit répondre|ne répond pas encore)[^:]*)\s*:\s*(.+)$/i.exec(t);
   if (exigence) return `Exigence du ${exigence[1]}${exigence[2]} : « ${sansFin(exigence[3]).replace(/^«\s*|\s*»$/g, '')} ». Comment GSS y répond-elle (moyen, délai ou document à indiquer) ?`;
   const information = /^(?:Information|Valeur) à fournir(?: pour compléter(?: le mémoire)?)?\s*:\s*(.+)$/i.exec(t);
-  if (information) return `Quelle donnée faut-il indiquer ici : ${/^«/.test(information[1]) ? sansFin(information[1]) : `« ${sansFin(information[1])} »`} ?`;
+  if (information) {
+    const libelle = sansFin(information[1]).replace(/^«\s*|\s*»$/g, '');
+    // Libellé d'une personne (imm 341 : « Chargé d'affaires dédié » → « Quelle donnée faut-il indiquer ici ? ») : qui, avec
+    // son nom, sa fonction et son téléphone ; pour le chargé d'affaires ou l'interlocuteur, le responsable de marché de GSS.
+    const personne = /^(?:(?:le|la|l['’]|un|une)\s*)?(chargée? d['’]affaires?|r[ée]f[ée]rent(?:e)?|responsable|interlocut(?:eur|rice)|chef (?:de (?:poste|site|service|projet|secteur|groupe)|d['’][ée]quipe)|coordinat(?:eur|rice)|correspondant(?:e)?|superviseur|contact|gestionnaire|directeur|directrice)\b(.*)$/i.exec(libelle);
+    if (personne) {
+      const fonction = `${personne[1]}${personne[2]}`.trim();
+      const dirigeant = valeurRegistre('dirigeant').replace(/\s+/g, ' ').trim().replace(/^(\S+)\s+(\S+)$/, (_m, nom: string, prenom: string) => `${nom.toUpperCase()} ${prenom.charAt(0).toUpperCase()}${prenom.slice(1).toLowerCase()}`);
+      const proposition = /chargée? d['’]affaires?|interlocut|responsable (?:du |de )?march[ée]|r[ée]f[ée]rent(?:e)? (?:du |de )?march[ée]/i.test(fonction) && dirigeant
+        ? ` ${dirigeant}, responsable de marché et interlocuteur unique de GSS, peut-il être indiqué ?` : '';
+      return `Qui sera ${/^[aeiouyhàâéèêîïôûü]/i.test(fonction) ? "l'" : 'le '}${min(fonction)} pour ce marché (nom, fonction et téléphone) ?${proposition}`;
+    }
+    // Libellé nominal (« Nombre de véhicules » → « Combien de véhicules ? ») ; sinon la donnée nommée par son libellé.
+    const nominale = libelle && !/^(?:Information|Valeur) à fournir/i.test(libelle) ? questionExacte(libelle) : '';
+    return nominale && !/^(?:Quelle réponse GSS|Exigence du DCE)/.test(nominale) ? nominale : `Quelle donnée faut-il indiquer pour : « ${libelle} » ?`;
+  }
   // Consigne à l'infinitif (« Préciser les mesures… », « Confirmer auprès de GSS et de son assureur… ») : question à GSS.
   const verbe = /^(Préciser|Confirmer|Indiquer|Fournir|Transmettre|Joindre|Détailler|Décrire|Compléter|Valider|Vérifier|Lister|Donner|Communiquer|Justifier|Expliquer)\s+(.+)$/i.exec(t);
   if (verbe) {
