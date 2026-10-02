@@ -412,6 +412,40 @@ export function preciserQuestionsCadre(
       }
     }
   }
+  // Case de tableau réécrite par ligne et colonne (« Tableau du cadre, ligne « Autorisation dirigeant », colonne « … Date
+  // d'obtention » ») : une donnée par case, jamais le groupe générique du modèle (« contenu de rubrique non precise », qui
+  // réunissait trois cases du tableau CNAPS de havre2 : une saisie remplissait les trois avec la même date). Sa phrase,
+  // réduite à « [À COMPLÉTER] », devient « ligne — colonne : [À COMPLÉTER] » pour que l'assistant sache quelle donnée
+  // elle attend. La question en clair qui porte sur la même donnée (« date de fin de validité de l'autorisation d'exercer
+  // de GSS », « dates de délivrance et de fin de validité de l'agrément du dirigeant ») rejoint ses cases : une seule
+  // question, la sienne.
+  const CASE = /^Tableau du cadre, ligne « ([^»]+) », colonne « ([^»]+) »/;
+  const cellules = elements.map((el) => ({ el, m: CASE.exec(el.question) })).filter((x) => x.m) as Array<{ el: ElementACompleter; m: RegExpExecArray }>;
+  for (const { el, m } of cellules) {
+    el.groupe = norm(`case ${m[1]} ${m[2]}`);
+    if (!el.contexte.replace(/\[À COMPLÉTER\]|\[CHAMP_\d+\]|[\s.:;…-]/g, '')) el.contexte = `${m[1]} — ${m[2].split(' — ').pop()} : [À COMPLÉTER]`;
+  }
+  const marques = (t: string): Set<string> => {
+    const n = ` ${norm(t)} `;
+    const out = new Set<string>();
+    if (/ dirigeant| gerant| agrement /.test(n)) out.add('dirigeant');
+    if (/ entreprise| societe| global security services | gss /.test(n)) out.add('entreprise');
+    if (/ dates? d obtention| dates? de delivrance| delivrance et /.test(n)) out.add('obtention');
+    if (/ fin de validite| dates? d expiration| echeance/.test(n)) out.add('fin');
+    return out;
+  };
+  for (const el of elements) {
+    if (CASE.test(el.question) || el.statut !== 'ouvert') continue;
+    const q = marques(el.question);
+    const liees = cellules.filter(({ el: c, m }) => {
+      if (c.groupe?.startsWith('tableau du champ') || c.statut !== 'ouvert') return false;
+      const l = marques(m[1]), col = marques(m[2].split(' — ').pop() || m[2]);
+      return l.size > 0 && col.size > 0 && [...l, ...col].every((x) => q.has(x));
+    }).map((x) => x.el);
+    if (!liees.length) continue;
+    el.groupe = norm(el.question);
+    for (const c of liees) { c.question = el.question; c.groupe = el.groupe; }
+  }
   // Questions identiques : un seul groupe.
   const parQuestion = new Map<string, string>();
   for (const el of elements) {
@@ -419,6 +453,13 @@ export function preciserQuestionsCadre(
     if (!k) continue;
     if (parQuestion.has(k)) el.groupe = parQuestion.get(k)!;
     else { el.groupe = el.groupe || k; parQuestion.set(k, el.groupe); }
+  }
+  // Un groupe ne réunit jamais deux questions différentes (sauf les cases d'un même tableau, une question pour toutes) :
+  // la réponse saisie pour l'une serait écrite à la place de l'autre.
+  const questionsDuGroupe = new Map<string, Set<string>>();
+  for (const el of elements) if (el.groupe) (questionsDuGroupe.get(el.groupe) ?? questionsDuGroupe.set(el.groupe, new Set()).get(el.groupe)!).add(norm(el.question));
+  for (const el of elements) {
+    if (el.groupe && !el.groupe.startsWith('tableau du champ') && (questionsDuGroupe.get(el.groupe)?.size || 0) > 1) el.groupe = norm(el.question) || el.cle;
   }
 }
 
@@ -429,8 +470,8 @@ export function preciserQuestionsCadre(
 async function fragmentsPourPhrases(info: string, cibles: ElementACompleter[]): Promise<Array<{ cle: string; valeur: string }>> {
   if (!cibles.length) return [];
   const r = await json(
-    `Une information a été fournie pour compléter un mémoire technique. Pour chaque phrase, donne le fragment exact qui remplace « [À COMPLÉTER] » afin que la phrase reste grammaticalement correcte et naturelle. N'utilise QUE l'information fournie, sans rien ajouter. Renvoie {"remplissages": [{"cle": "...", "valeur": "..."}]}.`,
-    `Information fournie : ${info}\n\n${cibles.map((c) => `- ${c.cle} | phrase : ${c.contexte}`).join('\n')}`,
+    `Une information a été fournie pour compléter un mémoire technique. Pour chaque phrase, donne le fragment exact qui remplace « [À COMPLÉTER] » afin que la phrase reste grammaticalement correcte et naturelle. N'utilise QUE l'information fournie, sans rien ajouter. Chaque phrase attend une donnée précise (voir « donnée attendue » et la phrase elle-même : date d'obtention ou date de fin de validité, dirigeant ou entreprise…) : si l'information fournie ne contient pas CETTE donnée, ne renvoie rien pour cette phrase (jamais une autre donnée à sa place). Renvoie {"remplissages": [{"cle": "...", "valeur": "..."}]}.`,
+    `Information fournie : ${info}\n\n${cibles.map((c) => `- ${c.cle} | donnée attendue : ${c.question} | phrase : ${c.contexte}`).join('\n')}`,
   );
   const ok = new Set(cibles.map((c) => c.cle));
   return (Array.isArray(r.remplissages) ? r.remplissages : [])
