@@ -58,11 +58,37 @@ interface InfoRegistre {
 
 let cache: { passages: PassageMemoire[]; vecteurs: Float32Array[]; registre: InfoRegistre[] } | null = null;
 
+/** Correction d'un passage d'un ancien mémoire d'après une réponse de GSS (corrections_passages.json). */
+export interface CorrectionPassage { document: string; page: number; ancien: string; nouveau: string; source?: string }
+
+/**
+ * Corrections de GSS réappliquées aux passages (même règle que construire_base.py : ligne égale à « ancien » d'une page
+ * du document remplacée par « nouveau ») : une base reconstruite sans elles ne réintroduit jamais un fait corrigé
+ * (Peugeot 3008, 76 rue d'Elbeuf, 02.35.89.09.92, J-15…). Modifie les passages en place ; renvoie le nombre de lignes
+ * corrigées.
+ */
+export function appliquerCorrectionsPassages(passages: Array<Pick<PassageMemoire, 'document' | 'page' | 'texte'>>, corrections: CorrectionPassage[]): number {
+  let n = 0;
+  for (const p of passages) {
+    const cs = corrections.filter((c) => c.document === p.document && Number(c.page) === Number(p.page));
+    if (!cs.length) continue;
+    p.texte = String(p.texte).split('\n').map((l) => { const c = cs.find((x) => x.ancien === l); if (c) n++; return c ? c.nouveau : l; }).join('\n');
+  }
+  return n;
+}
+
+/** Corrections versionnées de la base des mémoires (fichier absent : aucune). */
+export function correctionsPassages(): CorrectionPassage[] {
+  try { return JSON.parse(fs.readFileSync(path.join(DIR, 'corrections_passages.json'), 'utf-8')).corrections || []; } catch { return []; }
+}
+
 function charger() {
   if (cache) return cache;
   try {
     const base = JSON.parse(fs.readFileSync(path.join(DIR, 'base_memoires.json'), 'utf-8'));
     const passages: PassageMemoire[] = base.passages || [];
+    const corriges = appliquerCorrectionsPassages(passages, correctionsPassages());
+    if (corriges) console.warn(`[BaseMemoires] ${corriges} ligne(s) de passage corrigée(s) au chargement d'après corrections_passages.json (base reconstruite sans les corrections de GSS).`);
     const buf = fs.readFileSync(path.join(DIR, 'base_memoires.emb'));
     const dim = passages.length ? buf.length / 4 / passages.length : 0;
     const vecteurs: Float32Array[] = passages.map((_, i) => {

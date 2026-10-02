@@ -1,0 +1,68 @@
+{
+ "description": "Corrections des passages des mémoires GSS d'après les réponses de GSS : chaque ligne « ancien » du texte extrait du PDF (document, page) est remplacée par « nouveau ». Appliquées par construire_base.py à chaque reconstruction (passages et textes intégraux du registre) et au chargement de la base par le générateur (base_memoires.ts).",
+ "corrections": [
+  {
+   "document": "GSS - Universite de Rouen Normandie - memoire.pdf",
+   "page": 86,
+   "ancien": "visites sur site en Peugeot 3008",
+   "nouveau": "visites sur site en Peugeot 208 et Renault Zoé",
+   "source": "Réponse de GSS du 1er octobre 2026 (reponses_gss_2026-10-01.md, point 8)"
+  },
+  {
+   "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+   "page": 1,
+   "ancien": "Adresse du siège de l’entreprise : …76 RUE D ELBEUF 76100",
+   "nouveau": "Adresse du siège de l’entreprise : …15 PLACE DE LA VERRERIE 76100",
+   "source": "Réponse de GSS du 1er octobre 2026 (reponses_gss_2026-10-01.md, point 11) ; attestation d'assurance RC Hiscox du 24/09/2026"
+  },
+  {
+   "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+   "page": 1,
+   "ancien": "…76 RUE D ELBEUF 76100 ROUEN",
+   "nouveau": "…15 PLACE DE LA VERRERIE 76100 ROUEN",
+   "source": "Réponse de GSS du 1er octobre 2026 (reponses_gss_2026-10-01.md, point 11) ; attestation d'assurance RC Hiscox du 24/09/2026"
+  },
+  {
+   "document": "GSS - Universite de Rouen Normandie - cadre lots 1-2-3.pdf",
+   "page": 8,
+   "ancien": "visites sur site en Peugeot 208 aux couleurs de GSS. Nous",
+   "nouveau": "visites sur site en Peugeot 208 et Renault Zoé aux couleurs de GSS. Nous",
+   "source": "Réponse de GSS du 1er octobre 2026 (reponses_gss_2026-10-01.md, point 8)"
+  },
+  {
+   "document": "GSS - Gardiennage des sites metropolitains - lot 1.pdf",
+   "page": 25,
+   "ancien": "Délai max: 30",
+   "nouveau": "Délai max: 45",
+   "source": "Réponse de GSS du 1er octobre 2026 (reponses_gss_2026-10-01.md, point 8)"
+  },
+  {
+   "document": "GSS - CAF 2025.pdf",
+   "page": 59,
+   "ancien": "max: 20 minutes SECOURS",
+   "nouveau": "max: 45 minutes SECOURS",
+   "source": "Réponse de GSS du 1er octobre 2026 (reponses_gss_2026-10-01.md, point 8)"
+  },
+  {
+   "document": "GSS - CAF 2025.pdf",
+   "page": 60,
+   "ancien": "rondier se rend sur place en moins de 20 minutes.",
+   "nouveau": "rondier se rend sur place en moins de 45 minutes.",
+   "source": "Réponse de GSS du 1er octobre 2026 (reponses_gss_2026-10-01.md, point 8)"
+  },
+  {
+   "document": "GSS - Region Normandie - lot 1.pdf",
+   "page": 49,
+   "ancien": "02.35.89.09.92",
+   "nouveau": "09.62.21.24.75",
+   "source": "Réponse de GSS du 1er octobre 2026 (reponses_gss_2026-10-01.md, point 8)"
+  },
+  {
+   "document": "GSS - Region Normandie - lot 1.pdf",
+   "page": 63,
+   "ancien": "J-15 DES PLANNINGS DU MOIS SUIVANT",
+   "nouveau": "J-10 DES PLANNINGS DU MOIS SUIVANT",
+   "source": "Réponse de GSS du 1er octobre 2026 (reponses_gss_2026-10-01.md, point 8)"
+  }
+ ]
+}

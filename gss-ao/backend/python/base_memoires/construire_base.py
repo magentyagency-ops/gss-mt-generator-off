@@ -9,8 +9,14 @@ Les passages identiques ou quasi identiques entre mémoires (ex. Région Normand
 sont fusionnés : on garde la version du mémoire le plus récent et la liste des mémoires qui la
 contiennent (un contenu repris dans plusieurs réponses est un contenu éprouvé).
 
+Les corrections apportées par GSS aux anciens mémoires (corrections_passages.json : une ligne du texte extrait
+d'une page remplacée par sa valeur actuelle, avec sa source) sont réappliquées à chaque reconstruction, aux passages
+comme aux textes intégraux qui servent au registre : une reconstruction ne réintroduit jamais un fait corrigé
+(Peugeot 3008, 76 rue d'Elbeuf, 02.35.89.09.92, J-15…).
+
 Usage :
   python3 construire_base.py <dossier_des_mémoires> <sortie.json>
+  python3 construire_base.py --corriger <base_memoires.json>   (réapplique les corrections à une base existante)
 Le dossier contient les réponses GSS (PDF) et un fichier documents.json décrivant chacune :
   [{"fichier": "...pdf", "client": "...", "date": "AAAA-MM", "type": "memoire|cadre"}]
 Nécessite pdftotext (poppler).
@@ -71,6 +77,31 @@ def shingles(t, k=5):
     return {" ".join(m[i:i + k]) for i in range(max(1, len(m) - k + 1))}
 
 
+CORRECTIONS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "corrections_passages.json")
+
+
+def charger_corrections():
+    try:
+        return json.load(open(CORRECTIONS, encoding="utf-8")).get("corrections", [])
+    except FileNotFoundError:
+        return []
+
+
+def corriger_texte(texte, document, page, corrections):
+    """Remplace, dans le texte d'une page (ou d'un passage) de `document`, chaque ligne égale à une ligne « ancien »."""
+    lignes = texte.split("\n")
+    for c in corrections:
+        if c["document"] == document and int(c["page"]) == int(page):
+            lignes = [c["nouveau"] if l == c["ancien"] else l for l in lignes]
+    return "\n".join(lignes)
+
+
+def appliquer_corrections(passages, corrections):
+    for p in passages:
+        p["texte"] = corriger_texte(p["texte"], p["document"], p["page"], corrections)
+    return passages
+
+
 def main(dossier, sortie):
     docs = json.load(open(os.path.join(dossier, "documents.json"), encoding="utf-8"))
     passages = []
@@ -110,12 +141,20 @@ def main(dossier, sortie):
                 g["aussi_dans"].append(ref)
     for p in gardes:
         p["id"] = hashlib.sha1((p["document"] + str(p["page"]) + p["texte"][:80]).encode()).hexdigest()[:16]
+    corrections = charger_corrections()
+    appliquer_corrections(gardes, corrections)
     json.dump({"documents": docs, "passages": gardes}, open(sortie, "w", encoding="utf-8"), ensure_ascii=False)
     # Texte intégral par mémoire (page par page) : sert à l'extraction du registre des informations.
-    textes = {d["fichier"]: ["\n".join(nettoyer(p)) for p in pages_de(os.path.join(dossier, d["fichier"]))] for d in docs}
+    textes = {d["fichier"]: [corriger_texte("\n".join(nettoyer(p)), d["fichier"], n, corrections)
+                             for n, p in enumerate(pages_de(os.path.join(dossier, d["fichier"])), 1)] for d in docs}
     json.dump(textes, open(sortie.replace(".json", "_textes.json"), "w", encoding="utf-8"), ensure_ascii=False)
     print(f"{len(passages)} passages extraits → {len(gardes)} après fusion des doublons")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    if sys.argv[1] == "--corriger":
+        base = json.load(open(sys.argv[2], encoding="utf-8"))
+        appliquer_corrections(base["passages"], charger_corrections())
+        json.dump(base, open(sys.argv[2], "w", encoding="utf-8"), ensure_ascii=False)
+    else:
+        main(sys.argv[1], sys.argv[2])

@@ -6,6 +6,7 @@
  *      dans le texte du mémoire (une valeur non retrouvée est écartée), puis consolidée par date.
  *
  * Usage : npx ts-node src/rag/base_memoires_build.ts <base_memoires_textes.json> [--sans-index] [--sans-registre]
+ *         npx ts-node src/rag/base_memoires_build.ts --sans-index --consolider   (reconsolide le registre, sans appel IA)
  * Nécessite OPENAI_API_KEY (lu dans ../.env). N'écrit RIEN en base de données.
  */
 import fs from 'fs';
@@ -131,8 +132,13 @@ async function extraireFaits(openai: OpenAI, fichierTextes: string) {
   ecrireRegistre(registre);
 }
 
-/** Champs propres au registre (hors extraction) conservés d'une reconstruction à l'autre. */
-const CHAMPS_CONSERVES = ['interne', 'usage', 'remarque', 'question_une_fois'];
+/**
+ * Champs propres au registre (hors extraction) conservés d'une reconstruction à l'autre. `valeur_retenue_imposee` :
+ * valeur rédigée à partir de la valeur sourcée (ex. recours_sous_traitance : « Non : GSS n'envisage pas de recourir à la
+ * sous-traitance pour les prestations fixes ou supplémentaires », d'après le cadre de l'Université de Rouen), retenue à
+ * la place de la valeur extraite.
+ */
+const CHAMPS_CONSERVES = ['interne', 'usage', 'remarque', 'question_une_fois', 'valeur_retenue_imposee'];
 
 /**
  * Réponses de l'équipe GSS (valeurs « reponse_gss », ex. réponses du 1er octobre 2026) et informations sans mémoire
@@ -158,7 +164,7 @@ function reprendreReponsesGss(registre: Record<string, any>) {
  * « NOM Prénom »). Statut « a_confirmer » si une date plus ancienne donne une valeur non équivalente :
  * l'information a changé (ou les mémoires se contredisent) → GSS doit confirmer la valeur actuelle.
  */
-function consolider(registre: Record<string, any>) {
+export function consolider(registre: Record<string, any>) {
   const cle = (v: string) => norm(v).split(' ').filter((m) => m.length > 1 && !['de', 'du', 'des', 'la', 'le', 'les', 'mr', 'mme', 'aux', 'couleurs', 'gss'].includes(m)).sort().join(' ');
   const nombres = (v: string) => (norm(v).match(/\d+/g) || []).join(' ');
   const mots = (v: string) => cle(v).split(' ').filter((m) => m.length >= 3 && !/^\d+$/.test(m));
@@ -176,17 +182,20 @@ function consolider(registre: Record<string, any>) {
   };
   for (const e of Object.values(registre) as any[]) {
     e.valeurs.sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
-    const dateRecente = e.valeurs[0].date;
+    // Réponse de l'équipe GSS : elle prime sur tout le reste (règle 1 du LISEZMOI), même face à un mémoire plus récent.
+    const gss = e.valeurs.filter((v: any) => v.reponse_gss);
+    const dateRecente = (gss.length ? gss : e.valeurs)[0].date;
     const recentes: any[] = [];
-    for (const v of e.valeurs.filter((v: any) => v.date === dateRecente)) {
+    for (const v of (gss.length ? gss : e.valeurs).filter((v: any) => v.date === dateRecente)) {
       // Une valeur de liste (« OPCALIA ; IFESSU ») recouvre ses éléments : on garde la plus complète.
       const idx = recentes.findIndex((r) => equiv(r.valeur, v.valeur));
       if (idx < 0) recentes.push(v);
       else if (cle(v.valeur).length > cle(recentes[idx].valeur).length) recentes[idx] = v;
     }
-    e.valeur_retenue = recentes.map((r) => r.valeur).join(' ; ');
+    e.valeur_retenue = e.valeur_retenue_imposee || recentes.map((r) => r.valeur).join(' ; ');
     e.date_retenue = dateRecente;
-    e.source_retenue = [...new Set(recentes.map((r) => r.client))].join(', ');
+    // Source précise d'une réponse de GSS (« Réponse de GSS (1er octobre 2026) », attestation datée) : `source_libelle`.
+    e.source_retenue = [...new Set(recentes.map((r) => r.source_libelle || r.client))].join(', ');
     const anciennes = e.valeurs.filter((v: any) => v.date !== dateRecente);
     // Une valeur ancienne plus générique (« véhicules aux couleurs de GSS », « système P.T.I ») n'est pas un
     // changement : seul compte un NOM ou un CHIFFRE différent.
@@ -205,7 +214,18 @@ function ecrireRegistre(registre: Record<string, any>) {
     `${sortie.informations.filter((e: any) => e.statut === 'a_confirmer').length} à confirmer par GSS.`);
 }
 
-(async () => {
+/** Registre existant relu pour une reconsolidation sans appel IA (--consolider) : valeurs et champs conservés. */
+export function registrePourConsolidation(informations: any[]): Record<string, any> {
+  const reg: Record<string, any> = {};
+  for (const e of informations) {
+    reg[e.cle] = { cle: e.cle, libelle: e.libelle, categorie: e.categorie, valeurs: e.valeurs };
+    for (const k of CHAMPS_CONSERVES) if (e[k] !== undefined) reg[e.cle][k] = e[k];
+  }
+  return reg;
+}
+
+// Lancement en ligne de commande seulement (le module est aussi importé par les tests).
+if (require.main === module) (async () => {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error('OPENAI_API_KEY manquante.');
   const openai = new OpenAI({ apiKey: key, timeout: 600_000 });
@@ -214,11 +234,7 @@ function ecrireRegistre(registre: Record<string, any>) {
   if (args.includes('--consolider')) {
     // Reconsolide le registre existant sans nouvel appel IA.
     const r = JSON.parse(fs.readFileSync(path.join(DIR, 'registre_informations.json'), 'utf-8'));
-    const reg: Record<string, any> = {};
-    for (const e of r.informations) {
-      reg[e.cle] = { cle: e.cle, libelle: e.libelle, categorie: e.categorie, valeurs: e.valeurs };
-      for (const k of CHAMPS_CONSERVES) if (e[k] !== undefined) reg[e.cle][k] = e[k];
-    }
+    const reg = registrePourConsolidation(r.informations);
     consolider(reg);
     ecrireRegistre(reg);
     return;

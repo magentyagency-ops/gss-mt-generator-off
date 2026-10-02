@@ -1,5 +1,5 @@
 {
- "genere_le": "2026-09-27",
+ "genere_le": "2026-10-02",
  "informations": [
   {
    "cle": "raison_sociale",
@@ -247,14 +247,14 @@
      "citation": "MENDES Ussumane"
     }
    ],
+   "question_une_fois": true,
    "valeur_retenue": "ALAMAT Ramzi",
    "date_retenue": "2026-06",
    "source_retenue": "Université de Rouen Normandie",
    "statut": "a_confirmer",
    "valeurs_anterieures_differentes": [
     "MENDES Ussumane (Région Normandie (lot 2), 2024-05)"
-   ],
-   "question_une_fois": true
+   ]
   },
   {
    "cle": "responsable_cynophile",
@@ -338,6 +338,7 @@
      "citation": "MEROUANI Sofiane"
     }
    ],
+   "question_une_fois": true,
    "valeur_retenue": "ATTOU NESRINE",
    "date_retenue": "2026-06",
    "source_retenue": "Université de Rouen Normandie",
@@ -345,8 +346,7 @@
    "valeurs_anterieures_differentes": [
     "OTMANI Abed (CAF (2025), 2025-10)",
     "MEROUANI Sofiane (Région Normandie (lot 2), 2024-05)"
-   ],
-   "question_une_fois": true
+   ]
   },
   {
    "cle": "effectif_agents_securite",
@@ -370,14 +370,14 @@
      "citation": "GSS dispose d’une équipe de 52 agents\nqualifiés, tous disposent du CQP (certificat de\nqualification professionnelle en sécurité)"
     }
    ],
+   "remarque": "423 (mémoire Université de Rouen Normandie, 2026-06) dépasse l'effectif total de 380 salariés donné par GSS le 1er octobre 2026 : valeur jamais citée (exclue comme incohérente).",
    "valeur_retenue": "423",
    "date_retenue": "2026-06",
    "source_retenue": "Université de Rouen Normandie",
    "statut": "a_confirmer",
    "valeurs_anterieures_differentes": [
     "52 (CAF (2025), 2025-10)"
-   ],
-   "remarque": "423 (mémoire Université de Rouen Normandie, 2026-06) dépasse l'effectif total de 380 salariés donné par GSS le 1er octobre 2026 : valeur jamais citée (exclue comme incohérente)."
+   ]
   },
   {
    "cle": "effectif_ssiap1",
@@ -629,14 +629,14 @@
      "citation": "Formation utilisation logiciel trackforce"
     }
    ],
+   "question_une_fois": true,
    "valeur_retenue": "TRACKFORCE ; vigicom",
    "date_retenue": "2026-06",
    "source_retenue": "Université de Rouen Normandie",
    "statut": "a_confirmer",
    "valeurs_anterieures_differentes": [
     "VIGICOM 6TADEL (MIN de Rouen (cadre de réponse), 2025-10)"
-   ],
-   "question_une_fois": true
+   ]
   },
   {
    "cle": "main_courante_donnees",
@@ -650,7 +650,8 @@
      "date": "2026-10",
      "page": null,
      "citation": "horodatage infalsifiable et historique des modifications OK ; sauvegardes OK ; exports PDF et Excel OK ; accès du client OK ; durée de conservation des données 10 ans ; restitution ou destruction des données en fin de marché OK",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Réponse de GSS (1er octobre 2026)"
     }
    ],
    "valeur_retenue": "Horodatage infalsifiable et historique des modifications ; sauvegardes ; exports PDF et Excel ; accès du client ; conservation des données 10 ans ; restitution ou destruction des données en fin de marché",
@@ -891,7 +892,8 @@
      "date": "2026-10",
      "page": null,
      "citation": "le PTI (Beepiz) est relié à notre astreinte",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Réponse de GSS (1er octobre 2026)"
     }
    ],
    "valeur_retenue": "Le PTI (Beepiz) est relié à l'astreinte de GSS",
@@ -912,7 +914,8 @@
      "date": "2026-10",
      "page": null,
      "citation": "lampes conformes ATEX : oui",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Réponse de GSS (1er octobre 2026)"
     }
    ],
    "valeur_retenue": "Oui : GSS peut fournir des lampes conformes ATEX",
@@ -1049,7 +1052,8 @@
      "date": "2026-10",
      "page": null,
      "citation": "véhicules des encadrants : Peugeot 208 et Renault Zoé",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Réponse de GSS (1er octobre 2026)"
     },
     {
      "valeur": "Peugeot 3008",
@@ -1105,11 +1109,7 @@
    "source_retenue": "Réponse de GSS (1er octobre 2026)",
    "statut": "confirmee",
    "valeurs_anterieures_differentes": [
-    "Peugeot 3008 (Université de Rouen Normandie, 2026-06)",
-    "Peugeot 208 aux couleurs de GSS (Université de Rouen Normandie (cadre lots 1-2-3), 2026-04)",
     "Peugeot 3008 (CAF du Val-de-Marne, 2026-04)",
-    "véhicules aux couleurs de GSS (Région Normandie (lot 1), 2024-05)",
-    "véhicules aux couleurs de GSS (Région Normandie (lot 2), 2024-05)",
     "véhicules aux couleurs de GSS (Région Normandie (lot 3), 2024-05)"
    ]
   },
@@ -1125,7 +1125,8 @@
      "date": "2026-10",
      "page": null,
      "citation": "délai d'intervention sur alarme PTI : 45 min",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Réponse de GSS (1er octobre 2026)"
     },
     {
      "valeur": "45 minutes",
@@ -1174,8 +1175,6 @@
    "statut": "confirmee",
    "valeurs_anterieures_differentes": [
     "moins de 20 minutes (CAF (2025), 2025-10)",
-    "moins de 30 minutes (Région Normandie (lot 1), 2024-05)",
-    "moins de 30 minutes (Région Normandie (lot 2), 2024-05)",
     "moins de 30 minutes (Région Normandie (lot 3), 2024-05)"
    ]
   },
@@ -1263,7 +1262,8 @@
      "date": "2026-10",
      "page": null,
      "citation": "siège : 15 place de la Verrerie, 76100 Rouen",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Réponse de GSS (1er octobre 2026) ; attestation d'assurance RC Hiscox (24/09/2026)"
     },
     {
      "valeur": "76 RUE D ELBEUF 76100 ROUEN",
@@ -1294,7 +1294,8 @@
      "date": "2026-10",
      "page": null,
      "citation": "présence des équipes et astreinte GSS sur toute la moitié nord, de Nantes à Lille et jusqu'à Reims",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Réponse de GSS (1er octobre 2026)"
     }
    ],
    "valeur_retenue": "Toute la moitié nord de la France, de Nantes à Lille et jusqu'à Reims (équipes et astreinte GSS)",
@@ -1395,7 +1396,8 @@
      "date": "2026-10",
      "page": null,
      "citation": "téléphones : 09 62 21 24 75 et 06 58 06 32 25",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Réponse de GSS (1er octobre 2026)"
     },
     {
      "valeur": "06 58 06 32 25",
@@ -1422,15 +1424,14 @@
      "citation": "NUMERO - 06.58.06.32.25\n02.35.89.09.92"
     }
    ],
+   "remarque": "Numéro unique de l'interlocuteur (dirigeant, mobile). Le numéro fixe est 09 62 21 24 75 (telephone_fixe) ; le 02 35 89 09 92 (2024) n'est plus utilisé.",
    "valeur_retenue": "06 58 06 32 25",
    "date_retenue": "2026-10",
    "source_retenue": "Réponse de GSS (1er octobre 2026)",
    "statut": "confirmee",
    "valeurs_anterieures_differentes": [
-    "06.58.06.32.25 ; 02.35.89.09.92 (Région Normandie (lot 1), 2024-05)",
     "06.58.06.32.25 ; 02.35.89.09.92 (Région Normandie (lot 2), 2024-05)"
-   ],
-   "remarque": "Numéro unique de l'interlocuteur (dirigeant, mobile). Le numéro fixe est 09 62 21 24 75 (telephone_fixe) ; le 02 35 89 09 92 (2024) n'est plus utilisé."
+   ]
   },
   {
    "cle": "telephone_fixe",
@@ -1444,15 +1445,16 @@
      "date": "2026-10",
      "page": null,
      "citation": "téléphones : 09 62 21 24 75 et 06 58 06 32 25",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Réponse de GSS (1er octobre 2026)"
     }
    ],
+   "remarque": "Remplace le 02 35 89 09 92 cité en 2024 (Région Normandie).",
    "valeur_retenue": "09 62 21 24 75",
    "date_retenue": "2026-10",
    "source_retenue": "Réponse de GSS (1er octobre 2026)",
    "statut": "confirmee",
-   "valeurs_anterieures_differentes": [],
-   "remarque": "Remplace le 02 35 89 09 92 cité en 2024 (Région Normandie)."
+   "valeurs_anterieures_differentes": []
   },
   {
    "cle": "email_contact",
@@ -1502,7 +1504,8 @@
      "date": "2026-10",
      "page": null,
      "citation": "Effectifs : « 380 2026 »",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Réponse de GSS (1er octobre 2026)"
     },
     {
      "valeur": "320",
@@ -1593,7 +1596,8 @@
      "date": "2026-10",
      "page": null,
      "citation": "ISO 9001 toujours en cours, prévue fin 2026 : oui",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Réponse de GSS (1er octobre 2026)"
     },
     {
      "valeur": "ISO 9001 en cours – prévu pour fin 2026",
@@ -1622,7 +1626,8 @@
      "date": "2026-09",
      "page": 1,
      "citation": "Assureur : Hiscox (Hiscox SA – Hiscox France, 49 avenue de l'Opéra, 75002 Paris)",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Attestation d'assurance RC Hiscox (fait à Paris le 24/09/2026)"
     }
    ],
    "valeur_retenue": "Hiscox (Hiscox SA – Hiscox France, 49 avenue de l'Opéra, 75002 Paris)",
@@ -1643,7 +1648,8 @@
      "date": "2026-09",
      "page": 1,
      "citation": "Contrat : HA RCP0242762",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Attestation d'assurance RC Hiscox (fait à Paris le 24/09/2026)"
     }
    ],
    "valeur_retenue": "HA RCP0242762",
@@ -1664,7 +1670,8 @@
      "date": "2026-09",
      "page": 1,
      "citation": "Validité de l'attestation : du 21 septembre 2026 au 16 mars 2027",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Attestation d'assurance RC Hiscox (fait à Paris le 24/09/2026)"
     }
    ],
    "valeur_retenue": "du 21/09/2026 au 16/03/2027",
@@ -1685,7 +1692,8 @@
      "date": "2026-09",
      "page": 1,
      "citation": "RC professionnelle et/ou RC après livraison : 300 000 € par sinistre et par année d'assurance, dont tous dommages corporels, matériels et immatériels consécutifs ou non : 300 000 €",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Attestation d'assurance RC Hiscox (fait à Paris le 24/09/2026)"
     }
    ],
    "valeur_retenue": "300 000 € par sinistre et par année d'assurance, dont tous dommages corporels, matériels et immatériels consécutifs ou non : 300 000 €",
@@ -1706,7 +1714,8 @@
      "date": "2026-09",
      "page": 1,
      "citation": "RC exploitation / RC employeur : 8 000 000 € par sinistre, dont […]",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Attestation d'assurance RC Hiscox (fait à Paris le 24/09/2026)"
     }
    ],
    "valeur_retenue": "8 000 000 € par sinistre, dont dommages matériels et immatériels consécutifs 1 500 000 € par sinistre ; dommages immatériels non consécutifs 500 000 € par sinistre ; intoxications alimentaires 800 000 € par sinistre ; maladies professionnelles et/ou faute inexcusable 1 500 000 € par année d'assurance ; atteintes accidentelles à l'environnement 800 000 € par sinistre ; vol par préposés 30 000 € par sinistre",
@@ -1727,7 +1736,8 @@
      "date": "2026-09",
      "page": 1,
      "citation": "Activités assurées : gardiennage, surveillance, filtrage ; intervention sur site en cas de déclenchement d'alarme intrusion ; sécurité incendie",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Attestation d'assurance RC Hiscox (fait à Paris le 24/09/2026)"
     }
    ],
    "valeur_retenue": "Gardiennage, surveillance, filtrage ; intervention sur site en cas de déclenchement d'alarme intrusion ; sécurité incendie (agent de sécurité qualifié / confirmé / chef de poste) ; monde entier hors USA / Canada",
@@ -1748,7 +1758,8 @@
      "date": "2026-10",
      "page": null,
      "citation": "envoi des plannings : J-10",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Réponse de GSS (1er octobre 2026)"
     },
     {
      "valeur": "J-10",
@@ -1797,7 +1808,6 @@
    "statut": "confirmee",
    "valeurs_anterieures_differentes": [
     "J-15 (Région Normandie (lot 1), 2024-05)",
-    "J-15 des plannings du mois suivant (Région Normandie (lot 2), 2024-05)",
     "J-15 des plannings du mois suivant (Région Normandie (lot 3), 2024-05)"
    ]
   },
@@ -1823,14 +1833,14 @@
      "citation": "Mr HANZAZ Abdelaziz"
     }
    ],
+   "question_une_fois": true,
    "valeur_retenue": "DA SILVA Luis",
    "date_retenue": "2025-10",
    "source_retenue": "CAF (2025)",
    "statut": "a_confirmer",
    "valeurs_anterieures_differentes": [
     "Mr HANZAZ Abdelaziz (Région Normandie (lot 2), 2024-05)"
-   ],
-   "question_une_fois": true
+   ]
   },
   {
    "cle": "delai_intervention_alarme",
@@ -1844,7 +1854,8 @@
      "date": "2026-10",
      "page": null,
      "citation": "délai d'intervention du rondier sur alarme : 45 min",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Réponse de GSS (1er octobre 2026)"
     },
     {
      "valeur": "60 MINUTES MAXI",
@@ -1914,6 +1925,7 @@
      "citation": "Utilisation envisagée de la sous-traitance pour les prestations fixes ou supplémentaires Oui (niveau N-1) Oui (niveau N-2 en cascade) x Non"
     }
    ],
+   "valeur_retenue_imposee": "Non : GSS n'envisage pas de recourir à la sous-traitance pour les prestations fixes ou supplémentaires",
    "valeur_retenue": "Non : GSS n'envisage pas de recourir à la sous-traitance pour les prestations fixes ou supplémentaires",
    "date_retenue": "2026-04",
    "source_retenue": "Université de Rouen Normandie (cadre lots 1-2-3)",
@@ -1932,7 +1944,8 @@
      "date": "2026-10",
      "page": null,
      "citation": "Intérim : NON",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Réponse de GSS (1er octobre 2026)"
     }
    ],
    "valeur_retenue": "Non : GSS n'a pas recours à l'intérim ; les remplacements sont assurés par ses propres équipes",
@@ -1953,16 +1966,17 @@
      "date": "2026-10",
      "page": null,
      "citation": "Prix : variable selon les marchés, de 22 à 30 € HT de l'heure",
-     "reponse_gss": true
+     "reponse_gss": true,
+     "source_libelle": "Réponse de GSS (1er octobre 2026)"
     }
    ],
+   "interne": true,
+   "usage": "décomposition justificative du prix uniquement ; jamais écrit dans un texte du mémoire",
    "valeur_retenue": "22 à 30 € HT de l'heure, variable selon les marchés",
    "date_retenue": "2026-10",
    "source_retenue": "Réponse de GSS (1er octobre 2026)",
    "statut": "confirmee",
-   "valeurs_anterieures_differentes": [],
-   "interne": true,
-   "usage": "décomposition justificative du prix uniquement ; jamais écrit dans un texte du mémoire"
+   "valeurs_anterieures_differentes": []
   }
  ]
 }
