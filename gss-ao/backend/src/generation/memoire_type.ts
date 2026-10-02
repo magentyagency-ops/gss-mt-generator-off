@@ -1770,6 +1770,9 @@ const INTERDITS_ADAPTATION: Array<[RegExp, string]> = [
 // Bornes en lettres accentuées comprises (\b ne voit pas « é » : « il est demandé », « est réputé » échappaient au motif).
 const VOIX_ACHETEUR = /(?<![\wÀ-ÿ])(?:devra|devront|doit|doivent|est tenu|sont tenus|il est demand[ée]|quels? que soi(?:t|ent)|vu que|est r[ée]put[ée]|sont r[ée]put[ée]s|ne (?:peut|pourra) (?:invoquer|se pr[ée]valoir))(?![\wÀ-ÿ])|\b(?:le|au|du) titulaire\b/i;
 
+/** Phrase qui commence par un pronom de reprise (« Il », « Elle », « Celui-ci », « Ce dernier »…). */
+const PRONOM_INITIAL = /^\s*(?:[-*•]\s+|\d+[.)]\s+)?(?:\*\*)?(?:Ils?|Elles?|Celui-ci|Celle-ci|Ceux-ci|Celles-ci|Ce dernier|Cette derni[èe]re|Ces derni(?:ers|[èe]res))(?![\wÀ-ÿ'’-])/;
+
 /** Motif de refus d'un texte proposé par le modèle (ou null s'il est acceptable). */
 function refusTexteNouveau(nouveau: string, ancien: string, o: OptionsModifications): string | null {
   for (const [rx, motif] of INTERDITS_ADAPTATION) if (rx.test(nouveau) && !rx.test(ancien) && !(motif === 'Covid' && rx.test(o.dce || ''))) return motif;
@@ -1867,6 +1870,9 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     // Rattachement : une exigence hors du sujet étroit de la rubrique (accueil quotidien à 7h00, état des lieux de fin de
     // marché dans l'intégration d'un nouveau marché) relève d'une autre rubrique ou des questions à GSS.
     if (!dansLeSujet(m.par, o.sujetAjouts)) { refusees.push({ ...m, raison: 'exigence hors du sujet de la rubrique (traitée par sa rubrique ou par les questions à GSS)' }); continue; }
+    // Ajout qui commence par un pronom (« Il synthétise les faits marquants… », génération réelle imm 13) : son
+    // antécédent est resté dans le CCTP, la phrase insérée dans le texte de GSS renvoie à un autre nom ou à rien.
+    if (PRONOM_INITIAL.test(m.par)) { refusees.push({ ...m, raison: 'ajout commençant par un pronom sans antécédent' }); continue; }
     const refus = refusTexteNouveau(m.par, '', o);
     if (refus) { refusees.push({ ...m, raison: refus }); continue; }
     if (m.extrait) {

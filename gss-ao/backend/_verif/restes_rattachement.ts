@@ -33,7 +33,7 @@ const coriolis = essai('À Coriolis, l’accueil des premiers utilisateurs du b�
 verifier('ajout « accueil de Coriolis à 7h00 » refusé (hors du sujet)', !coriolis.appliquees.length && /hors du sujet/.test(coriolis.refusees[0]?.raison || ''), coriolis.refusees[0]?.raison);
 const edl = essai('À la notification puis à l’échéance, un état des lieux contradictoire des locaux et installations est effectué ; les locaux sont restitués en parfait état.');
 verifier('ajout « état des lieux de fin de marché » refusé', !edl.appliquees.length, edl.refusees[0]?.raison);
-const repute = appliquerModifications(texte, { ajouts: [{ texte: 'Il est réputé avoir pris connaissance, vérifié et complété, par toute visite nécessaire et obligatoire, les données indispensables à l’exécution de ses prestations.' }] }, { dce: ign, reference: texte });
+const repute = appliquerModifications(texte, { ajouts: [{ texte: 'Le prestataire est réputé avoir pris connaissance, vérifié et complété, par toute visite nécessaire et obligatoire, les données indispensables à l’exécution de ses prestations.' }] }, { dce: ign, reference: texte });
 verifier('ajout « est réputé avoir pris connaissance » (CCTP recopié à la voix de l\'acheteur) refusé même sans sujet étroit', !repute.appliquees.length && /voix de l'acheteur/.test(repute.refusees[0]?.raison || ''), repute.refusees[0]?.raison);
 const legit = appliquerModifications(texte, { ajouts: [{ texte: 'Le plan de prévention est établi avant le démarrage des prestations, lors de la réunion sur site.' }] }, { dce: ign, reference: texte, sujetAjouts: sujetDeRubrique(nm) });
 verifier('ajout sur la période de démarrage accepté', legit.appliquees.length === 1, legit.refusees[0]?.raison);
@@ -62,3 +62,14 @@ verifier('ajout sur la période de démarrage accepté', legit.appliquees.length
 import { sansRecopieCctp } from '../src/generation/base_memoires';
 const fin = sansRecopieCctp('Le dispositif est en place. GSS est réputé avoir pris connaissance, vérifié et complété, par toute visite nécessaire et obligatoire, les données indispensables à l’exécution de ses prestations.', ign);
 verifier('texte final : « est réputé avoir pris connaissance » recopié retiré', fin.texte === 'Le dispositif est en place.', fin.texte);
+// 5. Ajout qui commence par un pronom dont l'antécédent est resté dans le CCTP (« Il synthétise… », imm 13) : refusé.
+{
+  const reu = rub('b5_reunions_indicateurs');
+  const t = String(reu.texte).replace(/\{\{[^}]*\}\}/g, 'l\'IMM');
+  const r1 = appliquerModifications(t, { ajouts: [{ texte: 'Il synthétise les faits marquants et difficultés concernant le personnel, le matériel et l’exécution des missions.' }] }, { reference: t });
+  verifier('ajout « Il synthétise les faits marquants… » refusé (pronom sans antécédent)', !r1.appliquees.length && /pronom/.test(r1.refusees[0]?.raison || ''), r1.refusees[0]?.raison);
+  const r2 = appliquerModifications(t, { ajouts: [{ texte: 'Le rapport mensuel synthétise les faits marquants concernant le personnel, le matériel et l’exécution des missions.' }] }, { reference: t });
+  verifier('même ajout avec son nom (« Le rapport mensuel synthétise… ») accepté', r2.appliquees.length === 1, r2.refusees[0]?.raison);
+  const r3 = appliquerModifications(t, { ajouts: [{ texte: 'Illustrations et indicateurs sont présentés lors de chaque réunion.' }] }, { reference: t });
+  verifier('mot commençant par « Il » (« Illustrations ») non confondu avec un pronom', r3.appliquees.length === 1, r3.refusees[0]?.raison);
+}
