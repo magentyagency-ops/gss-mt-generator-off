@@ -213,8 +213,8 @@ describe('Publipostage', () => {
     const t = '| Cat. | Nombre |\n|---|---|\n{{LIGNES_EQUIPE_DEDIEE}}\n\nÉquipe de {{EFFECTIF_AGENTS}} titulaires et {{NB_AGENTS_RENFORT}} renforts.\n\nTaux : {{TAUX_REPRISE}}.';
     const r = publiposter(t, { LIGNES_EQUIPE_DEDIEE: lignes }, { definitions: defs, marquerConsultations: true });
     expect(r.texte).toBe('| Cat. | Nombre |\n|---|---|\n| SSIAP 1 | [À COMPLÉTER] |\n| ADS | [À COMPLÉTER] |\n[CONSULTATION REQUISE : Effectif par catégorie.]\n\n'
-      + 'Équipe de [À COMPLÉTER] titulaires et [À COMPLÉTER] renforts.\n[CONSULTATION REQUISE : Nombre d\'agents titulaires de l\'équipe dédiée au marché.]\n[CONSULTATION REQUISE : Nombre d\'agents formés au site en renfort (équipe suppléante).]\n\n'
-      + 'Taux : [À COMPLÉTER].\n[CONSULTATION REQUISE : Taux de reprise du personnel en place proposé pour ce marché.]');
+      + 'Équipe de [À COMPLÉTER] titulaires et [À COMPLÉTER] renforts.\n[CONSULTATION REQUISE : Combien d\'agents titulaires compte l\'équipe dédiée au marché ?]\n[CONSULTATION REQUISE : Combien d\'agents formés au site compte l\'équipe suppléante (renfort) ?]\n\n'
+      + 'Taux : [À COMPLÉTER].\n[CONSULTATION REQUISE : Quel taux de reprise du personnel en place proposez-vous pour ce marché ?]');
     expect(r.manquantes.every((m) => m.repere)).toBe(true);
     expect(publiposter(t, { LIGNES_EQUIPE_DEDIEE: lignes }, { definitions: defs }).texte).not.toContain('CONSULTATION');
   });

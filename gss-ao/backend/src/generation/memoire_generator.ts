@@ -26,9 +26,9 @@ import {
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
-  controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference,
+  controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation,
 } from './memoire_type_cadre';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -1196,9 +1196,59 @@ const LIBELLES_IDENTITE_DETERMINISTES = 'Surveillance humaine et gardiennage (ac
  */
 export function questionExacte(q: string): string {
   const t = String(q || '').replace(/\s+/g, ' ').trim();
-  if (!t || /\?\s*(?:\([^)]*\))?\s*$/.test(t)) return t;
-  if (/^(?:Proposition|Réponse à relire|Confirmer|À confirmer|À demander à l.acheteur|Délai proposé|Marché hors Normandie|Exigence du (?:DCE|CCTP)|Information à fournir|Valeur à fournir|Partie|Rubrique|Champ|Organigramme|Télésurveillance|Implantation|Référence|Remplacements|GSS est-elle|Nombre|Taux|Fiche|Liste|Joindre|Fournir|Indiquer|Préciser|Transmettre|Quel|Quelle|Combien|Comment)\b/i.test(t)) return t;
-  return `Exigence du DCE à laquelle le mémoire doit répondre : « ${t.replace(/[.;]\s*$/, '')} ». Comment GSS y répond-elle (moyen, délai ou document à indiquer) ?`;
+  if (!t) return t;
+  const maj = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+  const min = (x: string) => (/^[A-ZÀ-Ý][a-zà-ÿ]/.test(x) ? x.charAt(0).toLowerCase() + x.slice(1) : x);
+  const sansFin = (x: string) => x.replace(/\s*[.;:…]+\s*$/, '').trim();
+  // Question déjà posée (éventuellement suivie d'une explication : « … PME … ? L'effectif est de 380 salariés ; … »).
+  if (/\?/.test(t) && !/^(?:Information|Valeur) à fournir/i.test(t)) return maj(t);
+  // Tâches de validation et alertes signalées comme telles (propositions de réponse, rubriques à relire, schéma absent).
+  if (/^(?:Proposition|Réponse à relire|(?:Partie|Rubrique) «)/i.test(t)) return t;
+  // Préfixes : la question qui suit est mise en forme à son tour.
+  const pref = /^(À demander à l.acheteur|Pour le critère «[^»]*»|Critère «[^»]*»|«[^»]*» — à confirmer|Champ \d+)\s*:\s*(.+)$/i.exec(t);
+  if (pref) {
+    const interieur = sansFin(pref[2]);
+    if (/^À demander à l.acheteur$/i.test(pref[1]) && !/\?/.test(interieur)) return `${pref[1]} : pouvez-vous nous transmettre ou préciser ${/^«/.test(interieur) ? interieur : `« ${interieur} »`} ?`;
+    if (/— à confirmer$/i.test(pref[1]) && !/\?/.test(interieur)) return `${pref[1].replace(/ — à confirmer$/, '')} : confirmez-vous ce point : « ${interieur} » ?`;
+    const suite = questionExacte(pref[2]);
+    return /^«[^»]*» — à confirmer$/i.test(pref[1]) ? `${pref[1].replace(/ — à confirmer$/, '')} : ${suite}` : `${pref[1]} : ${suite.startsWith('À demander') ? suite : min(suite)}`;
+  }
+  const aConfirmer = /^À confirmer\s*:\s*(.+)$/i.exec(t);
+  if (aConfirmer) return `Confirmez-vous ce point : « ${sansFin(aConfirmer[1])} » ?`;
+  const delaiPropose = /^Délai proposé hors Normandie, à confirmer par GSS \(organisation locale\)\s*:\s*(.+)$/i.exec(t);
+  if (delaiPropose) return `Hors Normandie, validez-vous ce délai proposé (organisation locale) : « ${sansFin(delaiPropose[1])} » ?`;
+  const horsNormandie = /^Marché hors Normandie\s*:\s*délai à confirmer par GSS \((.+)\)\.?$/i.exec(t);
+  if (horsNormandie) return `Marché hors Normandie : quel délai GSS annonce-t-elle (${horsNormandie[1]}) ?`;
+  const exigence = /^Exigence du (DCE|CCTP)( sans réponse dans le mémoire| à laquelle le mémoire (?:doit répondre|ne répond pas encore)[^:]*)\s*:\s*(.+)$/i.exec(t);
+  if (exigence) return `Exigence du ${exigence[1]}${exigence[2]} : « ${sansFin(exigence[3]).replace(/^«\s*|\s*»$/g, '')} ». Comment GSS y répond-elle (moyen, délai ou document à indiquer) ?`;
+  const information = /^(?:Information|Valeur) à fournir(?: pour compléter(?: le mémoire)?)?\s*:\s*(.+)$/i.exec(t);
+  if (information) return `Quelle donnée faut-il indiquer ici : ${/^«/.test(information[1]) ? sansFin(information[1]) : `« ${sansFin(information[1])} »`} ?`;
+  // Consigne à l'infinitif (« Préciser les mesures… », « Confirmer auprès de GSS et de son assureur… ») : question à GSS.
+  const verbe = /^(Préciser|Confirmer|Indiquer|Fournir|Transmettre|Joindre|Détailler|Décrire|Compléter|Valider|Vérifier|Lister|Donner|Communiquer|Justifier|Expliquer)\s+(.+)$/i.exec(t);
+  if (verbe) {
+    const reste = sansFin(verbe[2]).replace(/\bauprès de GSS et de son assureur\b/i, 'auprès de votre assureur').replace(/\bauprès de GSS\b/i, '').replace(/\s{2,}/g, ' ').trim();
+    return `Pouvez-vous ${verbe[1].toLowerCase()} ${reste} ?`;
+  }
+  // Libellé nominal d'une donnée (« Nombre d'agents… », « Délai d'envoi des plannings… », « Diplômes détenus… »).
+  const nombre = /^Nombre (d['’]|de |des )(.+)$/i.exec(t);
+  if (nombre) return `Combien ${nombre[1].toLowerCase() === 'des ' ? 'de ' : nombre[1].toLowerCase()}${sansFin(nombre[2])} ?`;
+  const GENRES: Record<string, string> = {
+    nom: 'Quel est', numero: 'Quel est', delai: 'Quel est', taux: 'Quel est', partenaire: 'Quel est', organigramme: 'Quel est', montant: 'Quel est',
+    date: 'Quelle est', liste: 'Quelle est', composition: 'Quelle est', duree: 'Quelle est', frequence: 'Quelle est', periodicite: 'Quelle est', adresse: 'Quelle est',
+    diplomes: 'Quels sont', noms: 'Quels sont', moyens: 'Quels sont', effectifs: 'Quels sont', horaires: 'Quels sont',
+    quantites: 'Quelles sont', coordonnees: 'Quelles sont', modalites: 'Quelles sont', qualifications: 'Quelles sont', dates: 'Quelles sont', references: 'Quelles sont',
+  };
+  const premier = t.split(/[\s'’]/)[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (GENRES[premier]) {
+    const article = /^(?:quels|quelles)/i.test(GENRES[premier]) ? 'les' : /^(?:date|liste|composition|duree|frequence|periodicite|adresse)$/.test(premier) ? 'la' : 'le';
+    const corps = min(sansFin(t));
+    return `${GENRES[premier]} ${/^[aeiouyhàâéèêîïôûü]/i.test(corps) && article !== 'les' ? `l'${corps}` : `${article} ${corps}`} ?`;
+  }
+  // Exigence du DCE (phrase à la voix de l'acheteur, ou fragment en minuscule tiré du cahier des charges).
+  if (/^[a-zà-ÿ]/.test(t) || /\b(?:doit|doivent|devra|devront|est tenue?|sont tenus|le titulaire|le prestataire|le candidat|exig|obligatoire|imp[ée]ratif)\b/i.test(t)) {
+    return `Exigence du DCE à laquelle le mémoire doit répondre : « ${sansFin(t)} ». Comment GSS y répond-elle (moyen, délai ou document à indiquer) ?`;
+  }
+  return `Quelle réponse GSS apporte-t-elle sur ce point : « ${sansFin(t)} » ?`;
 }
 
 /**
@@ -1845,10 +1895,25 @@ function inferFieldHint(context: string): string {
  * Le DCE cite un cadre de réponse imposé (« cadre de réponse technique », « cadre du mémoire ») mais aucun
  * n'est dans les pièces : la réponse libre risque d'être jugée irrégulière. GSS est prévenu.
  */
-function alerteCadreAbsent(dce: string): string[] {
-  const m = [...(dce || '').matchAll(/cadre\s+(?:de\s+)?(?:r[ée]ponse|du\s+m[ée]moire|de\s+m[ée]moire)(?:\s+technique)?[^.\n]{0,60}/gi)]
-    .find((x) => !/financi|prix|bordereau/i.test(x[0]) && !/bordereau|financi/i.test((dce || '').slice(Math.max(0, (x.index || 0) - 80), x.index || 0)));
-  return m ? [`Le DCE fait référence à un « ${m[0].trim().replace(/\s+/g, ' ')} » qui ne figure pas parmi les pièces du dossier : l'ajouter au dossier pour que le mémoire soit rédigé dans ce cadre imposé (sinon l'offre risque d'être jugée irrégulière).`] : [];
+export function alerteCadreAbsent(dce: string): string[] {
+  const t = String(dce || '');
+  // Nom du document seul (« cadre de réponse technique », « cadre de réponse technique et RSE », « cadre du mémoire
+  // technique »), jamais la suite de la phrase (caen : « cadre de réponse technique les délais et conditions de
+  // mobilisation des ») ; le plus précis des noms cités, avec la phrase du DCE qui le cite, entière.
+  const occurrences = [...t.matchAll(/cadre\s+(?:de\s+)?(?:r[ée]ponse|du\s+m[ée]moire|de\s+m[ée]moire)(?:\s+technique)?(?:\s+et\s+RSE)?/gi)]
+    .filter((x) => !/financi|prix|bordereau/i.test(t.slice(x.index || 0, (x.index || 0) + x[0].length + 20))
+      && !/bordereau|financi/i.test(t.slice(Math.max(0, (x.index || 0) - 80), x.index || 0)));
+  if (!occurrences.length) return [];
+  const m = occurrences.reduce((a, b) => (b[0].replace(/\s+/g, ' ').length > a[0].replace(/\s+/g, ' ').length ? b : a));
+  const nom = m[0].replace(/\s+/g, ' ').trim().replace(/^C/, 'c');
+  const i = m.index || 0;
+  const debut = Math.max(t.lastIndexOf('.', i), t.lastIndexOf('\n\n', i), t.lastIndexOf('\n-', i), t.lastIndexOf('\n•', i)) + 1;
+  const finPoint = t.indexOf('.', i + m[0].length);
+  const finBloc = t.indexOf('\n\n', i + m[0].length);
+  const fin = [finPoint >= 0 ? finPoint + 1 : -1, finBloc].filter((x) => x >= 0).reduce((a, b) => Math.min(a, b), t.length);
+  let phrase = t.slice(debut, fin).replace(/^[\s\-•]+/, '').replace(/\s+/g, ' ').trim();
+  if (phrase.length > 260) phrase = `${phrase.slice(0, 260).replace(/\s+\S*$/, '')}…`;
+  return [`Le DCE cite un « ${nom} »${phrase ? ` (« ${phrase.replace(/[«»]/g, '"')} »)` : ''} : ce document n'est pas parmi les pièces du dossier. Pouvez-vous l'ajouter au dossier, pour que le mémoire soit rédigé dans ce cadre imposé (sinon l'offre risque d'être jugée irrégulière) ?`];
 }
 
 export const GSS_IDENTITE = {
@@ -4921,8 +4986,16 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     }
     const retirerConfirmations = () => {
       for (const r of replacements) {
-        const { texte, confirmations } = extraireConfirmations(String(r.value ?? ''));
-        if (confirmations.length) {
+        const { texte, confirmations: brutes } = extraireConfirmations(String(r.value ?? ''));
+        // Question du rédacteur sur un autre marché (référence ou ancien acheteur de GSS absent du DCE, vitry 202 : « …
+        // applicable aux sites de Port-Jérôme-sur-Seine ») : jamais posée.
+        const confirmations = brutes.filter((c) => {
+          // Valeur du registre citée avec sa source (« dernière valeur connue : … (Région Normandie lot 1, 2024) ») : gardée.
+          const noms = /derni[èe]re valeur connue|valeur utilis[ée]e/i.test(c) ? [] : nomsHorsMarche(c, dceContext, analysisData?.clientName || '');
+          if (noms.length) console.warn(`[MemoireGenerator] Champ ${r.id} : question sur un autre marché non posée (${noms.join(', ')}) : ${c.slice(0, 120)}`);
+          return !noms.length;
+        });
+        if (brutes.length) {
           confirmations.forEach((c) => confirmationsGss.add(c));
           confirmationsParChamp.set(r.id, confirmations);
           r.value = texte || '[À COMPLÉTER]';
@@ -4934,7 +5007,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       const precises = confirmationsParChamp.get(d.id) || [];
       if (precises.length) return precises;
       const q = (d.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '';
-      return [`Critère « ${q.split(' : ')[0].slice(0, 140)} » : information marquée [À COMPLÉTER] à fournir`];
+      return [`Critère « ${q.split(' : ')[0].slice(0, 140)} » : quelle information faut-il écrire à la place du repère [À COMPLÉTER] ?`];
     };
 
     /**
@@ -4962,10 +5035,21 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       try {
         const corrections = JSON.parse(rep || '{}').corrections;
         let n = 0;
+        // Sources des noms propres admis dans une correction : DCE, registre et organigramme de GSS (jamais le nom d'une
+        // référence ou d'un acheteur d'un autre marché, vitry 202 : « Ville de Port-Jérôme-sur-Seine » à la place de l'acheteur).
+        const sourcesNoms = `${dceContext}\n${blocRegistre(marcheHorsNormandie(analysisData, dceContext))}\n${organigrammeGss(referentsContext)}`;
         for (const c of Array.isArray(corrections) ? corrections : []) {
           const r = grille.find((x) => x.id === Number(c?.id));
           const extrait = String(c?.extrait || ''), remplacement = String(c?.remplacement ?? '');
           if (!r || extrait.length < 3 || !String(r.value).includes(extrait) || /CONSULTATION REQUISE/.test(extrait)) continue;
+          // Réponse reprise du mémoire type (recalée) : ses phrases restent celles de GSS (consigne 5).
+          const reprise = repriseParChamp.get(r.id);
+          const reference = reprise && repriseMT ? reprise.ids.map((x) => repriseMT.textes[x] || '').join('\n\n') : '';
+          const motif = motifRefusHarmonisation({ extrait, remplacement, valeur: String(r.value), reference, sources: sourcesNoms, client: analysisData?.clientName || '' });
+          if (motif) {
+            console.warn(`[MemoireGenerator] Cohérence de la grille : correction refusée sur la réponse ${r.id} (${motif}) : « ${extrait.slice(0, 80)} » → « ${remplacement.slice(0, 80)} ».`);
+            continue;
+          }
           r.value = String(r.value).replace(extrait, remplacement);
           n++;
         }
@@ -5085,7 +5169,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       interlocuteurUnique: (valeurRegistre('dirigeant') || '').trim().split(/\s+/)[0] || undefined,
       interlocuteurNom: (valeurRegistre('dirigeant') || '').trim().split(/\s+/).map((m, i) => (i === 0 ? m.toUpperCase() : m.charAt(0).toUpperCase() + m.slice(1).toLowerCase())).join(' ') || undefined,
       questionPartenaire: valeurRegistre('partenaire_telesurveillance') ? undefined
-        : repriseMT?.mt.variables.PARTENAIRE_TELESURVEILLANCE?.question || 'Partenaire de télésurveillance retenu pour ce marché (ERYMA ou Delta).',
+        : repriseMT?.mt.variables.PARTENAIRE_TELESURVEILLANCE?.question || 'Quel partenaire de télésurveillance retenez-vous pour ce marché, ERYMA ou Delta ?',
     };
     const guardServiceCert = (val: string, _ctx: string): string => {
       // On scanne la VALEUR (pas le contexte) : si elle CITE une certification de service et que la
@@ -5726,7 +5810,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
           ...(descriptors.some((d) => d.grille)
             ? await this.consoliderConsultations([...aCompleter, ...confirmationsGss])
             : [...aCompleter, ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))]),
-        ].map((c) => (/p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(c) ? 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».' : c).replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean)),
+        ].map((c) => (/p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(c) ? 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».' : c).replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean).map(questionExacte)),
         // Une ligne par réponse à relire ou à valider (même intitulé possible : une ligne chacune, comme le premier message).
         ...[...propositionsCadre.entries()].filter(([id]) => champsRediges.includes(id)).sort((a, b) => a[0] - b[0]).map(([, c]) => c),
       ],
@@ -7056,7 +7140,8 @@ RÈGLES DE FORME (rendu Marp) :
         if (r.retirees.length) { sections[id] = r.texte; console.log(`[MemoireGenerator] Rubrique ${id} : ${r.retirees.length} engagement(s) non repris pour tenir en 2 pages de texte : ${r.retirees.map((x) => x.slice(0, 80)).join(' ; ')}.`); }
       }
     }
-    const consultationList = elementsLibres.filter((e) => e.statut === 'ouvert').map((e) => e.question);
+    // Questions à GSS mises en forme (vraies questions, sans doublon) comme dans l'état de l'assistant.
+    const consultationList = [...new Set(elementsSansDoublon(elementsLibres).filter((e) => e.statut === 'ouvert').map((e) => e.question))];
     consultationList.push(...avisSecours);
     // Propositions de réponse de l'IA : signalées APRÈS les éléments (jamais envoyées à l'équipe comme des questions).
     for (const a of ajouts) consultationList.push(`Proposition de réponse à valider (question nouvelle du DCE) : ${a.title}`);
@@ -8012,7 +8097,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     for (const id of Object.keys(sections)) sections[id] = nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retirerCommentairesInternes(sections[id]).texte, dceContext), dceContext, horsNormandie).texte, dceContext));
     // Complétions reprises des mémoires : le PDF est recomposé si un repère a été rempli.
     rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
-    const consultationList = elements.filter((e) => e.statut === 'ouvert').map((e) => e.question);
+    const consultationList = [...new Set(elementsSansDoublon(elements).filter((e) => e.statut === 'ouvert').map((e) => e.question))];
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
     console.log(`[MemoireGenerator] Format court : ${rendu.pages} page(s) / ${format.pagesMax} autorisée(s).`);
 
@@ -8400,7 +8485,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     // « Le titulaire » des exigences recopiées du CCTP est GSS : voix de GSS dans tout le texte remis.
     for (const id of Object.keys(sections)) sections[id] = voixDeGss(nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext)));
     rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
-    const consultationList = elements.filter((e) => e.statut === 'ouvert').map((e) => e.question);
+    const consultationList = [...new Set(elementsSansDoublon(elements).filter((e) => e.statut === 'ouvert').map((e) => e.question))];
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
     consultationList.push(...avisSecours, ...propositions);
     console.log(`[MemoireGenerator] Format court (mémoire type) : ${rendu.pages} page(s) / ${format.pagesMax} autorisée(s) ; ${toutesRetenues.length} rubrique(s) du mémoire type reprise(s), ${propositions.length} proposition(s).`);

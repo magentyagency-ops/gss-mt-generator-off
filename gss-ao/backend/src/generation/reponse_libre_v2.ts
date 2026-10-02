@@ -300,6 +300,13 @@ export function libelleEmplacementSeul(question: string | undefined, texteAvant:
   let l = String(question || '')
     .replace(/^\s*à demander à l.acheteur\s*:\s*/i, '')
     .replace(/^\s*(?:obtenir|demander|fournir|pr[ée]ciser|indiquer|confirmer|communiquer|transmettre|donner|valider|lister|d[ée]crire)\s+(?:(?:de|à|aupr[èe]s de)\s+(?:GSS|l.acheteur)\s*:?\s*)?/i, '')
+    // Question à GSS (« Quel taux de reprise… proposez-vous… ? », « Combien d'agents titulaires compte l'équipe… ? ») :
+    // libellé nominal de la donnée (« Taux de reprise du personnel en place », « Nombre d'agents titulaires »).
+    .replace(/^\s*pouvez-vous\s+\S+\s+/i, '')
+    .replace(/^\s*combien\s+(d['’]|de\s+)(.+?)(?:\s+(?:compte|comptent|composent|compose|seront|sont|faut-il|pr[ée]voyez-vous)\b.*)?$/i, (_m, de: string, x: string) => `Nombre ${de.trim() === 'de' ? 'de ' : de}${x}`)
+    .replace(/^\s*quel(?:le)?s?\s+(?:est|sont)\s+(.+)$/i, '$1')
+    .replace(/^\s*qui est\s+(.+)$/i, '$1')
+    .replace(/^\s*quel(?:le)?s?\s+(.+?)\s+\S+-(?:vous|elle|il|t-elle|t-il)\b.*$/i, '$1')
     .split(/\s*(?:[,;:?(]|\s—\s|\sainsi que\s|\set les supports\s)/)[0]
     .replace(/^(?:les|le|la|l['’]|des|du|un|une)\s*/i, '')
     .replace(/[.\s]+$/, '')
@@ -433,7 +440,7 @@ export function poserReperes(sections: Record<string, string>, ordre: string[], 
       if (question && /^\s*\|/.test(ligne) && (questionsParBloc[Number(kb)] || []).filter((q) => q === question).length > 1) {
         // Même question pour plusieurs lignes d'un tableau : chaque ligne est précisée.
         const libelle = libelleLigneTableau(ligne);
-        if (libelle) question = `${question.replace(/[.\s]+$/, '')} — ligne « ${libelle} »`;
+        if (libelle) question = /\?\s*$/.test(question) ? `${question.replace(/\s*\?\s*$/, '')} — ligne « ${libelle} » ?` : `${question.replace(/[.\s]+$/, '')} — ligne « ${libelle} »`;
       }
       enPlace.push({ n, id, question, contexte, environnement });
       // « [À COMPLÉTER] » seul sur sa ligne : précédé du libellé de la donnée attendue (question, sinon intertitre).

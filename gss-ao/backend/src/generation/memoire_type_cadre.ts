@@ -604,6 +604,40 @@ function nomsPropresAjoutes(ref: string, cand: string, dce: string): string[] {
 }
 
 /**
+ * Correction proposée par la passe de cohérence d'une grille (harmoniserGrille, après le recalage sur le mémoire type)
+ * admise ? Refusée (motif renvoyé) quand elle :
+ *  - introduit un nom propre absent de l'extrait remplacé et des sources autorisées (DCE, registre, organigramme de GSS) :
+ *    vitry 202, « la Ville de Vitry-sur-Seine » devenue « la Ville de Port-Jérôme-sur-Seine », nom d'une référence de GSS
+ *    citée dans une autre réponse ;
+ *  - retire un mot distinctif du nom de l'acheteur (CLIENT) ;
+ *  - modifie une phrase reprise du mémoire type (`reference`), sauf pour remplir un « [À COMPLÉTER] » : la consigne 5 veut
+ *    le texte de GSS repris exactement.
+ * Renvoie '' si la correction est admise.
+ */
+export function motifRefusHarmonisation(c: { extrait: string; remplacement: string; valeur: string; reference?: string; sources: string; client?: string }): string {
+  const extrait = String(c.extrait || ''), remplacement = String(c.remplacement ?? '');
+  const ajoutes = nomsPropresAjoutes(`${extrait}\n${c.sources || ''}`, ` ${remplacement}`, '');
+  if (ajoutes.length) return `nom propre introduit (${ajoutes.join(', ')})`;
+  const n = (x: string) => normaliser(x).replace(/[^a-z0-9]+/g, ' ').trim();
+  const motsClient = n(c.client || '').split(' ').filter((w) => w.length >= 4 && !/^(ville|commune|centre|service|services|region|departement|universite|qualite|groupement|groupements|commandes|coordonnateur|ministere|etablissement|public|publique|national|nationale|direction|regional|regionale)$/.test(w));
+  const ext = ` ${n(extrait)} `, rem = ` ${n(remplacement)} `;
+  const perdus = motsClient.filter((w) => ext.includes(` ${w} `) && !rem.includes(` ${w} `));
+  if (perdus.length) return `nom de l'acheteur retiré (${perdus.join(', ')})`;
+  if (c.reference && !/À COMPLÉTER/.test(extrait)) {
+    const valeur = String(c.valeur || '');
+    const k = valeur.indexOf(extrait);
+    if (k >= 0) {
+      const debut = Math.max(valeur.lastIndexOf('\n', k), ...['. ', '! ', '? '].map((s) => valeur.lastIndexOf(s, k))) + 1;
+      const finCandidats = ['\n', '. ', '! ', '? '].map((s) => valeur.indexOf(s, k + extrait.length)).filter((x) => x >= 0);
+      const fin = finCandidats.length ? Math.min(...finCandidats) : valeur.length;
+      const phrase = n(valeur.slice(debut, fin));
+      if (phrase.split(' ').length >= 4 && ` ${n(c.reference)} `.includes(` ${phrase} `)) return 'phrase du mémoire type de GSS modifiée';
+    }
+  }
+  return '';
+}
+
+/**
  * Nombre de mots permis à une réponse du cadre d'après son contexte : part fixée par la répartition d'une limite de pages
  * (« environ 140 mots pour celle-ci ») ou limite de pages de la rubrique (« 2 pages maximum », environ 420 mots par page).
  * Aucune limite (undefined) pour un critère de grille sans limite de pages : le texte retenu y est repris en entier.

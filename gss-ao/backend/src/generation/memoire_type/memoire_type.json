@@ -250,7 +250,7 @@
    "type": "client",
    "si_absente": "repli",
    "repli": "votre établissement",
-   "question": "Nom exact de l'acheteur introuvable dans le DCE : à vérifier."
+   "question": "Quel est le nom exact de l'acheteur ? Le DCE ne permet pas de le trouver."
   },
   "OBJET_MARCHE": {
    "description": "Intitulé du marché",
@@ -287,7 +287,7 @@
    "origine": "analyzeDce.sites[].name",
    "type": "liste",
    "si_absente": "a_completer",
-   "question": "Nom exact du ou des sites du marché."
+   "question": "Quel est le nom exact du ou des sites du marché ?"
   },
   "VILLE": {
    "description": "Commune(s) du ou des sites",
@@ -324,7 +324,7 @@
    "origine": "qualifications exigées par le DCE ; sinon à fournir par GSS",
    "type": "liste",
    "si_absente": "a_completer",
-   "question": "Diplômes détenus par l'équipe dédiée au marché."
+   "question": "Quels diplômes détient l'équipe dédiée au marché ?"
   },
   "TENUE_RETENUE": {
    "description": "Tenue portée sur le marché",
@@ -337,21 +337,21 @@
    "origine": "qualifications exigées ; nombres validés par GSS dans l'assistant",
    "type": "markdown",
    "si_absente": "a_completer",
-   "question": "Composition de l'équipe dédiée (nombre d'agents par catégorie)."
+   "question": "Quelle est la composition de l'équipe dédiée (nombre d'agents par catégorie) ?"
   },
   "EFFECTIF_AGENTS": {
    "description": "Nombre d'agents titulaires dédiés au marché",
    "origine": "proposition validée par GSS (jamais dans le DCE)",
    "type": "nombre",
    "si_absente": "a_completer",
-   "question": "Nombre d'agents titulaires de l'équipe dédiée au marché."
+   "question": "Combien d'agents titulaires compte l'équipe dédiée au marché ?"
   },
   "NB_AGENTS_RENFORT": {
    "description": "Nombre d'agents formés au site en renfort (équipe suppléante)",
    "origine": "proposition validée par GSS",
    "type": "nombre",
    "si_absente": "a_completer",
-   "question": "Nombre d'agents formés au site en renfort (équipe suppléante)."
+   "question": "Combien d'agents formés au site compte l'équipe suppléante (renfort) ?"
   },
   "EFFECTIF_ADS_CQP": {
    "description": "Nombre d'agents de sécurité CQP de GSS",
@@ -460,14 +460,14 @@
    "origine": "annuaire « Personnes » + registre (rolesOrganigramme, base_memoires.ts)",
    "type": "markdown",
    "si_absente": "a_completer",
-   "question": "Organigramme de GSS (responsables par pôle)."
+   "question": "Quels sont les responsables de GSS par pôle (organigramme) ?"
   },
   "INTERLOCUTEUR_UNIQUE": {
    "description": "Interlocuteur unique du marché",
    "origine": "choix GSS ; par défaut le dirigeant (registre dirigeant / interlocuteur_unique : MARCHANI Adil)",
    "type": "texte",
    "si_absente": "a_completer",
-   "question": "Nom de l'interlocuteur unique du marché."
+   "question": "Qui est l'interlocuteur unique du marché (nom et fonction) ?"
   },
   "FONCTION_INTERLOCUTEUR": {
    "description": "Fonction de l'interlocuteur unique",
@@ -481,14 +481,14 @@
    "type": "texte",
    "si_absente": "a_completer",
    "registre": "telephone_contact",
-   "question": "Numéro de téléphone unique du marché."
+   "question": "Quel est le numéro de téléphone unique du marché ?"
   },
   "TAUX_REPRISE": {
    "description": "Taux de reprise du personnel en place",
    "origine": "engagement de GSS pour ce marché (100 % pour l'Université de Rouen Normandie, 2026-04)",
    "type": "texte",
    "si_absente": "a_completer",
-   "question": "Taux de reprise du personnel en place proposé pour ce marché."
+   "question": "Quel taux de reprise du personnel en place proposez-vous pour ce marché ?"
   },
   "FONDEMENT_REPRISE_DCE": {
    "description": "Fondement juridique de la reprise CITÉ PAR LE DCE",
@@ -501,7 +501,7 @@
    "origine": "choix GSS : ERYMA ou Delta (slides GSS)",
    "type": "texte",
    "si_absente": "a_completer",
-   "question": "Partenaire de télésurveillance retenu pour ce marché (ERYMA ou Delta)."
+   "question": "Quel partenaire de télésurveillance retenez-vous pour ce marché, ERYMA ou Delta ?"
   },
   "ENGAGEMENTS_TELESURVEILLANCE": {
    "description": "Engagements par site demandés par le cadre de réponse",
@@ -561,7 +561,7 @@
    "type": "texte",
    "si_absente": "a_completer",
    "registre": "envoi_plannings",
-   "question": "Délai d'envoi des plannings du mois suivant."
+   "question": "Quel est le délai d'envoi des plannings du mois suivant ?"
   },
   "DELAI_COMMANDE_SUPPLEMENTAIRE": {
    "description": "Délai de mise en place d'une commande supplémentaire",

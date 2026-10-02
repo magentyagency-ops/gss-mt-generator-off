@@ -327,6 +327,22 @@ export function acheteursCites(texte: string, client = ''): string[] {
 }
 
 /**
+ * Noms d'un autre marché cités dans un texte (question à GSS, valeur d'un champ) : anciens acheteurs de GSS
+ * (acheteursCites) et références clients de GSS que le DCE ne cite pas. Une question « Confirmer le délai de mobilisation
+ * applicable aux sites de Port-Jérôme-sur-Seine » posée pour la Ville de Vitry-sur-Seine (vitry 202) porte sur un autre
+ * marché : elle n'est pas posée.
+ */
+export function nomsHorsMarche(texte: string, dce = '', client = ''): string[] {
+  const t = String(texte || '');
+  const dceN = normTxt(dce);
+  const refs = motifsReferences()
+    .filter((r) => r.motifs.some((m) => m.test(t)) && !normTxt(client).includes(normTxt(r.nom)))
+    .filter((r) => !dceN.includes(normTxt(r.nom)) && !r.motifs.slice(1).some((m) => m.test(dce)))
+    .map((r) => r.nom);
+  return [...new Set([...acheteursCites(t, client).filter((n) => !dceN.includes(normTxt(n))), ...refs])];
+}
+
+/**
  * Une référence client est citée dans DEUX rubriques au plus (retour GSS : CESI, Schneider… repris
  * partout). On garde la rubrique « références » puis la première rubrique qui la cite ; ailleurs, les
  * phrases, puces et lignes de tableau qui la citent sont retirées (jamais au point de vider une rubrique,

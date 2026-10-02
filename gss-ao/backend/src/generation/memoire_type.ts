@@ -999,7 +999,7 @@ function delai(c: CalculVariables, nom: string, sujet: keyof typeof SUJETS_DELAI
   const duDce = sujet ? delaiDuDce(c.ctx.dce || '', sujet) : '';
   if (duDce) return { valeur: duDce, source: 'délai imposé par le DCE' };
   if (c.horsNormandie && def?.normandie_seulement) {
-    return { valeur: null, question: `Marché hors Normandie : délai à confirmer par GSS (${def.description.charAt(0).toLowerCase()}${def.description.slice(1)}).` };
+    return { valeur: null, question: `Marché hors Normandie : quel délai GSS annonce-t-elle (${def.description.charAt(0).toLowerCase()}${def.description.slice(1).replace(/[.\s]+$/, '')}) ?` };
   }
   if (def?.registre) {
     const v = depuisRegistre(c, def.registre, normaliserDelai);
@@ -1098,7 +1098,7 @@ const CALCULS: Record<string, Calculateur> = {
     if (!c.ind.SSIAP || ads || c.qualifs.includes('CQP APS')) lignes.push(`| Agent de sécurité | CQP APS | ${ac} | |`);
     if (c.ind.CYNOPHILE) lignes.push(`| Agent cynophile | CQP APS – qualification cynophile | ${ac} | |`);
     if (c.ind.TELESURVEILLANCE) lignes.push(`| Rondier intervenant | CQP APS | ${ac} | |`);
-    return { valeur: lignes.join('\n'), question: "Nombre d'agents par catégorie de l'équipe dédiée au marché (tableau de l'adéquation des moyens humains).", source: 'qualifications exigées par le DCE' };
+    return { valeur: lignes.join('\n'), question: "Combien d'agents de cette catégorie compte l'équipe dédiée au marché (tableau de l'adéquation des moyens humains) ?", source: 'qualifications exigées par le DCE' };
   },
   EFFECTIF_AGENTS: (c) => (c.ctx.dimensionnement?.titulaires
     ? { valeur: String(c.ctx.dimensionnement.titulaires), source: 'dimensionnement calculé à partir des postes et des horaires du DCE', aConfirmer: questionDimensionnement(c.ctx.dimensionnement) }
@@ -1152,7 +1152,7 @@ const CALCULS: Record<string, Calculateur> = {
     // Interlocuteur choisi par GSS autre que le dirigeant : le numéro du registre (celui du dirigeant) ne vaut pas pour lui.
     const choisi = valeurPropre(c.ctx.choix?.variables?.INTERLOCUTEUR_UNIQUE as string);
     const dirigeant = nomPropre(c.registre.find((x) => x.cle === 'dirigeant')?.valeur_retenue || '');
-    if (choisi && normaliser(choisi) !== normaliser(dirigeant)) return { valeur: null, question: `Numéro de téléphone unique de l'interlocuteur choisi (${choisi}).` };
+    if (choisi && normaliser(choisi) !== normaliser(dirigeant)) return { valeur: null, question: `Quel est le numéro de téléphone unique de l'interlocuteur choisi (${choisi}) ?` };
     return depuisRegistre(c, 'telephone_contact');
   },
   TAUX_REPRISE: () => ({ valeur: null }),
@@ -1426,7 +1426,7 @@ export function publiposter(texte: string, variables: Variables, options: Option
       continue;
     }
     const regle: SiAbsente = def?.si_absente || 'a_completer';
-    const question = v?.question || def?.question || `Valeur à fournir : ${def?.description || nom}.`;
+    const question = v?.question || def?.question || `Quelle valeur faut-il indiquer pour : ${(def?.description || nom).replace(/[.\s]+$/, '')} ?`;
     if (regle === 'repli' && def?.repli) {
       const repli: ValeurVariable = { valeur: def.repli, article: '' };
       if (def.type === 'client' || nom === 'CLIENT') {
@@ -1613,7 +1613,7 @@ export function publierRubrique(mt: MemoireType, rubrique: RubriqueMemoireType, 
   const titreRubrique = rubrique.titre.replace(/\{\{[^}]*\}\}/g, '').replace(/\s*:\s*$/, '').trim();
   const aConfirmer = [...r.aConfirmer];
   for (const q of rubrique.a_confirmer || []) {
-    if (q && q.trim()) aConfirmer.push({ variable: `rubrique:${rubrique.id}`, valeur: '', question: `« ${titreRubrique} » — à confirmer : ${q.trim()}` });
+    if (q && q.trim()) aConfirmer.push({ variable: `rubrique:${rubrique.id}`, valeur: '', question: `« ${titreRubrique} » : ${/\?/.test(q) ? q.trim() : `confirmez-vous ce point : « ${q.trim().replace(/[.\s]+$/, '')} » ?`}` });
   }
   return { ...base, texte, manquantes: r.manquantes, aConfirmer, schema };
 }
