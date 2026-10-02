@@ -25,7 +25,7 @@ import {
   type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, phrasesThematiques, completerParThematiques, textesSchemaSvg, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
-  attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
+  attribuerRubriques, blocRenvois, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides,
 } from './memoire_type_cadre';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
@@ -4652,7 +4652,9 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
       const developpee = buildPrompt(f).includes('[PARAGRAPHE]') && f.kind !== 'checkbox' && !tableau && !!repriseMT && !champValeur(q || demande);
       return {
         developpee,
-        questionMT: `${q || demande} ${critere}`.trim(),
+        // Question qui n'est qu'une consigne de forme (« Le renvoi vers un rapport général… est à proscrire ») : le sujet est
+        // pris dans le titre du champ et ses paragraphes voisins (havre2, mesures sociétales).
+        questionMT: questionUtileChamp(f.context) || `${q || demande} ${critere}`.trim(),
         hors: questionHorsMemoireType(q || demande, critere),
         comprehension: developpee && questionComprehension(q || demande),
         libelle: intitulePrincipal(q || demande),
@@ -7490,11 +7492,8 @@ RÈGLES DE FORME (rendu Marp) :
       const textes: Record<string, string> = {};
       const publiees = publierMemoire(prep);
       for (const p of publiees) if (p.texte && p.mode !== 'besoin') textes[p.id] = p.texte;
-      const question = (d: { context: string }) => {
-        const q = (d.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '';
-        const libelle = q.replace(/[\s.:;,…\-—–/|()]+/g, '').length ? q : (((d.context.match(/Contexte(?: proche)?:\s*"([^"]*)"/) || [])[1] || '').split('/').map((s) => s.trim()).filter(Boolean).pop() || '');
-        return `${libelle} ${(d.context.match(/Critère:\s*"([^"]*)"/) || [])[1] || ''}`.trim();
-      };
+      // Même question que pour la recherche lexicale (consigne de forme remplacée par le sujet du champ).
+      const question = (d: { context: string }) => questionUtileChamp(d.context);
       const developpees = descriptors.filter((d) => d.kind !== 'checkbox' && buildPrompt(d).includes('[PARAGRAPHE]') && question(d));
       const scores = new Map<number, Record<string, number>>();
       if (developpees.length) {

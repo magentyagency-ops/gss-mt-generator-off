@@ -417,6 +417,34 @@ export function champValeur(libelle: string): boolean {
     || (/^\s*(?:si oui|si non|effectifs?\b|nombre (?:de|d['’]))/i.test(p) && mots < 20);
 }
 
+/** Phrase de consigne de FORME du cadre (« Le renvoi vers un rapport général … est à proscrire », « Les réponses doivent être
+ *  rédigées en français », « Pour rappel, seront prises en compte uniquement … ») : elle ne dit pas le sujet de la question. */
+const CONSIGNE_FORME = /^(?:le |tout )?renvoi vers\b|\best à proscrire\b|^les réponses doivent être rédigée?s?\b|^pour rappel\b|^seront prises en compte uniquement\b/i;
+
+/**
+ * Question d'un champ du cadre pour la recherche des rubriques du mémoire type (contexte du champ : « Section: "…" |
+ * Question: "…" | Contexte: "… / …" | Critère: "…" »). Quand la « question » n'est qu'une consigne de forme (havre2, champ
+ * « Mesures et initiatives sociétales » : « Le renvoi vers un rapport général … est à proscrire. Les réponses doivent être
+ * rédigées en Français. »), le sujet est pris dans le titre du champ et ses paragraphes voisins, sans les consignes de
+ * forme (« Cela peut concerner les personnes éloignées de l'emploi …, la lutte contre les discriminations … »). Sinon,
+ * la question telle quelle.
+ */
+export function questionUtileChamp(contexte: string): string {
+  const champ = (nom: string) => (new RegExp(`${nom}:\\s*"([^"]*)"`).exec(String(contexte || '')) || [])[1] || '';
+  const q = champ('Question');
+  const critere = champ('Critère');
+  const proche = champ('Contexte(?: proche)?');
+  const vide = q.replace(/[\s.:;,…\-—–/|()]+/g, '').length === 0;
+  const base = (vide ? proche.split('/').map((x) => x.trim()).filter(Boolean).pop() || '' : q);
+  const utiles = (t: string) => t.split(/(?<=[.!?])\s+/).filter((ph) => ph.trim() && !CONSIGNE_FORME.test(ph.trim())).join(' ').trim();
+  if (base && !utiles(base)) {
+    const voisins = [utiles(proche.replace(/\s+\/\s+/g, ' / ').split(/\s\/\s(?=[A-ZÀ-Ý«])/).join(' '))].filter(Boolean);
+    const sujet = [champ('Section'), ...voisins].filter(Boolean).join(' ').trim();
+    if (sujet) return `${sujet} ${critere}`.trim();
+  }
+  return `${base} ${critere}`.trim();
+}
+
 /** Texte qui représente une rubrique pour la recherche sémantique : titre, mots-clés, début du texte de GSS. */
 export function signatureRubrique(r: RubriqueMemoireType): string {
   return `${r.titre}. ${r.mots_cles.join(', ')}. ${texteBrut(String(r.texte || '').replace(/\{\{[^}]*\}\}/g, ' ')).slice(0, 1200)}`;
