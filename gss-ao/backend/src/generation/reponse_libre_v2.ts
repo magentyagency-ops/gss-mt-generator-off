@@ -596,7 +596,14 @@ export const court = (t: unknown, max: number): string => {
   const entoure = /^[«"“]\s*([^«»"“”]*?)\s*[»"”]$/.exec(s);
   if (entoure) s = entoure[1].trim();
   if (s.length <= max) return s;
-  const coupe = s.slice(0, max + 1).replace(/\s+\S*$/, '');
+  let coupe = s.slice(0, max + 1).replace(/\s+\S*$/, '');
+  // Coupe au milieu d'une citation ou d'une parenthèse (caen 475 : « …l'intervention via « Notre socle de procédures » sans
+  // guillemet fermant, schéma refusé) : arrêtée avant la citation, sans la préposition qui l'introduisait.
+  const ouverte = (o: string, f: string) => coupe.split(o).length > coupe.split(f).length;
+  for (const [o, f] of [['«', '»'], ['(', ')'], ['“', '”']]) {
+    if (!ouverte(o, f)) continue;
+    coupe = coupe.slice(0, coupe.lastIndexOf(o)).replace(/\s+(?:via|avec|par|de|du|des|d['’]|à|au|aux|et|ou|en|dans|sur|pour|selon|le|la|les|l['’])\s*$/i, '').trimEnd();
+  }
   return coupe.replace(/[,;:\s]+$/, '');
 };
 
@@ -969,7 +976,10 @@ export function sansRenvoiBloc(y: string): string {
   t = t.slice(0, k);
   const QUEUE = /(?:\s*[,;:(]\s*|\s+(?:suit|suivent|suivant|selon|conform[ée]ment|d['’]apr[èe]s|[àa]|au|aux|le|la|les|l['’]|du|des|de|dans|en|processus|proc[ée]dures?|process|d[ée]crite?s?|d[ée]taill[ée]e?s?|d[ée]velopp[ée]e?s?|trait[ée]e?s?|pr[ée]sent[ée]e?s?|expos[ée]e?s?|expliqu[ée]e?s?|voir|cf\.?|et|est|sont|sera|seront|qui))+\s*$/i;
   for (let i = 0; i < 6 && QUEUE.test(` ${t}`); i++) t = ` ${t}`.replace(QUEUE, '').trim();
-  t = t.replace(/[\s,;:(«»"]+$/, '').trim();
+  // Guillemet fermant d'une citation gardée (caen 475 : « …avec « La planification », développée au bloc 4 » donnait
+  // « …avec « La planification », citation ouverte, étape coupée en « Nous organisons la disponibilité »).
+  t = t.replace(/[\s,;:(«"]+$/, '').trim();
+  while (/»$/.test(t) && t.split('»').length > t.split('«').length) t = t.replace(/[\s»]+$/, '').replace(/[\s,;:(«"]+$/, '').trim();
   return t.split(/\s+/).filter((w) => /[\p{L}\d]/u.test(w)).length >= 3 ? t : '';
 }
 
@@ -1050,7 +1060,8 @@ export function completerResultatBesoin(etapes: Array<{ titre?: string; texte?: 
   // Défauts qui portent tous sur la dernière étape (caen 441 : « étape 5 : la phrase reprend le titre de l'étape » et
   // « étape 5 : la dernière étape doit dire le résultat ») : l'étape est remplacée par « Votre résultat » tiré du texte,
   // au lieu de refuser tout le schéma.
-  const derniere = (d: string) => /la dernière étape doit dire le résultat/.test(d) || d.startsWith(`étape ${etapes.length} :`);
+  // Défauts de fond (« étape 5 : … ») et anomalies de forme (« étape 5 « Titre » : … », caen 475).
+  const derniere = (d: string) => /la dernière étape doit dire le résultat/.test(d) || d.startsWith(`étape ${etapes.length} :`) || d.startsWith(`étape ${etapes.length} «`);
   if (!defauts.every(derniere)) return null;
   const autreQueResultat = defauts.some((d) => !/la dernière étape doit dire le résultat/.test(d));
   const gardees = etapes.slice(0, autreQueResultat ? Math.min(4, etapes.length - 1) : 4).map((e) => ({ titre: String(e?.titre || '').trim(), texte: String(e?.texte || '').trim(), role: String(e?.role || '').toLowerCase() === 'vert' ? 'bleu' : String(e?.role || '') }));
@@ -1185,6 +1196,16 @@ function rubriqueCitee(x: string): string {
  * guillemets ni leur sous-titre, article d'un titre en minuscule au milieu de la phrase (« par la planification et le
  * contrôleur de rondes »). Le moteur de schémas compare les mots, pas la casse.
  */
+/** Renvoi final à une rubrique qui redit un nom déjà dans la phrase (« …la planification des moyens avec la planification »,
+ *  caen 475) : retiré. */
+export function sansRenvoiRedondant(y: string): string {
+  const t = String(y || '').trim();
+  const m = /^(.*\S)\s+(?:avec|via|par|gr[âa]ce [àa])\s+(?:le|la|les|l['’]|notre|nos)\s*([^,;.]{3,80})[.]?$/i.exec(t);
+  if (!m) return t;
+  const plein = normaliser(m[2]).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).find((w) => w.length >= 4 && !MOTS_OUTILS.has(w));
+  return plein && normaliser(m[1]).includes(plein) && m[1].split(/\s+/).length >= 4 ? m[1] : t;
+}
+
 export function reponsePourSchema(y: string): string {
   let t = String(y || '').replace(/\*\*\s*«\s*([^»*]+?)\s*»\s*\*\*/g, '« $1 »').replace(/\*\*([^*]+)\*\*/g, (_m, x: string) => (/^[A-ZÀ-Ý]/.test(x.trim()) ? rubriqueCitee(x) : x)).replace(/\*\*/g, '');
   // Titre entre guillemets employé comme groupe nominal (en tête, après « par », « et », « sur »…) : sans guillemets ;
@@ -1210,6 +1231,13 @@ export function texteEtapeCoordination(y: string, max = 86): string {
   const t = String(y || '').replace(/\s+/g, ' ').replace(/[.;,:\s]+$/, '').trim();
   const entier = texteEtapeEntier(t, max);
   if (entier) return entier;
+  // Renvoi final à une rubrique (« …la disponibilité et la planification des moyens avec « La planification » », caen 475) :
+  // retiré avant toute coupe, la phrase reste entière (jamais « Nous organisons la disponibilité »).
+  const sansRenvoi = t.replace(/\s+(?:avec|via|par|gr[âa]ce [àa]|dans|selon)\s+«[^»]{3,120}»(?:\s*,?\s*(?:d[ée]velopp|d[ée]taill|d[ée]crit|trait|pr[ée]sent)[a-zéè]*\s+(?:au|aux|dans les?)\s+blocs?\s+\d+(?:\s*(?:,|et)\s*\d+)*)?$/i, '').trim();
+  if (sansRenvoi !== t) {
+    const e = texteEtapeEntier(sansRenvoi, max);
+    if (e) return e;
+  }
   let meilleur = '';
   for (const m of t.matchAll(/\s+(?:et|ainsi que)\s+(?=(?:le|la|les|l['’]|un|une|des|du|son|sa|ses|leur|leurs|notre|nos)\b)/gi)) {
     const pre = t.slice(0, m.index).trim();
@@ -1297,7 +1325,7 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
       // le renvoi était toute la réponse.
       // Réponse sans « ** » ni guillemets autour des titres de rubrique (caen 471 : « **La planification** » imprimé tel
       // quel ; imm 473 : guillemet ouvrant perdu, « Le livre … (LMC) » structure… »).
-      .map((m) => ({ x: m.x.replace(/\*\*/g, '').trim(), y: reponsePourSchema(sansRenvoiBloc(sansIncisesRenvoi(m.y).split(/\s*;\s*/)[0]).replace(/\s+(?:est|sont|sera|seront)$/i, '').trim()), citation: m.citation }))
+      .map((m) => ({ x: m.x.replace(/\*\*/g, '').trim(), y: sansRenvoiRedondant(reponsePourSchema(sansRenvoiBloc(sansIncisesRenvoi(m.y).split(/\s*;\s*/)[0]).replace(/\s+(?:est|sont|sera|seront)$/i, '').trim())), citation: m.citation }))
       .filter((c) => c.y);
   };
   const vigilance = puces(/^##\s+Les points de vigilance/i);

@@ -7865,7 +7865,15 @@ RÈGLES DE FORME (rendu Marp) :
       // (seul défaut des étapes du modèle : la dernière étape ; l'étape ajoutée « Votre résultat » est le vocabulaire du moteur)
       if (completees) { etapes = completees; d = []; }
       const spec = d.length ? null : specProcessBesoin(etapes, 'flux');
-      return { etapes, defauts: d.length ? d : spec ? anomaliesSchemaBloc1(spec) : ['étapes absentes ou incomplètes'] };
+      const anomalies = d.length ? d : spec ? anomaliesSchemaBloc1(spec) : ['étapes absentes ou incomplètes'];
+      // Anomalies de forme qui ne portent que sur la dernière étape (caen 475 : « étape 5 « Continuité des prestations » : le
+      // texte redit le titre ») : étape remplacée par « Votre résultat » tiré du texte, au lieu de refuser tout le schéma (T4N-7).
+      if (!d.length && spec && anomalies.length) {
+        const derniere = completerResultatBesoin(spec.params.etapes, texte, anomalies);
+        const spec2 = derniere ? specProcessBesoin(derniere, 'flux') : null;
+        if (spec2 && !anomaliesSchemaBloc1(spec2).length) return { etapes: derniere, defauts: [] };
+      }
+      return { etapes, defauts: anomalies };
     };
     const initiales = secours ? { etapes: null, defauts: [] as string[] } : etapesRecevables(rep?.etapes);
     const defautsInitiaux = initiales.defauts;
