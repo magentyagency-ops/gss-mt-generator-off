@@ -35,11 +35,23 @@ export interface ProfilDimensionne {
 
 export interface LigneCasPratique { plage: string; profil: string; enService: number; rotation: number; dureeH: number; justification: string }
 
+/** Fonction d'un dispositif événementiel proposé (chef de site, agents au filtrage, agents de comptage…). */
+export interface FonctionEvenement { fonction: string; nombre: number; justification: string }
+
+/**
+ * Mise en situation événementielle du DCE (vitry 202 : forum et concert jusqu'à 10 000 personnes) : le dispositif que GSS
+ * PROPOSE (D5, proposition à valider), fonction par fonction, avec les postes d'inspection filtrage (PIF) et les
+ * détecteurs de métaux quand le DCE les demande.
+ */
+export interface MiseEnSituation { libelle: string; capacite: number | null; fonctions: FonctionEvenement[]; total: number; pif: number | null; detecteurs: number | null }
+
 export interface Dimensionnement {
   profils: ProfilDimensionne[];
   titulaires: number;
   suppleants: number;
   casPratique: LigneCasPratique[];
+  /** Mises en situation événementielles (dispositif proposé par GSS, à valider). */
+  misesEnSituation?: MiseEnSituation[];
 }
 
 /** « 7h00 », « 07:00 », « 19 h », « 1h » → heures décimales ; NaN si illisible. */
@@ -171,6 +183,7 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     if (!plage || !profil || !d || !Number.isInteger(n) || n < 0 || n > 10) continue;
     casPratique.push({ plage, profil, enService: n, rotation: n * Math.ceil(d / VACATION_MAX_H), dureeH: d, justification: String(l?.justification || '').trim() });
   }
+  const misesEnSituation = lireMisesEnSituation(rep?.mises_en_situation, dce, dceMots);
   // Accord-cadre sans poste permanent, avec un cas pratique : l'équipe proposée est celle du cas pratique (pour chaque
   // profil, l'effectif nécessaire à la rotation sur la plage la plus exigeante).
   if (!profils.size && casPratique.length) {
@@ -182,10 +195,61 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
       profils.set(cle, x);
     }
     const t = [...profils.values()].reduce((s2, x) => s2 + x.titulaires, 0);
-    return { profils: [...profils.values()], titulaires: t, suppleants: t ? Math.max(2, Math.ceil(t * PART_SUPPLEANTS)) : 0, casPratique };
+    return { profils: [...profils.values()], titulaires: t, suppleants: t ? Math.max(2, Math.ceil(t * PART_SUPPLEANTS)) : 0, casPratique, ...(misesEnSituation.length ? { misesEnSituation } : {}) };
   }
-  if (!profils.size && !casPratique.length) return null;
-  return { profils: [...profils.values()], titulaires, suppleants, casPratique };
+  if (!profils.size && !casPratique.length && !misesEnSituation.length) return null;
+  return { profils: [...profils.values()], titulaires, suppleants, casPratique, ...(misesEnSituation.length ? { misesEnSituation } : {}) };
+}
+
+/**
+ * Mises en situation événementielles relevées par le modèle (`mises_en_situation`) : gardées seulement si leur citation
+ * vient du DCE (six mots consécutifs), si la capacité d'accueil annoncée figure dans le DCE, et si chaque nombre est un
+ * entier plausible (fonction : 0 à 300 agents ; PIF et détecteurs : 0 à 100). Le total est calculé ici.
+ */
+export function lireMisesEnSituation(brut: unknown, dce: string, dceMots = ` ${normaliser(String(dce || '')).replace(/[^a-z0-9]+/g, ' ').trim()} `): MiseEnSituation[] {
+  const entier = (x: unknown, max: number): number | null => { const n = Number(x); return Number.isInteger(n) && n >= 0 && n <= max ? n : null; };
+  const chiffresDce = String(dce || '').replace(/(\d)[\s\u00a0\u202f](?=\d{3}\b)/g, '$1');
+  const out: MiseEnSituation[] = [];
+  for (const m of Array.isArray(brut) ? brut : []) {
+    const libelle = String(m?.libelle || '').replace(/\s+/g, ' ').trim();
+    if (!libelle || !citationDansDce(String(m?.citation || ''), dceMots)) continue;
+    const cap = entier(m?.capacite, 1_000_000);
+    const capacite = cap && new RegExp(`(?<![\\d])${cap}(?![\\d])`).test(chiffresDce) ? cap : null;
+    const fonctions: FonctionEvenement[] = [];
+    for (const f of Array.isArray(m?.dispositif) ? m.dispositif : []) {
+      const fonction = String(f?.fonction || '').replace(/\s+/g, ' ').trim();
+      const nombre = entier(f?.nombre, 300);
+      if (!fonction || nombre === null || nombre === 0) continue;
+      fonctions.push({ fonction, nombre, justification: String(f?.justification || '').replace(/\s+/g, ' ').trim() });
+    }
+    const total = fonctions.reduce((a, f) => a + f.nombre, 0);
+    if (!total) continue;
+    out.push({ libelle, capacite, fonctions, total, pif: entier(m?.pif, 100), detecteurs: entier(m?.detecteurs, 100) });
+  }
+  return out;
+}
+
+/** « 24 agents, dont 2 chefs de site et 14 agents au filtrage ; 6 PIF ; 6 détecteurs de métaux » (dispositif d'une mise en situation). */
+export function dispositifMiseEnSituation(m: MiseEnSituation): string {
+  const fonctions = m.fonctions.map((f) => effectifProfil(f.nombre, f.fonction));
+  return `${pluriel(m.total, 'agent')} en service (${fonctions.join(', ')})${m.pif !== null ? ` ; ${pluriel(m.pif, 'poste d\'inspection filtrage (PIF)', 'postes d\'inspection filtrage (PIF)')}` : ''}${m.detecteurs !== null ? ` ; ${pluriel(m.detecteurs, 'détecteur de métaux', 'détecteurs de métaux')}` : ''}`;
+}
+
+/** Question exacte posée à GSS pour chaque mise en situation (proposition à valider, D5). */
+export function questionsMisesEnSituation(d: Dimensionnement | null | undefined): string[] {
+  return (d?.misesEnSituation || []).map((m) => `Proposition à valider : ${m.libelle}${m.capacite ? ` (jusqu'à ${String(m.capacite).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')} personnes)` : ''} : validez-vous ${dispositifMiseEnSituation(m)} ?`);
+}
+
+/**
+ * Réponse à une mise en situation qui ne donne pas le nombre demandé (vitry 202 : « Le nombre d'agents… est établi à
+ * partir du plan… », sans aucun nombre) : le dispositif proposé de chaque mise en situation est ajouté, en lignes
+ * entières, après le texte. Rien n'est ajouté si chaque total figure déjà dans la réponse.
+ */
+export function completerMisesEnSituation(texte: string, d: Dimensionnement | null | undefined): { texte: string; n: number } {
+  const ms = d?.misesEnSituation || [];
+  const manque = ms.filter((m) => !new RegExp(`(?<![\\d])${m.total}\\s+agents?\\b`).test(texte));
+  if (!manque.length) return { texte, n: 0 };
+  return { texte: `${String(texte || '').trimEnd()}\n\nDispositif proposé :\n${manque.map((m) => `• ${m.libelle} : ${dispositifMiseEnSituation(m)}.`).join('\n')}`, n: manque.length };
 }
 
 /** « 2 agent de sécurité » → « 2 agents de sécurité », « 2 maître-chien » → « 2 maîtres-chiens ». */
@@ -259,6 +323,7 @@ export function texteDimensionnement(d: Dimensionnement): string {
   const etp = d.profils.filter((x) => !x.observation).reduce((a, x) => a + x.etp, 0);
   if (etp > 0) l.push(`- Total des postes : ${fr(etp)} ETP (à reprendre là où un nombre d'agents en ETP est demandé).`);
   if (d.profils.length) l.push(`- Tableau des moyens humains par site : une cellule par site, au même format pour toutes (postes et horaires du CCTP pour ce site), sans répartir l'équipe suppléante entre les sites (elle se cite une seule fois, pour tout le marché).`);
+  for (const m of d.misesEnSituation || []) l.push(`- ${m.libelle} (proposition de GSS à valider) : ${dispositifMiseEnSituation(m)}. Reprends ces nombres EXACTEMENT dans la réponse à cette mise en situation (nombre d'agents, catégories de personnel, PIF, détecteurs de métaux).`);
   if (d.casPratique.length) {
     l.push(`- Cas pratique (effectif en service et effectif nécessaire pour la rotation, vacations de ${VACATION_MAX_H} heures au plus) :`);
     for (const x of d.casPratique) l.push(`  • ${x.plage} | ${x.profil} | en service : ${x.enService} | rotation : ${x.rotation}${x.justification ? ` — ${x.justification}` : ''}`);
@@ -309,7 +374,20 @@ export function extraitDimensionnement(dce: string, cadre = '', max = 90_000): s
     const nom = blocs[i] || blocs[i + 1] || '';
     const corps = blocs[i + 2] || '';
     const n = `${nom} ${nom.replace(/[_.\s-]+/g, '')}`;
-    if (/ccap|\bRC\b|r[èe]glement|acte d.engagement|\bAE\b|d[ée]claration|attestation|candidature/i.test(n)) continue;
+    if (/ccap|\bRC\b|r[èe]glement|acte d.engagement|\bAE\b|d[ée]claration|attestation|candidature/i.test(n)) {
+      // Règlement de consultation : seulement les passages d'une mise en situation ou d'un cas pratique (vitry 202 : le
+      // forum et le concert, capacité de 10 000 personnes, ne sont décrits que dans le tableau des critères du RC).
+      if (/\bRC\b|r[èe]glement/i.test(n)) {
+        const passages: string[] = [];
+        for (const m of corps.matchAll(/mises? en situation|cas pratiques?/gi)) {
+          const debut = Math.max(0, (m.index || 0) - 200);
+          if (passages.length && debut < Number(passages[passages.length - 1].split('|')[0]) + 1800) continue;
+          passages.push(`${debut}|${corps.slice(debut, debut + 2200)}`);
+        }
+        if (passages.length) avant.push(`=== ${nom} (passages : mises en situation) ===\n${passages.map((x) => x.split('|').slice(1).join('|')).join('\n[…]\n')}`);
+      }
+      continue;
+    }
     // Volumes horaires et plannings d'abord (courts), puis le CCTP.
     if (/dqe|bpu|bordereau|planning|annexe|cadre|m[ée]moire/i.test(n)) avant.push(`=== ${nom} ===\n${corps}`);
     else apres.push(`=== ${nom} ===\n${corps}`);
@@ -331,13 +409,20 @@ export const CONSIGNE_DIMENSIONNEMENT = `Tu lis le DCE d'un marché de sécurit�
 2. "cas_pratique" : seulement si le DCE ou le cadre de réponse pose un cas pratique ou une mise en situation qui demande le nombre d'agents par plage (sinon null). Ici, et seulement ici, tu PROPOSES le dispositif de GSS : c'est ce que l'acheteur demande au candidat.
    - "plages" : [{"libelle": "Dimanche férié, 6 h–21 h", "debut": "06:00", "fin": "21:00"}, …], libellés courts (jour et horaires) ;
    - "dispositif" (OBLIGATOIRE, jamais vide) : une entrée pour CHAQUE plage et CHAQUE profil demandé (agent de sécurité, maître-chien, agent de sécurité incendie, encadrant…), {"plage": "<libelle exact de la plage>", "profil": "<profil du DCE>", "en_service": <entier>, "justification": "<une phrase>"} : l'effectif EN SERVICE que GSS propose, argumenté par le site décrit (surface, nombre de bâtiments, accès, clôture, quartier, risques de jour et de nuit) ; 0 si le profil n'est pas utile sur cette plage (dis pourquoi). Un maître-chien travaille en binôme avec son chien ; un encadrant peut passer ponctuellement (0 en service, contrôle par passage).
-Réponds UNIQUEMENT par un objet JSON : {"postes": [...], "cas_pratique": {...} ou null}`;
+3. "mises_en_situation" : seulement si le DCE (règlement de consultation ou cadre de réponse) décrit une mise en situation ou un cas pratique ÉVÉNEMENTIEL (forum, concert, salon, manifestation : capacité d'accueil, plein air, nocturne…) et demande le nombre d'agents et les catégories de personnel (sinon []). Ici aussi tu PROPOSES le dispositif de GSS, une entrée par mise en situation :
+   - "libelle" : nom court, ex. « Mise en situation 1 : forum des associations (journée, plein air, enceinte fermée) » ;
+   - "citation" : la phrase du DCE qui la décrit, recopiée mot pour mot ;
+   - "capacite" : la capacité maximale d'accueil du public écrite dans le DCE (entier), sinon null ;
+   - "dispositif" : [{"fonction": "Chef de site", "nombre": <entier>, "justification": "<une phrase>"}, {"fonction": "Agent de sécurité au filtrage des accès", …}, {"fonction": "Agent de sécurité en surveillance et rondes", …}, …] : l'effectif EN SERVICE par fonction, argumenté par la capacité, les accès et issues, le plein air, la nuit, les risques (feu d'artifice, foule) ; uniquement des fonctions de sécurité privée ;
+   - "pif" : le nombre de postes d'inspection filtrage proposés (entier), null si le DCE ne les demande pas ; "detecteurs" : le nombre de détecteurs de métaux (entier), null si le DCE ne les demande pas.
+Réponds UNIQUEMENT par un objet JSON : {"postes": [...], "cas_pratique": {...} ou null, "mises_en_situation": [...]}`;
 
 /** Paragraphe du premier message de l'assistant : le dimensionnement proposé, à valider ou à modifier avant la remise. */
 export function messageDimensionnement(d: Dimensionnement): string {
   const l: string[] = ['J\'ai aussi proposé les effectifs, calculés à partir des postes et des horaires du cahier des charges (à relire avant la remise) :'];
   for (const x of d.profils) l.push(x.observation ? `- ${x.profil} : ${pluriel(x.titulaires, 'titulaire')} (${x.observation}) ;` : `- ${x.profil} : ${fr(x.heuresSemaine)} h par semaine, soit ${fr(x.etp)} ETP → ${pluriel(x.titulaires, 'titulaire')} ;`);
   if (d.profils.length) l.push(`- équipe dédiée de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} et équipe suppléante de ${pluriel(d.suppleants, 'agent formé', 'agents formés')} au site ;`);
+  for (const m of d.misesEnSituation || []) l.push(`- ${m.libelle.charAt(0).toLowerCase()}${m.libelle.slice(1)} : ${dispositifMiseEnSituation(m)} ;`);
   for (const p of [...new Set(d.casPratique.map((x) => x.plage))]) l.push(`- cas pratique, ${p} : ${d.casPratique.filter((x) => x.plage === p && x.enService > 0).map((x) => `${effectifProfil(x.enService, x.profil)} (rotation ${x.rotation})`).join(', ') || 'aucun agent'} ;`);
   l.push('', 'Vous pouvez les valider (« Je valide les effectifs proposés ») ou les modifier (« Mets 7 agents SSIAP 2 dans l\'équipe dédiée »).');
   return l.join('\n');

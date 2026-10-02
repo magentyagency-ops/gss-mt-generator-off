@@ -20,7 +20,7 @@ import {
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, planSelonRC, passagesPlanImpose, controlerProposition,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
-import { CONSIGNE_DIMENSIONNEMENT, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, type Dimensionnement } from './dimensionnement';
+import { CONSIGNE_DIMENSIONNEMENT, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, type Dimensionnement } from './dimensionnement';
 import {
   type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
@@ -5207,6 +5207,22 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       r.value = nettoyerChampCadre(delais.texte).trim() || (retires.length || delais.retires.length || recopie.retires.length ? '[À COMPLÉTER]' : r.value);
       // Cas pratique : cases « en service : [À COMPLÉTER] | rotation : [À COMPLÉTER] » remplies avec le dispositif proposé.
       if (dimensionnementCadre) r.value = remplirCasPratique(String(r.value), dimensionnementCadre).texte;
+      // Mise en situation événementielle (vitry 202 : forum et concert jusqu'à 10 000 personnes) : la réponse donne le nombre
+      // d'agents, les catégories, les PIF et les détecteurs demandés ; sans dispositif proposé, le nombre est demandé à GSS.
+      {
+        const d = descriptors.find((x) => x.id === r.id);
+        const intitule = intitulePrincipal(((d?.context || '').match(/Question:\s*"([^"]*)"/) || [])[1] || '');
+        if (d && d.kind !== 'checkbox' && /mises? en situation/i.test(intitule) && !/barri[eè]rage|sch[ée]ma|plan/i.test(intitule) && String(r.value ?? '').length >= 200) {
+          if (dimensionnementCadre?.misesEnSituation?.length) {
+            const c = completerMisesEnSituation(String(r.value), dimensionnementCadre);
+            if (c.n) console.log(`[MemoireGenerator] Champ ${r.id} : dispositif proposé de ${c.n} mise(s) en situation ajouté (nombre d'agents absent de la réponse).`);
+            r.value = c.texte;
+          } else if (!dimensionnementCadre?.casPratique.length && !/\d+\s+agents?\b/.test(String(r.value))) {
+            r.value = `${String(r.value).trimEnd()}\n\nNombre d'agents mis en place, catégories de personnel, nombre de PIF et de détecteurs de métaux, pour chaque mise en situation : [À COMPLÉTER].`;
+            console.log(`[MemoireGenerator] Champ ${r.id} : mise en situation sans dispositif proposé, nombre d'agents demandé à GSS.`);
+          }
+        }
+      }
       // Nom de l'acheteur écrit d'une seule façon (graphie de la variable CLIENT).
       if (repriseMT?.prep.variables.CLIENT?.valeur) r.value = harmoniserNomClient(String(r.value), String(repriseMT.prep.variables.CLIENT.valeur));
       if (recopie.retires.length) console.log(`[MemoireGenerator] Champ ${r.id} : ${recopie.retires.length} phrase(s) du CCTP recopiée(s) à la voix de l'acheteur retirée(s).`);
@@ -5226,7 +5242,12 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     // Valeurs du registre encore « à confirmer » reprises dans le document : GSS est prévenu.
     confirmationsRegistreUtilisees(replacements.map((r) => String(r.value ?? '')).join('\n'), marcheHorsNormandie(analysisData, dceContext)).forEach((c) => confirmationsGss.add(c));
     // Dimensionnement proposé et repris dans le document : une seule question à GSS (proposition à valider).
-    if (dimensionnementCadre && replacements.some((r) => dimensionnementCadre.casPratique.some((x) => String(r.value ?? '').includes(`en service : ${x.enService}`)) || (dimensionnementCadre.titulaires && new RegExp(`\\b${dimensionnementCadre.titulaires} agents? titulaires`).test(String(r.value ?? ''))))) confirmationsGss.add(questionDimensionnement(dimensionnementCadre));
+    if (dimensionnementCadre && (dimensionnementCadre.profils.length || dimensionnementCadre.casPratique.length) && replacements.some((r) => dimensionnementCadre.casPratique.some((x) => String(r.value ?? '').includes(`en service : ${x.enService}`)) || (dimensionnementCadre.titulaires && new RegExp(`\\b${dimensionnementCadre.titulaires} agents? titulaires`).test(String(r.value ?? ''))))) confirmationsGss.add(questionDimensionnement(dimensionnementCadre));
+    // Mises en situation : une question par dispositif proposé et repris dans une réponse (proposition à valider, D5).
+    if (dimensionnementCadre?.misesEnSituation?.length) {
+      const textes = replacements.map((r) => String(r.value ?? '')).join('\n');
+      questionsMisesEnSituation(dimensionnementCadre).forEach((q, i) => { if (new RegExp(`(?<![\\d])${dimensionnementCadre.misesEnSituation![i].total}\\s+agents?\\b`).test(textes)) confirmationsGss.add(q); });
+    }
     console.log(`[MemoireGenerator] GPT a renvoyé ${replacements.length} valeurs au total.`);
     if (repriseMT) console.log(`[MemoireGenerator] Mémoire type : ${repriseParChamp.size} réponse(s) développée(s) reprise(s) (${[...repriseParChamp.entries()].map(([id, r]) => `champ ${id} ← ${r.ids.join('+')} ${r.fidelite.toFixed(2)}`).join(' ; ') || 'aucune'}), ${[...propositionsCadre.values()].filter((c) => /^Proposition/.test(c)).length} proposition(s) hors mémoire type.`);
     setProgress(dossierId, { phase: 'finalisation', pct: 94, label: 'Application des réponses au cadre…' });
@@ -5956,7 +5977,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       // Premier message de l'assistant : propositions de réponse et réponses à relire, validables ou modifiables (D5).
       // Aucun repère technique (« GSS_CH_n ») montré à GSS : l'assistant retrouve chaque réponse par son libellé.
       const aRelire = [...propositionsCadre.entries()].filter(([id]) => champsRediges.includes(id)).sort((a, b) => a[0] - b[0]);
-      const dimRepris = dimensionnementCadre && [...confirmationsGss].some((c) => c.startsWith('Proposition à valider : dimensionnement'));
+      const dimRepris = dimensionnementCadre && [...confirmationsGss].some((c) => c.startsWith('Proposition à valider : dimensionnement') || questionsMisesEnSituation(dimensionnementCadre).includes(c));
       const conversation = aRelire.length || dimRepris ? [{ role: 'assistant' as const, date: new Date().toISOString(), texte: [
         ...(aRelire.length ? [
           `J'ai rempli le cadre de réponse avec le mémoire type de GSS. ${aRelire.length === 1 ? 'Une réponse est à relire' : `${aRelire.length} réponses sont à relire`} avant la remise :`,
