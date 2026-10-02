@@ -108,10 +108,19 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     // Volume du DQE (« TOTAL HEBDOMADAIRE | 84 ») : prioritaire sur les plages (un bordereau liste toutes les plages
     // facturables, le DQE les heures réellement estimées), pris seulement si ce nombre figure dans le DCE.
     const hh = nombre(p?.heures_hebdo);
-    let hs = hh && new RegExp(`(?<![\\d,.])${hh}(?![\\d,.])`).test(dce) ? hh : plages.length ? heuresSemaine(plages) : 0;
+    const hebdoDuDce = !!hh && new RegExp(`(?<![\\d,.])${hh}(?![\\d,.])`).test(dce);
+    let hs = hebdoDuDce ? hh : plages.length ? heuresSemaine(plages) : 0;
     if (!hs || hs > 24 * 7 * 6) continue;
     const ha = nombre(p?.heures_an);
-    const heuresAn = ha && new RegExp(`(?<![\\d,.])${ha}(?![\\d,.])`).test(dce.replace(/(\d)[\s  ](?=\d{3}\b)/g, '$1')) ? ha : Math.round(hs * 52);
+    const anDuDce = !!ha && new RegExp(`(?<![\\d,.])${ha}(?![\\d,.])`).test(dce.replace(/(\d)[\s  ](?=\d{3}\b)/g, '$1'));
+    const heuresAn = anDuDce ? ha : Math.round(hs * 52);
+    // Volume annuel du DCE : les heures par semaine affichées en découlent (ifits 171 : « 84 h par semaine » tirées des
+    // plages alors que le DCE prévoit 1 751 h par an, environ 34 h par semaine) ; jamais deux chiffres contradictoires.
+    // Le volume hebdomadaire du DQE (saison de 47 semaines, Citédia) reste celui du DCE.
+    if (anDuDce && !hebdoDuDce && hs > 1.5 * (ha / 52)) {
+      console.log(`[Dimensionnement] ${profil} : ${hs} h/sem d'après les plages, ${ha} h/an dans le DCE → ${Math.round((ha / 52) * 100) / 100} h/sem retenues.`);
+      hs = Math.round((ha / 52) * 100) / 100;
+    }
     const qualification = String(p?.qualification || profil).replace(/\s+/g, ' ').trim();
     const cle = normaliser(`${profil}|${qualification}`);
     const x = profils.get(cle) || { profil, qualification, lieux: [], heuresSemaine: 0, heuresAn: 0, etp: 0, titulaires: 0 };
@@ -215,7 +224,7 @@ export function syntheseCasPratique(d: Dimensionnement): string {
 export function questionDimensionnement(d: Dimensionnement): string {
   const parts: string[] = [];
   if (d.profils.length && !d.profils.some((x) => x.observation)) {
-    parts.push(`équipe dédiée de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} (${d.profils.map((x) => `${x.titulaires} ${normaliser(categorieDe(x.profil)) === normaliser(x.profil) ? categorieDe(x.profil) : `${x.profil} (${categorieDe(x.profil).toLowerCase()})`} pour ${fr(x.heuresSemaine)} h par semaine`).join(', ')}, base de 1 607 heures par an et par ETP) et équipe suppléante de ${pluriel(d.suppleants, 'agent formé', 'agents formés')} au site`);
+    parts.push(`équipe dédiée de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} (${d.profils.map((x) => `${normaliser(categorieDe(x.profil)) === normaliser(x.profil) ? categorieDe(x.profil) : `${x.profil} (${categorieDe(x.profil).toLowerCase()})`} : ${pluriel(x.titulaires, 'titulaire')} pour ${fr(x.heuresSemaine)} h par semaine`).join(' ; ')}, base de 1 607 heures par an et par ETP) et équipe suppléante de ${pluriel(d.suppleants, 'agent formé', 'agents formés')} au site`);
   }
   if (d.casPratique.length) parts.push(`dispositif du cas pratique (${syntheseCasPratique(d)} ; vacations de ${VACATION_MAX_H} heures au plus)${d.titulaires ? `, d'où une équipe de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} (${d.profils.map((x) => effectifProfil(x.titulaires, x.profil)).join(', ')}) et une équipe suppléante de ${pluriel(d.suppleants, 'agent', 'agents')}` : ''}`);
   return `Proposition à valider : dimensionnement calculé à partir des postes et des horaires du DCE — ${parts.join(' ; ')}. GSS valide ces effectifs ou les modifie dans l'assistant.`;
