@@ -17,12 +17,12 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces,
-  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1,
+  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, planSelonRC, passagesPlanImpose,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, type Dimensionnement } from './dimensionnement';
 import {
-  candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp,
+  type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
@@ -6444,7 +6444,11 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
     // Réponse libre v2 (refonte 2026-10) : le mémoire type de GSS en 5 blocs, personnalisé par publipostage et adapté au
     // CCTP. Retour arrière : GSS_MEMOIRE_TYPE=non → rédaction rubrique par rubrique du plan v1 ci-dessous, inchangée.
     const memoireType = this.memoireTypeV2();
-    if (memoireType) return this.genererReponseLibreV2(dossierId, dceContext, analysisData, memoireType, onProgress);
+    if (memoireType) {
+      // Ordre imposé par le RC sans limite de pages (consigne 5 : seule la construction change).
+      const planImpose = await this.detecterPlanImpose(dceContext);
+      return this.genererReponseLibreV2(dossierId, dceContext, analysisData, memoireType, onProgress, planImpose);
+    }
     const analysisJson = JSON.stringify(analysisData, null, 2);
     const clientName = analysisData?.clientName || 'le client';
 
@@ -6756,6 +6760,7 @@ RÈGLES DE FORME (rendu Marp) :
     analysisData: any,
     mt: MemoireType,
     onProgress?: (progress: number, message: string, status?: string) => void,
+    planImpose: PartieRC[] | null = null,
   ): Promise<{ filePath: string, generatedData: Record<string, string>, consultations: string[] }> {
     console.log('[MemoireGenerator] ═══ Réponse libre v2 : mémoire type en 5 blocs ═══');
     // Vocabulaire du CCTP (« chef de poste ») aussi dans les titres et les textes des schémas dessinés (génération ign 12).
@@ -6795,6 +6800,17 @@ RÈGLES DE FORME (rendu Marp) :
     }
     const plan = prep.plan;
     plan.vocabulaireSchemas = vocabulaireSchemas(dceContext);
+    // Plan imposé par le RC (ordre et numérotation des pièces, sans limite de pages) : les blocs deviennent les parties du
+    // RC ; chaque rubrique du mémoire type va dans la partie qui la reçoit (répartition du format court, rubriques que le
+    // modèle ne place pas gardées dans leur bloc d'origine) ; un élément attendu qu'aucune rubrique ne traite est demandé à GSS.
+    const questionsRC: string[] = [];
+    if (planImpose?.length) {
+      const repRC = lireRepartition((await this.callOpenAI(consigneRepartition(mt, plan, planImpose), 0.1, 'Plan imposé par le RC : répartition du mémoire type', true, 'analyse')) || '', mt, plan, planImpose);
+      const secondaires = new Set(repRC.source === 'modele' ? repRC.secondaires : []);
+      const parPartie = Object.fromEntries(Object.entries(repRC.parPartie).map(([k, l]) => [k, l.filter((id) => !secondaires.has(id))]));
+      Object.assign(plan, planSelonRC(plan, planImpose, parPartie));
+      for (const p of planImpose) for (const e of repRC.nonCouverts[p.id] || []) questionsRC.push(`Pièce attendue par le règlement de consultation (partie « ${p.title} ») qu'aucune rubrique du mémoire type ne traite : « ${e} ». Quelle réponse GSS y apporte-t-elle ?`);
+    }
     const mtParId = new Map(mt.rubriques.map((r) => [r.id, r]));
     console.log(`[MemoireGenerator] Plan v2 : ${plan.blocs.map((b) => `${b.cle} ${b.titre} (${b.rubriques.length})`).join(' | ')} ; ${plan.exclues.length} rubrique(s) écartée(s) par leur condition.`);
 
@@ -6943,6 +6959,7 @@ RÈGLES DE FORME (rendu Marp) :
       ...commentairesRetires,
       ...alertesAcheteurs,
       ...questionsCouverture,
+      ...questionsRC,
       ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie),
       // Publipostage : valeurs du registre à confirmer, passages retirés faute de valeur (délai hors Normandie…).
       ...publiees.flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)]).flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
@@ -7717,6 +7734,42 @@ Renvoie UNIQUEMENT un objet JSON : {"suppressions": [{"id": "rubrique où retire
       }
     } catch { /* étape facultative */ }
     if (n) console.log(`[MemoireGenerator] Répétitions entre rubriques : ${n} passage(s) retiré(s).`);
+  }
+
+  /**
+   * Plan imposé par le RC SANS limite de pages (IFITS, art. 11.2 et 12.4 : « en respectant l'ordre et la numérotation des
+   * pièces » : 2-1 Moyens humains, 2-2 Moyens organisationnels, 2-3 Moyens techniques et matériels). Repérage sans modèle
+   * des passages (passagesPlanImpose), puis lecture IA du plan ; chaque intitulé lu doit figurer dans le DCE (aucun
+   * plan inventé). null : pas de plan imposé, la réponse libre suit les 5 blocs (D1).
+   */
+  private async detecterPlanImpose(dce: string): Promise<PartieRC[] | null> {
+    const passages = passagesPlanImpose(dce);
+    if (!passages.length) return null;
+    const r = await this.callOpenAI([
+      {
+        role: 'system',
+        content: `Tu lis des extraits du règlement de consultation d'un marché de sécurité privée. Le RC impose-t-il l'ORDRE (et éventuellement la numérotation) des parties du MÉMOIRE TECHNIQUE ? Ignore les pièces administratives et financières (acte d'engagement, BPU, DPGF…) : seulement les parties du mémoire technique.
+Si oui, liste ses parties de premier niveau DANS L'ORDRE DU RC : "numero" = numérotation du RC telle qu'écrite (ex. « 2-1 »), "titre" = intitulé exact recopié du RC, "attendu" = TOUS les sous-éléments cités pour cette partie (ex. « 2-1a Nombre d'agents… ; 2-1b … »), recopiés fidèlement.
+Renvoie UNIQUEMENT un objet JSON : {"impose": true|false, "parties": [{"numero": "…", "titre": "…", "attendu": "…"}]}`,
+      },
+      { role: 'user', content: passages.join('\n---\n') },
+    ], 0.1, 'Plan imposé par le RC', true, 'analyse');
+    try {
+      const d = lireJson(r || '');
+      if (!d?.impose) return null;
+      const dn = normaliser(dce).replace(/[^a-z0-9]+/g, ' ');
+      const parties: PartieRC[] = (Array.isArray(d.parties) ? d.parties : []).map((p: any, i: number) => {
+        const numero = String(p?.numero || '').trim();
+        const titre = String(p?.titre || '').trim();
+        const propre = titre.charAt(0) + (titre === titre.toUpperCase() ? titre.slice(1).toLowerCase() : titre.slice(1));
+        return { id: `c${i + 1}`, title: `${numero ? `${numero} ` : ''}${propre}`.trim(), attendu: String(p?.attendu || '').trim(), brut: titre };
+      }).filter((p: any) => p.brut && dn.includes(normaliser(p.brut).replace(/[^a-z0-9]+/g, ' ').trim()));
+      if (parties.length < 2) return null;
+      console.log(`[MemoireGenerator] Plan imposé par le RC (sans limite de pages) : ${parties.map((p) => p.title).join(' | ')}.`);
+      return parties.map(({ id, title, attendu }) => ({ id, title, attendu }));
+    } catch {
+      return null;
+    }
   }
 
   /**

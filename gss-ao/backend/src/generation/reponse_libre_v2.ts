@@ -134,6 +134,56 @@ export function rubriquesV2(plan: PlanMemoireType, ajouts: AjoutLibre[] = []): A
   });
 }
 
+const ROMAINS_RC = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+
+/**
+ * Plan imposé par le RC sans limite de pages (IFITS : « Le mémoire technique sera présenté en respectant l'ordre et la
+ * numérotation des pièces » 2-1 Moyens humains, 2-2 Moyens organisationnels, 2-3 Moyens techniques et matériels) :
+ * consigne 5, GSS reprend EXACTEMENT son mémoire type et n'en change que la construction. Les blocs deviennent les
+ * parties du RC, dans son ordre et avec sa numérotation ; chaque rubrique du mémoire type va dans la partie qui la reçoit
+ * (répartition du format court), sans limite de pages, avec sa page de schéma. La compréhension du besoin reste en tête
+ * si aucune partie du RC ne la demande ; une rubrique qu'aucune partie ne reçoit reste dans un bloc à son nom d'origine,
+ * après la compréhension (rien du mémoire type n'est perdu).
+ */
+export function planSelonRC(plan: PlanMemoireType, parties: Array<{ id: string; title: string }>, parPartie: Record<string, string[]>): PlanMemoireType {
+  const pris = new Set(Object.values(parPartie).flat());
+  const blocs: PlanMemoireType['blocs'] = [];
+  const b1 = plan.rubriques.find((r) => r.mode === 'besoin');
+  if (b1 && !pris.has(b1.id)) {
+    const orig = plan.blocs.find((b) => b.rubriques.includes(b1.id));
+    blocs.push({ id: orig?.id || 'besoin', cle: '', numero: 0, titre: orig?.titre || 'Notre compréhension de votre besoin', rubriques: [b1.id] });
+    pris.add(b1.id);
+  }
+  // Rubriques sans partie : leur bloc d'origine, dans l'ordre du mémoire type.
+  for (const b of plan.blocs) {
+    const reste = b.rubriques.filter((id) => !pris.has(id));
+    if (reste.length) blocs.push({ id: b.id, cle: '', numero: 0, titre: b.titre, rubriques: reste });
+    reste.forEach((id) => pris.add(id));
+  }
+  for (const p of parties) {
+    const ids = (parPartie[p.id] || []).filter((id) => plan.rubriques.some((r) => r.id === id));
+    if (ids.length) blocs.push({ id: `rc_${p.id}`, cle: '', numero: 0, titre: p.title, rubriques: ids });
+  }
+  blocs.forEach((b, i) => { b.cle = ROMAINS_RC[i] || String(i + 1); b.numero = i + 1; });
+  const rubriques: PlanMemoireType['rubriques'] = blocs.flatMap((b) => b.rubriques.map((id) => ({ ...plan.rubriques.find((r) => r.id === id)!, bloc: b.id, cle: b.cle })));
+  return { ...plan, blocs, rubriques };
+}
+
+/** Passages du RC qui imposent l'ordre du mémoire technique, sans limite de pages (repérage sans modèle). */
+export function passagesPlanImpose(dce: string): string[] {
+  const d = String(dce || '');
+  const rx = /respect(?:ant|er)?\s+l.ordre|dans\s+l.ordre\s+(?:de\s+(?:la\s+)?num[ée]rotation|des\s+(?:pi[èe]ces|parties|crit[èe]res)|suivant|ci-dessous)|selon\s+le\s+plan\s+(?:suivant|ci-dessous)|structur[ée]\s+(?:comme\s+suit|selon\s+le\s+plan)|ordre\s+et\s+(?:la\s+)?num[ée]rotation/gi;
+  const out: string[] = [];
+  for (const m of d.matchAll(rx)) {
+    const autour = d.slice(Math.max(0, (m.index || 0) - 400), (m.index || 0) + 400);
+    if (!/m[ée]moire\s+technique|offre\s+technique|note\s+m[ée]thodologique/i.test(autour)) continue;
+    const texte = d.slice(Math.max(0, (m.index || 0) - 3500), (m.index || 0) + 1500);
+    if (!out.some((o) => o.includes(texte.slice(3000, 3600)))) out.push(texte);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
 /** Rubriques (id, chapitre, titre) du plan v2, ajouts compris, dans l'ordre du document. */
 export function sectionsV2(plan: PlanMemoireType, ajouts: AjoutLibre[] = []): Array<{ id: string; chapter: string; title: string }> {
   return rubriquesV2(plan, ajouts).flatMap((b) => b.rubriques.map((r) => ({ id: r.id, chapter: r.chapter, title: r.title })));
