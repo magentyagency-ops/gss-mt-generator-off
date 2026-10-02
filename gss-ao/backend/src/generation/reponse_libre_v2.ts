@@ -1171,7 +1171,13 @@ function rubriqueCitee(x: string): string {
   const t = String(x || '').replace(/\s+/g, ' ').trim();
   const m = /^(.+?)\s+:\s+(.+)$/.exec(t);
   if (!m) return t;
-  return /^(?:notre socle(?: de proc[ée]dures)?|nos proc[ée]dures|le socle commun)$/i.test(m[1].trim()) ? m[2].charAt(0).toUpperCase() + m[2].slice(1) : m[1].trim();
+  // Préfixe de catégorie (« Formations et certifications », « Les moyens techniques », « Contrôle 2 »…) : la suite nomme
+  // le process, sans sa parenthèse (« l'agent SSIAP 1 (le feu, …) » → « L'agent SSIAP 1 »).
+  if (/^(?:notre socle(?: de proc[ée]dures)?|nos proc[ée]dures|le socle commun|formations et certifications|les moyens techniques|nos valeurs manag[ée]riales|notre engagement [ée]cologique|contr[ôo]le \d)$/i.test(m[1].trim())) {
+    const b = m[2].replace(/\s*\([^()]*\)\s*$/, '').trim();
+    return b.charAt(0).toUpperCase() + b.slice(1);
+  }
+  return m[1].trim();
 }
 
 /**
@@ -1253,7 +1259,8 @@ export function libellesBloc1(texte: string): string {
 
 export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: string; role?: string }> {
   const puces = (titre: RegExp) => {
-    const partie = String(texte || '').split(/^(?=##\s)/m).find((p) => titre.test(p)) || '';
+    // Toutes les parties de ce titre (texte rédigé puis puces ajoutées pour le minimum, format court hors ligne imm).
+    const partie = String(texte || '').split(/^(?=##\s)/m).filter((p) => titre.test(p)).join('\n');
     return partie.split('\n').map((l) => {
       // Libellé nommé en gras suivi de l'exigence, sans deux-points (« **L'arrivée sur site** est exigée … → « … » … »,
       // forme écrite par libellesBloc1) : le libellé et sa suite sont l'exigence.
@@ -1373,6 +1380,9 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
       corps = reste.charAt(0).toUpperCase() + reste.slice(1);
     }
     if (etapes.some((d) => procheDe(d.titre, titre) || normaliser(String(d.texte || '')) === normaliser(corps))) continue;
+    // Texte qui redit le titre (« Reprise du personnel en place » / « La reprise du personnel en place ») : l'étape
+    // n'apporte rien, elle serait refusée par le contrôle du schéma.
+    { const ti = pleinsDe(titre), tx = pleinsDe(corps); if (ti.length && ti.every((w) => tx.includes(w)) && tx.filter((w) => !ti.includes(w)).length <= 2) continue; }
     etapes.push({ titre: titre.charAt(0).toUpperCase() + titre.slice(1), texte: corps, role: etapes.length < 2 ? 'rouge' : 'bleu' });
   }
   return etapes;

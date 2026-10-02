@@ -98,3 +98,15 @@ describe('texte du bloc 1 lu par l\'acheteur (T4N-8)', () => {
     expect(r.retirees).toEqual(['Les badges → « La gestion des moyens d\'accès » encadre.']);
   });
 });
+
+describe('schéma du bloc 1, format court hors ligne (T4C-2)', () => {
+  it('puces ajoutées dans une seconde partie « Vos attentes » lues aussi ; texte qui redit le titre écarté ; préfixe de catégorie retiré', () => {
+    const t = "## Vos attentes et nos engagements\nVous attendez un poste tenu sans interruption.\n\n## Vos attentes et nos engagements\n- **Ce que vous attendez** : poste permanent de sécurité incendie et de sûreté 24 h/24, 7 j/7 → notre réponse : « L'adéquation de nos moyens humains avec votre besoin ».\n- **Ce que vous attendez** : agents titulaires du SSIAP 1 à jour → notre réponse : « Formations et certifications : l'agent SSIAP 1 (le feu, la sécurité incendie, les moyens de secours) ».\n\n## Les points de vigilance identifiés et nos réponses\n- **Point de vigilance** : reprise du personnel en place selon l'accord du 5 mars 2002 → notre réponse : « La reprise du personnel en place ».\n- **Point de vigilance** : réunion de suivi trimestrielle avec le responsable sécurité → notre réponse : « Les réunions de suivi et la remontée des indicateurs ».";
+    const s = specSecoursPuces(t)!;
+    expect(s).not.toBeNull();
+    expect(anomaliesSchemaBloc1(s)).toEqual([]);
+    const l = lignes(s).join(' | ');
+    expect(l).not.toMatch(/Reprise du personnel en place :: La reprise du personnel en place|Formations et certifications/);
+    expect(l).toContain("L'agent SSIAP 1");
+  });
+});
