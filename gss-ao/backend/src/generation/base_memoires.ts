@@ -1057,14 +1057,23 @@ export function nettoyerChampCadre(texte: string): string {
   const LISTE = /^\s*(?:[-*•]|\d+[.)])\s+/;
   const out: string[] = [];
   const vues: Array<Set<string>> = [];
+  const nombresVus: string[] = [];
   const cles = new Set<string>();
-  const mots = (t: string) => new Set(normTxt(t).replace(/[^a-z0-9]+/g, ' ').split(' ').filter((w) => w.length >= 3));
+  // Mots porteurs : mots de 3 lettres et plus, et TOUS les nombres (« 2 », « 3 », « 28 ») : sans eux, « Agents SSIAP 2 :
+  // SSIAP 1 – SSIAP 2 : 28 » et « Agents SSIAP 3 : SSIAP 1 – 2 – 3 : 2 » se réduisaient à {agents, ssiap} et la ligne
+  // SSIAP 3 du tableau des ressources de GSS disparaissait de tous les cadres (T4N-1).
+  const mots = (t: string) => new Set(normTxt(t).replace(/[^a-z0-9]+/g, ' ').split(' ').filter((w) => w.length >= 3 || /^\d+$/.test(w)));
+  const nombres = (t: string) => (normTxt(t).match(/\d+/g) || []).join(' ');
   const deja = (ph: string) => {
     const k = normTxt(ph).replace(/[^a-z0-9]+/g, ' ').trim();
     if (k.split(' ').length < 6 || /\[À COMPLÉTER\]|⟦|\[CONSULTATION/.test(ph)) return false;
+    // Ligne de tableau (« a : b : c », issue du texte brut d'un tableau) : jamais un doublon de prose.
+    if ((ph.match(/\s:\s/g) || []).length >= 2) return false;
     if (cles.has(k)) return true;
     const m = mots(ph);
-    if (vues.some((v) => { let n = 0; for (const w of m) if (v.has(w)) n++; return n / Math.max(m.size, v.size) >= 0.9; })) return true;
+    const nb = nombres(ph);
+    if (vues.some((v, i) => { if (nombresVus[i] !== nb) return false; let n = 0; for (const w of m) if (v.has(w)) n++; return n / Math.max(m.size, v.size) >= 0.9; })) return true;
+    nombresVus.push(nb);
     cles.add(k); vues.push(m);
     return false;
   };
