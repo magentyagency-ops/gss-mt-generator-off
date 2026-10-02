@@ -7082,7 +7082,7 @@ RÈGLES DE FORME (rendu Marp) :
     };
     // Étapes sans contenu propre au marché (titre « Votre besoin », « … nous consulte pour le marché », « Le PC réalise
     // les rondes ») : refusées comme un schéma invalide (correction des seules étapes, puis schéma de secours).
-    const defautsInitiaux = secours ? [] : defautsEtapesBesoin(rep?.etapes);
+    const defautsInitiaux = secours ? [] : defautsEtapesBesoin(rep?.etapes, { texte, sites: besoin.sites });
     let schema = secours ? { erreurs: ['texte de secours'] } as { svg?: string; erreurs: string[] }
       : defautsInitiaux.length ? { erreurs: defautsInitiaux } : await dessiner(specProcessBesoin(rep?.etapes, 'flux'));
     if (!schema.svg && !secours && brut) {
@@ -7092,7 +7092,7 @@ RÈGLES DE FORME (rendu Marp) :
         { role: 'user', content: `Le schéma de process est refusé :\n- ${schema.erreurs.slice(0, 8).join('\n- ')}\nCorrige SEULEMENT les étapes (4 ou 5, dernière étape verte) en recopiant des mots EXACTS de ton texte (même orthographe, mêmes accords), sans aucun chiffre absent du texte. Renvoie UNIQUEMENT {"etapes": [{"titre": "…", "texte": "…", "role": "…"}]}.` },
       ], 0.2, 'Compréhension du besoin : schéma corrigé', true, 'redaction', 0);
       const etapesCorrigees = lireJson(correction || '')?.etapes;
-      const defautsCorriges = defautsEtapesBesoin(etapesCorrigees);
+      const defautsCorriges = defautsEtapesBesoin(etapesCorrigees, { texte, sites: besoin.sites });
       schema = defautsCorriges.length ? { erreurs: defautsCorriges } : await dessiner(specProcessBesoin(etapesCorrigees, 'flux'));
     }
     if (!schema.svg) console.warn(`[MemoireGenerator] Compréhension du besoin : étapes du schéma refusées (${schema.erreurs.slice(0, 3).join(' | ')}) ; schéma de secours d'après les points de vigilance et les attentes.`);

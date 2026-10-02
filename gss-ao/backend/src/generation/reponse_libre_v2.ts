@@ -550,7 +550,7 @@ const INTITULE_POSTE = /\b(?:tienn?ent|occupent|occupe|assurent|assure|tient)\s+
 /** Étape de résultat (« Site sécurisé sans interruption », « Continuité de service garantie »…). */
 const RESULTAT = /s[ée]curis|s[ûu]ret[ée] (?:assur|garanti)|continuit|garanti|conform|ma[îi]tris|fiab|s[ée]r[ée]nit|r[ée]sultat|z[ée]ro|sans (?:interruption|rupture|incident|carence)|prot[ée]g|tranquill|qualit[ée]|respect|confian|trac[ée]|r[ée]activ|disponib|s[ée]curit[ée] (?:des|du)|assur[ée]e?s?\b/i;
 
-export function defautsEtapesBesoin(etapes: Array<{ titre?: string; texte?: string }> | undefined): string[] {
+export function defautsEtapesBesoin(etapes: Array<{ titre?: string; texte?: string }> | undefined, contexte: { texte?: string; sites?: string[] } = {}): string[] {
   const GENERIQUE = /^(?:(?:votre|vos|notre|nos|le|la|les)\s+)?(?:besoins?|enjeux?|dispositifs?|pilotages?|r[ée]sultats?|attentes?|r[ée]ponses?|process(?:us)?)$/i;
   const FORMULE = /nous consulte|consult\w* (?:GSS )?pour (?:le|ce|un) march[ée]|^(?:vos|nos) enjeux (?:comprennent|sont|portent)|^notre dispositif s.appuie|^notre pilotage (?:s.appuie|repose)|^votre besoin porte sur|blocs? cit[ée]s?/i;
   const POSTE_ACTEUR = /^(?:le|la|l['’])\s*(?:PC|PCS|poste(?: central| de s[ée]curit[ée])?|accueil|loge)\s+(?!(?:de|du|des|d['’])\s)(?:r[ée]alis|effectu|assur|g[èe]r|surveill|contr[ôo]l|accueill|alert|fai[ts])/i;
@@ -567,6 +567,22 @@ export function defautsEtapesBesoin(etapes: Array<{ titre?: string; texte?: stri
     if (POSTE_ACTEUR.test(texte)) defauts.push(`${n} : « ${texte} » présente un poste comme acteur ; le sujet est l'agent qui l'occupe, avec sa qualification, et son action respecte le CCTP.`);
     if (INTITULE_POSTE.test(`${titre} ${texte}`)) defauts.push(`${n} : « ${titre} : ${texte} » ne fait que reprendre les intitulés de poste ; dis ce que l'agent fait de propre à ce marché.`);
   });
+  // Le besoin ne se réduit pas au nom du site (fontainebleau 21 : « Domaine de Fontainebleau → Remplacement sous 2 heures »).
+  const premiere = Array.isArray(etapes) && etapes.length ? etapes[0] : null;
+  const titre1 = norm(String(premiere?.titre || ''));
+  const LIEU = /^(?:(?:le|la|les|l)\s+)?(?:site|sites|domaine|chateau|campus|batiment|batiments|siege|musee|parc|hopital|centre|universite|mairie|ville|residence|immeuble|ensemble)\b/;
+  if (titre1 && ((contexte.sites || []).some((x) => { const n = norm(x); return n && (n === titre1 || n.startsWith(titre1) || titre1.startsWith(n)); })
+    || (LIEU.test(titre1) && !/\b(?:besoin|surveillance|securite|continuite|protection|accueil|controle|rondes?|filtrage|gardiennage|prevention|evenement)/.test(titre1)))) {
+    defauts.push(`étape 1 : « ${premiere!.titre} » nomme le site, pas le besoin ; l'étape 1 dit ce dont l'acheteur a besoin (fait du DCE).`);
+  }
+  // Étapes recopiées de la seule phrase de conclusion du texte : le schéma redit la conclusion, il ne montre pas un
+  // process (besoin → contraintes → réponse de GSS → résultat).
+  if (contexte.texte && Array.isArray(etapes) && etapes.length >= 3) {
+    const libres = String(contexte.texte).split(/\n{2,}/).map((p) => p.trim()).filter((p) => p && !/^(?:#|\||[-*•]\s)/.test(p));
+    const conclusion = norm(libres[libres.length - 1] || '');
+    const dans = etapes.filter((e) => { const m = norm(String(e?.texte || '')).split(' ').filter((w) => w.length > 3); return m.length >= 3 && m.filter((w) => conclusion.includes(w)).length / m.length >= 0.8; }).length;
+    if (conclusion && dans >= 3) defauts.push(`${dans} étapes recopient la phrase de conclusion du texte ; enchaîne le besoin, les contraintes du DCE, la réponse de GSS puis le résultat, avec des mots des parties « Vos attentes » et « Points de vigilance ».`);
+  }
   // « Pour arriver à ça » : la dernière étape dit le résultat obtenu pour l'acheteur.
   const derniere = Array.isArray(etapes) && etapes.length ? etapes[etapes.length - 1] : null;
   if (derniere && !RESULTAT.test(`${derniere.titre || ''} ${derniere.texte || ''}`)) {
@@ -860,34 +876,49 @@ function titreEtape(t: unknown, max: number): string {
  * puis une étape verte « Votre résultat ». Génération réelle ign 16 : le secours par sous-titres donnait un schéma
  * « Votre contexte → Le périmètre → Vos attentes → Les points de vigilance », qui n'apporte rien. null : moins de 3 puces.
  */
+const INTERNE = /\[À COMPLÉTER\]|⟦|\[CONSULTATION|\[\s*[A-ZÀ-Ý]/;
+
 export function specSecoursPuces(texte: string): { gabarit: string; params: any } | null {
   const puces = (titre: RegExp) => {
     const partie = String(texte || '').split(/^(?=##\s)/m).find((p) => titre.test(p)) || '';
     return partie.split('\n').map((l) => /^\s*[-*•]\s+\*\*[^*]+\*\*(?:\s*\([^)]*\))?\s*:\s*(.+?)\s*→\s*notre réponse\s*:\s*(.+)$/.exec(l))
-      .filter((m): m is RegExpExecArray => !!m && m[1].trim().length > 3)
-      .map((m) => ({ x: m[1].trim(), y: m[2].replace(/\s*\((?:[^()]*\bblocs?\b)[^)]*\)?.*$/i, '').replace(/,?\s*(?:développée?s?|traitée?s?)\s+(?:au|aux|dans les?)\s+blocs?\s+[\d\s,et]+\.?$/i, '').replace(/,?\s*blocs?\s+[\d\s,et]+\.?$/i, '').replace(/[.;]\s*$/, '').trim() }));
+      // Jamais de repère interne dans un schéma (« [À COMPLÉTER] », ⟦AC:n⟧, « [CONSULTATION REQUISE : …] »).
+      .filter((m): m is RegExpExecArray => !!m && m[1].trim().length > 3 && !INTERNE.test(m[0]))
+      .map((m) => ({ x: m[1].trim(), y: m[2].replace(/\s*\((?:[^()]*\bblocs?\b)[^)]*\)?.*$/i, '').replace(/,?\s*(?:développée?s?|traitée?s?)\s+(?:au|aux|dans les?)\s+blocs?\s+[\d\s,et]+\.?$/i, '').replace(/,?\s*blocs?\s+[\d\s,et]+\.?$/i, '').replace(/[.;]\s*$/, '').replace(/\s+(?:est|sont|sera|seront)$/i, '').trim() }));
   };
   const vigilance = puces(/^##\s+Les points de vigilance/i);
   const attentes = puces(/^##\s+Vos attentes/i);
+  // Titre nominal : le groupe nominal qui précède le premier verbe (« La continuité doit toujours s'opérer… » → « La
+  // continuité » ; « Les rondes techniques cessent… » → « Les rondes techniques »), coupé sur un mot plein.
+  const VERBE = /^(?:est|sont|doit|doivent|peut|peuvent|a|ont|exigen?t?|exige|cessen?t?|cesse|restent|reste|varien?t?|varie|imposen?t?|impose|prévoi(?:t|ent)|porten?t?|porte|assuren?t?|assure|se|s['’]\S*|fai(?:t|s)|font|demanden?t?|demande|nécessiten?t?|nécessite|impliquen?t?|implique|sera|seront|intervien(?:t|nent)|requiert|requièrent|associen?t?|associe|comprend|comprennent|comporten?t?|comporte|accueillen?t?|accueille|comptent|compte|dispose|disposent|couvren?t?|couvre|regroupen?t?|regroupe|concernen?t?|concerne|inclut|incluent|ouvren?t?|ouvre|fermen?t?|ferme|fonctionnen?t?|fonctionne|reçoi(?:t|vent)|abriten?t?|abrite|représenten?t?|représente|dépend(?:ent)?|accèdent|accède|circulen?t?|circule|travaillen?t?|travaille|nécessitera|fixe|fixent|prévoit|attend|attendent|souhaite|souhaitent|veut|veulent)$/i;
+  /** Titre nominal (groupe nominal avant le premier verbe), '' s'il n'y en a pas de propre : jamais une phrase tronquée
+   *  (« Le site associe un bâtiment ») ni un mot seul (« Le service »). */
+  const nominal = (x: string): string => {
+    const mots = x.replace(/\*\*/g, '').split(/\s+/);
+    const k = mots.findIndex((m, i) => i > 0 && VERBE.test(m));
+    if (k <= 0) return '';
+    const gn = mots.slice(0, k).join(' ');
+    const pleins = mots.slice(0, k).map((m) => m.toLowerCase().replace(/^(?:l|d)['’]/, '').replace(/['’]$/, '')).filter((m) => m && !MOTS_OUTILS.has(m));
+    if (gn.length > 34 || pleins.length < 2) return '';
+    return gn;
+  };
+  /** Sinon, tête de la réponse de GSS (groupe nominal : « planification des relèves »), jusqu'à la première virgule. */
+  const teteReponse = (y: string): string => {
+    const t = y.split(/,|\s+(?:et|selon|par|pour|avec|dans)\s+/)[0].trim();
+    return t.length <= 34 && t.split(/\s+/).length >= 2 ? t : '';
+  };
   // Trois étapes distinctes (titre et texte jamais répétés : le moteur refuse un élément en double).
   const choix: Array<{ x: string; y: string }> = [];
-  for (const c of [...vigilance.slice(0, 2), ...attentes, ...vigilance.slice(2)]) {
+  // Puces dont le constat a un vrai titre nominal d'abord (sinon le titre serait une phrase tronquée).
+  const ordre = [...vigilance.slice(0, 2), ...attentes, ...vigilance.slice(2)];
+  for (const c of [...ordre.filter((x) => nominal(x.x)), ...ordre.filter((x) => !nominal(x.x))]) {
     if (choix.length >= 3) break;
     if (choix.some((d) => normaliser(d.y) === normaliser(c.y) || normaliser(d.x) === normaliser(c.x))) continue;
     choix.push(c);
   }
   if (choix.length < 3) return null;
-  // Titre nominal : le groupe nominal qui précède le premier verbe (« La continuité doit toujours s'opérer… » → « La
-  // continuité » ; « Les rondes techniques cessent… » → « Les rondes techniques »), coupé sur un mot plein.
-  const VERBE = /^(?:est|sont|doit|doivent|peut|peuvent|a|ont|exigen?t?|exige|cessen?t?|cesse|restent|reste|varien?t?|varie|imposen?t?|impose|prévoi(?:t|ent)|porten?t?|porte|assuren?t?|assure|se|s['’]\S*|fai(?:t|s)|font|demanden?t?|demande|nécessiten?t?|nécessite|impliquen?t?|implique|sera|seront|intervien(?:t|nent)|requiert|requièrent)$/i;
-  const nominal = (x: string) => {
-    const mots = x.split(/\s+/);
-    const k = mots.findIndex((m, i) => i > 0 && VERBE.test(m));
-    const gn = k > 0 ? mots.slice(0, k).join(' ') : x;
-    return titreEtape(gn.split(/\s+/).length >= 2 || k < 0 ? gn : x, 34);
-  };
   const etapes: Array<{ titre: string; texte?: string; role?: string }> = choix.map((c, i) => {
-    const titre = nominal(c.x);
+    const titre = nominal(c.x) || teteReponse(c.y) || titreEtape(c.y, 34);
     // Texte de 86 caractères au plus, coupé de préférence à la fin d'une proposition (virgule, « et ») plutôt qu'en plein groupe.
     let y = c.y.charAt(0).toUpperCase() + c.y.slice(1);
     if (y.length > 86) {
@@ -897,7 +928,7 @@ export function specSecoursPuces(texte: string): { gabarit: string; params: any 
     return { titre: titre.charAt(0).toUpperCase() + titre.slice(1), texte: y, role: i < 2 ? 'rouge' : 'bleu' };
   });
   // Résultat : la phrase de conclusion du texte (dernière ligne libre, 86 caractères au plus), sinon la première réponse.
-  const libres = String(texte || '').split('\n').map((l) => l.trim()).filter((l) => l && !/^(?:#|\||[-*•]\s)/.test(l));
+  const libres = String(texte || '').split('\n').map((l) => l.trim()).filter((l) => l && !/^(?:#|\||[-*•]\s)/.test(l) && !INTERNE.test(l));
   const conclusion = (libres[libres.length - 1] || '').replace(/\*\*/g, '').replace(/[.;]\s*$/, '');
   const dejaEcrits = new Set(etapes.map((e) => normaliser(String(e.texte || ''))));
   const resultat = [conclusion.length <= 86 ? conclusion : '', ...attentes.map((a) => a.y)]
