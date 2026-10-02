@@ -27,6 +27,7 @@ import { personnesDuRole, retirerCommentairesInternes } from './base_memoires';
 import { RETOUR_ARRIERE } from './themes';
 import type { PlanMemoireType } from './memoire_type';
 import type { AjoutLibre } from './reponse_libre_v2';
+import type { PhraseAdaptee } from './adaptations_cctp';
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const RESPONSE_DIR = path.resolve(__dirname, '../../response');
@@ -120,6 +121,9 @@ export interface EtatCompletion {
   /** Dispositif proposé pour les mises en situation (D5), avec l'empreinte de l'extrait du DCE dont il vient : repris tel
    *  quel à la génération suivante tant que le DCE ne change pas (vitry : 22 puis 45 agents d'une génération à l'autre). */
   dimensionnement?: { empreinte: string; misesEnSituation: any[] };
+  /** Phrases de GSS adaptées au cahier des charges du client (D8) : signalées à GSS (consultations, premier message de
+   *  l'assistant), validées, modifiées ou rétablies par l'assistant ; les choix de GSS sont repris à la génération suivante. */
+  adaptations?: PhraseAdaptee[];
 }
 
 // ─── État ────────────────────────────────────────────────────────────────────────────────
@@ -152,7 +156,7 @@ export function ecrireEtat(etat: EtatCompletion): void {
 
 /** Vue publique de l'état (sans le texte des rubriques ni les schémas). */
 export function vueEtat(etat: EtatCompletion) {
-  const { libre, reponsesTraitees, champs, dimensionnement, ...reste } = etat;
+  const { libre, reponsesTraitees, champs, dimensionnement, adaptations, ...reste } = etat;
   return {
     ...reste,
     restants: etat.elements.filter((e) => e.statut === 'ouvert').length,

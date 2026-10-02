@@ -28,6 +28,7 @@ import {
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides,
 } from './memoire_type_cadre';
+import { SuiviAdaptations, adaptationsHorsNormandie, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, type PhraseAdaptee } from './adaptations_cctp';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -4676,6 +4677,8 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     //    question. Détection des champs, champs courts, identité, tableaux et cases : inchangés. Retour arrière :
     //    GSS_MEMOIRE_TYPE=non. ──
     const repriseMT = await this.textesMemoireTypeCadre(dossierId, analysisData, dceContext, referentsContext, descriptors, buildPrompt, dimensionnementCadre);
+    // Phrases de GSS adaptées au CCTP (D8) : délais normands retirés au publipostage, puis filtres du CCTP ; signalées à GSS.
+    const suiviCadre = repriseMT ? this.suiviAdaptations(dossierId, repriseMT.mt, repriseMT.ctx, Object.keys(repriseMT.textes), Object.values(repriseMT.textes)) : null;
     /** Questions développées rédigées hors mémoire type (propositions) et reprises à relire, pour GSS. */
     const propositionsCadre = new Map<number, string>();
     const repriseParChamp = new Map<number, { ids: string[]; fidelite: number; brute?: number }>();
@@ -5418,7 +5421,9 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       // le reste à la voix de GSS (« le titulaire » → « GSS »).
       const recopie = sansRecopieCctp(texte, dceContext);
       // Texte nettoyé toujours repris (reformulations et montants de pénalité retirés, même sans commentaire interne).
-      const delais = delaisHorsNormandie(interditsDce(fondementReprise(voixDeGss(recopie.texte), dceContext), dceContext), dceContext, horsNormandieCadre);
+      const avantFiltres = fondementReprise(voixDeGss(recopie.texte), dceContext);
+      const delais = delaisHorsNormandie(interditsDce(avantFiltres, dceContext), dceContext, horsNormandieCadre);
+      suiviCadre?.noterFiltres(`GSS_CH_${r.id}`, avantFiltres, delais.texte, dceContext, horsNormandieCadre, analysisData);
       // Étiquette « … : » restée sans contenu, phrases répétées dans le même champ : retirées.
       r.value = nettoyerChampCadre(delais.texte).trim() || (retires.length || delais.retires.length || recopie.retires.length ? '[À COMPLÉTER]' : r.value);
       // Réponse développée sous un tableau : ni « [À COMPLÉTER] » seul en tête, ni pseudo-lignes du tableau (T4-COH-2).
@@ -5939,6 +5944,17 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       console.warn(`[MemoireGenerator] Contrôle des parties limitées en pages indisponible : ${e?.message || e}`);
     }
 
+    // Phrases de GSS adaptées au CCTP (D8) : retrouvées dans les réponses finales ; choix de GSS de la génération
+    // précédente appliqués aux réponses ; les autres signalées (consultations, premier message de l'assistant).
+    let adaptationsCadre: PhraseAdaptee[] = [];
+    if (suiviCadre) {
+      const textesChamps: Record<string, string> = {};
+      for (const r of [...replacements].sort((a, b) => a.id - b.id)) if (descriptors.find((d) => d.id === r.id)?.kind !== 'checkbox' && String(r.value ?? '').trim()) textesChamps[`GSS_CH_${r.id}`] = String(r.value);
+      const libelle = (k: string) => { const id = Number(k.replace('GSS_CH_', '')); return libelleQuestionCadre((descriptors.find((d) => d.id === id)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || `Réponse ${id}`); };
+      adaptationsCadre = this.finaliserAdaptations(suiviCadre, textesChamps, libelle, [], Object.fromEntries([...repriseParChamp.entries()].map(([id, x]) => [`GSS_CH_${id}`, x.ids])));
+      for (const r of replacements) { const t = textesChamps[`GSS_CH_${r.id}`]; if (t !== undefined && t !== String(r.value)) r.value = t; }
+    }
+
     // 6. Apply replacements in the DOM
     let applied = 0;
     replacements.forEach((rep: any) => {
@@ -6249,10 +6265,19 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         // Effectifs proposés à partir du DCE (D5) : à valider ou modifier avant la remise.
         ...(dimRepris ? [...(aRelire.length ? [''] : []), messageDimensionnement(dimensionnementCadre!)] : []),
       ].join('\n') }] : undefined;
+      // Phrases de GSS adaptées au CCTP (D8) : seulement dans les réponses que l'assistant peut modifier ; annoncées dans le
+      // premier message, à valider, modifier ou rétablir.
+      adaptationsCadre = adaptationsCadre.filter((a) => champsEtat.some((c) => c.cle === a.rubrique));
+      adaptationsCadre.forEach((a, i) => { a.n = i + 1; });
+      const texteAdaptations = messageAdaptations(adaptationsCadre);
+      const conversationFinale = texteAdaptations
+        ? (conversation?.length ? [{ ...conversation[0], texte: `${conversation[0].texte}\n\n${texteAdaptations}` }] : [{ role: 'assistant' as const, date: new Date().toISOString(), texte: texteAdaptations }])
+        : conversation;
       ecrireEtat({
         dossierId, mode: 'cadre', fichier: outputPath, majLe: '', elements: elementsSansDoublon(elementsACompleter), reponsesTraitees: [],
-        champs: champsEtat, demande: this.demandeParticuliere?.demande || undefined, conversation,
+        champs: champsEtat, demande: this.demandeParticuliere?.demande || undefined, conversation: conversationFinale,
         ...(this.dimensionnementEtat ? { dimensionnement: this.dimensionnementEtat } : {}),
+        ...(adaptationsCadre.length ? { adaptations: adaptationsCadre } : {}),
       });
     } catch (e: any) {
       console.warn(`[MemoireGenerator] État de complétion non enregistré (non bloquant) : ${e?.message || e}`);
@@ -6297,6 +6322,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         // deux lignes identiques n'en font qu'une.
         ...new Set([...propositionsCadre.entries()].filter(([id]) => champsRediges.includes(id)).sort((a, b) => a[0] - b[0])
           .map(([id, c]) => c.replace(/\[?champ_\d+\]?/gi, () => libelleQuestionCadre(champsEtatLibelle(id)) || `réponse ${id}`))),
+        // Phrases de GSS adaptées au CCTP (D8) : une ligne par phrase à valider.
+        ...consultationsAdaptations(adaptationsCadre),
       ],
     };
   }
@@ -7414,6 +7441,9 @@ RÈGLES DE FORME (rendu Marp) :
     const publiees = publierMemoire(prep, { marquerConsultations: true });
     const sections: Record<string, string> = {};
     for (const p of publiees) if (p.texte) sections[p.id] = p.texte;
+    // Phrases de GSS adaptées au CCTP (D8) : délais normands retirés au publipostage, puis étapes qui alignent le texte de
+    // GSS sur le CCTP ; signalées à GSS en fin de génération.
+    const suivi = this.suiviAdaptations(dossierId, mt, { ...ctxBase, matrice }, publiees.filter((p) => p.texte).map((p) => p.id), publiees.map((p) => p.texte || ''), { marquerConsultations: true });
     const { parRubrique, nouvelles: nouvellesMatrice } = exigencesParRubrique(mt, plan, matrice);
     const tri = trierNouvelles(mt, plan, nouvellesMatrice);
     for (const [id, l] of Object.entries(tri.rattachees)) (parRubrique[id] ||= []).push(...l);
@@ -7538,6 +7568,7 @@ RÈGLES DE FORME (rendu Marp) :
       nettoye.retires.forEach((x) => commentairesRetires.add(`À confirmer : ${retablirGras(x)}`));
       const delais = delaisHorsNormandie(retablirGras(nettoye.texte), dceContext, horsNormandie);
       delais.retires.forEach((x) => commentairesRetires.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
+      suivi.noterFiltres(id, retablirGras(nettoye.texte), delais.texte, dceContext, horsNormandie, analysisData);
       sections[id] = delais.texte;
     }
 
@@ -7552,8 +7583,9 @@ RÈGLES DE FORME (rendu Marp) :
     progres(74, 'Cohérence avec les exigences chiffrées et les horaires du CCTP…');
     // Valeurs habituelles de GSS dont l'engagement renforcé n'est dû que si le DCE l'exige (indicateur faux) : protégées.
     const proteges = Object.values(mt.variables).filter((v) => v.valeur_gss && v.valeur_si_exige && v.indicateur_exige && !prep.indicateurs[v.indicateur_exige]).map((v) => v.valeur_gss!);
-    await this.corrigerContradictions(sections, rubriquesDoc, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))], proteges, questionsCouverture);
-    await this.verifierHoraires(sections, rubriquesDoc, dceContext);
+    const exigencesCoherence = [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))];
+    await this.corrigerContradictions(sections, rubriquesDoc, exigencesCoherence, proteges, questionsCouverture, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, exigencesCoherence.map((x) => String(x.exigence || ''))));
+    await this.verifierHoraires(sections, rubriquesDoc, dceContext, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, [], 'Horaires du CCTP'));
     await this.engagementsChiffresManquants(sections, rubriquesDoc, dceContext);
     limiterRappelsSite(sections, rubriquesDoc.map((x) => x.id));
     const refsRetirees = limiterReferences(sections, rubriquesDoc.map((x) => x.id).filter((id) => plan.rubriques.find((r) => r.id === id)?.ancienne_rubrique !== 'b_references'));
@@ -7629,7 +7661,12 @@ RÈGLES DE FORME (rendu Marp) :
       const i = t.indexOf(ENGAGEMENTS);
       return i < 0 ? sansRecopieCctp(t, dceContext).texte : `${sansRecopieCctp(t.slice(0, i), dceContext).texte.trimEnd()}\n\n${t.slice(i)}`;
     };
-    for (const id of Object.keys(sections)) sections[id] = voixDeGss(sansRecopie(id, nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext))));
+    for (const id of Object.keys(sections)) {
+      const avantFiltres = fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext);
+      const filtre = interditsDce(delaisHorsNormandie(avantFiltres, dceContext, horsNormandie).texte, dceContext);
+      suivi.noterFiltres(id, avantFiltres, filtre, dceContext, horsNormandie, analysisData);
+      sections[id] = voixDeGss(sansRecopie(id, nettoyerStructure(filtre)));
+    }
     // Nom de l'acheteur écrit d'une seule façon partout (casse et accents de la variable CLIENT, parc_expo 202).
     { const nomClient = String(prep.variables.CLIENT?.valeur || ''); if (nomClient) for (const id of Object.keys(sections)) sections[id] = harmoniserNomClient(sections[id], nomClient); }
     nomClientCourtApresPremiere(sections, prep.variables.CLIENT as any, analysisData?.clientName || '');
@@ -7641,6 +7678,9 @@ RÈGLES DE FORME (rendu Marp) :
         if (r.retirees.length) { sections[id] = r.texte; console.log(`[MemoireGenerator] Rubrique ${id} : ${r.retirees.length} engagement(s) non repris pour tenir en 2 pages de texte : ${r.retirees.map((x) => x.slice(0, 80)).join(' ; ')}.`); }
       }
     }
+    // Phrases de GSS adaptées au CCTP (D8) : retrouvées dans le texte final ; choix de GSS de la génération précédente
+    // appliqués (texte remis), les autres signalées à GSS. Aucun signalement dans le mémoire remis.
+    const adaptations = this.finaliserAdaptations(suivi, sections, titreDe, elementsLibres);
     // Questions à GSS mises en forme (vraies questions, sans doublon) comme dans l'état de l'assistant.
     const consultationList = [...new Set(elementsSansDoublon(elementsLibres).filter((e) => e.statut === 'ouvert').map((e) => e.question))];
     consultationList.push(...avisSecours);
@@ -7653,6 +7693,8 @@ RÈGLES DE FORME (rendu Marp) :
       return { id, n: i < 0 ? 0 : (t.slice(i).match(/^\s*[-*•]\s+\S/gm) || []).length };
     }).filter((x) => x.n > 0);
     for (const x of engagementsIA) consultationList.push(`Engagements à valider (exigences du CCTP rédigées par l'IA) : « ${titreDe(x.id)} » — ${x.n} engagement${x.n > 1 ? 's' : ''}`);
+    // Phrases de GSS adaptées au CCTP (D8) : une ligne par phrase à valider (aucune s'il n'y en a pas).
+    consultationList.push(...consultationsAdaptations(adaptations));
     if (consultationList.length) {
       console.warn(`[MemoireGenerator] ⚠ ${consultationList.length} consultation(s) GSS :\n- ${consultationList.join('\n- ')}`);
       progres(86, `⚠ ${consultationList.length} information(s) à obtenir ou à valider auprès de GSS : ${consultationList.slice(0, 3).join(' ; ')}${consultationList.length > 3 ? '…' : ''}`);
@@ -7690,6 +7732,13 @@ RÈGLES DE FORME (rendu Marp) :
       if (etat.conversation?.length) etat.conversation[0].texte = `${etat.conversation[0].texte}\n\n${texteEng}`;
       else etat.conversation = [{ role: 'assistant', texte: texteEng, date: new Date().toISOString() }];
     }
+    // Phrases de GSS adaptées au CCTP (D8) : annoncées dans le premier message, à valider, modifier ou rétablir.
+    const texteAdaptations = messageAdaptations(adaptations);
+    if (texteAdaptations) {
+      if (etat.conversation?.length) etat.conversation[0].texte = `${etat.conversation[0].texte}\n\n${texteAdaptations}`;
+      else etat.conversation = [{ role: 'assistant', texte: texteAdaptations, date: new Date().toISOString() }];
+    }
+    if (adaptations.length) etat.adaptations = adaptations;
     // Dimensionnement proposé (D5) : annoncé dans le premier message de l'assistant, à valider ou modifier.
     if (ctxBase.dimensionnement?.titulaires) {
       const texteDim = `${messageDimensionnement(ctxBase.dimensionnement)}`;
@@ -8185,11 +8234,47 @@ Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "tex
   }
 
   /**
+   * Suivi des phrases de GSS adaptées au CCTP (D8) pour une génération : textes de GSS publipostés (référence), délais
+   * normands retirés au publipostage (marché hors Normandie ou à sites mixtes) et choix de GSS de la génération précédente
+   * du dossier (état de complétion).
+   */
+  private suiviAdaptations(dossierId: string, mt: MemoireType, ctx: ContexteMarche, ids: string[], textes: string[], options: { marquerConsultations?: boolean } = {}): SuiviAdaptations {
+    let horsNormandie: ReturnType<typeof adaptationsHorsNormandie> = [];
+    try {
+      horsNormandie = adaptationsHorsNormandie(mt, ctx, ids, options);
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Délais normands retirés au publipostage : comparaison indisponible (${e?.message || e}).`);
+    }
+    const decisions = dossierId ? (lireEtat(dossierId)?.adaptations || []) : [];
+    const suivi = new SuiviAdaptations({ reference: [...textes, ...horsNormandie.map((x) => x.reference)], decisions });
+    suivi.noterPubliposte(horsNormandie);
+    return suivi;
+  }
+
+  /**
+   * Fin de génération (D8) : phrases adaptées retrouvées dans le texte final, choix de GSS de la génération précédente
+   * appliqués ; un emplacement « [À COMPLÉTER] » disparu avec une phrase rétablie n'est plus demandé.
+   */
+  private finaliserAdaptations(suivi: SuiviAdaptations, sections: Record<string, string>, titreDe: (id: string) => string, elements: ElementACompleter[] = [], correspondance: Record<string, string[]> = {}): PhraseAdaptee[] {
+    const avant = Object.values(sections).join('\n');
+    const liste = suivi.finaliser(sections, titreDe, correspondance);
+    const apres = Object.values(sections).join('\n');
+    if (apres !== avant) {
+      for (let i = elements.length - 1; i >= 0; i--) {
+        const r = elements[i].reperes || [];
+        if (elements[i].statut === 'ouvert' && r.length && r.every((n) => avant.includes(REPERE(n)) && !apres.includes(REPERE(n)))) elements.splice(i, 1);
+      }
+    }
+    if (liste.length) console.log(`[MemoireGenerator] Phrases de GSS adaptées au CCTP (D8) : ${liste.length}, dont ${aValider(liste).length} à valider par GSS${liste.length > aValider(liste).length ? ` (choix repris : ${liste.filter((a) => a.statut !== 'a_valider').map((a) => `n° ${a.n} ${a.statut}`).join(', ')})` : ''}.`);
+    return liste;
+  }
+
+  /**
    * Cohérence avec le CCTP : une phrase dont un chiffre contredit une exigence chiffrée du DCE (fréquence
    * inférieure au minimum imposé, délai plus long que le maximum…) est reformulée pour s'aligner sur
    * l'exigence. Seuls les remplacements retrouvés MOT POUR MOT sont appliqués. Étape non bloquante.
    */
-  private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>, proteges: string[] = [], questions?: Set<string>): Promise<void> {
+  private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>, proteges: string[] = [], questions?: Set<string>, noter?: (id: string, avant: string, apres: string, exigence: string) => void): Promise<void> {
     const ids = rubriques.map((r) => r.id).filter((id) => (sections[id] || '').trim());
     // Une rubrique à la fois, avec les exigences chiffrées qui lui sont attribuées (contexte court : résultat stable).
     // Chaque rubrique est confrontée à TOUTES les exigences (une contradiction se trouve souvent hors de la
@@ -8232,7 +8317,10 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
           if (questions && exigence) questions.add(`Le DCE exige : « ${exigence.replace(/[.\s]+$/, '').slice(0, 300)} ». Le mémoire indique la valeur de GSS : « ${extrait.replace(/[*_#]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)} ». Disposez-vous d'une garantie ou d'une valeur conforme à cette exigence (extension, attestation), et laquelle faut-il écrire ?`);
           continue;
         }
+        const texteAvant = sections[id];
         sections[id] = sections[id].replace(extrait, remplacement);
+        // Le CCTP prime, mais la phrase de GSS alignée est signalée à GSS avec l'exigence citée (D8).
+        noter?.(id, texteAvant, sections[id], String(c?.exigence || '').replace(/\s+/g, ' ').trim());
         n++;
       }
     } catch { /* étape facultative */ }
@@ -8248,7 +8336,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
    * fixe la fermeture aux usagers à 21 h et la mise sous alarme à 22 h). Seule la phrase fautive est remplacée,
    * partout où elle figure. Étape non bloquante.
    */
-  private async verifierHoraires(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, dce: string): Promise<void> {
+  private async verifierHoraires(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, dce: string, noter?: (id: string, avant: string, apres: string, exigence: string) => void): Promise<void> {
     // Ouverture, fermeture et mise sous alarme des bâtiments seulement : les horaires de rondes et de présence des
     // postes sont contrôlés rubrique par rubrique (corrigerContradictions), avec le détail de chaque site.
     const OBJET = /ouvert|ferm|alarme/i;
@@ -8295,7 +8383,13 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"n": <numéro>, "phrase": "
         const apres = String(c?.phrase || '').trim();
         // Correction d'horaire seulement : la phrase garde l'essentiel de son texte (pas de réécriture).
         if (!avant || !apres || apres === avant || Math.abs(squelette(apres).length - squelette(avant).length) > 45) continue;
-        for (const id of ids) if (sections[id].includes(avant)) { sections[id] = sections[id].split(avant).join(apres); n++; }
+        for (const id of ids) if (sections[id].includes(avant)) {
+          const texteAvant = sections[id];
+          sections[id] = sections[id].split(avant).join(apres);
+          // Phrase alignée sur l'horaire du CCTP : signalée à GSS (D8).
+          noter?.(id, texteAvant, sections[id], String(c?.horaire_cctp || '').replace(/\s+/g, ' ').trim() || exigenceProche(apres, horaires));
+          n++;
+        }
       }
     } catch { /* étape facultative */ }
     if (n) console.log(`[MemoireGenerator] Horaires du CCTP : ${n} phrase(s) corrigée(s).`);
@@ -8736,6 +8830,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const publiees = publierMemoire(prep, { marquerConsultations: true });
     const textes: Record<string, string> = {};
     for (const p of publiees) if (p.texte) textes[p.id] = p.texte;
+    // Phrases de GSS adaptées au CCTP (D8), comme en réponse libre.
+    const suivi = this.suiviAdaptations(dossierId, mt, { ...ctxBase, matrice }, publiees.filter((p) => p.texte).map((p) => p.id), publiees.map((p) => p.texte || ''), { marquerConsultations: true });
     const { parRubrique, nouvelles: nouvellesMatrice } = exigencesParRubrique(mt, planMT, matrice);
     const tri = trierNouvelles(mt, planMT, nouvellesMatrice);
     for (const [id, l] of Object.entries(tri.rattachees)) (parRubrique[id] ||= []).push(...l);
@@ -8897,11 +8993,13 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       nettoye.retires.forEach((x) => commentairesRetires.add(`À confirmer : ${retablirGras(x)}`));
       const delais = delaisHorsNormandie(retablirGras(nettoye.texte), dceContext, horsNormandie);
       delais.retires.forEach((x) => commentairesRetires.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
+      suivi.noterFiltres(id, retablirGras(nettoye.texte), delais.texte, dceContext, horsNormandie, analysisData);
       sections[id] = delais.texte;
     }
     progres(70, 'Cohérence avec les exigences chiffrées et les horaires du CCTP…');
-    await this.corrigerContradictions(sections, plan, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))], [], questionsCouverture);
-    await this.verifierHoraires(sections, plan, dceContext);
+    const exigencesCoherence = [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))];
+    await this.corrigerContradictions(sections, plan, exigencesCoherence, [], questionsCouverture, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, exigencesCoherence.map((x) => String(x.exigence || ''))));
+    await this.verifierHoraires(sections, plan, dceContext, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, [], 'Horaires du CCTP'));
     await this.engagementsChiffresManquants(sections, plan, dceContext);
     const remarquesCourt = await this.remarquesCahierDesCharges(dceContext);
     if (remarquesCourt) {
@@ -9066,14 +9164,24 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     elements.push(...questionsDesEmplacements(sections, elements, (id) => plan.find((x) => x.id === id)?.title || ''));
     await this.completerParLesMemoires(elements, sections, horsNormandie);
     // « Le titulaire » des exigences recopiées du CCTP est GSS : voix de GSS dans tout le texte remis.
-    for (const id of Object.keys(sections)) sections[id] = voixDeGss(nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext)));
+    for (const id of Object.keys(sections)) {
+      const avantFiltres = fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext);
+      const filtre = interditsDce(delaisHorsNormandie(avantFiltres, dceContext, horsNormandie).texte, dceContext);
+      suivi.noterFiltres(id, avantFiltres, filtre, dceContext, horsNormandie, analysisData);
+      sections[id] = voixDeGss(nettoyerStructure(filtre));
+    }
     // Nom de l'acheteur écrit d'une seule façon partout (casse et accents de la variable CLIENT, parc_expo 202).
     { const nomClient = String(prep.variables.CLIENT?.valeur || ''); if (nomClient) for (const id of Object.keys(sections)) sections[id] = harmoniserNomClient(sections[id], nomClient); }
     nomClientCourtApresPremiere(sections, prep.variables.CLIENT as any, analysisData?.clientName || '');
+    // Phrases de GSS adaptées au CCTP (D8) : retrouvées dans les parties finales (rubriques du mémoire type reprises par
+    // chaque partie) ; choix de GSS de la génération précédente appliqués, les autres signalées.
+    const adaptations = this.finaliserAdaptations(suivi, sections, (id) => plan.find((x) => x.id === id)?.title || id, elements, rep.parPartie);
     rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
     const consultationList = [...new Set(elementsSansDoublon(elements).filter((e) => e.statut === 'ouvert').map((e) => e.question))];
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
     consultationList.push(...avisSecours, ...propositions);
+    // Phrases de GSS adaptées au CCTP (D8) : une ligne par phrase à valider (aucune s'il n'y en a pas).
+    consultationList.push(...consultationsAdaptations(adaptations));
     console.log(`[MemoireGenerator] Format court (mémoire type) : ${rendu.pages} page(s) / ${format.pagesMax} autorisée(s) ; ${toutesRetenues.length} rubrique(s) du mémoire type reprise(s), ${propositions.length} proposition(s).`);
     // Premier message de l'assistant : les propositions de l'IA, à valider ou modifier avant la remise (D5) ; chaque
     // partie qui en contient est marquée « proposition à valider » pour l'action « valider » de l'assistant.
@@ -9101,12 +9209,19 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       if (conversation?.length) conversation[0].texte = `${conversation[0].texte}\n\n${texteDim}`;
       else conversation = [{ role: 'assistant', texte: texteDim, date: new Date().toISOString() }];
     }
+    // Phrases de GSS adaptées au CCTP (D8) : annoncées dans le premier message, à valider, modifier ou rétablir.
+    const texteAdaptations = messageAdaptations(adaptations);
+    if (texteAdaptations) {
+      if (conversation?.length) conversation[0].texte = `${conversation[0].texte}\n\n${texteAdaptations}`;
+      else conversation = [{ role: 'assistant', texte: texteAdaptations, date: new Date().toISOString() }];
+    }
     try {
       ecrireEtat({
         dossierId, mode: 'libre', fichier: rendu.filePath, majLe: '', elements: elementsSansDoublon(elements), reponsesTraitees: [],
         libre: { sections, schemas, cover, court: { pagesMax: format.pagesMax, plan, source: format.source }, theme: themeActif(), ...(ajoutsCourt.length ? { ajouts: ajoutsCourt } : {}) },
         demande: this.demandeParticuliere?.demande || undefined, conversation,
         ...(this.dimensionnementEtat ? { dimensionnement: this.dimensionnementEtat } : {}),
+        ...(adaptations.length ? { adaptations } : {}),
       });
     } catch (e: any) {
       console.warn(`[MemoireGenerator] État de complétion non enregistré (non bloquant) : ${e?.message || e}`);
