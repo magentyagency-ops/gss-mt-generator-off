@@ -2155,6 +2155,26 @@ function siteCellVerbatim(rowLabel: string, col: SiteColumn): string {
 
 // ─── Main Class ───
 
+
+/**
+ * Calendrier de GSS gardé alors que le DCE impose un autre délai (ifsem 335 : J-10, J-7, J-3 face à « au moins 10 jours
+ * ouvrés avant le début du mois ») : une seule question précise, qui cite l'exigence et les jalons écrits dans le mémoire.
+ * Une question de couverture sur la même obligation (même délai et même objet, « planning ») n'est pas reposée à part :
+ * elle est remplacée par cette question, qui la reprend en entier.
+ */
+export function questionJalons(questions: Set<string>, exigence: string, section: string): string {
+  const calendrier = section.split('\n').map((l) => l.replace(/^\s*[-*•]\s*/, '').replace(/[*_]/g, '').replace(/\s*;\s*$/, '').trim())
+    .filter((l) => /(?<![A-Za-z0-9])J\s*[-−–+]\s*\d/.test(l));
+  const ex = exigence.replace(/[.\s]+$/, '').slice(0, 300);
+  const objet = (/(planning|rapport|bilan|compte rendu|facture|consigne|liste)s?/i.exec(ex) || [])[1]?.toLowerCase() || '';
+  const delai = (/\d+\s*(?:jours?|heures?|h|semaines?|mois)(?:\s+(?:ouvr[ée]s|calendaires|francs|ouvrables))?/i.exec(ex) || [])[0] || '';
+  const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ');
+  const memes = [...questions].filter((q) => delai && objet && norm(q).includes(norm(delai)) && norm(q).includes(norm(objet)));
+  memes.forEach((q) => questions.delete(q));
+  const q = `Le DCE exige : « ${ex} ». Le calendrier de GSS écrit dans le mémoire est : « ${calendrier.join(' ; ')} ». Quelles échéances faut-il écrire pour ce marché (envoi des plannings, validation par les agents, envoi à l'acheteur) ?${memes.length ? ` ${memes.join(' ')}` : ''}`;
+  questions.add(q);
+  return q;
+}
 export class MemoireGenerator {
   private openai: OpenAI;
   private responseDir: string;
@@ -7923,6 +7943,7 @@ Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "tex
     const toutes = exigences.map((r) => String(r.exigence || '')).filter(Boolean).slice(0, 130);
     const lots = ids.map((id) => ({ id, chiffrees: toutes })).filter((l) => l.chiffrees.length);
     let n = 0;
+    const jalonsRefuses = new Map<string, string>();
     await Promise.all(lots.map(async ({ id: idLot, chiffrees }) => {
     const r = await this.callOpenAI([
       {
@@ -7948,6 +7969,11 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
         if (motif) {
           console.warn(`[MemoireGenerator] Cohérence ${id} avec le CCTP : remplacement refusé (${motif}) : « ${extrait.slice(0, 100)} ».`);
           const exigence = String(c?.exigence || '').replace(/\s+/g, ' ').trim();
+          // Calendrier de GSS (« J-10 », « J-3 ») : une seule question par rubrique, qui cite l'exigence et les jalons écrits.
+          if (motif === 'jalon du calendrier de GSS') {
+            if (questions && exigence && !jalonsRefuses.has(id)) jalonsRefuses.set(id, exigence);
+            continue;
+          }
           if (questions && exigence) questions.add(`Le DCE exige : « ${exigence.replace(/[.\s]+$/, '').slice(0, 300)} ». Le mémoire indique la valeur de GSS : « ${extrait.replace(/[*_#]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)} ». Disposez-vous d'une garantie ou d'une valeur conforme à cette exigence (extension, attestation), et laquelle faut-il écrire ?`);
           continue;
         }
@@ -7957,6 +7983,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
     } catch { /* étape facultative */ }
     }));
     if (n) console.log(`[MemoireGenerator] Cohérence avec le CCTP : ${n} passage(s) aligné(s) sur les exigences chiffrées.`);
+    if (questions) for (const [id, exigence] of jalonsRefuses) questionJalons(questions, exigence, sections[id] || '');
   }
 
   /**

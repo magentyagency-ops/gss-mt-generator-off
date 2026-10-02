@@ -377,6 +377,11 @@ export function montantsRegistre(): string[] {
   return charger().registre.flatMap((e) => String(e.valeur_retenue || '').match(/\d[\d\s\u00a0\u202f.,]*\s*(?:€|euros?\b)/gi) || []);
 }
 
+/** Jalons « J-n » / « J+n » d'un texte, normalisés (« J - 10 » → « J-10 »). */
+export function jalonsDe(t: string): string[] {
+  return [...String(t || '').matchAll(/(?<![A-Za-z0-9])J\s*([-−–+])\s*(\d{1,3})(?!\d)/g)].map((m) => `J${m[1] === '+' ? '+' : '-'}${m[2]}`);
+}
+
 /**
  * Remplacement proposé par une passe d'alignement sur le CCTP (corrigerContradictions) qui toucherait un fait de GSS :
  * montant en euros (garanties d'assurance), numéro de contrat ou d'autorisation, valeur du registre. Le seuil exigé par le
@@ -388,6 +393,10 @@ export function motifRefusAlignement(extrait: string, remplacement: string): str
   if (montants(extrait) && montants(extrait) !== montants(remplacement)) return 'montant de GSS';
   const numeros = (t: string) => String(t || '').match(/\b[A-Z]{2,}[A-Z0-9-]*\d{4,}[A-Z0-9-]*\b/g) || [];
   if (numeros(extrait).some((x) => !String(remplacement).includes(x))) return 'numéro de contrat ou d\'autorisation de GSS';
+  // Jalon du calendrier de GSS (« J-10 : envoi des plannings », « J-3 : envoi des plannings au CNRS », confirmés par GSS) :
+  // jamais remplacé par le délai du CCTP, sinon la suite des jalons n'est plus chronologique (ifsem 335 : planning envoyé au
+  // CNRS avant d'être validé par les agents). L'écart est demandé à GSS.
+  if (jalonsDe(extrait).some((j) => !jalonsDe(remplacement).includes(j))) return 'jalon du calendrier de GSS';
   const n = (t: string) => normTxt(String(t || '')).replace(/\s+/g, ' ');
   const ext = n(extrait), rem = n(remplacement);
   for (const e of charger().registre) {

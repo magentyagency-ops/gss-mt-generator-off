@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { lignesEquipe, questionDimensionnement, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, marcheHorsNormandie, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss } from './base_memoires';
+import { horairesImposes, jalonsDe, marcheHorsNormandie, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -2063,6 +2063,8 @@ function refusTexteNouveau(nouveau: string, ancien: string, o: OptionsModificati
   for (const [rx, motif] of INTERDITS_ADAPTATION) if (rx.test(nouveau) && !rx.test(ancien) && !(motif === 'Covid' && !motifCovidInterdit(o.dce || '').test(nouveau))) return motif;
   if (/L\.?\s?1224/.test(nouveau) && !/L\.?\s?1224/.test(o.dce || '')) return 'article L. 1224-1 absent du DCE';
   if (retirerCommentairesInternes(nouveau).retires.length) return 'commentaire interne';
+  // Jalon du calendrier de GSS (« J-10 », « J-3 ») : jamais remplacé par un délai du DCE (ifsem 335).
+  if (jalonsDe(ancien).some((j) => !jalonsDe(nouveau).includes(j))) return 'jalon du calendrier de GSS';
   // Phrase du CCTP recopiée (« son remplaçant devra être présent … », « À Coriolis, l'accueil des premiers
   // utilisateurs … ») : ce n'est pas une adaptation du texte de GSS, et l'exigence est traitée par sa rubrique.
   const motsAncien = new Set(normaliser(ancien).split(/[^a-z0-9]+/));
