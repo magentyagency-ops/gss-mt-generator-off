@@ -974,9 +974,16 @@ const NOMBRES_LETTRES: Record<string, number> = {
 const RX_DELAI = /(?:dans|sous|en moins de|d[ée]lai(?:\s+maxim(?:al|um))?\s+de|au plus tard (?:dans|en))\s+(?:les\s+|un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?de\s+)?(\d{1,3}|une?|deux|trois|quatre|cinq|six|sept|huit|dix|douze|quinze|vingt|trente|quarante-cinq|quarante|soixante)\s*(?:\(\s*(\d{1,3})\s*\)\s*)?(minutes?|mn|min|heures?|h)(?![\wÀ-ÿ])/gi;
 
 /** Sujets des délais que le CCTP peut imposer. */
-const SUJETS_DELAI: Record<string, { sujet: RegExp; exclure?: RegExp }> = {
+const SUJETS_DELAI: Record<string, { sujet: RegExp; exclure?: RegExp; objet?: RegExp; personnel?: RegExp }> = {
   // « absence prévue / prévisible » (préavis) exclue ; « absence imprévue », « effectif prévu » gardés.
-  remplacement: { sujet: /rempla[cç]/i, exclure: /absences? (?:pr[ée]vues?|pr[ée]visibles?)|(?<![\wÀ-ÿ])pr[ée]visibles?(?![\wÀ-ÿ])|[àa] l.avance|planning/i },
+  // Le remplacement d'un OBJET (rouen_univ : « En cas de panne ils devront être remplacés en moins de 24H par un véhicule
+  // équivalent ») n'est pas le remplacement d'un agent : la phrase est écartée quand elle nomme un objet sans nommer le
+  // personnel (T4C-4 : l'agent d'astreinte était annoncé « sur site en 24 heures maximum »).
+  remplacement: {
+    sujet: /rempla[cç]/i, exclure: /absences? (?:pr[ée]vues?|pr[ée]visibles?)|(?<![\wÀ-ÿ])pr[ée]visibles?(?![\wÀ-ÿ])|[àa] l.avance|planning/i,
+    objet: /v[ée]hicules?|t[ée]l[ée]phones?|mat[ée]riels?|(?<![\wÀ-ÿ])cl[ée]s?(?![\wÀ-ÿ])|cylindres?|badges?|[ée]quipements?|batteries?|(?<![\wÀ-ÿ])pannes?(?![\wÀ-ÿ])|appareils?|terminal|terminaux|radios?|talkies?|uniformes?|tenues?/i,
+    personnel: /agents?|personnels?|effectifs?|postes?|absen|d[ée]faillan|salari[ée]s?|vacations?|rondiers?|gardiens?|SSIAP|chefs?|rempla[cç]ants?/i,
+  },
   alarme: { sujet: /alarme|t[ée]l[ée]\s?-?surveillance|lev[ée]e de doute|d[ée]clenchement/i, exclure: /(?<![\wÀ-ÿ])(?:PTI|DATI)(?![\wÀ-ÿ])|travailleur isol/i },
   pti: { sujet: /(?<![\wÀ-ÿ])(?:PTI|DATI)(?![\wÀ-ÿ])|travailleur isol/i },
   commande: { sujet: /bons? de commande|commandes? (?:compl[ée]mentaires?|suppl[ée]mentaires?)|prestations? (?:ponctuelles?|exceptionnelles?|suppl[ée]mentaires?)/i, exclure: /pr[ée]venance/i },
@@ -992,6 +999,7 @@ export function delaiDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): strin
   const valeurs = new Set<string>();
   for (const ph of phrasesDuDce(dce)) {
     if (!def.sujet.test(ph) || def.exclure?.test(ph)) continue;
+    if (def.objet?.test(ph) && !def.personnel?.test(ph)) continue;
     if (sujet === 'ssi' && !/d[ée]faillan|hors service|d[ée]rangement/i.test(ph)) continue;
     for (const m of ph.matchAll(RX_DELAI)) {
       const n = m[2] ? Number(m[2]) : (/^\d+$/.test(m[1]) ? Number(m[1]) : NOMBRES_LETTRES[m[1].toLowerCase()]);
