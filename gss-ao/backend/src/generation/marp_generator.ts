@@ -691,10 +691,11 @@ export class MarpGenerator {
 
         // Split TOC across pages if it gets too long (~18 items per page)
         if (tocPages[tocPages.length - 1].length >= (refonte ? 28 : 18)) {
-          // Thèmes de la refonte (corps de texte plus petit) : 28 lignes par page, et la page suivante reprend la ligne
-          // du chapitre en cours (sinon la sous-rubrique qui l'ouvre serait lue comme un bloc de code).
+          // Thèmes de la refonte (corps de texte plus petit) : 28 lignes par page ; tous les thèmes, retour arrière compris : la
+          // page suivante reprend la ligne du chapitre en cours (sinon la sous-rubrique qui l'ouvre, « \t5. __…__ » en tête
+          // de page, était lue comme un bloc de code : sommaire de la recomposition v1 becquerel et d'un état v1 réel).
           // Ligne vide après la ligne du chapitre : la sous-liste reprise (« 28. ») ne peut pas interrompre un paragraphe.
-          tocPages.push(refonte && idx < titresToc.length - 1 ? [chapterLine, ''] : []);
+          tocPages.push(idx < titresToc.length - 1 ? [chapterLine, ''] : []);
         }
       });
     }

@@ -35,6 +35,14 @@ function preparerAvant(): void {
   for (const f of ['marp_generator.ts', 'organigramme.ts', 'format_court.ts', 'visuels_cadre.ts', 'schema_service.ts']) {
     let src = execSync(`git -C "${RACINE_GIT}" show ${COMMIT}:gss-ao/backend/src/generation/${f}`, { encoding: 'utf-8', maxBuffer: 64 << 20 });
     for (const [re, rep] of imports) src = src.replace(re, rep);
+    // Correction voulue du retour arrière (tour 2, T2-REG-1, bug antérieur à la refonte) : la page de sommaire qui suit une
+    // coupure reprend la ligne du chapitre en cours ; la référence d'avant les thèmes la reçoit aussi, le reste est comparé
+    // à l'identique.
+    if (f === 'marp_generator.ts') {
+      const avant = src;
+      src = src.replace(/(if \(tocPages\[tocPages\.length - 1\]\.length >= 18\) \{\s*)tocPages\.push\(\[\]\);/, "$1tocPages.push(idx < titresToc.length - 1 ? [chapterLine, ''] : []);");
+      if (src === avant) throw new Error('Référence du sommaire introuvable dans marp_generator.ts du commit de référence.');
+    }
     fs.writeFileSync(path.join(AVANT, f), src);
   }
   // Ressources Marp (logo, CSS d'origine du commit) : dossier propre, la feuille est celle d'avant les thèmes.
