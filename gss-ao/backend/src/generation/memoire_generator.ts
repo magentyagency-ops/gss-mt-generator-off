@@ -5353,7 +5353,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         const ws = sigWords(v);
         const ls = lineSig(d.context);
         const arr = zoneWordSets.get(ls) ?? zoneWordSets.set(ls, []).get(ls)!;
-        if (ws.size >= 3 && arr.some((prev) => overlap(ws, prev) >= 0.78)) {
+        if (ws.size >= 3 && !coordonnees && arr.some((prev) => overlap(ws, prev) >= 0.78)) {
           valById.set(d.id, '');
           console.log(`[MemoireGenerator] Quasi-doublon vidé: CHAMP_${d.id} (redite dans la même zone)`);
         } else {
@@ -5580,10 +5580,24 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       // Question générique (« Quelle donnée précise doit figurer dans le passage laissé vide… ? », « … la partie manquante du
       // mémoire technique relative au site concerné ? », havre1 21) : elle cite la question du cadre et la phrase exacte.
       for (const el of elementsACompleter) {
-        if (!/laiss[ée]e? vide|partie manquante|passage manquant|donn[ée]e pr[ée]cise doit figurer|information manquante/i.test(el.question)) continue;
         const champ = signets.find((s) => s.cle === el.cle)?.champ;
-        const libelleCadre = ((descriptors.find((x) => x.id === champ)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').replace(/\s+/g, ' ').trim().slice(0, 160);
-        el.question = `Quelle information faut-il écrire${libelleCadre ? ` dans la réponse à « ${libelleCadre} »` : ''}, à la place de « [À COMPLÉTER] » dans la phrase « ${el.contexte.replace(REPERE_TECHNIQUE, '').replace(/\s+/g, ' ').trim().slice(0, 220)} » ?`;
+        const ctxChamp = descriptors.find((x) => x.id === champ)?.context || '';
+        // Case de tableau dont la phrase se réduit à « [À COMPLÉTER] » : la question cite la ligne et la colonne en clair.
+        const colonne = (ctxChamp.match(/Colonne:\s*"([^"]*)"/) || [])[1];
+        const ligne = ((ctxChamp.match(/Ligne:\s*"([^"]*)"/) || [])[1] || '').split('|')[0].replace(/\[CHAMP_\d+\]/g, '').trim();
+        const contexteVide = !el.contexte.replace(/\[À COMPLÉTER\]|\[CHAMP_\d+\]|[\s.:;…-]/g, '');        // Périodes neutralisées (« fermeture entreprise ») : celles de GSS, le soumissionnaire, jamais celles de l'acheteur.
+        if (/p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(`${ctxChamp} ${el.contexte}`)) {
+          el.question = 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».';
+          el.pourAcheteur = false;
+          continue;
+        }
+        if (colonne && ligne && (contexteVide || /emplacement|laiss[ée]e? vide|partie manquante/i.test(el.question))) {
+          el.question = `Tableau du cadre, ligne « ${ligne} », colonne « ${colonne.replace(/\s*\/\s*/g, ' — ')} » : quelle valeur faut-il écrire ?`;
+          continue;
+        }
+        if (!contexteVide && !/laiss[ée]e? vide|partie manquante|passage manquant|donn[ée]e pr[ée]cise (?:doit figurer|manque)|emplacement [àa] compl[ée]ter|information manquante/i.test(el.question)) continue;
+        const libelleCadre = ((ctxChamp.match(/Question:\s*"([^"]*)"/) || [])[1] || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+        el.question = `Quelle information faut-il écrire${libelleCadre ? ` dans la réponse à « ${libelleCadre} »` : ''}${contexteVide ? '' : `, à la place de « [À COMPLÉTER] » dans la phrase « ${el.contexte.replace(REPERE_TECHNIQUE, '').replace(/\s+/g, ' ').trim().slice(0, 220)} »`} ?`;
       }
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Formulation des questions par emplacement indisponible : ${e?.message || e}`);
@@ -5697,12 +5711,15 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       },
       // Grille de notation : chaque sous-critère signale ses manques → fusion des questions en doublon.
       // Aucun repère technique (« [CHAMP_14] ») ni doublon dans les questions remises à GSS (havre1 21).
-      consultations: [...new Set([
-        ...(descriptors.some((d) => d.grille)
-          ? await this.consoliderConsultations([...aCompleter, ...confirmationsGss])
-          : [...aCompleter, ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))]),
+      consultations: [
+        ...new Set([
+          ...(descriptors.some((d) => d.grille)
+            ? await this.consoliderConsultations([...aCompleter, ...confirmationsGss])
+            : [...aCompleter, ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))]),
+        ].map((c) => (/p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(c) ? 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».' : c).replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean)),
+        // Une ligne par réponse à relire ou à valider (même intitulé possible : une ligne chacune, comme le premier message).
         ...[...propositionsCadre.entries()].filter(([id]) => champsRediges.includes(id)).sort((a, b) => a[0] - b[0]).map(([, c]) => c),
-      ].map((c) => c.replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean))],
+      ],
     };
   }
 
