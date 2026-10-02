@@ -83,6 +83,8 @@ function cleanTextForMarp(raw: string): string {
     // On PRÉSERVE les titres Markdown (##/###) et le gras (**…**) : le thème les met en rouge et
     // en plus grande police. On escape seulement les caractères qui casseraient le rendu Marp.
     .replace(/([\\()[\]{}])/g, '\\$1')
+    // Guillemets français : espace insécable à l'intérieur, jamais un « » » seul en début de ligne (fontainebleau 21 p. 8).
+    .replace(/«[ \t]+/g, '«\u00a0').replace(/[ \t]+»/g, '\u00a0»')
     .trim();
 }
 

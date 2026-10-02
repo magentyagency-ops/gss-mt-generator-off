@@ -14,7 +14,7 @@
 import fs from 'fs';
 import path from 'path';
 import {
-  chargerMemoireType, normaliser, rechercherRubriques,
+  chargerMemoireType, normaliser, rechercherRubriques, similarite, motsDePhrase, faitsDePhrase,
   type DonneesBesoin, type ExigenceMatrice, type MemoireType, type PlanMemoireType, type SchemaRubrique,
 } from './memoire_type';
 import { ZONE_GSS, vocabulaireDuCctp } from './base_memoires';
@@ -945,6 +945,75 @@ export function analyseCompacte(analyse: any): string {
   return lignes.map(([k, v]) => `- ${k} : ${v.slice(0, 600)}`).join('\n');
 }
 
+/**
+ * Bloc 1 rédigé par le modèle, nettoyé sans modèle (fontainebleau 21) :
+ * - une phrase qui redit une phrase précédente du bloc (le chapeau redit dans « Votre contexte et votre site » : mêmes
+ *   chiffres et la moitié de ses mots au moins, ou 80 % de ressemblance) est retirée ;
+ * - durée du marché absente des données du DCE : la phrase « La durée du marché est [À COMPLÉTER] » et sa question sont
+ *   retirées (donnée de l'acheteur, jamais une question à GSS) ;
+ * - un renvoi « au bloc n, « Rubrique » » prend le numéro du bloc qui contient réellement la rubrique citée (« La
+ *   planification » est au bloc 4, pas au bloc 5) ; des rubriques de blocs différents sont renvoyées chacune à son bloc.
+ */
+export function nettoyerBloc1(texte: string, plan: PlanMemoireType | undefined, duree: string): { texte: string; retirees: string[]; renvois: number } {
+  const retirees: string[] = [];
+  let t = String(texte || '');
+  // 1. Durée inconnue du DCE.
+  if (!String(duree || '').trim()) {
+    t = t.split('\n').filter((l) => !(/\[CONSULTATION REQUISE\s*:[^\]]*dur[ée]e/i.test(l) && !l.replace(/\[CONSULTATION REQUISE\s*:[^\]]*\]/gi, '').trim())).join('\n');
+    t = t.split('\n').map((l) => l.split(/(?<=[.!?])\s+/).filter((ph) => {
+      const ko = /dur[ée]e[^.]{0,60}\[À COMPLÉTER\]/i.test(ph);
+      if (ko) retirees.push(ph.trim());
+      return !ko;
+    }).join(' ')).join('\n');
+  }
+  // 2. Redites (hors tableaux, sous-titres et puces).
+  const vues: Array<{ mots: string[]; faits: string[] }> = [];
+  t = t.split('\n').map((l) => {
+    if (/^\s*(?:\||#|[-*•]\s|\d+[.)]\s)/.test(l) || !l.trim()) return l;
+    return l.split(/(?<=[.!?])\s+/).filter((ph) => {
+      const mots = motsDePhrase(ph);
+      const faits = faitsDePhrase(ph).filter((f) => f.startsWith('N:'));
+      if (mots.length < 5) return true;
+      const redite = vues.some((v) => {
+        if (similarite(v.mots, mots) >= 0.8) return true;
+        if (!faits.length || !faits.every((f) => v.faits.includes(f))) return false;
+        const jeu = new Set(v.mots);
+        return mots.filter((w) => jeu.has(w)).length / mots.length >= 0.5;
+      });
+      if (redite) { retirees.push(ph.trim()); return false; }
+      vues.push({ mots, faits });
+      return true;
+    }).join(' ');
+  }).join('\n').replace(/\n{3,}/g, '\n\n');
+  // 3. Numéros de bloc des renvois.
+  let renvois = 0;
+  if (plan) {
+    const blocDe = new Map<string, number>();
+    for (const r of plan.rubriques) {
+      const b = plan.blocs.find((x) => x.id === r.bloc || x.rubriques.includes(r.id));
+      if (b) blocDe.set(normaliser(r.titre).replace(/[^a-z0-9]+/g, ' ').trim(), b.numero);
+    }
+    const numero = (titre: string): number | undefined => {
+      const k = normaliser(titre).replace(/[^a-z0-9]+/g, ' ').trim();
+      if (blocDe.has(k)) return blocDe.get(k);
+      // Titre cité en partie (« Le remplacement d'un agent absent » pour « … : absence non prévue ») : préfixe unique.
+      const cands = [...blocDe.entries()].filter(([x]) => x.startsWith(k) || k.startsWith(x));
+      return cands.length && new Set(cands.map((c) => c[1])).size === 1 ? cands[0][1] : undefined;
+    };
+    t = t.replace(/\b(au|du|dans le) bloc (\d)\s*(,|:)?\s*((?:«[^»]{2,120}»(?:\s*(?:,|et)\s*(?=«))?)+)/g, (m, prep: string, n: string, sep: string | undefined, cites: string) => {
+      const titres = [...cites.matchAll(/«\s*([^»]+?)\s*»/g)].map((x) => x[1]);
+      const nums = titres.map(numero);
+      if (!titres.length || nums.some((x) => x === undefined)) return m;
+      const distincts = [...new Set(nums as number[])];
+      if (distincts.length === 1 && distincts[0] === Number(n)) return m;
+      renvois++;
+      const liste = (l: string[]) => (l.length > 1 ? `${l.slice(0, -1).map((x) => `« ${x} »`).join(', ')} et « ${l[l.length - 1]} »` : `« ${l[0]} »`);
+      return distincts.sort((a, b) => a - b).map((b, i) => `${i === 0 ? prep : 'au'} bloc ${b}${sep || ','} ${liste(titres.filter((_, k) => nums[k] === b))}`).join(', et ');
+    });
+  }
+  return { texte: t.trim(), retirees, renvois };
+}
+
 /** Rubriques du plan par bloc, pour que la compréhension renvoie aux process GSS qui la démontrent. */
 export function sommaireProcess(plan: PlanMemoireType): string {
   return plan.blocs.filter((b) => !b.rubriques.every((id) => /^b1_/.test(id)))
@@ -956,7 +1025,7 @@ export const CONSIGNE_COMPREHENSION = `Tu rédiges, pour GSS (Global Security Se
 Sois force de proposition : montre que GSS a lu le cahier des charges en détail (faits, chiffres et mots exacts du DCE) et ce qu'il propose concrètement à CE client, process par process, en renvoyant aux blocs du mémoire qui le démontrent.
 
 TEXTE (Markdown, __MOTS__ mots, jamais plus), en quatre sous-parties « ## », dans cet ordre :
-## Votre contexte et votre site — 3 à 6 lignes : l'acheteur, l'objet du marché, le ou les sites, la durée ; faits du DCE uniquement, sans qualificatif promotionnel.
+## Votre contexte et votre site — 3 à 6 lignes : l'acheteur, l'objet du marché, le ou les sites, la durée (seulement si elle figure dans les DONNÉES DU MARCHÉ ; sinon n'en parle pas, jamais [À COMPLÉTER] pour une donnée de l'acheteur) ; faits du DCE uniquement, sans qualificatif promotionnel ; ne redis pas la première phrase.
 ## Le périmètre de la prestation demandée — un tableau Markdown « Site | Poste | Jours et horaires | Qualification | Missions principales », une ligne par poste prévu au CCTP (aucun poste, horaire ni effectif ajouté), puis une phrase par prestation complémentaire prévue (rondes, interventions sur alarme, bons de commande, reprise du personnel…).
 ## Vos attentes et nos engagements — 3 à 6 puces de la forme « **Ce que vous attendez** (mots de l'acheteur) : … → notre réponse : … (process GSS), développée au bloc n ».
 ## Les points de vigilance identifiés et nos réponses — 2 à 4 puces de la forme « **Point de vigilance** : … (fait du DCE) → notre réponse : … (process GSS existant) ».
