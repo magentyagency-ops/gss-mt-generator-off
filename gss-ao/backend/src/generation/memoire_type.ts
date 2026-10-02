@@ -389,6 +389,19 @@ function nombreDe(v: string): string {
 }
 
 /** Délai normalisé (« 60 MINUTES MAXI » → « 60 minutes », « 2 h » → « 2 heures »). */
+/**
+ * Délai imposé réduit à la durée (« 30 minutes maximum », « dans un délai maximal de 2 heures », « moins de 1 heure » →
+ * « 30 minutes », « 2 heures », « 1 heure ») : les phrases de GSS écrivent déjà « en {{DELAI}} au maximum » (caen 475 :
+ * « en 30 minutes maximum au maximum »). Un qualificatif de la durée (« 48 heures ouvrées ») est gardé.
+ */
+export function delaiNu(v: string): string {
+  return valeurPropre(v)
+    .replace(/^(?:(?:dans\s+)?un\s+d[ée]lai\s+(?:maximal\s+|maximum\s+|de\s+)?(?:de\s+)?|en\s+|sous\s+|moins\s+de\s+|au\s+plus\s+tard\s+(?:en\s+|sous\s+)?|au\s+maximum\s+|maximum\s+)/i, '')
+    .replace(/\s*(?:au\s+)?(?:maximum|max\.?)\s*$/i, '')
+    .replace(/\s*au\s+plus(?:\s+tard)?\s*$/i, '')
+    .trim();
+}
+
 export function normaliserDelai(v: string): string {
   const m = /(\d+)\s*(minutes?|mn|min|heures?|h)(?![\wÀ-ÿ])/i.exec(v || '');
   if (!m) return valeurPropre(v);
@@ -2702,7 +2715,8 @@ Réponds UNIQUEMENT par un objet JSON : {"valeurs":[{"variable":"NOM","valeur":"
     const nombresCitation = new Set(nombresDe(citation));
     const etrangers = nombresDe(valeur).filter((n) => !nombresCitation.has(n));
     if (etrangers.length) { refusees.push({ variable: nom, raison: `chiffre absent de la citation (${etrangers.join(', ')})` }); continue; }
-    imposees[nom] = { valeur, citation };
+    // Délai : la durée seule, la phrase de GSS porte déjà « en … au maximum ».
+    imposees[nom] = { valeur: sujetV !== undefined ? delaiNu(valeur) || valeur : valeur, citation };
   }
   return { imposees, refusees };
 }
