@@ -536,8 +536,11 @@ export function nettoyerReponseCadre(texte: string): string {
   const out: string[] = [];
   const vues = new Set<string>();
   const mots = (l: string) => new Set(normaliser(l.split(':')[0]).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length > 2));
+  const autres = lignes.filter((l) => l.trim() && !/^\[À COMPLÉTER\][.;]?$/.test(l.trim())).length;
   for (const l of lignes) {
     const t = l.trim();
+    // « [À COMPLÉTER] » seul sur sa ligne au milieu d'une réponse rédigée (havre1 181, 3.4) : sans objet, retiré.
+    if (/^\[À COMPLÉTER\][.;]?$/.test(t) && autres > 0) continue;
     if (/^(?:[•\-*]|\d+[.)])\s+[^:]{2,80}:\s*$/.test(t)) {
       // Puce de libellé sans contenu : rien ne la suit, ou la ligne suivante n'est pas une puce (fin de liste).
       const i = lignes.indexOf(l);

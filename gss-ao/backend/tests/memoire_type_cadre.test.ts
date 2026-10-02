@@ -333,6 +333,7 @@ describe('tour 1 : réponse 3.4 de havre1', () => {
     expect(r).not.toContain('Autorisation entreprise :');
     expect(r.match(/\[À COMPLÉTER\]/g)).toHaveLength(1);
     expect(r).toContain('Les tenues :\n• La tenue costume.');
+    expect(nettoyerReponseCadre('[À COMPLÉTER]\nL’autorisation d’exercer est AUT-076.')).toBe('L’autorisation d’exercer est AUT-076.');
   });
   it('au plus deux rubriques, de score voisin', () => {
     const c = (id: string, score: number) => ({ cle: id, id, titre: id, texte: '', score });
