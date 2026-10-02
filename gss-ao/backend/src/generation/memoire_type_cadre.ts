@@ -716,7 +716,13 @@ export function completerSousTitresVides(texte: string, sources: Array<{ texte?:
       const ls = String(src.texte || '').split('\n').map(n).filter(Boolean);
       return ls.some((l, k) => l === n(lignes[i]) && ls[k + 1] === n(lignes[j]));
     });
-    const vide = j >= lignes.length || repere || (estSousTitreCadre(lignes[j]) && !amorce && !suiteDeGss);
+    // Sous-titre du cadre suivi d'un sous-titre de GSS qui a son texte (citedia2 474 : « Continuité et stabilité des équipes »
+    // puis « La stabilité des équipes : » et sa phrase) : le bloc de GSS lui répond, il n'est pas vide (T4N-5).
+    let k2 = j + 1;
+    while (k2 < lignes.length && !lignes[k2].trim()) k2++;
+    const blocDeGss = j < lignes.length && estSousTitreCadre(lignes[j]) && k2 < lignes.length && !estSousTitreCadre(lignes[k2]) && !/^\s*\[À COMPLÉTER\][.;]?\s*$/.test(lignes[k2])
+      && sources.some((src) => String(src.texte || '').split('\n').some((l) => n(l) === n(lignes[j])));
+    const vide = j >= lignes.length || repere || (estSousTitreCadre(lignes[j]) && !amorce && !suiteDeGss && !blocDeGss);
     if (!vide) continue;
     const cible = racines(lignes[i].replace(/[#*]/g, ''));
     let meilleure = '', score = 0, exaequo = 0;
@@ -728,10 +734,32 @@ export function completerSousTitresVides(texte: string, sources: Array<{ texte?:
     // Deux mots porteurs en commun, ou un seul s'il ne désigne qu'une phrase des textes de GSS.
     const valeur = score >= 2 || (score === 1 && !exaequo) ? meilleure : '[À COMPLÉTER]';
     if (valeur !== '[À COMPLÉTER]') completes.push(lignes[i].trim());
+    // Phrase de GSS déjà présente plus loin dans la réponse (citedia2 442, T4N-5 : « Nous privilégions la stabilité… »
+    // sous « La stabilité des équipes : ») : déplacée sous ce sous-titre, jamais recopiée (le doublon retiré ensuite
+    // laissait le sous-titre de GSS sans texte) ; le sous-titre de GSS resté sans texte est retiré.
+    let deplacee = false;
+    if (valeur !== '[À COMPLÉTER]') {
+      const k = lignes.findIndex((l, x) => x > i && l.includes(valeur));
+      if (k > i) {
+        const reste = lignes[k].replace(valeur, '').replace(/\s{2,}/g, ' ').trim();
+        if (!reste || /^(?:[•\-*]|\d+[.)])$/.test(reste)) lignes.splice(k, 1); else lignes[k] = lignes[k].replace(valeur, '').replace(/\s{2,}/g, ' ').trimEnd();
+        deplacee = true;
+      }
+    }
     if (repere) lignes[j] = valeur;
     else lignes.splice(i + 1, 0, valeur);
+    if (deplacee) {
+      for (let x = i + 2; x < lignes.length; x++) {
+        if (!estSousTitreCadre(lignes[x])) continue;
+        let y = x + 1;
+        while (y < lignes.length && !lignes[y].trim()) y++;
+        const sansTexte = y >= lignes.length || estSousTitreCadre(lignes[y]);
+        const deGss = sources.some((src) => String(src.texte || '').split('\n').some((l) => n(l) === n(lignes[x])));
+        if (sansTexte && deGss) { lignes.splice(x, y - x); x--; }
+      }
+    }
   }
-  return { texte: lignes.join('\n'), completes };
+  return { texte: lignes.join('\n').replace(/\n{3,}/g, '\n\n'), completes };
 }
 
 /** Repères « R1 »… cités par le modèle, limités aux candidats fournis. */
@@ -773,6 +801,21 @@ export function sousTitreDeReference(ligne: string): boolean {
   return /:\s*$/.test(l) && motsDePhrase(l).length <= 8 && estSousTitreCadre(l.replace(/\s*:\s*$/, ''));
 }
 
+/**
+ * Phrase qui redit une phrase de GSS (même critère que la mesure de forme : 48 % de mots communs et 80 % de ressemblance) :
+ * un ajout de ce genre est une redite, retirée comme une bribe (citedia2 474, T4N-5 : « Nombre : 3 titulaires, représentant
+ * 2,39 ETP… » qui redit la ligne du tableau de l'équipe dédiée).
+ */
+export function rediteDePhrase(phraseGss: string, phrase: string): boolean {
+  const net = (t: string) => normaliser(String(t || '').replace(/\*\*/g, '')).replace(/^[\s•*\-\d.)]+/, '').replace(/[^a-z0-9']+/g, ' ').trim().split(' ').filter(Boolean);
+  const p = net(phraseGss), c = net(phrase);
+  if (p.length < 3 || c.length < 3) return false;
+  const jeu = new Set(p);
+  let communs = 0;
+  for (const w of c) if (jeu.has(w)) communs++;
+  return communs / Math.max(p.length, c.length) >= 0.48 && similarite(p, c) >= 0.8;
+}
+
 export function ordreEtSousTitres(reference: string, reponse: string): number {
   const net = (t: string) => normaliser(String(t || '').replace(/\*\*/g, '')).replace(/^[\s•*\-\d.)]+/, '').replace(/[^a-z0-9']+/g, ' ').trim();
   const phrases = (t: string) => String(t || '').split('\n').flatMap((l, ligne) => l.split(/(?<=[.!?;])\s+/).map((brut) => ({ brut, ligne, mots: net(brut).split(' ').filter(Boolean) })))
@@ -785,21 +828,34 @@ export function ordreEtSousTitres(reference: string, reponse: string): number {
   const contenuRepris = new Set<number>();
   let reprises = 0;
   let doublons = 0;
-  for (const p of ref) {
+  // Chaque phrase de GSS est appariée à la phrase la plus proche encore libre : deux phrases de GSS presque identiques
+  // (en-têtes des tableaux de l'équipe dédiée et des ressources de GSS, citedia2 474) ont chacune la leur ; seule une phrase
+  // proche que nulle phrase de GSS ne prend est une redite.
+  const prochesDe: Array<Array<{ j: number; s: number }>> = ref.map((p) => {
     const jeu = new Set(p.mots);
-    const proches: number[] = [];
+    const proches: Array<{ j: number; s: number }> = [];
     cand.forEach((c, j) => {
       let communs = 0;
       for (const w of c.mots) if (jeu.has(w)) communs++;
       if (communs / Math.max(p.mots.length, c.mots.length) < 0.48) return;
-      if (similarite(p.mots, c.mots) >= 0.8) proches.push(j);
+      const s = similarite(p.mots, c.mots);
+      if (s >= 0.8) proches.push({ j, s });
     });
-    if (!proches.length) continue;
+    return proches;
+  });
+  const pris = new Set<number>();
+  ref.forEach((p, k) => {
+    const proches = prochesDe[k];
+    if (!proches.length) return;
+    const libre = [...proches].sort((a, b) => b.s - a.s || a.j - b.j).find((x) => !pris.has(x.j)) || proches[0];
+    pris.add(libre.j);
     reprises++;
     contenuRepris.add(p.ligne);
-    positions.push(proches[0]);
-    doublons += proches.length - 1;
-  }
+    positions.push(libre.j);
+  });
+  const redites = new Set<number>();
+  prochesDe.forEach((proches) => proches.forEach((x) => { if (!pris.has(x.j)) redites.add(x.j); }));
+  doublons = redites.size;
   if (!reprises) return 1;
   // Plus longue suite croissante des positions (ordre de GSS conservé).
   const fins: number[] = [];
@@ -905,6 +961,39 @@ export interface ResultatRecalage {
   bribesRetirees: number;
 }
 
+/** Racines porteuses (5 lettres et plus, hors mots vides) d'un libellé, pour rapprocher un sous-titre d'un élément attendu. */
+const VIDES_ATTENDU = new Set(['dans', 'cadre', 'marche', 'prestation', 'prestations', 'service', 'mise', 'oeuvre', 'mises', 'propose', 'proposes', 'proposee', 'proposees', 'affecte', 'affectes', 'permettant', 'ensemble']);
+const racinesAttendu = (t: string) => new Set(normaliser(t).replace(/[^a-z ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 5 && !VIDES_ATTENDU.has(w)).map((w) => w.replace(/s$/, '').slice(0, 7)));
+
+/** Sous-titre ou ligne qui porte sur un élément attendu du cadre : deux racines communes, ou la moitié des siennes. */
+export function correspondAttendu(ligne: string, attendu: string): boolean {
+  const a = racinesAttendu(attendu), l = racinesAttendu(ligne);
+  if (!a.size || !l.size) return false;
+  const n = [...a].filter((w) => l.has(w)).length;
+  return n >= 2 || n / Math.min(a.size, l.size) >= 0.5;
+}
+
+/**
+ * Éléments attendus d'un champ du cadre (« Éléments de réponse attendus : ; Présentation de la main courante électronique ;
+ * … »), lus dans le libellé ou le contexte du champ. Liste vide s'il n'y en a pas.
+ */
+export function attendusDuChamp(texte: string): string[] {
+  const m = /[ÉE]l[ée]ments?\s+(?:de\s+r[ée]ponse\s+)?attendus?\s*:?/i.exec(String(texte || ''));
+  if (!m) return [];
+  const suite = String(texte).slice(m.index + m[0].length).split(/"\s*(?:\||$)|\n\s*\n\s*\n/)[0];
+  return [...new Set(suite.split(/\s*;\s*|\n+/).map((x) => x.replace(/^[\s•\-*]+/, '').trim())
+    .filter((x) => x.split(/\s+/).length >= 3 && x.length <= 200 && /^[A-ZÀ-Ý]/.test(x) && !/\b(?:maximum|pages?\s+recto|sur \d+ points|description argument)/i.test(x)))];
+}
+
+/**
+ * Éléments attendus du cadre sans réponse dans le texte remis : ni sous-titre ni ligne qui y correspond (T4N-4). Ils sont
+ * signalés à GSS (« Réponse à relire »).
+ */
+export function attendusSansReponse(texte: string, attendus: string[]): string[] {
+  const lignes = String(texte || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  return attendus.filter((a) => !lignes.some((l) => correspondAttendu(l, a)));
+}
+
 /**
  * Recalage d'une réponse développée du cadre sur le texte de GSS qu'elle reprend (consigne 5 : « l'IA reprend exactement
  * le mémoire de base » ; décision D7 : 90 % au moins), sans nouvel appel au modèle :
@@ -920,7 +1009,7 @@ export interface ResultatRecalage {
  * n'est jamais remise. Un sous-titre de GSS omis (« Le recyclage de nos tenues : ») n'est remis que devant son contenu.
  * Une phrase courte (moins de 6 mots, souvent un intitulé) n'est rapprochée d'une phrase de GSS qu'à 80 % au moins.
  */
-export function recalerSurReference(reference: string, reponse: string, o: { limite?: boolean; maxMots?: number; seuil?: number; exclure?: (phrase: string) => boolean; dce?: string } = {}): ResultatRecalage {
+export function recalerSurReference(reference: string, reponse: string, o: { limite?: boolean; maxMots?: number; seuil?: number; exclure?: (phrase: string) => boolean; dce?: string; attendus?: string[] } = {}): ResultatRecalage {
   const seuil = o.seuil ?? SEUIL_FIDELITE_CADRE;
   type Item = { brut: string; mots: string[]; ref?: number; ajout?: boolean };
   type Ligne = { items: Item[] };
@@ -1045,13 +1134,25 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     }
   };
   detacherAjouts();
-  const rendre = () => sortie.map((l) => l.items.map((x) => x.brut.trim()).join(' ')).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  // Phrase de GSS rétablie après un « ; » (« …dans la main courante électronique ; Le rapport trimestriel… », citedia2 442,
+  // T4N-4) : le déterminant qui suit le point-virgule reprend sa minuscule.
+  const APRES_PV = /^(?:Le|La|Les|L['’]|Un|Une|Des|Ce|Cet|Cette|Ces|Nous|Notre|Nos|Chaque|Il|Elle|Ils|Elles|Leur|Leurs|Son|Sa|Ses)(?=[\s'’])/;
+  const rendre = () => sortie.map((l) => l.items.map((x) => x.brut.trim()).reduce((acc, x) => {
+    if (!acc) return x;
+    return `${acc} ${/;\s*$/.test(acc) && APRES_PV.test(x) ? x.charAt(0).toLowerCase() + x.slice(1) : x}`;
+  }, '')).join('\n').replace(/\n{3,}/g, '\n\n').trim();
   const compter = (t: string) => (t.match(/[\wÀ-ÿ'’-]+/g) || []).length;
   // Sous-titre de GSS (ligne d'une seule phrase courte terminée par « : ») : remis en second, devant son contenu.
   const sousTitre = (k: number) => lignesRef[ref[k].ligne].length === 1 && /:\s*$/.test(ref[k].brut) && ref[k].mots.length <= 8;
   // Ligne de sous-titre de la référence (« Les transports : »), même de moins de trois mots (« Le numérique : »).
   const ligneSousTitre = (i: number) => (lignesRef[i] || []).length === 1 && sousTitreDeReference(lignesRef[i][0]);
   const estPuce = (i: number) => PUCE.test((lignesRef[i] || [])[0] || '');
+  // Ligne d'un tableau de GSS (« Catégorie : Qualification : Nombre : Observations ») et amorce qui l'introduit
+  // (« …constitué l'équipe suivante : ») : un bloc indivisible (T4N-5, citedia2 442 : amorce séparée de son tableau par
+  // les sous-titres du cadre, « Observations Nombre : 3. » collé à la ligne d'en-tête).
+  const LIGNE_TABLEAU_REF = /^(?![•\-*]\s)[^:\n]{2,}(?:\s:\s[^:\n]+){2,}$/;
+  const estTableauRef = (i: number) => LIGNE_TABLEAU_REF.test((lignesRef[i] || []).join(' ').trim());
+  const amorceTableau = (i: number) => !ligneSousTitre(i) && /:\s*$/.test((lignesRef[i] || [])[(lignesRef[i] || []).length - 1] || '') && estTableauRef(i + 1);
   // Sous-titre de GSS écrit tel quel par le modèle (souvent moins de trois mots, jamais apparié) : c'est celui de GSS.
   for (const it of items) {
     if (it.ref !== undefined) continue;
@@ -1070,19 +1171,25 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
    */
   const recomposer = (ajoutsALaFin: boolean) => {
     // Ajouts regroupés par ligne de GSS d'ancrage (dernière phrase de GSS qui les précède dans la réponse).
-    type Morceau = { ancre: number; lignes: Item[][]; dansLaLigne: boolean };
+    type Morceau = { ancre: number; lignes: Item[][]; dansLaLigne: boolean; suivant?: number };
     const morceaux: Morceau[] = [];
     let ancre = -1;
     let ligneAncre: Ligne | null = null;
+    let sansSuivant: Morceau[] = [];
     for (const l of sortie) {
       let courant: Item[] | null = null;
       for (const it of l.items) {
-        if (it.ref !== undefined) { ancre = it.ref; ligneAncre = l; courant = null; continue; }
+        if (it.ref !== undefined) {
+          // Phrase de GSS qui suit l'ajout dans la réponse (amorce de tableau : l'ajout reste devant elle).
+          for (const m of sansSuivant) m.suivant = it.ref;
+          sansSuivant = [];
+          ancre = it.ref; ligneAncre = l; courant = null; continue;
+        }
         const dernier = morceaux[morceaux.length - 1];
         if (!courant) {
           courant = [];
           if (dernier && dernier.ancre === ancre && ligneAncre !== l) dernier.lignes.push(courant);
-          else morceaux.push({ ancre, lignes: [courant], dansLaLigne: ligneAncre === l });
+          else { morceaux.push({ ancre, lignes: [courant], dansLaLigne: ligneAncre === l }); sansSuivant.push(morceaux[morceaux.length - 1]); }
         }
         courant.push(it);
       }
@@ -1096,12 +1203,16 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
         return j;
       }
       const dernierePhrase = (lignesRef[i] || [])[(lignesRef[i] || []).length - 1] || '';
+      if (estTableauRef(i) || amorceTableau(i)) { while (j + 1 < lignesRef.length && estTableauRef(j + 1)) j++; return j; }
       if (/:\s*$/.test(dernierePhrase) || estPuce(i)) while (j + 1 < lignesRef.length && estPuce(j + 1)) j++;
       return j;
     };
     const presents = (i: number) => ref.map((_, k) => k).filter((k) => ref[k].ligne === i && position.has(k));
     const nouvelle: Ligne[] = [];
     const aPlacer = new Map<number, Morceau[]>();
+    // Ajouts écrits avant une amorce de tableau (sous-titres et textes du cadre) : placés devant l'amorce, qui reste collée
+    // à son tableau.
+    const avantLigne = new Map<number, Morceau[]>();
     const enTete: Morceau[] = [];
     const aLaFin: Morceau[] = [];
     for (const m of morceaux) {
@@ -1112,8 +1223,11 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
       // gilet pare-lame. ») ; sinon après la liste ou le bloc.
       const premiere = m.lignes[0] || [];
       const court = premiere.length < 2 && premiere.reduce((a, x) => a + x.mots.length, 0) < 35;
-      const dansLaLigne = m.dansLaLigne && !ligneSousTitre(i) && !/:\s*$/.test(ref[m.ancre].brut) && (!estPuce(i) || court);
+      const dansLaLigne = m.dansLaLigne && !ligneSousTitre(i) && !estTableauRef(i) && !/:\s*$/.test(ref[m.ancre].brut) && (!estPuce(i) || court);
       if (ajoutsALaFin && !(dansLaLigne && m.lignes.length === 1)) { aLaFin.push(m); continue; }
+      // Ajout écrit juste avant une amorce de tableau (ou juste après elle) : devant l'amorce, jamais entre elle et son tableau.
+      const amorce = amorceTableau(i) ? i : m.suivant !== undefined && amorceTableau(ref[m.suivant].ligne) && ref[m.suivant].ligne > i && finGroupe(i) >= ref[m.suivant].ligne ? ref[m.suivant].ligne : -1;
+      if (amorce >= 0 && !dansLaLigne) { if (!avantLigne.has(amorce)) avantLigne.set(amorce, []); avantLigne.get(amorce)!.push({ ...m, dansLaLigne: false }); continue; }
       const cible = dansLaLigne ? i : finGroupe(i);
       if (!aPlacer.has(cible)) aPlacer.set(cible, []);
       aPlacer.get(cible)!.push({ ...m, dansLaLigne });
@@ -1146,6 +1260,7 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
       } else {
         const ks = presents(i);
         if (ks.length) {
+          for (const m of avantLigne.get(i) || []) { poser(m); vide = false; }
           const premier = ref.findIndex((p) => p.ligne === i);
           const puce = (PUCE.exec(ref[premier].brut) || [''])[0];
           const its = ks.map((k) => position.get(k)!.item);
@@ -1172,10 +1287,66 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   // Réponse du modèle qui ne reprend presque rien du texte de GSS (fidélité sous 0,5, havre2 : 0,14 et 0,17) : le texte de
   // GSS est remis tel quel, et ce que le modèle a écrit pour la question le suit.
   const ajoutsALaFin = fideliteAvant < 0.5;
+  // Phrase ajoutée qui ouvre un paragraphe par un pronom (« Elle peut également, si elle le souhaite, être destinataire
+  // des rapports… », citedia2 442, T4N-4) : son antécédent a été retiré ou n'est pas là ; elle est retirée.
+  // « Il » impersonnel (« Il peut arriver que… », « Il est », « Il faut ») : jamais un pronom sans antécédent.
+  const PRONOM = /^(?:Elle|Il(?!\s+(?:peut arriver|arrive|est|faut|s['’]agit|existe|convient|y a|importe|appara[iî]t)\b)|Ils|Elles|Celle-ci|Celui-ci|Ceux-ci|Celles-ci|Cela|Ce dernier|Cette derni[èe]re)\s/;
+  const retirerOrphelines = (): number => {
+    let n = 0;
+    for (let li = 0; li < sortie.length; li++) {
+      const l = sortie[li];
+      const premier = l.items[0];
+      const demonstratif = /^(Cette|Cet|Ces|Ce)\s+(?!qui\b|que\b|qu['’]|dont\b|sont\b|est\b|sera\b|serait\b)([a-zà-ÿ])/.exec(premier?.brut || '');
+      if (!premier?.ajout || (!PRONOM.test(premier.brut) && !demonstratif)) continue;
+      const prec = [...sortie.slice(0, li)].reverse().find((x) => x.items.length);
+      const precTexte = prec ? prec.items.map((x) => x.brut).join(' ').trim() : '';
+      const debutDeBloc = !prec || !sortie[li - 1]?.items.length || (prec.items.length === 1 && (estSousTitreCadre(precTexte) || /:\s*$/.test(precTexte)));
+      if (!debutDeBloc) continue;
+      // Démonstratif sans antécédent (« Cette transmission permet… » sous « Modalités d'alerte », citedia2 474) : article défini.
+      if (demonstratif) {
+        const article = { Cette: 'La', Ce: 'Le', Ces: 'Les', Cet: "L'" }[demonstratif[1] as 'Cette' | 'Ce' | 'Ces' | 'Cet'];
+        premier.brut = premier.brut.replace(/^(Cette|Cet|Ces|Ce)\s+/, article === "L'" ? "L'" : `${article} `);
+        n++;
+        continue;
+      }
+      l.items.shift();
+      n++;
+      li--;
+    }
+    return n;
+  };
+  // Fragment de pseudo-tableau écrit par le modèle sous un tableau de GSS (citedia2 474, T4N-5 : « Nombre : 3 titulaires,
+  // représentant 2,39 ETP… » sous le tableau de l'équipe dédiée, ou collé à son en-tête) : phrase ajoutée qui commence par
+  // un intitulé de colonne du tableau ; elle redit le tableau, elle est retirée.
+  const retirerPseudoTableau = (): number => {
+    let n = 0;
+    const colonnes = new Set<string>();
+    for (let i = 0; i < lignesRef.length; i++) {
+      if (!estTableauRef(i) || (i > 0 && estTableauRef(i - 1))) continue;
+      lignesRef[i].join(' ').split(/\s:\s/).map((c) => normaliser(c).replace(/[^a-z0-9 ]+/g, ' ').trim()).filter((c) => c.length >= 3).forEach((c) => colonnes.add(c));
+    }
+    if (colonnes.size) {
+      for (let li = 1; li < sortie.length; li++) {
+        const prec = sortie[li - 1];
+        const tableauAvant = prec.items.length > 0 && prec.items.every((x) => x.ref !== undefined) && estTableauRef(ref[prec.items[0].ref!].ligne);
+        if (!tableauAvant) continue;
+        const l = sortie[li];
+        while (l.items.length && l.items[0].ajout) {
+          const m = /^\s*([^:]{3,40}?)\s*:\s*\S/.exec(l.items[0].brut);
+          if (!m || !colonnes.has(normaliser(m[1]).replace(/[^a-z0-9 ]+/g, ' ').trim())) break;
+          l.items.shift();
+          n++;
+        }
+      }
+    }
+    return n;
+  };
   recomposer(ajoutsALaFin);
+  const pseudoTableau = retirerPseudoTableau();
+  retirerOrphelines();
   let texte = rendre();
   if (o.limite && mesure(texte) >= seuil) {
-    return { texte, fideliteAvant, fidelite: mesure(texte), reformulees, reinserees: lignesTableauRemises, ajoutsRetires: 0, bribesRetirees: 0 };
+    return { texte, fideliteAvant, fidelite: mesure(texte), reformulees, reinserees: lignesTableauRemises, ajoutsRetires: 0, bribesRetirees: pseudoTableau };
   }
   // 2. Phrases de GSS omises remises à leur place (dans la limite de mots s'il y en a une).
   const budget = o.maxMots !== undefined ? Math.max(o.maxMots, compter(texte)) : Infinity;
@@ -1241,33 +1412,56 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   }
   // Bribe d'une phrase de GSS (70 % de ses mots au moins dans une seule phrase de GSS, plus courte qu'elle : phrase
   // tronquée ou « En résumé, … ») alors que la phrase de GSS entière est dans la réponse : retirée (pas de redite).
-  let bribesRetirees = 0;
+  let bribesRetirees = pseudoTableau;
   for (const l of sortie) {
     for (let j = l.items.length - 1; j >= 0; j--) {
       const it = l.items[j];
       if (!it.ajout) continue;
       const jeu = new Set(it.mots);
-      const bribe = ref.some((p, k) => position.has(k) && p.mots.length >= it.mots.length
-        && [...jeu].filter((w) => p.mots.includes(w)).length / jeu.size >= 0.7);
+      const bribe = ref.some((p, k) => position.has(k) && ((p.mots.length >= it.mots.length
+        && [...jeu].filter((w) => p.mots.includes(w)).length / jeu.size >= 0.7) || rediteDePhrase(p.brut, it.brut)));
       if (bribe) { l.items.splice(j, 1); bribesRetirees++; }
     }
   }
+  bribesRetirees += retirerPseudoTableau();
   detacherAjouts();
   recomposer(ajoutsALaFin);
+  retirerOrphelines();
   texte = rendre();
-  // 3. Limite de longueur atteinte et fidélité encore insuffisante : ajouts retirés, du dernier au premier.
+  // 3. Limite de longueur atteinte et fidélité encore insuffisante : ajouts retirés, du dernier au premier. Jamais la
+  // seule réponse à un élément attendu du cadre (T4N-4, citedia2 442 : 17 ajouts retirés, « Modalités d'alerte », « Démarche
+  // qualité », « Traitement des anomalies » et « Indicateurs » restés sans réponse) : son sous-titre et le début de son
+  // texte (60 mots) sont gardés ; la réponse reste alors « à relire » si la fidélité n'atteint pas le seuil.
+  const proteges = new Set<Item>();
+  if (o.attendus?.length) {
+    const titreSeul = (l: Ligne) => l.items.length === 1 && estSousTitreCadre(l.items[0].brut);
+    for (let li = 0; li < sortie.length; li++) {
+      const l = sortie[li];
+      if (!titreSeul(l) || !l.items[0].ajout || !o.attendus.some((a) => correspondAttendu(l.items[0].brut, a))) continue;
+      const bloc: Item[] = [];
+      for (let m = li + 1; m < sortie.length && !titreSeul(sortie[m]); m++) bloc.push(...sortie[m].items);
+      // Sous-titre du cadre devant le texte de GSS qui répond à l'élément : gardé (quelques mots).
+      if (bloc.some((it) => it.ref !== undefined)) { proteges.add(l.items[0]); continue; }
+      const ajouts = bloc.filter((it) => it.ajout);
+      if (!ajouts.length) continue;
+      proteges.add(l.items[0]);
+      let n = 0;
+      for (const it of ajouts) { if (n >= 60) break; proteges.add(it); n += it.mots.length; }
+    }
+  }
   let ajoutsRetires = 0;
   if (mesure(texte) < seuil) {
     for (let li = sortie.length - 1; li >= 0 && mesure(texte) < seuil; li--) {
       const l = sortie[li];
       for (let j = l.items.length - 1; j >= 0 && mesure(texte) < seuil; j--) {
-        if (!l.items[j].ajout) continue;
+        if (!l.items[j].ajout || proteges.has(l.items[j])) continue;
         l.items.splice(j, 1);
         ajoutsRetires++;
         texte = rendre();
       }
     }
   }
+  if (retirerOrphelines()) texte = rendre();
   return { texte, fideliteAvant, fidelite: mesure(texte), reformulees, reinserees, ajoutsRetires, bribesRetirees };
 }
 

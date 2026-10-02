@@ -26,7 +26,7 @@ import {
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
-  controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides,
+  controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, attendusDuChamp, attendusSansReponse,
 } from './memoire_type_cadre';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
 import fs from 'fs';
@@ -5098,8 +5098,12 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
           // Intitulé de la rubrique du cadre (titre de section) quand la « question » n'est qu'un paragraphe de consigne
           // (havre1 : « Le renvoi vers un rapport général… est à proscrire » au lieu de « Mesures et initiatives sociétales »).
           const sectionChamp = ((f.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '').replace(/\[CHAMP_\d+\]/gi, '').replace(/\s+/g, ' ').trim();
-          const consigneSeule = !!sectionChamp && sectionChamp !== (questionMT || '').trim() && !/^\d/.test((questionMT || '').trim())
-            && (!/[a-zà-ÿ]/.test(sectionChamp) || /^(?:le renvoi|cela peut|le soumissionnaire|le candidat|le prestataire|il est demand|il convient)/i.test((questionMT || '').trim()));
+          // Titre de section en capitales seul (rouen_univ : « (UFR DESP) », etampes1 : « VALEURS TECHNIQUES ») : jamais à la place
+          // d'une vraie question ou d'une liste d'attendus ; seulement si la « question » est une consigne de forme (suite de R4-1 :
+          // réponses à relire distinctes fusionnées sous un même titre de section dans les consultations).
+          const qTrim = (questionMT || '').trim();
+          const consigneSeule = !!sectionChamp && sectionChamp !== qTrim && !/^\d/.test(qTrim)
+            && /^(?:(?:le |tout )?renvoi|cela peut|le soumissionnaire|le candidat|le prestataire|il est demand|il convient|pour rappel|seront prises en compte|les réponses doivent)|\best à proscrire\b/i.test(qTrim);
           const titreSection = /[a-zà-ÿ]/.test(sectionChamp) ? sectionChamp : sectionChamp.charAt(0) + sectionChamp.slice(1).toLowerCase();
           const libelleBrut = libelleQuestionCadre(consigneSeule ? titreSection : questionMT || `Champ ${f.id}`);
           // Jamais un repère interne comme libellé : l'intitulé de la question, sinon celui du champ.
@@ -5112,8 +5116,10 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
             // sur le texte de référence, sans autre appel : phrase reformulée → phrase de GSS, phrase de GSS omise →
             // remise à sa place, phrases propres à la question gardées ; avec une limite de longueur, dans la limite de
             // mots (les ajouts cèdent la place au texte de GSS). Une phrase de GSS contraire au DCE n'est pas remise.
+            // Éléments attendus du cadre (« Éléments de réponse attendus : … ») : jamais laissés sans réponse au recalage (T4N-4).
+            const attendus = attendusDuChamp(f.context).length ? attendusDuChamp(f.context) : attendusDuChamp(String(questionMT || ''));
             const rec = recalerSurReference(retenus.map((c) => c.texte).join('\n\n'), String(value), {
-              limite: limiteChamp, maxMots: motsMaxChamp(f.context), exclure: (ph) => phraseContraireAuDce(ph, dceContext), dce: dceContext,
+              limite: limiteChamp, maxMots: motsMaxChamp(f.context), exclure: (ph) => phraseContraireAuDce(ph, dceContext), dce: dceContext, attendus,
             });
             if (rec.fideliteAvant < SEUIL_FIDELITE_CADRE && !strict) {
               console.log(`[MemoireGenerator] ${label} : fidélité ${rec.fideliteAvant.toFixed(2)} au mémoire type (${retenus.map((c) => c.id).join(', ')}) < ${SEUIL_FIDELITE_CADRE} → nouvel essai strict.`);
@@ -5144,7 +5150,11 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
             }
             const fid = rec.fidelite;
             repriseParChamp.set(f.id, { ids: retenus.map((c) => c.id), fidelite: fid, brute: rec.fideliteAvant });
-            if (fid < SEUIL_FIDELITE_CADRE) propositionsCadre.set(f.id, `Réponse à relire (mémoire type de GSS repris en partie, fidélité ${Math.round(fid * 100)} %) : ${libelle}`);
+            // Élément attendu resté sans réponse après le recalage : signalé à GSS, avec la liste (T4N-4).
+            const sansReponse = attendusSansReponse(String(value), attendus);
+            if (sansReponse.length) console.warn(`[MemoireGenerator] ${label} : ${sansReponse.length} élément(s) attendu(s) sans réponse après recalage (${sansReponse.join(' ; ')}).`);
+            if (sansReponse.length) propositionsCadre.set(f.id, `Réponse à relire (élément${sansReponse.length > 1 ? 's' : ''} attendu${sansReponse.length > 1 ? 's' : ''} sans réponse : ${sansReponse.map((x) => `« ${x} »`).join(', ')}${fid < SEUIL_FIDELITE_CADRE ? ` ; mémoire type de GSS repris en partie, fidélité ${Math.round(fid * 100)} %` : ''}) : ${libelle}`);
+            else if (fid < SEUIL_FIDELITE_CADRE) propositionsCadre.set(f.id, `Réponse à relire (mémoire type de GSS repris en partie, fidélité ${Math.round(fid * 100)} %) : ${libelle}`);
             else propositionsCadre.delete(f.id);
             if (comprehension?.svg && ![...svgComprehension.keys()].some((id) => id !== f.id)) svgComprehension.set(f.id, comprehension.svg);
             // Compréhension sans schéma de process (R4-2, ca_normandie) : signalée à GSS comme en réponse libre et en format court.
