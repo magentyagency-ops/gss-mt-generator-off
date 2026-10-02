@@ -521,9 +521,12 @@ export function marcheHorsNormandie(analyse: any, dce: string): boolean {
   const texte = `${JSON.stringify(analyse || {})} ${String(dce || '').slice(0, 40000)}`;
   // Code postal suivi de la commune, avec ou sans séparateur (« 93330 Neuilly », « 93330 – Neuilly-sur-Marne »,
   // « 93330, Neuilly »), ou code entre parenthèses après la commune (« Lille (59000) »). Le \b initial écarte les
-  // longues suites de chiffres des formulaires.
+  // longues suites de chiffres des formulaires. La commune commence par une majuscule et n'est jamais une unité : une
+  // surface ou une jauge écrite en chiffres (« 12000 m² », « 18962 m2 », « 45000 visiteurs ») n'est pas un code postal
+  // (T3-COH-1 : becquerel avec « 12000 m² » passait hors Normandie).
+  const UNITE = /^(?:m[²³23]?|km|ha|h|heures?|€|eur|euros?|ht|ttc|personnes?|visiteurs?|spectateurs?|places?|agents?|salari[ée]s?|habitants?|usagers?|[ée]l[èe]ves?|[ée]tudiants?|passages?|entr[ée]es?|lits?|logements?|v[ée]hicules?)$/i;
   const codes = [
-    ...[...texte.matchAll(/\b(\d{2})\d{3}\s*(?:[–—,-]\s*)?[A-ZÉÈa-zéè]/g)].map((m) => m[1]),
+    ...[...texte.matchAll(/\b(\d{2})\d{3}\s*(?:[–—,-]\s*)?([A-ZÉÈÀÂÎÔÛ][\wÀ-ÿ²³]*)/g)].filter((m) => !UNITE.test(m[2])).map((m) => m[1]),
     ...[...texte.matchAll(/\(\s*(\d{2})\d{3}\s*\)/g)].map((m) => m[1]),
   ].filter((d) => Number(d) >= 1 && Number(d) <= 95);
   // Département nommé entre parenthèses après la commune (« Neuilly-sur-Marne (Seine-Saint-Denis) »).
