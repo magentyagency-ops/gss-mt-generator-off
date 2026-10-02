@@ -3,9 +3,11 @@
  *  1. sous-traitance d'une prestation (cadre) : réponse connue de GSS (« Non »), jamais « [À COMPLÉTER] » ;
  *  2. intitulé de question cité dans un renvoi : jamais coupé au milieu d'un mot ;
  *  3. exigence « en écart » mais traitée dans le texte final : pas de question à GSS ;
- *  4. attente du bloc 1 complétée depuis le DCE : initiale en minuscule après « : » (sigle gardé).
+ *  4. attente du bloc 1 complétée depuis le DCE : initiale en minuscule après « : » (sigle gardé) ;
+ *  5. champ de contact attribué à une autre personne que l'interlocuteur unique (rouen_univ 16 : « VATTIER Marie,
+ *     interlocutrice unique — tél. : 06 58 06 32 25 ») : nom de l'interlocuteur unique, numéro unique gardé.
  */
-import { reponseSousTraitance, libelleQuestion } from '../src/generation/memoire_type_cadre';
+import { reponseSousTraitance, libelleQuestion, controlerFaitsNouveauxCadre } from '../src/generation/memoire_type_cadre';
 import { exigenceTraitee, completerBesoinMinimum } from '../src/generation/reponse_libre_v2';
 import { valeurRegistre } from '../src/generation/base_memoires';
 let ko = 0, n = 0;
@@ -33,5 +35,12 @@ const m = completerBesoinMinimum(b1, [
 ], undefined, '', { attentes: 3, vigilance: 1 });
 verifier('initiale en minuscule', /\*\*Ce que vous attendez\*\* : le taux moyen mensuel/.test(m.texte), true);
 verifier('sigle gardé', /: SSIAP 2 présent au PCS/.test(m.texte), true);
+const connu = 'marchani adil interlocuteur unique responsable de marche vattier marie responsable qualite contact@gss-securite.fr e-mail tel';
+const sources = { toutes: connu, gss: connu, telephoneUnique: '06 58 06 32 25', interlocuteurUnique: 'MARCHANI', interlocuteurNom: 'MARCHANI Adil' };
+const contact = controlerFaitsNouveauxCadre('VATTIER Marie, interlocutrice unique — tél. : 06 58 06 32 25 — e-mail : contact@gss-securite.fr', 'Question: "Coordonnées de la personne à contacter pour obtenir des renseignements complémentaires :"', sources);
+verifier('contact : interlocuteur unique', contact.texte, 'MARCHANI Adil, interlocuteur unique — tél. : 06 58 06 32 25 — e-mail : contact@gss-securite.fr');
+verifier('contact : aucune question', contact.questions.filter((q) => /Numéro de téléphone/.test(q)).length, 0);
+const autre = controlerFaitsNouveauxCadre('Responsable qualité : VATTIER Marie — 06 58 06 32 25', 'Question: "Plan qualité interne – responsable qualité"', sources);
+verifier('autre champ : numéro demandé à GSS', /\[À COMPLÉTER\]/.test(autre.texte) && autre.questions.some((q) => /Numéro de téléphone de VATTIER Marie/.test(q)), true);
 console.log(ko ? `${ko} échec(s) sur ${n}` : `${n}/${n} contrôles conformes`);
 process.exit(ko ? 1 : 0);

@@ -129,9 +129,22 @@ const PLAGES_ETAMPES = [
 ];
 const DIMENSIONNEMENT: Record<CorpusCC, any> = {
   imm: {
-    postes: [{ profil: 'SSIAP 2', qualification: 'SSIAP 2', lieu: 'Institut Médico-Chirurgical Montsouris', heures_hebdo: null, heures_an: null,
-      plages: [{ jours: TOUS_LES_JOURS, debut: '08:00', fin: '20:00' }, { jours: TOUS_LES_JOURS, debut: '20:00', fin: '08:00' }],
-      citation: 'l’option 2 : 1 SSIAP 2 7j/7 7j/7 24h/24 ou en vacations de 12h (08h00-20h00/20h00-08h00)' }],
+    // Postes permanents N1, N2, N3 du CCTP (24 h/24) ; les options (« l'option 2 : 1 SSIAP 2… ») ne sont pas des postes
+    // de l'équipe dédiée (génération réelle imm 16 : options relevées, 36 titulaires au lieu de 18).
+    postes: [
+      { profil: "Chef d'équipe / Agent N1", qualification: 'SSIAP 2, SST, carte CNAPS', lieu: 'Poste de sécurité', heures_hebdo: null, heures_an: null,
+        plages: [{ jours: TOUS_LES_JOURS, debut: '08:00', fin: '20:00' }, { jours: TOUS_LES_JOURS, debut: '20:00', fin: '08:00' }],
+        citation: '1er Chef d’équipe ou agent N1 : 24h/24h au poste de sécurité' },
+      { profil: 'Agent de sécurité N2', qualification: 'SSIAP 1, SST, carte CNAPS', lieu: 'Poste de sécurité', heures_hebdo: null, heures_an: null,
+        plages: [{ jours: TOUS_LES_JOURS, debut: '08:00', fin: '20:00' }, { jours: TOUS_LES_JOURS, debut: '20:00', fin: '08:00' }],
+        citation: '2ème Agent de sécurité ou agent N2 : 24h/24h au poste de sécurité' },
+      { profil: 'Agent de sécurité N3', qualification: 'SSIAP 1, SST, carte CNAPS', lieu: 'Poste de sécurité', heures_hebdo: null, heures_an: null,
+        plages: [{ jours: TOUS_LES_JOURS, debut: '08:00', fin: '20:00' }, { jours: TOUS_LES_JOURS, debut: '20:00', fin: '08:00' }],
+        citation: '3ème Agent de sécurité ou agent N3 : 24h/24h au poste de sécurité' },
+      { profil: 'SSIAP 2', qualification: 'SSIAP 2', lieu: 'Institut Médico-Chirurgical Montsouris', heures_hebdo: null, heures_an: null,
+        plages: [{ jours: TOUS_LES_JOURS, debut: '08:00', fin: '20:00' }, { jours: TOUS_LES_JOURS, debut: '20:00', fin: '08:00' }],
+        citation: 'l’option 2 : 1 SSIAP 2 7j/7 7j/7 24h/24 ou en vacations de 12h (08h00-20h00/20h00-08h00)' },
+    ],
     cas_pratique: null,
   },
   etampes1: {

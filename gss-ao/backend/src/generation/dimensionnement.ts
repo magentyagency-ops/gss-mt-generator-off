@@ -84,6 +84,9 @@ const nombre = (x: unknown): number | null => {
   return Number.isFinite(n) && n > 0 ? n : null;
 };
 
+/** Poste qui n'est pas permanent : option, tranche optionnelle, agent supplémentaire, prestation à la demande ou ponctuelle. */
+const POSTE_OPTIONNEL = /\boptions?\b|\boptionnel(?:le)?s?\b|agents? suppl[ée]mentaires?|\bà la demande\b|bons? de commande|\bponctuel(?:le)?s?\b|\brenforts? ponctuels?\b/i;
+
 /**
  * Calcul du dimensionnement à partir de la lecture du DCE par le modèle (`rep` : {postes, cas_pratique}). Renvoie
  * null si aucun poste ni cas pratique n'est exploitable.
@@ -96,6 +99,9 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     const brut = String(p?.profil || '').replace(/\s+/g, ' ').trim();
     const profil = /[A-ZÀ-Ý]{5,}/.test(brut) && (brut.match(/[A-Za-zÀ-ÿ]{2,}/g) || []).length >= 2 && brut === brut.toUpperCase() ? brut.charAt(0) + brut.slice(1).toLowerCase().replace(/\b(ssiap|ads|cqp|aps)\b/g, (m) => m.toUpperCase()) : brut;
     if (!profil || !citationDansDce(String(p?.citation || ''), dceMots)) continue;
+    // Poste optionnel ou ponctuel (« l'option 1 : 1 SSIAP 1 7j/7 24h/24… », génération réelle imm 16 : trois options
+    // comptées comme postes permanents, 36 titulaires au lieu de 18) : jamais dans l'équipe dédiée.
+    if (POSTE_OPTIONNEL.test(`${p?.citation || ''} ${brut}`)) continue;
     const plages: PlageHoraire[] = (Array.isArray(p?.plages) ? p.plages : [])
       .map((x: any) => ({ jours: joursDe(x?.jours), debut: String(x?.debut || ''), fin: String(x?.fin || '') }))
       .filter((x: PlageHoraire) => x.jours.length && dureePlage(x.debut, x.fin) > 0);
@@ -180,7 +186,20 @@ export function categorieDe(profil: string): string {
 
 /** Lignes du tableau « L'équipe dédiée » (catégorie, qualification, nombre, observations). */
 export function lignesEquipe(d: Dimensionnement): string {
-  return d.profils.map((x) => `| ${categorieDe(x.profil)} | ${x.qualification} | ${x.titulaires} | ${x.observation || `${fr(x.heuresSemaine)} h par semaine${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}, soit ${fr(x.etp)} ETP`} |`).join('\n');
+  // Une ligne par catégorie et qualification (génération réelle imm 16 : « Agent de sécurité | SSIAP 1, SST, carte CNAPS »
+  // deux fois, pour les postes N2 et N3) : effectifs, heures et ETP additionnés.
+  const lignes = new Map<string, ProfilDimensionne & { categorie: string }>();
+  for (const x of d.profils) {
+    const categorie = categorieDe(x.profil);
+    const cle = x.observation ? `${normaliser(x.profil)}|obs` : `${normaliser(categorie)}|${normaliser(x.qualification)}`;
+    const y = lignes.get(cle);
+    if (!y) { lignes.set(cle, { ...x, lieux: [...x.lieux], categorie }); continue; }
+    y.titulaires += x.titulaires;
+    y.heuresSemaine = Math.round((y.heuresSemaine + x.heuresSemaine) * 100) / 100;
+    y.etp = Math.round((y.etp + x.etp) * 100) / 100;
+    for (const l of x.lieux) if (!y.lieux.includes(l)) y.lieux.push(l);
+  }
+  return [...lignes.values()].map((x) => `| ${x.categorie} | ${x.qualification} | ${x.titulaires} | ${x.observation || `${fr(x.heuresSemaine)} h par semaine${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}, soit ${fr(x.etp)} ETP`} |`).join('\n');
 }
 
 /** Phrase de synthèse du dispositif d'un cas pratique, plage par plage. */
@@ -281,7 +300,7 @@ export const CONSIGNE_DIMENSIONNEMENT = `Tu lis le DCE d'un marché de sécurit�
    - "heures_hebdo" : le volume hebdomadaire total si le DCE (DQE, BPU) le donne en heures pour ce poste, sinon null ;
    - "heures_an" : le volume annuel en heures si le DCE le donne, sinon null ;
    - "citation" : la phrase ou la ligne du DCE d'où vient le poste, recopiée mot pour mot.
-   Ne relève pas les prestations ponctuelles sur bon de commande sans horaires fixés, ni les interventions sur alarme.
+   Ne relève pas les prestations ponctuelles sur bon de commande sans horaires fixés, ni les interventions sur alarme, ni les options (« option », « agent supplémentaire » que l'acheteur se réserve d'ajouter).
 2. "cas_pratique" : seulement si le DCE ou le cadre de réponse pose un cas pratique ou une mise en situation qui demande le nombre d'agents par plage (sinon null). Ici, et seulement ici, tu PROPOSES le dispositif de GSS : c'est ce que l'acheteur demande au candidat.
    - "plages" : [{"libelle": "Dimanche férié, 6 h–21 h", "debut": "06:00", "fin": "21:00"}, …], libellés courts (jour et horaires) ;
    - "dispositif" (OBLIGATOIRE, jamais vide) : une entrée pour CHAQUE plage et CHAQUE profil demandé (agent de sécurité, maître-chien, agent de sécurité incendie, encadrant…), {"plage": "<libelle exact de la plage>", "profil": "<profil du DCE>", "en_service": <entier>, "justification": "<une phrase>"} : l'effectif EN SERVICE que GSS propose, argumenté par le site décrit (surface, nombre de bâtiments, accès, clôture, quartier, risques de jour et de nuit) ; 0 si le profil n'est pas utile sur cette plage (dis pourquoi). Un maître-chien travaille en binôme avec son chien ; un encadrant peut passer ponctuellement (0 en service, contrôle par passage).

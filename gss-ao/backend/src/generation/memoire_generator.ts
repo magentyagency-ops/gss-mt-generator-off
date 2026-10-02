@@ -6,7 +6,7 @@ import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce, 
 import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque, estRetourArriere } from './themes';
-import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE } from './completion';
+import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements } from './completion';
 import {
   chargerMemoireType, preparerMemoireType, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
@@ -4947,6 +4947,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       gss: normaliser(`${gssDocContext} ${texteSourcesMemoires()} ${this.texteDemande()} ${textesMT}`),
       telephoneUnique: valeurRegistre('telephone_contact') || undefined,
       interlocuteurUnique: (valeurRegistre('dirigeant') || '').trim().split(/\s+/)[0] || undefined,
+      interlocuteurNom: (valeurRegistre('dirigeant') || '').trim().split(/\s+/).map((m, i) => (i === 0 ? m.toUpperCase() : m.charAt(0).toUpperCase() + m.slice(1).toLowerCase())).join(' ') || undefined,
       questionPartenaire: valeurRegistre('partenaire_telesurveillance') ? undefined
         : repriseMT?.mt.variables.PARTENAIRE_TELESURVEILLANCE?.question || 'Partenaire de télésurveillance retenu pour ce marché (ERYMA ou Delta).',
     };
@@ -8155,6 +8156,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       }
       return { cle: `Q${i + 1}`, question: q.question, contexte, statut: 'ouvert', reperes, pourAcheteur: /^À demander à l.acheteur/i.test(q.question) };
     });
+    // Tout « [À COMPLÉTER] » du texte remis a sa question (D7), y compris un emplacement venu de l'adaptation au CCTP.
+    elements.push(...questionsDesEmplacements(sections, elements, (id) => plan.find((x) => x.id === id)?.title || ''));
     await this.completerParLesMemoires(elements, sections, horsNormandie);
     // « Le titulaire » des exigences recopiées du CCTP est GSS : voix de GSS dans tout le texte remis.
     for (const id of Object.keys(sections)) sections[id] = voixDeGss(nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext)));

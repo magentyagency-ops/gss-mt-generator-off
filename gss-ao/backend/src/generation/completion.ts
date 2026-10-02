@@ -53,6 +53,33 @@ export interface ElementACompleter {
   groupe?: string;             // emplacements qui attendent la MÊME donnée : une seule question, une seule réponse
 }
 
+/**
+ * Emplacements « [À COMPLÉTER] » du texte remis sans question (D7 : chaque donnée manquante a sa question) : un
+ * emplacement venu de l'adaptation au CCTP (« Chargé d'affaire dédié : [À COMPLÉTER] », génération réelle imm 16) ou dont
+ * la question a disparu à la fusion des consultations reçoit une question tirée de son libellé. Un paragraphe dont un
+ * repère ⟦AC:n⟧ est déjà couvert par une question est laissé tel quel. Renvoie les éléments à ajouter.
+ */
+export function questionsDesEmplacements(sections: Record<string, string>, elements: ElementACompleter[], titreDe: (id: string) => string = () => ''): ElementACompleter[] {
+  const couverts = new Set(elements.flatMap((e) => e.reperes || []));
+  const ajouts: ElementACompleter[] = [];
+  for (const id of Object.keys(sections)) {
+    for (const bloc of String(sections[id] || '').split(/\n{2,}/)) {
+      if (!bloc.includes('[À COMPLÉTER]')) continue;
+      const reperes = [...bloc.matchAll(REPERE_RE)].map((m) => Number(m[1]));
+      if (reperes.some((r) => couverts.has(r))) continue;
+      for (const ligne of bloc.split('\n').filter((l) => l.includes('[À COMPLÉTER]'))) {
+        const propre = ligne.replace(REPERE_RE, '').trim();
+        const libelle = propre.replace(/\*\*/g, '').replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').split('[À COMPLÉTER]')[0].replace(/[\s:,;–—-]+$/, '').trim();
+        const question = `Information à fournir pour compléter le mémoire : « ${(libelle || propre).slice(0, 160)} ».`;
+        if ([...elements, ...ajouts].some((e) => e.question === question)) continue;
+        ajouts.push({ cle: `Q${elements.length + ajouts.length + 1}`, question, contexte: `${titreDe(id)} — …${propre.slice(0, 220)}`, statut: 'ouvert', reperes, pourAcheteur: false });
+        reperes.forEach((r) => couverts.add(r));
+      }
+    }
+  }
+  return ajouts;
+}
+
 export interface EtatCompletion {
   dossierId: string;
   mode: 'cadre' | 'libre';

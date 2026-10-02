@@ -847,6 +847,8 @@ export interface SourcesFaitsCadre {
   /** Numéro unique de GSS (registre telephone_contact) et nom de famille de l'interlocuteur unique qui le porte. */
   telephoneUnique?: string;
   interlocuteurUnique?: string;
+  /** Nom complet de l'interlocuteur unique (« MARCHANI Adil »), pour un champ de contact attribué à une autre personne. */
+  interlocuteurNom?: string;
   /** Question à poser quand la réponse nomme un partenaire de télésurveillance (ERYMA ou Delta) non confirmé par GSS. */
   questionPartenaire?: string;
 }
@@ -887,6 +889,12 @@ export function controlerFaitsNouveauxCadre(valeur: string, contexte: string, s:
       const personnes = [...seg.matchAll(/\b([A-ZÀ-ÖØ-Þ]{2,}(?:[ -][A-ZÀ-ÖØ-Þ]{2,})*)\s+([A-ZÀ-ÖØ-Þ][a-zà-ÿ][\wà-ÿ'’-]*)/g)]
         .map((m) => `${m[1]} ${m[2]}`).filter((n) => !SIGLES_ADMIS.has(normaliser(n.split(' ')[0])));
       if (!personnes.length || personnes.some((n) => normaliser(n).includes(normaliser(s.interlocuteurUnique!)))) return seg;
+      // Champ de contact (« personne à contacter », « interlocuteur ») ou personne présentée comme « interlocutrice unique »
+      // (génération réelle rouen_univ 16 : « VATTIER Marie, interlocutrice unique — tél. : 06 58 06 32 25 ») : le contact de
+      // GSS est l'interlocuteur unique (faits de référence) ; son nom remplace l'autre, le numéro unique reste.
+      if (s.interlocuteurNom && (/personne (?:a|à) contacter|interlocuteur/.test(ctxN) || /interlocut(?:eur|rice) unique/i.test(seg))) {
+        return seg.replace(personnes[0], s.interlocuteurNom).replace(/\binterlocutrice unique\b/gi, 'interlocuteur unique');
+      }
       questions.push(`Numéro de téléphone de ${personnes[0]} (le ${s.telephoneUnique} est le numéro unique de l'interlocuteur unique, ${s.interlocuteurUnique})${libelle ? ` — champ « ${libelle} »` : ''}.`);
       return seg.replace(rxTel, '[À COMPLÉTER]');
     }).join('')).join('\n');
