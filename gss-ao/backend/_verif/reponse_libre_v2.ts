@@ -204,7 +204,9 @@ function structure(md: string, etat: EtatCompletion): any {
     && new RegExp(`^## ${r.entete.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'im').test(x.contenu.toUpperCase()));
   res.regroupees = res.rubriques.filter((r: any, i: number) => regroupee(r, i)).map((r: any) => r.entete);
   for (const [i, r] of res.rubriques.entries()) {
-    if ((r.textes < 1 && !regroupee(r, i)) || r.textes > 2) res.anomalies.push(`${r.entete} : ${r.textes} page(s) de texte`);
+    // Tour 1 (T1C-03) : plus aucun regroupement de deux rubriques sur une page de texte (consigne 6).
+    if (regroupee(r, i)) res.anomalies.push(`${r.entete} : texte regroupé avec la rubrique précédente`);
+    if (r.textes < 1 || r.textes > 2) res.anomalies.push(`${r.entete} : ${r.textes} page(s) de texte`);
     if (r.schemas > 1) res.anomalies.push(`${r.entete} : ${r.schemas} pages de schéma`);
   }
   res.sans_schema = res.rubriques.filter((r: any) => !r.schemas).map((r: any) => r.entete);
