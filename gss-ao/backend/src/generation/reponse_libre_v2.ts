@@ -704,6 +704,25 @@ export function reduireBesoinAPages(texte: string, pages: (t: string) => number,
   return { texte: t, retirees };
 }
 
+/**
+ * Exigence du DCE marquée « en écart » par l'analyse, mais traitée dans le texte final (puce d'engagement de la
+ * couverture, proposition) : ce n'est plus une question pour GSS (génération réelle imm 15 : « Quels bâtiments, locaux
+ * et installations annexes composent le périmètre du marché… » posé à GSS alors que le mémoire écrit « GSS prendra en
+ * compte le périmètre du marché : bâtiment principal composé des bâtiments D, T, C et H… »). Traitée = tous ses chiffres
+ * et au moins 60 % de ses mots porteurs (4 lettres et plus) figurent dans un même paragraphe du texte.
+ */
+export function exigenceTraitee(exigence: string, texte: string): boolean {
+  const e = normaliser(String(exigence || ''));
+  const mots = [...new Set(e.split(/[^a-z0-9]+/).filter((w) => w.length >= 4))];
+  if (mots.length < 3) return false;
+  const chiffres = e.match(/\d+(?:[,.]\d+)?/g) || [];
+  return String(texte || '').split(/\n{2,}|\n(?=\s*[-*•]\s)/).some((p) => {
+    const n = normaliser(p);
+    if (!chiffres.every((c) => new RegExp(`(?<![\\d,.])${c.replace('.', '[.,]')}(?![\\d])`).test(n))) return false;
+    const presents = new Set(n.split(/[^a-z0-9]+/));
+    return mots.filter((w) => presents.has(w)).length / mots.length >= 0.6;
+  });
+}
 
 export function completerBesoinMinimum(
   texte: string,
@@ -761,7 +780,15 @@ export function completerBesoinMinimum(
     }
     return out;
   };
-  const maj = (t: string) => t.charAt(0).toUpperCase() + t.slice(1).replace(/[.;]\s*$/, '');
+  // Exigence citée après « : » (comme les puces rédigées) : initiale en minuscule, sauf sigle ou nom propre en tête
+  // (« : le taux moyen mensuel… », génération réelle ign 15 : « : Le taux moyen… » ; « : SSIAP 2 au PC… » gardé).
+  const maj = (t: string) => {
+    const x = t.replace(/[.;]\s*$/, '');
+    const premier = x.split(/[\s,;:]/)[0] || '';
+    const propre = /^[A-ZÀ-Ý0-9]{2,}/.test(premier) || /^[A-ZÀ-Ý][a-zà-ÿ]+(?:-[A-ZÀ-Ý]|[A-ZÀ-Ý])/.test(premier)
+      || /^(?:Paris|Rouen|Caen|Normandie|France|Île|GSS)$/.test(premier);
+    return propre ? x : x.charAt(0).toLowerCase() + x.slice(1);
+  };
   let ajoutees = 0;
   const att = prendre(manqueAtt).map((e) => `- **Ce que vous attendez** : ${maj(e.exigence)}${renvoi(e.rubrique)}.`);
   const vig = prendre(manqueVig).map((e) => `- **Point de vigilance** : ${maj(e.exigence)}${renvoi(e.rubrique)}.`);

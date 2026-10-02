@@ -16,7 +16,7 @@ import {
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
-  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages,
+  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee,
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
@@ -1152,7 +1152,9 @@ const AI_SECTIONS_B: Array<{ id: string; chapter: string; title: string }> = [
 
 const CHAPTER_ORDER_B = ['I', 'II', 'III', 'IV'];
 /** Exigence qui porte sur la composition du dossier de l'offre (pas sur la prestation) : ni question à GSS, ni texte du mémoire. */
-const PIECES_OFFRE = /acte d.engagement|bordereau de prix|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?/i;
+// Prix et bordereaux (BPU, DPGF, DQE) : pièces financières de l'offre, jamais un engagement du mémoire technique (génération
+// réelle imm 15 : « GSS complétera le BPU des prestations ponctuelles avec des taux distincts… »).
+const PIECES_OFFRE = /acte d.engagement|bordereaux? (?:de|des) prix|\b(?:BPU|DPGF|DQE)\b|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?/i;
 /** Rubriques et chapitres de la réponse libre (lecture seule, pour l'assistant de modification). */
 export { AI_SECTIONS_B as SECTIONS_REPONSE_LIBRE, CHAPTER_TITLES_B as CHAPITRES_REPONSE_LIBRE };
 
@@ -6771,7 +6773,8 @@ RÈGLES DE FORME (rendu Marp) :
       ...publiees.flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)]).flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
     ]);
     for (const r of matrice) {
-      if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence) && !enProposition.has(r)) consultations.add(r.exigence.trim());
+      if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence) && !enProposition.has(r)
+        && !exigenceTraitee(r.exigence, Object.values(sections).join('\n\n'))) consultations.add(r.exigence.trim());
     }
     for (const e of ecartees) if (!PIECES_OFFRE.test(e.exigence)) consultations.add(`Exigence du DCE sans réponse dans le mémoire : ${e.exigence.trim()}`);
     const { enPlace, enLigne } = poserReperes(sections, rubriquesDoc.map((r) => r.id), 0);
@@ -7786,6 +7789,9 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const cover = await this.getCoverInfo(dossierId, analysisData);
     const horsNormandie = marcheHorsNormandie(analysisData, dceContext);
     const ctxBase: ContexteMarche = { analyse: analysisData, dce: dceContext, cover, referents, horsNormandie };
+    // Effectifs proposés à partir des postes et des horaires du DCE (proposition à valider par GSS, D5), comme en réponse
+    // libre : sans eux, le tableau de l'équipe dédiée restait à « [À COMPLÉTER] » (génération réelle imm 15).
+    ctxBase.dimensionnement = await this.dimensionner(dceContext);
     let prep: MemoirePrepare = preparerMemoireType(ctxBase, { memoireType: mt });
     const gssDocs = await this.getGssDocumentation();
     if (valeurRegistre('effectif_total')) for (const k of Object.keys(gssDocs)) if (/^EFFECTIFS/i.test(k)) delete gssDocs[k];
@@ -7988,7 +7994,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       ...publiees.filter((p) => toutesRetenues.includes(p.id)).flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)])
         .flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
     ]);
-    for (const r of matrice) if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence)) consultations.add(r.exigence.trim());
+    // Exigence en écart mais traitée dans le texte final (engagement de couverture, proposition) : pas de question à GSS.
+    for (const r of matrice) if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence) && !exigenceTraitee(r.exigence, Object.values(sections).join('\n\n'))) consultations.add(r.exigence.trim());
     const markerRe = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
     const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
     let nRepere = 0;
@@ -8141,6 +8148,12 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       } catch (e: any) {
         console.warn(`[MemoireGenerator] Message des propositions non préparé (${e?.message || e}).`);
       }
+    }
+    // Dimensionnement proposé (D5) : annoncé dans le premier message de l'assistant, à valider ou modifier.
+    if (ctxBase.dimensionnement?.titulaires) {
+      const texteDim = messageDimensionnement(ctxBase.dimensionnement);
+      if (conversation?.length) conversation[0].texte = `${conversation[0].texte}\n\n${texteDim}`;
+      else conversation = [{ role: 'assistant', texte: texteDim, date: new Date().toISOString() }];
     }
     try {
       ecrireEtat({

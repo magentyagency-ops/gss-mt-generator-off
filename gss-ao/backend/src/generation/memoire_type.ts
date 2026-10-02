@@ -628,6 +628,9 @@ export interface ValeurVariable {
   /** Acheteur : forme courte (sigles ou nom principal) et son article, employée après la première mention. */
   court?: string;
   articleCourt?: string;
+  /** Acheteur : genre de la forme courte quand il diffère de la forme longue (« l'Association … (Nouvel IMM) » → « l'IMM » :
+   *  '' = pas d'accord imposé). Absent : genre de la forme longue. */
+  genreCourt?: 'f' | 'm' | 'p' | '';
   /** Acheteur : genre grammatical quand ni l'article ni le premier mot ne le donnent (société : féminin). */
   genre?: 'f' | 'm' | 'p';
 }
@@ -691,7 +694,7 @@ function articleSigle(sigle: string, articleEntite: string): string {
  *   (« …, pour l'École nationale … ») ; absente quand le nom est déjà court.
  * La forme longue sert à la première mention du bloc 1 (amorce), la forme courte partout ailleurs.
  */
-export function formesClient(nom: string, dce = ''): { long: string; court?: { article: string; nom: string }; pluriel?: boolean } {
+export function formesClient(nom: string, dce = ''): { long: string; court?: { article: string; nom: string; genre?: 'f' | 'm' | '' }; pluriel?: boolean } {
   const n = String(nom || '').replace(/\s+/g, ' ').trim();
   const iPrecision = n.search(/,\s*(?:pour|agissant|repr[ée]sent[ée]e?s?|au nom)\b/i);
   const principal = iPrecision > 0 ? n.slice(0, iPrecision) : n;
@@ -717,6 +720,24 @@ export function formesClient(nom: string, dce = ''): { long: string; court?: { a
     }
   }
   if (suite && entites.length === 1 && principal.split(/\s+/).length <= 8) return { long, court: { article: '', nom: principal } };
+  // Nom d'usage entre parenthèses en fin de nom (« Association Nouvel Institut Médico-Chirurgical Montsouris (Nouvel IMM) ») :
+  // forme courte, sinon le nom de 8 mots revenait à chaque mention (génération réelle imm 15 : 21 fois en 12 pages). Le
+  // sigle qu'il contient est retenu quand le DCE l'emploie seul (« l'IMM », 37 fois dans le DCE de l'IMM), sinon le nom
+  // d'usage avec l'article de son premier mot (« le Nouvel IMM ») ; le genre de la forme longue (« Association ») ne
+  // s'applique plus aux pronoms.
+  const usage = entites.length === 1 && !suite ? (/\(([^()]{2,40})\)\s*$/.exec(principal) || [])[1]?.trim() : undefined;
+  if (usage && /^[A-ZÀ-Ý]/.test(usage) && usage.split(/\s+/).length <= 4 && normaliser(usage) !== normaliser(principal)) {
+    const sigle = (/(?:^|\s)([A-Z][A-Z0-9&]{1,11})(?=\s|$)/.exec(usage) || [])[1];
+    const d = normaliser(dce);
+    if (sigle && sigle !== usage && d) {
+      const n = (d.match(new RegExp(`(?:^|[^a-z0-9])(?:l'|le |la |du |de l'|au |a l'|les |des )${echapper(normaliser(sigle))}(?![a-z0-9])`, 'g')) || []).length;
+      const art = articleEtNom(sigle, dce).article;
+      if (n >= 3 && art) return { long, court: { article: art, nom: sigle, genre: '' } };
+    }
+    const premier = usage.split(/\s+/)[0];
+    const article = /^(?:nouvel|nouveau|grand|petit|vieux|vieil)$/i.test(premier) ? 'le' : /^(?:nouvelle|grande|petite|vieille)$/i.test(premier) ? 'la' : articleEtNom(usage, dce).article;
+    if (article) return { long, court: { article, nom: usage, genre: article === 'la' ? 'f' : article === 'le' ? 'm' : '' } };
+  }
   return { long, pluriel };
 }
 
@@ -934,7 +955,7 @@ const CALCULS: Record<string, Calculateur> = {
     return {
       // Société (nom propre) : sans article (« Citédia Métropole », jamais « le Citédia Métropole »).
       valeur: formes.long, article: societeDce && !formes.pluriel ? '' : article, source: brut === couverture ? 'page de garde' : 'analyse du DCE (clientName)',
-      ...(formes.court ? { court: formes.court.nom, articleCourt: formes.court.article } : {}),
+      ...(formes.court ? { court: formes.court.nom, articleCourt: formes.court.article, ...(formes.court.genre !== undefined ? { genreCourt: formes.court.genre } : {}) } : {}),
       ...(formes.pluriel ? { genre: 'p' as const } : societeDce ? { genre: 'f' as const } : {}),
     };
   },
@@ -1280,7 +1301,11 @@ export function publiposter(texte: string, variables: Variables, options: Option
   };
   const aConfirmer: ResultatPubliposte['aConfirmer'] = [];
   const utilisees = new Set<string>();
-  const t = trace ? resoudreSections(String(texte || ''), indicateurs, variables, trace) : accorderPronomsClient(resoudreSections(String(texte || ''), indicateurs, variables, trace), variables.CLIENT);
+  // Pronoms accordés sur la forme réellement imprimée (forme courte d'un nom d'usage : son propre genre).
+  const client = variables.CLIENT;
+  const clientImprime = client && !options.clientLong && client.court && client.genreCourt !== undefined
+    ? { ...client, valeur: client.court, article: client.articleCourt ?? '', genre: client.genreCourt || undefined } : client;
+  const t = trace ? resoudreSections(String(texte || ''), indicateurs, variables, trace) : accorderPronomsClient(resoudreSections(String(texte || ''), indicateurs, variables, trace), clientImprime);
   let sortie = '';
   let dernier = 0;
   for (const m of t.matchAll(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g)) {
@@ -1904,7 +1929,20 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
         const suite = t.slice(pos[0].fin);
         const fin = /[.!?](?=\s|$)|\n/.exec(suite);
         const coupe = pos[0].fin + (fin ? fin.index + (fin[0] === '\n' ? 0 : 1) : suite.length);
-        t = `${t.slice(0, coupe)} ${m.par}${t.slice(coupe)}`;
+        if (/:\s*$/.test(t.slice(debutLigne, coupe)) && (!fin || fin[0] === '\n')) {
+          // Ligne qui annonce une liste (« … votre interlocuteur unique est : ») : l'ajout n'est jamais collé après les
+          // deux-points (génération réelle imm 15 : « est : Les agents sont identifiables… ») ; il a son propre
+          // paragraphe après la liste annoncée.
+          let finListe = finLigne;
+          while (finListe < t.length) {
+            const suivante = t.indexOf('\n', finListe + 1) < 0 ? t.length : t.indexOf('\n', finListe + 1);
+            if (!LISTE.test(t.slice(finListe + 1, suivante))) break;
+            finListe = suivante;
+          }
+          t = `${t.slice(0, finListe).trimEnd()}\n\n${m.par}${finListe < t.length ? `\n\n${t.slice(finListe).replace(/^\n+/, '')}` : ''}`;
+        } else {
+          t = `${t.slice(0, coupe)} ${m.par}${t.slice(coupe)}`;
+        }
       }
     } else {
       t = `${t.trimEnd()}\n\n${m.par}`;
