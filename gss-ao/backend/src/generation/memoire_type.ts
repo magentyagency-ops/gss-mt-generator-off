@@ -54,6 +54,12 @@ export interface IndicateurMemoireType {
    * « dce » dans le texte du DCE.
    */
   motif_dce?: string;
+  /**
+   * Preuve exigée dans le texte du DCE (motif « dce ») : l'analyse, le secteur ou une rubrique de la matrice ne
+   * suffisent pas à rendre l'indicateur vrai quand le DCE est lisible (caen : aucun SSIAP dans le DCE, indicateur
+   * rendu vrai par l'analyse « aucun agent SSIAP exigé » ou par une exigence rattachée à une rubrique SSIAP).
+   */
+  preuve_dce?: boolean;
   /** Choix de GSS (assistant, demande particulière) : jamais déduit du DCE. */
   choix_gss?: boolean;
   defaut?: boolean;
@@ -441,6 +447,15 @@ export interface EtatIndicateur {
   raisons: string[];
 }
 
+/**
+ * Propositions qui nient ce qu'elles citent (« aucun agent SSIAP exigé », « pas de télésurveillance », « hors
+ * périmètre ») retirées : une mention niée n'est jamais une preuve (T4N-3).
+ */
+const NEGATION = /(?<![\wÀ-ÿ])(?:(?:aucune?|ni|exclue?s?)(?![\wÀ-ÿ])|pas\s+d(?:e(?![\wÀ-ÿ])|['’])|hors\s+(?:du\s+)?p[ée]rim[èe]tre|non\s+(?:exig|requis|demand|pr[ée]vu|concern|applicable|inclu)|n['’](?:est|exige|implique)\s+pas(?![\wÀ-ÿ])|ne\s+(?:sont|requi[eè]r[\wÀ-ÿ]*|n[ée]cessit[\wÀ-ÿ]*|compren[\wÀ-ÿ]*|comprend)\s+pas(?![\wÀ-ÿ])|sans\s+objet)/i;
+export function sansMentionsNiees(texte: string): string {
+  return String(texte || '').split(/(?<=[.,;!?\n])|(?=[()])|(?<=[()])/).filter((p) => !NEGATION.test(p)).join('');
+}
+
 /** Champs de l'analyse du DCE consultés par les indicateurs. */
 function texteAnalyse(analyse: any): string {
   if (!analyse || typeof analyse !== 'object') return '';
@@ -448,7 +463,7 @@ function texteAnalyse(analyse: any): string {
   const morceaux = [o.agentProfiles, o.uniforms, o.equipment, o.qualityControls, analyse.telesurveillance, analyse.projectTitle,
     ...(Array.isArray(analyse.sites) ? analyse.sites.map((s: any) => `${s?.name || ''} ${s?.requirements || ''}`) : []),
     ...(Array.isArray(analyse.lots) ? analyse.lots.map((l: any) => `${l?.perimetre || ''}`) : [])];
-  return morceaux.map((x) => valeurPropre(x)).filter(Boolean).join(' \n ');
+  return morceaux.map((x) => sansMentionsNiees(valeurPropre(x))).filter((x) => x.trim()).join(' \n ');
 }
 
 function extrait(t: string, i: number, n: number): string {
@@ -493,6 +508,11 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
       if (def.matrice?.length && (!engageants.has(nom) || (def.motif_dce ? dceNorm.includes(normaliser(def.motif_dce)) : raisons.some((r) => r.startsWith('DCE'))))) {
         const e = matrice.find((x) => x.rubrique && def.matrice!.includes(x.rubrique));
         if (e) raisons.push(`exigence rattachée à ${e.rubrique} : « ${e.exigence.slice(0, 120)} »`);
+      }
+      // Preuve exigée dans le DCE lisible : l'analyse, le secteur ou la matrice seuls ne suffisent pas (T4N-3).
+      if (def.preuve_dce && dce.length >= 2000 && raisons.length && !raisons.some((r) => r.startsWith('DCE'))) {
+        console.log(`[MemoireType] Indicateur ${nom} : écarté, aucune mention dans le DCE (${raisons.join(' ; ').slice(0, 200)}).`);
+        raisons.splice(0, raisons.length);
       }
       valeur = raisons.length > 0;
       // Le DCE dit lui-même que la condition n'existe pas (IFITS : « Pas de personnel transférable ») : faux.
@@ -1094,9 +1114,19 @@ export function fondementRepriseDce(dce: string): string {
   return parts.join(' et à ');
 }
 
-/** Qualifications exigées par le DCE (et citées par l'analyse), dans l'ordre du catalogue GSS. */
+/** Le DCE lisible parle-t-il de sécurité incendie (SSIAP, agent ou prestation de sécurité incendie) ? */
+const PREUVE_INCENDIE = /(?<![\wÀ-ÿ])(?:SSIAP|S\.S\.I\.A\.P)|service de s[ée]curit[ée] incendie et d.assistance|agents? de s[ée]curit[ée] incendie|prestations? (?:de )?s[ée]curit[ée] incendie/i;
+
+/**
+ * Qualifications exigées par le DCE (et citées par l'analyse), dans l'ordre du catalogue GSS. Un SSIAP cité par la
+ * seule analyse ne compte que si le DCE lisible parle lui-même de sécurité incendie (T4N-3, caen : aucun SSIAP dans le
+ * DCE, « SSIAP 1 » imprimé d'après l'analyse).
+ */
 export function qualificationsDuDce(dce: string, analyse?: any): string[] {
-  const t = `${String(dce || '')} ${texteAnalyse(analyse)}`.replace(/\s+/g, ' ');
+  const texteDce = String(dce || '');
+  const an = texteAnalyse(analyse);
+  const incendie = texteDce.replace(/\s+/g, ' ').length < 2000 || PREUVE_INCENDIE.test(texteDce.replace(/\s+/g, ' '));
+  const t = `${texteDce} ${incendie ? an : an.replace(/S\.?S\.?I\.?A\.?P\.?(?:\s*(?:[123]|I{1,3})(?![\wÀ-ÿ]))?/gi, '')}`.replace(/\s+/g, ' ');
   const out: string[] = [];
   if (/SSIAP\s*(?:3|III)(?![\wÀ-ÿ])/i.test(t)) out.push('SSIAP 3');
   if (/SSIAP\s*(?:2|II)(?![\wÀ-ÿ])/i.test(t)) out.push('SSIAP 2');
@@ -1156,6 +1186,36 @@ function fonctionDansAnnuaire(referents: string, nom: string): string {
     }
   }
   return '';
+}
+
+/** Lignes « catégorie | qualification » du tableau de l'équipe dédiée quand aucun dimensionnement n'est calculé. */
+function lignesEquipeParQualification(c: CalculVariables): Array<[string, string]> {
+  const lignes: Array<[string, string]> = [];
+  if (c.qualifs.includes('SSIAP 3')) lignes.push(['Chef de service de sécurité incendie', 'SSIAP 3']);
+  if (c.qualifs.includes('SSIAP 2')) lignes.push(["Chef d'équipe de sécurité incendie", 'SSIAP 2']);
+  if (c.qualifs.includes('SSIAP 1')) lignes.push(['Agent de sécurité incendie', 'SSIAP 1']);
+  const ads = /(?<![\wÀ-ÿ])ADS(?![\wÀ-ÿ])|agents? de (?:s[ée]curit[ée](?! incendie)|surveillance|s[ûu]ret[ée])/i.test(String(c.ctx.dce || ''));
+  if (!c.ind.SSIAP || ads || c.qualifs.includes('CQP APS')) lignes.push(['Agent de sécurité', 'CQP APS']);
+  if (c.ind.CYNOPHILE) lignes.push(['Agent cynophile', 'CQP APS – qualification cynophile']);
+  if (c.ind.TELESURVEILLANCE) lignes.push(['Rondier intervenant', 'CQP APS']);
+  return lignes;
+}
+
+/**
+ * Diplômes de l'équipe dédiée : qualifications des profils du tableau de l'équipe (dimensionnement, sinon lignes par
+ * qualification), puis les autres qualifications exigées par le DCE pour ces agents (SST, PSC1, habilitation) quand
+ * aucun dimensionnement ne fixe les profils. Ordre du catalogue GSS.
+ */
+function diplomesEquipe(c: CalculVariables): string[] {
+  const profils = c.ctx.dimensionnement?.profils || [];
+  if (profils.length) {
+    const q = qualificationsDuDce(profils.map((p) => `${p.profil} : ${p.qualification}`).join(' ; '));
+    return q.length ? q : c.qualifs;
+  }
+  const tableau = lignesEquipeParQualification(c).map(([, q]) => q).join(' ; ');
+  const q = qualificationsDuDce(tableau);
+  const autres = c.qualifs.filter((x) => !/^SSIAP|^CQP APS$/.test(x));
+  return [...q, ...autres.filter((x) => !q.includes(x))];
 }
 
 interface CalculVariables {
@@ -1269,7 +1329,12 @@ const CALCULS: Record<string, Calculateur> = {
     if (c.ind.TELESURVEILLANCE) p.push('nos agents rondiers intervenants');
     return { valeur: p };
   },
-  DIPLOMES_EQUIPE: (c) => (c.qualifs.length ? { valeur: c.qualifs, source: 'qualifications exigées par le DCE' } : { valeur: null }),
+  // Diplômes de l'équipe dédiée = qualifications des profils du tableau de l'équipe (T4N-3 : citedia2, lot 2 en SSIAP 1 et
+  // CQP APS, imprimait « SSIAP 2 » exigé pour le seul chef d'équipe du lot 1 ; caen imprimait « SSIAP 1 » sans CQP APS).
+  DIPLOMES_EQUIPE: (c) => {
+    const q = diplomesEquipe(c);
+    return q.length ? { valeur: q, source: c.ctx.dimensionnement?.profils.length ? "qualifications des profils de l'équipe dédiée (dimensionnement)" : "qualifications des lignes du tableau de l'équipe dédiée" } : { valeur: null };
+  },
   TENUE_RETENUE: (c) => {
     const uniformes = valeurPropre(c.ctx.analyse?.operationalSummary?.uniforms);
     const ads = /(?<![\wÀ-ÿ])ADS(?![\wÀ-ÿ])|agents? de (?:s[ée]curit[ée](?! incendie)|surveillance|s[ûu]ret[ée])/i.test(String(c.ctx.dce || ''));
@@ -1283,15 +1348,8 @@ const CALCULS: Record<string, Calculateur> = {
     // Postes et horaires du DCE : une ligne par profil exigé, effectif calculé (proposition à valider par GSS).
     const dim = c.ctx.dimensionnement;
     if (dim?.profils.length) return { valeur: lignesEquipe(dim), source: 'dimensionnement calculé à partir des postes et des horaires du DCE', aConfirmer: questionDimensionnement(dim) };
-    const lignes: string[] = [];
     const ac = '[À COMPLÉTER]';
-    if (c.qualifs.includes('SSIAP 3')) lignes.push(`| Chef de service de sécurité incendie | SSIAP 3 | ${ac} | |`);
-    if (c.qualifs.includes('SSIAP 2')) lignes.push(`| Chef d'équipe de sécurité incendie | SSIAP 2 | ${ac} | |`);
-    if (c.qualifs.includes('SSIAP 1')) lignes.push(`| Agent de sécurité incendie | SSIAP 1 | ${ac} | |`);
-    const ads = /(?<![\wÀ-ÿ])ADS(?![\wÀ-ÿ])|agents? de (?:s[ée]curit[ée](?! incendie)|surveillance|s[ûu]ret[ée])/i.test(String(c.ctx.dce || ''));
-    if (!c.ind.SSIAP || ads || c.qualifs.includes('CQP APS')) lignes.push(`| Agent de sécurité | CQP APS | ${ac} | |`);
-    if (c.ind.CYNOPHILE) lignes.push(`| Agent cynophile | CQP APS – qualification cynophile | ${ac} | |`);
-    if (c.ind.TELESURVEILLANCE) lignes.push(`| Rondier intervenant | CQP APS | ${ac} | |`);
+    const lignes = lignesEquipeParQualification(c).map(([categorie, qualif]) => `| ${categorie} | ${qualif} | ${ac} | |`);
     return { valeur: lignes.join('\n'), question: "Combien d'agents de cette catégorie compte l'équipe dédiée au marché (tableau de l'adéquation des moyens humains) ?", source: 'qualifications exigées par le DCE' };
   },
   EFFECTIF_AGENTS: (c) => (c.ctx.dimensionnement?.titulaires

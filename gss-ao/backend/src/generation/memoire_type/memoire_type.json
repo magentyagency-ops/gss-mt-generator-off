@@ -71,8 +71,9 @@
   },
   "SSIAP": {
    "description": "Le marché exige des agents SSIAP (sécurité incendie, ERP ou IGH).",
-   "dce": "(?<![\\wÀ-ÿ])(?:SSIAP|S\\.S\\.I\\.A\\.P)|service de s[ée]curit[ée] incendie et d.assistance",
+   "dce": "(?<![\\wÀ-ÿ])(?:SSIAP|S\\.S\\.I\\.A\\.P)|service de s[ée]curit[ée] incendie et d.assistance|agents? de s[ée]curit[ée] incendie|prestations? (?:de )?s[ée]curit[ée] incendie",
    "analyse": "SSIAP",
+   "preuve_dce": true,
    "matrice": [
     "b3_formation_ssiap_a",
     "b3_formation_ssiap_b"
