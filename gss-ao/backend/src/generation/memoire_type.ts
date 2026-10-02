@@ -71,6 +71,8 @@ export interface VariableMemoireType {
   indicateur_exige?: string;
   normandie_seulement?: boolean;
   a_confirmer?: string;
+  /** Question qui ne dépend pas du marché : posée une seule fois à GSS (questions_gss_une_fois), jamais à chaque génération. */
+  question_une_fois?: boolean;
   seulement_si_confirmee?: boolean;
 }
 
@@ -316,6 +318,8 @@ export interface EntreeRegistre {
   date_retenue: string;
   source_retenue: string;
   statut: 'confirmee' | 'a_confirmer';
+  /** Valeur à confirmer posée une seule fois à GSS (questions_gss_une_fois) : utilisée telle quelle, jamais reposée. */
+  question_une_fois?: boolean;
 }
 
 const FICHIER_REGISTRE = path.resolve(__dirname, '../../python/base_memoires/registre_informations.json');
@@ -340,9 +344,17 @@ function moisDepuis(date: string, maintenant = new Date()): number {
   return (maintenant.getFullYear() - Number(m[1])) * 12 + (maintenant.getMonth() + 1 - Number(m[2]));
 }
 
-/** Valeur du registre « à confirmer » (statut, ou dernière source de plus de 12 mois pour une information variable). */
+/** Valeur du registre « à confirmer » (statut, ou dernière source de plus de 12 mois pour une information variable). Une
+ *  valeur dont la question est posée une seule fois à GSS (question_une_fois : ALAMAT, ATTOU, DA SILVA) n'est pas reposée
+ *  à chaque génération. */
 function aConfirmerRegistre(e: EntreeRegistre): boolean {
+  if (e.question_une_fois) return false;
   return e.statut === 'a_confirmer' || (CATEGORIES_VARIABLES.has(e.categorie) && moisDepuis(e.date_retenue) > 12);
+}
+
+/** Question de confirmation d'une variable, posée à chaque génération ; aucune si elle est posée une seule fois à GSS. */
+function questionParGeneration(def?: VariableMemoireType): string | undefined {
+  return def && !def.question_une_fois ? def.a_confirmer : undefined;
 }
 
 /** Premier nombre d'une valeur du registre (« 500 agents » → « 500 »). */
@@ -863,7 +875,7 @@ function delai(c: CalculVariables, nom: string, sujet: keyof typeof SUJETS_DELAI
     const v = depuisRegistre(c, def.registre, normaliserDelai);
     if (variableRenseignee(v)) return v;
   }
-  if (def?.valeur_gss) return { valeur: def.valeur_gss, source: def.origine, aConfirmer: def.a_confirmer };
+  if (def?.valeur_gss) return { valeur: def.valeur_gss, source: def.origine, aConfirmer: questionParGeneration(def) };
   return { valeur: null };
 }
 
@@ -975,7 +987,7 @@ const CALCULS: Record<string, Calculateur> = {
   STATUT_PME: (c) => {
     const e = c.registre.find((x) => x.cle === 'statut_pme');
     if (e) return /^\s*(?:oui|pme)\b/i.test(e.valeur_retenue) ? { valeur: 'PME', source: `registre statut_pme (${e.source_retenue}, ${e.date_retenue})` } : { valeur: null };
-    return { valeur: null, question: c.mt.variables.STATUT_PME?.a_confirmer };
+    return { valeur: null, question: questionParGeneration(c.mt.variables.STATUT_PME) };
   },
   EFFECTIF_TOTAL: (c) => depuisRegistre(c, 'effectif_total', nombreDe),
   EFFECTIF_76: (c) => depuisRegistre(c, 'effectif_departement_76', nombreDe),
@@ -1029,7 +1041,7 @@ const CALCULS: Record<string, Calculateur> = {
   FREQ_CONTROLE_3: (c) => ({ valeur: c.mt.variables.FREQ_CONTROLE_3?.valeur_gss || null, source: 'pratique GSS' }),
   CONTROLES_INOPINES_MENSUELS: (c) => valeurSiExige(c, 'CONTROLES_INOPINES_MENSUELS') || ({ valeur: c.mt.variables.CONTROLES_INOPINES_MENSUELS?.valeur_gss || null, source: 'pratique GSS' }),
   FREQ_REUNIONS: (c) => ({ valeur: frequenceReunionsDce(c.ctx.dce || '') || null, source: 'DCE' }),
-  RESPONSABLE_APR: (c) => ({ valeur: c.mt.variables.RESPONSABLE_APR?.valeur_gss || null, source: 'AO RNE p.49-50', aConfirmer: c.mt.variables.RESPONSABLE_APR?.a_confirmer }),
+  RESPONSABLE_APR: (c) => ({ valeur: c.mt.variables.RESPONSABLE_APR?.valeur_gss || null, source: 'AO RNE p.49-50', aConfirmer: questionParGeneration(c.mt.variables.RESPONSABLE_APR) }),
 };
 
 /**

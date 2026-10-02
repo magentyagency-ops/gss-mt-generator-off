@@ -23,6 +23,7 @@ const f = interditsDce("Le chef de site contrôle les agents. Les responsables d
 verifier('IGN : « chef de poste », terme du CCTP', f === "Le chef de poste contrôle les agents. Les chefs de poste envoient leur rapport, en concertation avec l'IGN (responsable de site).", f);
 const dceCit = fs.readFileSync(path.resolve(__dirname, '../../_corpus_verif/_dce_textes/citedia2.txt'), 'utf-8');
 verifier('Citédia : vocabulaire inchangé', interditsDce('Le chef de site contrôle.', dceCit) === 'Le chef de site contrôle.');
+// Depuis la correction des points restants : ATTOU n'est plus reposé à chaque génération (question posée une seule fois).
 const g = confirmationsRegistreUtilisees('Responsable incendie : ATTOU NESRINE');
-verifier('nom en capitales → prénom en minuscules', g.some((x) => /ATTOU Nesrine/.test(x)) && !g.some((x) => /NESRINE/.test(x)), g.join(' | '));
+verifier('ATTOU : question posée une seule fois, jamais reposée', !g.length, g.join(' | '));
 console.log(ko ? `${ko} ÉCHEC(S)` : 'TOUT OK');

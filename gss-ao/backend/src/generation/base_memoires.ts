@@ -52,6 +52,8 @@ interface InfoRegistre {
   valeurs_anterieures_differentes: string[];
   /** Information interne de GSS (ex. prix horaire) : jamais transmise aux rédactions ni écrite dans un mémoire. */
   interne?: boolean;
+  /** Valeur à confirmer dont la question est posée une seule fois à GSS (questions_gss_une_fois) : jamais reposée. */
+  question_une_fois?: boolean;
 }
 
 let cache: { passages: PassageMemoire[]; vecteurs: Float32Array[]; registre: InfoRegistre[] } | null = null;
@@ -144,6 +146,9 @@ function moisDepuis(date: string): number {
 
 /** Entrées du registre encore « à confirmer » mais tranchées pour le mémoire : jamais reposées à GSS. */
 const POINTS_TRANCHES = new Set(['logiciel_main_courante', 'effectif_agents_securite']);
+/** Entrée jamais reposée à chaque génération : point tranché, ou question posée une seule fois à GSS (question_une_fois :
+ *  noms de l'organigramme ALAMAT, ATTOU, DA SILVA, en attendant l'organigramme à jour). */
+const jamaisReposee = (e: InfoRegistre): boolean => POINTS_TRANCHES.has(e.cle) || !!e.question_une_fois;
 
 /** Registre des informations variables, avec l'instruction de fraîcheur pour chacune. */
 
@@ -159,7 +164,7 @@ export function blocRegistre(horsNormandie = false): string {
   // marchés normands, ne sont pas transmis (sinon ils étaient promis tels quels, ex. 60 min depuis Rouen).
   const lignes = registre.filter((e) => !incoherent(e) && !(horsNormandie && e.categorie === 'delais')).map((e) => {
     const ancien = CATEGORIES_VARIABLES.has(e.categorie) && moisDepuis(e.date_retenue) > FRAICHEUR_MOIS;
-    const aConfirmer = (e.statut === 'a_confirmer' || ancien) && !POINTS_TRANCHES.has(e.cle);
+    const aConfirmer = (e.statut === 'a_confirmer' || ancien) && !jamaisReposee(e);
     const raison = e.statut === 'a_confirmer'
       ? ` — A ÉVOLUÉ (avant : ${e.valeurs_anterieures_differentes.slice(0, 2).join(' ; ')})`
       : (ancien ? ` — dernière source de plus de ${FRAICHEUR_MOIS} mois` : '');
@@ -363,7 +368,7 @@ export function confirmationsRegistreUtilisees(texte: string, horsNormandie = fa
     if (e.statut !== 'a_confirmer' && !ancien) continue;
     // Points déjà tranchés : main courante Trackforce (seul outil employé par le mémoire), effectif de 423 agents
     // de sécurité (faux, jamais imprimé).
-    if (POINTS_TRANCHES.has(e.cle)) continue;
+    if (jamaisReposee(e)) continue;
     const morceaux = e.valeur_retenue.split(';').map((x) => normTxt(x).replace(/\s+/g, ' ').trim()).filter((x) => x.length >= 4);
     if (morceaux.some((m) => t.includes(m))) {
       // Main courante : le mémoire n'emploie que Trackforce (Vigicom figure dans un ancien mémoire).

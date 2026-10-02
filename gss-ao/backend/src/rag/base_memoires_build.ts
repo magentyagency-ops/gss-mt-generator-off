@@ -132,7 +132,7 @@ async function extraireFaits(openai: OpenAI, fichierTextes: string) {
 }
 
 /** Champs propres au registre (hors extraction) conservés d'une reconstruction à l'autre. */
-const CHAMPS_CONSERVES = ['interne', 'usage', 'remarque'];
+const CHAMPS_CONSERVES = ['interne', 'usage', 'remarque', 'question_une_fois'];
 
 /**
  * Réponses de l'équipe GSS (valeurs « reponse_gss », ex. réponses du 1er octobre 2026) et informations sans mémoire

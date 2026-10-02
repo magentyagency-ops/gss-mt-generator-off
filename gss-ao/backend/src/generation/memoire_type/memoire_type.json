@@ -366,7 +366,8 @@
    "type": "texte",
    "si_absente": "vide",
    "registre": "statut_pme",
-   "a_confirmer": "GSS est-elle une PME au sens européen (moins de 250 salariés, et chiffre d'affaires de 50 M€ au plus ou bilan de 43 M€ au plus) ? L'effectif est de 380 salariés ; tant que GSS n'a pas répondu, le mémoire n'imprime aucune mention « PME ». Répondre Oui ou Non (la mention de la dénomination et la case « PME » des cadres de réponse en dépendent)."
+   "a_confirmer": "GSS est-elle une PME au sens européen (moins de 250 salariés, et chiffre d'affaires de 50 M€ au plus ou bilan de 43 M€ au plus) ? L'effectif est de 380 salariés ; tant que GSS n'a pas répondu, le mémoire n'imprime aucune mention « PME ». Répondre Oui ou Non (la mention de la dénomination et la case « PME » des cadres de réponse en dépendent).",
+   "question_une_fois": true
   },
   "EFFECTIF_TOTAL": {
    "description": "Effectif total de GSS",
@@ -534,7 +535,8 @@
    "si_absente": "vide",
    "valeur_gss": "moins de 2 heures",
    "normandie_seulement": true,
-   "a_confirmer": "Confirmer le délai d'intervention des agents d'astreinte sur n'importe quel site normand — valeur utilisée dans le mémoire : moins de 2 heures (Région Normandie lot 1, 2024-05). Le délai de 60 minutes maximum ne concerne que le remplacement d'un agent absent sur son site"
+   "a_confirmer": "Confirmer le délai d'intervention des agents d'astreinte sur n'importe quel site normand — valeur utilisée dans le mémoire : moins de 2 heures (Région Normandie lot 1, 2024-05). Le délai de 60 minutes maximum ne concerne que le remplacement d'un agent absent sur son site",
+   "question_une_fois": true
   },
   "DELAI_PTI": {
    "description": "Délai d'arrivée sur place après une alarme PTI sans réponse",
@@ -575,7 +577,8 @@
    "si_absente": "vide",
    "valeur_gss": "45 minutes à 2 heures",
    "normandie_seulement": true,
-   "a_confirmer": "Confirmer le délai de mobilisation sur un SSI défaillant — valeur utilisée dans le mémoire : 45 minutes à 2 heures (Région Normandie lot 1, 2024-05)"
+   "a_confirmer": "Confirmer le délai de mobilisation sur un SSI défaillant — valeur utilisée dans le mémoire : 45 minutes à 2 heures (Région Normandie lot 1, 2024-05)",
+   "question_une_fois": true
   },
   "FREQ_CONTROLE_1": {
    "description": "Fréquence du contrôle de fond (responsable de site)",
@@ -621,7 +624,8 @@
    "type": "texte",
    "si_absente": "a_completer",
    "valeur_gss": "LEMELE Fabrice",
-   "a_confirmer": "Confirmer que LEMELE Fabrice est toujours le responsable de la protection rapprochée (APR)."
+   "a_confirmer": "Confirmer que LEMELE Fabrice est toujours le responsable de la protection rapprochée (APR).",
+   "question_une_fois": true
   }
  },
  "rubriques": [
@@ -5198,11 +5202,31 @@
   "placement": "Dans le bloc du même thème, en fin de bloc (ou à la place imposée par le cadre), avec son schéma si la réponse décrit un process."
  },
  "questions_gss_une_fois": {
-  "note": "Points du mémoire type qui ne dépendent pas du marché : ils sont posés une seule fois à GSS (comme le registre), jamais à chaque génération. La réponse de GSS est reportée dans le texte de la rubrique ou dans le registre, puis le point est retiré de cette liste. Les points déjà tranchés (interlocuteur unique MARCHANI Adil, effectif de 423 agents faux, main courante Trackforce) et les valeurs déjà posées par une variable (délai de défaillance du SSI) ne sont plus posés.",
+  "note": "Points du mémoire type et du registre qui ne dépendent pas du marché : ils sont posés une seule fois à GSS, jamais à chaque génération (variables et entrées du registre marquées « question_une_fois » : la valeur connue est utilisée, sans question dans les consultations). La réponse de GSS est reportée dans le texte de la rubrique, dans la variable ou dans le registre (statut « confirmee »), puis le point est retiré de cette liste. Les points déjà tranchés (interlocuteur unique MARCHANI Adil, effectif de 423 agents faux, main courante Trackforce) ne sont plus posés. Exception : une case « PME : Oui / Non » d'un cadre de réponse reste vide tant que GSS n'a pas répondu ; elle est alors signalée dans les consultations du document concerné, puisqu'il faut la remplir avant la remise.",
   "questions": [
    {
     "rubrique": "b2_organigramme",
     "question": "Organigramme : faut-il ajouter DUHAMEL Leo (administratif) et LEMELE Fabrice (exploitation), absents de l'organigramme du mémoire ?"
+   },
+   {
+    "rubrique": "b2_organigramme",
+    "registre": "responsable_unite_mobile",
+    "question": "Organigramme : ALAMAT Ramzi est-il toujours le responsable de l'unité mobile ?"
+   },
+   {
+    "rubrique": "b2_organigramme",
+    "registre": "responsable_incendie",
+    "question": "Organigramme : ATTOU Nesrine est-elle toujours la responsable incendie ?"
+   },
+   {
+    "rubrique": "b2_identite",
+    "variable": "STATUT_PME",
+    "question": "GSS est-elle une PME au sens européen (moins de 250 salariés, et chiffre d'affaires de 50 M€ au plus ou bilan de 43 M€ au plus) ? L'effectif est de 380 salariés ; tant que GSS n'a pas répondu, le mémoire n'imprime aucune mention « PME ». Répondre Oui ou Non (la mention de la dénomination et la case « PME » des cadres de réponse en dépendent)."
+   },
+   {
+    "rubrique": "b2_implantation",
+    "variable": "DELAI_ASTREINTE_NORMANDIE",
+    "question": "Astreinte en Normandie : quel délai d'intervention des agents d'astreinte sur n'importe quel site normand faut-il annoncer : moins de 2 heures (Région Normandie, 2024, valeur utilisée aujourd'hui) ou 60 minutes maximum (Université de Rouen Normandie, 2026, délai qui semble viser le remplacement d'un agent absent sur son site) ?"
    },
    {
     "rubrique": "b2_ref_logistique",
@@ -5214,7 +5238,8 @@
    },
    {
     "rubrique": "b3_formation_apr",
-    "question": "Protection rapprochée : LEMELE Fabrice est-il toujours le responsable APR ? Si ce n'est plus le cas, la fiche « Notre responsable APR » est retirée plutôt que de changer le nom."
+    "question": "Protection rapprochée : LEMELE Fabrice est-il toujours le responsable APR ? Si ce n'est plus le cas, la fiche « Notre responsable APR » est retirée plutôt que de changer le nom.",
+    "variable": "RESPONSABLE_APR"
    },
    {
     "rubrique": "b3_formation_apr",
@@ -5246,7 +5271,8 @@
    },
    {
     "rubrique": "b5_equipe_controle",
-    "question": "Équipe de contrôle : DA SILVA Luis est-il responsable d'exploitation, gestionnaire d'exploitation ou responsable commercial ?"
+    "question": "Équipe de contrôle : DA SILVA Luis est-il responsable d'exploitation, gestionnaire d'exploitation ou responsable commercial ?",
+    "registre": "responsable_commercial"
    },
    {
     "rubrique": "b5_equipe_controle",
@@ -5255,6 +5281,11 @@
    {
     "rubrique": "b5_nouveau_marche",
     "question": "Mise en place : GSS a-t-elle un rétroplanning court pour un démarrage en moins de 30 jours (notification tardive) ?"
+   },
+   {
+    "rubrique": "b5_defaillance_ssi",
+    "variable": "DELAI_DEFAILLANCE_SSI",
+    "question": "SSI défaillant : en Normandie, le délai de mobilisation de 45 minutes à 2 heures (engagement pris pour la Région Normandie en 2024) vaut-il toujours quand le cahier des charges ne fixe pas de délai ?"
    }
   ]
  },

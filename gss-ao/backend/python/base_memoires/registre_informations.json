@@ -253,7 +253,8 @@
    "statut": "a_confirmer",
    "valeurs_anterieures_differentes": [
     "MENDES Ussumane (Région Normandie (lot 2), 2024-05)"
-   ]
+   ],
+   "question_une_fois": true
   },
   {
    "cle": "responsable_cynophile",
@@ -344,7 +345,8 @@
    "valeurs_anterieures_differentes": [
     "OTMANI Abed (CAF (2025), 2025-10)",
     "MEROUANI Sofiane (Région Normandie (lot 2), 2024-05)"
-   ]
+   ],
+   "question_une_fois": true
   },
   {
    "cle": "effectif_agents_securite",
@@ -1826,7 +1828,8 @@
    "statut": "a_confirmer",
    "valeurs_anterieures_differentes": [
     "Mr HANZAZ Abdelaziz (Région Normandie (lot 2), 2024-05)"
-   ]
+   ],
+   "question_une_fois": true
   },
   {
    "cle": "delai_intervention_alarme",
