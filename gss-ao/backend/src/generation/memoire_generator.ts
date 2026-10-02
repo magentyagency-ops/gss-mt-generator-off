@@ -7215,6 +7215,9 @@ RÈGLES DE FORME (rendu Marp) :
       }
       titresSchemas[b1.id] = c.titre;
       if (c.svg) schemasGeneres.set(CLE_SCHEMA(b1.id), c.svg);
+      // Aucun schéma de process construit sur le contenu du texte (étapes du modèle refusées, secours impossibles) : signalé à
+      // GSS (T3C-3), le schéma construit au rendu est à relire.
+      else if (!c.secours) avisSecours.push(`Rubrique « ${b1.titre} » : le schéma de process n'a pas pu être construit sur les étapes du texte (schéma construit au rendu d'après le texte) ; à relire et à corriger via l'assistant avant la remise.`);
       if (c.secours) avisSecours.push(`Rubrique « ${b1.titre} » : rédaction automatique indisponible, texte construit à partir des données du DCE, à relire et compléter.`);
     }
 
@@ -7531,7 +7534,7 @@ RÈGLES DE FORME (rendu Marp) :
       if (cit.retirees) console.log(`[MemoireGenerator] Compréhension du besoin : ${cit.retirees} citation(s) du CCTP sans rapport avec leur puce retirée(s).`);
       texte = cit.texte;
       // Redites du chapeau, durée inconnue écrite « [À COMPLÉTER] », renvois au mauvais bloc (fontainebleau 21).
-      const nb = nettoyerBloc1(texte, prep.plan, besoin.duree);
+      const nb = nettoyerBloc1(texte, prep.plan, besoin.duree, Array.isArray(rep?.etapes) ? rep.etapes : []);
       if (nb.retirees.length || nb.renvois) console.log(`[MemoireGenerator] Compréhension du besoin : ${nb.retirees.length} redite(s) ou phrase(s) sans donnée retirée(s), ${nb.renvois} renvoi(s) de bloc corrigé(s).`);
       texte = nb.texte;
       const m = completerBesoinMinimum(texte, sources, prep.plan, String(ctx.dce || ''));

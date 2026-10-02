@@ -166,12 +166,9 @@ describe('Réponse libre v2 : bloc « compréhension »', () => {
     expect(s.params.etapes[4].role).toBe('vert');
     expect(s.params.etapes[2].texte.length).toBeLessThanOrEqual(86);
     expect(specProcessBesoin([{ titre: 'Seule' }])).toBeNull();
-    const c = specSecoursBesoin('## Votre contexte et votre site\nA\n## Le périmètre\nB\n## Vos attentes et nos engagements\n- **Continuité de service** : les postes restent tenus sans interruption.\n## Les points de vigilance\nD');
-    expect(c?.gabarit).toBe('chevrons');
-    // Titres de chevrons coupés à 26 caractères au plus (afadca1) : « Votre contexte et votre site » → « Votre contexte ».
-    // Tour 2 (T2C-1) : trois phases, puis toujours « Votre résultat » avec son texte (jamais une phase finale sans résultat).
-    expect(c?.params.etapes.map((e: any) => e.titre)).toEqual(['Votre contexte', 'Le périmètre', 'Vos attentes', 'Votre résultat']);
-    expect(c?.params.etapes[3].texte).toBe('Continuité de service');
+    // Tour 3 (T3C-3, imm 341 et citedia 341) : plus jamais de schéma « Votre contexte → Le périmètre → Vos attentes → Votre
+    // résultat » réduit aux intitulés ; sans contenu exploitable, aucun schéma (le défaut est signalé à GSS).
+    expect(specSecoursBesoin('## Votre contexte et votre site\nA\n## Le périmètre\nB\n## Vos attentes et nos engagements\n- **Continuité de service** : les postes restent tenus sans interruption.\n## Les points de vigilance\nD')).toBeNull();
     expect(specSecoursBesoin('## Votre contexte et votre site\nA\n## Le périmètre\nB')).toBeNull();
     expect(court('Un titre beaucoup trop long pour une carte de schéma', 20)).toBe('Un titre beaucoup');
   });

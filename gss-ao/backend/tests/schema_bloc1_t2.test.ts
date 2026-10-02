@@ -56,7 +56,8 @@ describe('schéma de process du bloc 1 (T2C-1)', () => {
     const l = lignes(s).join(' → ');
     expect(l).not.toMatch(/bloc \d|permettent de transmettre$/);
     expect(s.params.etapes[s.params.etapes.length - 1].texte).toBeTruthy();
-    expect(l).toContain('Le remplacement des absences prévues et imprévues');
+    // Tour 3 : les attentes citées sans flèche (« **« ouverture effective à 07h20 »** : … ») donnent aussi des étapes.
+    expect(l).toContain('07h20');
   });
 
   it('ca_normandie 221 : titre jamais répété dans le texte, titres jamais quasi identiques, résultat écrit', () => {
