@@ -635,7 +635,8 @@
    "statut": "a_confirmer",
    "valeurs_anterieures_differentes": [
     "VIGICOM 6TADEL (MIN de Rouen (cadre de réponse), 2025-10)"
-   ]
+   ],
+   "question_une_fois": true
   },
   {
    "cle": "main_courante_donnees",

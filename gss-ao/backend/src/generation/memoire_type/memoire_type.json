@@ -5203,7 +5203,7 @@
   "placement": "Dans le bloc du même thème, en fin de bloc (ou à la place imposée par le cadre), avec son schéma si la réponse décrit un process."
  },
  "questions_gss_une_fois": {
-  "note": "Points du mémoire type et du registre qui ne dépendent pas du marché : ils sont posés une seule fois à GSS, jamais à chaque génération (variables et entrées du registre marquées « question_une_fois » : la valeur connue est utilisée, sans question dans les consultations). La réponse de GSS est reportée dans le texte de la rubrique, dans la variable ou dans le registre (statut « confirmee »), puis le point est retiré de cette liste. Les points déjà tranchés (interlocuteur unique MARCHANI Adil, effectif de 423 agents faux, main courante Trackforce) ne sont plus posés. Exception : une case « PME : Oui / Non » d'un cadre de réponse reste vide tant que GSS n'a pas répondu ; elle est alors signalée dans les consultations du document concerné, puisqu'il faut la remplir avant la remise.",
+  "note": "Points du mémoire type et du registre qui ne dépendent pas du marché : ils sont posés une seule fois à GSS, jamais à chaque génération (variables et entrées du registre marquées « question_une_fois » : la valeur connue est utilisée, sans question dans les consultations). La réponse de GSS est reportée dans le texte de la rubrique, dans la variable ou dans le registre (statut « confirmee »), puis le point est retiré de cette liste. Les points déjà tranchés (interlocuteur unique MARCHANI Adil, effectif de 423 agents faux) ne sont plus posés ; la main courante est écrite « Trackforce » dans tous les mémoires, et la question du logiciel exact (sans réponse de GSS le 1er octobre 2026) est posée ici une seule fois. Exception : une case « PME : Oui / Non » d'un cadre de réponse reste vide tant que GSS n'a pas répondu ; elle est alors signalée dans les consultations du document concerné, puisqu'il faut la remplir avant la remise.",
   "questions": [
    {
     "rubrique": "b2_organigramme",
@@ -5257,6 +5257,11 @@
    {
     "rubrique": "b3_reprise_personnel",
     "question": "Reprise du personnel : GSS valide-t-elle le schéma en trois étapes (réunion, reprise sur le même site, intégration), sans le scénario « agents non maintenus affectés sur un autre site » ?"
+   },
+   {
+    "rubrique": "b4_main_courante",
+    "registre": "logiciel_main_courante",
+    "question": "Main courante électronique : quel logiciel GSS utilise-t-elle aujourd'hui sur ses sites, Trackforce, Vigicom ou les deux ? Le mémoire écrit « Trackforce » (horodatage infalsifiable, exports PDF et Excel, conservation 10 ans, déjà confirmés)."
    },
    {
     "rubrique": "b4_tenues_reglementaires",

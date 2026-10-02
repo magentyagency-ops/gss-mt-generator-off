@@ -49,5 +49,5 @@ const registre: any[] = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../p
 for (const e of registre.filter((x) => x.question_une_fois)) verifier(`registre ${e.cle} : question posée une fois`, liste.some((q) => q.registre === e.cle && q.question));
 const interdit = /faits_gss|slide|AO RNE|m[ée]moire type/i;
 verifier('questions_gss_une_fois : aucune référence interne', !liste.some((q) => interdit.test(q.question)), liste.filter((q) => interdit.test(q.question)).map((q) => q.question).join(' | '));
-verifier('lireRegistre : champ question_une_fois lu', lireRegistre().filter((e: any) => e.question_une_fois).length === 3);
+verifier('lireRegistre : champ question_une_fois lu', lireRegistre().filter((e: any) => e.question_une_fois).length === 4);
 console.log(ko ? `${ko} ÉCHEC(S)` : 'TOUT OK');
