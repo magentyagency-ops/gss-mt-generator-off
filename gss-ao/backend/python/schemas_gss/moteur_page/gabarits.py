@@ -1216,6 +1216,16 @@ def fiche(nom, lieu, icone_secteur, stats, missions, titre_missions="Nos mission
         raise Deborde(f"missions trop longues : {nom}")
     hm = max(P["total"] for P in Ps) + 70 + pad * 1.6
     tot = hb + g + (h_stats + g if stats else 0) + hm
+    if _ETAT["etirer"]:
+        # Dernier recours d'en_grand (décision D7 : dessin sur au moins 85 % de la hauteur utile de la page) : bandeau,
+        # chiffres et cadre des missions grandissent jusqu'à remplir la page (textes inchangés, centrés ou en tête).
+        libre = 0.97 * (H - 2 * MY) - tot
+        if libre > 0:
+            hb += libre * (0.25 if stats else 0.4)
+            if stats:
+                h_stats += libre * 0.25
+            hm += libre * (0.5 if stats else 0.6)
+            tot = hb + g + (h_stats + g if stats else 0) + hm
     y = (H - tot) / 2
     zone(MX, y, wc, hb)
     if mode in ("plein", "plein_filet"):

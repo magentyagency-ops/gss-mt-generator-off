@@ -277,12 +277,29 @@ section table tr:nth-child(even) td {
   background-color: var(--gss-tableau-ligne, #F2F0EA);
 }
 
-/* Page de schéma (1 schéma = 1 page) : le titre-message du schéma, puis le schéma en grand (toile portrait : 212 mm,
-   71 % de la page, laissent la place d'un titre sur deux lignes). */
+/* Page de schéma (1 schéma = 1 page) : le titre-message du schéma, puis le schéma en grand (décision D7 : le dessin
+   occupe au moins 85 % de la hauteur utile). Marges latérales de 10 mm ; la toile portrait occupe toute la place sous son
+   titre (une ou deux lignes), à la plus grande taille qui tient en largeur et en hauteur, centrée. */
+section.schema {
+  padding: 31mm 10mm 20mm 10mm;
+  display: flex;
+  flex-direction: column;
+}
+section.schema h2 {
+  flex: none;
+  margin: 0 0 3mm 0;
+}
+section.schema .schema-page {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 section.schema .schema-page svg {
   display: block;
   width: 100%;
-  height: auto;
-  max-height: 212mm;
+  height: 100%;
+  max-height: none;
   margin: 0 auto;
 }
