@@ -687,6 +687,76 @@ function articleSigle(sigle: string, articleEntite: string): string {
   return articleEntite === 'le' || articleEntite === 'la' || articleEntite === 'les' ? articleEntite : '';
 }
 
+/** Forme juridique (jamais une forme courte du nom de l'acheteur : « le Groupement d'Intérêt Public » n'est pas l'IFITS). */
+const FORME_JURIDIQUE = /^(?:groupement d.int[ée]r[êe]t public|g\.?i\.?p\.?|[ée]tablissement public(?: [àa] caract[èe]re [^)]*| administratif| industriel et commercial| local)?|e\.?p\.?[ai]\.?c?\.?|association(?: loi 1901)?|syndicat mixte|soci[ée]t[ée] (?:publique locale|d.[ée]conomie mixte|anonyme|par actions simplifi[ée]e)|s\.?e\.?m\.?|s\.?p\.?l\.?|s\.?a\.?s\.?u?|s\.?a\.?r\.?l\.?)$/i;
+
+const MOTS_OUTILS = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'et', 'en', 'sur', 'pour', 'aux', 'au', 'a', 'd', 'l']);
+
+/**
+ * Sigle de l'acheteur employé par le DCE : celui que le DCE écrit entre parenthèses juste après le nom
+ * (« établissement public du château de fontainebleau (EPCF) », « … Théodore Simon (IFITS) »), sinon les initiales des
+ * mots du nom (IFITS), retenu seulement si le DCE l'emploie au moins 3 fois avec un article (« l'IFITS », « de l'EPCF »).
+ * '' sinon (jamais inventé).
+ */
+function sigleDuDce(nom: string, dce: string): string {
+  const d = normaliser(dce);
+  if (!d) return '';
+  const cle = normaliser(nom).replace(/[^a-z0-9' -]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const candidats: string[] = [];
+  if (cle.split(' ').length >= 2) {
+    const rx = new RegExp(`${cle.split(' ').map(echapper).join("[\\s'-]+")}\\s*\\(\\s*([a-z][a-z0-9&]{1,11})\\s*[),]`, 'g');
+    for (const m of d.matchAll(rx)) candidats.push(m[1].toUpperCase());
+  }
+  const initiales = normaliser(nom).replace(/[^a-z0-9' -]+/g, ' ').split(/[\s'-]+/).filter((w) => w.length >= 3 && !MOTS_OUTILS.has(w)).map((w) => w[0]).join('').toUpperCase();
+  if (initiales.length >= 3) candidats.push(initiales);
+  for (const sigle of candidats) {
+    if (FORME_JURIDIQUE.test(sigle) || !new RegExp(`(?<![A-Za-z0-9])${echapper(sigle)}(?![A-Za-z0-9])`).test(dce)) continue;
+    const n = (d.match(new RegExp(`(?:^|[^a-z0-9])(?:l'|le |la |du |de l'|au |a l'|les |des )${echapper(sigle.toLowerCase())}(?![a-z0-9])`, 'g')) || []).length;
+    if (n >= 3) return sigle;
+  }
+  return '';
+}
+
+/**
+ * Nom de l'acheteur écrit en capitales (« ETABLISSEMENT PUBLIC DU CHATEAU DE FONTAINEBLEAU », « MAIRIE DE
+ * PETIT-QUEVILLY ») : chaque mot reprend la graphie que le DCE emploie le plus (accents et casse : « établissement »,
+ * « château », « Fontainebleau »), la majuscule initiale étant rétablie ; un sigle que le DCE n'écrit qu'en capitales le
+ * reste. Si un mot est absent du DCE, le nom reste tel quel (jamais d'accent ni de casse inventés). '' si rien à faire.
+ */
+export function casseDuDce(nom: string, dce: string): string {
+  const lettres = nom.replace(/[^A-Za-zÀ-ÿ]/g, '');
+  if (!lettres || lettres.replace(/[^A-ZÀ-Ý]/g, '').length / lettres.length <= 0.7 || !dce) return '';
+  const cle = (w: string) => normaliser(w);
+  const formes = new Map<string, Map<string, number>>();
+  for (const m of dce.matchAll(/[A-Za-zÀ-ÿ]+/g)) {
+    const k = cle(m[0]);
+    if (!formes.has(k)) formes.set(k, new Map());
+    const f = formes.get(k)!;
+    f.set(m[0], (f.get(m[0]) || 0) + 1);
+  }
+  let ok = true;
+  let premier = true;
+  const sortie = nom.replace(/[A-Za-zÀ-ÿ]+/g, (mot) => {
+    const k = cle(mot);
+    let r: string;
+    const f = formes.get(k);
+    const minuscules = [...(f?.entries() || [])].filter(([w]) => w === w.toLowerCase()).sort((a, b) => b[1] - a[1]);
+    const capitalises = [...(f?.entries() || [])].filter(([w]) => w.length > 1 && w[0] !== w[0].toLowerCase() && w.slice(1) === w.slice(1).toLowerCase()).sort((a, b) => b[1] - a[1]);
+    const nbMin = minuscules.reduce((t, x) => t + x[1], 0);
+    const nbCap = capitalises.reduce((t, x) => t + x[1], 0);
+    if (MOTS_OUTILS.has(k) && !premier) r = mot.toLowerCase();
+    else if (nbCap && nbCap > 2 * nbMin) r = capitalises[0][0];
+    else if (nbMin) r = minuscules[0][0];
+    else if (nbCap) r = capitalises[0][0];
+    else if (f?.has(mot)) r = mot; // sigle écrit en capitales dans le DCE
+    else { ok = false; r = mot; }
+    if (premier) r = r.charAt(0).toUpperCase() + r.slice(1);
+    premier = false;
+    return r;
+  });
+  return ok && sortie !== nom ? sortie : '';
+}
+
 /**
  * Formes de l'acheteur pour le publipostage (consigne 2 : on remplace le nom, sans l'alourdir).
  * - forme longue : chaque entité coordonnée prend son article (« … (ENPC) et l'Institut national … (IGN) ») ;
@@ -709,6 +779,16 @@ export function formesClient(nom: string, dce = ''): { long: string; court?: { a
     : n;
   const pluriel = entites.length > 1 || undefined;
   const mots = n.split(/\s+/).length;
+  // Forme juridique entre parenthèses (« … Théodore Simon (Groupement d'Intérêt Public) ») : jamais une forme courte ;
+  // le sigle que le DCE emploie (« l'IFITS ») la remplace. Nom de 5 ou 6 mots suivi de son sigle dans le DCE
+  // (« établissement public du château de fontainebleau (EPCF) ») : le sigle sert après la première mention.
+  const parenthese = entites.length === 1 && !suite ? (/\(([^()]{2,40})\)\s*$/.exec(principal) || [])[1]?.trim() : undefined;
+  const juridique = !!parenthese && FORME_JURIDIQUE.test(normaliser(parenthese).replace(/[’]/g, "'"));
+  if (entites.length === 1 && !suite && (juridique || (mots >= 5 && mots <= 6 && !parenthese))) {
+    const sigle = sigleDuDce(juridique ? principal.replace(/\s*\([^()]*\)\s*$/, '') : principal, dce);
+    const art = sigle ? articleEtNom(sigle, dce).article || articleSigle(sigle, '') : '';
+    if (sigle && art) return { long, court: { article: art, nom: sigle, genre: '' } };
+  }
   if (mots <= 6) return { long, pluriel };
   // Sigles des entités (« (ENPC) », « (ENSG, dénommée … ) »).
   const sigles = entites.map((e) => (/\(([A-Z][A-Z0-9&.\-]{1,11})\s*[,)]/.exec(e) || [])[1] || '');
@@ -725,7 +805,7 @@ export function formesClient(nom: string, dce = ''): { long: string; court?: { a
   // sigle qu'il contient est retenu quand le DCE l'emploie seul (« l'IMM », 37 fois dans le DCE de l'IMM), sinon le nom
   // d'usage avec l'article de son premier mot (« le Nouvel IMM ») ; le genre de la forme longue (« Association ») ne
   // s'applique plus aux pronoms.
-  const usage = entites.length === 1 && !suite ? (/\(([^()]{2,40})\)\s*$/.exec(principal) || [])[1]?.trim() : undefined;
+  const usage = juridique ? undefined : parenthese;
   if (usage && /^[A-ZÀ-Ý]/.test(usage) && usage.split(/\s+/).length <= 4 && normaliser(usage) !== normaliser(principal)) {
     const sigle = (/(?:^|\s)([A-Z][A-Z0-9&]{1,11})(?=\s|$)/.exec(usage) || [])[1];
     const d = normaliser(dce);
@@ -948,6 +1028,8 @@ const CALCULS: Record<string, Calculateur> = {
       if (sansForme && normaliser(analyse).replace(/[^a-z0-9]+/g, ' ').trim().includes(sansForme)) brut = analyse;
     }
     if (FORME_SOCIETE.test(brut) && brut.replace(FORME_SOCIETE, '').trim()) brut = brut.replace(FORME_SOCIETE, '').trim();
+    // Nom resté en capitales (page de garde et analyse en capitales) : graphie du DCE, mot par mot.
+    brut = casseDuDce(brut, c.ctx.dce || '') || brut;
     const { article, nom } = articleEtNom(brut, c.ctx.dce || '');
     const formes = formesClient(nom, c.ctx.dce || '');
     // Société désignée ainsi dans le DCE (« S.P.L. CITEDIA METROPOLE », « société publique locale … ») : féminin.
