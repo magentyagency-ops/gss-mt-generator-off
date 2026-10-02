@@ -189,6 +189,7 @@
    "description": "Le DCE prévoit la reprise du personnel en place.",
    "dce": "reprise (?:du |de |des )?(?:personnel|salari[ée]s|agents)|personnel (?:en place|actuel|repris|[àa] reprendre)|salari[ée]s? [àa] reprendre|L\\.?\\s?1224|accord du 5 mars 2002|annexe VII",
    "analyse": "reprise du personnel|taux de reprise",
+   "dce_exclure": "pas de personnel (?:transf[ée]rable|[àa] reprendre)|aucun (?:personnel|salari[ée]) (?:n.est )?(?:transf[ée]rable|[àa] reprendre)",
    "matrice": [
     "b3_reprise_personnel"
    ]

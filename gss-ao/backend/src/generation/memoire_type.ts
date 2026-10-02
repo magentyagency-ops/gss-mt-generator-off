@@ -42,6 +42,8 @@ export interface IndicateurMemoireType {
   dce?: string;
   /** Motif cherché dans les champs de l'analyse du DCE (profils, équipements, contrôles, sites, lots…). */
   analyse?: string;
+  /** Motif du DCE qui rend l'indicateur FAUX malgré les autres motifs (« Pas de personnel transférable » : pas de reprise). */
+  dce_exclure?: string;
   /** Motif cherché dans le secteur d'activité du client (analyse.clientSector). */
   secteur?: string;
   /** Rubriques : une exigence de la matrice rattachée à l'une d'elles rend l'indicateur vrai. */
@@ -493,6 +495,12 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
         if (e) raisons.push(`exigence rattachée à ${e.rubrique} : « ${e.exigence.slice(0, 120)} »`);
       }
       valeur = raisons.length > 0;
+      // Le DCE dit lui-même que la condition n'existe pas (IFITS : « Pas de personnel transférable ») : faux.
+      const exclu = def.dce_exclure ? new RegExp(def.dce_exclure, 'i').exec(dce) : null;
+      if (valeur && exclu) {
+        valeur = false;
+        raisons.splice(0, raisons.length, `écarté, DCE : « ${extrait(dce, exclu.index, exclu[0].length)} »`);
+      }
     }
     const force = ctx.choix?.indicateurs?.[nom];
     if (force !== undefined && !def.choix_gss) {
@@ -1945,6 +1953,10 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     const pos = positionsExtrait(t, m.extrait);
     if (pos.length !== 1) { refusees.push({ ...m, raison: pos.length ? 'extrait ambigu (plusieurs occurrences)' : 'extrait introuvable mot pour mot' }); continue; }
     if (!m.par!.trim()) { refusees.push({ ...m, raison: 'remplacement vide (utiliser un retrait)' }); continue; }
+    // Un repère « [À COMPLÉTER] » (donnée que seul GSS peut donner, avec sa question) ne se remplace jamais par une
+    // valeur de l'adaptation (génération réelle ifits 171 : « Taux de reprise du personnel en place : 0 % »).
+    const nRepere = (x: string) => (x.match(/\[À COMPLÉTER\]/g) || []).length;
+    if (nRepere(m.extrait) > nRepere(m.par!)) { refusees.push({ ...m, raison: 'un repère à compléter ne se remplace pas' }); continue; }
     m.par = sansCovidEnumere(m.par!);
     const refus = refusTexteNouveau(m.par!, m.extrait, o);
     if (refus) { refusees.push({ ...m, raison: refus }); continue; }
