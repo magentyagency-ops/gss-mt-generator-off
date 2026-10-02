@@ -7099,7 +7099,7 @@ RÈGLES DE FORME (rendu Marp) :
     // Secours sur le contenu (points de vigilance et attentes du texte), puis sur les sous-titres.
     if (!schema.svg) schema = await dessiner(specSecoursPuces(texte));
     if (!schema.svg) schema = await dessiner(specSecoursBesoin(texte));
-    if (!schema.svg) console.warn(`[MemoireGenerator] Compréhension du besoin : schéma de process non dessiné (${schema.erreurs.slice(0, 3).join(' | ')}) ; construit au rendu d'après le texte.`);
+    if (!schema.svg) console.warn(`[MemoireGenerator] Compréhension du besoin : schéma de process non dessiné (${schema.erreurs.slice(0, 3).join(' | ')}) ${o.format === 'paysage' ? '' : ' ; en réponse libre, construit au rendu d\'après le texte'}.`);
     return { texte, titre, svg: schema.svg, secours };
   }
 
@@ -7912,6 +7912,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       });
       textes[b1.id] = c.texte;
       svgComprehension = c.svg;
+      // Consigne 3 : jamais de compréhension sans schéma ; le format court n'a pas de schéma construit au rendu.
+      if (!c.svg) avisSecours.push(`Partie « ${partieB1.title} » : le schéma de process de la compréhension du besoin n'a pas pu être dessiné ; à demander via l'assistant avant la remise.`);
       if (c.secours) avisSecours.push(`Partie « ${partieB1.title} » : compréhension du besoin construite à partir des données du DCE (rédaction automatique indisponible), à relire.`);
     }
 

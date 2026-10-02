@@ -152,6 +152,9 @@ const texteDocx = (f: string) => new PizZip(fs.readFileSync(f)).file('word/docum
       if (/\{\{|Non communiqué|⟦AC:|\[CONSULTATION REQUISE/.test(texte)) anomalie('variable, mention « Non communiqué » ou marqueur interne dans le PDF');
       for (const [c, re] of Object.entries(ACHETEURS)) if (c !== corpus && re.test(texte)) anomalie(`nom d'un autre acheteur (${c}) dans le PDF`);
       if (!res.propositions.length) anomalie('aucune proposition signalée (le prix du RC n\'est pas dans le mémoire type)');
+      // Tour 1 (T1C-12) : la compréhension du besoin a toujours son schéma de process (consigne 3) ; sous-titre jamais collé.
+      if (res.consultations.some((c: string) => /schéma de process de la compréhension du besoin n'a pas pu être dessiné/.test(c))) anomalie('compréhension du besoin sans schéma de process');
+      if (/[.!?]##\s/.test(texte)) anomalie('sous-titre « ## » collé au texte');
     }
     spawnSync('pdftoppm', ['-png', '-r', '50', r.filePath, path.join(SORTIE, 'p')]);
   }

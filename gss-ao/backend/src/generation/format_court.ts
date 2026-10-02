@@ -233,7 +233,7 @@ function html(
 <section>
   <h1><span class="num">${i + 1}.</span> ${echapper(p.titre)}</h1>
   ${p.tete ? figure(p) : ''}
-  ${md.render(p.texte.replace(/^#\s+/gm, '## '))}
+  ${md.render(p.texte.replace(/^#\s+/gm, '## ').replace(/«[ \t]+/g, '«\u00a0').replace(/[ \t]+»/g, '\u00a0»'))}
   ${p.tete ? '' : figure(p)}
 </section>`).join('\n');
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><style>

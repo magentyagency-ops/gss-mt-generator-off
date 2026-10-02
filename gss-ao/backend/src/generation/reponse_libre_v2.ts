@@ -812,7 +812,8 @@ export function completerBesoinMinimum(
     if (!l.length) return;
     ajoutees += l.length;
     if (i >= 0) parties[i] = `${parties[i].trimEnd()}\n${l.join('\n')}\n\n`;
-    else parties.push(`${titre}\n\n${l.join('\n')}\n\n`);
+    // Sous-titre ajouté toujours sur sa propre ligne (format court hors ligne : « …main courante.## Vos attentes… »).
+    else parties.push(`\n\n${titre}\n\n${l.join('\n')}\n\n`);
   };
   ajouter(iAtt, '## Vos attentes et nos engagements', att);
   ajouter(iVig < 0 ? -1 : parties.findIndex((p) => /^##\s+Les points de vigilance/i.test(p)), '## Les points de vigilance identifiés et nos réponses', vig);
@@ -943,10 +944,12 @@ export function specSecoursPuces(texte: string): { gabarit: string; params: any 
  * libellé du premier engagement du texte, pour garder un process de 4 phases.
  */
 export function specSecoursBesoin(texte: string): { gabarit: string; params: any } | null {
-  const titres = [...String(texte || '').matchAll(/^#{2,3}\s+(.+?)\s*$/gm)].map((m) => m[1].replace(/\*\*/g, '').trim()).filter((t) => t && !/^remarques?\b/i.test(t));
-  if (titres.length < 3) return null;
+  // Sous-titres « ## », ou lignes entièrement en gras qui en tiennent lieu (« **Votre contexte et votre site** »).
+  const titres = [...String(texte || '').matchAll(/^(?:#{2,3}\s+(.+?)|\*\*([^*\n]{3,80})\*\*)\s*$/gm)].map((m) => (m[1] || m[2]).replace(/\*\*/g, '').trim()).filter((t) => t && !/^remarques?\b/i.test(t))
+    .filter((t, i, l) => l.findIndex((x) => normaliser(x) === normaliser(t)) === i);
+  if (titres.length < 2) return null;
   const etapes: Array<{ titre: string; texte?: string }> = titres.slice(0, 4).map((t) => ({ titre: t }));
-  if (etapes.length === 3) {
+  if (etapes.length <= 3) {
     // Premier point de la partie « … engagements » (ou à défaut de la dernière partie), recopié du texte.
     const parties = String(texte).split(/^#{2,3}\s+/m).slice(1);
     const partie = parties.find((p) => /^[^\n]*engagement/i.test(p)) || parties[parties.length - 1] || '';
