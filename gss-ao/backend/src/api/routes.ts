@@ -16,6 +16,7 @@ import { learnSollicitationsForDossier, learnPendingSollicitations } from '../ge
 import { getGenerationGate } from '../generation/generation_gate';
 import { lireEtat, vueEtat, remplirSaisie, capitaliser, integrerReponse, memePole, personnesConnuesDuRole, verrouiller } from '../generation/completion';
 import { discuter, PieceJointe } from '../generation/assistant_memoire';
+import { assistantInteractif } from '../core/modeles_ia';
 import { getSettings } from '../core/config';
 import { getScopedClient, requestContext } from '../core/supabase';
 import { createClient } from '@supabase/supabase-js';
@@ -623,7 +624,8 @@ router.post('/dossiers/:id/completion', async (req: Request, res: Response) => {
   const valeur = String(req.body?.valeur ?? '').trim();
   if (!cle || !valeur) return res.status(400).json({ error: 'Emplacement et information requis.' });
   try {
-    const etat = await verrouiller(dossierId, () => remplirSaisie(dossierId, cle, valeur));
+    // Assistant interactif (D9) : appels OpenAI au niveau standard, jamais en file Flex (modeles_ia.ts).
+    const etat = await verrouiller(dossierId, () => assistantInteractif(() => remplirSaisie(dossierId, cle, valeur)));
     const el = etat.elements.find((e) => e.cle === cle);
     // Capitalisation : l'information saisie rejoint la base de connaissance GSS (non bloquant).
     if (el) capitaliser(dossierId, el).catch((e) => console.warn('[completion] capitalisation :', e?.message));
@@ -760,7 +762,8 @@ router.post('/dossiers/:id/assistant', upload.array('fichiers', 10), async (req:
     return res.status(400).json({ error: `Pièce jointe illisible : ${err.message}` });
   }
   try {
-    const r = await verrouiller(dossierId, () => discuter(dossierId, message, pieces));
+    // Assistant interactif (D9) : échanges et recomposition du mémoire au niveau OpenAI standard, jamais en file Flex (modeles_ia.ts).
+    const r = await verrouiller(dossierId, () => assistantInteractif(() => discuter(dossierId, message, pieces)));
     res.json({ ...vueEtat(r.etat), reponse: r.reponse, modifies: r.modifies, page: r.page });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
