@@ -83,3 +83,13 @@ describe('bloc 1 : schéma de process et texte (tour 3)', () => {
     expect(an.some((x) => /étape 1 .*lot ou le périmètre/.test(x))).toBe(true);
   });
 });
+
+describe('mention « (process GSS) » recopiée de la consigne (ifsem 361)', () => {
+  it('retirée du texte du bloc 1', async () => {
+    const { nettoyerBloc1 } = await import('../src/generation/reponse_libre_v2');
+    const t = '## Vos attentes et nos engagements\n- **« présence permanente »** : mise en place de la prestation selon les postes du CCTP (process GSS), développée au bloc 5.\n- **Point de vigilance** : rondes isolées → notre réponse : équipement PTI (process GSS existant).';
+    const r = nettoyerBloc1(t, undefined, 'x').texte;
+    expect(r).not.toMatch(/process GSS/);
+    expect(r).toMatch(/selon les postes du CCTP, développée au bloc 5\./);
+  });
+});

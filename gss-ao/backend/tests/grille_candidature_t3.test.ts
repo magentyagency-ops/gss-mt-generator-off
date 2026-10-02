@@ -56,3 +56,10 @@ describe('grille de candidature (T3-COH-4)', () => {
     expect(questionDonneeGss(acheteur)).toBe(acheteur);
   });
 });
+
+describe('calendrier de GSS jamais « à demander à l’acheteur » (ifsem 361)', () => {
+  it('préfixe retiré', () => {
+    expect(questionDonneeGss('À demander à l’acheteur : quelles échéances faut-il retenir pour l’envoi du planning nominatif prévisionnel au service prescripteur — exigé au moins 10 jours ouvrés avant le début du mois —, sa validation par les agents et son envoi à l’acheteur, compte tenu du calendrier GSS proposé (J-10, J-7 et J-3) ?'))
+      .toMatch(/^Quelles échéances faut-il retenir/);
+  });
+});

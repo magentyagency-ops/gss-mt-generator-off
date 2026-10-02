@@ -387,7 +387,8 @@ export function questionDonneeGss(question: string): string {
   const m = /^\s*À demander à l['’]acheteur\s*:\s*/i.exec(q);
   if (!m) return q;
   const reste = q.slice(m[0].length);
-  if (!/chiffre d['’]affaires|d[ée]nomination sociale|montant annuel(?: HT)?|part de l['’]encadrement|effectifs? moyens?|nombre de cadres|r[ée]f[ée]rences? (?:professionnelles|clients?|de GSS|de l['’]ann[ée]e)|[ée]tablissement client/i.test(reste)) return q;
+  // Calendrier de GSS (« J-10, J-7 et J-3 », ifsem 361) : ses échéances sont celles de GSS, jamais celles de l'acheteur.
+  if (!/chiffre d['’]affaires|d[ée]nomination sociale|montant annuel(?: HT)?|part de l['’]encadrement|effectifs? moyens?|nombre de cadres|r[ée]f[ée]rences? (?:professionnelles|clients?|de GSS|de l['’]ann[ée]e)|[ée]tablissement client|calendrier (?:de )?GSS|\bJ\s?[-−–]\s?\d+\b/i.test(reste)) return q;
   return reste.charAt(0).toUpperCase() + reste.slice(1);
 }
 

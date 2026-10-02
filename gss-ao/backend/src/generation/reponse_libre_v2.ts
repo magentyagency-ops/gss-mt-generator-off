@@ -1326,7 +1326,10 @@ export function sansBribesApresRenvoi(texte: string, etapes: Array<{ titre?: str
 export function nettoyerBloc1(texte: string, plan: PlanMemoireType | undefined, duree: string, etapes: Array<{ titre?: string; texte?: string }> = []): { texte: string; retirees: string[]; renvois: number } {
   const retirees: string[] = [];
   let t = String(texte || '');
-  // 0. Bribes collées après le renvoi d'une puce pour que les mots du schéma figurent dans le texte (ifsem 335).
+  // 0. Mention « (process GSS) » recopiée de la consigne (ifsem 361 : « … mise en place de la prestation (process GSS),
+  //    développée au bloc 5 ») : retirée ; le moteur de schémas refusait aussi le mot « process » dans le schéma de secours.
+  t = t.replace(/\s*\((?:un |le )?process(?:us)? GSS(?: existant)?\)/gi, '');
+  // 0 bis. Bribes collées après le renvoi d'une puce pour que les mots du schéma figurent dans le texte (ifsem 335).
   {
     const b = sansBribesApresRenvoi(t, etapes);
     t = b.texte;
@@ -1402,8 +1405,8 @@ Sois force de proposition : montre que GSS a lu le cahier des charges en détail
 TEXTE (Markdown, __MOTS__ mots, jamais plus), en quatre sous-parties « ## », dans cet ordre :
 ## Votre contexte et votre site — 3 à 6 lignes : l'acheteur, l'objet du marché, le ou les sites, la durée (seulement si elle figure dans les DONNÉES DU MARCHÉ ; sinon n'en parle pas, jamais [À COMPLÉTER] pour une donnée de l'acheteur) ; faits du DCE uniquement, sans qualificatif promotionnel ; ne redis pas la première phrase.
 ## Le périmètre de la prestation demandée — un tableau Markdown « Site | Poste | Jours et horaires | Qualification | Missions principales », une ligne par poste prévu au CCTP (aucun poste, horaire ni effectif ajouté), puis une phrase par prestation complémentaire prévue (rondes, interventions sur alarme, bons de commande, reprise du personnel…).
-## Vos attentes et nos engagements — 3 à 6 puces de la forme « **Ce que vous attendez** (mots de l'acheteur) : … → notre réponse : … (process GSS), développée au bloc n ».
-## Les points de vigilance identifiés et nos réponses — 2 à 4 puces de la forme « **Point de vigilance** : … (fait du DCE) → notre réponse : … (process GSS existant) ».
+## Vos attentes et nos engagements — 3 à 6 puces de la forme « **Ce que vous attendez** (mots de l'acheteur) : … → notre réponse : … (le process GSS qui y répond, nommé par ses mots, sans écrire « process GSS »), développée au bloc n ».
+## Les points de vigilance identifiés et nos réponses — 2 à 4 puces de la forme « **Point de vigilance** : … (fait du DCE) → notre réponse : … (un process GSS existant, nommé par ses mots, sans écrire « process GSS ») ».
 
 SCHÉMA DE PROCESS (champ "etapes") : 5 étapes lues de gauche à droite, dans cet ordre : 1. le besoin (role rouge) ; 2. l'enjeu principal (rouge) ; 3. le dispositif de GSS (orange) ; 4. le pilotage (bleu) ; 5. le résultat pour l'acheteur (vert, toujours la dernière). Chaque étape porte un CONTENU propre à CE marché, tiré des enjeux et des exigences clés du DCE (délai de mobilisation, qualification au poste, confidentialité, continuité, tuilage, nouveau bâtiment…) : "titre" = un titre NOMINAL court (1 à 4 mots) qui nomme ce contenu (ex. « Mobilisation sous 2 heures », « SSIAP 2 au PC 24 h/24 », « Confidentialité des patients »), jamais le seul nom de l'étape (« Votre besoin », « Vos enjeux », « Notre dispositif », « Notre pilotage », « Votre résultat ») ; "texte" = une phrase concrète de 12 mots au plus, qui commence par une majuscule, sans reprendre le titre de l'étape ni une formule générale (« … nous consulte pour le marché », « Vos enjeux comprennent… », « Notre dispositif s'appuie sur… »). Un poste (PC, accueil, loge) n'agit pas : le sujet est l'agent qui l'occupe, avec sa qualification (« L'agent SSIAP 2 du PC… »), et ce qu'il fait respecte le CCTP (un agent qui doit rester au PC ne fait pas de ronde). Les étapes reprennent des mots EXACTS de ton TEXTE (même orthographe, mêmes accords) : chaque mot et chaque chiffre du schéma doit déjà figurer dans ton texte, sinon le schéma est refusé ; c'est le schéma qui reprend le texte, jamais l'inverse : n'ajoute jamais au texte des mots ou des bribes de phrase (« Traçabilité des rondes. », « SSIAP 1 et ADS. ») pour y faire figurer ceux du schéma. "titre_schema" : le message du schéma, en une phrase courte (60 caractères au plus).
 
