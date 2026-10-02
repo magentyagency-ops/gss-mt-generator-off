@@ -84,8 +84,48 @@ export function choisir(reponses: ReponseCadre[], themeDemande?: string, options
   return out;
 }
 
-/** Rend des SVG en PNG (navigateur sans interface, une seule instance), avec les polices du thème embarquées. */
-async function rendrePng(svgs: string[], theme: string = themeActif()): Promise<string[]> {
+/**
+ * Toile ramenée à son contenu, à 28 unités près (place des ombres portées), exécuté dans la page du navigateur : les
+ * gabarits paysage de la bibliothèque centrent leur contenu sur une toile fixe de 1200 × 660, ce qui laissait dans le
+ * document des bandes vides (II-ENC-10, « Équipe de contrôle du marché » : environ 20 % en haut et en bas, cadre
+ * Citédia). Le fond plein de la toile est ignoré ; rien n'est déplacé ni redimensionné, seul le cadrage change.
+ * Renvoie vrai si la toile a été recadrée.
+ */
+export const ROGNER_TOILE = `(() => {
+  const svg = document.querySelector('svg');
+  const vb = svg && svg.viewBox && svg.viewBox.baseVal;
+  if (!svg || !vb || !vb.width || !vb.height) return false;
+  const r0 = svg.getBoundingClientRect();
+  if (!r0.width || !r0.height) return false;
+  const kx = vb.width / r0.width, ky = vb.height / r0.height;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const el of svg.querySelectorAll('rect,circle,ellipse,path,line,polyline,polygon,text,image,use,foreignObject')) {
+    if (el.closest('defs,marker,clipPath,mask,pattern,symbol')) continue;
+    const r = el.getBoundingClientRect();
+    if (!r.width && !r.height) continue;
+    if (r.width * r.height >= 0.9 * r0.width * r0.height) continue;
+    x0 = Math.min(x0, r.left); y0 = Math.min(y0, r.top); x1 = Math.max(x1, r.right); y1 = Math.max(y1, r.bottom);
+  }
+  if (!isFinite(x0)) return false;
+  const M = 28;
+  // Bornes entières : la toile reste alignée sur les pixels (aucun décalage d'anticrénelage).
+  const nx = Math.max(vb.x, Math.floor(vb.x + (x0 - r0.left) * kx - M));
+  const ny = Math.max(vb.y, Math.floor(vb.y + (y0 - r0.top) * ky - M));
+  const nw = Math.min(vb.x + vb.width, Math.ceil(vb.x + (x1 - r0.left) * kx + M)) - nx;
+  const nh = Math.min(vb.y + vb.height, Math.ceil(vb.y + (y1 - r0.top) * ky + M)) - ny;
+  if (nw <= 0 || nh <= 0 || (nw >= vb.width * 0.97 && nh >= vb.height * 0.97)) return false;
+  const lw = r0.width * nw / vb.width, lh = r0.height * nh / vb.height;
+  svg.setAttribute('viewBox', nx + ' ' + ny + ' ' + nw + ' ' + nh);
+  svg.setAttribute('width', String(lw));
+  svg.setAttribute('height', String(lh));
+  svg.style.width = lw + 'px';
+  svg.style.height = lh + 'px';
+  return true;
+})()`;
+
+/** Rend des SVG en PNG (navigateur sans interface, une seule instance), avec les polices du thème embarquées. Thèmes de
+ *  la refonte : toile recadrée sur son contenu (ROGNER_TOILE) ; retour arrière : rendu d'origine inchangé. */
+export async function rendrePng(svgs: string[], theme: string = themeActif()): Promise<string[]> {
   const polices = fontFaceTheme(theme);
   const puppeteer = require('puppeteer');
   const navigateur = await puppeteer.launch({
@@ -104,6 +144,7 @@ async function rendrePng(svgs: string[], theme: string = themeActif()): Promise<
       } else {
         await page.setContent(`<html><body style="margin:0;background:#fff">${svg}</body></html>`, { waitUntil: 'load' });
       }
+      if (!estRetourArriere(theme)) await page.evaluate(ROGNER_TOILE);
       const el = await page.$('svg');
       const f = path.join(os.tmpdir(), `gss-schema-${Date.now()}-${fichiers.length}.png`);
       if (el) { await el.screenshot({ path: f }); fichiers.push(f); } else fichiers.push('');
