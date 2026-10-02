@@ -64,7 +64,8 @@ export function renvoisVersParties(
     : (parties[idx[0]].title.trim().length <= 60 ? `${idx[0] + 1} « ${parties[idx[0]].title.trim()} »` : `${idx[0] + 1}`));
   // « bloc 5 », « blocs 3 et 5 », éventuellement suivis des rubriques citées : « bloc 4 : « La planification » et « … » ».
   const RX = /(,\s*)?(\b(?:d[ée]velopp|d[ée]crit|pr[ée]sent|d[ée]taill|trait)[ée]?e?s?\s+)?\b(au|aux|du|des|le|les|dans les?|en)?\s*\b[Bb]locs?\s+(\d)((?:\s*(?:,|et)\s*\d)*)(?![\d])(\s*:\s*«[^»]{1,120}»(?:\s*(?:,|et|;)\s*«[^»]{1,120}»)*)?/g;
-  return String(texte || '').replace(RX, (m, virgule: string | undefined, participe: string | undefined, prep: string | undefined, n1: string, suite: string, cites: string | undefined) => {
+  const SUPPR = '\u0003';
+  const sortie = String(texte || '').replace(RX, (m, virgule: string | undefined, participe: string | undefined, prep: string | undefined, n1: string, suite: string, cites: string | undefined, pos: number, tout: string) => {
     const citations = [...String(cites || '').matchAll(/«\s*([^»]+?)\s*»/g)].map((x) => x[1]);
     if (citations.length) {
       // Rubriques citées : elles restent (titres de sous-parties du mémoire), précédées de leur partie si elle est unique.
@@ -74,7 +75,13 @@ export function renvoisVersParties(
     }
     const numeros = [Number(n1), ...[...(suite || '').matchAll(/\d/g)].map((x) => Number(x[0]))];
     const idx = [...new Set(numeros.flatMap(partiesDuBloc))].sort((a, b) => a - b);
-    if (!idx.length || idx.length > 2) return '';
+    if (!idx.length || idx.length > 2) {
+      // Participe attribut après un auxiliaire (« le processus de reprise est détaillé au bloc 3 ») : retirer seulement
+      // le renvoi laisserait « le processus de reprise est. » ; toute la proposition est retirée (marquée ici).
+      if (participe && !virgule && /\b(?:est|sont|sera|seront|serait|soit|été|étaient|était)\s+$/i.test(tout.slice(0, pos))) return SUPPR;
+      // Incise entre deux virgules (« La procédure, développée au bloc 3, garantit… ») : la virgule fermante part aussi.
+      return virgule ? '\u0004' : '';
+    }
     const pluriel = idx.length > 1;
     const p = (prep || '').toLowerCase();
     const prepNouvelle = /^(?:au|aux|dans|en)/.test(p) ? (pluriel ? 'dans les parties' : 'dans la partie')
@@ -82,7 +89,14 @@ export function renvoisVersParties(
         : /^(?:le|les)$/.test(p) ? (pluriel ? 'les parties' : 'la partie')
           : (pluriel ? 'parties' : 'partie');
     return `${virgule || ''}${participe || ''}${prepNouvelle} ${libelle(idx)}`;
-  }).replace(/\(\s*[:;,]\s*/g, '(').replace(/[;,]\s*[:;,]\s*/g, '; ').replace(/\(\s*\)/g, '').replace(/ +([,.)])/g, '$1').replace(/ {2,}/g, ' ');
+  })
+    // Proposition marquée : retirée depuis le « ; » ou le début de phrase qui la précède (« A ; B est détaillé au bloc 3. »
+    // → « A. » ; « Les contrôles sont présentés au bloc 5. » → phrase retirée).
+    .replace(/\s*;\s*[^.;!?\n\u0003]*\u0003/g, '')
+    .replace(/(^|[.!?]\s+|\n)[^.;!?\n\u0003]*\u0003\s*[.!?]?\s*/g, '$1')
+    .split(SUPPR).join('')
+    .replace(/\u0004\s*,\s*/g, ' ').split('\u0004').join('');
+  return sortie.replace(/\(\s*[:;,]\s*/g, '(').replace(/[;,]\s*[:;,]\s*/g, '; ').replace(/\(\s*\)/g, '').replace(/ +([,.)])/g, '$1').replace(/ {2,}/g, ' ');
 }
 
 const TITRE_ENGAGEMENTS = '## Nos engagements sur les exigences du cahier des charges';
