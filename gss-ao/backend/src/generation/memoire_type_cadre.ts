@@ -471,12 +471,24 @@ export function attribuerRubriques(champs: Array<{ id: number; libelle: string; 
   return { candidats, renvois };
 }
 
+/**
+ * Intitulé d'une question du cadre cité dans un renvoi (« voir notre réponse à la question « … » ») : entier jusqu'à 200
+ * caractères, sinon coupé entre deux mots, jamais au milieu d'un mot (génération réelle rouen_univ 15 : « (gilets par coups,
+ * lame, bal…). » recopié tel quel dans le cadre remis).
+ */
+export function libelleQuestion(libelle: string): string {
+  const l = String(libelle || '').replace(/\s+/g, ' ').trim();
+  if (l.length <= 200) return l;
+  const coupe = l.slice(0, 160).replace(/\s+\S*$/, '').replace(/[\s,;:(–-]+$/, '');
+  return `${coupe}…`;
+}
+
 /** Consigne d'un champ dont un texte du mémoire type est déjà repris dans une autre réponse du cadre. */
 export function blocRenvois(renvois: Array<{ titre: string; libelle: string }>): string {
   if (!renvois.length) return '';
   return `
 --- TEXTES DE GSS DÉJÀ REPRIS DANS UNE AUTRE RÉPONSE ---
-${renvois.map((r) => `- « ${r.titre} » est déjà repris dans la réponse à la question « ${r.libelle.replace(/\s+/g, ' ').slice(0, 120)} ».`).join('\n')}
+${renvois.map((r) => `- « ${r.titre} » est déjà repris dans la réponse à la question « ${libelleQuestion(r.libelle)} ».`).join('\n')}
 Ne recopie pas ces textes ici. Si cette question porte sur le même sujet, renvoie à cette réponse en une phrase (« voir notre réponse à la question « … » ») et ne développe que ce que cette question demande en plus.
 `;
 }
@@ -623,6 +635,26 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     reformulees++;
   }
   for (const it of items) if (it.ref === undefined && it.mots.length >= 3) it.ajout = true;
+  // Phrases propres à la question (ajouts) écrites par le modèle à la suite d'une puce de GSS (« • d'un téléphone portable :
+  // … si nécessaire. Pour le lot 1, GSS met à disposition les deux véhicules… », génération réelle rouen_univ 15 : quatre
+  // phrases, une centaine de mots, sur d'autres sujets) : elles ne prolongent pas la puce de GSS ; elles forment leur propre
+  // paragraphe après la liste. Une seule phrase courte qui complète la puce (« Avec l'accord de notre interlocuteur, nous y
+  // ajoutons un gilet pare-lame. ») y reste.
+  const detacherAjouts = () => {
+    for (let li = 0; li < sortie.length; li++) {
+      const l = sortie[li];
+      if (!l.items.length || l.items[0].ajout || !PUCE.test(l.items[0].brut)) continue;
+      const k = l.items.findIndex((x, j) => j > 0 && x.ajout && l.items.slice(j).every((y) => y.ajout || y.ref === undefined));
+      if (k < 0) continue;
+      const suite = l.items.slice(k);
+      if (suite.filter((x) => x.ajout).length < 2 && suite.reduce((a, x) => a + x.mots.length, 0) < 35) continue;
+      const detaches = l.items.splice(k);
+      let fin = li;
+      while (fin + 1 < sortie.length && sortie[fin + 1].items.length && PUCE.test(sortie[fin + 1].items[0].brut)) fin++;
+      sortie.splice(fin + 1, 0, { items: [] }, { items: detaches });
+    }
+  };
+  detacherAjouts();
   const rendre = () => sortie.map((l) => l.items.map((x) => x.brut.trim()).join(' ')).join('\n').replace(/\n{3,}/g, '\n\n').trim();
   const compter = (t: string) => (t.match(/[\wÀ-ÿ'’-]+/g) || []).length;
   let texte = rendre();
@@ -706,6 +738,7 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
       if (bribe) { l.items.splice(j, 1); bribesRetirees++; }
     }
   }
+  detacherAjouts();
   texte = rendre();
   // 3. Limite de longueur atteinte et fidélité encore insuffisante : ajouts retirés, du dernier au premier.
   let ajoutsRetires = 0;
@@ -721,6 +754,23 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     }
   }
   return { texte, fideliteAvant, fidelite: mesure(texte), reformulees, reinserees, ajoutsRetires, bribesRetirees };
+}
+
+/**
+ * Champ du cadre qui demande si une prestation est sous-traitée et à quelle entreprise (« La prestation d'intervention
+ * (lever de doute) est-elle sous-traitée ? Si oui à quelle(s) entreprise(s) : Département 76 : … Département 27 : … »),
+ * laissé à « [À COMPLÉTER] » : GSS a répondu (registre recours_sous_traitance : « Non » ; faits de référence : GSS ne
+ * sous-traite pas), la réponse est donc connue et aucune question n'est posée (génération réelle rouen_univ 15 : deux
+ * « [À COMPLÉTER] » et la question « Combien d'agents GSS sont mobilisables dans le département 76 ? » posée deux fois).
+ * null si le champ ne porte pas sur la sous-traitance ou si GSS n'a pas répondu « Non ».
+ */
+export function reponseSousTraitance(contexte: string, recoursSousTraitance: string): string | null {
+  if (!/^\s*non\b/i.test(String(recoursSousTraitance || ''))) return null;
+  const c = normaliser(String(contexte || ''));
+  if (!/sous[- ]?trait/.test(c)) return null;
+  return /lev(?:er|ee)s? de doute|intervention/.test(c)
+    ? "Non : la levée de doute est assurée par les équipes de GSS, sans sous-traitance."
+    : "Non : GSS n'a pas recours à la sous-traitance.";
 }
 
 /**

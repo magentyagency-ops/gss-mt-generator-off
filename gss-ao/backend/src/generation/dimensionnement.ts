@@ -207,6 +207,12 @@ export function texteDimensionnement(d: Dimensionnement): string {
   const l: string[] = ['', '', 'DIMENSIONNEMENT PROPOSÉ PAR GSS (calculé à partir des postes et des horaires du DCE ; proposition que GSS validera — reprends ces chiffres EXACTEMENT là où l\'effectif, le nombre d\'agents, de maîtres-chiens, d\'équipes ou les rotations sont demandés, au lieu d\'écrire [À COMPLÉTER]) :'];
   for (const x of d.profils) l.push(x.observation ? `- ${x.profil} (${x.qualification}) : ${pluriel(x.titulaires, 'titulaire')} (${x.observation})` : `- ${x.profil} (${x.qualification}) : ${fr(x.heuresSemaine)} h par semaine, ${fr(x.heuresAn)} h par an, soit ${fr(x.etp)} ETP → ${pluriel(x.titulaires, 'titulaire')}${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}`);
   if (d.profils.length) l.push(`- Équipe dédiée : ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} ; équipe suppléante formée au site : ${pluriel(d.suppleants, 'agent', 'agents')}.`);
+  // Cadre de l'université de Rouen (génération réelle rouen_univ 15) : « Nombre total d'agents … dédiés en ETP » laissé à
+  // « [À COMPLÉTER] » et cellules par site au format variable (« 8 titulaires + 6 agents formés » pour un site, postes du
+  // CCTP pour les autres, toute l'équipe suppléante du marché dans la cellule d'un seul site).
+  const etp = d.profils.filter((x) => !x.observation).reduce((a, x) => a + x.etp, 0);
+  if (etp > 0) l.push(`- Total des postes : ${fr(etp)} ETP (à reprendre là où un nombre d'agents en ETP est demandé).`);
+  if (d.profils.length) l.push(`- Tableau des moyens humains par site : une cellule par site, au même format pour toutes (postes et horaires du CCTP pour ce site), sans répartir l'équipe suppléante entre les sites (elle se cite une seule fois, pour tout le marché).`);
   if (d.casPratique.length) {
     l.push(`- Cas pratique (effectif en service et effectif nécessaire pour la rotation, vacations de ${VACATION_MAX_H} heures au plus) :`);
     for (const x of d.casPratique) l.push(`  • ${x.plage} | ${x.profil} | en service : ${x.enService} | rotation : ${x.rotation}${x.justification ? ` — ${x.justification}` : ''}`);

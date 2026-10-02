@@ -24,7 +24,7 @@ import { CONSIGNE_DIMENSIONNEMENT, etapesSchemaDemande, calculerDimensionnement,
 import {
   candidatsReference, blocReference, referencesRetenues, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
-  partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES,
+  partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference,
 } from './memoire_type_cadre';
@@ -320,6 +320,28 @@ function getTableCellContext(cell: any, tr: any): string {
   return colHeader
     ? `Colonne: "${colHeader}" | Ligne: "${rowContext}"`
     : `Ligne: "${rowContext}"`;
+}
+
+/**
+ * Emplacement pointillé seul en tête de paragraphe, suivi dans le MÊME paragraphe par l'intitulé d'une autre question
+ * (au moins quatre mots, majuscule initiale) : le cadre compte sur les pointillés pour renvoyer l'intitulé à la ligne.
+ */
+function intituleColleApres(tEl: any, placeholder: string): boolean {
+  const text = String(tEl?.textContent || '');
+  if (!text.trimEnd().endsWith(placeholder)) return false;
+  const run = tEl.parentNode;
+  if (!run || run.localName !== 'r' || !run.parentNode || run.parentNode.localName !== 'p') return false;
+  const textes = (n: any) => getElementsWithLocalName(n, 't').map((t: any) => t.textContent || '').join('');
+  // Rien d'écrit avant l'emplacement dans le paragraphe (ligne pointillée seule).
+  for (let n = run.previousSibling; n; n = n.previousSibling) if (n.localName === 'r' && textes(n).trim()) return false;
+  if (text.slice(0, text.lastIndexOf(placeholder)).trim()) return false;
+  for (let n = run.nextSibling; n; n = n.nextSibling) {
+    if (n.localName !== 'r') continue;
+    const t = textes(n).trim();
+    if (!t) continue;
+    return /^[A-ZÀ-Ý][^\s]*(?:\s+\S+){3,}/.test(t);
+  }
+  return false;
 }
 
 function replaceTextInElement(xmlDoc: any, tEl: any, placeholder: string, value: string) {
@@ -5286,6 +5308,12 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       let value = dedupeClientName(guardPlaceholders(guardNames(guardInventedClaims(guardServiceCert(guardFactual(String(rep.value), desc.context), desc.context), desc.context)), desc.context));
       // Ligne de continuation « : …… » vidée par un garde-fou : pointillés effacés plutôt qu'un « [À COMPLÉTER] » sans objet.
       if (/^\[À COMPLÉTER\]\.?$/.test(value.trim()) && continuationAvecPrincipale(desc)) value = '';
+      // Sous-traitance d'une prestation (« … est-elle sous-traitée ? Si oui à quelle(s) entreprise(s) ») : réponse connue de
+      // GSS (registre recours_sous_traitance : « Non »), jamais « [À COMPLÉTER] » ni question.
+      if (/^\[À COMPLÉTER\]\.?$/.test(value.trim()) && desc.kind !== 'checkbox') {
+        const st = reponseSousTraitance(desc.context, valeurRegistre('recours_sous_traitance'));
+        if (st) { value = st; console.log(`[MemoireGenerator] CHAMP_${rep.id} : sous-traitance, réponse connue de GSS (« Non »).`); }
+      }
       // Réponse développée d'une grille de notation : mêmes garde-fous, mais appliqués PHRASE par phrase
       // (téléphones/e-mails non sourcés retirés, certifications/claims non prouvées retirées) plutôt
       // qu'en effaçant toute la réponse ; la mise en forme en lignes est conservée.
@@ -5329,7 +5357,10 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         const marquee = value.split('[À COMPLÉTER]').join(`[À COMPLÉTER]${MARQUE_CHAMP(rep.id)}`);
         const writeVal = desc.kind === 'checkbox' ? (isChecked ? '☑' : '☐') : (value.trim() ? `${DEBUT_CHAMP(rep.id)}${marquee}${FIN_CHAMP(rep.id)}` : marquee);
         const tEls = getElementsWithLocalName(xmlDoc, 't');
-        tEls.forEach((tEl: any) => replaceTextInElement(xmlDoc, tEl, `[CHAMP_${rep.id}]`, writeVal));
+        // Intitulé suivant collé dans le même paragraphe que la ligne pointillée (cadre de l'université de Rouen : « ………Moyens
+        // d'ouverture des locaux pour la levée de doute », génération réelle rouen_univ 15 : « … : [À COMPLÉTER].Moyens
+        // d'ouverture… ») : une réponse rédigée est suivie d'un retour à la ligne, l'intitulé garde sa ligne.
+        tEls.forEach((tEl: any) => replaceTextInElement(xmlDoc, tEl, `[CHAMP_${rep.id}]`, writeVal + (desc.kind !== 'checkbox' && value.trim().length >= 40 && intituleColleApres(tEl, `[CHAMP_${rep.id}]`) ? '\n' : '')));
         applied++;
       } else if (desc.type === 'legacy_checkbox') {
         let checkedEl = findLocalNameChild(desc.element, 'checked');
