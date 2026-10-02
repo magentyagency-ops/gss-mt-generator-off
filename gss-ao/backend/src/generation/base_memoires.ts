@@ -540,8 +540,10 @@ export function marcheHorsNormandie(analyse: any, dce: string): boolean {
 }
 
 /**
- * Information INTERNE du registre (ex. « prix_horaire » : 22 à 30 € HT de l'heure, variable selon les marchés), réservée à
- * la décomposition justificative du prix : jamais écrite dans un texte du mémoire. '' si inconnue.
+ * Information INTERNE du registre (ex. « prix_horaire » : 22 à 30 € HT de l'heure, variable selon les marchés) : jamais
+ * écrite dans un texte du mémoire. '' si inconnue. Seul accès prévu à ces informations ; aucun appelant dans le
+ * générateur pour l'instant (la décomposition justificative du prix n'existe pas encore : usage futur, à décider par
+ * GSS). Elle est gardée pour le test qui vérifie que le prix reste lisible ici et absent de tout texte transmis.
  */
 export function valeurInterne(cle: string): string {
   try {
