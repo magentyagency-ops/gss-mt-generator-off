@@ -14,7 +14,7 @@
  * Fonctions pures (aucun appel réseau) : les appels au modèle restent dans memoire_generator.ts.
  */
 import {
-  normaliser, fidelite, decouperSousParties, rechercherRubriques, lireJson,
+  normaliser, fidelite, decouperSousParties, rechercherRubriques, lireJson, SEUIL_FIDELITE, motsDePhrase, similarite,
   type MemoireType, type RubriqueMemoireType, type PlanMemoireType, type SousPartie,
 } from './memoire_type';
 
@@ -508,8 +508,12 @@ export function referencesRetenues(candidats: CandidatReference[], valeur: unkno
   return candidats.filter((c) => l.includes(c.cle));
 }
 
-/** Seuil de fidélité d'une réponse développée du cadre au texte de référence repris. */
-export const SEUIL_FIDELITE_CADRE = 0.6;
+/**
+ * Seuil de fidélité d'une réponse développée du cadre au texte de référence repris (décision D7 : 0,9 au moins ; la
+ * consigne 5 veut le texte du mémoire de base repris exactement). La réponse du modèle est recalée sur la référence
+ * (recalerSurReference) : une réponse sous ce seuil après recalage reste signalée « à relire ».
+ */
+export const SEUIL_FIDELITE_CADRE = SEUIL_FIDELITE;
 
 /**
  * Fidélité d'une réponse au texte de référence repris : part des phrases de ce texte conservées dans la réponse
@@ -519,6 +523,204 @@ export const SEUIL_FIDELITE_CADRE = 0.6;
 export function fideliteReponse(reference: string, reponse: string, limite = false): number {
   const couverture = fidelite(reference, reponse);
   return limite ? Math.max(couverture, fidelite(reponse, reference)) : couverture;
+}
+
+/**
+ * Nombre de mots permis à une réponse du cadre d'après son contexte : part fixée par la répartition d'une limite de pages
+ * (« environ 140 mots pour celle-ci ») ou limite de pages de la rubrique (« 2 pages maximum », environ 420 mots par page).
+ * Aucune limite (undefined) pour un critère de grille sans limite de pages : le texte retenu y est repris en entier.
+ */
+export function motsMaxChamp(contexte: string): number | undefined {
+  const c = String(contexte || '');
+  const part = /environ\s+(\d+)\s+mots/i.exec(c);
+  if (part) return Number(part[1]);
+  const p = /(\d+|une?)\s+pages?\s+maximum|maximum\s*:?\s*(\d+)\s+pages?/i.exec(c);
+  if (!p) return undefined;
+  const n = p[2] ? Number(p[2]) : /^\d+$/.test(p[1]) ? Number(p[1]) : 1;
+  return n * 420;
+}
+
+export interface ResultatRecalage {
+  texte: string;
+  /** Fidélité de la réponse du modèle, puis de la réponse recalée (mesure de fideliteReponse). */
+  fideliteAvant: number;
+  fidelite: number;
+  /** Phrases reformulées remplacées par la phrase de GSS ; phrases de GSS omises remises à leur place ; ajouts retirés (limite). */
+  reformulees: number;
+  reinserees: number;
+  ajoutsRetires: number;
+  /** Bribes d'une phrase de GSS (phrase tronquée ou résumée) retirées : la phrase de GSS entière est dans la réponse. */
+  bribesRetirees: number;
+}
+
+/**
+ * Recalage d'une réponse développée du cadre sur le texte de GSS qu'elle reprend (consigne 5 : « l'IA reprend exactement
+ * le mémoire de base » ; décision D7 : 90 % au moins), sans nouvel appel au modèle :
+ *  1. une phrase de la réponse proche d'une phrase de GSS (même phrase, nom ou chiffre changé) est gardée telle quelle ;
+ *     une phrase reformulée (ressemblance de 50 à 80 %) redevient la phrase de GSS, sauf si elle porte un chiffre absent
+ *     de la phrase de GSS (chiffre imposé par le DCE : gardé) ;
+ *  2. chaque phrase de GSS omise est remise à sa place (après la phrase de GSS qui la précède dans la réponse ; une ligne
+ *     entière omise sur sa propre ligne) ;
+ *  3. les phrases propres à la question (ajouts) sont gardées à leur place.
+ * Avec une limite de longueur (`limite`, `maxMots`) : les phrases de GSS ne sont remises que dans la limite de mots ; si la
+ * fidélité reste sous le seuil, les ajouts sont retirés en partant de la fin (la réponse redevient le texte de GSS).
+ * Une phrase de GSS contraire au DCE (`exclure`, ex. flotte électrique quand le CCTP impose une motorisation thermique)
+ * n'est jamais remise. Un sous-titre de GSS omis (« Le recyclage de nos tenues : ») n'est remis que devant son contenu.
+ * Une phrase courte (moins de 6 mots, souvent un intitulé) n'est rapprochée d'une phrase de GSS qu'à 80 % au moins.
+ */
+export function recalerSurReference(reference: string, reponse: string, o: { limite?: boolean; maxMots?: number; seuil?: number; exclure?: (phrase: string) => boolean } = {}): ResultatRecalage {
+  const seuil = o.seuil ?? SEUIL_FIDELITE_CADRE;
+  type Item = { brut: string; mots: string[]; ref?: number; ajout?: boolean };
+  type Ligne = { items: Item[] };
+  const PUCE = /^\s*(?:[•\-*]|\d+[.)])\s+/;
+  const decouper = (t: string) => String(t || '').replace(/\r/g, '').split('\n')
+    .map((l) => l.trim() ? l.split(/(?<=[.!?;:])\s+/).filter((x) => x.trim()) : []);
+  // Phrases de GSS (référence), ligne par ligne.
+  const lignesRef = decouper(reference);
+  const ref: Array<{ brut: string; mots: string[]; ligne: number }> = [];
+  lignesRef.forEach((l, i) => l.forEach((brut) => ref.push({ brut, mots: motsDePhrase(brut), ligne: i })));
+  // Phrases contraires au DCE (et l'amorce « … : » qui les introduit sur la même ligne) : jamais remises.
+  const exclus = ref.map((p) => !!o.exclure?.(p.brut));
+  for (let k = ref.length - 2; k >= 0; k--) if (!exclus[k] && exclus[k + 1] && ref[k + 1].ligne === ref[k].ligne && /:\s*$/.test(ref[k].brut)) exclus[k] = true;
+  // Texte de GSS applicable au marché (mesure de la fidélité) : sans ces phrases.
+  const applicable = exclus.some(Boolean)
+    ? lignesRef.map((_, i) => ref.filter((p, k) => p.ligne === i && !exclus[k]).map((p) => p.brut).join(' ')).join('\n') : reference;
+  const mesure = (t: string) => fideliteReponse(applicable, t, !!o.limite);
+  const fideliteAvant = mesure(reponse);
+  // Réponse du modèle.
+  const sortie: Ligne[] = decouper(reponse).map((l) => ({ items: l.map((brut) => ({ brut, mots: motsDePhrase(brut) })) }));
+  const items = sortie.flatMap((l) => l.items);
+  // 1. Appariement phrase à phrase (meilleures ressemblances d'abord, une phrase de GSS pour une phrase de la réponse).
+  const paires: Array<{ i: Item; r: number; s: number }> = [];
+  for (const it of items) {
+    if (it.mots.length < 3) continue;
+    const jeu = new Set(it.mots);
+    ref.forEach((p, k) => {
+      if (p.mots.length < 3) return;
+      let communs = 0;
+      for (const w of p.mots) if (jeu.has(w)) communs++;
+      if (communs / Math.max(p.mots.length, it.mots.length) < 0.3) return;
+      const s = similarite(p.mots, it.mots);
+      if (s >= 0.8 || (s >= 0.5 && Math.min(p.mots.length, it.mots.length) >= 6)) paires.push({ i: it, r: k, s });
+    });
+  }
+  paires.sort((a, b) => b.s - a.s);
+  const position = new Map<number, { ligne: Ligne; item: Item }>();
+  const ligneDe = (it: Item) => sortie.find((l) => l.items.includes(it))!;
+  const chiffres = (t: string): string[] => t.match(/\d+(?:[.,]\d+)?/g) || [];
+  let reformulees = 0;
+  for (const p of paires) {
+    if (p.i.ref !== undefined || position.has(p.r)) continue;
+    p.i.ref = p.r;
+    position.set(p.r, { ligne: ligneDe(p.i), item: p.i });
+    if (p.s >= 0.8) continue;
+    const r = ref[p.r];
+    const nouveaux = chiffres(p.i.brut).filter((c) => !chiffres(r.brut).includes(c));
+    if (nouveaux.length) continue;
+    const puce = (PUCE.exec(p.i.brut) || [''])[0];
+    p.i.brut = `${puce}${r.brut.replace(PUCE, '')}`;
+    p.i.mots = r.mots;
+    reformulees++;
+  }
+  for (const it of items) if (it.ref === undefined && it.mots.length >= 3) it.ajout = true;
+  const rendre = () => sortie.map((l) => l.items.map((x) => x.brut.trim()).join(' ')).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  const compter = (t: string) => (t.match(/[\wÀ-ÿ'’-]+/g) || []).length;
+  let texte = rendre();
+  if (o.limite && mesure(texte) >= seuil) {
+    return { texte, fideliteAvant, fidelite: mesure(texte), reformulees, reinserees: 0, ajoutsRetires: 0, bribesRetirees: 0 };
+  }
+  // 2. Phrases de GSS omises remises à leur place (dans la limite de mots s'il y en a une).
+  const budget = o.maxMots !== undefined ? Math.max(o.maxMots, compter(texte)) : Infinity;
+  let mots = compter(texte);
+  let reinserees = 0;
+  const inserer = (k: number, ligneEntiere: boolean): boolean => {
+    const ks = ref.map((_, j) => j).filter((j) => ref[j].ligne === ref[k].ligne && !exclus[j]);
+    const n = ligneEntiere ? ks.reduce((a, j) => a + compter(ref[j].brut), 0) : compter(ref[k].brut);
+    if (mots + n > budget) return false;
+    if (ligneEntiere) {
+      const ligne: Ligne = { items: ks.map((j) => ({ brut: ref[j].brut, mots: ref[j].mots, ref: j })) };
+      // Après la ligne de la phrase de GSS précédente déjà présente ; sinon avant la ligne de la suivante ; sinon en tête.
+      let prec = -1;
+      for (let j = ks[0] - 1; j >= 0; j--) if (position.has(j)) { prec = j; break; }
+      if (prec >= 0) sortie.splice(sortie.indexOf(position.get(prec)!.ligne) + 1, 0, ligne);
+      else {
+        let suiv = -1;
+        for (let j = ks[ks.length - 1] + 1; j < ref.length; j++) if (position.has(j)) { suiv = j; break; }
+        sortie.splice(suiv >= 0 ? sortie.indexOf(position.get(suiv)!.ligne) : 0, 0, ligne);
+      }
+      ligne.items.forEach((it) => position.set(it.ref!, { ligne, item: it }));
+    } else {
+      // Phrase omise au milieu d'une ligne reprise : à côté de sa voisine de la même ligne.
+      const voisines = ref.map((_, j) => j).filter((j) => ref[j].ligne === ref[k].ligne && position.has(j));
+      const avant = voisines.filter((j) => j < k).pop();
+      const apres = voisines.find((j) => j > k);
+      const it: Item = { brut: ref[k].brut.replace(PUCE, ''), mots: ref[k].mots, ref: k };
+      if (avant !== undefined) {
+        const pos = position.get(avant)!;
+        pos.ligne.items.splice(pos.ligne.items.indexOf(pos.item) + 1, 0, it);
+        position.set(k, { ligne: pos.ligne, item: it });
+      } else if (apres !== undefined) {
+        const pos = position.get(apres)!;
+        const puce = (PUCE.exec(pos.item.brut) || [''])[0];
+        if (puce && pos.ligne.items.indexOf(pos.item) === 0) { pos.item.brut = pos.item.brut.replace(PUCE, ''); it.brut = `${puce}${it.brut}`; }
+        pos.ligne.items.splice(pos.ligne.items.indexOf(pos.item), 0, it);
+        position.set(k, { ligne: pos.ligne, item: it });
+      } else return false;
+    }
+    mots += n;
+    reinserees++;
+    return true;
+  };
+  // Sous-titre de GSS (ligne d'une seule phrase courte terminée par « : ») : remis en second, devant son contenu.
+  const sousTitre = (k: number) => lignesRef[ref[k].ligne].length === 1 && /:\s*$/.test(ref[k].brut) && ref[k].mots.length <= 8;
+  const exclue = (k: number) => exclus[k];
+  for (let k = 0; k < ref.length; k++) {
+    if (position.has(k) || ref[k].mots.length < 3 || sousTitre(k) || exclue(k)) continue;
+    // Ligne de GSS entièrement absente de la réponse : remise sur sa propre ligne (puces comprises), sans ses phrases exclues.
+    const ligneEntiere = ref.every((p, j) => p.ligne !== ref[k].ligne || exclue(j) || !position.has(j));
+    inserer(k, ligneEntiere);
+  }
+  for (let k = 0; k < ref.length; k++) {
+    if (position.has(k) || !sousTitre(k) || exclue(k)) continue;
+    // Devant la ligne de la phrase de GSS qui le suit, si elle est dans la réponse ; sinon le sous-titre n'est pas remis.
+    const suiv = k + 1 < ref.length ? position.get(k + 1) : undefined;
+    if (!suiv) continue;
+    const n = compter(ref[k].brut);
+    if (mots + n > budget) continue;
+    const ligne: Ligne = { items: [{ brut: ref[k].brut, mots: ref[k].mots, ref: k }] };
+    sortie.splice(sortie.indexOf(suiv.ligne), 0, ligne);
+    position.set(k, { ligne, item: ligne.items[0] });
+    mots += n;
+    reinserees++;
+  }
+  // Bribe d'une phrase de GSS (70 % de ses mots au moins dans une seule phrase de GSS, plus courte qu'elle : phrase
+  // tronquée ou « En résumé, … ») alors que la phrase de GSS entière est dans la réponse : retirée (pas de redite).
+  let bribesRetirees = 0;
+  for (const l of sortie) {
+    for (let j = l.items.length - 1; j >= 0; j--) {
+      const it = l.items[j];
+      if (!it.ajout) continue;
+      const jeu = new Set(it.mots);
+      const bribe = ref.some((p, k) => position.has(k) && p.mots.length >= it.mots.length
+        && [...jeu].filter((w) => p.mots.includes(w)).length / jeu.size >= 0.7);
+      if (bribe) { l.items.splice(j, 1); bribesRetirees++; }
+    }
+  }
+  texte = rendre();
+  // 3. Limite de longueur atteinte et fidélité encore insuffisante : ajouts retirés, du dernier au premier.
+  let ajoutsRetires = 0;
+  if (mesure(texte) < seuil) {
+    for (let li = sortie.length - 1; li >= 0 && mesure(texte) < seuil; li--) {
+      const l = sortie[li];
+      for (let j = l.items.length - 1; j >= 0 && mesure(texte) < seuil; j--) {
+        if (!l.items[j].ajout) continue;
+        l.items.splice(j, 1);
+        ajoutsRetires++;
+        texte = rendre();
+      }
+    }
+  }
+  return { texte, fideliteAvant, fidelite: mesure(texte), reformulees, reinserees, ajoutsRetires, bribesRetirees };
 }
 
 /**

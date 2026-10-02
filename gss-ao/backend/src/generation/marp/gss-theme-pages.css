@@ -320,10 +320,23 @@ section.intercalaire ul.gss-bloc-rubriques.compacte li::before {
   height: 2mm;
 }
 
-/* Page de schéma : 1 schéma = 1 page, en grand (toile portrait 1000 × 1270 sur toute la largeur utile). */
+/* Page de schéma : 1 schéma = 1 page, en grand (consigne 6 ; décision D7 : le dessin occupe au moins 85 % de la hauteur
+   utile). Marges latérales de 10 mm ; le schéma (toile portrait 1000 × 1270) occupe toute la place sous son titre, à
+   la plus grande taille qui tient en largeur et en hauteur (titre sur une ou deux lignes), centré. */
 section.schema {
-  padding-top: 24mm;
-  padding-bottom: 14mm;
+  padding: 24mm 10mm 14mm 10mm;
+  display: flex;
+  flex-direction: column;
+}
+section.schema h2 {
+  flex: none;
+}
+section.schema .schema-page {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 section.schema h2 {
   font-size: 1.62em;
@@ -339,5 +352,7 @@ section.schema h2::after {
   margin-top: 2.6mm;
 }
 section.schema .schema-page svg {
-  max-height: 232mm;
+  width: 100%;
+  height: 100%;
+  max-height: none;
 }

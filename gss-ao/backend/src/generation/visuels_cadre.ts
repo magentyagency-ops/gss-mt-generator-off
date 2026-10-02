@@ -184,9 +184,18 @@ export async function insererSchemasReponses(zip: PizZip, xmlDoc: any, reponses:
  * type) : « Flotte électrique, à terme 100 % électrique » quand le CCTP impose une motorisation thermique ou indique
  * qu'aucune borne de recharge n'est disponible.
  */
-const TUILES_CONTRAIRES: Array<{ ref: string; tuile: RegExp; dce: RegExp }> = [
-  { ref: 'I-RSE-02', tuile: /flotte [ée]lectrique/i, dce: /motorisation thermique|v[ée]hicules? (?:[àa] motorisation )?thermiques?|hybride non rechargeable|ne dispos\w* (?:pas|d.aucune?) (?:de )?bornes? de recharge/i },
+const TUILES_CONTRAIRES: Array<{ ref: string; tuile: RegExp; phrase: RegExp; dce: RegExp }> = [
+  { ref: 'I-RSE-02', tuile: /flotte [ée]lectrique/i, phrase: /flotte (?:\d+\s*%\s*)?[ée]lectrique/i, dce: /motorisation thermique|v[ée]hicules? (?:[àa] motorisation )?thermiques?|hybride non rechargeable|ne dispos\w* (?:pas|d.aucune?) (?:de )?bornes? de recharge/i },
 ];
+
+/**
+ * Phrase d'un texte de GSS contraire au DCE, selon les mêmes règles que les tuiles des schémas (« nous budgétons le
+ * remplacement, à terme, de notre flotte par une flotte 100 % électrique » quand le CCTP impose une motorisation
+ * thermique) : elle n'est pas remise dans une réponse du cadre recalée sur le mémoire type.
+ */
+export function phraseContraireAuDce(phrase: string, dce: string): boolean {
+  return TUILES_CONTRAIRES.some((t) => t.phrase.test(String(phrase || '')) && t.dce.test(String(dce || '')));
+}
 
 /**
  * Réponses dont le schéma de bibliothèque porte une tuile contraire au DCE : schéma redessiné sans cette tuile (même

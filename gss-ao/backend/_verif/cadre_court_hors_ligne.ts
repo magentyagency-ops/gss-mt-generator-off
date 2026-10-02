@@ -3,7 +3,7 @@
  *  génération complète (generate) sur un DCE du corpus, appels au modèle interceptés au niveau du SDK (réponses
  *  simulées : _verif/cadre_court_simulation.ts ; embeddings en sac de mots), rendu réel (docx, ou PDF du format court).
  *  Contrôles :
- *   - cadre (etampes1, rouen_univ) : réponses développées reprises du mémoire type (fidélité ≥ 0,6, essai strict),
+ *   - cadre (etampes1, rouen_univ) : réponses développées reprises du mémoire type (fidélité ≥ 0,9 après recalage, décision D7),
  *     questions hors mémoire type signalées en proposition, valeurs d'identité de la référence (SIRET, CNAPS, contacts,
  *     signataire…) toujours présentes ;
  *   - format court (imm) : parties dans l'ordre du RC, pages ≤ maximum, part des phrases venues du mémoire type, aucune
@@ -148,7 +148,7 @@ const texteDocx = (f: string) => new PizZip(fs.readFileSync(f)).file('word/docum
       });
       const global = memoireType.fidelite(court.plan.map((p: any) => (sections[p.id] || '').split(/\n(?=## )/).filter((b: string) => !/^## (?:Nos engagements|Engagements sur|Cohérence du prix|Nos remarques)/.test(b)).join('\n')).join('\n'), toutMT);
       res.part_memoire_type = Math.round(global * 100) / 100;
-      if (global < 0.6) anomalie(`seulement ${Math.round(global * 100)} % des phrases viennent du mémoire type`);
+      if (global < 0.9) anomalie(`seulement ${Math.round(global * 100)} % des phrases viennent du mémoire type (90 % exigés, décision D7)`);
       if (/\{\{|Non communiqué|⟦AC:|\[CONSULTATION REQUISE/.test(texte)) anomalie('variable, mention « Non communiqué » ou marqueur interne dans le PDF');
       for (const [c, re] of Object.entries(ACHETEURS)) if (c !== corpus && re.test(texte)) anomalie(`nom d'un autre acheteur (${c}) dans le PDF`);
       if (!res.propositions.length) anomalie('aucune proposition signalée (le prix du RC n\'est pas dans le mémoire type)');

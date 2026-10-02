@@ -1915,6 +1915,17 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
   return { texte: nettoyerPubliposte(t), appliquees, refusees };
 }
 
+/**
+ * Fidélité minimale aux textes de GSS (décision D7 du 2 octobre 2026 : au moins 90 % du texte de GSS repris, jamais
+ * 60 ou 70 %) : rubriques adaptées au CCTP, réponses développées du cadre imposé, condensation du format court.
+ */
+export const SEUIL_FIDELITE = 0.9;
+
+/** Mots normalisés d'une phrase (même découpage que la mesure de fidélité). */
+export function motsDePhrase(p: string): string[] {
+  return normaliser(String(p || '').replace(/\*\*|__|#+\s|⟦AC:\d+⟧/g, ' ')).replace(/^[-*•|\d.)\s]+/, '').replace(/[^a-z0-9'\s]+/g, ' ').split(/\s+/).filter(Boolean);
+}
+
 /** Phrases (et lignes de liste ou de tableau) d'un texte, normalisées, avec leurs mots. */
 function phrasesNormalisees(t: string): string[][] {
   return String(t || '').replace(/\*\*|__|#+\s|⟦AC:\d+⟧/g, ' ').split(/\n+|(?<=[.!?;:])\s+/)
@@ -1923,7 +1934,7 @@ function phrasesNormalisees(t: string): string[][] {
 }
 
 /** Similarité de deux suites de mots (1 − distance d'édition / longueur maximale). */
-function similarite(a: string[], b: string[]): number {
+export function similarite(a: string[], b: string[]): number {
   if (!a.length || !b.length) return 0;
   let prec = Array.from({ length: b.length + 1 }, (_, j) => j);
   for (let i = 1; i <= a.length; i++) {
@@ -1982,7 +1993,7 @@ export interface ContexteAdaptation {
 }
 
 export interface OptionsAdaptation extends Omit<OptionsModifications, 'dce' | 'reference'> {
-  /** Fidélité minimale au texte de référence (0,75 par défaut). */
+  /** Fidélité minimale au texte de référence (SEUIL_FIDELITE, 0,9, par défaut). */
   seuilFidelite?: number;
   /** « progressif » (défaut) : les modifications qui feraient passer sous le seuil sont refusées une à une ;
    *  « reference » : sous le seuil, la rubrique revient entièrement au texte de référence. */
@@ -2004,7 +2015,7 @@ const CONSIGNE_ADAPTATION = `Tu adaptes UNE rubrique du mémoire technique de GS
 Le texte de la rubrique est le texte de référence de GSS, déjà personnalisé (nom du client, chiffres du registre). Il doit rester celui de GSS : « si c'est toujours le même process, on remet la même réponse ».
 Tu ne réécris RIEN. Tu proposes seulement des modifications ciblées, chacune sur un extrait recopié MOT POUR MOT du texte :
 1. remplacements : un nom (site, bâtiment, service, fonction) écrit autrement dans le DCE ; un chiffre, un délai, une fréquence ou un horaire que le DCE impose et qui diffère du texte (le chiffre du DCE remplace celui de GSS : jamais les deux) ;
-2. retraits : un passage hors du périmètre du marché ou contraire au DCE (poste, matériel, prestation que le CCTP ne prévoit pas ou interdit) ;
+2. retraits : un passage hors du périmètre du marché ou contraire au DCE (poste, matériel, prestation que le CCTP ne prévoit pas ou interdit) ; les retraits restent exceptionnels : au moins 90 % du texte de GSS doit être conservé ;
 3. ajouts (3 au plus, 60 mots chacun au plus) : une phrase pour une exigence du DCE propre à cette rubrique que le texte ne couvre pas, écrite avec les mots du DCE.
 INTERDITS : inventer un chiffre, un nom, un moyen ou un engagement absent du DCE et du texte ; promettre un délai d'intervention hors Normandie que le DCE n'impose pas ; citer l'article L. 1224-1 si le DCE ne le cite pas ; parler de Covid ; écrire qu'un agent contrôle l'identité (il invite à justifier sa présence) ; présenter l'ISO 9001 comme obtenue (elle est en cours, prévue fin 2026) ; évoquer la sous-traitance ; écrire un commentaire interne (« non précisé », « à confirmer », « selon la documentation »…) ; citer un montant de pénalité. Une donnée propre au marché inconnue de GSS s'écrit « [À COMPLÉTER] ».
 Si aucune modification n'est nécessaire, renvoie des listes vides.
@@ -2049,11 +2060,11 @@ export function lireJson(reponse: string): any {
 /**
  * Adapte une rubrique « adapte » au CCTP : un appel au modèle (fonction reçue en paramètre) propose des
  * modifications ciblées, appliquées seulement sur des extraits exacts et contrôlées ; la fidélité au texte de
- * référence doit rester au-dessus du seuil (0,75), sinon les modifications sont refusées (repli progressif) ou la
+ * référence doit rester au-dessus du seuil (SEUIL_FIDELITE, 0,9 : décision D7), sinon les modifications sont refusées (repli progressif) ou la
  * rubrique revient à la référence. Une rubrique « fixe » ou « besoin » est rendue telle quelle, sans appel.
  */
 export async function adapterRubrique(rubrique: RubriqueMemoireType, textePubliposte: string, ctx: ContexteAdaptation, appelModele: AppelModele, options: OptionsAdaptation = {}): Promise<ResultatAdaptation> {
-  const seuil = options.seuilFidelite ?? 0.75;
+  const seuil = options.seuilFidelite ?? SEUIL_FIDELITE;
   const reference = textePubliposte;
   const sortie = (texte: string, repli: boolean, raison?: string, appliquees: ModificationTraitee[] = [], refusees: ModificationTraitee[] = []): ResultatAdaptation =>
     ({ id: rubrique.id, texte, fidelite: fidelite(reference, texte), repli, raison, appliquees, refusees });

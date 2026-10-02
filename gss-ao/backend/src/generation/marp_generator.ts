@@ -793,7 +793,7 @@ export class MarpGenerator {
         }
 
         // Page de schéma (1 à 2 pages de texte, puis 1 page de schéma) : le titre-message du schéma, puis le schéma
-        // en grand, sans autre texte (toile portrait du moteur de schémas, au moins 70 % de la hauteur de la page).
+        // en grand, sans autre texte (toile portrait du moteur de schémas : dessin sur au moins 85 % de la hauteur utile).
         if (section.schemaPleinePage?.svg) {
           lines.push('---');
           lines.push('<!-- _class: schema -->');

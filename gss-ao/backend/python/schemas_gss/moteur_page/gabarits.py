@@ -162,7 +162,8 @@ def etoile(centre, branches, role_centre="sombre", r=118, larg=350):
     rows = math.ceil(n / ncol)
     gy = 30
     zone_h = H - 2 * MY - hh - g_hub
-    h = min(560 if n <= 3 else 340, (zone_h - (rows - 1) * gy) / rows)
+    # Dernier recours d'en_grand (_ETAT["etirer"]) : cartes sans plafond, fil central plus long (page remplie).
+    h = min((560 if n <= 3 else 340) if not _ETAT["etirer"] else zone_h, (zone_h - (rows - 1) * gy) / rows)
 
     def specs(hh_):
         out = []
@@ -179,7 +180,7 @@ def etoile(centre, branches, role_centre="sombre", r=118, larg=350):
     t, b, n_lt, besoin = ajuster_cartes(cs, t_max=40, t_min=18, quoi="étoile")
     h2, gy = _remplir(rows, besoin, h, gy, zone_h, k_e=1.8)
     bv = _besoin_v(cs, t, b, n_lt)
-    g_hub = clamp(zone_h + g_hub - rows * h2 - (rows - 1) * gy, 64, 92)
+    g_hub = clamp(zone_h + g_hub - rows * h2 - (rows - 1) * gy, 64, 92 if not _ETAT["etirer"] else 260)
     tot = hh + g_hub + rows * h2 + (rows - 1) * gy
     ytop = _y_optique(H - 2 * MY, tot)
     yc0 = ytop + hh + g_hub
@@ -245,7 +246,7 @@ def flux(etapes, labels=None, sorties=None, h=None, numeroter=True, cy=None, gap
         gaps.append(g)
     place = H - 2 * MY
     h_lib = (place - sum(gaps)) / rows
-    hh = min(300, h_lib)
+    hh = min(300, h_lib) if not _ETAT["etirer"] else h_lib
     main = [{"w": w_m, "h": hh, "role": _it(e, "role", "creme"), "titre": _it(e, "titre"), "corps": _it(e, "texte", ()),
              "icone": _it(e, "icone"), "orient": "h"} for e in etapes]
     so = [{"w": w_s, "h": hh, "role": _it(v, "role", "vert"), "titre": _it(v, "titre"), "corps": _it(v, "texte", ()),
@@ -254,12 +255,14 @@ def flux(etapes, labels=None, sorties=None, h=None, numeroter=True, cy=None, gap
                                         quoi="flux")
     h2 = max(besoin, min(hh, besoin + max(18, besoin * 0.1)))
     tot = rows * h2 + sum(gaps)
-    if tot < 0.86 * place:
-        h2 = max(h2, min(hh, besoin * 1.25, (0.86 * place - sum(gaps)) / rows))
+    # Dernier recours d'en_grand (_ETAT["etirer"]) : la composition remplit la page (cartes et écarts plus grands).
+    occ, k_h, k_g = (0.86, 1.25, 1.0) if not _ETAT["etirer"] else (0.97, 2.2, 2.5)
+    if tot < occ * place:
+        h2 = max(h2, min(hh, besoin * k_h, (occ * place - sum(gaps)) / rows))
         tot = rows * h2 + sum(gaps)
-    libre = 0.86 * place - tot
+    libre = occ * place - tot
     if rows > 1 and libre > 0:
-        gaps = [g + min(g * 1.0, libre / (rows - 1)) for g in gaps]
+        gaps = [g + min(g * k_g, libre / (rows - 1)) for g in gaps]
     tot = rows * h2 + sum(gaps)
     y0 = _y_optique(place, tot)
     ys = []
@@ -314,7 +317,9 @@ def chevrons(etapes, h_chevron=120, h_corps=210):
     w_b = wc - w_ch - g_x
     p = 34                       # profondeur de la pointe
     gap = 14
-    hh = min(300, (H - 2 * MY - (n - 1) * gap) / n)
+    hh = (H - 2 * MY - (n - 1) * gap) / n
+    if not _ETAT["etirer"]:     # dernier recours d'en_grand : bandes sans plafond, à leur hauteur maximale
+        hh = min(300, hh)
     tnum = 24
 
     def essai(t, b):
@@ -339,7 +344,7 @@ def chevrons(etapes, h_chevron=120, h_corps=210):
         if _it(e, "texte", ()):
             besoin = max(besoin, carte(0, 0, w_b, hh, _it(e, "role", "sable"), None, _it(e, "texte", ()),
                                        puces=_it(e, "puces", False), t=t, b=b, mesure=True) + 8)
-    h2 = _hauteur_finale(hh, besoin, 0.82)
+    h2 = _hauteur_finale(hh, besoin, 0.82 if not _ETAT["etirer"] else 0.97)
     tot = n * h2 + (n - 1) * gap
     y0 = (H - tot) / 2
     for i, e in enumerate(etapes):
@@ -581,7 +586,9 @@ def chiffres(tuiles, note=None, cols=None):
     cw = (wc - (ncol - 1) * gx) / ncol
     rows = math.ceil(n / ncol)
     place = H - 2 * MY - h_note
-    h = min(320 if ncol == 1 else 360, (place - (rows - 1) * gy) / rows)
+    h = (place - (rows - 1) * gy) / rows
+    if not _ETAT["etirer"]:     # dernier recours d'en_grand : bandeaux sans plafond
+        h = min(320 if ncol == 1 else 360, h)
     tv_max = 140 if ncol == 1 else 120
 
     def essai(tv, tl):
@@ -1068,13 +1075,16 @@ def frise(jalons, w_carte=None, alterne=True, couleur_bande="#B8CCB1"):
     cw = (wc - 2 * demi) / 2 if alterne else wc - demi - 40
     place = H - 2 * MY - 90
     gy = 40
-    h = min(340, (place - (n - 1) * gy) / max(1, (n * 0.62 if alterne else n)))
+    h = (place - (n - 1) * gy) / max(1, (n * 0.62 if alterne else n))
+    if not _ETAT["etirer"]:     # dernier recours d'en_grand : cartes sans plafond, pas plus grand
+        h = min(340, h)
     cs = [{"w": cw, "h": h, "role": _it(j, "role", "sable"), "titre": _it(j, "titre"), "corps": _it(j, "texte", ()),
            "puces": _it(j, "puces", False), "orient": "v"} for j in jalons]
     t, b, n_lt, besoin = ajuster_cartes(cs, 38, 18, quoi="frise")
-    h2 = min(h, max(besoin + 18, besoin * 1.15))
+    h2 = min(h, max(besoin + 18, besoin * (1.15 if not _ETAT["etirer"] else 1.6)))
     pas_min = h2 * (0.62 if alterne else 1.0) + gy
-    pas = clamp((0.86 * place - h2) / max(n - 1, 1), pas_min, h2 + 2.2 * gy) if n > 1 else 0
+    occ, k_g = (0.86, 2.2) if not _ETAT["etirer"] else (0.97, 6.0)
+    pas = clamp((occ * place - h2) / max(n - 1, 1), pas_min, h2 + k_g * gy) if n > 1 else 0
     tot = (n - 1) * pas + h2
     y0 = _y_optique(H - 2 * MY, tot + 90) + 40
     Rv = th.role("vert")
@@ -1274,10 +1284,21 @@ ANCRES = {"tete": (600, 118), "col": (600, 192), "torse": (600, 262), "poitrine"
 
 def silhouette(annotations, tenue="intervention", dos=False, marquage=False):
     """Silhouette de l'agent en grand, au centre ; annotations de part et d'autre, chacune à la hauteur de
-    son repère sur la tenue (traits courts, sans croisement)."""
+    son repère sur la tenue (traits courts, sans croisement). Silhouette de la tête aux pieds sur environ 90 % de la
+    hauteur de la toile (décision D7) ; plus petite seulement si les annotations ne tiennent pas à côté."""
+    for i in range(21):     # de 2,25 à 2,05 (taille d'origine), par pas de 0,01
+        k_ = round(2.25 - i * 0.01, 2)
+        try:
+            return _silhouette(annotations, tenue, dos, marquage, k_)
+        except Deborde:
+            if i == 20:
+                raise
+    return None
+
+
+def _silhouette(annotations, tenue, dos, marquage, k_):
     s, W, H = _toile()
     th = T()
-    k_ = 2.05
     ox = W / 2 - 600 * k_
     oy = (H - (588 - 82) * k_) / 2 - 82 * k_
     P_ = lambda x, y: (ox + x * k_, oy + y * k_)  # noqa: E731
@@ -2118,9 +2139,12 @@ def pourcentages(taux, note=None):
 # ── En grand : la composition occupe la hauteur de la page (D4 : au moins 70 % de la hauteur utile) ──────────
 # Gabarits dont les cartes et les textes délimitent tout le dessin (mesure fiable par le registre de la toile).
 ZOOMABLES = {"grille", "etoile", "comparatif", "chiffres", "barres", "fiche", "flux", "checklist", "chevrons", "arbre",
-             "matrice"}
+             "matrice", "frise"}
 ZOOMS = (1.08, 1.16, 1.25, 1.35, 1.45, 1.6)
-CIBLE_HAUTEUR = 0.84     # part de la hauteur de la toile (la toile fait 0,93 de la hauteur utile de la page : ≥ 0,77)
+CIBLE_HAUTEUR = 0.90     # part de la hauteur de la toile (décision D7 : dessin ≥ 85 % de la hauteur utile de la page)
+# Allongement (dernier recours) : accepté au plus grand zoom (textes les plus gros) dès cette part de la toile, les marges
+# fixes de la toile pesant davantage sur une toile zoomée (dessin mesuré dans la page ≥ 0,85 de la hauteur utile).
+CIBLE_ALLONGEMENT = 0.88
 
 
 def part_hauteur(s):
@@ -2156,15 +2180,20 @@ def en_grand(dessin, gabarit, cible=CIBLE_HAUTEUR):
         if f2 >= cible:
             return meilleur
     # Aucun zoom n'atteint la cible (colonnes étroites, textes déjà à leur taille) : les gabarits qui le permettent
-    # (comparatif, et ceux qui répartissent leurs rangées par _remplir) allongent leurs cadres, au meilleur zoom.
-    _ETAT["zoom"], _ETAT["etirer"] = z_meilleur, cible
-    try:
-        s3 = dessin()
-        if part_hauteur(s3) > f_meilleur:
-            meilleur = s3
-    except Exception:  # noqa: BLE001
-        pass
-    finally:
-        _ETAT["zoom"], _ETAT["etirer"] = 1.0, 0.0
+    # (comparatif, et ceux qui répartissent leurs rangées par _remplir) allongent leurs cadres, du meilleur zoom au
+    # zoom 1 : le plus grand zoom dont l'allongement atteint la cible, sinon le dessin le plus haut.
+    for z in [x for x in (1.0,) + ZOOMS if x <= z_meilleur][::-1]:
+        _ETAT["zoom"], _ETAT["etirer"] = z, cible
+        try:
+            s3 = dessin()
+        except Exception:  # noqa: BLE001
+            continue
+        finally:
+            _ETAT["zoom"], _ETAT["etirer"] = 1.0, 0.0
+        f3 = part_hauteur(s3)
+        if f3 > f_meilleur:
+            meilleur, f_meilleur = s3, f3
+        if f3 >= min(cible, CIBLE_ALLONGEMENT):
+            break
     return meilleur
 

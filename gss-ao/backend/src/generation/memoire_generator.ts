@@ -2,14 +2,14 @@ import { MarpGenerator, AssembleChapter, AssembleSection } from './marp_generato
 import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema, dessinerSpecs, finaliserSvg } from './schema_service';
-import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce } from './visuels_cadre';
+import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce, phraseContraireAuDce } from './visuels_cadre';
 import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque } from './themes';
 import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE } from './completion';
 import {
   chargerMemoireType, preparerMemoireType, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
-  obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite,
+  obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
   type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais,
 } from './memoire_type';
@@ -22,7 +22,7 @@ import {
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, type Dimensionnement } from './dimensionnement';
 import {
-  candidatsReference, blocReference, referencesRetenues, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE,
+  candidatsReference, blocReference, referencesRetenues, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES,
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
@@ -4217,7 +4217,7 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const repriseMT = await this.textesMemoireTypeCadre(dossierId, analysisData, dceContext, referentsContext, descriptors, buildPrompt, dimensionnementCadre);
     /** Questions développées rédigées hors mémoire type (propositions) et reprises à relire, pour GSS. */
     const propositionsCadre = new Map<number, string>();
-    const repriseParChamp = new Map<number, { ids: string[]; fidelite: number }>();
+    const repriseParChamp = new Map<number, { ids: string[]; fidelite: number; brute?: number }>();
     /** Schéma de process de la compréhension du besoin, inséré sous la réponse qui le reprend (consigne 3). */
     const svgComprehension = new Map<number, string>();
     /** Texte « Notre compréhension de votre besoin » (rédigé une seule fois, d'après le DCE), pour les questions de compréhension. */
@@ -4594,24 +4594,37 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
           const retenus = referencesRetenues(candidats, data.reference);
           const libelle = (questionMT || `Champ ${f.id}`).replace(/\s+/g, ' ').slice(0, 160);
           if (retenus.length) {
-            const fid = fideliteReponse(retenus.map((c) => c.texte).join('\n\n'), String(value), limiteChamp);
-            if (fid < SEUIL_FIDELITE_CADRE && !strict) {
-              console.log(`[MemoireGenerator] ${label} : fidélité ${fid.toFixed(2)} au mémoire type (${retenus.map((c) => c.id).join(', ')}) < ${SEUIL_FIDELITE_CADRE} → nouvel essai strict.`);
+            // Consigne 5 et décision D7 : le texte de GSS repris EXACTEMENT, à 90 % au moins. Réponse du modèle sous ce
+            // seuil : nouvel essai strict (recopie mot pour mot), gardé s'il est plus fidèle. Puis la réponse est recalée
+            // sur le texte de référence, sans autre appel : phrase reformulée → phrase de GSS, phrase de GSS omise →
+            // remise à sa place, phrases propres à la question gardées ; avec une limite de longueur, dans la limite de
+            // mots (les ajouts cèdent la place au texte de GSS). Une phrase de GSS contraire au DCE n'est pas remise.
+            const rec = recalerSurReference(retenus.map((c) => c.texte).join('\n\n'), String(value), {
+              limite: limiteChamp, maxMots: motsMaxChamp(f.context), exclure: (ph) => phraseContraireAuDce(ph, dceContext),
+            });
+            if (rec.fideliteAvant < SEUIL_FIDELITE_CADRE && !strict) {
+              console.log(`[MemoireGenerator] ${label} : fidélité ${rec.fideliteAvant.toFixed(2)} au mémoire type (${retenus.map((c) => c.id).join(', ')}) < ${SEUIL_FIDELITE_CADRE} → nouvel essai strict.`);
               const avant = replacements.length;
               await answerField(f, true);
               if (replacements.length > avant) {
-                // Le nouvel essai n'est gardé que s'il est plus fidèle au texte de GSS que le premier.
+                // Le nouvel essai (recalé lui aussi) n'est gardé que si le modèle y a repris davantage le texte de GSS.
                 const second = repriseParChamp.get(f.id);
-                if (!second || second.fidelite < fid) {
+                if (!second || (second.brute ?? 0) < rec.fideliteAvant) {
                   const k = replacements.map((x) => x.id).lastIndexOf(f.id);
-                  if (k >= 0) replacements[k].value = String(value);
-                  repriseParChamp.set(f.id, { ids: retenus.map((c) => c.id), fidelite: fid });
-                  propositionsCadre.set(f.id, `Réponse à relire (mémoire type de GSS repris en partie, fidélité ${Math.round(fid * 100)} %) : ${libelle}`);
+                  if (k >= 0) replacements[k].value = rec.texte;
+                  repriseParChamp.set(f.id, { ids: retenus.map((c) => c.id), fidelite: rec.fidelite, brute: rec.fideliteAvant });
+                  if (rec.fidelite < SEUIL_FIDELITE_CADRE) propositionsCadre.set(f.id, `Réponse à relire (mémoire type de GSS repris en partie, fidélité ${Math.round(rec.fidelite * 100)} %) : ${libelle}`);
+                  else propositionsCadre.delete(f.id);
                 }
                 return;
               }
             }
-            repriseParChamp.set(f.id, { ids: retenus.map((c) => c.id), fidelite: fid });
+            if (rec.texte !== String(value)) {
+              console.log(`[MemoireGenerator] ${label} : réponse recalée sur le mémoire type (${retenus.map((c) => c.id).join(', ')}), fidélité ${rec.fideliteAvant.toFixed(2)} → ${rec.fidelite.toFixed(2)} (${rec.reformulees} phrase(s) reformulée(s) rétablie(s), ${rec.reinserees} remise(s), ${rec.bribesRetirees} bribe(s) et ${rec.ajoutsRetires} ajout(s) retiré(s)).`);
+              value = rec.texte;
+            }
+            const fid = rec.fidelite;
+            repriseParChamp.set(f.id, { ids: retenus.map((c) => c.id), fidelite: fid, brute: rec.fideliteAvant });
             if (fid < SEUIL_FIDELITE_CADRE) propositionsCadre.set(f.id, `Réponse à relire (mémoire type de GSS repris en partie, fidélité ${Math.round(fid * 100)} %) : ${libelle}`);
             else propositionsCadre.delete(f.id);
             if (comprehension?.svg && ![...svgComprehension.keys()].some((id) => id !== f.id)) svgComprehension.set(f.id, comprehension.svg);
@@ -8048,7 +8061,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
         const sel = selectionnerDansPartie(t, infosRubriques, cible);
         retraits.push(...sel.retraits);
         sections[p.id] = sel.texte;
-        // Condensation seulement si la sélection ne suffit pas, et refusée si moins de 60 % des phrases de GSS restent.
+        // Condensation seulement si la sélection ne suffit pas, et refusée si moins de 90 % des phrases du texte condensé
+        // viennent mot pour mot du texte de GSS (SEUIL_FIDELITE, décision D7) : la partie reste alors le texte de GSS sélectionné.
         const mots = motsPartie([{ titre: '', texte: sections[p.id] }]);
         if (mots <= cible * 1.05) continue;
         const r = await this.callOpenAI([
@@ -8058,8 +8072,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
         const reps = (x: string) => (x.match(/⟦AC:\d+⟧/g) || []).sort().join();
         if (r && r.split(/\s+/).length < mots && reps(r) === reps(sections[p.id])) {
           const fid = fidelite(r, sections[p.id]);
-          if (fid >= 0.6) sections[p.id] = r.replace(/^#\s+[^\n]*\n+/, '').trim();
-          else console.log(`[MemoireGenerator] Condensation ${p.id} refusée : ${Math.round(fid * 100)} % des phrases seulement viennent du texte de GSS (60 % exigés).`);
+          if (fid >= SEUIL_FIDELITE) sections[p.id] = r.replace(/^#\s+[^\n]*\n+/, '').trim();
+          else console.log(`[MemoireGenerator] Condensation ${p.id} refusée : ${Math.round(fid * 100)} % des phrases seulement viennent du texte de GSS (${Math.round(SEUIL_FIDELITE * 100)} % exigés).`);
         }
       }
       if (retraits.length) console.log(`[MemoireGenerator] Format court — passe ${tour} : ${retraits.length} passage(s) non repris : ${retraits.join(' ; ')}.`);

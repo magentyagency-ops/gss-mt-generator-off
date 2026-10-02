@@ -4,7 +4,7 @@
  *     interceptés au niveau du SDK (réponses simulées réalistes : _verif/reponse_libre_v2_simulation.ts), rendu réel
  *     (Marp + Chromium, moteur de schémas Python) ;
  *  2. contrôles : sommaire en 5 blocs dans l'ordre du mémoire type ; pour chaque rubrique 1 à 2 pages de texte puis
- *     exactement 1 page de schéma (dessin ≥ 70 % de la hauteur utile de la page) ; aucun débordement ; aucune variable {{…}}, aucune
+ *     exactement 1 page de schéma (dessin ≥ 85 % de la hauteur utile de la page, décision D7) ; aucun débordement ; aucune variable {{…}}, aucune
  *     mention « Non communiqué », aucun marqueur interne, aucun autre acheteur du corpus ; rubriques fixes intactes ;
  *     propositions signalées (état, consultations, premier message de l'assistant) ;
  *  3. pages en PNG (pdftoppm) et planche-contact ;
@@ -251,6 +251,7 @@ async function main() {
   bilan.textes = controlesTexte(pages.join('\n'), etat);
   bilan.mesures = await mesurer(markdowns[markdowns.length - 1], etat.libre!.theme!);
   bilan.mesures.sous_70 = bilan.mesures.schemas.filter((s: any) => s.hauteur < 0.7);
+  bilan.mesures.sous_85 = bilan.mesures.schemas.filter((s: any) => s.hauteur < 0.85);
   bilan.mesures.hauteur_min = Math.min(...bilan.mesures.schemas.map((s: any) => s.hauteur));
   bilan.mesures.remplissage_texte = { max: Math.max(...bilan.mesures.remplissages), moyen: +(bilan.mesures.remplissages.reduce((a: number, x: number) => a + x, 0) / bilan.mesures.remplissages.length).toFixed(2) };
   delete bilan.mesures.remplissages;

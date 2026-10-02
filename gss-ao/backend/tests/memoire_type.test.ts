@@ -6,7 +6,7 @@ import { blocRegistre, texteSourcesMemoires, valeurInterne } from '../src/genera
 import {
   A_COMPLETER, VARIABLES_CALCULEES, adapterRubrique, appliquerModifications, articleEtNom,
   chargerMemoireType, dateDebutMarche, decouperSousParties, delaiDuDce, donneesBesoin,
-  evaluerCondition, exigencesParRubrique, extraireValeursImposees, fidelite, fondementRepriseDce, frequenceReunionsDce, lireRegistre,
+  evaluerCondition, exigencesParRubrique, extraireValeursImposees, fidelite, SEUIL_FIDELITE, fondementRepriseDce, frequenceReunionsDce, lireRegistre,
   planMemoireType, preparerMemoireType, publierMemoire, publierRubrique, publierSchema, publiposter, rechercherRubriques,
   reordonnerSousParties, validerMemoireType,
   type AppelModele, type ContexteMarche, type MemoireType, type Variables,
@@ -514,7 +514,7 @@ describe('Adaptation ciblée (extrait exact → remplacement) et fidélité', ()
     expect(recu).toContain(REFERENCE);
     expect(r.repli).toBe(false);
     expect(r.texte).toContain('J-7 : envoi des plannings au SAIMG');
-    expect(r.fidelite).toBeGreaterThanOrEqual(0.75);
+    expect(r.fidelite).toBeGreaterThanOrEqual(SEUIL_FIDELITE);
   });
 
   it('adapterRubrique : une réécriture qui fait chuter la fidélité est refusée (repli progressif ou retour à la référence)', async () => {
@@ -522,7 +522,8 @@ describe('Adaptation ciblée (extrait exact → remplacement) et fidélité', ()
       'Comète nous permet de nous adapter très facilement en cas de modification de dernière minute.', 'Il nous donne une vision en temps réel des prises et fins de service.'];
     const modele: AppelModele = async () => JSON.stringify({ retraits: phrases.map((extrait) => ({ extrait })) });
     const progressif = await adapterRubrique(rubriqueAdapte, REFERENCE, { dce: DCE_ADAPT }, modele);
-    expect(progressif.fidelite).toBeGreaterThanOrEqual(0.75);
+    expect(SEUIL_FIDELITE).toBe(0.9);
+    expect(progressif.fidelite).toBeGreaterThanOrEqual(SEUIL_FIDELITE);
     expect(progressif.refusees.some((m) => /fidélité/.test(m.raison || ''))).toBe(true);
     const reference = await adapterRubrique(rubriqueAdapte, REFERENCE, { dce: DCE_ADAPT }, modele, { repli: 'reference' });
     expect(reference.repli).toBe(true);

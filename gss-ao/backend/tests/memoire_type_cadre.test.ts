@@ -4,6 +4,7 @@ import {
   texteBrut, candidatsReference, blocReference, referencesRetenues, fideliteReponse, rubriquesEssentielles, partiePourTexte, poidsPartie,
   sousPartieDe, QUESTION_HORS_MEMOIRE_TYPE, plafonnerEngagements, intitulePrincipal, questionHorsMemoireType, questionComprehension,
   champValeur, attribuerRubriques, blocRenvois, PIECES_ADMINISTRATIVES, type PartieRC, type RubriqueSelection,
+  recalerSurReference, motsMaxChamp, SEUIL_FIDELITE_CADRE,
 } from '../src/generation/memoire_type_cadre';
 import { chargerMemoireType, planMemoireType, type PlanMemoireType } from '../src/generation/memoire_type';
 
@@ -244,5 +245,79 @@ describe('Cadre imposé : texte de référence du mémoire type', () => {
     expect(fideliteReponse(ref, `${ref} Une phrase ajoutée pour la question posée.`)).toBeGreaterThanOrEqual(0.99);
     expect(fideliteReponse(ref, 'En cas d’absence, notre société assure une continuité rapide et informe le client.')).toBeLessThan(0.6);
     expect(fideliteReponse(ref, 'Nous remplaçons tout agent absent dans les deux heures qui suivent son absence.', true)).toBe(1);
+  });
+
+  // Décision D7 (2 octobre 2026) : au moins 90 % du texte de GSS repris, la réponse du modèle est recalée sans nouvel appel.
+  const REF_CADRE = `Nous mettons à disposition de nos équipes plusieurs types de tenues, selon les missions effectuées.
+Les tenues :
+• La tenue costume, pour les sites tertiaires : pantalon de costume noir, chemise blanche et veste de costume noire.
+• La tenue d'intervention, pour les rondes et les interventions : pantalon treillis, chaussures de sécurité et parka.
+Nos rondiers utilisent leurs véhicules de fonction : nous budgétons le remplacement, à terme, de notre flotte par une flotte 100 % électrique.
+Pour l'Université de Rouen Normandie, nos agents porteront la tenue d'intervention.`;
+
+  it('seuil de fidélité du cadre : 0,9 (décision D7)', () => {
+    expect(SEUIL_FIDELITE_CADRE).toBe(0.9);
+  });
+
+  it('recalage : phrases de GSS omises remises à leur place, ajouts propres à la question gardés, fidélité 1', () => {
+    const reponse = `• La tenue d'intervention, pour les rondes et les interventions : pantalon treillis, chaussures de sécurité et parka. Avec l'accord de notre interlocuteur, nous y ajoutons un gilet pare-lame.`;
+    expect(fideliteReponse(REF_CADRE, reponse)).toBeLessThan(0.5);
+    const r = recalerSurReference(REF_CADRE, reponse);
+    expect(r.fidelite).toBe(1);
+    expect(r.texte).toContain("Avec l'accord de notre interlocuteur, nous y ajoutons un gilet pare-lame.");
+    // Ordre du texte de GSS : introduction, sous-titre devant son contenu, tenues, puis la suite.
+    const pos = (x: string) => r.texte.indexOf(x);
+    expect(pos('Nous mettons à disposition')).toBeLessThan(pos('Les tenues :'));
+    expect(pos('Les tenues :')).toBeLessThan(pos('• La tenue costume'));
+    expect(pos('• La tenue costume')).toBeLessThan(pos("• La tenue d'intervention"));
+    expect(pos('gilet pare-lame')).toBeLessThan(pos('Nos rondiers'));
+    expect(r.texte.match(/La tenue d'intervention/g)).toHaveLength(1);
+  });
+
+  it('recalage : une phrase reformulée redevient celle de GSS, sauf si elle porte un chiffre imposé par le DCE', () => {
+    const ref = 'Nous remplaçons tout agent absent dans les deux heures qui suivent son absence et nous prévenons le client sans délai. Un agent formé au site prend le poste avec les consignes à jour.';
+    const reformulee = 'Nous remplaçons chaque agent absent dans les deux heures suivant son absence et prévenons le client immédiatement. Un agent formé au site prend le poste avec les consignes à jour.';
+    const r = recalerSurReference(ref, reformulee);
+    expect(r.reformulees).toBe(1);
+    expect(r.texte).toBe(ref);
+    const chiffree = 'Nous remplaçons tout agent absent dans un délai de 45 minutes suivant son absence et nous prévenons le client. Un agent formé au site prend le poste avec les consignes à jour.';
+    const r2 = recalerSurReference(ref, chiffree);
+    expect(r2.texte).toContain('45 minutes');
+    expect(r2.texte).not.toContain('deux heures');
+  });
+
+  it('recalage : les bribes d’une phrase de GSS (« En résumé, … » tronqué) sont retirées, sans redite', () => {
+    const ref = 'Il peut arriver que le client ait besoin d’une prestation supplémentaire, non prévue ou de dernière minute. Les prestations supplémentaires sont contrôlées selon le même dispositif que les prestations habituelles.';
+    const r = recalerSurReference(ref, 'En résumé, Il peut arriver que le client ait besoin. En résumé, Les prestations supplémentaires sont contrôlées selon le.');
+    expect(r.texte).toBe(ref);
+    expect(r.bribesRetirees).toBe(2);
+    expect(r.fidelite).toBe(1);
+  });
+
+  it('recalage : un intitulé court de la réponse n’est pas confondu avec un sous-titre de GSS', () => {
+    const ref = `La stabilité des équipes :\nNous privilégions la stabilité sur les sites fixes, tout en maintenant un léger roulement.`;
+    const r = recalerSurReference(ref, 'Composition des équipes\nNous privilégions la stabilité sur les sites fixes, tout en maintenant un léger roulement.');
+    expect(r.texte.split('\n')[0]).toBe('Composition des équipes');
+    expect(r.texte).toContain('La stabilité des équipes :');
+  });
+
+  it('recalage : une phrase de GSS contraire au DCE n’est pas remise', () => {
+    const r = recalerSurReference(REF_CADRE, 'Pour l\'Université de Rouen Normandie, nos agents porteront la tenue d\'intervention.', {
+      exclure: (ph) => /flotte 100 % électrique/.test(ph),
+    });
+    expect(r.texte).not.toContain('flotte 100 % électrique');
+    expect(r.texte).not.toContain('Nos rondiers utilisent leurs véhicules de fonction');
+    // La fidélité se mesure sur le texte de GSS applicable au marché (sans la phrase contraire au DCE).
+    expect(r.fidelite).toBe(1);
+  });
+
+  it('recalage avec limite de mots : texte de GSS dans la limite, ajouts retirés si la fidélité reste sous 0,9', () => {
+    const reponse = 'Une réponse entièrement rédigée pour la question posée, sans reprendre le texte de référence de GSS. Elle développe un autre argument propre au marché.';
+    const r = recalerSurReference(REF_CADRE, reponse, { limite: true, maxMots: 60 });
+    expect(r.fidelite).toBeGreaterThanOrEqual(0.9);
+    expect(r.ajoutsRetires).toBeGreaterThan(0);
+    expect(motsMaxChamp('Section: "1 page maximum" | Limite: "1 page(s) au total pour les 3 réponses de cette rubrique : environ 140 mots pour celle-ci, sans dépasser"')).toBe(140);
+    expect(motsMaxChamp('Section: "2 pages maximum"')).toBe(840);
+    expect(motsMaxChamp('Question: "Moyens humains"')).toBeUndefined();
   });
 });
