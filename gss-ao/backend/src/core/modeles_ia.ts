@@ -13,6 +13,8 @@
 //                            (défaut : explicite sur GPT-5.6 et suivants)
 //   GSS_IA_SERVICE_TIER      niveau de service OpenAI (défaut : « flex » pour gpt-6-luna, −50 % sur tous les jetons,
 //                            réponses plus lentes ; « standard » pour le désactiver)
+// Assistant interactif (décision D9 du 3 octobre 2026) : niveau standard, jamais Flex, quel que soit GSS_IA_SERVICE_TIER
+// (constante NIVEAU_SERVICE_ASSISTANT ci-dessous) ; la génération des mémoires reste en Flex avec repli standard.
 // L'effort propre à un usage (GSS_IA_EFFORT_<USAGE>) l'emporte sur GSS_IA_EFFORT.
 //
 // Périmètre (consigne 9 : modèle de RÉDACTION ; consigne 10 : rien d'autre) : seuls les appels de rédaction et
@@ -31,6 +33,7 @@
 // d'entrée, alors que les prompts GSS ne sont presque jamais relus. Le mode explicite n'écrit que les
 // préfixes stables marqués par prefixeEnCache() (relus ensuite à 0,1 ×) ; le reste est facturé 1 ×.
 import './config'; // charge le .env avant toute lecture de process.env
+import { AsyncLocalStorage } from 'async_hooks';
 import OpenAI from 'openai';
 
 export type UsageIA = 'redaction' | 'analyse' | 'mecanique';
@@ -116,10 +119,34 @@ export function reglagesIA(usage: UsageIA, opts: { temperature?: number } = {}):
  * valeur est transmise telle quelle à l'API.
  */
 function niveauService(model: string): string {
+  if (enAssistantInteractif()) return NIVEAU_SERVICE_ASSISTANT === 'standard' ? '' : NIVEAU_SERVICE_ASSISTANT;
   const v = env('GSS_IA_SERVICE_TIER').toLowerCase();
   if (v === 'standard' || v === 'aucun' || v === 'non') return '';
   if (v) return v;
   return /^gpt-6-luna/i.test(model) ? 'flex' : '';
+}
+
+// ── Assistant interactif : niveau standard (décision D9 du 3 octobre 2026) ──────────────────
+// Les échanges avec GSS dans l'assistant (validation ou modification des propositions de l'IA, demandes de
+// modification, information saisie dans l'aperçu) et la recomposition du mémoire qu'ils déclenchent ne doivent jamais
+// faire attendre GSS dans la file Flex d'OpenAI. (Les échanges d'avant la génération, evaluateMissingInfoChat et
+// fill-missing, n'utilisent pas ce module : le premier appelle OpenAI sans service_tier, le second n'appelle pas OpenAI.) Les routes concernées (api/routes.ts) exécutent leur traitement dans
+// assistantInteractif(…) : tous les appels faits pendant ce traitement, quel que soit le module (completion.ts,
+// assistant_memoire.ts, memoire_generator.ts, schema_service.ts), partent au niveau ci-dessous, sans service_tier.
+// Même modèle, même effort ; seul le niveau de service change. La génération des mémoires reste en Flex (repli standard).
+/** Niveau de service de l'assistant interactif : « standard » (aucun service_tier envoyé). */
+export const NIVEAU_SERVICE_ASSISTANT: string = 'standard';
+
+const contexteAssistant = new AsyncLocalStorage<true>();
+
+/** Exécute un traitement de l'assistant interactif : ses appels OpenAI partent au niveau NIVEAU_SERVICE_ASSISTANT. */
+export function assistantInteractif<T>(traitement: () => Promise<T>): Promise<T> {
+  return contexteAssistant.run(true, traitement);
+}
+
+/** Vrai pendant un traitement de l'assistant interactif (voir assistantInteractif). */
+export function enAssistantInteractif(): boolean {
+  return contexteAssistant.getStore() === true;
 }
 
 // ── Crédit OpenAI épuisé ─────────────────────────────────────────────────────────────────────

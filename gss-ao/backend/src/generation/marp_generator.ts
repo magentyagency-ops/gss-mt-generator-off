@@ -68,6 +68,34 @@ interface LimitesPage { mots: number; lignes: number; caracteres?: number; ligne
 /** Path to Marp assets (CSS + logo) bundled with the backend. */
 const MARP_ASSETS_DIR = path.resolve(__dirname, 'marp');
 
+/** Lanceur de Chrome pour conteneur Linux (scripts/chrome-conteneur.sh) : ajoute --disable-dev-shm-usage. */
+const LANCEUR_CHROME_CONTENEUR = path.resolve(__dirname, '../../scripts/chrome-conteneur.sh');
+
+/**
+ * Chemin du lanceur à donner à Marp (CHROME_PATH) à la place de Chrome, ou null pour lancer Chrome directement.
+ * Conteneur Linux (Railway) : /dev/shm y est souvent limité à 64 Mo et un long mémoire peut faire planter l'onglet de
+ * Chrome ; le lanceur ajoute --disable-dev-shm-usage puis exécute le vrai Chrome (GSS_CHROME_REEL). Mac et Windows :
+ * aucun lanceur, rendu inchangé. GSS_CHROME_LANCEUR=non le désactive, GSS_CHROME_LANCEUR=oui l'impose (essais).
+ */
+export function lanceurChromeConteneur(chromePath: string | undefined, plateforme: string = process.platform): string | null {
+  const choix = (process.env.GSS_CHROME_LANCEUR || '').trim().toLowerCase();
+  if (!chromePath || choix === 'non' || (plateforme !== 'linux' && choix !== 'oui')) return null;
+  if (path.resolve(chromePath) === LANCEUR_CHROME_CONTENEUR) return null; // CHROME_PATH désigne déjà le lanceur
+  try {
+    fs.accessSync(LANCEUR_CHROME_CONTENEUR, fs.constants.X_OK);
+  } catch {
+    try {
+      fs.chmodSync(LANCEUR_CHROME_CONTENEUR, 0o755); // droit d'exécution perdu à la copie des fichiers
+      fs.accessSync(LANCEUR_CHROME_CONTENEUR, fs.constants.X_OK);
+    } catch (e: any) {
+      console.warn(`[MarpGenerator] Lanceur Chrome inutilisable (${e?.message || e}) : Chrome lancé sans --disable-dev-shm-usage.`);
+      return null;
+    }
+  }
+  console.log(`[MarpGenerator] Chrome lancé par ${LANCEUR_CHROME_CONTENEUR} (--disable-dev-shm-usage).`);
+  return LANCEUR_CHROME_CONTENEUR;
+}
+
 // ─── Helpers ───
 /**
  * Escape markdown special characters in generated text so Marp renders
@@ -459,10 +487,13 @@ export class MarpGenerator {
     const marpBin = path.resolve(__dirname, '../../node_modules/.bin/marp');
     const useMarpBin = !isWin && fs.existsSync(marpBin);
     const cmd = useMarpBin ? marpBin : 'npx';
+    // Options de Chrome : Marp CLI 4.4 n'a aucune option pour en transmettre (l'ancienne « --puppeteer-launch-args »
+    // n'existe pas et était ignorée). Il ajoute lui-même --no-sandbox en conteneur ou en administrateur. Pour
+    // --disable-dev-shm-usage (conteneur Linux, /dev/shm limité), CHROME_PATH désigne un lanceur qui l'ajoute.
+    const lanceur = lanceurChromeConteneur(chromePath);
     const baseArgs = [
       q(mdPath), '--theme', q(cssPath), '--pdf', '-o', q(pdfPath),
       '--allow-local-files', '--html', '--no-stdin',
-      '--puppeteer-launch-args', '--no-sandbox --disable-setuid-sandbox --disable-gpu --disable-dev-shm-usage',
     ];
     const args = useMarpBin
       ? baseArgs
@@ -486,7 +517,8 @@ export class MarpGenerator {
           ...process.env, 
           PUPPETEER_TIMEOUT: '900000',
           PUPPETEER_PROTOCOL_TIMEOUT: '900000',
-          CHROME_PATH: chromePath || '',
+          CHROME_PATH: lanceur || chromePath || '',
+          ...(lanceur ? { GSS_CHROME_REEL: chromePath } : {}),
         },
       }
     );
