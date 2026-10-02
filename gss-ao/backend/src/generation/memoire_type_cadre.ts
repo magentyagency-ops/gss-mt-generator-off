@@ -608,6 +608,50 @@ export function nettoyerReponseCadre(texte: string): string {
   return out.join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
+/** Phrase du mémoire type de GSS (publipostée) qui répond à un sujet précis du cadre, reconnu à son libellé. */
+export interface PhraseThematique { sujet: RegExp; phrase: string }
+
+/**
+ * Phrases thématiques du mémoire type publiposté : le vivier de GSS pour un besoin urgent ou ponctuel de renfort (« Pour les
+ * renforts ponctuels, nous disposons d'un vivier de 500 agents validés par nos équipes, dont 100 mobilisables en 48
+ * heures », sans les 48 heures hors Normandie). Aucune phrase si la valeur n'est pas publipostée.
+ */
+export function phrasesThematiques(textes: Record<string, string>): PhraseThematique[] {
+  const phrases = Object.values(textes || {}).flatMap((t) => texteBrut(String(t || '')).split('\n')).flatMap((l) => l.split(/(?<=[.!?])\s+/)).map((p) => p.trim());
+  const vivier = phrases.find((p) => /^Pour les renforts ponctuels, nous disposons d'un vivier de \d/.test(p) && !/\[À COMPLÉTER\]|\{\{/.test(p));
+  return vivier ? [{ sujet: /\brenforts?\b[^.]*\b(?:urgents?|ponctuels?|hors astreinte|impr[ée]vus?)|\b(?:urgents?|ponctuels?)\b[^.]*\brenforts?\b/i, phrase: vivier }] : [];
+}
+
+/**
+ * Repères sur un sujet que GSS traite dans le mémoire type (vivier pour les renforts urgents) remplacés par la phrase de
+ * GSS : ligne « libellé : [À COMPLÉTER] » (ca_normandie 241, 2.2 : « Moyens mis en œuvre pour remédier à un besoin urgent
+ * de renfort hors astreinte : [À COMPLÉTER]. ») ou sous-titre resté sans texte (« Besoin urgent de renfort hors astreinte »).
+ */
+export function completerParThematiques(texte: string, thematiques: PhraseThematique[]): { texte: string; completes: string[] } {
+  const lignes = String(texte || '').split('\n');
+  const completes: string[] = [];
+  if (!thematiques.length) return { texte: lignes.join('\n'), completes };
+  const thematique = (t: string) => thematiques.find((x) => x.sujet.test(t) && x.phrase.trim() && !/\[À COMPLÉTER\]|\{\{/.test(x.phrase))?.phrase || '';
+  const LIGNE_REPERE = /^\s*([^:\n]{3,200}?)\s*:\s*\[À COMPLÉTER\][.;]?\s*$/;
+  for (let i = 0; i < lignes.length; i++) {
+    const m = LIGNE_REPERE.exec(lignes[i]);
+    const phrase = m ? thematique(m[1]) : '';
+    if (phrase) { completes.push(m![1].trim()); lignes[i] = phrase; }
+  }
+  for (let i = 0; i < lignes.length; i++) {
+    if (!estSousTitreCadre(lignes[i])) continue;
+    let j = i + 1;
+    while (j < lignes.length && !lignes[j].trim()) j++;
+    const repere = j < lignes.length && /^\s*\[À COMPLÉTER\][.;]?\s*$/.test(lignes[j]);
+    if (!(j >= lignes.length || repere || estSousTitreCadre(lignes[j]))) continue;
+    const phrase = thematique(lignes[i]);
+    if (!phrase) continue;
+    completes.push(lignes[i].trim());
+    if (repere) lignes[j] = phrase; else lignes.splice(i + 1, 0, phrase);
+  }
+  return { texte: lignes.join('\n'), completes };
+}
+
 /**
  * Sous-titre d'une réponse du cadre resté sans texte (suivi d'un « [À COMPLÉTER] » seul, d'un autre sous-titre ou de la fin) :
  * rempli avec la phrase du mémoire type de GSS qui traite ce sujet dans les textes fournis (rubriques reprises ou déjà
@@ -615,13 +659,14 @@ export function nettoyerReponseCadre(texte: string): string {
  * urgent de renfort hors astreinte » ← « Pour les renforts ponctuels, nous disposons d'un vivier de 500 agents… »). Sans
  * phrase de GSS, le sous-titre reçoit « [À COMPLÉTER] » (donnée demandée à GSS) : jamais un sous-titre seul.
  */
-export function completerSousTitresVides(texte: string, sources: Array<{ texte?: string }>): { texte: string; completes: string[] } {
+export function completerSousTitresVides(texte: string, sources: Array<{ texte?: string }>, thematiques: PhraseThematique[] = []): { texte: string; completes: string[] } {
   const VIDES_ST = new Set(['besoin', 'moyen', 'moyens', 'mise', 'oeuvre', 'description', 'gestion', 'organisation', 'politique', 'personnel', 'service', 'prestation', 'mesure', 'mesures']);
   const racines = (t: string) => new Set(normaliser(t).replace(/[^a-z ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 5 && !VIDES_ST.has(w)).map((w) => w.replace(/s$/, '').slice(0, 7)));
   const phrases = sources.flatMap((s) => String(s.texte || '').split('\n')).filter((l) => l.trim() && !estSousTitreCadre(l) && !/\[À COMPLÉTER\]|\{\{/.test(l))
     .flatMap((l) => l.replace(/^\s*(?:[•\-*]|\d+[.)])\s+/, '').split(/(?<=[.!?])\s+/)).map((p) => p.trim()).filter((p) => p.split(/\s+/).length >= 6);
-  const lignes = String(texte || '').split('\n');
-  const completes: string[] = [];
+  const theme = completerParThematiques(texte, thematiques);
+  const lignes = theme.texte.split('\n');
+  const completes: string[] = [...theme.completes];
   for (let i = 0; i < lignes.length; i++) {
     if (!estSousTitreCadre(lignes[i])) continue;
     let j = i + 1;
@@ -1285,10 +1330,18 @@ export function partiesDuDocument(paras: ParagrapheCadre[]): PartieDocument[] {
   const marques = paras.map((p, k) => ({ k, m: /^((\d+|une?)\s+pages?\s+maximum)(?:\s+pour\s+(?:le|la|les)\s+(\d+(?:\.\d+)*))?$/i.exec(norme(p.texte)) }))
     .filter((x): x is { k: number; m: RegExpExecArray } => !!x.m);
   const titreAvant = (k: number) => { for (let j = k - 1; j >= Math.max(0, k - 4); j--) if (paras[j].texte.trim()) return j; return k; };
+  // Fin d'une partie : titre de la partie suivante, limitée ou non (« Nombre de page libre », ca_normandie 221 : la partie 7
+  // « Mise en œuvre de la responsabilité environnementale » suit la partie 6 « 3 pages maximum »), ou titre numéroté de
+  // rang supérieur (« 7 – … » après « 6 – … »).
+  const autresMarques = paras.map((p, k) => (/^(?:nombre de pages? libres?|pages? libres?|sans limite de pages?|pas de limite de pages?)$/i.test(norme(p.texte)) ? titreAvant(k) : -1)).filter((k) => k >= 0);
+  const rang = (t: string) => { const r = /^(\d+)\s*[-–—.]\s*\S/.exec(norme(t)); return r && norme(t).length <= 160 ? Number(r[1]) : null; };
   const out: PartieDocument[] = [];
   marques.forEach(({ k, m }, i) => {
     const suivante = marques[i + 1];
-    const borne = suivante ? titreAvant(suivante.k) - 1 : paras.length - 1;
+    let borne = suivante ? titreAvant(suivante.k) - 1 : paras.length - 1;
+    const rangTitre = rang(paras[titreAvant(k)].texte);
+    const finTitre = paras.findIndex((p, j) => j > k && j <= borne && (autresMarques.includes(j) || (rangTitre !== null && (rang(p.texte) ?? 0) > rangTitre)));
+    if (finTitre > 0) borne = finTitre - 1;
     let debut = titreAvant(k);
     if (m[3]) {
       const sous = paras.findIndex((p, j) => j > k && j <= borne && norme(p.texte).startsWith(m[3]));
@@ -1297,7 +1350,7 @@ export function partiesDuDocument(paras: ParagrapheCadre[]): PartieDocument[] {
     }
     const aChamp = (p: ParagrapheCadre) => p.champs.length > 0 || p.finsChamps.length > 0;
     let fin = borne;
-    if (!suivante) { fin = -1; for (let j = borne; j > k; j--) if (aChamp(paras[j])) { fin = j; break; } if (fin < 0) return; }
+    if (!suivante && finTitre < 0) { fin = -1; for (let j = borne; j > k; j--) if (aChamp(paras[j])) { fin = j; break; } if (fin < 0) return; }
     while (fin > debut && !paras[fin].texte.trim() && !paras[fin].imagePt) fin--;
     const ids = [...new Set(paras.slice(debut, fin + 1).flatMap((p) => p.champs))];
     if (!ids.length) return;

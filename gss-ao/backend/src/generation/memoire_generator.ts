@@ -22,7 +22,7 @@ import {
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, type Dimensionnement } from './dimensionnement';
 import {
-  type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
+  type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, phrasesThematiques, completerParThematiques, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
@@ -4943,7 +4943,7 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
             rec.texte = nettoyerReponseCadre(rec.texte);
             // Sous-titre resté sans texte (ca_normandie 221, 2.2 « Besoin urgent de renfort hors astreinte ») : la phrase de GSS
             // qui traite ce sujet (rubriques reprises ici ou dans une autre réponse), sinon « [À COMPLÉTER] » demandé à GSS.
-            const sousTitres = completerSousTitresVides(rec.texte, [...retenus, ...renvois]);
+            const sousTitres = completerSousTitresVides(rec.texte, [...retenus, ...renvois], phrasesThematiques(repriseMT!.textes));
             if (sousTitres.completes.length) console.log(`[MemoireGenerator] ${label} : sous-titre(s) sans texte complété(s) par le mémoire type (${sousTitres.completes.join(' ; ')}).`);
             rec.texte = sousTitres.texte;
             if (rec.texte !== String(value)) {
@@ -5213,6 +5213,12 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       r.value = nettoyerChampCadre(delais.texte).trim() || (retires.length || delais.retires.length || recopie.retires.length ? '[À COMPLÉTER]' : r.value);
       // Cas pratique : cases « en service : [À COMPLÉTER] | rotation : [À COMPLÉTER] » remplies avec le dispositif proposé.
       if (dimensionnementCadre) r.value = remplirCasPratique(String(r.value), dimensionnementCadre).texte;
+      // Sujet que GSS traite dans le mémoire type, resté « [À COMPLÉTER] » après la rédaction (ca_normandie 241, 2.2 :
+      // renfort urgent hors astreinte) : la phrase publipostée de GSS, sans question.
+      if (repriseMT) {
+        const theme = completerParThematiques(String(r.value), phrasesThematiques(repriseMT.textes));
+        if (theme.completes.length) { r.value = theme.texte; console.log(`[MemoireGenerator] Champ ${r.id} : ${theme.completes.length} repère(s) remplacé(s) par la phrase du mémoire type (${theme.completes.join(' ; ')}).`); }
+      }
       // Mise en situation événementielle (vitry 202 : forum et concert jusqu'à 10 000 personnes) : la réponse donne le nombre
       // d'agents, les catégories, les PIF et les détecteurs demandés ; sans dispositif proposé, le nombre est demandé à GSS.
       {
@@ -5241,7 +5247,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       const cl = repriseMT?.prep.variables.CLIENT;
       if (cl?.valeur && cl.court) {
         const ordre = replacements.filter((r) => descriptors.find((d) => d.id === r.id)?.kind !== 'checkbox').sort((a, b) => a.id - b.id);
-        const sorties = formeCourteApresPremiere(ordre.map((r) => String(r.value ?? '')), String(cl.valeur), { article: cl.articleCourt ?? '', nom: String(cl.court) }, cl.article || '');
+        const sorties = formeCourteApresPremiere(ordre.map((r) => String(r.value ?? '')), String(cl.valeur), { article: cl.articleCourt ?? '', nom: String(cl.court) }, cl.article || '', [String(analysisData?.clientName || '')]);
         ordre.forEach((r, i) => { r.value = sorties[i]; });
       }
     }

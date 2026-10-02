@@ -761,15 +761,14 @@ export function harmoniserNomClient(texte: string, nom: string): string {
  * Seul le nom est remplacé (l'article et la préposition qui le précèdent restent : « au Ministère … » → « au SAR de Rouen ») ;
  * rien n'est fait si la forme courte n'a pas le même article que la forme longue.
  */
-export function formeCourteApresPremiere(textes: string[], long: string, court: { article: string; nom: string } | undefined, articleLong = ''): string[] {
+export function formeCourteApresPremiere(textes: string[], long: string, court: { article: string; nom: string } | undefined, articleLong = '', variantes: string[] = []): string[] {
   if (!court?.nom || !long || long === court.nom || (court.article && articleLong && court.article !== articleLong)) return textes;
+  // Variantes du nom entier écrites par la rédaction (ca_normandie 241 : nom de l'analyse du DCE « …(SAR de Rouen), BOP
+  // Normand, pour… » à côté de la forme longue « …(SAR de Rouen) et le BOP Normand, pour… ») : traitées comme la forme longue.
+  const formes = [...new Set([long, ...variantes.map((v) => String(v || '').replace(/\s+/g, ' ').trim())])].filter((f) => f && f !== court.nom && f.length > court.nom.length).sort((a, b) => b.length - a.length);
+  const rx = new RegExp(formes.map((f) => f.split(/\s+/).map(echapper).join('\\s+')).join('|'), 'g');
   let vu = false;
-  return textes.map((t) => String(t ?? '').split(long).reduce((acc, morceau, i) => {
-    if (i === 0) return morceau;
-    const nom = vu ? court.nom : long;
-    vu = true;
-    return `${acc}${nom}${morceau}`;
-  }, ''));
+  return textes.map((t) => String(t ?? '').replace(rx, (x) => { const r = vu ? court.nom : x; vu = true; return r; }));
 }
 
 /** Nom entier tel que le DCE l'écrit en casse mêlée (au moins une majuscule et une minuscule), la graphie la plus fréquente. */
@@ -876,6 +875,18 @@ export function formesClient(nom: string, dce = ''): { long: string; court?: { a
     if (sigle && art) return { long, court: { article: art, nom: sigle, genre: '' } };
   }
   if (mots <= 6) return { long, pluriel };
+  // Sigle d'usage entre parenthèses au milieu du nom, que le DCE emploie (ca_normandie 241 : « Ministère de la Justice –
+  // Service administratif régional de Rouen (SAR de Rouen), BOP Normand, pour les cours d'appel de Rouen et de Caen »,
+  // 8 fois en entier dans le cadre) : forme courte « le SAR de Rouen » ; le programme budgétaire (« BOP Normand ») n'est
+  // pas un second acheteur.
+  {
+    const usageSigle = (/\(([A-Z]{2,6}(?:\s+(?:de|du|des|d['’])\s*[A-ZÀ-Ý][\wÀ-ÿ'’-]*)?)\)/.exec(principal) || [])[1];
+    if (usageSigle) {
+      const nDce = (normaliser(dce).match(new RegExp(`(?:^|[^a-z0-9])(?:l'|le |la |du |de l'|au |a l'|les |des )${echapper(normaliser(usageSigle))}(?![a-z0-9])`, 'g')) || []).length;
+      const art = articleEtNom(usageSigle, dce).article || articleSigle(usageSigle.split(/\s+/)[0], '');
+      if (nDce >= 2 && art) return { long, court: { article: art, nom: usageSigle, genre: '' } };
+    }
+  }
   // Nom composé « Tutelle – Entité / Programme (précision) » (ca_normandie 221 : « Ministère de la Justice – Service
   // administratif régional de Rouen / BOP Normand (cours d'appel de Rouen et de Caen) », 11 fois dans le cadre) : forme
   // courte = l'entité, par son sigle quand le DCE l'emploie (« le SAR de Rouen »), sinon son nom.
