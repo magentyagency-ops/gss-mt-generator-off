@@ -125,7 +125,7 @@ function niveauService(model: string): string {
 // ── Repli automatique du niveau Flex ─────────────────────────────────────────────────────────
 // En Flex, OpenAI peut répondre « ressource indisponible » (429) ou laisser la requête en file d'attente :
 // l'appel est alors refait une fois en niveau standard (coût normal pour CET appel seulement), avec un délai
-// d'attente allongé à 15 minutes en Flex. Un crédit épuisé (insufficient_quota) n'est jamais réessayé.
+// d'attente allongé à 15 minutes en Flex, sans nouvelle tentative du SDK en Flex (repli au bout de 15 min au plus). Un crédit épuisé (insufficient_quota) n'est jamais réessayé.
 // Le repli est posé une seule fois sur le SDK : il vaut pour tous les clients OpenAI du serveur.
 const FLEX_DELAI_MS = 15 * 60 * 1000;
 {
@@ -134,7 +134,9 @@ const FLEX_DELAI_MS = 15 * 60 * 1000;
     const creer = proto.create;
     proto.create = function (corps: any, options?: any) {
       if (!corps || corps.service_tier !== 'flex' || corps.stream) return creer.call(this, corps, options);
-      const opts = { ...(options || {}), timeout: Math.max(options?.timeout || 0, FLEX_DELAI_MS) };
+      // maxRetries: 0 en Flex : sans cela le SDK refait jusqu'à 2 fois une requête expirée (3 × 15 min = 45 min
+      // avant le repli). Le repli standard ci-dessous garde, lui, les nouvelles tentatives normales du SDK.
+      const opts = { ...(options || {}), timeout: Math.max(options?.timeout || 0, FLEX_DELAI_MS), maxRetries: 0 };
       const appel = creer.call(this, corps, opts);
       const repli = async () => {
         try {

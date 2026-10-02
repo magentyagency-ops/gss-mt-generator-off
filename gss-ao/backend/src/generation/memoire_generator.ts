@@ -7801,7 +7801,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
    * partie du RC assemble, dans l'ordre du mémoire type, les textes publipostés des rubriques qui lui sont rattachées
    * (rubriques « adapte » : modifications ciblées contrôlées, comme la réponse libre v2) ; la limite de pages est tenue
    * d'abord en retirant les sous-parties puis les rubriques les moins prioritaires, ensuite seulement par condensation
-   * (acceptée si au moins 60 % des phrases restent celles de GSS). Un élément attendu par le RC qu'aucune rubrique ne
+   * (acceptée si au moins 90 % des phrases restent celles de GSS : SEUIL_FIDELITE, décision D7). Un élément attendu par le RC qu'aucune rubrique ne
    * traite est rédigé comme avant et signalé à GSS comme proposition. Contrôles, schémas, rendu et état : inchangés.
    */
   private async genererFormatCourtMT(
