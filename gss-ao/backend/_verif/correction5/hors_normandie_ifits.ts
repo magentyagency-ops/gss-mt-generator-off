@@ -1,0 +1,21 @@
+// Tour 1 (B3, COH-T1-01) : IFITS (Neuilly-sur-Marne, « 93330 – Neuilly-sur-Marne ») reconnu hors Normandie ;
+// délai du DCE écrit « 30 (trente) minutes » gardé ; une puce dont le libellé est retiré disparaît entière.
+import fs from 'fs';
+import path from 'path';
+import { delaisHorsNormandie, marcheHorsNormandie } from '../../src/generation/base_memoires';
+const dce = fs.readFileSync(path.resolve(__dirname, '../../../_corpus_verif/_dce_textes/ifits.txt'), 'utf-8');
+let ko = 0;
+const verif = (ok: boolean, nom: string, detail = '') => { if (!ok) ko++; console.log(ok ? 'OK ' : 'KO ', nom, detail); };
+verif(marcheHorsNormandie({}, dce), 'ifits hors Normandie');
+verif(marcheHorsNormandie({}, 'Site : Lille (59000), rue X'), 'Lille (59000) hors Normandie');
+verif(marcheHorsNormandie({}, 'Neuilly-sur-Marne (Seine-Saint-Denis)'), 'département en lettres');
+verif(!marcheHorsNormandie({}, 'Rouen (76000)'), 'Rouen (76000) en Normandie');
+verif(!marcheHorsNormandie({}, 'n° 5391151358900055816514224000 Rouen'), 'suite de chiffres ignorée');
+const puce = '- **« Intervention sur alarme »** : l\'agent intervient sur site en moins de 30 minutes. → notre réponse : le processus « intervention sur alarme ».';
+const r1 = delaisHorsNormandie(puce, dce, true);
+verif(r1.texte === puce && !r1.retires.length, '30 (trente) minutes du DCE gardé', r1.texte);
+const puce2 = '- **« Remplacement »** : l\'agent remplaçant arrive en 45 minutes. → notre réponse : le processus « remplacement ».\n- Autre point.';
+const r2 = delaisHorsNormandie(puce2, dce, true);
+verif(!/→/.test(r2.texte) && r2.texte.trim() === '- Autre point.', 'puce retirée entière', JSON.stringify(r2.texte));
+console.log(ko ? `${ko} échec(s)` : 'Tout est conforme.');
+process.exit(ko ? 1 : 0);

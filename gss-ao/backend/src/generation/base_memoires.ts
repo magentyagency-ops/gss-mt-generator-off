@@ -381,13 +381,27 @@ export function confirmationsRegistreUtilisees(texte: string, horsNormandie = fa
   return out;
 }
 
+/** Départements cités en toutes lettres entre parenthèses (Normandie et départements les plus fréquents des DCE). */
+const DEPARTEMENTS: Record<string, string> = { 'calvados': '14', 'eure': '27', 'manche': '50', 'orne': '61', 'seine maritime': '76', 'nord': '59', 'pas de calais': '62', 'somme': '80', 'oise': '60', 'aisne': '02', 'paris': '75', 'seine et marne': '77', 'yvelines': '78', 'essonne': '91', 'hauts de seine': '92', 'seine saint denis': '93', 'val de marne': '94', 'val d oise': '95', 'eure et loir': '28', 'sarthe': '72', 'mayenne': '53', 'ille et vilaine': '35', 'loiret': '45', 'marne': '51', 'bas rhin': '67', 'haut rhin': '68', 'rhone': '69', 'gironde': '33', 'loire atlantique': '44', 'isere': '38', 'bouches du rhone': '13', 'haute garonne': '31', 'herault': '34', 'alpes maritimes': '06', 'var': '83', 'moselle': '57', 'meurthe et moselle': '54', 'finistere': '29', 'morbihan': '56', 'cotes d armor': '22', 'maine et loire': '49', 'indre et loire': '37', 'loir et cher': '41', 'cher': '18', 'vienne': '86', 'charente maritime': '17' };
+
 /**
  * Vrai si le marché se situe hors de Normandie (zone d'intervention habituelle de GSS), d'après les codes
  * postaux de l'analyse du DCE et du début du DCE. Faux si aucun code postal n'est trouvé (doute → pas de filtre).
  */
 export function marcheHorsNormandie(analyse: any, dce: string): boolean {
   const texte = `${JSON.stringify(analyse || {})} ${String(dce || '').slice(0, 40000)}`;
-  const codes = [...texte.matchAll(/\b(\d{2})\d{3}\s+[A-ZÉÈa-zéè]/g)].map((m) => m[1]).filter((d) => Number(d) >= 1 && Number(d) <= 95);
+  // Code postal suivi de la commune, avec ou sans séparateur (« 93330 Neuilly », « 93330 – Neuilly-sur-Marne »,
+  // « 93330, Neuilly »), ou code entre parenthèses après la commune (« Lille (59000) »). Le \b initial écarte les
+  // longues suites de chiffres des formulaires.
+  const codes = [
+    ...[...texte.matchAll(/\b(\d{2})\d{3}\s*(?:[–—,-]\s*)?[A-ZÉÈa-zéè]/g)].map((m) => m[1]),
+    ...[...texte.matchAll(/\(\s*(\d{2})\d{3}\s*\)/g)].map((m) => m[1]),
+  ].filter((d) => Number(d) >= 1 && Number(d) <= 95);
+  // Département nommé entre parenthèses après la commune (« Neuilly-sur-Marne (Seine-Saint-Denis) »).
+  for (const m of texte.matchAll(/\(\s*([A-ZÉÈa-zéè][A-Za-zÀ-ÿ' -]{2,30}?)\s*\)/g)) {
+    const d = DEPARTEMENTS[m[1].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[\s'-]+/g, ' ').trim()];
+    if (d) codes.push(d);
+  }
   if (!codes.length) return false;
   const normands = codes.filter((d) => ['14', '27', '50', '61', '76'].includes(d)).length;
   return normands < codes.length / 2;
@@ -631,7 +645,9 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
   const dansDce = (n: string, u: string): { statut: 'oui' | 'seuil' | 'non'; objet?: string } => {
     const unite = /^m/i.test(u) ? '(?:minutes?|min\\b|mn\\b)' : '(?:heures?|h\\b)';
     const chiffre = `${n.replace('.', '[.,]').replace(',', '[.,]')}`;
-    const formes = LETTRES[n] ? `(?:${chiffre}|${LETTRES[n]})(?:\\s*\\(${chiffre}\\))?` : chiffre;
+    // Chiffre et lettres dans les deux ordres : « trente (30) minutes » comme « 30 (trente) minutes » (IFITS).
+    const une = LETTRES[n] ? `(?:${chiffre}|${LETTRES[n]})` : chiffre;
+    const formes = `${une}(?:\\s*\\(${une}\\))?`;
     // Un seuil de pénalité (« retard supérieur à 60 min … 300 € HT / manquement », « 200 € par agent demandé pour une
     // mise à disposition urgente attendue dans un délai de 2 heures ») n'est pas un délai d'intervention imposé : il
     // n'autorise pas GSS à promettre ce délai hors Normandie.
@@ -662,7 +678,8 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
   // Sigles à points (« C.C.T.P. : ») : jamais une fin de phrase.
   const proteger = (t: string) => t.replace(/\b((?:[A-Z]\.){2,})/g, (m) => m.replace(/\./g, '\u0002'));
   const retablir = (t: string) => t.replace(/\u0002/g, '.');
-  const lignes = proteger(texte).split('\n').map((ligne) => ligne.split(/(?<=[.!?;])\s+/).map((ph) => {
+  const lignesSource = proteger(texte).split('\n');
+  const lignes = lignesSource.map((ligne) => ligne.split(/(?<=[.!?;])\s+/).map((ph) => {
     if (!PRESENCE.test(ph) || /⟦AC:|\[CONSULTATION REQUISE/.test(ph)) return ph;
     const hors: string[] = [];
     const seuilsPhrase: Array<{ duree: string; objet: string }> = [];
@@ -683,9 +700,21 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
       const puce = (/^\s*[-*•]\s+/.exec(ph) || [''])[0];
       if (premier) return puce + (/;\s*$/.test(ph) ? `${MARQUE_SEUIL};` : MARQUE_SEUIL);
     }
-    // Puce : on garde le tiret vide ? non — la puce disparaît avec sa phrase.
+    // La puce disparaît avec sa phrase.
     return '';
-  }).filter((ph, k, t) => ph !== '' || false).join(' '));
+  })).map((phrases, i) => {
+    // Puce dont la première phrase (le libellé) est retirée : la puce entière disparaît, « → notre réponse » compris
+    // (jamais de ligne orpheline « → … » ni de suite de puce sans tiret). Une phrase « → … » qui suivait une phrase
+    // retirée disparaît aussi.
+    if (/^\s*[-*•]\s+/.test(lignesSource[i]) && phrases[0] === '') return '';
+    const out: string[] = [];
+    for (let k = 0; k < phrases.length; k++) {
+      if (phrases[k] === '') continue;
+      if (/^\s*→/.test(phrases[k]) && (k === 0 || phrases[k - 1] === '')) continue;
+      out.push(phrases[k]);
+    }
+    return out.join(' ');
+  });
   let sortie = retablir(lignes.filter((l, k, t) => !(l.trim() === '' && /^\s*[-*•]\s*$/.test(l))).join('\n').replace(/^\s*[-*•]\s*$/gm, '').replace(/\n{3,}/g, '\n\n'));
   if (seuils.length) {
     // Préposition élidée devant une voyelle (« délais d'intervention », « d'arrivée »).
