@@ -985,7 +985,7 @@ export function resultatBesoin(texte: string, dejaEcrits: string[] = []): string
   const phrasesConclusion = libres.slice(1).reverse().flatMap((l) => l.replace(/\*\*/g, '').split(/(?<=[.!?])\s+/).reverse());
   const partieAttentes = t.split(/^(?=##\s)/m).find((p) => /^##\s+Vos attentes/i.test(p)) || '';
   const engagements = partieAttentes.split('\n').filter((l) => /^\s*[-*•]\s/.test(l) && !INTERNE.test(l)).map((l) => {
-    const m = /→\s*notre réponse\s*:\s*(.+)$/.exec(l);
+    const m = /→\s*notre réponse\s*:\s*(.+)$/.exec(l) || /»[^—–\n]{0,80}?\s[—–]\s*(?:notre\s+)?réponse\s*:\s*(.+)$/i.exec(l);
     if (m) return m[1];
     const c = /^\s*[-*•]\s+(?:\*\*[^*]+\*\*\s*)?(?:\(\s*«[^»]*»\s*\))?\s*:\s*(.+)$/.exec(l);
     return c ? c[1] : '';
@@ -1050,12 +1050,19 @@ export function anomaliesSchemaBloc1(spec: { gabarit?: string; params?: any } | 
 export function specSecoursPuces(texte: string): { gabarit: string; params: any } | null {
   const puces = (titre: RegExp) => {
     const partie = String(texte || '').split(/^(?=##\s)/m).find((p) => titre.test(p)) || '';
-    return partie.split('\n').map((l) => /^\s*[-*•]\s+\*\*[^*]+\*\*(?:\s*\([^)]*\))?\s*:\s*(.+?)\s*→\s*notre réponse\s*:\s*(.+)$/.exec(l))
+    return partie.split('\n').map((l) => {
+      const m = /^\s*[-*•]\s+\*\*[^*]+\*\*(?:\s*\([^)]*\))?\s*:\s*(.+?)\s*→\s*notre réponse\s*:\s*(.+)$/.exec(l);
+      if (m) return { brut: m[0], x: m[1], y: m[2], citation: false };
+      // Attente écrite en citation du DCE (cadre imposé, ca_normandie 241 : « « main courante tenue en temps réel » —
+      // réponse : main courante électronique… ») : la citation est l'exigence, la suite la réponse de GSS.
+      const c = /^\s*[-*•]\s+(?:\*\*[^*]+\*\*\s*:\s*)?«\s*([^»]{3,160}?)\s*»[^—–\n]{0,80}?\s[—–]\s*(?:notre\s+)?réponse\s*:\s*(.+)$/i.exec(l);
+      return c ? { brut: c[0], x: c[1], y: c[2], citation: true } : null;
+    })
       // Jamais de repère interne dans un schéma (« [À COMPLÉTER] », ⟦AC:n⟧, « [CONSULTATION REQUISE : …] »).
-      .filter((m): m is RegExpExecArray => !!m && m[1].trim().length > 3 && !INTERNE.test(m[0]))
+      .filter((m): m is { brut: string; x: string; y: string; citation: boolean } => !!m && m.x.trim().length > 3 && !INTERNE.test(m.brut))
       // Réponse sans renvoi interne (« processus détaillés au bloc 4, « … » », « suit les processus du bloc 5 ») : '' si
       // le renvoi était toute la réponse.
-      .map((m) => ({ x: m[1].trim(), y: sansRenvoiBloc(m[2].split(/\s*;\s*/)[0]).replace(/\s+(?:est|sont|sera|seront)$/i, '').trim() }))
+      .map((m) => ({ x: m.x.trim(), y: sansRenvoiBloc(m.y.split(/\s*;\s*/)[0]).replace(/\s+(?:est|sont|sera|seront)$/i, '').trim(), citation: m.citation }))
       .filter((c) => c.y);
   };
   const vigilance = puces(/^##\s+Les points de vigilance/i);
@@ -1096,9 +1103,18 @@ export function specSecoursPuces(texte: string): { gabarit: string; params: any 
   // titres jamais quasi identiques (le moteur refuse un élément en double ; le lecteur ne voit pas deux fois la même idée).
   const etapes: Array<{ titre: string; texte?: string; role?: string }> = [];
   const ordre = [...vigilance.slice(0, 2), ...attentes, ...vigilance.slice(2)];
-  for (const c of [...ordre.filter((x) => nominal(x.x)), ...ordre.filter((x) => !nominal(x.x))]) {
+  // Exigence citée du DCE, courte et nominale (« Main courante tenue en temps réel », « Délai maximum de 20 minutes ») :
+  // elle sert de titre telle quelle.
+  const citationTitre = (c: { x: string; citation: boolean }): string => {
+    if (!c.citation) return '';
+    const x = c.x.replace(/\s+/g, ' ').trim();
+    const pleins = pleinsDe(x);
+    return x.length <= 40 && pleins.length >= 2 && !/[,;:«»"]/.test(x) && !x.split(/\s+/).some((w, i) => i > 0 && VERBE.test(w)) ? x : '';
+  };
+  const titreDe = (c: { x: string; citation: boolean }) => citationTitre(c) || nominal(c.x);
+  for (const c of [...ordre.filter((x) => titreDe(x)), ...ordre.filter((x) => !titreDe(x))]) {
     if (etapes.length >= 3) break;
-    let titre = nominal(c.x);
+    let titre = titreDe(c);
     let y = c.y;
     if (!titre) {
       const tr = teteReponse(c.y);

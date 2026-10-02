@@ -109,3 +109,18 @@ describe('schéma de process du bloc 1 (T2C-1)', () => {
     expect(completerResultatBesoin(etapes, CANORM, [...d, 'étape 1 : titre « Votre besoin » réduit au nom de l\'étape'])).toBeNull();
   });
 });
+
+/** Génération réelle de contrôle ca_normandie 241 : attentes écrites en citation du DCE (« « … » — réponse : … »). */
+describe('secours du bloc 1 sur les attentes citées (ca_normandie 241)', () => {
+  it('les attentes citées donnent des étapes avec leur texte, jamais le secours par sous-titres sans contenu', async () => {
+    const { specSecoursPuces, anomaliesSchemaBloc1 } = await import('../src/generation/reponse_libre_v2');
+    const texte = "## Votre contexte et votre site\nLe marché couvre les lots 1 et 2 des juridictions normandes.\n\n## Vos attentes et nos engagements\n- « main courante tenue en temps réel » — réponse : main courante électronique, avec accès en temps réel du RSEM et conservation des données.\n- « délai maximum de 20 minutes » pour la levée de doute — réponse : procédure d'intervention sur alarme et télésurveillance, avec intervention tracée.\n\n## Les points de vigilance\n- **Point de vigilance** : le besoin du Palais de justice de Rouen indique à la fois deux SSIAP 1 → notre réponse : intégration du marché et mise en place de la prestation à partir des postes définis au CCTP.";
+    const s = specSecoursPuces(texte)!;
+    expect(s).not.toBeNull();
+    expect(anomaliesSchemaBloc1(s)).toEqual([]);
+    const etapes = s.params.etapes as Array<{ titre: string; texte: string }>;
+    expect(etapes.map((e) => e.titre)).toContain('Délai maximum de 20 minutes');
+    expect(etapes.every((e) => e.texte && e.texte.length > 10)).toBe(true);
+    expect(etapes[etapes.length - 1].titre).toBe('Votre résultat');
+  });
+});
