@@ -32,6 +32,7 @@ P.textesMemoireTypeCadre = async (_d: any, _a: any, _c: any, _r: any, descriptor
     const q = (d.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '';
     const ancienne = `${q.replace(/[\s.:;,…\-—–/|()]+/g, '').length ? q : (((d.context.match(/Contexte(?: proche)?:\s*"([^"]*)"/) || [])[1] || '').split('/').map((s) => s.trim()).filter(Boolean).pop() || '')} ${(d.context.match(/Critère:\s*"([^"]*)"/) || [])[1] || ''}`.trim();
     const nouvelle = questionUtileChamp(d.context);
+    if (process.env.CONTEXTES) console.log(`CTX ${d.id} [${d.kind}] ${d.context.slice(0, 600)}`);
     if (ancienne !== nouvelle) console.log(`DIFFÉRENT champ ${d.id}\n  avant : ${ancienne.slice(0, 200)}\n  après : ${nouvelle.slice(0, 300)}\n  lexical : ${JSON.stringify(rechercherRubriques(mt, nouvelle, 3))}`);
     else console.log(`IDENTIQUE champ ${d.id}`);
     if (process.env.CANDIDATS) console.log(`CANDIDATS champ ${d.id} : ${candidatsReference(mt, textes, nouvelle, { scores: {} }).map((c) => c.id).join(', ')}${process.env.DETAIL ? ` :: ${nouvelle} :: ${JSON.stringify(rechercherRubriques(mt, nouvelle, 3))}` : ''}`);
