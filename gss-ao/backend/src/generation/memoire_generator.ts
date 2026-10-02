@@ -20,7 +20,7 @@ import {
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, planSelonRC, passagesPlanImpose, controlerProposition,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
-import { CONSIGNE_DIMENSIONNEMENT, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, type Dimensionnement } from './dimensionnement';
+import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, type Dimensionnement } from './dimensionnement';
 import {
   type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, phrasesThematiques, completerParThematiques, textesSchemaSvg, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
@@ -7246,7 +7246,14 @@ RÈGLES DE FORME (rendu Marp) :
     for (const [id, l] of Object.entries(tri.rattachees)) (parRubrique[id] ||= []).push(...l);
     // Formalités de l'offre (visite obligatoire, cadre de réponse à joindre…) : jamais une rubrique, une question à GSS.
     const formalitesOffre = tri.nouvelles.filter((e) => FORMALITES_OFFRE.test(`${e.sujet || ''} ${e.exigence}`));
-    const { groupes, ecartees } = grouperNouvelles(tri.nouvelles.filter((e) => !formalitesOffre.includes(e)), 6);
+    // Poste et horaires déjà repris par le dimensionnement (ifsem 335 : ADS permanent à Ivry) : pas une question nouvelle ;
+    // l'exigence va à la rubrique de l'équipe dédiée (contrôle de couverture).
+    const postesDimensionnes = tri.nouvelles.filter((e) => !formalitesOffre.includes(e) && exigenceDePosteDimensionne(`${e.sujet || ''} ${e.exigence}`, ctxBase.dimensionnement));
+    if (postesDimensionnes.length) {
+      if (plan.rubriques.some((r) => r.id === 'b3_adequation')) (parRubrique.b3_adequation ||= []).push(...postesDimensionnes);
+      console.log(`[MemoireGenerator] ${postesDimensionnes.length} exigence(s) de poste déjà dimensionné rattachée(s) à l'équipe dédiée, sans proposition à part.`);
+    }
+    const { groupes, ecartees } = grouperNouvelles(tri.nouvelles.filter((e) => !formalitesOffre.includes(e) && !postesDimensionnes.includes(e)), 6);
     const besoin = donneesBesoin(prep, ctxBase);
 
     // ── 4. Adaptation ciblée des rubriques « adapte » (et des rubriques fixes visées par la demande particulière) ──
@@ -8676,7 +8683,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       if (texte && reqs.length) texte = plafonnerEngagements(nettoyerEngagements(await this.completerCouverture(texte, reqs, p.id, horsNormandie, questionsCouverture)), 6);
       sections[p.id] = texte.trim();
     }
-    for (const g of grouperNouvelles(nouvellesCourt, 6).groupes) {
+    // Poste et horaires déjà repris par le dimensionnement : couverts par la partie (engagement), sans proposition à part.
+    for (const g of grouperNouvelles(nouvellesCourt.filter((e) => !exigenceDePosteDimensionne(`${e.sujet || ''} ${e.exigence}`, ctxBase.dimensionnement)), 6).groupes) {
       const partie = partiePourTexte(plan, `${g.sujet} ${g.exigences.map((e) => e.exigence).join(' ')}`);
       propositions.push(`Proposition de réponse à valider (question nouvelle du DCE, en engagement dans la partie « ${partie.title} ») : ${g.sujet}`);
       propositionsCourt.push({ pid: partie.id, titres: [g.sujet], dansLeTexte: false });

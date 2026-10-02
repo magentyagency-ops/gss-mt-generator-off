@@ -337,6 +337,28 @@ export function lignesEquipe(d: Dimensionnement): string {
   return [...lignes.values()].map((x) => `| ${x.categorie} | ${x.qualification} | ${x.titulaires} | ${x.observation || `${fr(x.heuresSemaine)} h par semaine${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}, soit ${fr(x.etp)} ETP${simultanesTexte(x)}`} |`).join('\n');
 }
 
+/**
+ * Exigence qui ne fait que définir un poste et ses horaires, poste déjà repris par le dimensionnement (même poste, même
+ * site) : ce n'est pas une question nouvelle (ifsem 335 : « présence permanente d'un ADS à Ivry, 7 j/7 et 24 h/24, en
+ * vacations de 7 h à 19 h et de 19 h à 7 h » proposée à part avec un engagement « [À COMPLÉTER] », alors que le tableau
+ * de l'équipe dédiée compte déjà les ADS du site d'Ivry-sur-Seine).
+ */
+export function exigenceDePosteDimensionne(exigence: string, d: Dimensionnement | null | undefined): boolean {
+  if (!d?.profils?.length) return false;
+  const net = (t: string) => ` ${normaliser(t).replace(/[^a-z0-9]+/g, ' ').trim()} `;
+  const e = net(exigence);
+  if (!/ 24 ?h ?24 | 7 ?j(?:ours)? ?(?:sur )?7 | \d{1,2} ?h(?: ?\d{2})? (?:a|au|jusqu a) \d{1,2} ?h|vacations?|permanen|en continu|jour et nuit/.test(e)) return false;
+  const GENERIQUES = new Set(['site', 'sites', 'campus', 'batiment', 'batiments', 'centre', 'sur', 'seine', 'saint', 'sainte', 'principal', 'annexe']);
+  return d.profils.some((p) => {
+    const prof = net(p.profil);
+    const q = net(p.qualification).trim();
+    const poste = (/ agents? de (?:securite|surveillance|surete) | ads /.test(prof) && / ads | agents? de (?:securite|surveillance|surete) /.test(e))
+      || (!!q && q.length >= 4 && e.includes(` ${q} `));
+    if (!poste) return false;
+    return p.lieux.some((l) => net(l).trim().split(' ').filter((w) => w.length >= 4 && !GENERIQUES.has(w)).some((w) => e.includes(` ${w} `)));
+  });
+}
+
 /** Phrase de synthèse du dispositif d'un cas pratique, plage par plage. */
 export function syntheseCasPratique(d: Dimensionnement): string {
   const plages = [...new Set(d.casPratique.map((l) => l.plage))];

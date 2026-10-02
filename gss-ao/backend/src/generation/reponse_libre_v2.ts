@@ -1504,6 +1504,9 @@ export function controlerProposition(texte: string, montantsGss: string[] = []):
     const gardees = corps.split(/(?<=[.!?])\s+/).filter((ph) => {
       if (INTERDIT.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion ||= /\[À COMPLÉTER\]/.test(ph); return false; }
       if (/\b(?:si|lorsque|quand|dont|notamment)\s*:?\s*\[À COMPLÉTER\]\s*[.;]?\s*$/i.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion = true; return false; }
+      // Engagement réduit à un oui ou non laissé en blanc (ifsem 335 : « Engagement de GSS sur la couverture permanente de ce
+      // poste et ces horaires : [À COMPLÉTER]. ») : la proposition est déjà « à valider », la phrase et sa question partent.
+      if (/^\s*(?:\*\*)?\s*(?:engagement|confirmation|validation)\b[^:]{0,200}:\s*\[À COMPLÉTER\]\s*\.?\s*(?:\*\*)?\s*$/i.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion = true; return false; }
       // Fait accompli ou pièce jointe affirmés par GSS sans source (citedia 341 : « La visite obligatoire des lieux a été
       // effectuée le 7 octobre 2026 », « L'attestation… est jointe à l'offre ») : retiré, demandé à GSS.
       if (FAIT_ACCOMPLI.test(ph)) {
