@@ -5111,11 +5111,17 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       }
     };
     /** Question(s) à poser pour un critère de grille resté incomplet : les questions précises du rédacteur. */
+    /** Question générique d'un critère (aucune question précise du rédacteur) → champ : remplacée, dans les consultations,
+     *  par les questions précises de ses emplacements (vitry 241 : « Critère « SOUS CRITERE 3 » : quelle information… »,
+     *  reformulée « À demander à l'acheteur » alors que les effectifs sont des données de GSS). */
+    const questionsVaguesGrille = new Map<string, number>();
     const questionsGrille = (d: FieldDesc): string[] => {
       const precises = confirmationsParChamp.get(d.id) || [];
       if (precises.length) return precises;
       const q = (d.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '';
-      return [`Critère « ${q.split(' : ')[0].slice(0, 140)} » : quelle information faut-il écrire à la place du repère [À COMPLÉTER] ?`];
+      const vague = `Critère « ${libelleQuestionCadre(q, 140)} » : quelle information faut-il écrire à la place du repère [À COMPLÉTER] ?`;
+      questionsVaguesGrille.set(vague, d.id);
+      return [vague];
     };
 
     /**
@@ -5876,7 +5882,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
           continue;
         }
         if (!contexteVide && !/laiss[ée]e? vide|partie manquante|passage manquant|donn[ée]e pr[ée]cise (?:doit figurer|manque)|emplacement [àa] compl[ée]ter|information manquante/i.test(el.question)) continue;
-        const libelleCadre = ((ctxChamp.match(/Question:\s*"([^"]*)"/) || [])[1] || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+        const libelleCadre = libelleQuestionCadre((ctxChamp.match(/Question:\s*"([^"]*)"/) || [])[1] || '');
         el.question = `Quelle information faut-il écrire${libelleCadre ? ` dans la réponse à « ${libelleCadre} »` : ''}${contexteVide ? '' : `, à la place de « [À COMPLÉTER] » dans la phrase « ${el.contexte.replace(REPERE_TECHNIQUE, '').replace(/\s+/g, ' ').trim().slice(0, 220)} »`} ?`;
       }
     } catch (e: any) {
@@ -6015,7 +6021,13 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       consultations: [
         ...new Set([
           ...(descriptors.some((d) => d.grille)
-            ? await this.consoliderConsultations([...aCompleter, ...confirmationsGss], { dce: dceContext, horsNormandie: marcheHorsNormandie(analysisData, dceContext) })
+            ? await this.consoliderConsultations([...aCompleter.flatMap((q) => {
+              // Question générique d'un critère : les questions précises de ses emplacements, une fois chacune.
+              const champ = questionsVaguesGrille.get(q);
+              if (champ === undefined) return [q];
+              const precises = [...new Set(elementsACompleter.filter((el) => signets.find((x) => x.cle === el.cle)?.champ === champ).map((el) => el.question).filter((x) => x && !questionsVaguesGrille.has(x)))];
+              return precises.length ? precises : [q];
+            }), ...confirmationsGss], { dce: dceContext, horsNormandie: marcheHorsNormandie(analysisData, dceContext) })
             : [...aCompleter, ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))]),
         ].map((c) => (/p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(c) ? 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».' : c).replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean).map(questionExacte)),
         // Une ligne par réponse à relire ou à valider (même intitulé possible : une ligne chacune, comme le premier message).

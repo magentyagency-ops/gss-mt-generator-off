@@ -575,13 +575,17 @@ export function nettoyerReponseCadre(texte: string): string {
   const vues = new Set<string>();
   const mots = (l: string) => new Set(normaliser(l.split(':')[0]).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length > 2));
   const autres = lignes.filter((l) => l.trim() && !/^\[À COMPLÉTER\][.;]?$/.test(l.trim())).length;
-  for (const l of lignes) {
+  for (const [i, l] of lignes.entries()) {
     const t = l.trim();
     // « [À COMPLÉTER] » seul sur sa ligne au milieu d'une réponse rédigée (havre1 181, 3.4) : sans objet, retiré ; sauf
-    // sous un sous-titre (ca_normandie 221, 2.2 : « Besoin urgent de renfort hors astreinte » restait imprimé sans texte) :
-    // le repère reste, la donnée est demandée à GSS.
+    // sous un sous-titre resté sans texte (ca_normandie 221, 2.2 : « Besoin urgent de renfort hors astreinte » restait
+    // imprimé sans texte) : le repère reste, la donnée est demandée à GSS. Un sous-titre dont le texte suit le repère
+    // (vitry 241, critère 3 : « Organisation des déplacements / [À COMPLÉTER] / Nous encourageons nos salariés… ») n'est
+    // pas vide : le repère est retiré.
     const precedente = [...out].reverse().find((x) => x.trim()) || '';
-    if (/^\[À COMPLÉTER\][.;]?$/.test(t) && autres > 0 && !estSousTitreCadre(precedente)) continue;
+    const suivante = lignes.slice(i + 1).find((x) => x.trim()) || '';
+    const sousTitreVide = estSousTitreCadre(precedente) && (!suivante.trim() || estSousTitreCadre(suivante) || /^\[À COMPLÉTER\]/.test(suivante.trim()));
+    if (/^\[À COMPLÉTER\][.;]?$/.test(t) && autres > 0 && !sousTitreVide) continue;
     if (/^(?:[•\-*]|\d+[.)])\s+[^:]{2,80}:\s*$/.test(t)) {
       // Puce de libellé sans contenu : rien ne la suit, ou la ligne suivante n'est pas une puce (fin de liste).
       const i = lignes.indexOf(l);
