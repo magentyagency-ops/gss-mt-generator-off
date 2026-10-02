@@ -4683,6 +4683,9 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const svgComprehension = new Map<number, string>();
     /** Réponses de compréhension restées sans schéma de process (R4-2), signalées à GSS dans les consultations. */
     const alertesComprehension = new Set<string>();
+    /** Champs dont la rédaction automatique a échoué (OpenAI en panne, réponse illisible) : intitulé, et si le texte du
+     *  mémoire type de GSS a été repris tel quel (T4-COH-1). */
+    const echecsRedaction = new Map<number, { libelle: string; reference: boolean; developpee: boolean }>();
     /** Puces d'engagement ajoutées par la couverture du CCTP, par champ (parties limitées en pages). */
     const ajoutsCouvertureCadre = new Map<number, string[]>();
     /** Hauteur maximale (EMU) des schémas par réponse, et place partagée des parties limitées en pages. */
@@ -5063,7 +5066,21 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
         [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
         temperature, label, true, 'redaction', 0,
       );
-      if (aiResponse === null) return;
+      // Rédaction impossible (OpenAI en panne, réponse vide ou illisible) : réponse développée → texte du mémoire type de GSS
+      // repris tel quel (comme la réponse libre, « texte de référence conservé ») et signalé à relire ; sinon champ signalé.
+      const echec = () => {
+        const lib = libelleQuestionCadre(String(questionMT || '').replace(/\[CHAMP_\d+\]/gi, '').trim() || intitulePrincipal(((f.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').replace(/\[CHAMP_\d+\]/gi, '')) || `Champ ${f.id}`);
+        const ref = developpee && candidats.length ? texteBrut(String(candidats[0].texte || '')).trim() : '';
+        if (ref) {
+          replacements.push({ id: f.id, value: ref });
+          propositionsCadre.set(f.id, `Réponse à relire (rédaction automatique indisponible : texte du mémoire type de GSS repris tel quel) : ${lib}`);
+        }
+        echecsRedaction.set(f.id, { libelle: lib, reference: !!ref, developpee });
+      };
+      if (aiResponse === null) { echec(); return; }
+      let lisible = true;
+      try { const d0 = JSON.parse(aiResponse || '{}'); lisible = (d0?.value ?? (Array.isArray(d0?.replacements) ? d0.replacements[0]?.value : undefined)) !== undefined; } catch { lisible = false; }
+      if (!lisible && developpee) { echec(); return; }
       try {
         const data = JSON.parse(aiResponse || '{}');
         let value = data.value ?? (Array.isArray(data.replacements) ? data.replacements[0]?.value : undefined);
@@ -5202,7 +5219,10 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
         [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
         0.15, `Zone "${zone.label.slice(0, 30)}" (${N}l)`, true, 'redaction', 0,
       );
-      if (aiResponse === null) return;
+      if (aiResponse === null) {
+        for (const f of zone.fields) echecsRedaction.set(f.id, { libelle: libelleQuestionCadre(zone.label || `Champ ${f.id}`), reference: false, developpee: false });
+        return;
+      }
       try {
         const data = JSON.parse(aiResponse || '{}');
         const items: any[] = Array.isArray(data.items) ? data.items : [];
@@ -5247,10 +5267,22 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
       if (onProgress) onProgress(pct, label);
     });
     await runPool(tracked, 2);
+    // OpenAI en panne pendant le remplissage (T4-COH-1) : plus de la moitié des réponses non rédigées → aucun cadre remis
+    // comme « terminé » (erreur claire, à relancer) ; sinon chaque réponse non rédigée est signalée à GSS.
+    if (echecsRedaction.size) {
+      console.warn(`[MemoireGenerator] Rédaction automatique indisponible pour ${echecsRedaction.size}/${totalJobs} champ(s) du cadre.`);
+      if (echecsRedaction.size * 2 > totalJobs) {
+        throw new Error(`Rédaction automatique indisponible (OpenAI) : ${echecsRedaction.size} réponse(s) du cadre sur ${totalJobs} n'ont pas pu être rédigées. Aucun document n'est remis ; relancez la génération.`);
+      }
+    }
 
     // Informations variables à confirmer par GSS (registre) : le marqueur ne doit JAMAIS apparaître dans le
     // document remis à l'acheteur → retiré de la valeur, remonté dans les consultations.
     const confirmationsGss = new Set<string>(alertesComprehension);
+    {
+      const sansTexte = [...echecsRedaction.values()].filter((x) => !x.reference).map((x) => x.libelle);
+      if (sansTexte.length) confirmationsGss.add(`Rédaction automatique indisponible pour ${sansTexte.length === 1 ? 'la réponse' : `${sansTexte.length} réponses`} du cadre ${[...new Set(sansTexte)].map((l) => `« ${l} »`).join(', ')} : à relire et compléter avant la remise (via l'assistant). Pouvez-vous indiquer les éléments à écrire ?`);
+    }
     const confirmationsParChamp = new Map<number, string[]>();
     // Case « PME : Oui / Non » : réponse de GSS au registre (statut_pme) ; à défaut, aucune case cochée et la question
     // posée à GSS (le mémoire type écrit « PME » alors que l'effectif de 380 salariés dépasse le seuil européen).
