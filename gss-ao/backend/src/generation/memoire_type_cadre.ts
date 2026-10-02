@@ -672,7 +672,16 @@ export function completerSousTitresVides(texte: string, sources: Array<{ texte?:
     let j = i + 1;
     while (j < lignes.length && !lignes[j].trim()) j++;
     const repere = j < lignes.length && /^\s*\[À COMPLÉTER\][.;]?\s*$/.test(lignes[j]);
-    const vide = j >= lignes.length || repere || estSousTitreCadre(lignes[j]);
+    // Ligne suivante qui amorce une liste (« Nous veillons au respect de bonnes pratiques dans nos locaux : » puis ses
+    // puces), ou qui suit ce sous-titre dans le texte de GSS (havre2 341 : « Les économies d'énergie : » complété par une
+    // phrase insérée avant l'amorce de sa liste) : le sous-titre a son texte.
+    const amorce = j < lignes.length && /:\s*$/.test(lignes[j]) && j + 1 < lignes.length && /^\s*(?:[•\-*]|\d+[.)])\s/.test(lignes[j + 1]);
+    const n = (x: string) => normaliser(x).replace(/[^a-z0-9]+/g, ' ').trim();
+    const suiteDeGss = j < lignes.length && sources.some((src) => {
+      const ls = String(src.texte || '').split('\n').map(n).filter(Boolean);
+      return ls.some((l, k) => l === n(lignes[i]) && ls[k + 1] === n(lignes[j]));
+    });
+    const vide = j >= lignes.length || repere || (estSousTitreCadre(lignes[j]) && !amorce && !suiteDeGss);
     if (!vide) continue;
     const cible = racines(lignes[i].replace(/[#*]/g, ''));
     let meilleure = '', score = 0, exaequo = 0;
@@ -710,7 +719,76 @@ export const SEUIL_FIDELITE_CADRE = SEUIL_FIDELITE;
  */
 export function fideliteReponse(reference: string, reponse: string, limite = false, autorises = ''): number {
   const couverture = fidelite(reference, reponse, 0.8, autorises);
-  return limite ? Math.max(couverture, fidelite(reponse, reference, 0.8, autorises)) : couverture;
+  const base = limite ? Math.max(couverture, fidelite(reponse, reference, 0.8, autorises)) : couverture;
+  return base * ordreEtSousTitres(reference, reponse);
+}
+
+/**
+ * Forme du texte de GSS dans une réponse (havre2 335 et 341, champ 37 : fidélité affichée 1,00 pour un texte remis
+ * dans le désordre, une puce en double et quatre sous-titres perdus) : produit de trois parts, chacune de 0 à 1 :
+ *  - ordre : phrases de GSS reprises dans l'ordre de la référence (plus longue suite dans l'ordre / phrases reprises) ;
+ *  - doublons : phrases de GSS écrites une seule fois (une phrase de GSS reprise deux fois compte en plus) ;
+ *  - sous-titres : sous-titres de GSS (« Les transports : ») présents devant un contenu repris.
+ * 1 quand la réponse garde l'ordre, les sous-titres et aucune redite.
+ */
+/** Sous-titre d'un texte de GSS en texte brut (« Les transports : », « **Le numérique** ») : court, sans phrase avant les deux-points. */
+export function sousTitreDeReference(ligne: string): boolean {
+  const l = String(ligne || '').trim();
+  if (/^\*\*[^*]+\*\*\s*:?$/.test(l)) return true;
+  return /:\s*$/.test(l) && motsDePhrase(l).length <= 8 && estSousTitreCadre(l.replace(/\s*:\s*$/, ''));
+}
+
+export function ordreEtSousTitres(reference: string, reponse: string): number {
+  const net = (t: string) => normaliser(String(t || '').replace(/\*\*/g, '')).replace(/^[\s•*\-\d.)]+/, '').replace(/[^a-z0-9']+/g, ' ').trim();
+  const phrases = (t: string) => String(t || '').split('\n').flatMap((l, ligne) => l.split(/(?<=[.!?;])\s+/).map((brut) => ({ brut, ligne, mots: net(brut).split(' ').filter(Boolean) })))
+    .filter((x) => x.mots.length >= 3);
+  const ref = phrases(reference);
+  const cand = phrases(reponse);
+  if (!ref.length || !cand.length) return 1;
+  // Phrase de la réponse la plus proche de chaque phrase de GSS (ressemblance de 80 % au moins), et redites.
+  const positions: number[] = [];
+  const contenuRepris = new Set<number>();
+  let reprises = 0;
+  let doublons = 0;
+  for (const p of ref) {
+    const jeu = new Set(p.mots);
+    const proches: number[] = [];
+    cand.forEach((c, j) => {
+      let communs = 0;
+      for (const w of c.mots) if (jeu.has(w)) communs++;
+      if (communs / Math.max(p.mots.length, c.mots.length) < 0.48) return;
+      if (similarite(p.mots, c.mots) >= 0.8) proches.push(j);
+    });
+    if (!proches.length) continue;
+    reprises++;
+    contenuRepris.add(p.ligne);
+    positions.push(proches[0]);
+    doublons += proches.length - 1;
+  }
+  if (!reprises) return 1;
+  // Plus longue suite croissante des positions (ordre de GSS conservé).
+  const fins: number[] = [];
+  for (const x of positions) {
+    let a = 0, b = fins.length;
+    while (a < b) { const m = (a + b) >> 1; if (fins[m] < x) a = m + 1; else b = m; }
+    fins[a] = x;
+  }
+  const ordre = fins.length / positions.length;
+  const sansDoublon = reprises / (reprises + doublons);
+  // Sous-titres de GSS dont le contenu (lignes suivantes, jusqu'à une ligne vide ou au sous-titre suivant) est repris.
+  const lignesRef = String(reference || '').split('\n');
+  const lignesRep = new Set(String(reponse || '').split('\n').map((l) => net(l)).filter(Boolean));
+  let attendus = 0, presents = 0;
+  lignesRef.forEach((l, i) => {
+    if (!sousTitreDeReference(l)) return;
+    let repris = false;
+    for (let j = i + 1; j < lignesRef.length && lignesRef[j].trim() && !sousTitreDeReference(lignesRef[j]); j++) if (contenuRepris.has(j)) { repris = true; break; }
+    if (!repris) return;
+    attendus++;
+    if (lignesRep.has(net(l))) presents++;
+  });
+  const sousTitres = attendus ? presents / attendus : 1;
+  return ordre * sansDoublon * sousTitres;
 }
 
 /**
@@ -831,7 +909,14 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   const autorises = nombresAutorisesDe(o.dce || '');
   const fideliteAvant = mesure(reponse);
   // Réponse du modèle.
-  const sortie: Ligne[] = decouper(reponse).map((l) => ({ items: l.map((brut) => ({ brut, mots: motsDePhrase(brut) })) }));
+  // Phrase du modèle collée après l'amorce d'une liste de GSS (havre2 341 : « …les recycle selon trois filières : Ces
+  // dispositions associent… ») : l'amorce et la phrase ajoutée sont deux phrases (six mots au moins de part et d'autre).
+  const separerAmorce = (brut: string): string[] => {
+    const m = /^(.*\S)\s:\s+([A-ZÀ-Ý].*[.!?])$/.exec(brut);
+    if (!m || motsDePhrase(m[1]).length < 6 || motsDePhrase(m[2]).length < 6) return [brut];
+    return [`${m[1]} :`, m[2]];
+  };
+  const sortie: Ligne[] = decouper(reponse).map((l) => ({ items: l.flatMap(separerAmorce).map((brut) => ({ brut, mots: motsDePhrase(brut) })) }));
   const items = sortie.flatMap((l) => l.items);
   // 1. Appariement phrase à phrase (meilleures ressemblances d'abord, une phrase de GSS pour une phrase de la réponse).
   const paires: Array<{ i: Item; r: number; s: number }> = [];
@@ -927,6 +1012,132 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   detacherAjouts();
   const rendre = () => sortie.map((l) => l.items.map((x) => x.brut.trim()).join(' ')).join('\n').replace(/\n{3,}/g, '\n\n').trim();
   const compter = (t: string) => (t.match(/[\wÀ-ÿ'’-]+/g) || []).length;
+  // Sous-titre de GSS (ligne d'une seule phrase courte terminée par « : ») : remis en second, devant son contenu.
+  const sousTitre = (k: number) => lignesRef[ref[k].ligne].length === 1 && /:\s*$/.test(ref[k].brut) && ref[k].mots.length <= 8;
+  // Ligne de sous-titre de la référence (« Les transports : »), même de moins de trois mots (« Le numérique : »).
+  const ligneSousTitre = (i: number) => (lignesRef[i] || []).length === 1 && sousTitreDeReference(lignesRef[i][0]);
+  const estPuce = (i: number) => PUCE.test((lignesRef[i] || [])[0] || '');
+  // Sous-titre de GSS écrit tel quel par le modèle (souvent moins de trois mots, jamais apparié) : c'est celui de GSS.
+  for (const it of items) {
+    if (it.ref !== undefined) continue;
+    const n = normaliser(it.brut.replace(PUCE, '')).replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!n) continue;
+    const k = ref.findIndex((p, j) => !position.has(j) && ligneSousTitre(p.ligne) && normaliser(p.brut).replace(/[^a-z0-9]+/g, ' ').trim() === n);
+    if (k >= 0) { it.ref = k; it.ajout = false; position.set(k, { ligne: ligneDe(it), item: it }); }
+  }
+  /**
+   * Réponse recomposée dans l'ordre du texte de GSS (consigne 5, D7 ; havre2 335 et 341, champ 37 : lignes de GSS dans le
+   * désordre, puces du numérique fondues dans le paragraphe du recyclage, phrase de l'IA entre « trois filières : » et
+   * sa liste, sous-titres perdus) : chaque ligne de GSS reprise revient à sa place, avec la puce de GSS ; chaque sous-titre
+   * de GSS est remis devant son contenu repris ; les ajouts propres à la question suivent la ligne de GSS qu'ils suivaient
+   * dans la réponse (dans le paragraphe s'ils le prolongeaient), jamais entre une ligne terminée par « : » et sa liste
+   * (après la liste, ou après le bloc du sous-titre). `ajoutsALaFin` : tous les ajouts après le texte de GSS.
+   */
+  const recomposer = (ajoutsALaFin: boolean) => {
+    // Ajouts regroupés par ligne de GSS d'ancrage (dernière phrase de GSS qui les précède dans la réponse).
+    type Morceau = { ancre: number; lignes: Item[][]; dansLaLigne: boolean };
+    const morceaux: Morceau[] = [];
+    let ancre = -1;
+    let ligneAncre: Ligne | null = null;
+    for (const l of sortie) {
+      let courant: Item[] | null = null;
+      for (const it of l.items) {
+        if (it.ref !== undefined) { ancre = it.ref; ligneAncre = l; courant = null; continue; }
+        const dernier = morceaux[morceaux.length - 1];
+        if (!courant) {
+          courant = [];
+          if (dernier && dernier.ancre === ancre && ligneAncre !== l) dernier.lignes.push(courant);
+          else morceaux.push({ ancre, lignes: [courant], dansLaLigne: ligneAncre === l });
+        }
+        courant.push(it);
+      }
+      if (!l.items.length) { const dernier = morceaux[morceaux.length - 1]; if (dernier && dernier.ancre === ancre) dernier.lignes.push([]); }
+    }
+    // Fin du groupe d'une ligne de GSS : une amorce « … : » ou une puce va jusqu'au bout de sa liste ; un sous-titre jusqu'au bout de son bloc.
+    const finGroupe = (i: number): number => {
+      let j = i;
+      if (ligneSousTitre(i)) {
+        while (j + 1 < lignesRef.length && lignesRef[j + 1].length && !ligneSousTitre(j + 1)) j++;
+        return j;
+      }
+      const dernierePhrase = (lignesRef[i] || [])[(lignesRef[i] || []).length - 1] || '';
+      if (/:\s*$/.test(dernierePhrase) || estPuce(i)) while (j + 1 < lignesRef.length && estPuce(j + 1)) j++;
+      return j;
+    };
+    const presents = (i: number) => ref.map((_, k) => k).filter((k) => ref[k].ligne === i && position.has(k));
+    const nouvelle: Ligne[] = [];
+    const aPlacer = new Map<number, Morceau[]>();
+    const enTete: Morceau[] = [];
+    const aLaFin: Morceau[] = [];
+    for (const m of morceaux) {
+      if (m.ancre < 0) { enTete.push(m); continue; }
+      const i = ref[m.ancre].ligne;
+      // Ajout qui prolonge la ligne de GSS dans la réponse : gardé dans la ligne s'il ne suit pas une amorce « … : » ; sur
+      // une puce, seulement une phrase courte qui la complète (« Avec l'accord de notre interlocuteur, nous y ajoutons un
+      // gilet pare-lame. ») ; sinon après la liste ou le bloc.
+      const premiere = m.lignes[0] || [];
+      const court = premiere.length < 2 && premiere.reduce((a, x) => a + x.mots.length, 0) < 35;
+      const dansLaLigne = m.dansLaLigne && !ligneSousTitre(i) && !/:\s*$/.test(ref[m.ancre].brut) && (!estPuce(i) || court);
+      if (ajoutsALaFin && !(dansLaLigne && m.lignes.length === 1)) { aLaFin.push(m); continue; }
+      const cible = dansLaLigne ? i : finGroupe(i);
+      if (!aPlacer.has(cible)) aPlacer.set(cible, []);
+      aPlacer.get(cible)!.push({ ...m, dansLaLigne });
+    }
+    const poser = (m: Morceau, ligne?: Ligne) => {
+      m.lignes.forEach((items, n) => {
+        if (n === 0 && m.dansLaLigne && ligne) ligne.items.push(...items);
+        else nouvelle.push({ items });
+      });
+    };
+    for (const m of enTete) poser(m);
+    let vide = false;
+    for (let i = 0; i < lignesRef.length; i++) {
+      let ligne: Ligne | undefined;
+      if (!lignesRef[i].length) {
+        if (nouvelle.length && !vide) { nouvelle.push({ items: [] }); vide = true; }
+      } else if (ligneSousTitre(i)) {
+        // Sous-titre : imprimé si une ligne de son bloc est reprise.
+        let repris = false;
+        for (let j = i + 1; j < lignesRef.length && lignesRef[j].length && !ligneSousTitre(j); j++) if (presents(j).length) { repris = true; break; }
+        const k = ref.findIndex((p) => p.ligne === i);
+        if (repris && !exclus[k]) {
+          const it = position.get(k)?.item || { brut: ref[k].brut, mots: ref[k].mots, ref: k };
+          it.brut = ref[k].brut;
+          ligne = { items: [it] };
+          position.set(k, { ligne, item: it });
+          nouvelle.push(ligne);
+          vide = false;
+        }
+      } else {
+        const ks = presents(i);
+        if (ks.length) {
+          const premier = ref.findIndex((p) => p.ligne === i);
+          const puce = (PUCE.exec(ref[premier].brut) || [''])[0];
+          const its = ks.map((k) => position.get(k)!.item);
+          its.forEach((it, n) => { it.brut = `${n === 0 ? puce : ''}${it.brut.replace(PUCE, '')}`; });
+          ligne = { items: its };
+          ks.forEach((k, n) => position.set(k, { ligne: ligne!, item: its[n] }));
+          nouvelle.push(ligne);
+          vide = false;
+        }
+      }
+      for (const m of aPlacer.get(i) || []) {
+        // Ajout placé après une liste de GSS : son propre paragraphe (jamais lu comme une puce de la liste).
+        if (!m.dansLaLigne && estPuce(i) && nouvelle.length && nouvelle[nouvelle.length - 1].items.length) nouvelle.push({ items: [] });
+        poser(m, ligne);
+        vide = false;
+      }
+    }
+    if (aLaFin.length) {
+      if (nouvelle.length && !vide) nouvelle.push({ items: [] });
+      for (const m of aLaFin) poser(m);
+    }
+    sortie.splice(0, sortie.length, ...nouvelle.filter((l, n, t) => l.items.length || (n > 0 && t[n - 1].items.length)));
+  };
+  // Réponse du modèle qui ne reprend presque rien du texte de GSS (fidélité sous 0,5, havre2 : 0,14 et 0,17) : le texte de
+  // GSS est remis tel quel, et ce que le modèle a écrit pour la question le suit.
+  const ajoutsALaFin = fideliteAvant < 0.5;
+  recomposer(ajoutsALaFin);
   let texte = rendre();
   if (o.limite && mesure(texte) >= seuil) {
     return { texte, fideliteAvant, fidelite: mesure(texte), reformulees, reinserees: lignesTableauRemises, ajoutsRetires: 0, bribesRetirees: 0 };
@@ -973,8 +1184,6 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     reinserees++;
     return true;
   };
-  // Sous-titre de GSS (ligne d'une seule phrase courte terminée par « : ») : remis en second, devant son contenu.
-  const sousTitre = (k: number) => lignesRef[ref[k].ligne].length === 1 && /:\s*$/.test(ref[k].brut) && ref[k].mots.length <= 8;
   const exclue = (k: number) => exclus[k];
   for (let k = 0; k < ref.length; k++) {
     if (position.has(k) || ref[k].mots.length < 3 || sousTitre(k) || exclue(k)) continue;
@@ -1009,6 +1218,7 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     }
   }
   detacherAjouts();
+  recomposer(ajoutsALaFin);
   texte = rendre();
   // 3. Limite de longueur atteinte et fidélité encore insuffisante : ajouts retirés, du dernier au premier.
   let ajoutsRetires = 0;

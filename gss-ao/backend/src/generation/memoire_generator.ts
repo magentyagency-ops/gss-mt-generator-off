@@ -7872,7 +7872,9 @@ Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "tex
         for (const a of ajouts) {
           const lignes = v.split('\n');
           const k = a.apres ? lignes.findIndex((l) => l.trim() === a.apres) : -1;
-          if (k < 0) { v = `${v.trimEnd()}\n• ${a.texte}`; n++; continue; }
+          // Sans rattachement : à la fin, séparée par une ligne vide quand la réponse finit par une liste de GSS (havre2 341 :
+          // « GSS n'autorise pas l'accès des véhicules… » imprimée comme une puce du « Numérique »).
+          if (k < 0) { const fin = v.trimEnd(); v = `${fin}\n${/(?:^|\n)\s*(?:[•\-*]|\d+[.)])\s[^\n]*$/.test(fin) ? '\n' : ''}• ${a.texte}`; n++; continue; }
           // Fin du paragraphe (et de la liste) qui suit le sous-titre.
           let fin = k + 1;
           while (fin < lignes.length && lignes[fin].trim()) fin++;

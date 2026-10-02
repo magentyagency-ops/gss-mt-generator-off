@@ -994,8 +994,12 @@ export function nettoyerChampCadre(texte: string): string {
     let j = i + 1;
     while (j < lignes.length && !lignes[j].trim()) j++;
     const suiteListe = j < lignes.length && LISTE.test(lignes[j]);
+    // Sous-titre seul sur sa ligne et suivi, sans ligne vide, de son texte (havre2 341, champ 37 : « Un réel engagement : »,
+    // « Le recyclage de nos tenues : » du texte de GSS retirés) : ce n'est pas une étiquette vide, il est gardé.
+    const sousTitreSuivi = /^[A-ZÀ-Ý][^.!?:]{1,80}\s?:\s*$/.test(l.trim()) && l.trim().split(/\s+/).length <= 9
+      && i + 1 < lignes.length && !!lignes[i + 1].trim() && (!/:\s*$/.test(lignes[i + 1]) || lignes[i + 1].trim().split(/\s+/).length > 9);
     // Étiquette finale sans contenu (et sans liste qui suit) : retirée de la ligne.
-    if (/:\s*$/.test(l) && !suiteListe) {
+    if (/:\s*$/.test(l) && !suiteListe && !sousTitreSuivi) {
       const debut = l.search(/(?:^|[.!?]\s+)[^.!?]*:\s*$/);
       const reste = debut <= 0 ? '' : l.slice(0, debut + 1).trim();
       if (debut <= 0 && l.trim().split(/\s+/).length > 12) { /* phrase longue terminée par « : » : gardée */ } else l = reste;
