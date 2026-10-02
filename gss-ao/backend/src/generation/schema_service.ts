@@ -3,7 +3,7 @@ import path from 'path';
 import { spawn, spawnSync } from 'child_process';
 import OpenAI from 'openai';
 import { getSettings } from '../core/config';
-import { reglagesIA, prefixeEnCache } from '../core/modeles_ia';
+import { reglagesIA, prefixeEnCache, creditEpuise, CreditOpenAIEpuise } from '../core/modeles_ia';
 import { themeActif, estRetourArriere, envTheme, schemasBibliotheque, FormatSchema } from './themes';
 
 /**
@@ -332,6 +332,7 @@ export class SchemaService {
             console.warn(`[SchemaService] ${page.key} : réponse IA non JSON, nouvel appel.`);
           }
         } catch (e: any) {
+          if (creditEpuise(e)) throw new CreditOpenAIEpuise();
           const attente = (e?.status === 429 ? 15_000 : 5_000) * appel;
           console.warn(`[SchemaService] ${page.key} : appel IA en échec (${e?.status || ''} ${e?.message || e}), nouvel essai dans ${attente / 1000} s.`);
           await new Promise((r) => setTimeout(r, attente));

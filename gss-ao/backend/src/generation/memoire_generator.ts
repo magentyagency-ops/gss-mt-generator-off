@@ -37,7 +37,7 @@ import PizZip from 'pizzip';
 import OpenAI from 'openai';
 import { Client as PgClient } from 'pg';
 import { getSettings } from '../core/config';
-import { modeleIA, reglagesIA, prefixeEnCache, UsageIA } from '../core/modeles_ia';
+import { modeleIA, reglagesIA, prefixeEnCache, UsageIA, creditEpuise, CreditOpenAIEpuise } from '../core/modeles_ia';
 import { DB, FichiersDB } from '../core/db';
 import { getScopedClient } from '../core/supabase';
 import { extractText, loadDocxStructure, loadDocxTemplateAnnotated, convertDocToDocx, findTextutil, convertirDocAvecWord } from '../ingestion/docConverter';
@@ -2086,6 +2086,17 @@ export class MemoireGenerator {
   private memoireModel: string = MEMOIRE_MODEL;
   /** « Demande particulière » saisie juste avant la génération (consigne et/ou document complémentaire). */
   private demandeParticuliere: DemandeParticuliere | null = null;
+  /** Crédit OpenAI épuisé pendant cette génération : plus aucun appel, aucun document produit (CreditOpenAIEpuise). */
+  private creditOpenAIEpuise = false;
+  private verifierCredit(): void {
+    if (this.creditOpenAIEpuise) throw new CreditOpenAIEpuise();
+  }
+  private signalerCredit(e: any, label: string): void {
+    if (!creditEpuise(e)) return;
+    if (!this.creditOpenAIEpuise) console.error(`[MemoireGenerator] ${label} : crédit OpenAI épuisé (${e?.code || e?.status || ''}) — génération interrompue, aucun mémoire produit.`);
+    this.creditOpenAIEpuise = true;
+    throw new CreditOpenAIEpuise();
+  }
 
   constructor(apiKey?: string) {
     const settings = getSettings();
@@ -2396,6 +2407,8 @@ export class MemoireGenerator {
     if (jsonMode && !messages.some((m) => typeof m?.content === 'string' && /json/i.test(m.content))) {
       messages = [...messages, { role: 'system', content: 'Réponds uniquement par un objet JSON valide.' }];
     }
+    // Crédit épuisé plus tôt dans la génération : aucun nouvel appel (la génération s'interrompt).
+    this.verifierCredit();
     const maxAttempts = 5;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -2408,9 +2421,12 @@ export class MemoireGenerator {
       } catch (e: any) {
         const status = e?.status || e?.code || '';
         const msg = (e?.message || String(e)).toString();
+        // Crédit OpenAI épuisé (insufficient_quota, credit_balance_exhausted) : jamais réessayé ; la génération est
+        // interrompue avec une erreur explicite (aucun mémoire dégradé remis sans avertissement).
+        if (e instanceof CreditOpenAIEpuise) throw e;
+        this.signalerCredit(e, label);
         // Coupure réseau passagère (pas de statut HTTP) : même traitement qu'une limite de débit.
-        // Crédit OpenAI épuisé (« insufficient_quota ») : inutile de réessayer.
-        if ((status === 429 || !e?.status) && e?.code !== 'insufficient_quota' && attempt < maxAttempts) {
+        if ((status === 429 || !e?.status) && attempt < maxAttempts) {
           const wait = 15000 * attempt; // 15s, 30s, 45s, 60s
           console.warn(`[MemoireGenerator] ${label}: ${e?.status ? '429 (TPM)' : 'connexion interrompue'} — attente ${wait / 1000}s puis réessai (${attempt}/${maxAttempts - 1})`);
           await this.sleep(wait);
@@ -2580,6 +2596,7 @@ ${rubriques.map((x) => `- ${x.id} : ${x.title}`).join('\n')}` },
           for (const d of resp.data) out.push(d.embedding as number[]);
           break;
         } catch (e: any) {
+          this.signalerCredit(e, 'Embeddings');
           const status = e?.status || e?.code || '';
           if (status === 429 && attempt < 5) {
             const wait = 10000 * attempt;
@@ -5747,7 +5764,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       console.warn(`[MemoireGenerator] Schémas GSS non insérés (non bloquant) : ${e?.message || e}`);
     }
 
-    // 8. Serialize and save
+    // 8. Serialize and save (jamais de document si le crédit OpenAI s'est épuisé en cours de génération)
+    this.verifierCredit();
     if (onProgress) onProgress(98, 'Génération du document Word…');
     const serializer = new XMLSerializer();
     zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
@@ -7479,6 +7497,7 @@ RÈGLES DE FORME (rendu Marp) :
     opts: { onProgress?: (progress: number, message: string) => void; schemas?: Map<string, string>; cover?: any; ajouts?: AjoutLibre[]; photos?: Record<string, Array<{ chemin: string; legende?: string }>>; titresSchemas?: Record<string, string> },
     theme: string,
   ): Promise<{ filePath: string; schemas: Map<string, string>; cover: any }> {
+    this.verifierCredit();
     const onProgress = opts.onProgress;
     const blocs = rubriquesV2(plan, opts.ajouts || []);
     const avecTexte = (id: string) => !!(sectionsMap[id] || '').trim();
@@ -8587,6 +8606,7 @@ FORME : sous-titres « ## » courts (un par élément), paragraphes courts et li
     theme?: string,
     policeMin?: number,
   ): Promise<{ filePath: string; pages: number; corps: number }> {
+    this.verifierCredit();
     const parties = court.plan
       .filter((p) => (sections[p.id] || '').trim())
       .map((p) => ({
@@ -8820,6 +8840,7 @@ FORME : sous-titres « ## » courts (un par élément), paragraphes courts et li
     onProgress?: (progress: number, message: string) => void,
     analyseDce?: any,
   ): Promise<{ filePath: string; generatedData: Record<string, string>; schemas?: Map<string, string>; cover?: any }> {
+    this.verifierCredit();
     const cover = analyseDce ? await this.getCoverInfo(dossierId, analyseDce) : undefined;
     const r = await this.rendreDepuisSections(sectionsMap, dossierId, { onProgress, cover });
     return { filePath: r.filePath, generatedData: {}, schemas: r.schemas, cover: r.cover };
@@ -8851,6 +8872,7 @@ FORME : sous-titres « ## » courts (un par élément), paragraphes courts et li
       titresSchemas?: Record<string, string>;
     } = {},
   ): Promise<{ filePath: string; schemas: Map<string, string>; cover: any }> {
+    this.verifierCredit();
     const onProgress = opts.onProgress;
     const theme = themeActif(opts.theme);
     if (estPlanV2(opts.plan)) return this.rendreDepuisSectionsV2(sectionsMap, dossierId, opts.plan, opts, theme);

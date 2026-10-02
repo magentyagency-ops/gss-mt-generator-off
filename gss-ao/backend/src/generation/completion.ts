@@ -22,7 +22,7 @@ import OpenAI from 'openai';
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getSettings } from '../core/config';
-import { reglagesIA } from '../core/modeles_ia';
+import { reglagesIA, creditEpuise, CreditOpenAIEpuise } from '../core/modeles_ia';
 import { personnesDuRole, retirerCommentairesInternes } from './base_memoires';
 import { RETOUR_ARRIERE } from './themes';
 import type { PlanMemoireType } from './memoire_type';
@@ -504,7 +504,9 @@ export async function json(system: string, user: string): Promise<any> {
       });
       break;
     } catch (e: any) {
-      const passagere = (!e?.status || e.status === 429 || e.status >= 500) && e?.code !== 'insufficient_quota';
+      // Crédit OpenAI épuisé (insufficient_quota, credit_balance_exhausted) : jamais réessayé, erreur explicite.
+      if (creditEpuise(e)) throw new CreditOpenAIEpuise();
+      const passagere = !e?.status || e.status === 429 || e.status >= 500;
       if (!passagere || essai >= 4) throw e;
       await new Promise((ok) => setTimeout(ok, [5_000, 15_000, 30_000][essai - 1]));
     }

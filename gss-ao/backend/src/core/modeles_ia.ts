@@ -122,6 +122,19 @@ function niveauService(model: string): string {
   return /^gpt-6-luna/i.test(model) ? 'flex' : '';
 }
 
+// ── Crédit OpenAI épuisé ─────────────────────────────────────────────────────────────────────
+/** Erreur « crédit OpenAI épuisé » (insufficient_quota, credit_balance_exhausted), quel que soit l'endroit où l'API l'écrit. */
+export function creditEpuise(e: any): boolean {
+  return /insufficient_quota|credit_balance/i.test(`${e?.code || ''} ${e?.error?.code || ''} ${e?.type || ''} ${e?.error?.type || ''} ${e?.message || ''}`);
+}
+/** Génération interrompue : le crédit OpenAI est épuisé ; aucun mémoire n'est produit (message montré à l'utilisateur). */
+export class CreditOpenAIEpuise extends Error {
+  constructor() {
+    super('Crédit OpenAI épuisé : génération interrompue, aucun mémoire produit. Rechargez le crédit OpenAI puis relancez la génération.');
+    this.name = 'CreditOpenAIEpuise';
+  }
+}
+
 // ── Repli automatique du niveau Flex ─────────────────────────────────────────────────────────
 // En Flex, OpenAI peut répondre « ressource indisponible » (429) ou laisser la requête en file d'attente :
 // l'appel est alors refait une fois en niveau standard (coût normal pour CET appel seulement), avec un délai
@@ -143,8 +156,14 @@ const FLEX_DELAI_MS = 15 * 60 * 1000;
           return await appel;
         } catch (e: any) {
           const code = e?.code || e?.error?.code || '';
-          const quota = /insufficient_quota|credit_balance/i.test(`${code} ${e?.message || ''}`);
-          const flexIndisponible = (e?.status === 429 && !quota) || /timed? ?out|timeout/i.test(`${e?.name || ''} ${e?.message || ''}`);
+          const quota = creditEpuise(e) || /insufficient_quota|credit_balance/i.test(String(code));
+          const statut = Number(e?.status) || 0;
+          // Erreur passagère (en Flex, le SDK ne réessaie plus : maxRetries 0) : 429 hors crédit épuisé, délai dépassé,
+          // erreur serveur (500, 502, 503…), 408, 409, connexion interrompue. L'appel est refait en niveau standard, avec
+          // les nouvelles tentatives normales du SDK (avant la refonte, le SDK réessayait 2 fois un 5xx).
+          const passagere = !quota && (statut === 429 || statut === 408 || statut === 409 || statut >= 500
+            || /APIConnection|ECONNRESET|ETIMEDOUT|socket hang up|fetch failed/i.test(`${e?.name || ''} ${e?.constructor?.name || ''} ${e?.message || ''}`));
+          const flexIndisponible = passagere || /timed? ?out|timeout/i.test(`${e?.name || ''} ${e?.message || ''}`);
           if (!flexIndisponible) throw e;
           console.warn(`[ModelesIA] Flex indisponible (${e?.status || e?.name || 'délai dépassé'}) : appel refait en niveau standard.`);
           const { service_tier: _niveau, ...standard } = corps;
