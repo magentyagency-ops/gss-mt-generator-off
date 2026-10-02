@@ -1846,27 +1846,50 @@ export function rechercherRubriques(mt: MemoireType, texte: string, n = 2, parmi
     .slice(0, n);
 }
 
+/** Sujets d'une exigence que les rubriques de présentation de GSS (bloc « presentation » : catalogue, identité, valeurs,
+ *  écologie, références) peuvent porter ; une exigence d'exécution (rondes, ouverture, remplacement…) n'y est jamais
+ *  ajoutée (génération réelle cstb 221 : 7 engagements sur les rondes dans « Notre catalogue de prestations »). */
+const SUJET_PRESENTATION = /autoris|agr[ée]ment|cnaps|carte professionnelle|certifi|\biso\b|\brse\b|responsabilit[ée] soci|environnement|[ée]cologi|d[ée]veloppement durable|carbone|d[ée]chets|recycl|r[ée]f[ée]rences?\b|exp[ée]rience|chiffre d.affaires|assurance|responsabilit[ée] civile|implantation|agences?\b|si[èe]ge social|organigramme|valeurs|[ée]thique|d[ée]ontolog|insertion|handicap|[ée]galit[ée]|kbis|attestation/i;
+
 /**
  * Rattache les exigences de la matrice aux rubriques du plan : rubrique du plan citée ; ancienne rubrique (b_*) →
  * rubrique correspondante la plus proche ; sinon recherche lexicale (score ≥ 2). Le reste forme les questions
- * nouvelles (propositions de réponse à faire valider par GSS) ; les pièces de l'offre sont ignorées.
+ * nouvelles (propositions de réponse à faire valider par GSS) ; les pièces de l'offre sont ignorées. Une rubrique ne
+ * reçoit jamais une exigence hors de son sujet (sujet_ajouts : « absence imprévue » refusée dans la rubrique de l'absence
+ * prévue ; bloc de présentation : seulement ses sujets) ; l'exigence va alors à la rubrique admise la plus proche.
  */
 export function exigencesParRubrique(mt: MemoireType, plan: PlanMemoireType, matrice: ExigenceMatrice[]): { parRubrique: Record<string, ExigenceMatrice[]>; nouvelles: ExigenceMatrice[] } {
   const ids = plan.rubriques.map((r) => r.id);
   const parRubrique: Record<string, ExigenceMatrice[]> = {};
   const nouvelles: ExigenceMatrice[] = [];
   const ajouter = (id: string, e: ExigenceMatrice) => { (parRubrique[id] ||= []).push(e); };
+  const admise = (id: string, e: ExigenceMatrice): boolean => {
+    const r = mt.rubriques.find((x) => x.id === id);
+    if (!r) return true;
+    if (!dansLeSujet(e.exigence, sujetDeRubrique(r))) return false;
+    return r.bloc !== 'presentation' || SUJET_PRESENTATION.test(e.exigence);
+  };
+  /** Rubrique admise la plus proche d'une exigence refusée par sa rubrique d'origine ; '' s'il n'y en a pas. */
+  const autre = (e: ExigenceMatrice, refusee: string): string => {
+    const admises = ids.filter((id) => id !== refusee && admise(id, e));
+    return rechercherRubriques(mt, `${e.sujet || ''} ${e.exigence}`, 1, admises)[0]?.id || '';
+  };
+  const placer = (id: string, e: ExigenceMatrice) => {
+    if (admise(id, e)) { ajouter(id, e); return; }
+    const a = autre(e, id);
+    if (a) ajouter(a, e); else nouvelles.push(e);
+  };
   for (const e of matrice || []) {
     if (!e?.exigence || PIECES_OFFRE.test(e.exigence)) continue;
-    if (e.rubrique && ids.includes(e.rubrique)) { ajouter(e.rubrique, e); continue; }
+    if (e.rubrique && ids.includes(e.rubrique)) { placer(e.rubrique, e); continue; }
     const candidates = e.rubrique && mt.correspondance_v1[e.rubrique] ? mt.correspondance_v1[e.rubrique].filter((x) => ids.includes(x)) : [];
     if (candidates.length) {
       const meilleur = rechercherRubriques(mt, e.exigence, 1, candidates)[0];
-      ajouter(meilleur?.id || candidates[0], e);
+      placer(meilleur?.id || candidates[0], e);
       continue;
     }
     const proche = rechercherRubriques(mt, `${e.sujet || ''} ${e.exigence}`, 1, ids)[0];
-    if (proche && proche.score >= 2 && e.rubrique !== 'nouvelle') ajouter(proche.id, e);
+    if (proche && proche.score >= 2 && e.rubrique !== 'nouvelle') placer(proche.id, e);
     else nouvelles.push(e);
   }
   return { parRubrique, nouvelles };

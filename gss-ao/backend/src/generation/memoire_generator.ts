@@ -28,7 +28,7 @@ import {
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides,
 } from './memoire_type_cadre';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, montantsRegistre } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -1263,6 +1263,13 @@ export function elementsSansDoublon(elements: ElementACompleter[]): ElementAComp
   for (const e of elements) {
     if (e.statut === 'ouvert' && !/^Proposition à valider/i.test(e.question)) e.question = questionExacte(e.question);
     const k = norm(e.question);
+    // Même demande formulée autrement (cstb 221 : « délai moyen maximum d'intervention sur site après appel de
+    // télésurveillance pour une levée de doute » et « … le délai moyen maximum d'arrivée sur site du rondier après l'appel
+    // de la télésurveillance… ? ») : une seule question, celle qui porte l'emplacement dans le texte.
+    if (e.statut === 'ouvert' && !e.reperes?.length && !/^GSS_AC/.test(e.cle)) {
+      const proche = out.find((x) => x.statut === 'ouvert' && !!x.pourAcheteur === !!e.pourAcheteur && memeDemande(x.question, e.question));
+      if (proche) continue;
+    }
     const deja = vus.get(k);
     if (deja && e.statut === 'ouvert' && deja.statut === 'ouvert') {
       if (!e.reperes?.length && !/^GSS_AC/.test(e.cle)) continue;
@@ -1271,7 +1278,27 @@ export function elementsSansDoublon(elements: ElementACompleter[]): ElementAComp
     } else vus.set(k, e);
     out.push(e);
   }
-  return out;
+  // Question sans emplacement posée AVANT la même demande portée par un emplacement : retirée aussi.
+  return out.filter((e, i) => !(e.statut === 'ouvert' && !e.reperes?.length && !/^GSS_AC/.test(e.cle)
+    && out.some((x, j) => j > i && x.statut === 'ouvert' && (x.reperes?.length || /^GSS_AC/.test(x.cle)) && !!x.pourAcheteur === !!e.pourAcheteur && memeDemande(x.question, e.question))));
+}
+
+/**
+ * Deux questions à GSS qui demandent la même donnée (cstb 221 : « délai moyen maximum d'intervention sur site après appel
+ * de télésurveillance pour une levée de doute » / « … délai moyen maximum d'arrivée sur site du rondier après l'appel de la
+ * télésurveillance… ») : mêmes mots porteurs (racines de 6 lettres, synonymes ramenés à une racine, hors mots de
+ * question et verbes de demande), 5 au moins. Un seul mot propre à l'une (« forum » / « concert », « 2024 » / « 2025 »,
+ * « SSIAP 1 » / « SSIAP 2 », « agents de sécurité » / « agents de sécurité incendie ») : deux demandes distinctes.
+ */
+export function memeDemande(a: string, b: string): boolean {
+  const VIDES = new Set(['quel', 'quelle', 'quels', 'quelles', 'est', 'sont', 'elle', 'gss', 'pour', 'apres', 'avant', 'dans', 'avec', 'sans', 'effect', 'indiqu', 'precis', 'confir', 'pouvez', 'vous', 'votre', 'notre', 'comment', 'repond', 'exigen', 'memoir', 'doit', 'cette', 'faut', 'donnee', 'ainsi', 'leurs', 'leur', 'aupres', 'rondie', 'laquel', 'fourni', 'delai,']);
+  const SYNONYMES: Record<string, string> = { arrive: 'interv', arriva: 'interv', interv: 'interv' };
+  // (sigles de 2 ou 3 lettres compris : « CQP APS » / « SSIAP 1 »)
+  const racines = (t: string) => new Set(String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^A-Za-z0-9]+/)
+    .filter((w) => w.length >= 4 || /^\d+$/.test(w) || /^[A-Z]{2,3}$/.test(w)).map((w) => w.toLowerCase().slice(0, 6)).map((w) => SYNONYMES[w] || w).filter((w) => !VIDES.has(w)));
+  const x = racines(a), y = racines(b);
+  const [petit, grand] = x.size <= y.size ? [x, y] : [y, x];
+  return petit.size >= 5 && petit.size === grand.size && [...petit].every((w) => grand.has(w));
 }
 
 /**
@@ -1294,6 +1321,9 @@ export function motifRefusEngagement(x: string): string {
     || /\b(?:fourni(?:t|r|ra)?|transmet(?:tre|tra)?)\b[^.]{0,60}\b(?:le nombre|les effectifs|l.effectif|dans (?:le|son|ce|notre) m[ée]moire|dans (?:l.|son |notre )offre|ult[ée]rieurement)/i.test(t)
     || /dans (?:le|son|ce|notre) m[ée]moire technique/i.test(t)) return 'phrase sur le mémoire, sans réponse';
   if (/sous[- ]?trait|int[ée]rim|covid/i.test(t)) return 'fait interdit (faits_gss.md)';
+  // « … dans le délai contractuel » sans délai chiffré (cstb 221 : « GSS s'engage à remplacer toute absence imprévue dans le
+  // délai contractuel », alors que le CCTP ne fixe aucun délai de remplacement) : renvoi à un délai qui n'existe pas.
+  if (/d[ée]lais? contractuels?|d[ée]lais? (?:pr[ée]vus?|fix[ée]s?) (?:au|par le) (?:contrat|march[ée]|CCTP|CCAP)/i.test(t) && !/\d/.test(t)) return 'renvoi à un délai que le DCE ne fixe pas';
   if (/\ben cas de recours\b|\bsi (?:GSS|le titulaire) (?:recourt|fait appel)/i.test(t)) return 'exigence conditionnelle qui ne s\'applique pas à GSS';
   return '';
 }
@@ -2956,12 +2986,24 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
    * par sujet, en gardant toutes les précisions ; aucun sujet n'est ajouté ni retiré. Repli : simple
    * dédoublonnage exact si l'appel échoue.
    */
-  private async consoliderConsultations(liste: string[]): Promise<string[]> {
-    return (await this.consoliderAvecSources(liste)).map((q) => q.question);
+  private async consoliderConsultations(liste: string[], contexte?: { dce: string; horsNormandie: boolean }): Promise<string[]> {
+    return (await this.consoliderAvecSources(liste, contexte)).map((q) => q.question);
   }
 
-  /** Comme consoliderConsultations, en indiquant pour chaque question les demandes d'origine (indices de `liste`). */
-  private async consoliderAvecSources(liste: string[]): Promise<Array<{ question: string; sources: number[] }>> {
+  /**
+   * Comme consoliderConsultations, en indiquant pour chaque question les demandes d'origine (indices de `liste`). Avec le
+   * contexte du marché, une question sur un délai chiffré absent du DCE est retirée hors Normandie, ou quand elle ne fait
+   * que confirmer un délai déjà tranché au registre (cstb 221 : « … un délai maximal de 60 minutes… » pour Grenoble).
+   */
+  private async consoliderAvecSources(liste: string[], contexte?: { dce: string; horsNormandie: boolean }): Promise<Array<{ question: string; sources: number[] }>> {
+    const brutes = await this.consoliderAvecSourcesBrut(liste);
+    if (!contexte) return brutes;
+    const gardees = brutes.filter((q) => !questionDelaiInapplicable(q.question, contexte.dce, contexte.horsNormandie));
+    if (gardees.length < brutes.length) console.log(`[MemoireGenerator] Consultations : ${brutes.length - gardees.length} question(s) sur un délai chiffré absent du DCE retirée(s) (${contexte.horsNormandie ? 'marché hors Normandie' : 'délai déjà au registre'}).`);
+    return gardees;
+  }
+
+  private async consoliderAvecSourcesBrut(liste: string[]): Promise<Array<{ question: string; sources: number[] }>> {
     const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
     const uniques: Array<{ texte: string; origines: number[] }> = [];
     // Réponse connue de GSS (registre recours_sous_traitance : « Non ») : aucune question sur ses sous-traitants ;
@@ -5843,7 +5885,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       consultations: [
         ...new Set([
           ...(descriptors.some((d) => d.grille)
-            ? await this.consoliderConsultations([...aCompleter, ...confirmationsGss])
+            ? await this.consoliderConsultations([...aCompleter, ...confirmationsGss], { dce: dceContext, horsNormandie: marcheHorsNormandie(analysisData, dceContext) })
             : [...aCompleter, ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))]),
         ].map((c) => (/p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(c) ? 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».' : c).replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean).map(questionExacte)),
         // Une ligne par réponse à relire ou à valider (même intitulé possible : une ligne chacune, comme le premier message).
@@ -6807,7 +6849,7 @@ RÈGLES DE FORME (rendu Marp) :
         return REPERE(nRepere);
       });
     }
-    const questionsGss = await this.consoliderAvecSources(demandes.map((d) => d.texte));
+    const questionsGss = await this.consoliderAvecSources(demandes.map((d) => d.texte), { dce: dceContext, horsNormandie: horsNormandieLibre });
     const elementsLibres: ElementACompleter[] = questionsGss.map((q, i) => {
       const reperes = [...new Set(q.sources.map((k) => demandes[k]?.repere).filter((x): x is number => typeof x === 'number'))];
       const idSection = reperes.length ? Object.keys(sectionsReperes).find((k) => sectionsReperes[k].includes(REPERE(reperes[0]))) : undefined;
@@ -7131,7 +7173,7 @@ RÈGLES DE FORME (rendu Marp) :
     }
     const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
     for (const r of enLigne) demandes.push({ texte: r.question, repere: r.n });
-    const questionsGss = await this.consoliderAvecSources(demandes.map((d) => d.texte));
+    const questionsGss = await this.consoliderAvecSources(demandes.map((d) => d.texte), { dce: dceContext, horsNormandie: horsNormandie });
     // Un élément par emplacement « [À COMPLÉTER] » (sa réponse remplace ce seul emplacement), puis les autres questions.
     const elementsLibres: ElementACompleter[] = enPlace.map((e, i) => ({
       cle: `Q${i + 1}`, question: e.question!, contexte: `${titreDe(e.id)} — ${e.contexte}`, statut: 'ouvert' as const, reperes: [e.n],
@@ -8149,7 +8191,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
     }
 
-    const questionsGss = await this.consoliderAvecSources(demandes.map((d) => d.texte));
+    const questionsGss = await this.consoliderAvecSources(demandes.map((d) => d.texte), { dce: dceContext, horsNormandie: horsNormandie });
     const elements: ElementACompleter[] = questionsGss.map((q, i) => {
       const reperes = [...new Set(q.sources.map((k) => demandes[k]?.repere).filter((x): x is number => typeof x === 'number'))];
       const id = reperes.length ? Object.keys(sections).find((k) => sections[k].includes(REPERE(reperes[0]))) : undefined;
@@ -8535,7 +8577,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     }
 
     // ── 10. Questions à GSS, complétion par les mémoires, nettoyage final, état ──
-    const questionsGss = await this.consoliderAvecSources(demandes.map((d) => d.texte));
+    const questionsGss = await this.consoliderAvecSources(demandes.map((d) => d.texte), { dce: dceContext, horsNormandie: horsNormandie });
     const elements: ElementACompleter[] = questionsGss.map((q, i) => {
       const reperes = [...new Set(q.sources.map((k) => demandes[k]?.repere).filter((x): x is number => typeof x === 'number'))];
       const id = reperes.length ? Object.keys(sections).find((k) => sections[k].includes(REPERE(reperes[0]))) : undefined;

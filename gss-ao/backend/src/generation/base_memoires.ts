@@ -463,6 +463,27 @@ export function confirmationsRegistreUtilisees(texte: string, horsNormandie = fa
   return out;
 }
 
+/**
+ * Question à GSS sur un délai chiffré qui ne se pose pas (cstb 221, Grenoble : « GSS confirme-t-elle un délai maximal de
+ * 60 minutes pour l'arrivée de l'agent d'astreinte en cas d'absence imprévue ? ») : délai chiffré absent du DCE, posé pour
+ * un marché hors Normandie (les délais normands de GSS n'y sont jamais repris), ou simple confirmation d'un délai déjà
+ * tranché au registre de GSS. Une question sur un délai que le DCE demande (« délai moyen maximum pour intervenir ») reste.
+ */
+export function questionDelaiInapplicable(question: string, dce: string, horsNormandie: boolean): boolean {
+  const q = String(question || '');
+  if (!/d[ée]lai|arriv|intervien|interven|remplac|astreinte/i.test(q)) return false;
+  const valeurs = [...q.matchAll(/(?<![\d,.])(\d+)\s*(minutes?|min\b|mn\b|heures?|h\b)/gi)].map((m) => ({ n: m[1], min: /^m/i.test(m[2]) }));
+  if (!valeurs.length) return false;
+  const d = normTxt(dce).replace(/\s+/g, ' ');
+  const dansDce = (v: { n: string; min: boolean }) => new RegExp(`(?<![\\d,.])${v.n}\\s*(?:${v.min ? 'minutes?|min|mn' : 'heures?|h'})\\b`).test(d);
+  const absents = valeurs.filter((v) => !dansDce(v));
+  if (!absents.length) return false;
+  if (horsNormandie) return true;
+  if (!/confirm|valid/i.test(q)) return false;
+  const registre = charger().registre.filter((e) => e.categorie === 'delais').map((e) => normTxt(e.valeur_retenue || ''));
+  return absents.every((v) => registre.some((r) => new RegExp(`(?<![\\d,.])${v.n}\\s*(?:${v.min ? 'minutes?|min|mn' : 'heures?|h'})\\b`).test(r)));
+}
+
 /** Départements cités en toutes lettres entre parenthèses (Normandie et départements les plus fréquents des DCE). */
 const DEPARTEMENTS: Record<string, string> = { 'calvados': '14', 'eure': '27', 'manche': '50', 'orne': '61', 'seine maritime': '76', 'nord': '59', 'pas de calais': '62', 'somme': '80', 'oise': '60', 'aisne': '02', 'paris': '75', 'seine et marne': '77', 'yvelines': '78', 'essonne': '91', 'hauts de seine': '92', 'seine saint denis': '93', 'val de marne': '94', 'val d oise': '95', 'eure et loir': '28', 'sarthe': '72', 'mayenne': '53', 'ille et vilaine': '35', 'loiret': '45', 'marne': '51', 'bas rhin': '67', 'haut rhin': '68', 'rhone': '69', 'gironde': '33', 'loire atlantique': '44', 'isere': '38', 'bouches du rhone': '13', 'haute garonne': '31', 'herault': '34', 'alpes maritimes': '06', 'var': '83', 'moselle': '57', 'meurthe et moselle': '54', 'finistere': '29', 'morbihan': '56', 'cotes d armor': '22', 'maine et loire': '49', 'indre et loire': '37', 'loir et cher': '41', 'cher': '18', 'vienne': '86', 'charente maritime': '17' };
 

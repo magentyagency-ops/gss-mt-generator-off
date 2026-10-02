@@ -132,6 +132,10 @@
     "b4_proc_alarme"
    ]
   },
+  "TELESURVEILLANCE_HORS_MARCHE": {
+   "description": "La télésurveillance du site est assurée par un autre prestataire, hors du marché (cstb : « alarmes gérées par une entreprise de télésurveillance (hors marché) ») : le partenaire de télésurveillance de GSS n'intervient pas, la phrase qui le nomme n'est pas reprise et aucune question n'est posée à son sujet.",
+   "dce": "t[ée]l[ée]\\s?-?surveillance\\s*\\(\\s*hors\\s+(?:du\\s+)?(?:march[ée]|p[ée]rim[eè]tre|prestation)|t[ée]l[ée]\\s?-?surveillance\\s+(?:est\\s+|sont\\s+)?(?:assur[ée]e\\s+|g[ée]r[ée]e\\s+|r[ée]alis[ée]e\\s+)?hors\\s+(?:du\\s+)?(?:march[ée]|p[ée]rim[eè]tre)|t[ée]l[ée]\\s?-?surveillance\\s+(?:n.est|ne\\s+fait)\\s+pas\\s+(?:partie\\s+du|compris[e]?\\s+dans\\s+le|incluse?\\s+dans\\s+le)\\s+(?:march[ée]|p[ée]rim[eè]tre)"
+  },
   "REMISE_MOYENS_ACCES": {
    "description": "Des clés, badges ou autres moyens d'accès sont confiés à GSS.",
    "dce": "(?<![\\wÀ-ÿ])(?:cl[ée]s|cl[ée]fs|badges?|trousseaux?|passes)(?![\\wÀ-ÿ])|moyens d.acc[èe]s",
@@ -3875,7 +3879,7 @@
    "condition": "TELESURVEILLANCE",
    "condition_texte": "si le CCTP prévoit de la télésurveillance, des interventions sur alarme ou de la levée de doute",
    "priorite": 1,
-   "texte": "En collaboration avec la télésurveillance, notre procédure d'intervention sur alarme est la suivante :\n1. La station de télésurveillance reçoit un signal de déclenchement d'alarme et appelle le numéro du rondier d'astreinte.\n2. Le rondier arrive sur site{{#si DELAI_INTERVENTION_ALARME}} en {{DELAI_INTERVENTION_ALARME}} au maximum après l'appel de la télésurveillance{{/si}} et effectue une ronde d'inspection pour analyser la situation.\n3. Selon le constat :\n- RAS, aucun incident : le rondier rédige un rapport sur la main courante et transmet un rapport à la télésurveillance ;\n- incident mineur (porte restée ouverte, défaillance de l'alarme ou du SSI, animal entré sur le site…) : le rondier résout le problème, rédige un rapport sur la main courante et transmet un rapport à la télésurveillance ;\n- incident majeur (incendie, intrusion, vandalisme…) : le rondier alerte les secours, les attend et applique les procédures adaptées (ordre d'alerte, gestion d'un incendie, gestion d'une intrusion…), puis rédige un rapport sur la main courante et transmet un rapport à la télésurveillance.\n\nNotre partenaire en télésurveillance est {{PARTENAIRE_TELESURVEILLANCE}}, avec qui nous collaborons sur différents types de sites. Les consignes et leurs modifications sont transmises en temps réel au rondier par Comète Link, et chaque intervention fait l'objet d'un reporting numérique : rapport sur la main courante électronique, rapport transmis à la télésurveillance et rapport écrit envoyé par mail à {{CLIENT}}.{{#si ENGAGEMENTS_TELESURVEILLANCE}}\n\n{{ENGAGEMENTS_TELESURVEILLANCE}}{{/si}}",
+   "texte": "En collaboration avec la télésurveillance, notre procédure d'intervention sur alarme est la suivante :\n1. La station de télésurveillance reçoit un signal de déclenchement d'alarme et appelle le numéro du rondier d'astreinte.\n2. Le rondier arrive sur site{{#si DELAI_INTERVENTION_ALARME}} en {{DELAI_INTERVENTION_ALARME}} au maximum après l'appel de la télésurveillance{{/si}} et effectue une ronde d'inspection pour analyser la situation.\n3. Selon le constat :\n- RAS, aucun incident : le rondier rédige un rapport sur la main courante et transmet un rapport à la télésurveillance ;\n- incident mineur (porte restée ouverte, défaillance de l'alarme ou du SSI, animal entré sur le site…) : le rondier résout le problème, rédige un rapport sur la main courante et transmet un rapport à la télésurveillance ;\n- incident majeur (incendie, intrusion, vandalisme…) : le rondier alerte les secours, les attend et applique les procédures adaptées (ordre d'alerte, gestion d'un incendie, gestion d'une intrusion…), puis rédige un rapport sur la main courante et transmet un rapport à la télésurveillance.\n\n{{#si !TELESURVEILLANCE_HORS_MARCHE}}Notre partenaire en télésurveillance est {{PARTENAIRE_TELESURVEILLANCE}}, avec qui nous collaborons sur différents types de sites. {{/si}}Les consignes et leurs modifications sont transmises en temps réel au rondier par Comète Link, et chaque intervention fait l'objet d'un reporting numérique : rapport sur la main courante électronique, rapport transmis à la télésurveillance et rapport écrit envoyé par mail à {{CLIENT}}.{{#si ENGAGEMENTS_TELESURVEILLANCE}}\n\n{{ENGAGEMENTS_TELESURVEILLANCE}}{{/si}}",
    "sous_parties": [],
    "schema": {
     "source": "spec",
@@ -4482,7 +4486,11 @@
    "nettoyage": [
     "Seuil harmonisé sur « au moins 24 heures » (schéma) ; le texte source écrivait « plus de 24 h »"
    ],
-   "longueur_mots": 114
+   "longueur_mots": 114,
+   "sujet_ajouts": {
+    "exclut": "impr[ée]vue?s?|non pr[ée]vue?s?|derni[èe]re minute|inopin[ée]e?s?|poste vide",
+    "motif": "Rubrique de l'absence PRÉVUE (l'agent prévient) : une exigence sur l'absence imprévue ou de dernière minute relève de la rubrique « absence non prévue » (génération réelle cstb 221 : « GSS s'engage à remplacer toute absence imprévue dans le délai contractuel » imprimé sous « absence prévue »)."
+   }
   },
   {
    "id": "b5_remplacement_imprevu",
