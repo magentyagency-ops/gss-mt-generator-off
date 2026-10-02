@@ -114,6 +114,17 @@ export function profilAgentSecurite(profil: string, qualification: string): stri
 }
 
 /**
+ * Intitulé de poste relevé par le modèle, sans le nombre d'agents recopié du DCE (« 2 agents » → « Agent de sécurité »,
+ * « 1 agente » → « Agent de sécurité », « 1 ADS » → « ADS », « 1 SSIAP 1 » → « SSIAP 1 », « SSIAP1 » → « SSIAP 1 »).
+ * Un « agent » sans autre précision, dans un relevé de gardiennage, est un agent de sécurité (CQP APS).
+ */
+export function profilSansNombre(profil: string): string {
+  let t = String(profil || '').replace(/\s+/g, ' ').trim().replace(/^\d+\s+(?=\S)/, '').replace(/\bSSIAP\s*([123])\b/gi, 'SSIAP $1');
+  if (/^agent(?:e)?s?$/i.test(t)) t = 'Agent de sécurité';
+  return t;
+}
+
+/**
  * Calcul du dimensionnement à partir de la lecture du DCE par le modèle (`rep` : {postes, cas_pratique}). Renvoie
  * null si aucun poste ni cas pratique n'est exploitable.
  */
@@ -122,7 +133,9 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
   const profils = new Map<string, ProfilDimensionne>();
   for (const p of Array.isArray(rep?.postes) ? rep.postes : []) {
     // Intitulé en capitales (« AGENT DE SECURITE ») : écrit en minuscules, initiale en majuscule.
-    const brut = String(p?.profil || '').replace(/\s+/g, ' ').trim();
+    // Nombre recopié dans l'intitulé (ca_normandie 241 : « 2 agents », « 1 agente », « 1 ADS », « 1 SSIAP 1 », « SSIAP1 ») :
+    // retiré ; « agent(s) » seul, relevé sous « Gardiennage de surveillance », est un agent de sécurité.
+    const brut = profilSansNombre(String(p?.profil || ''));
     const profil = /[A-ZÀ-Ý]{5,}/.test(brut) && (brut.match(/[A-Za-zÀ-ÿ]{2,}/g) || []).length >= 2 && brut === brut.toUpperCase() ? brut.charAt(0) + brut.slice(1).toLowerCase().replace(/\b(ssiap|ads|cqp|aps)\b/g, (m) => m.toUpperCase()) : brut;
     if (!profil || !citationDansDce(String(p?.citation || ''), dceMots)) continue;
     // Poste optionnel ou ponctuel (« l'option 1 : 1 SSIAP 1 7j/7 24h/24… », génération réelle imm 16 : trois options
@@ -398,7 +411,7 @@ export function extraitDimensionnement(dce: string, cadre = '', max = 90_000): s
 
 export const CONSIGNE_DIMENSIONNEMENT = `Tu lis le DCE d'un marché de sécurité privée pour GSS. Tu ne calcules aucun total : les calculs sont faits ensuite.
 1. "postes" (relevé, sans rien ajouter) : chaque poste de travail permanent ou planifié que le titulaire doit tenir (une entrée par poste et par lieu) :
-   - "profil" : intitulé court du poste dans les mots du DCE (ex. « SSIAP 2 », « SSIAP 1 », « Agent de sécurité ADS », « Agent de sécurité SSIAP 1 – CQP APS ») ;
+   - "profil" : intitulé court du poste dans les mots du DCE (ex. « SSIAP 2 », « SSIAP 1 », « Agent de sécurité ADS », « Agent de sécurité SSIAP 1 – CQP APS »), sans le nombre d'agents (« 2 agents » sous « Gardiennage de surveillance » : « Agent de sécurité ») ;
    - "qualification" : qualification exigée (ex. « SSIAP 2 », « CQP APS – SSIAP 1 ») ;
    - "lieu" : bâtiment ou site, si le DCE le précise ;
    - "plages" : chaque plage horaire hebdomadaire, {"jours": ["lundi", …], "debut": "07:00", "fin": "19:00"} (une plage de nuit finit le lendemain : "debut": "19:00", "fin": "07:00") ; ignore les jours fériés ;

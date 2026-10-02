@@ -67,3 +67,21 @@ Nous mettons en place une équipe de 83 agents titulaires, qui assurent les miss
     expect(sansEtirementRetourLigne(z3)).toBe(false);
   });
 });
+
+/** Génération réelle de contrôle ca_normandie 241 : nombre recopié dans l'intitulé du poste (« 2 agents », « 1 agente »). */
+describe('intitulé de poste sans nombre (ca_normandie 241)', () => {
+  it('« 2 agents », « 1 agente », « 1 ADS », « 1 SSIAP 1 », « SSIAP1 » : une catégorie de GSS chacune', async () => {
+    const { profilSansNombre } = await import('../src/generation/dimensionnement');
+    expect(['2 agents', '1 agente', 'Agent', '1 agent', '1 ADS', '1 SSIAP 1', 'SSIAP1', 'SSIAP 2'].map(profilSansNombre))
+      .toEqual(['Agent de sécurité', 'Agent de sécurité', 'Agent de sécurité', 'Agent de sécurité', 'ADS', 'SSIAP 1', 'SSIAP 1', 'SSIAP 2']);
+    const dce = '• Lundi au vendredi : 2 agents de 7h45 à 17h15 au palais de justice de Rouen pour le gardiennage de surveillance\n• Samedi et dimanche : 1 agente de 8h à 18h au tribunal judiciaire du Havre pour le gardiennage\n• Lundi au vendredi : 1 SSIAP 1 de 7h à 18h15 au tribunal judiciaire du Havre en sécurité incendie';
+    const d = calculerDimensionnement({ postes: [
+      { profil: '2 agents', qualification: '', lieu: 'Rouen', plages: [{ jours: ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi'], debut: '07:45', fin: '17:15' }], citation: 'Lundi au vendredi : 2 agents de 7h45 à 17h15 au palais de justice' },
+      { profil: '1 agente', qualification: '', lieu: 'Le Havre', plages: [{ jours: ['samedi', 'dimanche'], debut: '08:00', fin: '18:00' }], citation: 'Samedi et dimanche : 1 agente de 8h à 18h au tribunal' },
+      { profil: '1 SSIAP 1', qualification: 'SSIAP 1', lieu: 'Le Havre', plages: [{ jours: ['lundi'], debut: '07:00', fin: '18:15' }], citation: 'Lundi au vendredi : 1 SSIAP 1 de 7h à 18h15 au tribunal' },
+    ] }, dce)!;
+    const lignes = lignesEquipe(d);
+    expect(lignes).not.toMatch(/\| \d+ agente?s? \|/);
+    expect(lignes.split('\n').map((l) => l.split('|').slice(1, 3).map((x) => x.trim()).join(' / '))).toEqual(['Agent de sécurité / CQP APS', 'Agent de sécurité incendie / SSIAP 1']);
+  });
+});
