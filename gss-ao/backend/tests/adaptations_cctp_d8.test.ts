@@ -223,4 +223,16 @@ Le prestataire s'engage à :
     expect(photos.adaptee).not.toMatch(/photos/);
     expect(photos.exigence).toMatch(/Ne pas prendre de photo des bâtiments/);
   });
+
+  it('phrase adaptée par deux étapes (publipostage puis cohérence) : signalée une seule fois, avec les deux exigences', () => {
+    const o = 'Si l\'agent ne répond pas, le rondier d\'astreinte se rend sur place, en 45 minutes au maximum, avec son véhicule.';
+    const a1 = 'Si l\'agent ne répond pas, le rondier d\'astreinte se rend sur place, avec son véhicule.';
+    const a2 = 'Si l\'agent ne répond pas, le rondier d\'astreinte se rend sur place à pied, avec son véhicule laissé hors du site.';
+    const suivi = new SuiviAdaptations({ reference: [o] });
+    suivi.noterPubliposte([{ rubrique: 'b4_pti', avant: o, apres: a1, exigence: 'Marché hors Normandie', etape: 'Délais normands retirés (marché hors Normandie)' }]);
+    suivi.noterCoherence('b4_pti', a1, a2, 'Les rondes de surveillance sont effectuées à pied.', []);
+    const liste = suivi.finaliser({ b4_pti: a2 }, () => 'PTI');
+    expect(liste).toHaveLength(1);
+    expect(liste[0]).toMatchObject({ origine: o, adaptee: a2, exigence: 'Marché hors Normandie ; Les rondes de surveillance sont effectuées à pied.' });
+  });
 });

@@ -225,17 +225,26 @@ const PRESENCE = /interven|mobilis|rempla[cç]|astreinte|rondier|arriv|sur place
 export function exigenceHorsNormandie(dce: string, analyse: any): string {
   const sites = sitesDuMarche(analyse || {}, dce || '');
   const hors = sites.horsNormandie;
+  // Adresse du site telle que le DCE l'écrit : la ligne du code postal et de la commune, avec la ligne de la voie qui la
+  // précède (« 19, avenue de Maison Blanche / 93330 – Neuilly-sur-Marne »).
   let citation = '';
+  const lignes = String(dce || '').replace(/\r/g, '').split('\n').map((l) => l.replace(/\s+/g, ' ').trim());
   for (const c of hors) {
-    const rx = new RegExp(`${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[- ]/g, '[- ]')}`, 'i');
-    citation = citerDce(dce, new RegExp(`\\b\\d{5}\\b[^.]{0,60}${rx.source}|${rx.source}[^.]{0,20}\\(?\\b\\d{5}\\b`, 'i'));
-    if (citation) break;
+    const commune = c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[- ]/g, '[- ]');
+    const rx = new RegExp(`\\b\\d{5}\\b[^.\\n]{0,8}${commune}|${commune}[^.\\n]{0,20}\\(?\\b\\d{5}\\b`, 'i');
+    const k = lignes.findIndex((l) => rx.test(l) && !/cedex|b\.?p\.?\s*\d|bo[îi]te postale/i.test(l));
+    if (k < 0) continue;
+    const l = lignes[k];
+    const voie = /\b(?:rue|avenue|av\.|boulevard|bd|place|chemin|all[ée]e|route|quai|impasse|cours|square|parvis|esplanade|zone|za|zi)\b/i;
+    const prec = k > 0 && voie.test(lignes[k - 1]) && !voie.test(l) ? `${lignes[k - 1]} ` : '';
+    const m = rx.exec(l)!;
+    // Ligne longue (phrase) : la phrase du DCE qui contient l'adresse ; sinon la ligne d'adresse.
+    citation = l.length > 160 ? (citerDce(l, rx) || l.slice(Math.max(0, m.index - 80), m.index + m[0].length + 20)) : `${prec}${l}`;
+    break;
   }
   const lieu = hors.length ? `${hors.length > 1 ? 'sites' : 'site'} de ${listeFr(hors)}` : 'site du marché';
-  const motif = sites.mixte
-    ? `Marché en partie hors Normandie (${lieu}) : les délais d'intervention de GSS valent pour la Normandie ; aucun délai n'est imposé par le DCE pour ce point`
-    : `Marché hors Normandie (${lieu}) : les délais d'intervention de GSS valent pour la Normandie ; aucun délai n'est imposé par le DCE pour ce point`;
-  return citation ? `${motif}. Lieu d'exécution cité par le DCE : « ${citation} »` : `${motif}.`;
+  const motif = `${sites.mixte ? 'Marché en partie hors Normandie' : 'Marché hors Normandie'} (${lieu}) : les délais et les moyens de mobilisation que GSS annonce en Normandie ne sont pas promis ici, et le DCE n'en impose aucun pour ce point`;
+  return citation ? `${motif}. Lieu d'exécution cité par le DCE : « ${citation.length > 220 ? `${citation.slice(0, 220).replace(/\s+\S*$/, '')}…` : citation} »` : `${motif}.`;
 }
 
 /**
@@ -314,6 +323,15 @@ export class SuiviAdaptations {
   noter(rubrique: string, avant: string, apres: string, exigence: string | ((c: Changement) => string), etape: string, publipostage = false): number {
     let n = 0;
     for (const c of changements(avant, apres)) {
+      // Phrase déjà adaptée par une étape précédente, adaptée de nouveau : une seule adaptation, de la phrase de GSS à la
+      // dernière version, avec les deux exigences.
+      const prec = this.notes.find((x) => x.rubrique === rubrique && x.adaptee && cle(x.adaptee) === cle(c.origine));
+      if (prec) {
+        const e = String(typeof exigence === 'function' ? exigence(c) : exigence).replace(/\s+/g, ' ').trim() || exigenceProche(c.adaptee, [prec.exigence]);
+        Object.assign(prec, { adaptee: c.adaptee, avant: c.avant, apres: c.apres, exigence: e && !prec.exigence.includes(e) ? `${prec.exigence} ; ${e}` : prec.exigence });
+        n++;
+        continue;
+      }
       if (!publipostage && !this.estDeGss(c.origine)) continue;
       if (/^\s*#|^\s*\[CONSULTATION/.test(c.origine)) continue;
       const e = String(typeof exigence === 'function' ? exigence(c) : exigence).replace(/\s+/g, ' ').trim();
@@ -368,6 +386,14 @@ export class SuiviAdaptations {
           // Phrase de GSS de nouveau présente telle quelle (rétablie par une autre étape) : plus d'adaptation.
           if (localiser(texte, note.origine, 0.97) && cle(note.origine) !== cle(loc)) continue;
           adaptee = loc;
+          // Même phrase finale adaptée par deux étapes (publipostage, puis cohérence) : une seule phrase signalée, avec
+          // la phrase d'origine de GSS et les deux exigences.
+          const deja = liste.find((x) => x.rubrique === k && x.adaptee && cle(x.adaptee) === cle(loc));
+          if (deja) {
+            if (!deja.exigence.includes(note.exigence)) deja.exigence = `${deja.exigence} ; ${note.exigence}`;
+            vus.add(id);
+            continue;
+          }
         } else {
           if (localiser(texte, note.origine, 0.9)) continue;
           avant = note.avant ? localiser(texte, note.avant) || undefined : undefined;
