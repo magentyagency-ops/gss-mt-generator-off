@@ -23,3 +23,10 @@ describe('données CNAPS connues retirées des questions (T3C-8)', () => {
     ]) expect(sansDonneesCnapsConnues(q)).toBe(q);
   });
 });
+
+describe('question fusionnée entreprise et dirigeant (havre2 361)', () => {
+  it('la date d’obtention de l’autorisation de l’entreprise, connue, n’est plus demandée', () => {
+    expect(sansDonneesCnapsConnues('Quelles sont les dates d’obtention et de fin de validité des autorisations CNAPS de l’entreprise et du dirigeant ?'))
+      .toBe("Quelle est la date de fin de validité de l'autorisation d'exercer CNAPS de l'entreprise, et quelles sont les dates d'obtention et de fin de validité de l'agrément CNAPS du dirigeant ?");
+  });
+});

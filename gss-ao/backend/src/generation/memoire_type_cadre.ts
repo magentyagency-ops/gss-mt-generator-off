@@ -476,7 +476,7 @@ export interface CandidatReference {
  * la meilleure rubrique lexicale (mots-clés) si elle atteint 2,5. Le modèle dit ensuite lesquelles traitent vraiment
  * la question. Aucune candidate pour une question propre au marché (cas pratique, compréhension du site…).
  */
-export function candidatsReference(mt: MemoireType, textes: Record<string, string>, question: string, options: { scores?: Record<string, number>; seuil?: number; ecart?: number; maxMots?: number; hors?: boolean } = {}): CandidatReference[] {
+export function candidatsReference(mt: MemoireType, textes: Record<string, string>, question: string, options: { scores?: Record<string, number>; seuil?: number; ecart?: number; maxMots?: number; hors?: boolean; secondeLexicale?: boolean } = {}): CandidatReference[] {
   if (!question.trim() || (options.hors ?? questionHorsMemoireType(question))) return [];
   const parmi = Object.keys(textes).filter((id) => (textes[id] || '').trim() && mt.rubriques.find((r) => r.id === id)?.mode !== 'besoin');
   const seuil = options.seuil ?? SEUIL_SEMANTIQUE;
@@ -487,6 +487,13 @@ export function candidatsReference(mt: MemoireType, textes: Record<string, strin
   if (sem[0] && sem[0].score >= seuil) choix.push(...sem.slice(0, 3).filter((x) => x.score >= Math.max(seuil, sem[0].score - ecart)));
   const lex = rechercherRubriques(mt, question, 1, parmi)[0];
   if (lex && lex.score >= 2.5 && !choix.some((x) => x.id === lex.id)) choix.push({ id: lex.id, score: scores[lex.id] ?? 0 });
+  // Question reconstruite depuis le titre et la liste « Cela peut concerner A, B, C » (consigne de forme seule, havre2 :
+  // mesures sociétales) : une seconde rubrique lexicale très proche est gardée (non-discrimination 6, recrutement avec
+  // France Travail et la Mission locale 5).
+  if (options.secondeLexicale) {
+    const lex2 = rechercherRubriques(mt, question, 2, parmi)[1];
+    if (lex && lex2 && lex2.score >= 4 && lex2.score >= 0.8 * lex.score && !choix.some((x) => x.id === lex2.id)) choix.push({ id: lex2.id, score: scores[lex2.id] ?? 0 });
+  }
   const lexicaux = new Map(rechercherRubriques(mt, question, 50, parmi).map((x) => [x.id, x.score]));
   const maxMots = options.maxMots ?? 1200;
   const out: CandidatReference[] = [];

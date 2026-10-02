@@ -404,6 +404,12 @@ export function sansDonneesCnapsConnues(question: string): string | null {
   const dirigeant = /dirigeant|g[ée]rant|\bAGD\b/i.test(q);
   const entreprise = /entreprise|soci[ée]t[ée]|\bGSS\b|GLOBAL SECURITY|\bAUT\b|autorisation d.exercer(?! du dirigeant)/i.test(q) && !/autorisation d.exercer du dirigeant/i.test(q);
   if (!dirigeant && !entreprise) return q;
+  // Question fusionnée sur l'entreprise ET le dirigeant qui redemande la date d'obtention de l'autorisation de l'entreprise
+  // (connue : 12/02/2015) — havre2 361 : « Quelles sont les dates d'obtention et de fin de validité des autorisations CNAPS
+  // de l'entreprise et du dirigeant ? » : seules les données inconnues sont demandées.
+  if (dirigeant && /entreprise|soci[ée]t[ée]|\bGSS\b|GLOBAL SECURITY/i.test(q) && /obtention|d[ée]livrance/i.test(q) && /fin de validit/i.test(q) && valeurRegistre('date_autorisation_cnaps')) {
+    return "Quelle est la date de fin de validité de l'autorisation d'exercer CNAPS de l'entreprise, et quelles sont les dates d'obtention et de fin de validité de l'agrément CNAPS du dirigeant ?";
+  }
   const numeroConnu = (!dirigeant || !!valeurRegistre('agrement_dirigeant')) && (!entreprise || !!valeurRegistre('autorisation_cnaps'));
   const obtentionConnue = entreprise && !dirigeant && !!valeurRegistre('date_autorisation_cnaps');
   const NUM = "(?:le |son |leur )?num[ée]ro(?: d['’](?:autorisation(?: d['’]exercer)?|agr[ée]ment))?";

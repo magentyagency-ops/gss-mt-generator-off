@@ -4710,6 +4710,7 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
         // Question qui n'est qu'une consigne de forme (« Le renvoi vers un rapport général… est à proscrire ») : le sujet est
         // pris dans le titre du champ et ses paragraphes voisins (havre2, mesures sociétales).
         questionMT: questionUtileChamp(f.context) || `${q || demande} ${critere}`.trim(),
+        sujetReconstruit: !!questionUtileChamp(f.context) && questionUtileChamp(f.context) !== `${q || demande} ${critere}`.trim(),
         hors: questionHorsMemoireType(q || demande, critere),
         comprehension: developpee && questionComprehension(q || demande),
         libelle: intitulePrincipal(q || demande),
@@ -4961,7 +4962,7 @@ En cas de doute → "[À COMPLÉTER]".`;
       const comprehension = reprise.comprehension ? await comprehensionCadre() : null;
       const candidats: CandidatReference[] = !developpee ? []
         : comprehension ? [{ cle: 'R1', id: comprehension.id, titre: comprehension.titre, texte: comprehension.texte, score: 1 }]
-          : attribution?.candidats.get(f.id) ?? candidatsReference(repriseMT!.mt, repriseMT!.textes, questionMT, { scores: repriseMT!.scores.get(f.id), hors: reprise.hors });
+          : attribution?.candidats.get(f.id) ?? candidatsReference(repriseMT!.mt, repriseMT!.textes, questionMT, { scores: repriseMT!.scores.get(f.id), hors: reprise.hors, secondeLexicale: reprise.sujetReconstruit });
       const renvois = developpee && !comprehension ? attribution?.renvois.get(f.id) || [] : [];
       const userPrompt = `Analyse du marché (contexte de rédaction) :
 ${analysisJson}
@@ -5137,7 +5138,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     if (repriseMT) {
       const individuels = [...zones.filter(z => z.fields.length === 1).map(z => z.fields[0]), ...others].sort((a, b) => a.id - b.id);
       attribution = attribuerRubriques(individuels.map((f) => ({ f, r: infosReprise(f) })).filter(({ r }) => r.developpee && !r.comprehension)
-        .map(({ f, r }) => ({ id: f.id, libelle: r.libelle, candidats: candidatsReference(repriseMT.mt, repriseMT.textes, r.questionMT, { scores: repriseMT.scores.get(f.id), hors: r.hors }) })));
+        .map(({ f, r }) => ({ id: f.id, libelle: r.libelle, candidats: candidatsReference(repriseMT.mt, repriseMT.textes, r.questionMT, { scores: repriseMT.scores.get(f.id), hors: r.hors, secondeLexicale: r.sujetReconstruit }) })));
       const partages = [...attribution.renvois.entries()].map(([id, l]) => `champ ${id} → ${l.map((x) => x.titre).join(', ')}`);
       if (partages.length) console.log(`[MemoireGenerator] Mémoire type (cadre) : rubrique(s) déjà reprise(s) dans une autre réponse, renvoi : ${partages.join(' ; ')}.`);
     }

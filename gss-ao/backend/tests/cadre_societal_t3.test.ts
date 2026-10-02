@@ -23,5 +23,7 @@ describe('question utile d’un champ du cadre (T3N-7)', () => {
     const textes: Record<string, string> = {};
     for (const p of publierMemoire(preparerMemoireType({ analyse: {}, dce: '' } as any, { memoireType: mt }))) if (p.texte && p.mode !== 'besoin') textes[p.id] = p.texte;
     expect(candidatsReference(mt, textes, questionUtileChamp(ctx)).map((c) => c.id)).toContain('b3_valeurs_sociales');
+    // Question reconstruite (consigne de forme seule) : la seconde rubrique lexicale proche est gardée.
+    expect(candidatsReference(mt, textes, questionUtileChamp(ctx), { secondeLexicale: true }).map((c) => c.id)).toEqual(['b3_valeurs_sociales', 'b3_recrutement']);
   });
 });
