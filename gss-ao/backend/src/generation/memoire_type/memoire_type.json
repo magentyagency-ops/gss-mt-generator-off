@@ -1437,7 +1437,7 @@
     }
    ],
    "nettoyage": [
-    "Mentions Covid retirées (gestes barrières, gel hydroalcoolique, pass sanitaire) — règle faits_gss.md, sauf si le DCE en parle",
+    "Mentions Covid retirées (gestes barrières, gel hydroalcoolique, pass sanitaire) — règle faits_gss.md : le mot Covid jamais ; une mesure (pass sanitaire, gestes barrières, gel) seulement si le DCE l'exige lui-même sous ce terme",
     "Enseignes Intermarché, Intersport, Districenter, But, Noz, Kiloutou non reprises (absentes de la liste des références autorisées de faits_gss.md, voir divergences)"
    ],
    "longueur_mots": 281
@@ -1490,7 +1490,7 @@
     "libelle": "les mairies"
    },
    "nettoyage": [
-    "Mentions Covid retirées (gestes barrières, gel hydroalcoolique, pass sanitaire) — règle faits_gss.md, sauf si le DCE en parle (dont « comme récemment avec les nouvelles dispositions en matière de lutte contre le Covid »)"
+    "Mentions Covid retirées (gestes barrières, gel hydroalcoolique, pass sanitaire) — règle faits_gss.md : le mot Covid jamais ; une mesure (pass sanitaire, gestes barrières, gel) seulement si le DCE l'exige lui-même sous ce terme (dont « comme récemment avec les nouvelles dispositions en matière de lutte contre le Covid »)"
    ],
    "longueur_mots": 281
   },
@@ -1594,7 +1594,7 @@
     "libelle": "les écoles, universités et facultés"
    },
    "nettoyage": [
-    "Mentions Covid retirées (gestes barrières, gel hydroalcoolique, pass sanitaire) — règle faits_gss.md, sauf si le DCE en parle",
+    "Mentions Covid retirées (gestes barrières, gel hydroalcoolique, pass sanitaire) — règle faits_gss.md : le mot Covid jamais ; une mesure (pass sanitaire, gestes barrières, gel) seulement si le DCE l'exige lui-même sous ce terme",
     "NEOMA Business School et « l'université Olympe de Gouges à Alençon » non reprises (absentes de faits_gss.md, voir divergences)",
     "« chez une de nos partenaires industrie » (erreur de la source pour le CESI) supprimé"
    ],
@@ -1670,7 +1670,7 @@
     "libelle": "les établissements bancaires"
    },
    "nettoyage": [
-    "Mentions Covid retirées (gestes barrières, gel hydroalcoolique, pass sanitaire) — règle faits_gss.md, sauf si le DCE en parle",
+    "Mentions Covid retirées (gestes barrières, gel hydroalcoolique, pass sanitaire) — règle faits_gss.md : le mot Covid jamais ; une mesure (pass sanitaire, gestes barrières, gel) seulement si le DCE l'exige lui-même sous ce terme",
     "Mission « intervention sur alarme » citée deux fois dans la source : dédoublonnée"
    ],
    "longueur_mots": 89
@@ -1985,7 +1985,7 @@
     "libelle": "les hébergements touristiques"
    },
    "nettoyage": [
-    "Mentions Covid retirées (gestes barrières, gel hydroalcoolique, pass sanitaire) — règle faits_gss.md, sauf si le DCE en parle (« vérification des pass sanitaires pour les arrivées de nuit »)"
+    "Mentions Covid retirées (gestes barrières, gel hydroalcoolique, pass sanitaire) — règle faits_gss.md : le mot Covid jamais ; une mesure (pass sanitaire, gestes barrières, gel) seulement si le DCE l'exige lui-même sous ce terme (« vérification des pass sanitaires pour les arrivées de nuit »)"
    ],
    "notes": [
     "GSS n'a fourni aucun texte d'introduction pour le secteur hébergement."

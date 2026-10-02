@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { lignesEquipe, questionDimensionnement, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, marcheHorsNormandie, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce } from './base_memoires';
+import { horairesImposes, marcheHorsNormandie, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -1775,7 +1775,8 @@ const PRONOM_INITIAL = /^\s*(?:[-*•]\s+|\d+[.)]\s+)?(?:\*\*)?(?:Ils?|Elles?|Ce
 
 /** Motif de refus d'un texte proposé par le modèle (ou null s'il est acceptable). */
 function refusTexteNouveau(nouveau: string, ancien: string, o: OptionsModifications): string | null {
-  for (const [rx, motif] of INTERDITS_ADAPTATION) if (rx.test(nouveau) && !rx.test(ancien) && !(motif === 'Covid' && rx.test(o.dce || ''))) return motif;
+  // Covid : le mot jamais, une mesure (pass sanitaire, gestes barrières, gel) seulement si le DCE l'exige sous ce terme.
+  for (const [rx, motif] of INTERDITS_ADAPTATION) if (rx.test(nouveau) && !rx.test(ancien) && !(motif === 'Covid' && !motifCovidInterdit(o.dce || '').test(nouveau))) return motif;
   if (/L\.?\s?1224/.test(nouveau) && !/L\.?\s?1224/.test(o.dce || '')) return 'article L. 1224-1 absent du DCE';
   if (retirerCommentairesInternes(nouveau).retires.length) return 'commentaire interne';
   // Phrase du CCTP recopiée (« son remplaçant devra être présent … », « À Coriolis, l'accueil des premiers

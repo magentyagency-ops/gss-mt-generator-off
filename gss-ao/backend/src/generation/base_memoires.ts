@@ -1027,14 +1027,36 @@ export function obligationsChiffreesAbsentes(dce: string, memoire: string): stri
   return obligationsChiffrees(dce).filter((o) => !o.cle.test(texte)).map((o) => o.phrase);
 }
 
+/** Mesures liées à la Covid : une mesure n'est citée que si le DCE l'exige lui-même, sous le même terme. */
+const MESURES_COVID = [/pass(?:es)? sanitaires?/i, /gestes? barri[èe]res?/i, /gel hydro-?alcoolique|hydroalcool/i];
+/** Le mot « Covid » lui-même : jamais écrit (règle de GSS), même quand le DCE l'emploie. */
+const MOT_COVID = /\bcovid(?:-19)?\b/i;
+
+/**
+ * Motif Covid interdit dans un texte pour ce DCE : le mot « Covid » (toujours), ou une mesure (pass sanitaire, gestes
+ * barrières, gel hydroalcoolique) que le DCE ne cite pas. Avant, toute mention de l'un de ces termes dans le DCE
+ * (Becquerel : « la période covid du précédent marché ») autorisait toutes les autres et le mot Covid.
+ */
+export function motifCovidInterdit(dce: string): RegExp {
+  const d = String(dce || '');
+  const interdits = [MOT_COVID, ...MESURES_COVID.filter((rx) => !rx.test(d))];
+  return new RegExp(interdits.map((rx) => rx.source).join('|'), 'i');
+}
+
 /**
  * Mesures Covid reprises d'anciens mémoires (« contrôle des pass sanitaires », gestes barrières, gel hydroalcoolique) :
- * retirées (élément d'énumération, sinon la phrase), sauf si le DCE lui-même en parle.
+ * retirées (élément d'énumération, sinon la phrase), sauf la mesure que le DCE exige lui-même (Vitry : lecteur de QR
+ * codes pour les pass sanitaires en cas de crise sanitaire). Le mot « Covid » n'est jamais écrit : « plan Covid »,
+ * « période Covid », « crise de la Covid-19 » deviennent « plan de crise sanitaire », « crise sanitaire ».
  */
 export function sansContenuCovid(texte: string, dce: string): string {
-  const COVID = /pass(?:es)? sanitaires?|gestes? barrières?|gel hydro-?alcoolique|\bcovid/i;
-  if (!COVID.test(texte) || COVID.test(dce || '')) return texte;
-  const t = texte.replace(/,?\s*(?:ou |et )?(?:de |du |le |la |des )?(?:contr[ôo]les?|v[ée]rifications?) (?:des |du )?pass(?:es)? sanitaires?/gi, '');
+  if (!MOT_COVID.test(texte) && !MESURES_COVID.some((rx) => rx.test(texte))) return texte;
+  let t = texte
+    .replace(/\bplans? (?:de |d['’])?(?:la )?covid(?:-19)?\b/gi, (m) => (/^plans/i.test(m) ? 'plans de crise sanitaire' : 'plan de crise sanitaire'))
+    .replace(/\b(?:p[ée]riode|crise|[ée]pid[ée]mie|pand[ée]mie) (?:de (?:la )?|du )?covid(?:-19)?\b/gi, 'crise sanitaire');
+  const COVID = motifCovidInterdit(dce);
+  if (!COVID.test(t)) return t;
+  if (!MESURES_COVID[0].test(String(dce || ''))) t = t.replace(/,?\s*(?:ou |et )?(?:de |du |le |la |des )?(?:contr[ôo]les?|v[ée]rifications?) (?:des |du )?pass(?:es)? sanitaires?/gi, '');
   return t.split('\n').map((ligne) => {
     if (!COVID.test(ligne)) return ligne;
     if (/^\s*(?:[-*•]|\d+[.)])\s/.test(ligne)) return null;
