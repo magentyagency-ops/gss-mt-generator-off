@@ -5207,7 +5207,7 @@
   "questions": [
    {
     "rubrique": "b2_organigramme",
-    "question": "Organigramme : faut-il ajouter DUHAMEL Leo (administratif) et LEMELE Fabrice (exploitation), absents de l'organigramme du mémoire ?"
+    "question": "Organigramme : DUHAMEL Leo (responsable administratif) et LEMELE Fabrice (responsable d'exploitation) figurent dans l'organigramme des mémoires ; confirmez-vous ces deux fonctions ?"
    },
    {
     "rubrique": "b2_organigramme",
@@ -5273,7 +5273,7 @@
    },
    {
     "rubrique": "b4_proc_alarme",
-    "question": "Télésurveillance : quel est le partenaire de télésurveillance de GSS, ERYMA ou Delta ?"
+    "question": "Télésurveillance : votre partenaire de télésurveillance est-il toujours le même (ERYMA ou Delta), ou le choisissez-vous selon le marché ? S'il est toujours le même, il sera écrit dans tous les mémoires et ne sera plus demandé à chaque document ; sinon, il reste demandé pour chaque marché (il faut le connaître avant la remise)."
    },
    {
     "rubrique": "b5_controle_trois_niveaux",

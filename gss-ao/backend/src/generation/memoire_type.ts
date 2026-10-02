@@ -1067,7 +1067,9 @@ const CALCULS: Record<string, Calculateur> = {
   },
   TAUX_REPRISE: () => ({ valeur: null }),
   FONDEMENT_REPRISE_DCE: (c) => ({ valeur: fondementRepriseDce(c.ctx.dce || '') || null, source: 'DCE' }),
-  PARTENAIRE_TELESURVEILLANCE: () => ({ valeur: null }),
+  // Partenaire de télésurveillance : la réponse de GSS, une fois reportée au registre (partenaire_telesurveillance), vaut
+  // pour tous les marchés ; d'ici là, [À COMPLÉTER] et la question du document (questions_gss_une_fois : règle à trancher).
+  PARTENAIRE_TELESURVEILLANCE: (c) => depuisRegistre(c, 'partenaire_telesurveillance'),
   ENGAGEMENTS_TELESURVEILLANCE: () => ({ valeur: null }),
   SITES_RONDES: () => ({ valeur: null }),
   FICHE_POSTE_EXEMPLE: () => ({ valeur: null }),

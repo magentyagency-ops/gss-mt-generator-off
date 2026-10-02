@@ -145,12 +145,24 @@ function moisDepuis(date: string): number {
 }
 
 /** Entrées du registre encore « à confirmer » mais tranchées pour le mémoire : jamais reposées à GSS. */
-const POINTS_TRANCHES = new Set(['logiciel_main_courante', 'effectif_agents_securite']);
+// interlocuteur_unique : MARCHANI Adil, tranché par GSS (faits_gss.md), jamais « à confirmer ».
+const POINTS_TRANCHES = new Set(['logiciel_main_courante', 'effectif_agents_securite', 'interlocuteur_unique']);
 /** Entrée jamais reposée à chaque génération : point tranché, ou question posée une seule fois à GSS (question_une_fois :
  *  noms de l'organigramme ALAMAT, ATTOU, DA SILVA, en attendant l'organigramme à jour). */
 const jamaisReposee = (e: InfoRegistre): boolean => POINTS_TRANCHES.has(e.cle) || !!e.question_une_fois;
 
 /** Registre des informations variables, avec l'instruction de fraîcheur pour chacune. */
+
+/** Valeur et source de DELAI_ASTREINTE_NORMANDIE (mémoire type), ou null si le fichier est illisible. */
+function delaiAstreinteNormandie(): { valeur: string; source: string } | null {
+  for (const c of [path.resolve(__dirname, 'memoire_type', 'memoire_type.json'), path.resolve(__dirname, '../../src/generation/memoire_type/memoire_type.json')]) {
+    try {
+      const v = JSON.parse(fs.readFileSync(c, 'utf-8'))?.variables?.DELAI_ASTREINTE_NORMANDIE;
+      if (v?.valeur_gss) return { valeur: String(v.valeur_gss), source: String(v.origine || '').split(' : ')[0] || 'mémoire type' };
+    } catch { /* fichier suivant */ }
+  }
+  return null;
+}
 
 export function blocRegistre(horsNormandie = false): string {
   const { registre } = charger();
@@ -170,8 +182,16 @@ export function blocRegistre(horsNormandie = false): string {
       : (ancien ? ` — dernière source de plus de ${FRAICHEUR_MOIS} mois` : '');
     // Main courante tranchée : Trackforce seul (Vigicom figure dans un ancien mémoire).
     const valeur = e.cle === 'logiciel_main_courante' ? 'Trackforce' : e.valeur_retenue;
-    return `- ${e.libelle} : ${valeur} [source : ${e.source_retenue}, ${e.date_retenue}]${aConfirmer ? ` [À CONFIRMER${raison}]` : ''}`;
+    // Délai d'astreinte du registre : son objet exact (remplacement d'un agent absent sur son site, variable
+    // DELAI_ASTREINTE_NORMANDIE du mémoire type), jamais présenté comme le délai d'intervention de l'astreinte.
+    const libelle = e.cle === 'delai_astreinte' ? "Délai d'arrivée de l'agent d'astreinte en remplacement d'un agent absent sur son site" : e.libelle;
+    return `- ${libelle} : ${valeur} [source : ${e.source_retenue}, ${e.date_retenue}]${aConfirmer ? ` [À CONFIRMER${raison}]` : ''}`;
   });
+  // Délai d'intervention de l'astreinte sur un site normand (mémoire type, variable DELAI_ASTREINTE_NORMANDIE).
+  if (!horsNormandie) {
+    const d = delaiAstreinteNormandie();
+    if (d) lignes.push(`- Délai d'intervention des agents d'astreinte sur n'importe quel site normand : ${d.valeur} [source : ${d.source}]`);
+  }
   const avertissement = horsNormandie
     ? `\nCE MARCHÉ EST HORS DE NORMANDIE (siège et implantation historique de GSS) : ${ZONE_GSS} ; présente cette présence, sans inventer de ville d'agence. N'annonce AUCUN délai chiffré d'astreinte, d'intervention, de remplacement ou de mise en place repris d'anciens marchés normands (ex. 60 minutes, 1 h à 24 h) ; décris l'organisation et demande le délai à GSS.`
     : '';
