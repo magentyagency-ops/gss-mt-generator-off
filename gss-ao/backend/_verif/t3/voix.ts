@@ -1,0 +1,3 @@
+import { voixDeGss } from '../../src/generation/format_court';
+for (const t of ['avec le Titulaire sortant.', 'le cas échéant, avec le titulaire sortant.', 'du titulaire précédent', 'Le titulaire actuel du marché', 'le titulaire du marché sortant', 'le titulaire en place', 'Le titulaire gère les clés.', 'une copie est remise au titulaire.', 'du titulaire du marché.', 'le titulaire du SSIAP 1', 'le titulaire entrant']) console.log(JSON.stringify(t), '→', JSON.stringify(voixDeGss(t)));
+for (const t of ['du titulaire du marché.', 'au titulaire du marché.', 'Le titulaire du marché assure']) console.log(JSON.stringify(t), '→', JSON.stringify(voixDeGss(t)));

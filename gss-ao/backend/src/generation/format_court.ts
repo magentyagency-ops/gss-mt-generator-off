@@ -110,11 +110,14 @@ const motsEngagement = (t: string) => new Set(t.toLowerCase().normalize('NFD').r
  * (diplôme, poste tenu par un agent) n'est pas touché.
  */
 export function voixDeGss(texte: string): string {
-  const SAUF = String.raw`(?!\s+(?:du|d['’]un|d['’]une|des)\s+(?:SSIAP|dipl|poste|PC|carte|permis|CQP|titre|certificat|habilitation|SST|brevet))`;
+  // Autre titulaire que GSS (citedia 341 : « le cas échéant, avec le Titulaire sortant » devenu « GSS sortant ») : le
+  // titulaire sortant, précédent, actuel, en place, antérieur, ancien, entrant, futur… n'est jamais GSS.
+  const AUTRE = String.raw`(?!(?:\s+du\s+march[ée])?\s+(?:sortants?|pr[ée]c[ée]dents?|actuels?|en\s+place|ant[ée]rieurs?|anciens?|nouveaux?|entrants?|suivants?|futurs?|initial|retenus?|pressentis?)(?![\p{L}]))`;
+  const SAUF = String.raw`${AUTRE}(?!\s+(?:du|d['’]un|d['’]une|des)\s+(?:SSIAP|dipl|poste|PC|carte|permis|CQP|titre|certificat|habilitation|SST|brevet))`;
   return String(texte || '')
-    .replace(new RegExp(String.raw`\b([Aa])u titulaire(?: du march[ée])?\b${SAUF}`, 'g'), (_m, a: string) => (a === 'A' ? 'À GSS' : 'à GSS'))
-    .replace(new RegExp(String.raw`\b([Dd])u titulaire(?: du march[ée])?\b${SAUF}`, 'g'), (_m, d: string) => `${d}e GSS`)
-    .replace(new RegExp(String.raw`\b[Ll]e titulaire(?: du march[ée])?\b${SAUF}`, 'g'), 'GSS');
+    .replace(new RegExp(String.raw`\b([Aa])u titulaire(?: du march[ée])?(?![\p{L}])${SAUF}`, 'gu'), (_m, a: string) => (a === 'A' ? 'À GSS' : 'à GSS'))
+    .replace(new RegExp(String.raw`\b([Dd])u titulaire(?: du march[ée])?(?![\p{L}])${SAUF}`, 'gu'), (_m, d: string) => `${d}e GSS`)
+    .replace(new RegExp(String.raw`\b[Ll]e titulaire(?: du march[ée])?(?![\p{L}])${SAUF}`, 'gu'), 'GSS');
 }
 
 /**
