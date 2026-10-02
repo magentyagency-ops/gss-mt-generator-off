@@ -124,6 +124,24 @@ export interface RubriqueMemoireType {
   nettoyage?: string[];
   notes?: string[];
   longueur_mots?: number;
+  /** Sujet étroit de la rubrique (ex. intégration d'un nouveau marché : la période de démarrage) : une obligation du CCTP
+   *  ou un ajout de l'adaptation n'y est rattaché que s'il correspond à « exige » et pas à « exclut » (expressions
+   *  régulières, insensibles à la casse) ; sinon il relève d'une autre rubrique ou des questions à GSS. */
+  sujet_ajouts?: { exige?: string; exclut?: string; motif?: string };
+}
+
+/** Expressions du sujet d'une rubrique (sujet_ajouts), ou null. */
+export function sujetDeRubrique(r: RubriqueMemoireType): { exige?: RegExp; exclut?: RegExp } | null {
+  const s = r.sujet_ajouts;
+  if (!s || (!s.exige && !s.exclut)) return null;
+  return { exige: s.exige ? new RegExp(s.exige, 'i') : undefined, exclut: s.exclut ? new RegExp(s.exclut, 'i') : undefined };
+}
+
+/** Vrai si un texte (obligation du CCTP, ajout) relève du sujet étroit de la rubrique. */
+export function dansLeSujet(texte: string, sujet: { exige?: RegExp; exclut?: RegExp } | null | undefined): boolean {
+  if (!sujet) return true;
+  if (sujet.exclut && sujet.exclut.test(texte)) return false;
+  return !sujet.exige || sujet.exige.test(texte);
 }
 
 export interface MemoireType {
@@ -1636,7 +1654,11 @@ export function exigencesParRubrique(mt: MemoireType, plan: PlanMemoireType, mat
  */
 export function obligationsPourRubrique(rubrique: RubriqueMemoireType, dce: string, max = 8): string[] {
   const cles = rubrique.mots_cles.map((m) => normaliser(m)).filter((m) => m.length >= 4);
-  const pertinente = (ph: string) => { const t = normaliser(ph); return cles.some((k) => t.includes(k)); };
+  // Sujet étroit (sujet_ajouts) : une obligation qui ne fait que partager un mot-clé (« prise de poste » quotidienne,
+  // IGN) n'est pas transmise à la rubrique.
+  const sujet = sujetDeRubrique(rubrique);
+  // Mot-clé au début d'un mot (comme scoreRubrique) : « dati » (DATI) ne se trouve plus dans « dégradation ».
+  const pertinente = (ph: string) => { const t = ` ${normaliser(ph).replace(/[^a-z0-9]+/g, ' ')}`; return cles.some((k) => t.includes(` ${k.replace(/[^a-z0-9]+/g, ' ').trim()}`)) && dansLeSujet(ph, sujet); };
   const vues = new Set<string>();
   const out: string[] = [];
   for (const ph of [...obligationsChiffrees(dce).map((o) => o.phrase), ...horairesImposes(dce)]) {
@@ -1690,6 +1712,8 @@ export interface OptionsModifications {
   /** Titres des rubriques du mémoire type gardées dans le mémoire : un ajout ne pose pas de « [À COMPLÉTER] » sur
    *  un sujet qu'elles traitent déjà. */
   titresTraites?: string[];
+  /** Sujet étroit de la rubrique adaptée (sujet_ajouts) : un ajout hors de ce sujet est refusé. */
+  sujetAjouts?: { exige?: RegExp; exclut?: RegExp } | null;
 }
 
 const MOTS_VIDES_TITRE = new Set(['notre', 'nos', 'votre', 'vos', 'dans', 'pour', 'avec', 'des', 'les', 'une', 'aux', 'sur', 'par', 'leur', 'leurs', 'cas', 'place', 'tout', 'tous', 'toute']);
@@ -1743,7 +1767,8 @@ const INTERDITS_ADAPTATION: Array<[RegExp, string]> = [
 ];
 
 /** Exigence écrite à la voix de l'acheteur (« son remplaçant devra être présent », « quels que soit », « le titulaire »). */
-const VOIX_ACHETEUR = /\b(?:devra|devront|doit|doivent|est tenu|sont tenus|il est demand[ée]|quels? que soi(?:t|ent)|vu que)\b|\b(?:le|au|du) titulaire\b/i;
+// Bornes en lettres accentuées comprises (\b ne voit pas « é » : « il est demandé », « est réputé » échappaient au motif).
+const VOIX_ACHETEUR = /(?<![\wÀ-ÿ])(?:devra|devront|doit|doivent|est tenu|sont tenus|il est demand[ée]|quels? que soi(?:t|ent)|vu que|est r[ée]put[ée]|sont r[ée]put[ée]s|ne (?:peut|pourra) (?:invoquer|se pr[ée]valoir))(?![\wÀ-ÿ])|\b(?:le|au|du) titulaire\b/i;
 
 /** Motif de refus d'un texte proposé par le modèle (ou null s'il est acceptable). */
 function refusTexteNouveau(nouveau: string, ancien: string, o: OptionsModifications): string | null {
@@ -1839,6 +1864,9 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     }
     if (nAjouts >= o.maxAjouts) { refusees.push({ ...m, raison: `plus de ${o.maxAjouts} ajouts` }); continue; }
     if (!m.par || compterMots(m.par) > o.motsParAjout) { refusees.push({ ...m, raison: `ajout vide ou de plus de ${o.motsParAjout} mots` }); continue; }
+    // Rattachement : une exigence hors du sujet étroit de la rubrique (accueil quotidien à 7h00, état des lieux de fin de
+    // marché dans l'intégration d'un nouveau marché) relève d'une autre rubrique ou des questions à GSS.
+    if (!dansLeSujet(m.par, o.sujetAjouts)) { refusees.push({ ...m, raison: 'exigence hors du sujet de la rubrique (traitée par sa rubrique ou par les questions à GSS)' }); continue; }
     const refus = refusTexteNouveau(m.par, '', o);
     if (refus) { refusees.push({ ...m, raison: refus }); continue; }
     if (m.extrait) {
@@ -2027,7 +2055,7 @@ export async function adapterRubrique(rubrique: RubriqueMemoireType, textePublip
     return sortie(reference, true, `appel au modèle impossible : ${e?.message || e}`);
   }
   if (!mods || typeof mods !== 'object') return sortie(reference, true, 'réponse du modèle illisible');
-  const opts: OptionsModifications = { ...options, dce: ctx.dce, reference };
+  const opts: OptionsModifications = { ...options, dce: ctx.dce, reference, sujetAjouts: options.sujetAjouts ?? sujetDeRubrique(rubrique) };
   const tout = appliquerModifications(reference, mods, opts);
   if (fidelite(reference, tout.texte) >= seuil) return sortie(tout.texte, false, undefined, tout.appliquees, tout.refusees);
   if (options.repli === 'reference') {

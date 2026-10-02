@@ -790,7 +790,8 @@ export function recopieDuDce(phrase: string, dce: string, seuil = 0.8): boolean 
 export function sansRecopieCctp(texte: string, dce: string): { texte: string; retires: string[] } {
   const retires: string[] = [];
   if (!dce) return { texte, retires };
-  const VOIX_ACHETEUR = /\b(?:devra|devront|doit|doivent|est tenu|sont tenus|il est demand[ée]|quels? que soi(?:t|ent)|vu que|à la charge du titulaire)\b|\b(?:le|au|du) titulaire\b/i;
+  // Bornes en lettres accentuées comprises (\b ne voit pas « é » : « il est demandé », « est réputé » échappaient au motif).
+  const VOIX_ACHETEUR = /(?<![\wÀ-ÿ])(?:devra|devront|doit|doivent|est tenu|sont tenus|il est demand[ée]|quels? que soi(?:t|ent)|vu que|à la charge du titulaire|est r[ée]put[ée]|sont r[ée]put[ée]s|ne (?:peut|pourra) (?:invoquer|se pr[ée]valoir))(?![\wÀ-ÿ])|\b(?:le|au|du) titulaire\b/i;
   const garder = (ph: string) => /⟦AC:|\[À COMPLÉTER\]|\[CONSULTATION REQUISE|^\s*#/.test(ph) || !VOIX_ACHETEUR.test(ph) || !recopieDuDce(ph, dce);
   const sortie = texte.split('\n').map((ligne) => {
     if (/^\s*(?:#|\|)/.test(ligne)) return ligne;

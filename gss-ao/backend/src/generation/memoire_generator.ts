@@ -7413,7 +7413,9 @@ Renvoie UNIQUEMENT un objet JSON : {"puces": [{"rubrique": "identifiant", "texte
       for (const p of JSON.parse(r || '{}').puces || []) {
         const id = String(p?.rubrique || '').trim();
         const texte = String(p?.texte || '').trim().replace(/^[-•]\s*/, '');
-        if (!ids.includes(id) || texte.length < 15 || PIECES_OFFRE.test(texte) || /p[ée]nalit|plafonnement/i.test(texte)
+        // Procédure et administratif du marché (consigne du prompt), contrôlés sans modèle : facturation et paiement
+        // (« GSS s'engage à ce que la dernière facture puisse être différée », génération réelle ign 12).
+        if (!ids.includes(id) || texte.length < 15 || PIECES_OFFRE.test(texte) || /p[ée]nalit|plafonnement|factur|paiement|imput[ée]e?s? [àa] GSS/i.test(texte)
           || /\b(?:indiquera|précisera|détaillera|déterminera|communiquera ultérieurement)\b/i.test(texte)) continue;
         (parRubrique.get(id) ?? parRubrique.set(id, []).get(id)!).push(texte);
       }

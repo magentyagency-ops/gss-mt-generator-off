@@ -4636,7 +4636,12 @@
     "b_organisation",
     "b_amelioration"
    ],
-   "longueur_mots": 290
+   "longueur_mots": 290,
+   "sujet_ajouts": {
+    "exige": "\\bJ\\s?[-+–]\\s?\\d|d[ée]marrage|d[ée]but (?:du |de la |des )?(?:march[ée]|prestations?|contrat)|prise d.effet du march|notification|lancement|mise en place|premi[eè]re?s? (?:jours?|semaines?|vacations?|mois)|avant (?:le |la |toute )?(?:d[ée]marrage|d[ée]but|prise de poste|prise d.effet)|tuilage|passation|transition|r[ée]troplanning|pr[ée]paration|nouveau march|nouvelle [ée]quipe|reprise du personnel",
+    "exclut": "[ée]ch[ée]ance|fin (?:du |de )(?:march[ée]|contrat)|terme du march|restitu|remise en [ée]tat|derni[èe]re facture|r[ée]versibilit",
+    "motif": "Rubrique de la période de démarrage (rétroplanning de J-30 à J+30) : une obligation quotidienne qui partage seulement le mot-clé « prise de poste » (accueil de Coriolis à 7h00, remplaçant sous 2 heures, IGN) ou une exigence de fin de marché (état des lieux, restitution des locaux) n'y est pas rattachée (générations réelles ign 11 à 13)."
+   }
   },
   {
    "id": "b5_mise_en_place",
