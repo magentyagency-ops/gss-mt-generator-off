@@ -308,7 +308,14 @@ async function scenariosAssistant(etat0: EtatCompletion): Promise<any> {
   // 5. Saisie directe d'un « [À COMPLÉTER] » publiposté (effectif titulaire) : la valeur remplace l'emplacement.
   const el = e4.elements.find((e) => /titulaires/.test(e.question) && e.statut === 'ouvert');
   if (el) {
+    out.anomalies_saisie = [];
+    // Tour 1 (B11, R1-3) : la réponse à la proposition de dimensionnement change les effectifs publipostés (phrase et
+    // tableau), par une modification de l'assistant ; jamais une phrase « 8. » collée en fin d'une autre rubrique.
+    assistant.texteModifie = (t) => t.replace(/équipe (dédiée )?de \d+ agents titulaires/g, 'équipe $1de 8 agents titulaires');
     const e5 = await remplirSaisie(id, el.cle, '8');
+    const dims = Object.entries(e5.libre!.sections).filter(([, t]) => /équipe (?:dédiée )?de 9 agents titulaires/.test(t)).map(([k]) => k);
+    if (dims.length) out.anomalies_saisie.push(`effectif proposé (9) encore présent après la saisie de 8 : ${dims.join(', ')}`);
+    if (Object.values(e5.libre!.sections).some((t) => /(?:^|\n)8\.\s*$/.test(t))) out.anomalies_saisie.push('« 8. » collé en fin de rubrique');
     const sec = Object.values(e5.libre!.sections).find((t) => /équipe de 8 agents titulaires/.test(t));
     out.saisie = { cle: el.cle, remplace: !!sec, statut: e5.elements.find((e) => e.cle === el.cle)?.statut, pdf: /équipe de 8 agents titulaires/.test(textePages(e5.fichier).join('\n')) };
   }

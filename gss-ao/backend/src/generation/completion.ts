@@ -594,11 +594,17 @@ export async function remplir(
   if (!etat) throw new Error('Aucun document généré à compléter pour ce dossier.');
   let fichier = etat.fichier;
   let modifie = false;
+  /** Réponses à la proposition de dimensionnement qui changent les effectifs : appliquées après, comme une modification. */
+  const effectifs: Array<{ el: ElementACompleter; v: string }> = [];
   for (const { cle, valeur } of remplissages) {
     const el = etat.elements.find((e) => e.cle === cle);
     const v = String(valeur || '').trim();
     if (!el || !v) continue;
-    if (etat.mode === 'cadre') {
+    // Proposition de dimensionnement (D5) : « je valide » la garde telle quelle ; une autre réponse change les effectifs
+    // publipostés (phrase, tableau de l'équipe dédiée), jamais une phrase de plus collée ailleurs (deux chiffres).
+    if (etat.mode === 'libre' && PROPOSITION_DIMENSIONNEMENT.test(el.question)) {
+      if (!VALIDATION.test(v)) { effectifs.push({ el, v }); continue; }
+    } else if (etat.mode === 'cadre') {
       fichier = remplirSignet(fichier, cle, v);
     } else {
       const reperes = el.reperes?.length ? el.reperes : [];
@@ -630,6 +636,49 @@ export async function remplir(
   if (modifie && etat.mode === 'libre') fichier = await recomposerPdf(etat);
   etat.fichier = fichier;
   ecrireEtat(etat);
+  if (!effectifs.length) return etat;
+  return appliquerEffectifs(dossierId, effectifs, source);
+}
+
+/** Proposition de dimensionnement calculée à la génération (dimensionnement.ts, questionDimensionnement). */
+export const PROPOSITION_DIMENSIONNEMENT = /^Proposition à valider\s*:\s*dimensionnement/i;
+/** Réponse qui valide une proposition telle quelle. */
+const VALIDATION = /^\s*(?:oui|ok|okay|d['’]accord|je valide|valid[ée]e?s?|c['’]est (?:bon|ok|validé)|confirm[ée]e?s?|je confirme|parfait|ça me va|cela me va)\b[\s.!]*$/i;
+
+/**
+ * Réponse de GSS à la proposition de dimensionnement qui change les effectifs (« 8 », « 8 titulaires et 3 suppléants ») :
+ * les rubriques qui portent ces effectifs (phrase « équipe de N agents titulaires », tableau de l'équipe dédiée, équipe
+ * suppléante) sont réécrites avec les effectifs de GSS, par l'assistant (action « modifier »), puis le PDF est
+ * recomposé. L'élément n'est marqué complété que si les nombres de GSS figurent bien dans le texte ; sinon il reste
+ * ouvert et l'assistant l'explique dans la conversation.
+ */
+async function appliquerEffectifs(dossierId: string, effectifs: Array<{ el: ElementACompleter; v: string }>, source: ElementACompleter['source']): Promise<EtatCompletion> {
+  const { modifierRubriquesLibre } = await import('./assistant_memoire');
+  let etat = lireEtat(dossierId)!;
+  for (const { el, v } of effectifs) {
+    const sections = etat.libre!.sections;
+    const ancien = (/équipe dédiée de (\d+) agents? titulaires?/i.exec(el.question) || [])[1];
+    const PORTE = new RegExp(`(?:équipe (?:dédiée )?de ${ancien || '\\d+'} agents? titulaires?|équipe suppléante de \\d+|^\\|[^\\n]*\\|\\s*\\d+\\s*\\|[^\\n]*ETP)`, 'im');
+    const ids = Object.keys(sections).filter((id) => PORTE.test(sections[id] || ''));
+    if (!ids.length) continue;
+    const consigne = `Réponse de GSS à la proposition de dimensionnement : « ${v} ». Remplace les effectifs proposés de l'équipe dédiée (nombre d'agents titulaires${ancien ? `, aujourd'hui ${ancien}` : ''}, effectifs par profil du tableau de l'équipe dédiée, équipe suppléante) par ceux que donne GSS. Le total des lignes du tableau égale le nombre de titulaires. Si GSS ne donne qu'un total et que le tableau a plusieurs profils, écris [À COMPLÉTER] dans les cellules d'effectif par profil. Ne change rien d'autre : aucun autre mot, aucune autre phrase.`;
+    const r = await modifierRubriquesLibre(dossierId, ids.map((id) => ({ id, consigne })), `Effectifs de l'équipe dédiée : ${v}`, `Effectifs de l'équipe dédiée mis à jour d'après votre réponse (« ${v} »).`);
+    etat = r.etat;
+    const nombres: string[] = v.match(/\d+/g) || [];
+    const texte = ids.map((id) => etat.libre!.sections[id] || '').join('\n');
+    const ok = r.modifies.length > 0 && nombres.every((n) => new RegExp(`(?<![\\d,.])${n}(?![\\d,.])`).test(texte))
+      && !(ancien && !nombres.includes(ancien) && new RegExp(`équipe (?:dédiée )?de ${ancien} agents? titulaires?`, 'i').test(texte));
+    const e = etat.elements.find((x) => x.cle === el.cle)!;
+    if (ok) {
+      e.statut = 'complete';
+      e.valeur = v;
+      e.source = source;
+      e.completeLe = new Date().toISOString();
+    } else {
+      (etat.conversation ||= []).push({ role: 'assistant', texte: `Je n'ai pas pu reporter les effectifs « ${v} » dans le mémoire de façon sûre : précisez-les dans l'assistant (par exemple « 8 agents titulaires, dont 6 agents de sécurité et 2 SSIAP 1, et 3 suppléants »).`, date: new Date().toISOString() });
+    }
+    ecrireEtat(etat);
+  }
   return etat;
 }
 

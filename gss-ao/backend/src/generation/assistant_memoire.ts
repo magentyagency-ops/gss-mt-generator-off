@@ -341,7 +341,7 @@ export function pageDe(fichier: string, titre: string, derniere = false): number
   return t ? t.i + 1 : undefined;
 }
 
-async function assistantLibre(etat: EtatCompletion, message: string, pieces: PieceJointe[]): Promise<{ reponse: string; modifies: string[]; page?: number }> {
+async function assistantLibre(etat: EtatCompletion, message: string, pieces: PieceJointe[], imposees?: { reponse: string; actions: any[] }): Promise<{ reponse: string; modifies: string[]; page?: number }> {
   const lib = etat.libre!;
   lib.ajouts ||= [];
   const court = lib.court;
@@ -356,7 +356,8 @@ async function assistantLibre(etat: EtatCompletion, message: string, pieces: Pie
   const organisation = court
     ? `au FORMAT IMPOSÉ PAR LE RÈGLEMENT DE CONSULTATION (${court.pagesMax} pages maximum), organisé selon le plan du RC en parties (les « rubriques » ci-dessous). Une nouvelle demande de contenu s'intègre à la partie concernée (action "modifier") : les actions "ajouter" et "image" ne sont pas disponibles dans ce format (limite de pages) : explique-le si l'utilisateur les demande. Une partie du RC ne se supprime pas (action "supprimer" indisponible). Une proposition de réponse de l'IA ([PROPOSITION À VALIDER]) est un PASSAGE de la partie, pas la partie entière : pour la retirer, action "modifier" sur la partie avec la consigne « retire uniquement le passage proposé sur <sujet> »`
     : `organisé en chapitres (${Object.entries(chapitres).map(([k, v]) => `${k} : ${v}`).join(' ; ')}) et en rubriques`;
-  const plan = await json(
+  // Actions imposées (réponse de GSS à la proposition de dimensionnement, completion.ts) : pas de plan du modèle.
+  const plan = imposees ? { ...imposees } : await json(
     `Tu es l'assistant de modification d'un mémoire technique GSS (sécurité privée) déjà généré, ${organisation}. Actions possibles :
 1. "modifier" : refaire, corriger, compléter, développer, raccourcir ou enrichir une rubrique existante (repérée par son id).
 2. "ajouter" : ajouter une nouvelle rubrique (une ou plusieurs pages) dans un chapitre (${ouChapitres(Object.keys(chapitres))}), éventuellement juste après une rubrique donnée ("apres": id).
@@ -513,6 +514,22 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
 }
 
 // ─── Point d'entrée ───────────────────────────────────────────────────────────────────────
+
+/**
+ * Actions « modifier » imposées sur des rubriques d'une réponse libre (sans plan du modèle), avec le même traitement que
+ * l'assistant : réécriture, repères des « [À COMPLÉTER] », recomposition du PDF, trace dans la conversation. Sert à
+ * appliquer la réponse de GSS à la proposition de dimensionnement (completion.ts).
+ */
+export async function modifierRubriquesLibre(dossierId: string, actions: Array<{ id: string; consigne: string }>, message: string, reponse: string): Promise<ResultatAssistant> {
+  const etat = lireEtat(dossierId);
+  if (!etat || etat.mode !== 'libre') throw new Error('Aucune réponse libre générée pour ce dossier.');
+  const r = await assistantLibre(etat, message, [], { reponse, actions: actions.map((a) => ({ type: 'modifier', ...a })) });
+  const date = new Date().toISOString();
+  (etat.conversation ||= []).push({ role: 'utilisateur', texte: message, date });
+  etat.conversation.push({ role: 'assistant', texte: r.reponse, date: new Date().toISOString(), modifies: r.modifies });
+  ecrireEtat(etat);
+  return { etat, reponse: r.reponse, modifies: r.modifies, page: r.page };
+}
 
 export async function discuter(dossierId: string, message: string, pieces: PieceJointe[] = []): Promise<ResultatAssistant> {
   const etat = lireEtat(dossierId);
