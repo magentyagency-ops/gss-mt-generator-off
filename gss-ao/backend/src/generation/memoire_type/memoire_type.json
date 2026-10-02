@@ -191,8 +191,8 @@
   },
   "REPRISE_PERSONNEL": {
    "description": "Le DCE prévoit la reprise du personnel en place.",
-   "dce": "reprise (?:du |de |des )?(?:personnel|salari[ée]s|agents)|personnel (?:en place|actuel|repris|[àa] reprendre)|salari[ée]s? [àa] reprendre|L\\.?\\s?1224|accord du 5 mars 2002|annexe VII",
-   "analyse": "reprise du personnel|taux de reprise",
+   "dce": "reprise (?:du |de |des )?(?:personnel|salari[ée]s|agents)|(?:repri[sr]e?|repren(?:dre|d|nent|dra|dront)|transf[ée]r[ée]?s?|transfert)[^.;]{0,80}personnel en place|personnel en place[^.;]{0,80}(?:repris|reprendre|transf[ée]r)|personnel (?:actuel|repris|[àa] reprendre)|salari[ée]s? [àa] reprendre|L\\.?\\s?1224|accord du 5 mars 2002|annexe VII",
+   "analyse": "(?:reprise du personnel|taux de reprise)(?![^.;\\n\"]{0,60}(?:non (?:pr[ée]cis|mentionn|indiqu|pr[ée]vu|applicable|concern|exig|demand)|aucune?\\b|pas de\\b|n.est pas|n.est ni|sans objet|n[ée]ant|absente?))",
    "dce_exclure": "pas de personnel (?:transf[ée]rable|[àa] reprendre)|aucun (?:personnel|salari[ée]) (?:n.est )?(?:transf[ée]rable|[àa] reprendre)",
    "matrice": [
     "b3_reprise_personnel"
