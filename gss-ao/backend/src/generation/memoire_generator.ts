@@ -1319,6 +1319,39 @@ export function questionExacte(q: string): string {
     quantites: 'Quelles sont', coordonnees: 'Quelles sont', modalites: 'Quelles sont', qualifications: 'Quelles sont', dates: 'Quelles sont', references: 'Quelles sont',
   };
   const premier = t.split(/[\s'’]/)[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  // Nom suivi d'un adjectif au pluriel (« taux horaires … ») ou libellé qui coordonne plusieurs données (« nom et
+  // coordonnées du chef de site », « délai de remplacement et taux de reprise ») : chaque donnée prend son article
+  // (T4N-9 : « Quel est le taux horaires … et montants … ? » n'était pas une question correcte).
+  const sansAcc = (w: string) => w.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const articleDe = (groupe: string): string | null => {
+    const mots = groupe.trim().split(/\s+/);
+    const w = sansAcc(mots[0].replace(/['’].*$/, ''));
+    const suivant = mots[1] || '';
+    const pluriel = /^(?:quels|quelles)/i.test(GENRES[w] || '')
+      || (!GENRES[w] && /s$/.test(w) && !!GENRES[w.replace(/s$/, '')])
+      || (!!GENRES[w] && /[sxz]$/.test(w) && /^[a-zà-ÿ]+s$/.test(suivant) && !/^(?:de|des|du|par|pour|sur|dans|avec|sous)$/.test(suivant));
+    if (pluriel) return 'les';
+    const g = GENRES[w];
+    if (!g) return null;
+    if (/^[aeiouyhàâéèêîïôûü]/i.test(mots[0])) return "l'";
+    return /^Quelle /.test(g) ? 'la' : 'le';
+  };
+  const avecArticle = (groupe: string, art: string) => (art === "l'" ? `l'${min(groupe.trim())}` : `${art} ${min(groupe.trim())}`);
+  if (GENRES[premier] || GENRES[premier.replace(/s$/, '')]) {
+    const corps = sansFin(t);
+    // Coordination : « A et B » (une seule coordination de premier niveau, avant toute virgule).
+    const iVirgule = corps.search(/,\s/);
+    const tete = iVirgule > 0 ? corps.slice(0, iVirgule) : corps;
+    const suiteVirgule = iVirgule > 0 ? corps.slice(iVirgule) : '';
+    const parts = tete.split(/\s+et\s+/);
+    if (parts.length === 2) {
+      const a1 = articleDe(parts[0]);
+      const a2 = articleDe(parts[1]);
+      if (a1 && a2) return `Pouvez-vous indiquer ${avecArticle(parts[0], a1)} et ${avecArticle(parts[1], a2)}${suiteVirgule} ?`;
+    }
+    const a = articleDe(corps);
+    if (a === 'les' && GENRES[premier] && !/^(?:quels|quelles)/i.test(GENRES[premier])) return `Quels sont les ${min(corps)} ?`;
+  }
   if (GENRES[premier]) {
     const article = /^(?:quels|quelles)/i.test(GENRES[premier]) ? 'les' : /^(?:date|liste|composition|duree|frequence|periodicite|adresse)$/.test(premier) ? 'la' : 'le';
     const corps = min(sansFin(t));
@@ -1393,6 +1426,15 @@ export function motifRefusEngagement(x: string): string {
   const t = String(x || '');
   if (PIECES_OFFRE.test(t)) return 'pièce de l\'offre';
   if (/p[ée]nalit|plafonnement/i.test(t)) return 'pénalité';
+  // Renvoi à un document de l'offre au lieu de l'engagement (caen 471 : « les délais et conditions de mobilisation des
+  // personnels… sont indiqués dans le cadre de réponse technique ») : la puce n'engage à rien ; la question sur le
+  // document manquant, s'il y a lieu, est posée par ailleurs (pas de question ici).
+  if (/\b(?:indiqu|pr[ée]cis|d[ée]taill|d[ée]crit|mentionn|pr[ée]sent|repris|report|figur)[\wÀ-ÿ]*\s+(?:dans|au|aux|à|en)\s+(?:le |la |l['’]\s*|les |son |sa |ses |notre |nos |leur |leurs )?(?:cadre de r[ée]ponse|r[ée]ponse technique|BPU|DPGF|DQE|annexes?\b|bordereaux?|acte d.engagement|offre\b|m[ée]moire\b|documents? de (?:l.offre|la consultation)|pi[èe]ces? de l.offre)/i.test(t)) return 'renvoi à un document de l\'offre, sans l\'engagement';
+  // Plan du mémoire imposé par le RC (imm 473 : « GSS présentera les moyens humains et l'encadrement, la continuité et les
+  // situations dégradées, …, ainsi que la formation, la qualité, la démarche RSE et la cohérence du prix ») : la structure
+  // de la réponse, pas un engagement d'exécution (un rapport, un bilan, un agent présentés au client restent des engagements).
+  if (/\b(?:pr[ée]sentera|d[ée]crira|exposera|expliquera|d[ée]montrera|justifiera|abordera)\b/i.test(t) && (t.match(/,/g) || []).length >= 2
+    && !/\b(?:rapports?|bilans?|comptes?[- ]rendus?|tableaux? de bord|plannings?|indicateurs?|synth[èe]ses?|factures?|fiches?|agents?|personnels?|candidats?|dossiers?)\b/i.test(t)) return 'plan du mémoire imposé par le RC, pas un engagement';
   // « GSS s'engage à préciser / indiquer / détailler… » (cstb 221, b4_equipements : « s'engage à préciser les moyens
   // matériels envisagés…, notamment le nombre de véhicules affectés ») : une promesse de donner l'information, pas la réponse.
   if (/\bs.engage(?:ra)? [àa] (?:lui )?(?:pr[ée]ciser|indiquer|d[ée]tailler|communiquer|fournir|transmettre|mentionner|renseigner|pr[ée]senter|d[ée]terminer|d[ée]finir)\b/i.test(t)) return 'phrase sur le mémoire, sans réponse';
@@ -8018,7 +8060,7 @@ Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "tex
       for (const a of JSON.parse(r || '{}').ajouts || []) {
         const id = Number(a?.id);
         const texte = String(a?.texte || '').trim().replace(/^[-•]\s*/, '');
-        if (!reponses.some((x) => x.id === id) || texte.length < 20 || PIECES_OFFRE.test(texte) || /p[ée]nalit|\btitulaire\b|\bdevra\b/i.test(texte)) continue;
+        if (!reponses.some((x) => x.id === id) || texte.length < 20 || PIECES_OFFRE.test(texte) || motifRefusEngagement(texte) || /p[ée]nalit|\btitulaire\b|\bdevra\b/i.test(texte)) continue;
         const l = parId.get(id) ?? parId.set(id, []).get(id)!;
         if (l.length < 4) l.push({ apres: String(a?.apres || '').trim(), texte });
       }
