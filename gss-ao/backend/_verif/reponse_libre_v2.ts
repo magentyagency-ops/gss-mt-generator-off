@@ -331,6 +331,15 @@ async function scenariosAssistant(etat0: EtatCompletion): Promise<any> {
     const dims = Object.entries(e5.libre!.sections).filter(([, t]) => /équipe (?:dédiée )?de 9 agents titulaires/.test(t)).map(([k]) => k);
     if (dims.length) out.anomalies_saisie.push(`effectif proposé (9) encore présent après la saisie de 8 : ${dims.join(', ')}`);
     if (Object.values(e5.libre!.sections).some((t) => /(?:^|\n)8\.\s*$/.test(t))) out.anomalies_saisie.push('« 8. » collé en fin de rubrique');
+    // Tour 4 (T4N-6) : le tableau de l'équipe dédiée suit la phrase (somme des effectifs = titulaires), ou ses effectifs
+    // par profil restent à compléter, chacun avec sa question.
+    const { lignesTableauEquipe } = require('../src/generation/completion');
+    for (const [k, t] of Object.entries(e5.libre!.sections)) {
+      const lignes: Array<{ nombre: number | null }> = lignesTableauEquipe(t);
+      const phrase = /équipe (?:dédiée )?de (\d+) agents titulaires/.exec(t);
+      if (lignes.length && phrase && lignes.every((x) => x.nombre !== null) && lignes.reduce((a, x) => a + (x.nombre || 0), 0) !== Number(phrase[1])) out.anomalies_saisie.push(`tableau de l'équipe dédiée (${lignes.map((x) => x.nombre).join(' + ')}) différent des ${phrase[1]} titulaires de la phrase (${k})`);
+    }
+    out.questions_par_profil = e5.elements.filter((x) => /^Combien d'agents « .* » compte l'équipe dédiée de 8 agents/.test(x.question) && x.statut === 'ouvert').map((x) => x.question);
     const sec = Object.values(e5.libre!.sections).find((t) => /équipe de 8 agents titulaires/.test(t));
     out.saisie = { cle: el.cle, remplace: !!sec, statut: e5.elements.find((e) => e.cle === el.cle)?.statut, pdf: /équipe de 8 agents titulaires/.test(textePages(e5.fichier).join('\n')) };
   }

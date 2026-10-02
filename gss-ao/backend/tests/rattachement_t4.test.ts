@@ -34,3 +34,25 @@ describe('engagements rédigés par l\'IA signalés à GSS (T4C-10)', () => {
     expect(t).toContain('- « La gestion des moyens d\'accès » : 1 engagement');
   });
 });
+
+/** Génération réelle caen 475 (vérification de T4C-9) : rubriques au sujet étroit (sujet_ajouts) et mots-clés de routage. */
+describe('rattachement des exigences du CCTP, génération réelle caen 475 (T4C-9)', () => {
+  const mt = chargerMemoireType();
+  const plan = planMemoireType(mt, Object.fromEntries(Object.keys(mt.indicateurs).map((k) => [k, k !== 'HORS_NORMANDIE' && k !== 'SSIAP'])));
+  it('effraction, interdits de conduite, réunion d\'exploitation : rubrique de leur thème ; carte professionnelle et équipements gardés', () => {
+    const m: any[] = [
+      { exigence: 'En cas d’effraction, l’agent de sécurité reste sur place pour garantir la sécurité du bâtiment.', rubrique: 'b3_formation_ads' },
+      { exigence: 'Il est interdit au personnel l’introduction ou la consommation d’alcool ou de stupéfiants, le travail en état d’ivresse, le désordre et l’accès sans badge ou pièce d’identité.', rubrique: 'b3_valeurs_sociales' },
+      { exigence: 'Participer avec son personnel d’encadrement à une réunion d’exploitation qualité organisée au minimum trimestriellement : planification du mois à venir, bilan du mois écoulé, vérifications d’équipements.', rubrique: 'b4_equipements' },
+      { exigence: 'Les agents détiennent une carte professionnelle comportant le nom, le prénom, la qualité, la photo et la raison sociale.', rubrique: 'b3_formation_ads' },
+      { exigence: 'Fourniture de lampes torches et de gilets pare-lame aux agents.', rubrique: 'b4_equipements' },
+    ];
+    const r = exigencesParRubrique(mt, plan, m).parRubrique;
+    const ou = (debut: string) => Object.entries(r).find(([, l]) => l.some((e) => e.exigence.startsWith(debut)))?.[0];
+    expect(ou('En cas d’effraction')).toBe('b4_proc_intrusion');
+    expect(ou('Il est interdit au personnel')).toBe('b4_lmc');
+    expect(ou('Participer avec son personnel')).toBe('b5_reunions_indicateurs');
+    expect(ou('Les agents détiennent une carte')).toBe('b3_formation_ads');
+    expect(ou('Fourniture de lampes')).toBe('b4_equipements');
+  });
+});

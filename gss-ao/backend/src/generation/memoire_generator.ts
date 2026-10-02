@@ -17,8 +17,8 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, FORMALITES_OFFRE, questionFormalite,
-  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, planSelonRC, passagesPlanImpose, controlerProposition,
-  type AjoutLibre, type GroupeNouveau,
+  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition,
+  type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, type Dimensionnement } from './dimensionnement';
 import {
@@ -26,7 +26,7 @@ import {
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
-  controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides,
+  controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, attendusDuChamp, attendusSansReponse,
 } from './memoire_type_cadre';
 import { SuiviAdaptations, adaptationsDuPubliposte, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, type PhraseAdaptee } from './adaptations_cctp';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
@@ -5101,8 +5101,12 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
           // Intitulé de la rubrique du cadre (titre de section) quand la « question » n'est qu'un paragraphe de consigne
           // (havre1 : « Le renvoi vers un rapport général… est à proscrire » au lieu de « Mesures et initiatives sociétales »).
           const sectionChamp = ((f.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '').replace(/\[CHAMP_\d+\]/gi, '').replace(/\s+/g, ' ').trim();
-          const consigneSeule = !!sectionChamp && sectionChamp !== (questionMT || '').trim() && !/^\d/.test((questionMT || '').trim())
-            && (!/[a-zà-ÿ]/.test(sectionChamp) || /^(?:le renvoi|cela peut|le soumissionnaire|le candidat|le prestataire|il est demand|il convient)/i.test((questionMT || '').trim()));
+          // Titre de section en capitales seul (rouen_univ : « (UFR DESP) », etampes1 : « VALEURS TECHNIQUES ») : jamais à la place
+          // d'une vraie question ou d'une liste d'attendus ; seulement si la « question » est une consigne de forme (suite de R4-1 :
+          // réponses à relire distinctes fusionnées sous un même titre de section dans les consultations).
+          const qTrim = (questionMT || '').trim();
+          const consigneSeule = !!sectionChamp && sectionChamp !== qTrim && !/^\d/.test(qTrim)
+            && /^(?:(?:le |tout )?renvoi|cela peut|le soumissionnaire|le candidat|le prestataire|il est demand|il convient|pour rappel|seront prises en compte|les réponses doivent)|\best à proscrire\b/i.test(qTrim);
           const titreSection = /[a-zà-ÿ]/.test(sectionChamp) ? sectionChamp : sectionChamp.charAt(0) + sectionChamp.slice(1).toLowerCase();
           const libelleBrut = libelleQuestionCadre(consigneSeule ? titreSection : questionMT || `Champ ${f.id}`);
           // Jamais un repère interne comme libellé : l'intitulé de la question, sinon celui du champ.
@@ -5115,8 +5119,10 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
             // sur le texte de référence, sans autre appel : phrase reformulée → phrase de GSS, phrase de GSS omise →
             // remise à sa place, phrases propres à la question gardées ; avec une limite de longueur, dans la limite de
             // mots (les ajouts cèdent la place au texte de GSS). Une phrase de GSS contraire au DCE n'est pas remise.
+            // Éléments attendus du cadre (« Éléments de réponse attendus : … ») : jamais laissés sans réponse au recalage (T4N-4).
+            const attendus = attendusDuChamp(f.context).length ? attendusDuChamp(f.context) : attendusDuChamp(String(questionMT || ''));
             const rec = recalerSurReference(retenus.map((c) => c.texte).join('\n\n'), String(value), {
-              limite: limiteChamp, maxMots: motsMaxChamp(f.context), exclure: (ph) => phraseContraireAuDce(ph, dceContext), dce: dceContext,
+              limite: limiteChamp, maxMots: motsMaxChamp(f.context), exclure: (ph) => phraseContraireAuDce(ph, dceContext), dce: dceContext, attendus,
             });
             if (rec.fideliteAvant < SEUIL_FIDELITE_CADRE && !strict) {
               console.log(`[MemoireGenerator] ${label} : fidélité ${rec.fideliteAvant.toFixed(2)} au mémoire type (${retenus.map((c) => c.id).join(', ')}) < ${SEUIL_FIDELITE_CADRE} → nouvel essai strict.`);
@@ -5147,7 +5153,11 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
             }
             const fid = rec.fidelite;
             repriseParChamp.set(f.id, { ids: retenus.map((c) => c.id), fidelite: fid, brute: rec.fideliteAvant });
-            if (fid < SEUIL_FIDELITE_CADRE) propositionsCadre.set(f.id, `Réponse à relire (mémoire type de GSS repris en partie, fidélité ${Math.round(fid * 100)} %) : ${libelle}`);
+            // Élément attendu resté sans réponse après le recalage : signalé à GSS, avec la liste (T4N-4).
+            const sansReponse = attendusSansReponse(String(value), attendus);
+            if (sansReponse.length) console.warn(`[MemoireGenerator] ${label} : ${sansReponse.length} élément(s) attendu(s) sans réponse après recalage (${sansReponse.join(' ; ')}).`);
+            if (sansReponse.length) propositionsCadre.set(f.id, `Réponse à relire (élément${sansReponse.length > 1 ? 's' : ''} attendu${sansReponse.length > 1 ? 's' : ''} sans réponse : ${sansReponse.map((x) => `« ${x} »`).join(', ')}${fid < SEUIL_FIDELITE_CADRE ? ` ; mémoire type de GSS repris en partie, fidélité ${Math.round(fid * 100)} %` : ''}) : ${libelle}`);
+            else if (fid < SEUIL_FIDELITE_CADRE) propositionsCadre.set(f.id, `Réponse à relire (mémoire type de GSS repris en partie, fidélité ${Math.round(fid * 100)} %) : ${libelle}`);
             else propositionsCadre.delete(f.id);
             if (comprehension?.svg && ![...svgComprehension.keys()].some((id) => id !== f.id)) svgComprehension.set(f.id, comprehension.svg);
             // Compréhension sans schéma de process (R4-2, ca_normandie) : signalée à GSS comme en réponse libre et en format court.
@@ -7584,8 +7594,8 @@ RÈGLES DE FORME (rendu Marp) :
     // Valeurs habituelles de GSS dont l'engagement renforcé n'est dû que si le DCE l'exige (indicateur faux) : protégées.
     const proteges = Object.values(mt.variables).filter((v) => v.valeur_gss && v.valeur_si_exige && v.indicateur_exige && !prep.indicateurs[v.indicateur_exige]).map((v) => v.valeur_gss!);
     const exigencesCoherence = [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))];
-    await this.corrigerContradictions(sections, rubriquesDoc, exigencesCoherence, proteges, questionsCouverture, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, exigencesCoherence.map((x) => String(x.exigence || ''))));
-    await this.verifierHoraires(sections, rubriquesDoc, dceContext, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, [], 'Horaires du CCTP'));
+    await this.corrigerContradictions(sections, rubriquesDoc, exigencesCoherence, proteges, questionsCouverture, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, exigencesCoherence.map((x) => String(x.exigence || ''))));
+    await this.verifierHoraires(sections, rubriquesDoc, dceContext, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, [], 'Horaires du CCTP'));
     await this.engagementsChiffresManquants(sections, rubriquesDoc, dceContext);
     limiterRappelsSite(sections, rubriquesDoc.map((x) => x.id));
     const refsRetirees = limiterReferences(sections, rubriquesDoc.map((x) => x.id).filter((id) => plan.rubriques.find((r) => r.id === id)?.ancienne_rubrique !== 'b_references'));
@@ -7893,7 +7903,15 @@ RÈGLES DE FORME (rendu Marp) :
       // (seul défaut des étapes du modèle : la dernière étape ; l'étape ajoutée « Votre résultat » est le vocabulaire du moteur)
       if (completees) { etapes = completees; d = []; }
       const spec = d.length ? null : specProcessBesoin(etapes, 'flux');
-      return { etapes, defauts: d.length ? d : spec ? anomaliesSchemaBloc1(spec) : ['étapes absentes ou incomplètes'] };
+      const anomalies = d.length ? d : spec ? anomaliesSchemaBloc1(spec) : ['étapes absentes ou incomplètes'];
+      // Anomalies de forme qui ne portent que sur la dernière étape (caen 475 : « étape 5 « Continuité des prestations » : le
+      // texte redit le titre ») : étape remplacée par « Votre résultat » tiré du texte, au lieu de refuser tout le schéma (T4N-7).
+      if (!d.length && spec && anomalies.length) {
+        const derniere = completerResultatBesoin(spec.params.etapes, texte, anomalies);
+        const spec2 = derniere ? specProcessBesoin(derniere, 'flux') : null;
+        if (spec2 && !anomaliesSchemaBloc1(spec2).length) return { etapes: derniere, defauts: [] };
+      }
+      return { etapes, defauts: anomalies };
     };
     const initiales = secours ? { etapes: null, defauts: [] as string[] } : etapesRecevables(rep?.etapes);
     const defautsInitiaux = initiales.defauts;
@@ -8274,7 +8292,7 @@ Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "tex
    * inférieure au minimum imposé, délai plus long que le maximum…) est reformulée pour s'aligner sur
    * l'exigence. Seuls les remplacements retrouvés MOT POUR MOT sont appliqués. Étape non bloquante.
    */
-  private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>, proteges: string[] = [], questions?: Set<string>, noter?: (id: string, avant: string, apres: string, exigence: string) => void): Promise<void> {
+  private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>, proteges: string[] = [], questions?: Set<string>, adaptations?: AdaptationCctp[], noter?: (id: string, avant: string, apres: string, exigence: string) => void): Promise<void> {
     const ids = rubriques.map((r) => r.id).filter((id) => (sections[id] || '').trim());
     // Une rubrique à la fois, avec les exigences chiffrées qui lui sont attribuées (contexte court : résultat stable).
     // Chaque rubrique est confrontée à TOUTES les exigences (une contradiction se trouve souvent hors de la
@@ -8317,9 +8335,10 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
           if (questions && exigence) questions.add(`Le DCE exige : « ${exigence.replace(/[.\s]+$/, '').slice(0, 300)} ». Le mémoire indique la valeur de GSS : « ${extrait.replace(/[*_#]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)} ». Disposez-vous d'une garantie ou d'une valeur conforme à cette exigence (extension, attestation), et laquelle faut-il écrire ?`);
           continue;
         }
-        const texteAvant = sections[id];
+        const texteAvant = sections[id], pos = texteAvant.indexOf(extrait);
         sections[id] = sections[id].replace(extrait, remplacement);
-        // Le CCTP prime, mais la phrase de GSS alignée est signalée à GSS avec l'exigence citée (D8).
+        // D8 : le CCTP prime, mais la phrase de GSS adaptée est signalée à GSS (phrase d'origine, phrase adaptée, exigence).
+        adaptations?.push({ id, avant: phraseAutour(texteAvant, pos, extrait.length).replace(/\*\*|__/g, ''), apres: phraseAutour(sections[id], pos, remplacement.length).replace(/\*\*|__/g, ''), exigence: String(c?.exigence || '').replace(/\s+/g, ' ').trim() });
         noter?.(id, texteAvant, sections[id], String(c?.exigence || '').replace(/\s+/g, ' ').trim());
         n++;
       }
@@ -8336,7 +8355,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
    * fixe la fermeture aux usagers à 21 h et la mise sous alarme à 22 h). Seule la phrase fautive est remplacée,
    * partout où elle figure. Étape non bloquante.
    */
-  private async verifierHoraires(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, dce: string, noter?: (id: string, avant: string, apres: string, exigence: string) => void): Promise<void> {
+  private async verifierHoraires(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, dce: string, adaptations?: AdaptationCctp[], noter?: (id: string, avant: string, apres: string, exigence: string) => void): Promise<void> {
     // Ouverture, fermeture et mise sous alarme des bâtiments seulement : les horaires de rondes et de présence des
     // postes sont contrôlés rubrique par rubrique (corrigerContradictions), avec le détail de chaque site.
     const OBJET = /ouvert|ferm|alarme/i;
@@ -8383,12 +8402,14 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"n": <numéro>, "phrase": "
         const apres = String(c?.phrase || '').trim();
         // Correction d'horaire seulement : la phrase garde l'essentiel de son texte (pas de réécriture).
         if (!avant || !apres || apres === avant || Math.abs(squelette(apres).length - squelette(avant).length) > 45) continue;
-        for (const id of ids) if (sections[id].includes(avant)) {
+        for (const id of ids) {
+          if (!sections[id].includes(avant)) continue;
           const texteAvant = sections[id];
           sections[id] = sections[id].split(avant).join(apres);
-          // Phrase alignée sur l'horaire du CCTP : signalée à GSS (D8).
-          noter?.(id, texteAvant, sections[id], String(c?.horaire_cctp || '').replace(/\s+/g, ' ').trim() || exigenceProche(apres, horaires));
           n++;
+          // D8 : phrase de GSS adaptée à l'horaire du CCTP, signalée à GSS.
+          adaptations?.push({ id, avant: avant.replace(/\*\*|__/g, '').trim(), apres: apres.replace(/\*\*|__/g, '').trim(), exigence: String(c?.horaire_cctp || '').replace(/\s+/g, ' ').trim() });
+          noter?.(id, texteAvant, sections[id], String(c?.horaire_cctp || '').replace(/\s+/g, ' ').trim() || exigenceProche(apres, horaires));
         }
       }
     } catch { /* étape facultative */ }
@@ -8998,8 +9019,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     }
     progres(70, 'Cohérence avec les exigences chiffrées et les horaires du CCTP…');
     const exigencesCoherence = [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))];
-    await this.corrigerContradictions(sections, plan, exigencesCoherence, [], questionsCouverture, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, exigencesCoherence.map((x) => String(x.exigence || ''))));
-    await this.verifierHoraires(sections, plan, dceContext, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, [], 'Horaires du CCTP'));
+    await this.corrigerContradictions(sections, plan, exigencesCoherence, [], questionsCouverture, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, exigencesCoherence.map((x) => String(x.exigence || ''))));
+    await this.verifierHoraires(sections, plan, dceContext, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, [], 'Horaires du CCTP'));
     await this.engagementsChiffresManquants(sections, plan, dceContext);
     const remarquesCourt = await this.remarquesCahierDesCharges(dceContext);
     if (remarquesCourt) {

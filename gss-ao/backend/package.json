@@ -3,9 +3,12 @@
   "version": "0.1.0",
   "description": "Backend TypeScript pour GSS-AO (parseurs et RAG)",
   "main": "dist/main.js",
+  "engines": {
+    "node": ">=20 <25"
+  },
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec ts-node src/main.ts",
-    "build": "tsc",
+    "build": "tsc && node scripts/copier_ressources_build.js",
     "start": "node dist/main.js",
     "test": "vitest"
   },

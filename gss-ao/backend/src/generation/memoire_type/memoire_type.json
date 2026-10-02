@@ -71,8 +71,9 @@
   },
   "SSIAP": {
    "description": "Le marché exige des agents SSIAP (sécurité incendie, ERP ou IGH).",
-   "dce": "(?<![\\wÀ-ÿ])(?:SSIAP|S\\.S\\.I\\.A\\.P)|service de s[ée]curit[ée] incendie et d.assistance",
+   "dce": "(?<![\\wÀ-ÿ])(?:SSIAP|S\\.S\\.I\\.A\\.P)|service de s[ée]curit[ée] incendie et d.assistance|agents? de s[ée]curit[ée] incendie|prestations? (?:de )?s[ée]curit[ée] incendie",
    "analyse": "SSIAP",
+   "preuve_dce": true,
    "matrice": [
     "b3_formation_ssiap_a",
     "b3_formation_ssiap_b"
@@ -2152,7 +2153,10 @@
     "Première partie (déontologie, services publics, cadre légal) reprise de la slide FORMATION AGENT ADS 1, absente d'AO RNE (qui commence à « Informations relatives à l'armement »)",
     "« CqP » corrigé en « CQP APS »"
    ],
-   "longueur_mots": 463
+   "longueur_mots": 463,
+   "sujet_ajouts": {
+    "exige": "formation|form[ée]e?s?\\b|qualifi|cqp|carte professionnelle|cnaps|dipl[ôo]me|certifica|recyclage|comp[ée]tence|d[ée]ontolog|palpation|gestion des conflits|aptitude|habilit|sst\\b|secourisme"
+   }
   },
   {
    "id": "b3_formation_ssiap_a",
@@ -2656,7 +2660,10 @@
     "Citation intégrale de l'article L.1132-1 (version ancienne) remplacée par une présentation non exhaustive (« notamment ») au vocabulaire actuel du texte (« prétendue race »), pour ne pas citer une rédaction dépassée",
     "Phrase sur les heures supplémentaires ajoutée depuis la réponse GSS au cadre Université de Rouen Normandie (2026-04)"
    ],
-   "longueur_mots": 460
+   "longueur_mots": 460,
+   "sujet_ajouts": {
+    "exige": "discrimin|[ée]galit|diversit|prime|management|manag[ée]|turn-?over|fid[ée]lis|social|soci[ée]tal|handicap|insertion|salari[ée]|r[ée]mun[ée]r|bien-[êe]tre|qualit[ée] de vie|reconnaissance|formation"
+   }
   },
   {
    "id": "b3_interlocuteur_unique",
@@ -3064,7 +3071,11 @@
     "« Dans le contexte actuel » (formule datée) retiré de la phrase sur le gilet pare-lame",
     "Le contrôleur de ronde, décrit deux fois dans AO RNE (p.84 et p.91), n'est présenté qu'une fois, dans la section « Le contrôleur de rondes »"
    ],
-   "longueur_mots": 165
+   "longueur_mots": 165,
+   "sujet_ajouts": {
+    "exige": "[ée]quipement|gilet|lampe|torche|d[ée]tecteur|compteur|drone|\\bepi\\b|mat[ée]riel|radio|talkie|t[ée]l[ée]phone|tablette|protection individuelle|pare-lame|chaussure|gants",
+    "exclut": "r[ée]union|planification|bilan du mois"
+   }
   },
   {
    "id": "b4_planification",
@@ -3396,7 +3407,14 @@
     "registre des consignes",
     "confidentialité",
     "obligation de discrétion",
-    "discrétion"
+    "discrétion",
+    "alcool",
+    "stupéfiants",
+    "état d'ivresse",
+    "interdictions",
+    "interdit au personnel",
+    "règles de conduite",
+    "comportement des agents"
    ],
    "sources": [
     "AO RNE.pdf p.92",
@@ -4352,7 +4370,13 @@
     "reporting",
     "rapport mensuel",
     "rapport d'activité",
-    "tableau de bord"
+    "tableau de bord",
+    "réunion d'exploitation",
+    "réunion qualité",
+    "exploitation qualité",
+    "réunion trimestrielle",
+    "réunion mensuelle",
+    "bilan du mois"
    ],
    "sources": [
     "SLIDE REP AO/SUIVI QUALITE ET CONTROLES/SUIVI CONTROLE DES PRESTATIONS 4.pdf",

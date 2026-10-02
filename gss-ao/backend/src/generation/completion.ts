@@ -745,6 +745,68 @@ export const PROPOSITION_DIMENSIONNEMENT = /^Proposition à valider\s*:\s*dimens
 const VALIDATION = /^\s*(?:oui|ok|okay|d['’]accord|je valide|valid[ée]e?s?|c['’]est (?:bon|ok|validé)|confirm[ée]e?s?|je confirme|parfait|ça me va|cela me va)\b[\s.!]*$/i;
 
 /**
+ * Effectifs donnés par GSS en réponse à la proposition de dimensionnement : total des titulaires, suppléants, et nombre
+ * de détails par profil (« 8 agents titulaires, dont 6 agents de sécurité et 2 SSIAP 1, et 3 suppléants » : 2 détails).
+ * Les niveaux de qualification (« SSIAP 1 ») ne sont jamais lus comme des effectifs.
+ */
+export function lireEffectifsSaisis(v: string): { titulaires?: number; suppleants?: number; details: number } {
+  let t = ` ${String(v || '')} `.replace(/SSIAP\s*(?:[123]|I{1,3})(?![\wÀ-ÿ])/gi, 'SSIAP').replace(/H0\s*-?\s*B0/gi, '').replace(/\d+\s*(?:h|heures?|ETP)\b/gi, '');
+  let suppleants: number | undefined, titulaires: number | undefined;
+  const supp = /(\d+)\s*(?:agents?\s+)?suppl[ée]ants?/i.exec(t);
+  if (supp) { suppleants = Number(supp[1]); t = t.replace(supp[0], ' '); }
+  const tit = /(\d+)\s*(?:agents?\s+)?titulaires?/i.exec(t);
+  if (tit) { titulaires = Number(tit[1]); t = t.replace(tit[0], ' '); }
+  const restes = (t.match(/\d+/g) || []).map(Number);
+  if (titulaires === undefined && restes.length === 1) return { titulaires: restes[0], suppleants, details: 0 };
+  return { titulaires, suppleants, details: restes.length };
+}
+
+/** Lignes du tableau de l'équipe dédiée (« Catégorie de personnel | Qualification | Nombre | Observations »). */
+export function lignesTableauEquipe(texte: string): Array<{ index: number; categorie: string; qualification: string; nombre: number | null }> {
+  const lignes = String(texte || '').split('\n');
+  const out: Array<{ index: number; categorie: string; qualification: string; nombre: number | null }> = [];
+  for (let i = 0; i < lignes.length; i++) {
+    // Tableau de l'équipe dédiée seulement (colonne Observations) : jamais celui des ressources de GSS (même en-tête sans elle).
+    if (!/^\s*\|\s*Cat[ée]gorie de personnel\s*\|[^\n]*\|\s*Nombre\s*\|\s*Observations\s*\|/i.test(lignes[i])) continue;
+    for (let j = i + 1; j < lignes.length && /^\s*\|/.test(lignes[j]); j++) {
+      const cellules = lignes[j].split('|').slice(1, -1).map((c) => c.trim());
+      if (cellules.length < 3 || /^:?-{2,}:?$/.test(cellules[0])) continue;
+      const brut = cellules[2].replace(REPERE_RE, '').trim();
+      out.push({ index: j, categorie: cellules[0].replace(/\*\*/g, ''), qualification: cellules[1].replace(/\*\*/g, ''), nombre: /^\d+$/.test(brut) ? Number(brut) : null });
+    }
+  }
+  return out;
+}
+
+/**
+ * Tableau de l'équipe dédiée accordé au total de titulaires donné par GSS (T4N-6 : saisie de « 8 », phrase passée à 8,
+ * tableau resté à 6 + 3 = 9). Une seule ligne : elle prend le total. Plusieurs lignes et un total seul : les effectifs
+ * par profil deviennent « [À COMPLÉTER] » (avec leur repère), chacun demandé à GSS. Plusieurs lignes et des effectifs
+ * détaillés qui ne font pas le total : incohérent (l'élément reste ouvert). Renvoie le texte, les cases à compléter et
+ * la cohérence finale.
+ */
+export function accorderTableauEquipe(texte: string, total: number, totalSeul: boolean, repere: () => string): { texte: string; aCompleter: Array<{ categorie: string; qualification: string; repere: string }>; coherent: boolean } {
+  const lignes = lignesTableauEquipe(texte);
+  if (!lignes.length || lignes.some((l) => l.nombre === null)) return { texte, aCompleter: [], coherent: true };
+  const somme = lignes.reduce((t, l) => t + (l.nombre || 0), 0);
+  if (somme === total) return { texte, aCompleter: [], coherent: true };
+  const brut = texte.split('\n');
+  const remplacerNombre = (i: number, valeur: string) => {
+    const c = brut[i].split('|');
+    c[3] = ` ${valeur} `;
+    brut[i] = c.join('|');
+  };
+  if (lignes.length === 1) { remplacerNombre(lignes[0].index, String(total)); return { texte: brut.join('\n'), aCompleter: [], coherent: true }; }
+  if (!totalSeul) return { texte, aCompleter: [], coherent: false };
+  const aCompleter = lignes.map((l) => {
+    const r = repere();
+    remplacerNombre(l.index, `[À COMPLÉTER]${r}`);
+    return { categorie: l.categorie, qualification: l.qualification, repere: r };
+  });
+  return { texte: brut.join('\n'), aCompleter, coherent: true };
+}
+
+/**
  * Réponse de GSS à la proposition de dimensionnement qui change les effectifs (« 8 », « 8 titulaires et 3 suppléants ») :
  * les rubriques qui portent ces effectifs (phrase « équipe de N agents titulaires », tableau de l'équipe dédiée, équipe
  * suppléante) sont réécrites avec les effectifs de GSS, par l'assistant (action « modifier »), puis le PDF est
@@ -767,8 +829,35 @@ async function appliquerEffectifs(dossierId: string, effectifs: Array<{ el: Elem
     const texte = ids.map((id) => etat.libre!.sections[id] || '').join('\n');
     const ok = r.modifies.length > 0 && nombres.every((n) => new RegExp(`(?<![\\d,.])${n}(?![\\d,.])`).test(texte))
       && !(ancien && !nombres.includes(ancien) && new RegExp(`équipe (?:dédiée )?de ${ancien} agents? titulaires?`, 'i').test(texte));
+    // Tableau de l'équipe dédiée accordé au total de GSS, sans modèle (T4N-6) : la somme des effectifs par profil égale
+    // le nombre de titulaires ; un total seul pour plusieurs profils laisse chaque effectif à compléter, avec sa question.
+    const saisie = lireEffectifsSaisis(v);
+    let coherent = true;
+    if (ok && saisie.titulaires) {
+      let dernier = Math.max(0, ...etat.elements.flatMap((x) => x.reperes || []), ...Object.values(etat.libre!.sections).flatMap((t) => [...t.matchAll(REPERE_RE)].map((m) => Number(m[1]))));
+      let nQ = Math.max(0, ...etat.elements.map((x) => Number((/^Q(\d+)$/.exec(x.cle) || [])[1]) || 0));
+      let change = false;
+      const parProfil: string[] = [];
+      for (const id of Object.keys(etat.libre!.sections)) {
+        const acc = accorderTableauEquipe(etat.libre!.sections[id], saisie.titulaires, saisie.details === 0, () => REPERE(++dernier));
+        if (!acc.coherent) { coherent = false; continue; }
+        if (acc.texte === etat.libre!.sections[id]) continue;
+        etat.libre!.sections[id] = acc.texte;
+        change = true;
+        for (const c of acc.aCompleter) {
+          const n = Number((/\d+/.exec(c.repere) || [])[0]);
+          const libelle = `${c.categorie}${c.qualification ? ` · ${c.qualification}` : ''}`;
+          parProfil.push(libelle);
+          etat.elements.push({ cle: `Q${++nQ}`, question: `Combien d'agents « ${libelle} » compte l'équipe dédiée de ${saisie.titulaires} agents titulaires ?`, contexte: `Tableau de l'équipe dédiée — ligne « ${libelle} »`, statut: 'ouvert', reperes: [n], pourAcheteur: false });
+        }
+      }
+      if (change) {
+        etat.fichier = await recomposerPdf(etat);
+        if (parProfil.length) (etat.conversation ||= []).push({ role: 'assistant', texte: `J'ai reporté ${saisie.titulaires} agents titulaires. Le tableau de l'équipe dédiée a plusieurs profils : indiquez l'effectif de chacun pour que le total fasse ${saisie.titulaires} (${parProfil.map((x) => `« ${x} »`).join(', ')}).`, date: new Date().toISOString() });
+      }
+    }
     const e = etat.elements.find((x) => x.cle === el.cle)!;
-    if (ok) {
+    if (ok && coherent) {
       e.statut = 'complete';
       e.valeur = v;
       e.source = source;

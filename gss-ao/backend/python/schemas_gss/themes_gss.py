@@ -184,7 +184,9 @@ def correspondance(theme):
 @lru_cache(maxsize=None)
 def _police(chemin, taille4):
     from PIL import ImageFont
-    return ImageFont.truetype(chemin, max(1, taille4))
+    # Moteur simple imposé (comme sur le Mac, Pillow sans raqm) : mêmes largeurs mesurées sur le serveur Linux.
+    simple = ImageFont.Layout.BASIC if hasattr(ImageFont, "Layout") else ImageFont.LAYOUT_BASIC  # Pillow < 9.1 : constante
+    return ImageFont.truetype(chemin, max(1, taille4), layout_engine=simple)
 
 
 def _fichier_lexend(poids):

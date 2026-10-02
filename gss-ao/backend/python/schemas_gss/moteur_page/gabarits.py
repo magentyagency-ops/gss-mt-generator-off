@@ -714,7 +714,9 @@ def _largeur_lexend(t, taille, poids):
     k = (taille, poids)
     if k not in _LEXEND:
         fixe = min((400, 500, 600, 700, 800), key=lambda w: abs(w - poids))
-        _LEXEND[k] = ImageFont.truetype(_os.path.join(MOTEUR, "polices", f"Lexend-{fixe}.ttf"), max(1, round(taille * 4)))
+        from .gss_lib import MOTEUR_TEXTE_SIMPLE  # moteur simple, comme sur le Mac
+        _LEXEND[k] = ImageFont.truetype(_os.path.join(MOTEUR, "polices", f"Lexend-{fixe}.ttf"), max(1, round(taille * 4)),
+                                        layout_engine=MOTEUR_TEXTE_SIMPLE)
     return _LEXEND[k].getlength(t) / 4
 
 

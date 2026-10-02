@@ -40,3 +40,16 @@ describe('adaptation : délai de GSS et sujet du DCE (T4N-2)', () => {
     expect(a.appliquees).toHaveLength(1);
   });
 });
+
+import { delaiNu } from '../src/generation/memoire_type';
+/** caen 475 : « en 30 minutes maximum au maximum » (valeur imposée lue avec son qualificatif). */
+describe('délai imposé réduit à la durée', () => {
+  it('qualificatifs retirés, qualificatif de durée gardé', () => {
+    expect(delaiNu('30 minutes maximum')).toBe('30 minutes');
+    expect(delaiNu('dans un délai maximal de 2 heures')).toBe('2 heures');
+    expect(delaiNu('moins de 1 heure')).toBe('1 heure');
+    expect(delaiNu('2 heures au plus')).toBe('2 heures');
+    expect(delaiNu('48 heures ouvrées')).toBe('48 heures ouvrées');
+    expect(delaiNu('J-7')).toBe('J-7');
+  });
+});

@@ -33,9 +33,14 @@ def T():
 
 
 # ── Mesure du texte ───────────────────────────────────────────────────────────
+# Moteur de mise en forme simple imposé : c'est celui du Mac (Pillow sans raqm). Un Pillow de serveur Linux avec raqm
+# mesurerait sinon les textes autrement, et les contrôles de débordement faits sur le Mac ne vaudraient plus.
+MOTEUR_TEXTE_SIMPLE = ImageFont.Layout.BASIC if hasattr(ImageFont, "Layout") else ImageFont.LAYOUT_BASIC  # Pillow < 9.1 : constante
+
+
 @lru_cache(maxsize=None)
 def _pf(chemin, taille4):
-    return ImageFont.truetype(chemin, max(1, taille4))
+    return ImageFont.truetype(chemin, max(1, taille4), layout_engine=MOTEUR_TEXTE_SIMPLE)
 
 
 def police(usage, taille, poids):
