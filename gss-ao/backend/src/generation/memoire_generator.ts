@@ -2175,6 +2175,28 @@ export function libelleChampEtat(section: string, question: string): string {
 }
 
 /**
+ * Format court : questions dont le passage est encore dans le texte remis, après la sélection au rendu mesuré (imm 341 :
+ * la rubrique PTI écartée, la question « délai PTI hors Normandie » restait posée). Retirées : question d'une rubrique dont
+ * le sous-titre « ## titre » n'est plus dans aucune partie, question d'un repère disparu avec son passage, confirmation
+ * d'une valeur du registre qui n'est plus écrite (`confirmationsPerdues`).
+ */
+export function demandesDesPassagesRepris<T extends { texte: string; repere?: number }>(
+  demandes: T[], sections: Record<string, string>, rubriqueDeQuestion: Map<string, string>,
+  titreDe: (id: string) => string | undefined, repere: (n: number) => string, confirmationsPerdues: Set<string> = new Set(),
+): T[] {
+  const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const titres = new Set(Object.values(sections).flatMap((t) => (t.match(/^## .+$/gm) || []).map((l) => norm(l.slice(3)))));
+  const tout = Object.values(sections).join('\n');
+  return demandes.filter((d) => {
+    if (typeof d.repere === 'number' && !tout.includes(repere(d.repere))) return false;
+    const rid = rubriqueDeQuestion.get(d.texte);
+    const titre = rid ? titreDe(rid) : undefined;
+    if (titre && !titres.has(norm(titre))) return false;
+    return !confirmationsPerdues.has(d.texte);
+  });
+}
+
+/**
  * Calendrier de GSS gardé alors que le DCE impose un autre délai (ifsem 335 : J-10, J-7, J-3 face à « au moins 10 jours
  * ouvrés avant le début du mois ») : une seule question précise, qui cite l'exigence et les jalons écrits dans le mémoire.
  * Une question de couverture sur la même obligation (même délai et même objet, « planning ») n'est pas reposée à part :
@@ -8683,13 +8705,22 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     limiterRappelsSite(sections, plan.map((p) => p.id));
 
     // ── 8. Points à compléter (même logique que le format court d'avant) ──
+    const confirmationsAvantSelection = confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie);
     const consultations = new Set<string>([
-      ...alerteCadreAbsent(dceContext), ...commentairesRetires, ...questionsCouverture, ...formalitesCourt.map(questionFormalite), ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie),
+      ...alerteCadreAbsent(dceContext), ...commentairesRetires, ...questionsCouverture, ...formalitesCourt.map(questionFormalite), ...confirmationsAvantSelection,
       ...publiees.filter((p) => toutesRetenues.includes(p.id)).flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)])
         .flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
     ]);
     // Exigence en écart mais traitée dans le texte final (engagement de couverture, proposition) : pas de question à GSS.
     for (const r of matrice) if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence) && !exigenceTraitee(r.exigence, Object.values(sections).join('\n\n'))) consultations.add(FORMALITES_OFFRE.test(r.exigence) ? questionFormalite(r) : r.exigence.trim());
+    // Rubrique d'origine des questions du publipostage : une rubrique écartée ensuite par la sélection au rendu mesuré
+    // n'a plus de question (imm 341 : PTI non reprise, question sur le délai PTI hors Normandie quand même posée).
+    const rubriqueDeQuestion = new Map<string, string>();
+    for (const p of publiees.filter((x) => toutesRetenues.includes(x.id))) {
+      for (const q of [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)].flatMap((x) => x.split('\n')).map((x) => x.trim()).filter(Boolean)) {
+        if (!rubriqueDeQuestion.has(q)) rubriqueDeQuestion.set(q, p.id);
+      }
+    }
     const markerRe = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
     const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
     let nRepere = 0;
@@ -8803,6 +8834,14 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     }
 
     // ── 10. Questions à GSS, complétion par les mémoires, nettoyage final, état ──
+    // Questions d'un passage non repris par la sélection (rubrique entière, ou repère disparu avec son passage) : retirées.
+    {
+      const avant = demandes.length;
+      const gardees = demandesDesPassagesRepris(demandes, sections, rubriqueDeQuestion, (rid) => mtParId.get(rid)?.titre, REPERE,
+        new Set(confirmationsAvantSelection.filter((c) => !confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie).includes(c))));
+      demandes.splice(0, demandes.length, ...gardees);
+      if (demandes.length < avant) console.log(`[MemoireGenerator] Format court : ${avant - demandes.length} question(s) d'un passage non repris retirée(s).`);
+    }
     const questionsGss = await this.consoliderAvecSources(demandes.map((d) => d.texte), { dce: dceContext, horsNormandie: horsNormandie });
     const elements: ElementACompleter[] = questionsGss.map((q, i) => {
       const reperes = [...new Set(q.sources.map((k) => demandes[k]?.repere).filter((x): x is number => typeof x === 'number'))];
