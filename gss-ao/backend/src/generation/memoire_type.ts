@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { lignesEquipe, questionDimensionnement, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss } from './base_memoires';
+import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, sitesDuMarche, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -1134,7 +1134,14 @@ function delai(c: CalculVariables, nom: string, sujet: keyof typeof SUJETS_DELAI
   const duDce = sujet ? delaiDuDce(c.ctx.dce || '', sujet) : '';
   if (duDce) return { valeur: duDce, source: 'délai imposé par le DCE' };
   if (c.horsNormandie && def?.normandie_seulement) {
-    return { valeur: null, question: `Marché hors Normandie : quel délai GSS annonce-t-elle (${def.description.charAt(0).toLowerCase()}${def.description.slice(1).replace(/[.\s]+$/, '')}) ?` };
+    const objet = `${def.description.charAt(0).toLowerCase()}${def.description.slice(1).replace(/[.\s]+$/, '')}`;
+    // Sites mixtes (T4-COH-3) : la question nomme les sites hors Normandie et rappelle le délai normand de GSS.
+    const sites = sitesDuMarche(c.ctx.analyse || {}, c.ctx.dce || '');
+    if (sites.mixte) {
+      const normand = def.registre ? depuisRegistre(c, def.registre, normaliserDelai).valeur : def.valeur_gss || '';
+      return { valeur: null, question: `Marché en partie hors Normandie (${sites.horsNormandie.length > 1 ? 'sites' : 'site'} de ${listeFr(sites.horsNormandie)}) : ${normand ? `GSS annonce ${normand} en Normandie pour ce délai (${objet}) ; ` : ''}quel délai GSS annonce-t-elle pour ${sites.horsNormandie.length > 1 ? 'les sites' : 'le site'} de ${listeFr(sites.horsNormandie)}${normand ? '' : ` (${objet})`} ?` };
+    }
+    return { valeur: null, question: `Marché hors Normandie : quel délai GSS annonce-t-elle (${objet}) ?` };
   }
   if (def?.registre) {
     const v = depuisRegistre(c, def.registre, normaliserDelai);
@@ -2561,7 +2568,11 @@ Réponds UNIQUEMENT par un objet JSON : {"valeurs":[{"variable":"NOM","valeur":"
     const sujetV = SUJET_VARIABLE_DELAI[nom];
     if (sujetV !== undefined) {
       const def = sujetV ? SUJETS_DELAI[sujetV] : null;
-      if (!def || !def.sujet.test(citation) || def.exclure?.test(citation) || (def.objet?.test(citation) && !def.personnel?.test(citation))) {
+      // Phrase du DCE qui contient la citation (une citation peut n'être qu'un fragment : « présent sur site dans un délai
+      // maximal de 30 minutes »).
+      const cit = normaliser(citation).replace(/[^a-z0-9']+/g, ' ').trim();
+      const phrase = phrasesDuDce(dce).find((ph) => normaliser(ph).replace(/[^a-z0-9']+/g, ' ').includes(cit)) || citation;
+      if (!def || !def.sujet.test(phrase) || def.exclure?.test(phrase) || (def.objet?.test(phrase) && !def.personnel?.test(phrase))) {
         refusees.push({ variable: nom, raison: 'citation d\'un autre sujet que celui du délai' }); continue;
       }
     }

@@ -572,6 +572,8 @@ export function confirmationsRegistreUtilisees(texte: string, horsNormandie = fa
 export function questionDelaiInapplicable(question: string, dce: string, horsNormandie: boolean): boolean {
   const q = String(question || '');
   if (!/d[ée]lai|arriv|intervien|interven|remplac|astreinte/i.test(q)) return false;
+  // Question des sites mixtes (le délai normand de GSS rappelé, le délai hors Normandie demandé) : toujours posée.
+  if (/^Marché en partie hors Normandie\b/i.test(q)) return false;
   const valeurs = [...q.matchAll(/(?<![\d,.])(\d+)\s*(minutes?|min\b|mn\b|heures?|h\b)/gi)].map((m) => ({ n: m[1], min: /^m/i.test(m[2]) }));
   if (!valeurs.length) return false;
   const d = normTxt(dce).replace(/\s+/g, ' ');
@@ -610,7 +612,45 @@ export function marcheHorsNormandie(analyse: any, dce: string): boolean {
   }
   if (!codes.length) return false;
   const normands = codes.filter((d) => ['14', '27', '50', '61', '76'].includes(d)).length;
+  // Sites mixtes (T4-COH-3 : « site A à Rouen (76000) et site B à Paris (75013) ») : un délai normand de GSS ne se promet
+  // jamais pour tout le marché ; le marché est traité comme hors Normandie (aucun délai chiffré non imposé, question à GSS).
+  if (sitesDuMarche(analyse, dce).mixte) return true;
   return normands < codes.length / 2;
+}
+
+const NORMANDIE = ['14', '27', '50', '61', '76'];
+
+/**
+ * Sites du marché par code postal DISTINCT (et non par occurrence), en Normandie et hors Normandie. Une adresse postale
+ * administrative n'est pas un site : « Cedex », boîte postale, siège, administrations (rouen_univ : « DREETS des pays de
+ * la Loire … 44042 Nantes Cedex 1 »). `mixte` : au moins un site normand et au moins un site hors Normandie.
+ */
+export function sitesDuMarche(analyse: any, dce: string): { normands: string[]; horsNormandie: string[]; mixte: boolean } {
+  const texte = `${JSON.stringify(analyse || {})} ${String(dce || '').slice(0, 40000)}`.replace(/\\n/g, '\n');
+  const UNITE = /^(?:m[²³23]?|km|ha|h|heures?|€|eur|euros?|ht|ttc|personnes?|visiteurs?|spectateurs?|places?|agents?|salari[ée]s?|habitants?|usagers?|[ée]l[èe]ves?|[ée]tudiants?|passages?|entr[ée]es?|lits?|logements?|v[ée]hicules?)$/i;
+  const ADMIN = /cedex|\bB\.?P\.?\s*\d|bo[îi]te postale|si[èe]ge|DREETS|DIRECCTE|DDETS|tribunal|pr[ée]fecture|CNAPS|inspection du travail|URSSAF|tr[ée]sor|paierie|comptable public|greffe|minist[èe]re/i;
+  const normands = new Map<string, string>();
+  const hors = new Map<string, string>();
+  const ajouter = (code: string, commune: string, debut: number, fin: number) => {
+    const dep = code.slice(0, 2);
+    if (Number(dep) < 1 || Number(dep) > 95) return;
+    // Contexte administratif : la suite immédiate (« Cedex ») et les deux lignes qui précèdent (bloc d'adresse).
+    const avant = texte.slice(Math.max(0, debut - 200), debut).split('\n').slice(-3).join(' ');
+    const apres = texte.slice(fin, fin + 12);
+    if (ADMIN.test(apres) || ADMIN.test(avant.slice(-140))) return;
+    const c = commune.replace(/\s+(?:t[ée]l|tel|fax|courriel|mail|et|pour|le|la|les)\b.*$/i, '').replace(/\s+-/g, '-').trim();
+    (NORMANDIE.includes(dep) ? normands : hors).set(code, c);
+  };
+  // « 76000 Rouen », « 93330 – Neuilly-sur-Marne »
+  for (const m of texte.matchAll(/\b(\d{5})\s*(?:[–—,-]\s*)?([A-ZÉÈÀÂÎÔÛ][\wÀ-ÿ²³'’-]*(?:[ -](?!cedex|CEDEX|Cedex)[A-Za-zÀ-ÿ'’-]+){0,4})/g)) {
+    if (!UNITE.test(m[2])) ajouter(m[1], m[2], m.index || 0, (m.index || 0) + m[0].length);
+  }
+  // « Rouen (76000) », « Paris (75013) »
+  for (const m of texte.matchAll(/([A-ZÉÈÀÂÎÔÛ][A-Za-zÀ-ÿ'’-]+(?:[ -][A-Za-zÀ-ÿ'’-]+){0,3})\s*\(\s*(\d{5})\s*\)/g)) {
+    ajouter(m[2], m[1].split(/\s+(?:à|a|de|du|des)\s+/).pop() || m[1], m.index || 0, (m.index || 0) + m[0].length);
+  }
+  const fmt = (x: Map<string, string>) => [...new Set([...x.values()].map((c) => (c === c.toUpperCase() ? c.charAt(0) + c.slice(1).toLowerCase() : c)))];
+  return { normands: fmt(normands), horsNormandie: fmt(hors), mixte: normands.size > 0 && hors.size > 0 };
 }
 
 /**
