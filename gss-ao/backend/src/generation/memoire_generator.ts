@@ -66,6 +66,53 @@ const EMBED_MODEL = process.env.EMBEDDING_MODEL_MEMOIRE || 'text-embedding-3-sma
 // Bucket privé où sont archivées les pièces des dossiers (cf. routes.ts /dce/upload).
 const USER_FILES_BUCKET = 'user-files';
 
+/**
+ * Découpe un contexte DCE en segments d'au plus `maxLen` caractères, en coupant EN PRIORITÉ sur les
+ * frontières de pièces (« \n\n--- label ---\n », posées par getDceContext) pour qu'un CCTP ne soit
+ * pas scindé au milieu d'un article. Repli : coupure sur un saut de ligne, puis coupure sèche.
+ * Un DCE qui tient dans `maxLen` ressort en un seul segment (cas le plus fréquent).
+ * Invariant : la concaténation des segments redonne le texte entier (aucun caractère perdu).
+ */
+export function splitOnPieceBoundaries(text: string, maxLen: number): string[] {
+  if (text.length <= maxLen) return [text];
+  const re = /\n\n--- .+? ---\n/g;
+  // Bornes des pièces : [0, début pièce 2, …, fin du texte].
+  const bounds: number[] = [0];
+  for (let m = re.exec(text); m; m = re.exec(text)) if (m.index > 0) bounds.push(m.index);
+  bounds.push(text.length);
+
+  /** Tronçonne un bloc plus long que maxLen, de préférence sur un saut de ligne. */
+  const hardSplit = (block: string): string[] => {
+    const parts: string[] = [];
+    let rest = block;
+    while (rest.length > maxLen) {
+      const window = rest.slice(0, maxLen);
+      const cut = window.lastIndexOf('\n');
+      const end = cut > maxLen * 0.5 ? cut : maxLen;
+      parts.push(rest.slice(0, end));
+      rest = rest.slice(end);
+    }
+    if (rest.length > 0) parts.push(rest);
+    return parts;
+  };
+
+  const out: string[] = [];
+  let current = '';
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const piece = text.slice(bounds[i], bounds[i + 1]);
+    if (piece.length > maxLen) {
+      // Pièce plus grosse que la fenêtre : on ferme le segment courant, puis on la tronçonne.
+      if (current) { out.push(current); current = ''; }
+      out.push(...hardSplit(piece));
+      continue;
+    }
+    if (current.length + piece.length <= maxLen) current += piece;
+    else { out.push(current); current = piece; }
+  }
+  if (current) out.push(current);
+  return out.filter((s) => s.trim().length > 0);
+}
+
 /** Un manque détecté, avec sa criticité (bloquant = éliminatoire, facultatif = bonus, normal). */
 type MissingFieldDetected = { id: string; label: string; context: string; criticite: 'bloquant' | 'facultatif' | 'normal' };
 
@@ -2992,14 +3039,42 @@ Renvoie un JSON valide :
       );
       return parse(content);
     }
-    const content = await this.callOpenAI(
-      [
-        { role: 'system', content: "Tu extrais la CHECK-LIST des GRANDES EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. ATTENTION: Reste UNIQUEMENT au niveau des grandes thématiques (ex: Dispositif humain global, Matériel et technologies, Astreinte, Politique RSE, Démarche qualité) et ne liste SURTOUT PAS les sous-détails précis (ne liste pas les modèles de radio, les types d'EPI, les plannings précis, etc.). Limite-toi à une quinzaine d'exigences globales maximum. Le but est d'avoir une vue d'ensemble, sois très général et concis. N'invente rien." },
-        { role: 'user', content: `=== DCE ===\n${dceContext.slice(0, 120_000)}\n\nRenvoie un JSON : {"items":[{"label":"...","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}` },
-      ],
-      0.2, 'Extraction exigences CCTP', true, 'analyse',
-    );
-    return parse(content);
+    // Le DCE assemblé (getDceContext) va jusqu'à 240 000 caractères, et les DCE réels en dépassent
+    // souvent 120 000 (130 000 à 240 000 relevés sur le corpus) : tronquer à 120 000 faisait disparaître
+    // en silence les exigences des dernières pièces (annexes, RC, CCAP). Le DCE est donc découpé sur
+    // les frontières de pièces ; un DCE de 120 000 caractères au plus reste lu en un seul appel,
+    // identique à l'appel d'origine. Les parties suivantes ne renvoient que les grandes exigences qui
+    // ne relèvent d'aucun thème déjà relevé (vue d'ensemble conservée, sans doublon).
+    const segments = splitOnPieceBoundaries(dceContext, 120_000);
+    const toutes: Array<{ label: string; theme?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal' }> = [];
+    const cle = (l: string) => l.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    const vues = new Set<string>();
+    for (const [n, segment] of segments.entries()) {
+      const dejaReleves = toutes.map((x) => `- ${x.label}`).join('\n');
+      const content = await this.callOpenAI(
+        [
+          { role: 'system', content: "Tu extrais la CHECK-LIST des GRANDES EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. ATTENTION: Reste UNIQUEMENT au niveau des grandes thématiques (ex: Dispositif humain global, Matériel et technologies, Astreinte, Politique RSE, Démarche qualité) et ne liste SURTOUT PAS les sous-détails précis (ne liste pas les modèles de radio, les types d'EPI, les plannings précis, etc.). Limite-toi à une quinzaine d'exigences globales maximum. Le but est d'avoir une vue d'ensemble, sois très général et concis. N'invente rien." },
+          {
+            role: 'user',
+            content: n === 0
+              ? `=== DCE ===\n${segment}\n\nRenvoie un JSON : {"items":[{"label":"...","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}`
+              : `=== DCE (suite, partie ${n + 1}/${segments.length}) ===\n${segment}\n\n` +
+                `=== GRANDES EXIGENCES DÉJÀ RELEVÉES SUR LES PARTIES PRÉCÉDENTES DU DCE (ne les répète pas) ===\n${dejaReleves || '(aucune)'}\n\n` +
+                'Renvoie UNIQUEMENT les grandes exigences de cette partie qui ne relèvent d\'AUCUNE des exigences déjà relevées (liste vide si toutes sont déjà couvertes). ' +
+                'Renvoie un JSON : {"items":[{"label":"...","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}',
+          },
+        ],
+        0.2, segments.length > 1 ? `Extraction exigences CCTP (${n + 1}/${segments.length})` : 'Extraction exigences CCTP', true, 'analyse',
+      );
+      for (const x of parse(content) as typeof toutes) {
+        const k = cle(x.label);
+        if (!k || vues.has(k)) continue;
+        vues.add(k);
+        toutes.push(x);
+      }
+    }
+    if (segments.length > 1) console.log(`[MemoireGenerator] extractRequirementsList : DCE de ${dceContext.length} car lu en ${segments.length} parties → ${toutes.length} grandes exigences.`);
+    return toutes;
   }
 
   /**
