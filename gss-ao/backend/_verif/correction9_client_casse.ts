@@ -21,5 +21,10 @@ v('Rouvray avec le DCE', casseDuDce('CENTRE HOSPITALIER DU ROUVRAY', 'Le centre 
 v('Nom déjà en minuscules : inchangé', casseDuDce('Université de Rouen Normandie', 'x') === '');
 v('Citédia : inchangé', !formesClient('Citédia Métropole').court);
 v('IMM : forme courte inchangée', formesClient('Association Nouvel Institut Médico-Chirurgical Montsouris (Nouvel IMM)', lire('imm.txt')).court?.nom === 'IMM');
+// Tour 2 (T2C-6, T2N-7) : mot plein écrit seulement en capitales dans le DCE ; nom entier en casse mêlée repris tel quel.
+const cs = casseDuDce('LE CENTRE SCIENTIFIQUE ET TECHNIQUE DU BATIMENT', lire('cstb.txt'));
+v('CSTB : « Le Centre scientifique et technique du bâtiment »', cs === 'Le Centre scientifique et technique du bâtiment' && !/CENTRE/.test(cs), cs);
+const pe = casseDuDce('ROUEN NORMANDIE EVENEMENTS', lire('parc_expo.txt'));
+v('Parc des expositions : graphie entière du DCE', pe === 'Rouen Normandie Evènements', pe);
 console.log(ko ? `${ko} échec(s)` : 'Tout est conforme.');
 process.exit(ko ? 1 : 0);

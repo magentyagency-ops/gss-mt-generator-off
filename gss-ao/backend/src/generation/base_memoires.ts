@@ -326,6 +326,26 @@ export function acheteursCites(texte: string, client = ''): string[] {
   return cites.filter((c) => !cites.some((d) => d !== c && d.startsWith(`${c} `)));
 }
 
+/**
+ * Graphies en minuscules des mots des textes de GSS (passages des mémoires), par mot sans accent ni casse : sert à écrire en
+ * minuscules, avec ses accents, un mot que le DCE n'écrit qu'en capitales (« CENTRE » → « centre »).
+ */
+let vocabulaireGss: Map<string, string> | null = null;
+export function graphieMinusculeGss(mot: string): string {
+  if (!vocabulaireGss) {
+    const compte = new Map<string, Map<string, number>>();
+    for (const p of charger().passages) {
+      for (const m of String(p.texte || '').matchAll(/[a-zà-ÿ]{3,}/g)) {
+        const k = normTxt(m[0]);
+        const f = compte.get(k) || compte.set(k, new Map()).get(k)!;
+        f.set(m[0], (f.get(m[0]) || 0) + 1);
+      }
+    }
+    vocabulaireGss = new Map([...compte].map(([k, f]) => [k, [...f].sort((a, b) => b[1] - a[1])[0][0]]));
+  }
+  return vocabulaireGss.get(normTxt(String(mot || ''))) || '';
+}
+
 /** Montants en euros du registre de GSS (garanties d'assurance, prix) : seuls montants qu'un texte peut attribuer à GSS. */
 export function montantsRegistre(): string[] {
   return charger().registre.flatMap((e) => String(e.valeur_retenue || '').match(/\d[\d\s\u00a0\u202f.,]*\s*(?:€|euros?\b)/gi) || []);

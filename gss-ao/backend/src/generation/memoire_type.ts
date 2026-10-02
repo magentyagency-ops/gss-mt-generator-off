@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { lignesEquipe, questionDimensionnement, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, marcheHorsNormandie, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit } from './base_memoires';
+import { horairesImposes, marcheHorsNormandie, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -726,6 +726,76 @@ function sigleDuDce(nom: string, dce: string): string {
 }
 
 /**
+ * Nom de l'acheteur écrit d'une seule façon dans tout le mémoire (parc_expo 202 : « Rouen Normandie événements » 24 fois,
+ * « Rouen Normandie Événements » 7 fois) : toute occurrence du nom entier qui ne diffère que par la casse ou les accents
+ * prend la graphie retenue (variable CLIENT). Les noms d'un seul mot ne sont pas touchés.
+ */
+export function harmoniserNomClient(texte: string, nom: string): string {
+  const t = String(texte || '');
+  const mots = String(nom || '').match(/[A-Za-zÀ-ÿ]+/g) || [];
+  if (mots.length < 2 || !t) return t;
+  let plat = '';
+  const pos: number[] = [];
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    for (const x of c) { plat += x; pos.push(i); }
+  }
+  const rx = new RegExp(`(?<![a-z])${mots.map((w) => normaliser(w).replace(/[^a-z]/g, '')).join("[ '’-]+")}(?![a-z])`, 'g');
+  const morceaux: Array<[number, number]> = [];
+  for (const m of plat.matchAll(rx)) morceaux.push([pos[m.index!], pos[m.index! + m[0].length - 1] + 1]);
+  let sortie = t;
+  for (const [a, b] of morceaux.reverse()) {
+    const actuel = sortie.slice(a, b);
+    if (actuel === nom || actuel.replace(/\s+/g, ' ') !== actuel) continue;
+    // Début de phrase : la majuscule initiale est gardée.
+    const debut = /(?:^|[.!?:]\s+|\n\s*(?:[-*•]\s+)?|«\s*)$/.test(sortie.slice(Math.max(0, a - 4), a));
+    const remplacement = debut ? nom.charAt(0).toUpperCase() + nom.slice(1) : nom;
+    sortie = sortie.slice(0, a) + remplacement + sortie.slice(b);
+  }
+  return sortie;
+}
+
+/**
+ * Forme longue de l'acheteur à la première mention du document, forme courte ensuite (consigne 2 : on met le bon nom, sans
+ * alourdir ; règle déjà appliquée par la réponse libre) : textes donnés dans l'ordre du document (réponses du cadre).
+ * Seul le nom est remplacé (l'article et la préposition qui le précèdent restent : « au Ministère … » → « au SAR de Rouen ») ;
+ * rien n'est fait si la forme courte n'a pas le même article que la forme longue.
+ */
+export function formeCourteApresPremiere(textes: string[], long: string, court: { article: string; nom: string } | undefined, articleLong = ''): string[] {
+  if (!court?.nom || !long || long === court.nom || (court.article && articleLong && court.article !== articleLong)) return textes;
+  let vu = false;
+  return textes.map((t) => String(t ?? '').split(long).reduce((acc, morceau, i) => {
+    if (i === 0) return morceau;
+    const nom = vu ? court.nom : long;
+    vu = true;
+    return `${acc}${nom}${morceau}`;
+  }, ''));
+}
+
+/** Nom entier tel que le DCE l'écrit en casse mêlée (au moins une majuscule et une minuscule), la graphie la plus fréquente. */
+function graphieEntiereDuDce(nom: string, dce: string): string {
+  const mots = nom.match(/[A-Za-zÀ-ÿ]+/g) || [];
+  if (mots.length < 2) return '';
+  // Texte du DCE sans accents ni casse, caractère par caractère (positions conservées).
+  let plat = '';
+  const pos: number[] = [];
+  for (let i = 0; i < dce.length; i++) {
+    const c = dce[i].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    for (const x of c) { plat += x; pos.push(i); }
+  }
+  const rx = new RegExp(`(?<![a-z])${mots.map((w) => normaliser(w).replace(/[^a-z]/g, '')).join("[\\s'’-]+")}(?![a-z])`, 'g');
+  const compte = new Map<string, number>();
+  for (const m of plat.matchAll(rx)) {
+    const brut = dce.slice(pos[m.index!], pos[m.index! + m[0].length - 1] + 1).replace(/\s+/g, ' ');
+    // Casse mêlée significative : une majuscule ailleurs qu'en tête (celle d'un début de phrase ne dit rien du nom).
+    if (!/[A-ZÀ-Ý]/.test(brut.slice(1)) || !/[a-zà-ÿ]/.test(brut)) continue;
+    compte.set(brut, (compte.get(brut) || 0) + 1);
+  }
+  const meilleure = [...compte].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+  return meilleure ? meilleure.charAt(0).toUpperCase() + meilleure.slice(1) : '';
+}
+
+/**
  * Nom de l'acheteur écrit en capitales (« ETABLISSEMENT PUBLIC DU CHATEAU DE FONTAINEBLEAU », « MAIRIE DE
  * PETIT-QUEVILLY ») : chaque mot reprend la graphie que le DCE emploie le plus (accents et casse : « établissement »,
  * « château », « Fontainebleau »), la majuscule initiale étant rétablie ; un sigle que le DCE n'écrit qu'en capitales le
@@ -734,6 +804,10 @@ function sigleDuDce(nom: string, dce: string): string {
 export function casseDuDce(nom: string, dce: string): string {
   const lettres = nom.replace(/[^A-Za-zÀ-ÿ]/g, '');
   if (!lettres || lettres.replace(/[^A-ZÀ-Ý]/g, '').length / lettres.length <= 0.7 || !dce) return '';
+  // 1. Le nom entier écrit en casse mêlée dans le DCE (comparaison sans casse ni accents, mots consécutifs) : graphie reprise
+  //    telle quelle (parc_expo 202 : « Rouen Normandie Evènements », jamais « Rouen Normandie événements », nom commun).
+  const entier = graphieEntiereDuDce(nom, dce);
+  if (entier) return entier !== nom ? entier : '';
   const cle = (w: string) => normaliser(w);
   const formes = new Map<string, Map<string, number>>();
   for (const m of dce.matchAll(/[A-Za-zÀ-ÿ]+/g)) {
@@ -756,10 +830,14 @@ export function casseDuDce(nom: string, dce: string): string {
     else if (nbCap && nbCap > 2 * nbMin) r = capitalises[0][0];
     else if (nbMin) r = minuscules[0][0];
     else if (nbCap) r = capitalises[0][0];
-    else if (f?.has(mot)) r = mot; // sigle écrit en capitales dans le DCE
+    // Sigle écrit en capitales dans le DCE : mot court ou sans voyelle (« IGN », « SDIS ») ; un mot plein (« CENTRE », cstb
+    // 221 : « Le CENTRE scientifique… ») prend la graphie en minuscules des textes de GSS, sinon le nom reste en capitales.
+    else if (f?.has(mot) && (mot.length <= 5 || !/[AEIOUYÀ-Ý]/.test(mot))) r = mot;
+    else if (graphieMinusculeGss(mot)) r = graphieMinusculeGss(mot);
     else { ok = false; r = mot; }
     if (premier) r = r.charAt(0).toUpperCase() + r.slice(1);
-    premier = false;
+    // Nom précédé de son article (« LE CENTRE SCIENTIFIQUE… ») : le premier mot du nom garde sa majuscule (« Le Centre… »).
+    premier = premier && /^(?:le|la|les|l)$/.test(k);
     return r;
   });
   return ok && sortie !== nom ? sortie : '';
@@ -774,7 +852,7 @@ export function casseDuDce(nom: string, dce: string): string {
  */
 export function formesClient(nom: string, dce = ''): { long: string; court?: { article: string; nom: string; genre?: 'f' | 'm' | '' }; pluriel?: boolean } {
   const n = String(nom || '').replace(/\s+/g, ' ').trim();
-  const iPrecision = n.search(/,\s*(?:pour|agissant|repr[ée]sent[ée]e?s?|au nom)\b/i);
+  const iPrecision = n.search(/,\s*(?:pour|agissant|repr[ée]sent[ée]e?s?|au nom|en qualit[ée] de)\b/i);
   const principal = iPrecision > 0 ? n.slice(0, iPrecision) : n;
   const suite = iPrecision > 0 ? n.slice(iPrecision) : '';
   // Entités coordonnées : séparées après la parenthèse d'un sigle (« (ENPC) et Institut … »), jamais dans un nom
@@ -798,6 +876,28 @@ export function formesClient(nom: string, dce = ''): { long: string; court?: { a
     if (sigle && art) return { long, court: { article: art, nom: sigle, genre: '' } };
   }
   if (mots <= 6) return { long, pluriel };
+  // Nom composé « Tutelle – Entité / Programme (précision) » (ca_normandie 221 : « Ministère de la Justice – Service
+  // administratif régional de Rouen / BOP Normand (cours d'appel de Rouen et de Caen) », 11 fois dans le cadre) : forme
+  // courte = l'entité, par son sigle quand le DCE l'emploie (« le SAR de Rouen »), sinon son nom.
+  if (entites.length === 1 && !suite && /\s[–—-]\s/.test(principal)) {
+    const entite = principal.split(/\s[–—-]\s/).pop()!.split(/\s+\/\s+|\s*\(/)[0].trim();
+    const m = /^(.+?)\s+((?:de|du|des|d['’])\s*[A-ZÀ-Ý][\wÀ-ÿ'’-]*(?:\s+(?:et|de|du|des)\s+[A-ZÀ-Ý][\wÀ-ÿ'’-]*)*)$/.exec(entite);
+    const tete = m ? m[1] : entite;
+    const lieu = m ? m[2] : '';
+    const initiales = normaliser(tete).replace(/[^a-z0-9' -]+/g, ' ').split(/[\s'-]+/).filter((w) => w.length >= 3 && !MOTS_OUTILS.has(w)).map((w) => w[0]).join('').toUpperCase();
+    if (initiales.length >= 2 && entite.split(/\s+/).length >= 2) {
+      const avecLieu = lieu ? `${initiales} ${lieu}` : '';
+      const nLieu = avecLieu ? (dce.match(new RegExp(`(?<![A-Za-z0-9])${echapper(avecLieu)}(?![A-Za-z0-9])`, 'g')) || []).length : 0;
+      const nSigle = (normaliser(dce).match(new RegExp(`(?:^|[^a-z0-9])(?:l'|le |la |du |de l'|au |a l'|les |des )${echapper(initiales.toLowerCase())}(?![a-z0-9])`, 'g')) || []).length;
+      const art = articleEtNom(initiales, dce).article || articleSigle(initiales, '');
+      if (art && nLieu >= 2) return { long, court: { article: art, nom: avecLieu, genre: '' } };
+      if (art && nSigle >= 3) return { long, court: { article: art, nom: initiales, genre: '' } };
+    }
+    if (entite.split(/\s+/).length <= 8 && entite !== principal) {
+      const a = articleEtNom(entite, dce);
+      return { long, court: { article: a.article, nom: a.nom || entite } };
+    }
+  }
   // Sigles des entités (« (ENPC) », « (ENSG, dénommée … ) »).
   const sigles = entites.map((e) => (/\(([A-Z][A-Z0-9&.\-]{1,11})\s*[,)]/.exec(e) || [])[1] || '');
   if (sigles.every(Boolean)) {
@@ -807,7 +907,11 @@ export function formesClient(nom: string, dce = ''): { long: string; court?: { a
       return { long, pluriel, court: { article: arts[0], nom: reste.length > 1 ? `${reste.slice(0, -1).join(', ')} et ${reste[reste.length - 1]}` : reste[0] } };
     }
   }
-  if (suite && entites.length === 1 && principal.split(/\s+/).length <= 8) return { long, court: { article: '', nom: principal } };
+  if (suite && entites.length === 1 && principal.split(/\s+/).length <= 8) {
+    // Article de la forme courte (vitry : « la Ville de Vitry-sur-Seine », jamais « accompagnons Ville de Vitry-sur-Seine »).
+    const a = articleEtNom(principal, dce);
+    return { long, court: { article: a.article, nom: a.nom || principal } };
+  }
   // Nom d'usage entre parenthèses en fin de nom (« Association Nouvel Institut Médico-Chirurgical Montsouris (Nouvel IMM) ») :
   // forme courte, sinon le nom de 8 mots revenait à chaque mention (génération réelle imm 15 : 21 fois en 12 pages). Le
   // sigle qu'il contient est retenu quand le DCE l'emploie seul (« l'IMM », 37 fois dans le DCE de l'IMM), sinon le nom

@@ -611,3 +611,37 @@ describe('tour 1 (B1) : ajout après un sous-titre en gras', () => {
     expect(r.texte).toContain('chaque mois.\n\nLe site est visité');
   });
 });
+
+import { harmoniserNomClient, casseDuDce } from '../src/generation/memoire_type';
+/** Tour 2 (T2N-7, T2C-6) : nom de l'acheteur écrit d'une seule façon, graphie du DCE. */
+describe('nom de l’acheteur : une seule graphie', () => {
+  it('reprend le nom entier écrit en casse mêlée dans le DCE', () => {
+    expect(casseDuDce('ROUEN NORMANDIE EVENEMENTS', 'ROUEN NORMANDIE EVENEMENTS. La société Rouen Normandie Evènements. Les événements.')).toBe('Rouen Normandie Evènements');
+  });
+  it('un mot plein écrit seulement en capitales n’est pas un sigle', () => {
+    expect(casseDuDce('LE CENTRE SCIENTIFIQUE ET TECHNIQUE DU BATIMENT', 'LE CENTRE SCIENTIFIQUE ET TECHNIQUE DU BATIMENT. Le centre scientifique et technique du bâtiment.')).toBe('Le Centre scientifique et technique du bâtiment');
+  });
+  it('harmonise les variantes de casse et d’accents', () => {
+    const t = 'Rouen Normandie événements lance le marché. Pour Rouen Normandie Événements, GSS… avec rouen normandie evenements.';
+    expect(harmoniserNomClient(t, 'Rouen Normandie Evènements')).toBe('Rouen Normandie Evènements lance le marché. Pour Rouen Normandie Evènements, GSS… avec Rouen Normandie Evènements.');
+  });
+});
+
+import { formesClient, formeCourteApresPremiere } from '../src/generation/memoire_type';
+/** Tour 2 (T2C-9) : forme courte de l'acheteur après la première mention, aussi dans le cadre imposé. */
+describe('forme courte de l’acheteur', () => {
+  const dceSar = 'Le SAR de Rouen. Le SAR de Rouen notifie. Au SAR de Rouen. Le SAR de Caen. du SAR, le SAR, au SAR.';
+  const long = "Ministère de la Justice – Service administratif régional de Rouen / BOP Normand (cours d'appel de Rouen et de Caen)";
+  it('nom composé « Tutelle – Entité / Programme » : sigle de l’entité employé par le DCE', () => {
+    expect(formesClient(long, dceSar).court).toEqual({ article: 'le', nom: 'SAR de Rouen', genre: '' });
+  });
+  it('« …, en qualité de coordonnateur… » : forme courte avec son article', () => {
+    const f = formesClient('Ville de Vitry-sur-Seine, en qualité de coordonnateur des groupements de commandes Ville/Sidoresto et Ville/CCAS', 'La Ville de Vitry-sur-Seine lance la consultation.');
+    expect(f.court?.nom).toBe('Ville de Vitry-sur-Seine');
+    expect(f.court?.article).toBe('la');
+  });
+  it('première mention longue, puis courte, dans l’ordre des réponses', () => {
+    const r = formeCourteApresPremiere([`Réponse pour le ${long}.`, `présentation au ${long} et au ${long}.`], long, { article: 'le', nom: 'SAR de Rouen' }, 'le');
+    expect(r).toEqual([`Réponse pour le ${long}.`, 'présentation au SAR de Rouen et au SAR de Rouen.']);
+  });
+});

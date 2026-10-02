@@ -11,7 +11,7 @@ import {
   chargerMemoireType, preparerMemoireType, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
-  type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais,
+  type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, formeCourteApresPremiere,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
@@ -5113,9 +5113,21 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       r.value = nettoyerChampCadre(delais.texte).trim() || (retires.length || delais.retires.length || recopie.retires.length ? '[À COMPLÉTER]' : r.value);
       // Cas pratique : cases « en service : [À COMPLÉTER] | rotation : [À COMPLÉTER] » remplies avec le dispositif proposé.
       if (dimensionnementCadre) r.value = remplirCasPratique(String(r.value), dimensionnementCadre).texte;
+      // Nom de l'acheteur écrit d'une seule façon (graphie de la variable CLIENT).
+      if (repriseMT?.prep.variables.CLIENT?.valeur) r.value = harmoniserNomClient(String(r.value), String(repriseMT.prep.variables.CLIENT.valeur));
       if (recopie.retires.length) console.log(`[MemoireGenerator] Champ ${r.id} : ${recopie.retires.length} phrase(s) du CCTP recopiée(s) à la voix de l'acheteur retirée(s).`);
       retires.forEach((x) => confirmationsGss.add(`À confirmer : ${x}`));
       delais.retires.forEach((x) => confirmationsGss.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
+    }
+    // Forme longue de l'acheteur à la première mention, forme courte ensuite (ca_normandie 221 : « Ministère de la Justice –
+    // Service administratif régional de Rouen / BOP Normand (…) » 11 fois → « le SAR de Rouen » après la première).
+    {
+      const cl = repriseMT?.prep.variables.CLIENT;
+      if (cl?.valeur && cl.court) {
+        const ordre = replacements.filter((r) => descriptors.find((d) => d.id === r.id)?.kind !== 'checkbox').sort((a, b) => a.id - b.id);
+        const sorties = formeCourteApresPremiere(ordre.map((r) => String(r.value ?? '')), String(cl.valeur), { article: cl.articleCourt ?? '', nom: String(cl.court) }, cl.article || '');
+        ordre.forEach((r, i) => { r.value = sorties[i]; });
+      }
     }
     // Valeurs du registre encore « à confirmer » reprises dans le document : GSS est prévenu.
     confirmationsRegistreUtilisees(replacements.map((r) => String(r.value ?? '')).join('\n'), marcheHorsNormandie(analysisData, dceContext)).forEach((c) => confirmationsGss.add(c));
@@ -7156,6 +7168,8 @@ RÈGLES DE FORME (rendu Marp) :
       return i < 0 ? sansRecopieCctp(t, dceContext).texte : `${sansRecopieCctp(t.slice(0, i), dceContext).texte.trimEnd()}\n\n${t.slice(i)}`;
     };
     for (const id of Object.keys(sections)) sections[id] = voixDeGss(sansRecopie(id, nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext))));
+    // Nom de l'acheteur écrit d'une seule façon partout (casse et accents de la variable CLIENT, parc_expo 202).
+    { const nomClient = String(prep.variables.CLIENT?.valeur || ''); if (nomClient) for (const id of Object.keys(sections)) sections[id] = harmoniserNomClient(sections[id], nomClient); }
     // 1 à 2 pages d'explication par rubrique (consignes 3 et 6) : puces de couverture au-delà retirées, texte de GSS intact.
     if (!estRetourArriere(themeActif())) {
       for (const id of Object.keys(sections)) {
@@ -8527,6 +8541,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     await this.completerParLesMemoires(elements, sections, horsNormandie);
     // « Le titulaire » des exigences recopiées du CCTP est GSS : voix de GSS dans tout le texte remis.
     for (const id of Object.keys(sections)) sections[id] = voixDeGss(nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext)));
+    // Nom de l'acheteur écrit d'une seule façon partout (casse et accents de la variable CLIENT, parc_expo 202).
+    { const nomClient = String(prep.variables.CLIENT?.valeur || ''); if (nomClient) for (const id of Object.keys(sections)) sections[id] = harmoniserNomClient(sections[id], nomClient); }
     rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
     const consultationList = [...new Set(elementsSansDoublon(elements).filter((e) => e.statut === 'ouvert').map((e) => e.question))];
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
