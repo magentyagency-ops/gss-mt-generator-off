@@ -365,10 +365,12 @@ def _contigu(sous, tout):
     return n == 0 or any(tout[i:i + n] == sous for i in range(len(tout) - n + 1))
 
 
-def comparer_textes(nouveau, origine):
+def comparer_textes(nouveau, origine, adapter=None):
     """Mêmes mots (mêmes chiffres, majuscules et signes, même nombre d'occurrences) que le schéma d'origine, et
-    chaque bloc (titre, paragraphe, libellé) retrouvé d'un seul tenant dans le texte d'origine."""
-    jn, jo = _jetons(textes(nouveau)), _jetons(textes(origine))
+    chaque bloc (titre, paragraphe, libellé) retrouvé d'un seul tenant dans le texte d'origine. `adapter` : texte
+    d'origine adapté avant la comparaison (vocabulaire du cahier des charges : « chef de poste »)."""
+    jn = _jetons(textes(nouveau))
+    jo = _jetons([adapter(" ".join(textes(origine)))] if adapter else textes(origine))
     cn, co = Counter(jn), Counter(jo)
     r = {"textes_identiques": cn == co, "mots": len(jn), "mots_origine": len(jo)}
     if cn != co:

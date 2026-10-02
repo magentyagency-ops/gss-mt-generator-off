@@ -31,6 +31,7 @@ En ligne de commande : python3 rendu_schemas.py --redessiner [--theme T] [--form
   [--forcer] [--rapport fichier.json] — remplit le cache et affiche le bilan.
 """
 import gzip
+import html
 import json
 import os
 import re
@@ -584,12 +585,108 @@ def _dessiner_page(sp):
                        sp["gabarit"]).rendu()
 
 
-def redessiner(ids=None, fmt="page", forcer=False):
+# ── Vocabulaire du cahier des charges dans les textes des schémas ────────────
+def _vocabulaire(paires):
+    """[[« responsable de site », « chef de poste »], …] → expressions (pluriel du premier mot, casse, espaces)."""
+    out = []
+    for p in paires or []:
+        if not isinstance(p, (list, tuple)) or len(p) != 2 or not str(p[0]).strip():
+            continue
+        mots = str(p[0]).split()
+        rx = re.compile(r"(?<![\w])(" + re.escape(mots[0]) + r")(s?)" + "".join(r"\s+" + re.escape(m) for m in mots[1:])
+                        + r"(?![\w])", re.I)
+        out.append((rx, str(p[1])))
+    return out
+
+
+def substituer(texte, vrx):
+    """Terme du cahier des charges à la place de celui de GSS, au singulier ou au pluriel, casse gardée."""
+    for rx, cible in vrx:
+        def f(m, cible=cible):
+            mb = cible.split()
+            res = " ".join([mb[0] + m.group(2)] + mb[1:])
+            src = m.group(0)
+            if src.isupper():
+                return res.upper()
+            return res[0].upper() + res[1:] if src[0].isupper() else res
+        texte = rx.sub(f, texte)
+    return texte
+
+
+def _substituer_profond(o, vrx):
+    if isinstance(o, str):
+        return substituer(o, vrx)
+    if isinstance(o, list):
+        return [_substituer_profond(v, vrx) for v in o]
+    if isinstance(o, tuple):
+        return tuple(_substituer_profond(v, vrx) for v in o)
+    if isinstance(o, dict):
+        return {k: _substituer_profond(v, vrx) for k, v in o.items()}
+    return o
+
+
+_TEXTE_SVG = re.compile(r"(<text[^>]*>)([^<]*)(</text>)")
+
+
+def substituer_svg(svg, vrx):
+    """Textes d'un SVG (toile paysage d'origine, géométrie inchangée) : terme remplacé dans chaque ligne ; un terme
+    coupé sur deux lignes consécutives (« … responsable de » / « site ») est écrit sur la première ligne. Le terme du
+    cahier des charges est plus court (« chef de poste ») : aucune ligne ne s'allonge au-delà de l'original."""
+    morceaux = list(_TEXTE_SVG.finditer(svg))
+    lignes = [html.unescape(m.group(2)) for m in morceaux]
+    for i in range(len(lignes) - 1):
+        # Terme à cheval sur deux lignes : la ligne suivante commence par la fin du terme.
+        joint = lignes[i] + "\n" + lignes[i + 1]
+        for rx, _cible in vrx:
+            m = next((x for x in rx.finditer(joint) if x.start() < len(lignes[i]) < x.end()), None)
+            if m:
+                # Mots du terme répartis comme l'original : la première ligne ne dépasse pas sa longueur d'origine.
+                avant, reste = joint[:m.start()], joint[m.end():]
+                mots = substituer(m.group(0).replace("\n", " "), vrx).split(" ")
+                n = len(mots)
+                while n > 0 and len(avant + " ".join(mots[:n])) > len(lignes[i]):
+                    n -= 1
+                suite = " ".join(mots[n:])
+                if not suite and reste[:1] in ",;.":
+                    if len(avant + " ".join(mots) + reste[:1]) <= len(lignes[i]):
+                        mots[-1] += reste[:1]
+                    else:
+                        n -= 1
+                        suite = mots[-1]
+                    reste = reste[1:] if not suite else reste
+                lignes[i] = (avant + " ".join(mots[:n])).rstrip()
+                lignes[i + 1] = (suite + reste).strip() if suite else reste.lstrip()
+                break
+    lignes = [substituer(x, vrx) for x in lignes]
+    out, pos = [], 0
+    for m, x in zip(morceaux, lignes):
+        out.append(svg[pos:m.start()])
+        out.append(m.group(1) + html.escape(x, quote=False) + m.group(3))
+        pos = m.end()
+    out.append(svg[pos:])
+    return "".join(out)
+
+
+def _concerne(ident, vrx):
+    """Vrai si les textes du schéma contiennent un terme du vocabulaire."""
+    sp = _specs().get(ident)
+    texte = json.dumps(sp, ensure_ascii=False) if sp else ""
+    try:
+        texte += " " + " ".join(themes_gss.textes(open(os.path.join(ICI, "bibliotheque", f"{ident}.svg"), encoding="utf-8").read()))
+    except OSError:
+        pass
+    return any(rx.search(re.sub(r"\s+", " ", texte)) for rx, _ in vrx)
+
+
+def redessiner(ids=None, fmt="page", forcer=False, vocabulaire=None):
     """Schémas de la bibliothèque dans le thème actif : SVG bruts (comme les fichiers de bibliotheque/), lus dans le
     cache du thème ou redessinés. Format page : redessin depuis specs.json, textes contrôlés (identiques à
     l'original) ; en cas d'écart ou d'échec, le schéma d'origine aux couleurs du thème (source « repli_paysage »).
-    Format paysage : schéma d'origine aux couleurs et à la police du thème. Retour arrière au format paysage : schéma d'origine."""
+    Format paysage : schéma d'origine aux couleurs et à la police du thème. Retour arrière au format paysage : schéma d'origine.
+    `vocabulaire` : terme du cahier des charges (« chef de poste ») à la place de celui de GSS dans les textes (même
+    rôle, mot de l'acheteur) ; un schéma concerné est redessiné hors cache, les autres viennent du cache."""
     fmt = _format(fmt)
+    vrx = _vocabulaire(vocabulaire)
     if not ids:
         ids = [x["id"] for x in json.load(open(os.path.join(ICI, "bibliotheque", "index.json"), encoding="utf-8"))]
     # Retour arrière au format paysage : schémas d'origine ; au format page : redessin dans la palette d'origine.
@@ -605,23 +702,32 @@ def redessiner(ids=None, fmt="page", forcer=False):
         except OSError:
             out.append({"id": ident, "ok": False, "erreurs": [f"Schéma absent de la bibliothèque : {ident}"]})
             continue
+        voc = vrx if vrx and _concerne(ident, vrx) else None
         if retour:
-            out.append({"id": ident, "ok": True, "svg": origine, "source": "origine"})
+            out.append({"id": ident, "ok": True, "svg": substituer_svg(origine, voc) if voc else origine, "source": "origine"})
             continue
-        f = os.path.join(cache, f"{ident}.svg") if cache else None
+        f = os.path.join(cache, f"{ident}.svg") if cache and not voc else None
         if f and not forcer and os.path.exists(f):
             out.append({"id": ident, "ok": True, "svg": open(f, encoding="utf-8").read(), "source": "cache"})
             continue
         r = {"id": ident, "ok": True}
         if fmt == "paysage":
             svg, r["source"] = themes_gss.recolorer(origine, THEME), "recoloration"
+            if voc:
+                svg = substituer_svg(svg, voc)
         else:
             try:
                 sp = _specs().get(ident)
                 if sp is None:
                     raise Invalide("spécification absente de bibliotheque/specs.json")
+                if voc:
+                    # Paramètres décodés puis adaptés (_decoder les laisse tels quels au dessin).
+                    sp = {**sp, "params": _substituer_profond(_decoder(sp["params"]), voc)}
                 svg = _dessiner_page(sp)
-                ctl = themes_gss.comparer_textes(svg, origine)
+                if voc:
+                    # Schéma composé (dessiné par une fonction, sans paramètres) : textes adaptés après le dessin.
+                    svg = substituer_svg(svg, voc)
+                ctl = themes_gss.comparer_textes(svg, origine, (lambda t: substituer(t, voc)) if voc else None)
                 if not ctl["ok"]:
                     raise Invalide("textes différents de l'original : "
                                    + json.dumps({k: v for k, v in ctl.items() if k != "ok"}, ensure_ascii=False)[:400])
@@ -630,6 +736,8 @@ def redessiner(ids=None, fmt="page", forcer=False):
                 print(f"[rendu_schemas] {ident} : redessin au format page impossible ({type(e).__name__} {e}) ; "
                       "schéma d'origine aux couleurs du thème.", file=sys.stderr)
                 svg, r["source"], r["erreurs"] = themes_gss.recolorer(origine, THEME), "repli_paysage", [str(e)[:400]]
+                if voc:
+                    svg = substituer_svg(svg, voc)
         if f:
             try:
                 themes_gss.ecrire(f, svg)
@@ -676,7 +784,7 @@ def main():
     if req.get("mode") == "bibliotheque":
         res = bibliotheque(req.get("demandes") or [])
     elif req.get("mode") == "redessiner":
-        res = redessiner(req.get("ids") or None, req.get("format") or "page", bool(req.get("forcer")))
+        res = redessiner(req.get("ids") or None, req.get("format") or "page", bool(req.get("forcer")), req.get("vocabulaire"))
     else:
         res = [rendre(sp, req.get("format") or "paysage") for sp in req.get("schemas") or []]
     sys.stdout.write(json.dumps({"resultats": res}, ensure_ascii=False))

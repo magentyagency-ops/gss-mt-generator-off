@@ -28,7 +28,7 @@ import {
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference,
 } from './memoire_type_cadre';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -5447,7 +5447,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         // Champ de valeur (« Effectif … (transmis pour information) ») : jamais de schéma dessous.
         .filter((x) => (x.texte.length >= 600 && !champValeur(x.question)) || x.svgId === 'comprehension' || !!x.svgId?.startsWith('demande_'));
       await schemasSelonDce(developpees, dceContext);
-      const nSchemas = await insererSchemasReponses(zip, xmlDoc, developpees, { seulementReprise: !!repriseMT });
+      const nSchemas = await insererSchemasReponses(zip, xmlDoc, developpees, { seulementReprise: !!repriseMT, vocabulaire: vocabulaireSchemas(dceContext) });
       if (nSchemas) console.log(`[MemoireGenerator] ${nSchemas} schéma(s) GSS inséré(s) sous les réponses.`);
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Schémas GSS non insérés (non bloquant) : ${e?.message || e}`);
@@ -6607,6 +6607,7 @@ RÈGLES DE FORME (rendu Marp) :
       console.log(`[MemoireGenerator] Valeurs imposées par le CCTP : ${Object.entries(imposees.valides).map(([k, v]) => `${k} = ${v.valeur}`).join(' ; ')}.`);
     }
     const plan = prep.plan;
+    plan.vocabulaireSchemas = vocabulaireSchemas(dceContext);
     const mtParId = new Map(mt.rubriques.map((r) => [r.id, r]));
     console.log(`[MemoireGenerator] Plan v2 : ${plan.blocs.map((b) => `${b.cle} ${b.titre} (${b.rubriques.length})`).join(' | ')} ; ${plan.exclues.length} rubrique(s) écartée(s) par leur condition.`);
 
@@ -7080,7 +7081,7 @@ RÈGLES DE FORME (rendu Marp) :
       ...remplacements,
     ];
     if (biblio.length) {
-      const svgs = schemasBibliotheque(biblio.map((b) => b.ref), 'page', theme);
+      const svgs = schemasBibliotheque(biblio.map((b) => b.ref), 'page', theme, plan.vocabulaireSchemas || []);
       const index = new Map<string, string>();
       try {
         for (const x of JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../python/schemas_gss/bibliotheque/index.json'), 'utf-8'))) index.set(String(x.id), String(x.titre || ''));
@@ -7137,7 +7138,7 @@ RÈGLES DE FORME (rendu Marp) :
     const manquantes = presentes.filter((r) => !schemas.has(CLE_SCHEMA(r.id)));
     const biblio = manquantes.filter((r) => sourceDe(r.id)?.source === 'bibliotheque' && sourceDe(r.id)?.ref);
     if (biblio.length) {
-      const svgs = schemasBibliotheque(biblio.map((r) => sourceDe(r.id)!.ref!), 'page', theme);
+      const svgs = schemasBibliotheque(biblio.map((r) => sourceDe(r.id)!.ref!), 'page', theme, plan.vocabulaireSchemas || []);
       for (const r of biblio) {
         const svg = svgs.get(sourceDe(r.id)!.ref!);
         if (svg) schemas.set(CLE_SCHEMA(r.id), finaliserSvg(svg, `b${r.id}`));
@@ -7821,7 +7822,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const choixTous = choisirSchemasGss(plan.map((p) => ({
       cle: p.id, question: `${p.title} ${p.attendu || ''}`, texte: '',
       ...(svgComprehension && p.id === partieB1?.id ? { svg: svgComprehension, svgId: 'comprehension' } : {}),
-    })));
+    })), undefined, { vocabulaire: vocabulaireSchemas(dceContext) });
     const schemaProcess = choixTous.filter((c) => c.id === 'comprehension');
     const choixSchemas = [...schemaProcess, ...choixTous.filter((c) => c.id !== 'comprehension').slice(0, schemaProcess.length && format.pagesMax < 6 ? nbSchemas - 1 : nbSchemas)]
       // Organigramme : toile portrait, affiché en grand (noms lisibles) au lieu d'une vignette paysage.

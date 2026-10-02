@@ -865,6 +865,16 @@ export function vocabulaireDuCctp(texte: string, dce: string, opts: { parenthese
   return texte.replace(rx, (_m, f: string, s: string) => `${/^[CR]/.test(f) ? 'C' : 'c'}hef${s} de poste`);
 }
 
+/**
+ * Vocabulaire du CCTP pour les textes des schémas de la bibliothèque (même règle que vocabulaireDuCctp) : paires
+ * [terme de GSS, terme du CCTP] transmises au moteur de schémas ; vide quand le CCTP n'impose pas son terme.
+ */
+export function vocabulaireSchemas(dce: string): Array<[string, string]> {
+  return vocabulaireDuCctp('chef de site', dce) === 'chef de poste'
+    ? [['chef de site', 'chef de poste'], ['responsable de site', 'chef de poste']]
+    : [];
+}
+
 export function interditsDce(texte: string, dce: string): string {
   texte = vocabulaireDuCctp(sansContenuCovid(nomsComposesDce(qualificationsInconditionnelles(texte, dce), dce), dce), dce);
   const d = (dce || '').replace(/\s+/g, ' ');

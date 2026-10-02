@@ -220,7 +220,7 @@ export function recolorerSvg(svg: string, theme: string): string {
  * couleurs et à la police du thème). Cache par thème côté Python. Retour arrière au format paysage : les fichiers
  * d'origine ; moteur indisponible : les fichiers d'origine aux couleurs du thème (recolorerSvg).
  */
-export function schemasBibliotheque(ids: string[], format: FormatSchema = 'paysage', theme?: string | null): Map<string, string> {
+export function schemasBibliotheque(ids: string[], format: FormatSchema = 'paysage', theme?: string | null, vocabulaire: Array<[string, string]> = []): Map<string, string> {
   const t = themeActif(theme);
   const out = new Map<string, string>();
   const uniques = [...new Set(ids.filter((id) => /^[A-Za-z0-9-]+$/.test(id)))];
@@ -231,7 +231,8 @@ export function schemasBibliotheque(ids: string[], format: FormatSchema = 'paysa
     try {
       const win = process.platform === 'win32';
       const r = spawnSync(pythonBin(), [win ? `"${SCRIPT_SCHEMAS}"` : SCRIPT_SCHEMAS], {
-        input: JSON.stringify({ mode: 'redessiner', format, ids: uniques }),
+        // Vocabulaire du CCTP (« chef de poste ») : thèmes de la refonte seulement (le retour arrière reste celui d'origine).
+        input: JSON.stringify({ mode: 'redessiner', format, ids: uniques, ...(vocabulaire.length && !estRetourArriere(t) ? { vocabulaire } : {}) }),
         encoding: 'utf-8', timeout: 120_000, shell: win, env: envTheme(t), maxBuffer: 64 * 1024 * 1024,
       });
       if (r.status === 0 && r.stdout) {

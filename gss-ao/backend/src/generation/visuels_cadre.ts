@@ -31,7 +31,7 @@ export interface ReponseCadre { cle: string; question: string; texte: string; pr
 
 /** Choisit, pour chaque réponse, le schéma GSS le plus pertinent (ou aucun), dans le thème de style (schéma placé dans
  *  le texte : toile paysage du moteur, couleurs et police du thème ; retour arrière : schéma d'origine). */
-export function choisir(reponses: ReponseCadre[], themeDemande?: string, options: { seulementReprise?: boolean } = {}): Array<{ cle: string; id: string; svg: string }> {
+export function choisir(reponses: ReponseCadre[], themeDemande?: string, options: { seulementReprise?: boolean; vocabulaire?: Array<[string, string]> } = {}): Array<{ cle: string; id: string; svg: string }> {
   const theme = themeActif(themeDemande);
   let index: any[] = [];
   try { index = JSON.parse(fs.readFileSync(path.join(MOTEUR, 'bibliotheque', 'index.json'), 'utf-8')); } catch { return []; }
@@ -78,7 +78,8 @@ export function choisir(reponses: ReponseCadre[], themeDemande?: string, options
   }
   if (!estRetourArriere(theme)) {
     const biblio = out.filter((c) => c.id !== 'organigramme' && !dessines.has(c.id));
-    const themes = schemasBibliotheque(biblio.map((c) => c.id), 'paysage', theme);
+    // Vocabulaire du CCTP dans les textes des schémas (« Chefs de poste » au lieu de « Responsables de site », IGN).
+    const themes = schemasBibliotheque(biblio.map((c) => c.id), 'paysage', theme, options.vocabulaire || []);
     for (const c of biblio) if (themes.has(c.id)) c.svg = themes.get(c.id)!;
   }
   return out;
@@ -159,7 +160,7 @@ export async function rendrePng(svgs: string[], theme: string = themeActif()): P
  * Insère sous les réponses développées du cadre le schéma GSS le plus pertinent. Renvoie le nombre de
  * schémas insérés. Les signets GSS_CH_n doivent déjà être posés.
  */
-export async function insererSchemasReponses(zip: PizZip, xmlDoc: any, reponses: ReponseCadre[], options: { seulementReprise?: boolean } = {}): Promise<number> {
+export async function insererSchemasReponses(zip: PizZip, xmlDoc: any, reponses: ReponseCadre[], options: { seulementReprise?: boolean; vocabulaire?: Array<[string, string]> } = {}): Promise<number> {
   const theme = themeActif();
   const choix = choisir(reponses, theme, options);
   if (!choix.length) return 0;

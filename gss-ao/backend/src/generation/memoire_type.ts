@@ -556,6 +556,9 @@ export interface PlanMemoireType {
   indicateurs: Record<string, boolean>;
   /** Référence GSS du secteur du client, présentée en premier. */
   secteurReference?: { id: string; libelle: string };
+  /** Vocabulaire du CCTP pour les textes des schémas de la bibliothèque (vocabulaireSchemas) : gardé dans l'état pour
+   *  qu'un schéma redessiné à la recomposition suive le même terme. */
+  vocabulaireSchemas?: Array<[string, string]>;
 }
 
 export interface OptionsPlan {

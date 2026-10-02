@@ -192,9 +192,9 @@ export function titreSchemaMemoireType(id: string, mt?: MemoireType): string | u
 /**
  * Vocabulaire du CCTP (« chef de poste » au lieu de « chef de site » / « responsable de site », vocabulaireDuCctp)
  * appliqué aux titres du mémoire type : titres de rubrique et de sous-partie, titres de page de schéma, textes des
- * schémas dessinés par le moteur (spec, process). Un schéma de la bibliothèque, figé, garde son dessin d'origine
- * (consigne 6) ; seul le titre de sa page suit le CCTP. Le fond n'est pas touché (un mot de vocabulaire). Renvoie le
- * mémoire type lui-même quand rien ne change.
+ * schémas dessinés par le moteur (spec, process). Un schéma de la bibliothèque garde son dessin d'origine (consigne 6) :
+ * le titre de sa page suit le CCTP ici, et le terme de ses textes est remplacé au dessin par le moteur (vocabulaireSchemas,
+ * même rôle, mot de l'acheteur). Le fond n'est pas touché. Renvoie le mémoire type lui-même quand rien ne change.
  */
 export function vocabulaireMemoireType(mt: MemoireType, dce: string): MemoireType {
   const v = (x: string) => vocabulaireDuCctp(x, dce, { parentheses: true });
