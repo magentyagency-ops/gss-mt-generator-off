@@ -2157,6 +2157,24 @@ function siteCellVerbatim(rowLabel: string, col: SiteColumn): string {
 
 
 /**
+ * Libellé d'une réponse du cadre dans l'état (premier message de l'assistant, éléments) : le même que dans les
+ * consultations. Question qui porte son propre numéro (« 2.3 Le centre de permanence… » sous « 2.1 L'organisation… ») :
+ * la question seule. Question qui n'est qu'un paragraphe de consigne (« Le renvoi vers un rapport général… », « Le
+ * soumissionnaire décrit… ») : l'intitulé de la section seul, en minuscules s'il est écrit en capitales. Sinon
+ * « section — question » (havre2 335, T3N-8).
+ */
+export function libelleChampEtat(section: string, question: string): string {
+  const sec = String(section || '').replace(/\s+/g, ' ').trim();
+  const q = String(question || '').replace(/\s+/g, ' ').trim();
+  if (!sec || sec === q || q.includes(sec)) return q || sec;
+  if (/^\d+(?:\.\d+)*\.?\s/.test(q)) return q;
+  if (/^(?:le renvoi|tout renvoi|cela peut|le soumissionnaire|le candidat|le prestataire|il est demand|il convient|pour rappel|les réponses doivent)/i.test(q)) {
+    return /[a-zà-ÿ]/.test(sec) ? sec : sec.charAt(0) + sec.slice(1).toLowerCase();
+  }
+  return `${sec} — ${q}`;
+}
+
+/**
  * Calendrier de GSS gardé alors que le DCE impose un autre délai (ifsem 335 : J-10, J-7, J-3 face à « au moins 10 jours
  * ouvrés avant le début du mois ») : une seule question précise, qui cite l'exigence et les jalons écrits dans le mémoire.
  * Une question de couverture sur la même obligation (même délai et même objet, « planning ») n'est pas reposée à part :
@@ -6022,7 +6040,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         const net = (x: string) => x.replace(/\[CHAMP_\d+\]/g, '').replace(/(?:[_.…]\s*){3,}/g, ' ').replace(/\s+/g, ' ').trim();
         const sec = net(section);
         const libelle = net((m ? m.slice(1).find(Boolean) : '') || section || '') || `Réponse ${id}`;
-        return { cle: `GSS_CH_${id}`, libelle: sec && sec !== libelle && !libelle.includes(sec) ? `${sec} — ${libelle}` : libelle };
+        return { cle: `GSS_CH_${id}`, libelle: libelleChampEtat(sec, libelle) };
       });
       // Premier message de l'assistant : propositions de réponse et réponses à relire, validables ou modifiables (D5).
       // Aucun repère technique (« GSS_CH_n ») montré à GSS : l'assistant retrouve chaque réponse par son libellé.
