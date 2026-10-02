@@ -801,6 +801,13 @@ function graphieEntiereDuDce(nom: string, dce: string): string {
  * reste. Si un mot est absent du DCE, le nom reste tel quel (jamais d'accent ni de casse inventés). '' si rien à faire.
  */
 export function casseDuDce(nom: string, dce: string): string {
+  // Nom avec une parenthèse (imm : « ASSOCIATION NOUVEL INSTITUT MÉDICO-CHIRURGICAL MONTSOURIS (Nouvel IMM) ») : la partie
+  // hors parenthèse prend la graphie du DCE, la parenthèse (nom d'usage, sigle) reste telle quelle.
+  const par = /^([^()]+?)(\s*\([^()]*\).*)$/.exec(nom);
+  if (par) {
+    const tete = casseDuDce(par[1], dce);
+    return tete ? `${tete}${par[2]}` : '';
+  }
   const lettres = nom.replace(/[^A-Za-zÀ-ÿ]/g, '');
   if (!lettres || lettres.replace(/[^A-ZÀ-Ý]/g, '').length / lettres.length <= 0.7 || !dce) return '';
   // 1. Le nom entier écrit en casse mêlée dans le DCE (comparaison sans casse ni accents, mots consécutifs) : graphie reprise
@@ -842,6 +849,30 @@ export function casseDuDce(nom: string, dce: string): string {
   return ok && sortie !== nom ? sortie : '';
 }
 
+/**
+ * Forme juridique écrite après un tiret à la fin du nom de l'acheteur (imm : « … (Nouvel IMM) – Association régie par la
+ * loi du 1er juillet 1901 », « … – SA au capital de … », « … – Établissement public à caractère administratif ») : ce
+ * n'est pas le nom ; elle est retirée (sinon le nom de 15 mots, forme juridique comprise, revenait 24 fois).
+ */
+const FORME_JURIDIQUE_FINALE = /\s+[–—-]\s+(?:association|soci[ée]t[ée]|s\.?\s?a\.?(?:\s?s\.?)?(?:\s?u\.?)?|s\.?\s?a\.?\s?r\.?\s?l\.?|[ée]tablissement public|e\.?\s?p\.?\s?[aic]\.?(?:\s?c\.?)?|groupement d.int[ée]r[êe]t public|g\.?\s?i\.?\s?p\.?|fondation|soci[ée]t[ée] (?:publique locale|d.[ée]conomie mixte))(?![A-Za-zÀ-ÿ])[^–—()]*$/i;
+export function sansFormeJuridiqueFinale(nom: string): string {
+  const n = String(nom || '').replace(/\s+/g, ' ').trim();
+  const r = n.replace(FORME_JURIDIQUE_FINALE, '').trim();
+  return r && r !== n && r.split(/\s+/).length >= 2 ? r : n;
+}
+
+/**
+ * Tête nominale d'un nom très long sans sigle (« Syndicat mixte de gestion des déchets … » → « Syndicat mixte »,
+ * « Établissement public de coopération culturelle … » → « Établissement public ») : le nom et ses adjectifs jusqu'à la
+ * première préposition. '' si le nom n'a pas cette forme. Un nom en capitales est ramené à « Syndicat mixte ».
+ */
+export function teteNominale(nom: string): string {
+  const m = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’-]+(?:\s+(?!(?:de|du|des|et|en|pour|sur)\b)[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ-]+){0,2})\s+(?:de|du|des|d['’])(?![A-Za-zÀ-ÿ])/i.exec(String(nom || '').trim());
+  if (!m || m[1].split(/\s+/).length >= String(nom).trim().split(/\s+/).length) return '';
+  const t = m[1];
+  return t === t.toUpperCase() ? t.charAt(0) + t.slice(1).toLowerCase() : t;
+}
+
 /** Service d'un acheteur (direction, pôle, bureau, service des achats…), jamais l'acheteur lui-même. */
 const SERVICE_ACHETEUR = /^(?:sous[- ]direction|direction|p[ôo]le|bureau|mission|service\s+(?:des\s+|de\s+la\s+|du\s+|d['’]\s*)?(?:achats?|march[ée]s|commande|juridique|finances?|affaires)|d[ée]partement\s+(?:des\s+|de\s+la\s+|du\s+)(?:achats?|march[ée]s|commande))(?![a-zà-ÿ])/i;
 
@@ -853,7 +884,7 @@ const SERVICE_ACHETEUR = /^(?:sous[- ]direction|direction|p[ôo]le|bureau|missio
  * La forme longue sert à la première mention du bloc 1 (amorce), la forme courte partout ailleurs.
  */
 export function formesClient(nom: string, dce = ''): { long: string; court?: { article: string; nom: string; genre?: 'f' | 'm' | '' }; pluriel?: boolean } {
-  const n = String(nom || '').replace(/\s+/g, ' ').trim();
+  const n = sansFormeJuridiqueFinale(nom);
   const iPrecision = n.search(/,\s*(?:pour|agissant|repr[ée]sent[ée]e?s?|au nom|en qualit[ée] de)\b/i);
   const principal = iPrecision > 0 ? n.slice(0, iPrecision) : n;
   const suite = iPrecision > 0 ? n.slice(iPrecision) : '';
@@ -870,7 +901,10 @@ export function formesClient(nom: string, dce = ''): { long: string; court?: { a
   // Forme juridique entre parenthèses (« … Théodore Simon (Groupement d'Intérêt Public) ») : jamais une forme courte ;
   // le sigle que le DCE emploie (« l'IFITS ») la remplace. Nom de 5 ou 6 mots suivi de son sigle dans le DCE
   // (« établissement public du château de fontainebleau (EPCF) ») : le sigle sert après la première mention.
-  const parenthese = entites.length === 1 && !suite ? (/\(([^()]{2,40})\)\s*$/.exec(principal) || [])[1]?.trim() : undefined;
+  // Nom d'usage entre parenthèses, en fin de nom ou, s'il est la seule parenthèse, au milieu du nom (T4C-3).
+  const parenthese = entites.length === 1 && !suite
+    ? ((/\(([^()]{2,40})\)\s*$/.exec(principal) || [])[1] || ((principal.match(/\(/g) || []).length === 1 ? (/\(([^()]{2,40})\)/.exec(principal) || [])[1] : undefined))?.trim()
+    : undefined;
   const juridique = !!parenthese && FORME_JURIDIQUE.test(normaliser(parenthese).replace(/[’]/g, "'"));
   if (entites.length === 1 && !suite && (juridique || (mots >= 5 && mots <= 6 && !parenthese))) {
     const sigle = sigleDuDce(juridique ? principal.replace(/\s*\([^()]*\)\s*$/, '') : principal, dce);
@@ -916,9 +950,12 @@ export function formesClient(nom: string, dce = ''): { long: string; court?: { a
       if (art && nLieu >= 2) return { long, court: { article: art, nom: avecLieu, genre: '' } };
       if (art && nSigle >= 3) return { long, court: { article: art, nom: initiales, genre: '' } };
     }
-    if (entite.split(/\s+/).length <= 8 && entite !== principal) {
-      const a = articleEtNom(entite, dce);
-      return { long, court: { article: a.article, nom: a.nom || entite } };
+    // Tutelle (ou entité) de plus de 8 mots (T4-COH-4 : « Établissement public de coopération culturelle et
+    // environnementale du Grand Paris Sud - Direction des moyens généraux… », 29 fois en entier) : sa tête nominale.
+    const cible = entite.split(/\s+/).length <= 8 ? entite : teteNominale(entite);
+    if (cible && entite !== principal) {
+      const a = articleEtNom(cible, dce);
+      if (a.article || cible === entite) return { long, court: { article: a.article, nom: a.nom || cible, ...(cible !== entite ? { genre: genreTete(cible) } : {}) } };
     }
   }
   // Sigles des entités (« (ENPC) », « (ENSG, dénommée … ) »).
@@ -953,7 +990,21 @@ export function formesClient(nom: string, dce = ''): { long: string; court?: { a
     const article = /^(?:nouvel|nouveau|grand|petit|vieux|vieil)$/i.test(premier) ? 'le' : /^(?:nouvelle|grande|petite|vieille)$/i.test(premier) ? 'la' : articleEtNom(usage, dce).article;
     if (article) return { long, court: { article, nom: usage, genre: article === 'la' ? 'f' : article === 'le' ? 'm' : '' } };
   }
+  // Nom de plus de 8 mots sans sigle ni forme courte (T4-COH-4 : « Syndicat mixte de gestion des déchets ménagers et
+  // assimilés de la région elbeuvienne et du plateau du Neubourg ») : tête nominale avec son article après la première
+  // mention (« le Syndicat mixte »), jamais le nom entier à chaque mention.
+  if (entites.length === 1 && mots > 8) {
+    const tete = teteNominale(principal);
+    const a = tete ? articleEtNom(tete, dce) : null;
+    if (tete && a?.article) return { long, court: { article: a.article, nom: a.nom || tete, genre: genreTete(tete) } };
+  }
   return { long, pluriel };
+}
+
+/** Genre de la tête nominale (« Syndicat mixte » : m ; « Communauté … » : f ; '' si inconnu). */
+function genreTete(tete: string): 'f' | 'm' | '' {
+  const p = tete.split(/\s+/)[0];
+  return ARTICLES_FEMININS.test(p) ? 'f' : ARTICLES_MASCULINS.test(p) || /^(?:[ée]tablissement|office|institut|organisme|h[ôo]pital)$/i.test(p) ? 'm' : '';
 }
 
 const MOIS = 'janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre';
@@ -1178,6 +1229,7 @@ const CALCULS: Record<string, Calculateur> = {
       if (sansForme && normaliser(analyse).replace(/[^a-z0-9]+/g, ' ').trim().includes(sansForme)) brut = analyse;
     }
     if (FORME_SOCIETE.test(brut) && brut.replace(FORME_SOCIETE, '').trim()) brut = brut.replace(FORME_SOCIETE, '').trim();
+    brut = sansFormeJuridiqueFinale(brut);
     // Nom resté en capitales (page de garde et analyse en capitales) : graphie du DCE, mot par mot.
     brut = casseDuDce(brut, c.ctx.dce || '') || brut;
     const { article, nom } = articleEtNom(brut, c.ctx.dce || '');

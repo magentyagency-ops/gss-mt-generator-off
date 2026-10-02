@@ -1233,6 +1233,24 @@ export const PIECES_OFFRE = /acte d.engagement|bordereau de prix|(?:compl[ée]t|
 export function normComparaison(s: string): string {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’‘ʼ]/g, "'").replace(/[  ]/g, ' ');
 }
+/**
+ * Nom de l'acheteur dans tout le mémoire (T4C-3) : le nom brut de l'analyse (imm : « ASSOCIATION … (Nouvel IMM) –
+ * Association régie par la loi du 1er juillet 1901 ») devient la forme longue retenue (variable CLIENT), écrite à la
+ * première mention seulement ; ensuite la forme courte (« l'IMM »). Sections données dans l'ordre du document.
+ */
+export function nomClientCourtApresPremiere(sections: Record<string, string>, cl: { valeur?: any; court?: any; articleCourt?: string; article?: string } | undefined, brut = ''): void {
+  if (!cl?.valeur || !cl?.court) return;
+  const ids = Object.keys(sections);
+  const long = String(cl.valeur);
+  const b = String(brut || '').replace(/\s+/g, ' ').trim();
+  let textes = ids.map((id) => String(sections[id] ?? ''));
+  if (b && b !== long && b.length > long.length) {
+    const rx = new RegExp(b.split(' ').map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+'), 'g');
+    textes = textes.map((t) => t.replace(rx, long));
+  }
+  const sorties = formeCourteApresPremiere(textes, long, { article: cl.articleCourt ?? '', nom: String(cl.court) }, cl.article || '');
+  ids.forEach((id, i) => { sections[id] = sorties[i]; });
+}
 /** Libellés écrits sans modèle dans les cellules d'identité d'un cadre (tableau des autorisations CNAPS, signataire). */
 const LIBELLES_IDENTITE_DETERMINISTES = 'Surveillance humaine et gardiennage (activités privées de sécurité, livre VI du CSI, Code de la sécurité intérieure) ; Dirigeant d\u2019entreprise de surveillance et de gardiennage ; Dirigeant de GLOBAL SECURITY SERVICES';
 
@@ -7491,6 +7509,7 @@ RÈGLES DE FORME (rendu Marp) :
     for (const id of Object.keys(sections)) sections[id] = voixDeGss(sansRecopie(id, nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext))));
     // Nom de l'acheteur écrit d'une seule façon partout (casse et accents de la variable CLIENT, parc_expo 202).
     { const nomClient = String(prep.variables.CLIENT?.valeur || ''); if (nomClient) for (const id of Object.keys(sections)) sections[id] = harmoniserNomClient(sections[id], nomClient); }
+    nomClientCourtApresPremiere(sections, prep.variables.CLIENT as any, analysisData?.clientName || '');
     // 1 à 2 pages d'explication par rubrique (consignes 3 et 6) : puces de couverture au-delà retirées, texte de GSS intact.
     if (!estRetourArriere(themeActif())) {
       for (const id of Object.keys(sections)) {
@@ -8911,6 +8930,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     for (const id of Object.keys(sections)) sections[id] = voixDeGss(nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retablirGras(retirerCommentairesInternes(protegerGras(sections[id])).texte), dceContext), dceContext, horsNormandie).texte, dceContext)));
     // Nom de l'acheteur écrit d'une seule façon partout (casse et accents de la variable CLIENT, parc_expo 202).
     { const nomClient = String(prep.variables.CLIENT?.valeur || ''); if (nomClient) for (const id of Object.keys(sections)) sections[id] = harmoniserNomClient(sections[id], nomClient); }
+    nomClientCourtApresPremiere(sections, prep.variables.CLIENT as any, analysisData?.clientName || '');
     rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
     const consultationList = [...new Set(elementsSansDoublon(elements).filter((e) => e.statut === 'ouvert').map((e) => e.question))];
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
