@@ -1665,7 +1665,11 @@ export function textesSchemaSvg(svg: string): string[] {
 export function reduireComprehensionCadre(texte: string, assez: (t: string) => boolean, protegee: (l: string) => boolean = () => false): { texte: string; retirees: string[] } {
   const lignes = String(texte || '').split('\n');
   const puce = (l: string) => /^\s*[•\-*]\s/.test(l);
-  const vigilance = (l: string) => puce(l) && /point de vigilance/i.test(l.slice(0, 40));
+  // Point de vigilance : libellé « Point de vigilance » ou puce de la partie « Les points de vigilance… » (libellé remplacé
+  // par le nom du point, libellesBloc1).
+  const partieVigilance = new Set<string>();
+  { let dans = false; for (const l of lignes) { if (!puce(l) && l.trim()) dans = /points? de vigilance/i.test(l); else if (dans && puce(l)) partieVigilance.add(l); } }
+  const vigilance = (l: string) => puce(l) && (/point de vigilance/i.test(l.slice(0, 40)) || partieVigilance.has(l));
   // Attente : « Ce que vous attendez : … → notre réponse : … » ou citation du DCE « « … » — réponse : … » (ca_normandie 241 :
   // ces attentes étaient prises pour des engagements ajoutés et retirées toutes en premier).
   const attente = (l: string) => puce(l) && !vigilance(l) && (/ce que vous attendez|vos attentes|attente/i.test(l.slice(0, 40)) || /^\s*[•\-*]\s*«/.test(l) || /→\s*notre r[ée]ponse|[—–-]\s*r[ée]ponse\s*:/i.test(l));

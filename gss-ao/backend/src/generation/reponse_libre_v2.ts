@@ -590,7 +590,11 @@ const ROLES = ['bleu', 'orange', 'rouge', 'vert', 'sable', 'creme', 'or'];
 
 /** Texte court (titre de carte, titre de schéma) : coupé sur un mot, sans ponctuation finale pendante. */
 export const court = (t: unknown, max: number): string => {
-  const s = String(t ?? '').replace(/\s+/g, ' ').replace(/^[«"“\s]+|[»"”\s]+$/g, '').trim();
+  // Guillemets retirés seulement quand ils encadrent tout le texte (imm 473 : le guillemet ouvrant d'un titre cité en tête
+  // était retiré seul, « Le livre … (LMC) » structure… » sans guillemet ouvrant, et le moteur refusait le schéma).
+  let s = String(t ?? '').replace(/\s+/g, ' ').trim();
+  const entoure = /^[«"“]\s*([^«»"“”]*?)\s*[»"”]$/.exec(s);
+  if (entoure) s = entoure[1].trim();
   if (s.length <= max) return s;
   const coupe = s.slice(0, max + 1).replace(/\s+\S*$/, '');
   return coupe.replace(/[,;:\s]+$/, '');
@@ -1043,8 +1047,13 @@ export function resultatBesoin(texte: string, dejaEcrits: string[] = [], defaut 
  */
 export function completerResultatBesoin(etapes: Array<{ titre?: string; texte?: string; role?: string }> | undefined, texte: string, defauts: string[]): Array<{ titre: string; texte: string; role: string }> | null {
   if (!Array.isArray(etapes) || etapes.length < 3 || !defauts.length) return null;
-  if (!defauts.every((d) => /la dernière étape doit dire le résultat/.test(d))) return null;
-  const gardees = etapes.slice(0, 4).map((e) => ({ titre: String(e?.titre || '').trim(), texte: String(e?.texte || '').trim(), role: String(e?.role || '').toLowerCase() === 'vert' ? 'bleu' : String(e?.role || '') }));
+  // Défauts qui portent tous sur la dernière étape (caen 441 : « étape 5 : la phrase reprend le titre de l'étape » et
+  // « étape 5 : la dernière étape doit dire le résultat ») : l'étape est remplacée par « Votre résultat » tiré du texte,
+  // au lieu de refuser tout le schéma.
+  const derniere = (d: string) => /la dernière étape doit dire le résultat/.test(d) || d.startsWith(`étape ${etapes.length} :`);
+  if (!defauts.every(derniere)) return null;
+  const autreQueResultat = defauts.some((d) => !/la dernière étape doit dire le résultat/.test(d));
+  const gardees = etapes.slice(0, autreQueResultat ? Math.min(4, etapes.length - 1) : 4).map((e) => ({ titre: String(e?.titre || '').trim(), texte: String(e?.texte || '').trim(), role: String(e?.role || '').toLowerCase() === 'vert' ? 'bleu' : String(e?.role || '') }));
   if (gardees.some((e) => !e.titre || !e.texte)) return null;
   const resultat = resultatBesoin(texte, gardees.map((e) => e.texte), RESULTAT_MEMOIRE_TYPE);
   return resultat ? [...gardees, { titre: 'Votre résultat', texte: resultat, role: 'vert' }] : null;
@@ -1061,6 +1070,22 @@ export function anomaliesSchemaBloc1(spec: { gabarit?: string; params?: any } | 
   const out: string[] = [];
   const norm = (x: string) => normaliser(String(x || '')).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
   const pleins = (x: string) => norm(x).split(' ').filter((w) => w.length >= 3 && !MOTS_OUTILS.has(w));
+  etapes.forEach((e, i) => {
+    const n0 = `étape ${i + 1} « ${String(e?.titre || '').trim()} »`;
+    const ti0 = String(e?.titre || '').trim(), tx0 = String(e?.texte || '').trim();
+    // Marques Markdown imprimées telles quelles (caen 471 : « **La planification** ») ; guillemets ou parenthèses non
+    // refermés ; titre qui est une phrase (« La mobilisation est préparée ») ; texte sans sujet (« Coordonnée par… ») ;
+    // texte dont le verbe au pluriel s'accordait avec un sujet coupé par le titre (« Le contrôleur de rondes organisent… »).
+    if (/\*\*|__|(?:^|\s)#{1,4}\s|`/.test(`${ti0} ${tx0}`)) out.push(`${n0} : marque de mise en forme imprimée (« ** », « __ », « # »)`);
+    for (const x of [ti0, tx0]) if ((x.match(/«/g) || []).length !== (x.match(/»/g) || []).length || (x.match(/\(/g) || []).length !== (x.match(/\)/g) || []).length) out.push(`${n0} : guillemet ou parenthèse non refermé (« ${x} »)`);
+    if (/\b(?:est|sont|sera|seront|a été|ont été)\s+[a-zà-ÿ]+(?:é|ée|és|ées|i|ie|is|ies|u|ue|us|ues)(?![a-zà-ÿ])/i.test(ti0)) out.push(`${n0} : le titre est une phrase, pas un titre nominal`);
+    if (/^[A-ZÀ-Ý][a-zà-ÿ]+(?:ée?s?|ie?s?|ue?s?|ite?s?)\s+(?:par|avec|selon)\b/.test(tx0) && !/^(?:Une?|Les?|La|Chaque|Toute?s?)\b/.test(tx0)) out.push(`${n0} : texte sans sujet (« ${tx0.slice(0, 30)}… »)`);
+    {
+      const PLURIELS = /^(?:organisent|encadrent|structurent|soutiennent|permettent|assurent|suivent|garantissent|pilotent|couvrent|cadrent|traitent|r[ée]pondent|accompagnent|s[ée]curisent|compl[èe]tent|d[ée]finissent|fixent|distinguent|tracent|g[èe]rent)$/;
+      const m = /^(?:Le|La|L['’]|Un|Une|Chaque|Notre|Votre)\s?([^,;:.]{0,70}?)\s([a-zà-ÿ]{3,}ent)\b/.exec(tx0);
+      if (m && !/\s(?:et|ou)\s/.test(` ${m[1]} `) && PLURIELS.test(m[2])) out.push(`${n0} : accord du verbe (« ${m[2]} » après un sujet au singulier : sujet coupé)`);
+    }
+  });
   etapes.forEach((e, i) => {
     const n = `étape ${i + 1} « ${String(e?.titre || '').trim()} »`;
     const t = String(e?.texte || '').trim();
@@ -1104,10 +1129,136 @@ export function anomaliesSchemaBloc1(spec: { gabarit?: string; params?: any } | 
   return out;
 }
 
+/** Verbes conjugués qui terminent le groupe nominal d'une exigence (titre d'étape, libellé d'un point de vigilance). */
+const VERBE_TITRE = /^(?:est|sont|doit|doivent|devra|devront|peut|peuvent|a|ont|exigen?t?|exige|cessen?t?|cesse|restent|reste|varien?t?|varie|imposen?t?|impose|prévoi(?:t|ent)|porten?t?|porte|assuren?t?|assure|se|s['’]\S*|fai(?:t|s)|font|demanden?t?|demande|nécessiten?t?|nécessite|impliquen?t?|implique|sera|seront|intervien(?:t|nent)|requiert|requièrent|associen?t?|associe|comprend|comprennent|comporten?t?|comporte|accueillen?t?|accueille|comptent|compte|dispose|disposent|couvren?t?|couvre|regroupen?t?|regroupe|concernen?t?|concerne|inclut|incluent|ouvren?t?|ouvre|fermen?t?|ferme|fonctionnen?t?|fonctionne|reçoi(?:t|vent)|abriten?t?|abrite|représenten?t?|représente|dépend(?:ent)?|accèdent|accède|circulen?t?|circule|travaillen?t?|travaille|nécessitera|fixe|fixent|attend|attendent|souhaite|souhaitent|veut|veulent|mentionnen?t?|combinen?t?|indiquen?t?|constituen?t?|pourr(?:a|ont)|risquen?t?|possèdent|possède|encadren?t?|encadre|donnen?t?|donne|ont lieu|a lieu|permet|permettent|engendren?t?|entraînen?t?|obligen?t?)$/i;
+/** Mots après lesquels un titre peut s'arrêter sans couper un groupe : prépositions, coordinations, participe présent. */
+const COUPE_TITRE = /^(?:à|au|aux|dans|sur|pour|avec|par|en|sous|après|avant|entre|hors|selon|suivant|lors|dès|depuis|vers|chez|et|ou|de|du|des|d['’]\S*|pendant|durant|afin|sans|y|[a-zà-ÿ]{3,}ant)$/i;
+
+/**
+ * Titre court (34 caractères au plus) d'une exigence du DCE, pour une étape du schéma du bloc 1 ou le libellé d'un point
+ * de vigilance : le groupe nominal qui précède le premier verbe, arrêté avant une préposition, une coordination ou un
+ * participe (« les rondes d'ouverture à 05H30 et de fermeture… encadrent… » → « Les rondes d'ouverture » ; « remplacement
+ * sur site dans les UNE (1) heure… » → « Remplacement sur site »), jamais au milieu d'un groupe (« chef d'équipe ou
+ * agent »). '' si aucun titre propre n'est possible.
+ */
+export function titreExigence(x: string, max = 34): string {
+  const e = String(x || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').replace(/^[«"“\s]+|[»"”\s.;:]+$/g, '').trim();
+  if (!e) return '';
+  const mots0 = e.split(' ');
+  const k = mots0.findIndex((m, i) => i > 0 && (VERBE_TITRE.test(m) || /^(?:ne|n['’]\S*)$/i.test(m)));
+  const gn = (k > 0 ? mots0.slice(0, k) : mots0).join(' ').split(/\s*[,;:]\s+|\s+[—–]\s+/)[0].trim();
+  const mots = gn.split(' ');
+  const plein = (w: string) => { const v = w.toLowerCase().replace(/^(?:l|d)['’]/, ''); return v.length >= 3 && !MOTS_OUTILS.has(v); };
+  for (let i = mots.length; i >= 2; i--) {
+    const pre = mots.slice(0, i).join(' ');
+    if (pre.length > max) continue;
+    const dernier = mots[i - 1];
+    if (MOTS_OUTILS.has(dernier.toLowerCase().replace(/['’]$/, '')) || /['’]$/.test(dernier) || !/[\p{L}\d)]$/u.test(dernier)) continue;
+    // Coupe permise devant une préposition, une coordination ou un participe, ou quand le reste n'est qu'une suite
+    // d'adjectifs (« interventions successives | habituelles ») ; jamais devant un complément (« … ou agent | N1 au PCS »).
+    const reste = mots.slice(i);
+    if (reste.length && !COUPE_TITRE.test(reste[0]) && reste.some((w) => COUPE_TITRE.test(w) || !/^[a-zà-ÿ-]+$/.test(w))) continue;
+    if (mots.slice(0, i).filter(plein).length < 2) continue;
+    if ((pre.match(/«/g) || []).length !== (pre.match(/»/g) || []).length || (pre.match(/\(/g) || []).length !== (pre.match(/\)/g) || []).length) continue;
+    return pre.charAt(0).toUpperCase() + pre.slice(1);
+  }
+  return '';
+}
+
+/** Titre de rubrique cité dans une réponse : « A : B » → A (ou B quand A n'est que le socle commun : « Notre socle de
+ *  procédures : l'intervention sur alarme… » → « L'intervention sur alarme… »). */
+function rubriqueCitee(x: string): string {
+  const t = String(x || '').replace(/\s+/g, ' ').trim();
+  const m = /^(.+?)\s+:\s+(.+)$/.exec(t);
+  if (!m) return t;
+  return /^(?:notre socle(?: de proc[ée]dures)?|nos proc[ée]dures|le socle commun)$/i.test(m[1].trim()) ? m[2].charAt(0).toUpperCase() + m[2].slice(1) : m[1].trim();
+}
+
+/**
+ * Réponse de GSS d'une puce du bloc 1, prête pour une carte du schéma : sans « ** », titres de rubrique sans leurs
+ * guillemets ni leur sous-titre, article d'un titre en minuscule au milieu de la phrase (« par la planification et le
+ * contrôleur de rondes »). Le moteur de schémas compare les mots, pas la casse.
+ */
+export function reponsePourSchema(y: string): string {
+  let t = String(y || '').replace(/\*\*\s*«\s*([^»*]+?)\s*»\s*\*\*/g, '« $1 »').replace(/\*\*([^*]+)\*\*/g, (_m, x: string) => (/^[A-ZÀ-Ý]/.test(x.trim()) ? rubriqueCitee(x) : x)).replace(/\*\*/g, '');
+  // Titre entre guillemets employé comme groupe nominal (en tête, après « par », « et », « sur »…) : sans guillemets ;
+  // après un nom (« la procédure « Le remplacement… » ») : guillemets gardés, sans le sous-titre.
+  t = t.replace(/«\s*([A-ZÀ-Ý][^»]{2,160}?)\s*»/g, (m, x: string, pos: number, tout: string) => {
+    const avant = tout.slice(0, pos);
+    return /(?:^|[,;:]\s*|\b(?:par|et|ou|sur|avec|via|à|de|selon)\s+)$/i.test(avant) ? rubriqueCitee(x) : `« ${rubriqueCitee(x)} »`;
+  });
+  t = t.replace(/([\p{Ll}\d)»,]\s+)(Le|La|Les|Un|Une|Notre|Nos|Votre|Vos)(?=\s)/gu, (_m, a: string, b: string) => `${a}${b.toLowerCase()}`)
+    .replace(/([\p{Ll}\d)»,]\s+)L(['’])/gu, '$1l$2');
+  return t.replace(/\s+/g, ' ').trim();
+}
+
+/** Renvoi en incise (« **La gestion des moyens d'accès**, développée au bloc 4, encadre… ») retiré, la phrase reste. */
+export function sansIncisesRenvoi(y: string): string {
+  return String(y || '').replace(/,\s*(?:d[ée]velopp|d[ée]taill|d[ée]crit|trait|pr[ée]sent|expos)[a-zéè]*\s+(?:au|aux|dans les?)\s+blocs?\s+\d+(?:\s*(?:,|et)\s*(?:au\s+bloc\s+)?\d+)*\s*,\s*/gi, ' ');
+}
+
+/** Texte d'étape coupé avant la coordination de deux groupes nominaux quand la phrase entière dépasse la carte (« La
+ *  mobilisation est préparée et coordonnée par la planification | et la mise en place d'une prestation ») : la partie
+ *  gardée est une phrase (verbe conjugué) entière. '' sinon. */
+export function texteEtapeCoordination(y: string, max = 86): string {
+  const t = String(y || '').replace(/\s+/g, ' ').replace(/[.;,:\s]+$/, '').trim();
+  const entier = texteEtapeEntier(t, max);
+  if (entier) return entier;
+  let meilleur = '';
+  for (const m of t.matchAll(/\s+(?:et|ainsi que)\s+(?=(?:le|la|les|l['’]|un|une|des|du|son|sa|ses|leur|leurs|notre|nos)\b)/gi)) {
+    const pre = t.slice(0, m.index).trim();
+    if (pre.length > max || pre.length < 25) continue;
+    const dernier = (pre.split(' ').pop() || '').toLowerCase().replace(/['’]$/, '');
+    const verbe = VERBE_CONJUGUE.test(pre) || /(?:^|\s)(?:distingue|distinguent|structure|structurent|encadre|encadrent|soutient|soutiennent|pilote|pilotent|cadre|cadrent|traite|traitent|répond|répondent|accompagne|accompagnent|gère|gèrent|identifie|identifient|repose|reposent|s['’]appuie|s['’]appuient|coordonne|coordonnent)(?=\s|$)/i.test(pre);
+    if (MOTS_OUTILS.has(dernier) || !verbe || !texteEtapeEntier(pre, max)) continue;
+    if (pre.length > meilleur.length) meilleur = pre;
+  }
+  return meilleur;
+}
+
+/**
+ * Puces « Vos attentes » et « Points de vigilance » du bloc 1 telles que l'acheteur les lit (T4N-8, T4C-1) :
+ * - libellé générique « **Point de vigilance** : » ou « **Ce que vous attendez** : » répété à chaque puce : remplacé par le
+ *   nom du point, en gras (« **L'arrivée sur site** est exigée dans un délai maximal de 30 minutes… »), sinon retiré ;
+ * - titres de rubrique cités en gras au milieu de la phrase (« coordonnée par **La planification** et **La mise en place
+ *   d'une prestation** ») : entre guillemets (« coordonnée par « La planification » et « La mise en place d'une
+ *   prestation » »). Le gras de tête de la puce (citation du DCE, nom du point) reste.
+ */
+export function libellesBloc1(texte: string): string {
+  let partie = '';
+  return String(texte || '').split('\n').map((l) => {
+    if (/^##\s/.test(l)) { partie = l; return l; }
+    if (!/^##\s+(?:Vos attentes|Les points de vigilance)/i.test(partie) || !/^\s*[-*•]\s/.test(l)) return l;
+    const puce = (/^\s*[-*•]\s+/.exec(l) || [''])[0];
+    let corps = l.slice(puce.length);
+    const gen = /^\*\*\s*(?:Points? de vigilance|Ce que vous attendez|Vos attentes|Attente)\s*\*\*\s*(?:\([^)]*\))?\s*:\s*(.+)$/i.exec(corps);
+    if (gen) {
+      const iFleche = gen[1].search(/\s*→/);
+      const exigence = (iFleche >= 0 ? gen[1].slice(0, iFleche) : gen[1]).trim();
+      const suite = iFleche >= 0 ? gen[1].slice(iFleche) : '';
+      const nom = titreExigence(exigence);
+      const debut = normaliser(exigence.slice(0, nom.length));
+      corps = nom && debut === normaliser(nom)
+        ? `**${nom}**${exigence.slice(nom.length)}${suite}`
+        : `${exigence.charAt(0).toUpperCase()}${exigence.slice(1)}${suite}`;
+    }
+    // Gras de tête gardé ; ensuite, un titre en gras devient un titre entre guillemets.
+    const tete = (/^\*\*[^*]+\*\*/.exec(corps) || [''])[0];
+    const reste = corps.slice(tete.length)
+      .replace(/\*\*\s*«\s*([^»*]+?)\s*»\s*\*\*/g, '« $1 »')
+      .replace(/\*\*([^*]+)\*\*/g, (m, x: string) => (/^[A-ZÀ-Ý]/.test(x.trim()) ? `« ${x.trim()} »` : x));
+    return `${puce}${tete}${reste}`;
+  }).join('\n');
+}
+
 export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: string; role?: string }> {
   const puces = (titre: RegExp) => {
     const partie = String(texte || '').split(/^(?=##\s)/m).find((p) => titre.test(p)) || '';
     return partie.split('\n').map((l) => {
+      // Libellé nommé en gras suivi de l'exigence, sans deux-points (« **L'arrivée sur site** est exigée … → « … » … »,
+      // forme écrite par libellesBloc1) : le libellé et sa suite sont l'exigence.
+      const nv = /^\s*[-*•]\s+\*\*([^*«»]+)\*\*(?!\s*[:(])([^→\n]*?)\s*→\s*(?:notre réponse\s*:\s*)?(.+)$/i.exec(l);
+      if (nv && !/^(?:points? de vigilance|ce que vous attendez|vos attentes|notre réponse)$/i.test(nv[1].trim())) return { brut: nv[0], x: `${nv[1].trim()}${nv[2]}`, y: nv[3], citation: false };
       const m = /^\s*[-*•]\s+\*\*[^*]+\*\*(?:\s*\([^)]*\))?\s*:\s*(.+?)\s*→\s*notre réponse\s*:\s*(.+)$/.exec(l);
       if (m) return { brut: m[0], x: m[1], y: m[2], citation: false };
       // Attente en gras citée du DCE (« **« Aucun poste ne doit être laissé vacant »** : → notre réponse : … », imm 341), ou
@@ -1128,13 +1279,18 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
       // Attente écrite en citation du DCE (cadre imposé, ca_normandie 241 : « « main courante tenue en temps réel » —
       // réponse : main courante électronique… ») : la citation est l'exigence, la suite la réponse de GSS.
       const c = /^\s*[-*•]\s+(?:\*\*[^*]+\*\*\s*:\s*)?«\s*([^»]{3,160}?)\s*»[^—–\n]{0,80}?\s[—–]\s*(?:notre\s+)?réponse\s*:\s*(.+)$/i.exec(l);
-      return c ? { brut: c[0], x: c[1], y: c[2], citation: true } : null;
+      if (c) return { brut: c[0], x: c[1], y: c[2], citation: true };
+      // Exigence sans gras ni libellé (« - L'arrivée sur site est exigée … → … »).
+      const sg = /^\s*[-*•]\s+([^*→\n]{8,}?)\s*→\s*(?:notre réponse\s*:\s*)?(.+)$/i.exec(l);
+      return sg ? { brut: sg[0], x: sg[1], y: sg[2], citation: false } : null;
     })
       // Jamais de repère interne dans un schéma (« [À COMPLÉTER] », ⟦AC:n⟧, « [CONSULTATION REQUISE : …] »).
       .filter((m): m is { brut: string; x: string; y: string; citation: boolean } => !!m && m.x.trim().length > 3 && !INTERNE.test(m.brut))
       // Réponse sans renvoi interne (« processus détaillés au bloc 4, « … » », « suit les processus du bloc 5 ») : '' si
       // le renvoi était toute la réponse.
-      .map((m) => ({ x: m.x.trim(), y: sansRenvoiBloc(m.y.split(/\s*;\s*/)[0]).replace(/\s+(?:est|sont|sera|seront)$/i, '').trim(), citation: m.citation }))
+      // Réponse sans « ** » ni guillemets autour des titres de rubrique (caen 471 : « **La planification** » imprimé tel
+      // quel ; imm 473 : guillemet ouvrant perdu, « Le livre … (LMC) » structure… »).
+      .map((m) => ({ x: m.x.replace(/\*\*/g, '').trim(), y: reponsePourSchema(sansRenvoiBloc(sansIncisesRenvoi(m.y).split(/\s*;\s*/)[0]).replace(/\s+(?:est|sont|sera|seront)$/i, '').trim()), citation: m.citation }))
       .filter((c) => c.y);
   };
   const vigilance = puces(/^##\s+Les points de vigilance/i);
@@ -1167,6 +1323,11 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
     // un complément orphelin (« …, du PTI et des obligations », « … et d'intégration des nouveaux agents ») ni un sujet
     // dont le verbe s'accordait avec les deux (« le livre des consignes et l'intégration des intervenants permettent… »).
     if (/^(?:de|du|des|d['’]|à|au|aux|en|selon|par|pour|avec|dans)\b/i.test(m[3]) || m[3].split(/\s+/).some((w, i) => i > 0 && VERBE.test(w)) || /\bpermett?e?n?t\b/i.test(m[3])) return { titre: '', reste: '' };
+    // Titre qui contient un verbe (« la mobilisation est préparée ») ; suite sans sujet (« coordonnée par… ») ; suite dont
+    // le verbe au pluriel s'accordait avec les deux groupes (« la planification et le contrôleur de rondes organisent… ») :
+    // jamais un couple titre / texte (caen 471).
+    if (t.split(/\s+/).some((w, i) => i > 0 && (VERBE.test(w) || VERBE_TITRE.test(w))) || /^[a-zà-ÿ]+(?:ée?s?|ie?s?|ue?s?)\s+(?:par|avec|selon)\b/i.test(m[3])
+      || (/^et$/i.test(sep) && /^\S+(?:\s+\S+){0,6}?\s+[a-zà-ÿ]{3,}ent\b/i.test(m[3]) && /\b(?:organisent|encadrent|structurent|soutiennent|assurent|suivent|garantissent|pilotent|couvrent|cadrent|traitent|r[ée]pondent|accompagnent|distinguent|g[èe]rent)\b/i.test(m[3]))) return { titre: '', reste: '' };
     return { titre: t, reste: m[3].trim() };
   };
   const pleinsDe = (x: string) => normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 3 && !MOTS_OUTILS.has(w));
@@ -1186,18 +1347,21 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
     const pleins = pleinsDe(x);
     return x.length <= 40 && pleins.length >= 2 && !/[,;:«»"]/.test(x) && !x.split(/\s+/).some((w, i) => i > 0 && VERBE.test(w)) ? x : '';
   };
-  const titreDe = (c: { x: string; citation: boolean }) => citationTitre(c) || nominal(c.x);
+  const titreDe = (c: { x: string; citation: boolean }) => citationTitre(c) || nominal(c.x) || titreExigence(c.x);
   for (const c of [...ordre.filter((x) => titreDe(x)), ...ordre.filter((x) => !titreDe(x))]) {
     if (etapes.length >= 3) break;
     let titre = titreDe(c);
     let y = c.y;
-    if (!titre) {
+    let corps = titre ? texteEtapeCoordination(y.charAt(0).toUpperCase() + y.slice(1)) : '';
+    // Sans titre tiré de l'exigence, ou réponse trop longue pour la carte : tête de la réponse comme titre, sa suite
+    // comme texte (ca_normandie 241 : « Intégration du marché » / « Mise en place de la prestation… »).
+    if (!corps) {
       const tr = teteReponse(c.y);
       if (!tr.titre || tr.reste.split(/\s+/).length < 3) continue;
       titre = tr.titre;
       y = tr.reste;
+      corps = texteEtapeCoordination(y.charAt(0).toUpperCase() + y.slice(1));
     }
-    let corps = texteEtapeEntier(y.charAt(0).toUpperCase() + y.slice(1));
     if (!corps) continue;
     // Texte qui commence par le titre : la suite seulement, si elle dit encore quelque chose (3 mots au moins).
     const nt = normaliser(titre).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -1246,7 +1410,11 @@ export function specSecoursBesoin(texte: string): { gabarit: string; params: any
   for (const l of lignes) {
     if (etapes.length >= 2) break;
     const c = l.split('|').map((x) => x.trim()).filter((_, k, a) => k > 0 && k < a.length - 1);
-    const poste = titreEtape(String(c[1] || '').replace(/\*\*/g, ''), 34);
+    // Poste : intitulé entier, ou sa partie après « : » (« 1er poste : chef d'équipe ou agent N1 au PCS »), ou un titre
+    // arrêté avant un complément ; jamais coupé au milieu d'un groupe (imm 473 : « 1er poste : chef d'équipe ou agent »).
+    const brutPoste = String(c[1] || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
+    const apresDeuxPoints = (/^[^:]{1,30}\s:\s(.+)$/.exec(brutPoste) || [])[1] || '';
+    const poste = brutPoste.length <= 34 ? brutPoste : apresDeuxPoints && apresDeuxPoints.length <= 34 ? apresDeuxPoints : titreExigence(apresDeuxPoints || brutPoste);
     const horaires = texteEtapeEntier(String(c[2] || '').replace(/\*\*/g, ''));
     if (!poste || pleinsDe(poste).length < 1 || !horaires || horaires.split(/\s+/).length < 3 || INTERNE.test(l)) continue;
     if (etapes.some((e) => proches(e.titre, poste) || normaliser(e.texte) === normaliser(horaires))) continue;
@@ -1405,8 +1573,9 @@ Sois force de proposition : montre que GSS a lu le cahier des charges en détail
 TEXTE (Markdown, __MOTS__ mots, jamais plus), en quatre sous-parties « ## », dans cet ordre :
 ## Votre contexte et votre site — 3 à 6 lignes : l'acheteur, l'objet du marché, le ou les sites, la durée (seulement si elle figure dans les DONNÉES DU MARCHÉ ; sinon n'en parle pas, jamais [À COMPLÉTER] pour une donnée de l'acheteur) ; faits du DCE uniquement, sans qualificatif promotionnel ; ne redis pas la première phrase.
 ## Le périmètre de la prestation demandée — un tableau Markdown « Site | Poste | Jours et horaires | Qualification | Missions principales », une ligne par poste prévu au CCTP (aucun poste, horaire ni effectif ajouté), puis une phrase par prestation complémentaire prévue (rondes, interventions sur alarme, bons de commande, reprise du personnel…).
-## Vos attentes et nos engagements — 3 à 6 puces de la forme « **Ce que vous attendez** (mots de l'acheteur) : … → notre réponse : … (le process GSS qui y répond, nommé par ses mots, sans écrire « process GSS »), développée au bloc n ».
-## Les points de vigilance identifiés et nos réponses — 2 à 4 puces de la forme « **Point de vigilance** : … (fait du DCE) → notre réponse : … (un process GSS existant, nommé par ses mots, sans écrire « process GSS ») ».
+## Vos attentes et nos engagements — 3 à 6 puces de la forme « **« ce que vous attendez, avec les mots exacts de l'acheteur »** : … → notre réponse : … (le process GSS qui y répond, nommé par le titre de sa rubrique entre guillemets « … », sans écrire « process GSS »), développée au bloc n ».
+## Les points de vigilance identifiés et nos réponses — 2 à 4 puces de la forme « **<le point de vigilance, nommé en 2 à 5 mots>** : … (fait du DCE) → notre réponse : … (un process GSS existant, nommé par le titre de sa rubrique entre guillemets « … », sans écrire « process GSS ») » ; jamais le libellé « Point de vigilance » lui-même.
+Un titre de rubrique cité au milieu d'une phrase s'écrit entre guillemets (« coordonnée par « La planification » »), jamais en gras.
 
 SCHÉMA DE PROCESS (champ "etapes") : 5 étapes lues de gauche à droite, dans cet ordre : 1. le besoin (role rouge) ; 2. l'enjeu principal (rouge) ; 3. le dispositif de GSS (orange) ; 4. le pilotage (bleu) ; 5. le résultat pour l'acheteur (vert, toujours la dernière). Chaque étape porte un CONTENU propre à CE marché, tiré des enjeux et des exigences clés du DCE (délai de mobilisation, qualification au poste, confidentialité, continuité, tuilage, nouveau bâtiment…) : "titre" = un titre NOMINAL court (1 à 4 mots) qui nomme ce contenu (ex. « Mobilisation sous 2 heures », « SSIAP 2 au PC 24 h/24 », « Confidentialité des patients »), jamais le seul nom de l'étape (« Votre besoin », « Vos enjeux », « Notre dispositif », « Notre pilotage », « Votre résultat ») ; "texte" = une phrase concrète de 12 mots au plus, qui commence par une majuscule, sans reprendre le titre de l'étape ni une formule générale (« … nous consulte pour le marché », « Vos enjeux comprennent… », « Notre dispositif s'appuie sur… »). Un poste (PC, accueil, loge) n'agit pas : le sujet est l'agent qui l'occupe, avec sa qualification (« L'agent SSIAP 2 du PC… »), et ce qu'il fait respecte le CCTP (un agent qui doit rester au PC ne fait pas de ronde). Les étapes reprennent des mots EXACTS de ton TEXTE (même orthographe, mêmes accords) : chaque mot et chaque chiffre du schéma doit déjà figurer dans ton texte, sinon le schéma est refusé ; c'est le schéma qui reprend le texte, jamais l'inverse : n'ajoute jamais au texte des mots ou des bribes de phrase (« Traçabilité des rondes. », « SSIAP 1 et ADS. ») pour y faire figurer ceux du schéma. "titre_schema" : le message du schéma, en une phrase courte (60 caractères au plus).
 

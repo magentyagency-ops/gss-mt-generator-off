@@ -17,7 +17,7 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, FORMALITES_OFFRE, questionFormalite,
-  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, planSelonRC, passagesPlanImpose, controlerProposition,
+  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, planSelonRC, passagesPlanImpose, controlerProposition,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, type Dimensionnement } from './dimensionnement';
@@ -1268,7 +1268,7 @@ export function questionExacte(q: string): string {
   // Question déjà posée (éventuellement suivie d'une explication : « … PME … ? L'effectif est de 380 salariés ; … »).
   if (/\?/.test(t) && !/^(?:Information|Valeur) à fournir/i.test(t)) return maj(t);
   // Tâches de validation et alertes signalées comme telles (propositions de réponse, rubriques à relire, schéma absent).
-  if (/^(?:Proposition|Réponse à relire|(?:Partie|Rubrique) «)/i.test(t)) return t;
+  if (/^(?:Proposition|Réponse à relire|(?:Partie|Rubrique|Réponse) «)/i.test(t)) return t;
   // Préfixes : la question qui suit est mise en forme à son tour.
   const pref = /^(À demander à l.acheteur|Pour le critère «[^»]*»|Critère «[^»]*»|«[^»]*» — à confirmer|Champ \d+)\s*:\s*(.+)$/i.exec(t);
   if (pref) {
@@ -4673,6 +4673,8 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const repriseParChamp = new Map<number, { ids: string[]; fidelite: number; brute?: number }>();
     /** Schéma de process de la compréhension du besoin, inséré sous la réponse qui le reprend (consigne 3). */
     const svgComprehension = new Map<number, string>();
+    /** Réponses de compréhension restées sans schéma de process (R4-2), signalées à GSS dans les consultations. */
+    const alertesComprehension = new Set<string>();
     /** Puces d'engagement ajoutées par la couverture du CCTP, par champ (parties limitées en pages). */
     const ajoutsCouvertureCadre = new Map<number, string[]>();
     /** Hauteur maximale (EMU) des schémas par réponse, et place partagée des parties limitées en pages. */
@@ -5116,8 +5118,11 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
             if (fid < SEUIL_FIDELITE_CADRE) propositionsCadre.set(f.id, `Réponse à relire (mémoire type de GSS repris en partie, fidélité ${Math.round(fid * 100)} %) : ${libelle}`);
             else propositionsCadre.delete(f.id);
             if (comprehension?.svg && ![...svgComprehension.keys()].some((id) => id !== f.id)) svgComprehension.set(f.id, comprehension.svg);
+            // Compréhension sans schéma de process (R4-2, ca_normandie) : signalée à GSS comme en réponse libre et en format court.
+            else if (comprehension && !comprehension.svg) alertesComprehension.add(`Réponse « ${libelle} » : le schéma de process de la compréhension du besoin n'a pas pu être dessiné ; à demander via l'assistant avant la remise.`);
           } else if (comprehension) {
             propositionsCadre.set(f.id, `Réponse à relire (compréhension du besoin rédigée d'après le DCE) : ${libelle}`);
+            if (!comprehension.svg) alertesComprehension.add(`Réponse « ${libelle} » : le schéma de process de la compréhension du besoin n'a pas pu être dessiné ; à demander via l'assistant avant la remise.`);
           } else if (renvois.length) {
             // Le texte de GSS sur ce sujet est repris dans une autre réponse, à laquelle celle-ci renvoie. Une réponse qui
             // ajoute autour du renvoi des phrases rédigées par l'IA (havre1 21 : 3.3, 4.2, 4.4, 110 à 150 mots) n'est pas
@@ -5233,7 +5238,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
 
     // Informations variables à confirmer par GSS (registre) : le marqueur ne doit JAMAIS apparaître dans le
     // document remis à l'acheteur → retiré de la valeur, remonté dans les consultations.
-    const confirmationsGss = new Set<string>();
+    const confirmationsGss = new Set<string>(alertesComprehension);
     const confirmationsParChamp = new Map<number, string[]>();
     // Case « PME : Oui / Non » : réponse de GSS au registre (statut_pme) ; à défaut, aucune case cochée et la question
     // posée à GSS (le mémoire type écrit « PME » alors que l'effectif de 380 salariés dépasse le seuil européen).
@@ -7728,6 +7733,9 @@ RÈGLES DE FORME (rendu Marp) :
         texte = m.texte;
         console.log(`[MemoireGenerator] Compréhension du besoin : ${m.ajoutees} attente(s) ou point(s) de vigilance ajouté(s) depuis les exigences du DCE (minimum 4 et 3).`);
       }
+      // Libellés génériques (« Point de vigilance : ») remplacés par le nom du point ; titres de rubrique cités en gras au
+      // milieu d'une phrase écrits entre guillemets (T4N-8, T4C-1).
+      texte = libellesBloc1(texte);
     }
     const titre = court(rep?.titre_schema, 70) || titreDefaut;
     // Schéma de process : étapes de la réponse, puis correction des seules étapes, puis sous-titres du texte en phases.
