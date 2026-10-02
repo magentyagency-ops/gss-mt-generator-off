@@ -1174,9 +1174,11 @@ const AI_SECTIONS_B: Array<{ id: string; chapter: string; title: string }> = [
 
 const CHAPTER_ORDER_B = ['I', 'II', 'III', 'IV'];
 /** Exigence qui porte sur la composition du dossier de l'offre (pas sur la prestation) : ni question à GSS, ni texte du mémoire. */
-// Prix et bordereaux (BPU, DPGF, DQE) : pièces financières de l'offre, jamais un engagement du mémoire technique (génération
-// réelle imm 15 : « GSS complétera le BPU des prestations ponctuelles avec des taux distincts… »).
-const PIECES_OFFRE = /acte d.engagement|bordereaux? (?:de|des) prix|\b(?:BPU|DPGF|DQE)\b|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?/i;
+// Prix et bordereaux (BPU, DPGF, DQE) : la phrase qui parle de REMPLIR ou de CHIFFRER une pièce financière n'est pas un
+// engagement du mémoire technique (génération réelle imm 15 : « GSS complétera le BPU des prestations ponctuelles avec
+// des taux distincts… »). Une prestation qui cite seulement le bordereau reste un engagement (Becquerel : « renforts
+// exceptionnels commandés sur la base du BPU avec un délai de prévenance de 48 heures ouvrées »).
+export const PIECES_OFFRE = /acte d.engagement|bordereau de prix|(?:compl[ée]t|rempli|renseign|chiffr|joindr|fourni)[^.]{0,40}(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)|(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)[^.]{0,30}(?:compl[ée]t|rempli|renseign)|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?/i;
 /** Rubriques et chapitres de la réponse libre (lecture seule, pour l'assistant de modification). */
 export { AI_SECTIONS_B as SECTIONS_REPONSE_LIBRE, CHAPTER_TITLES_B as CHAPITRES_REPONSE_LIBRE };
 
