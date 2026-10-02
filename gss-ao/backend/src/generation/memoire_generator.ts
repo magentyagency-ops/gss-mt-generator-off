@@ -17,8 +17,8 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, FORMALITES_OFFRE, questionFormalite,
-  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, planSelonRC, passagesPlanImpose, controlerProposition,
-  type AjoutLibre, type GroupeNouveau,
+  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, phraseAutour, adaptationsRetenuesDe, consultationAdaptation, messageAdaptations, planSelonRC, passagesPlanImpose, controlerProposition,
+  type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, type Dimensionnement } from './dimensionnement';
 import {
@@ -7552,8 +7552,9 @@ RÈGLES DE FORME (rendu Marp) :
     progres(74, 'Cohérence avec les exigences chiffrées et les horaires du CCTP…');
     // Valeurs habituelles de GSS dont l'engagement renforcé n'est dû que si le DCE l'exige (indicateur faux) : protégées.
     const proteges = Object.values(mt.variables).filter((v) => v.valeur_gss && v.valeur_si_exige && v.indicateur_exige && !prep.indicateurs[v.indicateur_exige]).map((v) => v.valeur_gss!);
-    await this.corrigerContradictions(sections, rubriquesDoc, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))], proteges, questionsCouverture);
-    await this.verifierHoraires(sections, rubriquesDoc, dceContext);
+    const adaptationsCctp: AdaptationCctp[] = [];
+    await this.corrigerContradictions(sections, rubriquesDoc, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))], proteges, questionsCouverture, adaptationsCctp);
+    await this.verifierHoraires(sections, rubriquesDoc, dceContext, adaptationsCctp);
     await this.engagementsChiffresManquants(sections, rubriquesDoc, dceContext);
     limiterRappelsSite(sections, rubriquesDoc.map((x) => x.id));
     const refsRetirees = limiterReferences(sections, rubriquesDoc.map((x) => x.id).filter((id) => plan.rubriques.find((r) => r.id === id)?.ancienne_rubrique !== 'b_references'));
@@ -7653,6 +7654,10 @@ RÈGLES DE FORME (rendu Marp) :
       return { id, n: i < 0 ? 0 : (t.slice(i).match(/^\s*[-*•]\s+\S/gm) || []).length };
     }).filter((x) => x.n > 0);
     for (const x of engagementsIA) consultationList.push(`Engagements à valider (exigences du CCTP rédigées par l'IA) : « ${titreDe(x.id)} » — ${x.n} engagement${x.n > 1 ? 's' : ''}`);
+    // Phrases du texte de GSS adaptées au CCTP (D8, T4C-13 : caen 471, « n'imprimons plus de documents » réécrit sans
+    // signalement) : chacune est signalée, avec la phrase d'origine, la phrase adaptée et l'exigence.
+    const adaptationsRetenues = adaptationsRetenuesDe(adaptationsCctp, sections);
+    for (const a of adaptationsRetenues) consultationList.push(consultationAdaptation(a, titreDe(a.id)));
     if (consultationList.length) {
       console.warn(`[MemoireGenerator] ⚠ ${consultationList.length} consultation(s) GSS :\n- ${consultationList.join('\n- ')}`);
       progres(86, `⚠ ${consultationList.length} information(s) à obtenir ou à valider auprès de GSS : ${consultationList.slice(0, 3).join(' ; ')}${consultationList.length > 3 ? '…' : ''}`);
@@ -7689,6 +7694,12 @@ RÈGLES DE FORME (rendu Marp) :
       const texteEng = messageEngagements(engagementsIA.map((x) => ({ titre: titreDe(x.id), n: x.n })));
       if (etat.conversation?.length) etat.conversation[0].texte = `${etat.conversation[0].texte}\n\n${texteEng}`;
       else etat.conversation = [{ role: 'assistant', texte: texteEng, date: new Date().toISOString() }];
+    }
+    // Phrases de GSS adaptées au CCTP : annoncées dans le premier message, à valider, modifier ou rétablir (D8).
+    if (adaptationsRetenues.length) {
+      const texteAd = messageAdaptations(adaptationsRetenues.map((a) => ({ ...a, titre: titreDe(a.id) })));
+      if (etat.conversation?.length) etat.conversation[0].texte = `${etat.conversation[0].texte}\n\n${texteAd}`;
+      else etat.conversation = [{ role: 'assistant', texte: texteAd, date: new Date().toISOString() }];
     }
     // Dimensionnement proposé (D5) : annoncé dans le premier message de l'assistant, à valider ou modifier.
     if (ctxBase.dimensionnement?.titulaires) {
@@ -8189,7 +8200,7 @@ Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "tex
    * inférieure au minimum imposé, délai plus long que le maximum…) est reformulée pour s'aligner sur
    * l'exigence. Seuls les remplacements retrouvés MOT POUR MOT sont appliqués. Étape non bloquante.
    */
-  private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>, proteges: string[] = [], questions?: Set<string>): Promise<void> {
+  private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>, proteges: string[] = [], questions?: Set<string>, adaptations?: AdaptationCctp[]): Promise<void> {
     const ids = rubriques.map((r) => r.id).filter((id) => (sections[id] || '').trim());
     // Une rubrique à la fois, avec les exigences chiffrées qui lui sont attribuées (contexte court : résultat stable).
     // Chaque rubrique est confrontée à TOUTES les exigences (une contradiction se trouve souvent hors de la
@@ -8232,7 +8243,10 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
           if (questions && exigence) questions.add(`Le DCE exige : « ${exigence.replace(/[.\s]+$/, '').slice(0, 300)} ». Le mémoire indique la valeur de GSS : « ${extrait.replace(/[*_#]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)} ». Disposez-vous d'une garantie ou d'une valeur conforme à cette exigence (extension, attestation), et laquelle faut-il écrire ?`);
           continue;
         }
+        const texteAvant = sections[id], pos = texteAvant.indexOf(extrait);
         sections[id] = sections[id].replace(extrait, remplacement);
+        // D8 : le CCTP prime, mais la phrase de GSS adaptée est signalée à GSS (phrase d'origine, phrase adaptée, exigence).
+        adaptations?.push({ id, avant: phraseAutour(texteAvant, pos, extrait.length).replace(/\*\*|__/g, ''), apres: phraseAutour(sections[id], pos, remplacement.length).replace(/\*\*|__/g, ''), exigence: String(c?.exigence || '').replace(/\s+/g, ' ').trim() });
         n++;
       }
     } catch { /* étape facultative */ }
@@ -8248,7 +8262,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
    * fixe la fermeture aux usagers à 21 h et la mise sous alarme à 22 h). Seule la phrase fautive est remplacée,
    * partout où elle figure. Étape non bloquante.
    */
-  private async verifierHoraires(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, dce: string): Promise<void> {
+  private async verifierHoraires(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, dce: string, adaptations?: AdaptationCctp[]): Promise<void> {
     // Ouverture, fermeture et mise sous alarme des bâtiments seulement : les horaires de rondes et de présence des
     // postes sont contrôlés rubrique par rubrique (corrigerContradictions), avec le détail de chaque site.
     const OBJET = /ouvert|ferm|alarme/i;
@@ -8295,7 +8309,13 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"n": <numéro>, "phrase": "
         const apres = String(c?.phrase || '').trim();
         // Correction d'horaire seulement : la phrase garde l'essentiel de son texte (pas de réécriture).
         if (!avant || !apres || apres === avant || Math.abs(squelette(apres).length - squelette(avant).length) > 45) continue;
-        for (const id of ids) if (sections[id].includes(avant)) { sections[id] = sections[id].split(avant).join(apres); n++; }
+        for (const id of ids) {
+          if (!sections[id].includes(avant)) continue;
+          sections[id] = sections[id].split(avant).join(apres);
+          n++;
+          // D8 : phrase de GSS adaptée à l'horaire du CCTP, signalée à GSS.
+          adaptations?.push({ id, avant: avant.replace(/\*\*|__/g, '').trim(), apres: apres.replace(/\*\*|__/g, '').trim(), exigence: String(c?.horaire_cctp || '').replace(/\s+/g, ' ').trim() });
+        }
       }
     } catch { /* étape facultative */ }
     if (n) console.log(`[MemoireGenerator] Horaires du CCTP : ${n} phrase(s) corrigée(s).`);
@@ -8900,8 +8920,9 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       sections[id] = delais.texte;
     }
     progres(70, 'Cohérence avec les exigences chiffrées et les horaires du CCTP…');
-    await this.corrigerContradictions(sections, plan, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))], [], questionsCouverture);
-    await this.verifierHoraires(sections, plan, dceContext);
+    const adaptationsCctp: AdaptationCctp[] = [];
+    await this.corrigerContradictions(sections, plan, [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))], [], questionsCouverture, adaptationsCctp);
+    await this.verifierHoraires(sections, plan, dceContext, adaptationsCctp);
     await this.engagementsChiffresManquants(sections, plan, dceContext);
     const remarquesCourt = await this.remarquesCahierDesCharges(dceContext);
     if (remarquesCourt) {
@@ -9074,6 +9095,10 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const consultationList = [...new Set(elementsSansDoublon(elements).filter((e) => e.statut === 'ouvert').map((e) => e.question))];
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
     consultationList.push(...avisSecours, ...propositions);
+    // Phrases du texte de GSS adaptées au CCTP et toujours présentes après la condensation : signalées à GSS (D8).
+    const titrePartieAd = (pid: string) => plan.find((x) => x.id === pid)?.title || pid;
+    const adaptationsRetenues = adaptationsRetenuesDe(adaptationsCctp, sections);
+    for (const a of adaptationsRetenues) consultationList.push(consultationAdaptation(a, titrePartieAd(a.id)));
     console.log(`[MemoireGenerator] Format court (mémoire type) : ${rendu.pages} page(s) / ${format.pagesMax} autorisée(s) ; ${toutesRetenues.length} rubrique(s) du mémoire type reprise(s), ${propositions.length} proposition(s).`);
     // Premier message de l'assistant : les propositions de l'IA, à valider ou modifier avant la remise (D5) ; chaque
     // partie qui en contient est marquée « proposition à valider » pour l'action « valider » de l'assistant.
@@ -9100,6 +9125,12 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       const texteDim = messageDimensionnement(ctxBase.dimensionnement);
       if (conversation?.length) conversation[0].texte = `${conversation[0].texte}\n\n${texteDim}`;
       else conversation = [{ role: 'assistant', texte: texteDim, date: new Date().toISOString() }];
+    }
+    // Phrases de GSS adaptées au CCTP : annoncées dans le premier message, à valider, modifier ou rétablir (D8).
+    if (adaptationsRetenues.length) {
+      const texteAd = messageAdaptations(adaptationsRetenues.map((a) => ({ ...a, titre: titrePartieAd(a.id) })));
+      if (conversation?.length) conversation[0].texte = `${conversation[0].texte}\n\n${texteAd}`;
+      else conversation = [{ role: 'assistant', texte: texteAd, date: new Date().toISOString() }];
     }
     try {
       ecrireEtat({
