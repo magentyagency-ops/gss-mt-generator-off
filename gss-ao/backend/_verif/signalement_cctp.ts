@@ -215,7 +215,7 @@ function controlerGeneration(nom: string, r: any, etat: EtatCompletion, attendue
   const etat1 = lireEtat(id)!;
   fs.copyFileSync(r1.filePath, path.join(SORTIE, `generation1${path.extname(r1.filePath)}`));
   const avecAdaptation = corpus !== 'caen';
-  out.generation1 = controlerGeneration('génération 1', r1, etat1, { min: avecAdaptation ? 2 : 0 });
+  out.generation1 = controlerGeneration('génération 1', r1, etat1, { min: avecAdaptation ? (MODE === 'cc' ? 1 : 2) : 0 });
   if (!avecAdaptation) {
     if ((etat1.adaptations || []).length) anomalie(`caen (Normandie, aucune contradiction simulée) : ${etat1.adaptations!.length} phrase(s) adaptée(s)`);
   } else {
@@ -229,8 +229,9 @@ function controlerGeneration(nom: string, r: any, etat: EtatCompletion, attendue
     out.valider = { reponse: r.reponse, modifies: r.modifies, statut: e1.adaptations!.find((a) => a.n === a1.n)?.statut, document_inchange: e1.fichier === fichier0 };
     if (out.valider.statut !== 'validee') anomalie('validation non enregistrée');
     if (!out.valider.document_inchange) anomalie('document recomposé pour une simple validation');
-    const cibleModif = a3 ? a2 : null;
-    const cibleRetab = a3 || a2;
+    // Une seule phrase : validée, puis modifiée, puis rétablie (GSS change d'avis) ; deux : la seconde est rétablie.
+    const cibleModif = a3 ? a2 : a2 ? null : a1;
+    const cibleRetab = a3 || a2 || a1;
     if (cibleModif) {
       const texteGss = 'GSS met en place le dispositif demandé par le cahier des charges et en rend compte à chaque réunion de suivi.';
       planAssistant = { reponse: 'Phrase remplacée.', actions: [{ type: 'adaptation', n: cibleModif.n, choix: 'modifier', texte: texteGss }] };

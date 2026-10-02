@@ -515,7 +515,7 @@ export function messageAdaptations(liste: PhraseAdaptee[] | undefined): string {
       `   - Exigence du CCTP : « ${phraseLisible(a.exigence, 500)} »`,
     ]),
     '',
-    'Pour chacune, vous pouvez :',
+    l.length === 1 ? 'Pour cette phrase, vous pouvez :' : 'Pour chacune, vous pouvez :',
     '- valider la phrase adaptée : « Je valide la phrase adaptée n° … » ;',
     '- la modifier : « Pour la phrase adaptée n° …, écris : … » ;',
     '- rétablir votre phrase d\'origine : « Rétablis ma phrase d\'origine n° … ».',
