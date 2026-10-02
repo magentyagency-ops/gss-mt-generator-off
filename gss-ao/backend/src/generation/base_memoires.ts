@@ -838,7 +838,16 @@ export function retirerCommentairesInternes(texte: string): { texte: string; ret
       return `${/nt$/i.test(v) ? 'vérifient' : /er$/i.test(v) ? 'vérifier' : 'vérifie'} l’autorisation d’accès`;
     })
     .replace(/\bvérification\s+de\s+l['’]identité(?![a-zà-ÿ])/gi, (m, pos, tout) => (negationAvant(String(tout), pos) ? m : 'vérification de l’autorisation de présence'))
-    .replace(/\bcontr[ôo]l(ent|e) les accès et les identités\b/gi, 'contrôl$1 les accès et les autorisations de présence');
+    .replace(/\bcontr[ôo]l(ent|e) les accès et les identités\b/gi, 'contrôl$1 les accès et les autorisations de présence')
+    // Forme nominale (caen 471, puce d'engagement : « GSS assurera la surveillance des sites, […] le contrôle des
+    // identités, les premiers secours ») : « la vérification des autorisations de présence », article accordé.
+    .replace(/\b(?:(le|du|au|un|les|des|aux)\s+)?(contr[ôo]les?|v[ée]rifications?)\s+(?:des\s+identit[ée]s|d['’]\s*identit[ée]s?|de\s+l['’]\s*identit[ée](?![a-zà-ÿ])(?!\s+(?:de|du|des)\s))/gi, (m, art: string | undefined, _n, pos: number, tout: string) => {
+      if (negationAvant(String(tout), pos) || /interdi/i.test(String(tout).slice(Math.max(0, pos - 40), pos))) return m;
+      const a = (art || '').toLowerCase();
+      const pref = a === 'du' || a === 'des' ? 'de la ' : a === 'au' || a === 'aux' ? 'à la ' : a === 'un' ? 'une ' : a ? 'la ' : '';
+      const r = `${pref}vérification des autorisations de présence`;
+      return /^[A-ZÀ-Ý]/.test(m) ? r.charAt(0).toUpperCase() + r.slice(1) : r;
+    });
   return { texte: sansRepriseSelective(texteFinal), retires };
 }
 

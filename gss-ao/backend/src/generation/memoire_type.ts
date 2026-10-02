@@ -2130,7 +2130,7 @@ function nombresDe(t: string): string[] {
 
 const INTERDITS_ADAPTATION: Array<[RegExp, string]> = [
   [/covid|pass(?:es)? sanitaires?|gestes? barri|hydroalcool/i, 'Covid'],
-  [/(?:v[ée]rifi|contr[ôo]l)\w*\s+(?:de\s+|son\s+|leur\s+|les\s+)?(?:l['’])?(?:pi[èe]ces?\s+d['’])?identit/i, "contrôle d'identité"],
+  [/(?:v[ée]rifi|contr[ôo]l)\w*\s+(?:de\s+|des\s+|d['’]\s*|son\s+|leur\s+|les\s+)?(?:l['’]\s*)?(?:pi[èe]ces?\s+d['’])?identit/i, "contrôle d'identité"],
   [/certifi[ée]e?s?\s+ISO|ISO\s?9001\s+(?:obtenue|acquise)/i, 'ISO présentée comme acquise'],
   [/p[ôo]le emploi/i, 'Pôle emploi'],
   [/vigicom/i, 'Vigicom'],
