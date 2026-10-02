@@ -15,6 +15,7 @@
  */
 import {
   normaliser, fidelite, decouperSousParties, rechercherRubriques, lireJson, SEUIL_FIDELITE, motsDePhrase, similarite,
+  faitsDePhrase, faitsCompatibles, nombresAutorisesDe,
   type MemoireType, type RubriqueMemoireType, type PlanMemoireType, type SousPartie,
 } from './memoire_type';
 
@@ -532,9 +533,26 @@ export const SEUIL_FIDELITE_CADRE = SEUIL_FIDELITE;
  * (les ajouts propres à la question ne la font pas baisser) ; avec une limite de longueur (reprise intégrale
  * impossible), la meilleure des deux mesures : phrases du texte conservées, ou phrases de la réponse venues du texte.
  */
-export function fideliteReponse(reference: string, reponse: string, limite = false): number {
-  const couverture = fidelite(reference, reponse);
-  return limite ? Math.max(couverture, fidelite(reponse, reference)) : couverture;
+export function fideliteReponse(reference: string, reponse: string, limite = false, autorises = ''): number {
+  const couverture = fidelite(reference, reponse, 0.8, autorises);
+  return limite ? Math.max(couverture, fidelite(reponse, reference, 0.8, autorises)) : couverture;
+}
+
+/**
+ * Noms propres (mot à majuscule hors début de phrase ou de puce) de la phrase reprise absents de la phrase de GSS et du
+ * DCE : « notre rondier » devenu « notre agent Securitas » n'est plus la phrase de GSS.
+ */
+function nomsPropresAjoutes(ref: string, cand: string, dce: string): string[] {
+  const n = (x: string) => normaliser(x);
+  const refN = n(ref);
+  const dceN = n(dce);
+  const out: string[] = [];
+  const corps = String(cand || '').replace(/^\s*(?:[•\-*]|\d+[.)])\s+/, '');
+  for (const m of corps.matchAll(/(?<=[\s(«"'’])([A-ZÀ-Ý][\wÀ-ÿ-]{2,})/g)) {
+    const w = n(m[1]);
+    if (!new RegExp(`(?:^|[^a-z0-9])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-z0-9])`).test(`${refN} ${dceN}`)) out.push(m[1]);
+  }
+  return out;
 }
 
 /**
@@ -580,7 +598,7 @@ export interface ResultatRecalage {
  * n'est jamais remise. Un sous-titre de GSS omis (« Le recyclage de nos tenues : ») n'est remis que devant son contenu.
  * Une phrase courte (moins de 6 mots, souvent un intitulé) n'est rapprochée d'une phrase de GSS qu'à 80 % au moins.
  */
-export function recalerSurReference(reference: string, reponse: string, o: { limite?: boolean; maxMots?: number; seuil?: number; exclure?: (phrase: string) => boolean } = {}): ResultatRecalage {
+export function recalerSurReference(reference: string, reponse: string, o: { limite?: boolean; maxMots?: number; seuil?: number; exclure?: (phrase: string) => boolean; dce?: string } = {}): ResultatRecalage {
   const seuil = o.seuil ?? SEUIL_FIDELITE_CADRE;
   type Item = { brut: string; mots: string[]; ref?: number; ajout?: boolean };
   type Ligne = { items: Item[] };
@@ -597,7 +615,8 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   // Texte de GSS applicable au marché (mesure de la fidélité) : sans ces phrases.
   const applicable = exclus.some(Boolean)
     ? lignesRef.map((_, i) => ref.filter((p, k) => p.ligne === i && !exclus[k]).map((p) => p.brut).join(' ')).join('\n') : reference;
-  const mesure = (t: string) => fideliteReponse(applicable, t, !!o.limite);
+  const mesure = (t: string) => fideliteReponse(applicable, t, !!o.limite, o.dce || '');
+  const autorises = nombresAutorisesDe(o.dce || '');
   const fideliteAvant = mesure(reponse);
   // Réponse du modèle.
   const sortie: Ligne[] = decouper(reponse).map((l) => ({ items: l.map((brut) => ({ brut, mots: motsDePhrase(brut) })) }));
@@ -625,10 +644,16 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     if (p.i.ref !== undefined || position.has(p.r)) continue;
     p.i.ref = p.r;
     position.set(p.r, { ligne: ligneDe(p.i), item: p.i });
-    if (p.s >= 0.8) continue;
     const r = ref[p.r];
+    // Consigne 5 et D7 : une phrase de GSS dont un chiffre, un quantificateur (« une à trois » → « trois »), une borne
+    // (« 45 minutes maximum » → « 20 minutes ») ou un nom propre a changé, ou qui reçoit un mot interdit (« notre agent
+    // sous-traitant »), est rétablie telle que GSS l'a écrite (havre1 21 : « trois fois par mois » au lieu de « une à
+    // trois fois par mois »). Seul un nombre imposé par le DCE peut remplacer celui de GSS.
+    const faitsChanges = !faitsCompatibles(faitsDePhrase(r.brut), faitsDePhrase(p.i.brut), autorises)
+      || nomsPropresAjoutes(r.brut, p.i.brut, o.dce || '').length > 0;
+    if (p.s >= 0.8 && !faitsChanges) continue;
     const nouveaux = chiffres(p.i.brut).filter((c) => !chiffres(r.brut).includes(c));
-    if (nouveaux.length) continue;
+    if (nouveaux.length && !faitsChanges) continue;
     const puce = (PUCE.exec(p.i.brut) || [''])[0];
     p.i.brut = `${puce}${r.brut.replace(PUCE, '')}`;
     p.i.mots = r.mots;

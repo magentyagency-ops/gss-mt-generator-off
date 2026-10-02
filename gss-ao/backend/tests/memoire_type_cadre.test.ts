@@ -281,9 +281,12 @@ Pour l'Université de Rouen Normandie, nos agents porteront la tenue d'intervent
     expect(r.reformulees).toBe(1);
     expect(r.texte).toBe(ref);
     const chiffree = 'Nous remplaçons tout agent absent dans un délai de 45 minutes suivant son absence et nous prévenons le client. Un agent formé au site prend le poste avec les consignes à jour.';
-    const r2 = recalerSurReference(ref, chiffree);
+    // Chiffre imposé par le DCE (présent dans le DCE) : gardé ; sans le DCE, la phrase de GSS est rétablie (tour 1, T1C-01).
+    const r2 = recalerSurReference(ref, chiffree, { dce: 'Le titulaire remplace tout agent absent dans un délai de 45 minutes.' });
     expect(r2.texte).toContain('45 minutes');
     expect(r2.texte).not.toContain('deux heures');
+    const r3 = recalerSurReference(ref, chiffree);
+    expect(r3.texte).toBe(ref);
   });
 
   it('recalage : les bribes d’une phrase de GSS (« En résumé, … » tronqué) sont retirées, sans redite', () => {

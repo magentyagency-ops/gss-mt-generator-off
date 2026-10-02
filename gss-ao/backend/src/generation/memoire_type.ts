@@ -2079,25 +2079,77 @@ export function similarite(a: string[], b: string[]): number {
   return 1 - prec[b.length] / Math.max(a.length, b.length);
 }
 
+const NOMBRES_MOTS: Record<string, string> = {
+  un: '1', une: '1', deux: '2', trois: '3', quatre: '4', cinq: '5', six: '6', sept: '7', huit: '8', neuf: '9', dix: '10', onze: '11',
+  douze: '12', quinze: '15', vingt: '20', trente: '30', quarante: '40', cinquante: '50', soixante: '60', cent: '100',
+};
+const NB = '(\\d+(?:[.,]\\d+)?|un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|quinze|vingt|trente|quarante|cinquante|soixante|cent)';
+const nombre = (x: string) => NOMBRES_MOTS[x] || x.replace(',', '.');
+
+/**
+ * Faits d'une phrase (texte normalisé ou brut) qui ne doivent pas changer quand on reprend un texte de GSS : nombres
+ * (en chiffres ou en lettres, « un/une » seulement dans un intervalle), intervalles (« une à trois »), bornes (« au
+ * moins », « au plus », « maximum », « minimum », « moins de », « plus de », « jusqu'à ») et mots que faits_gss.md
+ * interdit (sous-traitance, intérim, Covid).
+ */
+export function faitsDePhrase(t: string): string[] {
+  const n = normaliser(t).replace(/[^a-z0-9',.\s-]+/g, ' ').replace(/\s+/g, ' ');
+  const out: string[] = [];
+  for (const m of n.matchAll(new RegExp(`(?:^|[^a-z0-9])${NB} (?:a|ou|et) ${NB}(?![a-z0-9])`, 'g'))) out.push(`R:${nombre(m[1])}-${nombre(m[2])}`);
+  for (const m of n.matchAll(/(?<![a-z0-9.,])(\d+(?:[.,]\d+)?)(?![0-9])/g)) out.push(`N:${nombre(m[1])}`);
+  for (const m of n.matchAll(/(?:^|[^a-z0-9])(deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|quinze|vingt|trente|quarante|cinquante|soixante|cent)(?![a-z0-9-])/g)) out.push(`N:${nombre(m[1])}`);
+  for (const m of n.matchAll(/(?:^|[^a-z0-9])(au moins|au plus|au maximum|au minimum|maximum|minimum|maximale?s?|minimale?s?|moins de|plus de|jusqu'a)(?![a-z0-9])/g)) out.push(`L:${m[1].replace(/^au /, '').replace(/ales?$|als?$/, 'um').replace(/^maxim(?:um)?$/, 'maximum').replace(/^minim(?:um)?$/, 'minimum')}`);
+  for (const m of n.matchAll(/(sous[ -]?trait|interim|covid)/g)) out.push(`F:${m[1].replace(/[ -]/g, '')}`);
+  return out;
+}
+
+/** Nombres (en chiffres) d'un texte : ceux que le DCE impose peuvent remplacer ceux de GSS. */
+export function nombresAutorisesDe(t: string): Set<string> {
+  return new Set(faitsDePhrase(String(t || '')).filter((f) => f.startsWith('N:')));
+}
+
+/**
+ * Vrai si les faits d'une phrase reprise sont ceux de la phrase de GSS. Seule exception : un nombre que le DCE impose
+ * (présent dans autorises) peut remplacer celui de GSS (« le chiffre du DCE remplace celui de GSS : jamais les deux »).
+ * Un intervalle, une borne ou un mot interdit changé n'est jamais accepté.
+ */
+export function faitsCompatibles(ref: string[], cand: string[], autorises: Set<string> = new Set()): boolean {
+  const compte = (l: string[]) => l.reduce((m, f) => m.set(f, (m.get(f) || 0) + 1), new Map<string, number>());
+  const a = compte(ref);
+  const b = compte(cand);
+  const ajoutes = [...b.keys()].filter((f) => (b.get(f) || 0) > (a.get(f) || 0));
+  const retires = [...a.keys()].filter((f) => (a.get(f) || 0) > (b.get(f) || 0));
+  if (!ajoutes.length && !retires.length) return true;
+  if (ajoutes.some((f) => !f.startsWith('N:') || !autorises.has(f))) return false;
+  return retires.every((f) => f.startsWith('N:')) && ajoutes.length > 0;
+}
+
 /**
  * Fidélité d'un texte au texte de référence : part (pondérée par le nombre de mots) des phrases de référence
  * conservées, une phrase étant conservée si une phrase du texte lui ressemble à 80 % au moins (un chiffre ou un nom
  * changé la conserve ; une phrase retirée ou réécrite ne l'est plus). Les ajouts ne changent pas la fidélité.
  */
-export function fidelite(reference: string, texte: string, seuilPhrase = 0.8): number {
+export function fidelite(reference: string, texte: string, seuilPhrase = 0.8, autorises = ''): number {
   const ref = phrasesNormalisees(reference);
   if (!ref.length) return 1;
   const cand = phrasesNormalisees(texte);
+  const faitsCand = cand.map((c) => faitsDePhrase(c.join(' ')));
+  const nombresAutorises = nombresAutorisesDe(autorises);
   let conserve = 0;
   let total = 0;
   for (const p of ref) {
     total += p.length;
     const jeu = new Set(p);
+    const faitsRef = faitsDePhrase(p.join(' '));
     let meilleur = 0;
-    for (const c of cand) {
+    for (let k = 0; k < cand.length; k++) {
+      const c = cand[k];
       let communs = 0;
       for (const w of c) if (jeu.has(w)) communs++;
       if (communs / Math.max(p.length, c.length) < seuilPhrase * 0.6) continue;
+      // Chiffre, quantificateur (« une à trois », « au moins », « maximum ») ou mot interdit changé : ce n'est plus la
+      // phrase de GSS (décision D7, consigne 5), même si presque tous ses mots sont là.
+      if (!faitsCompatibles(faitsRef, faitsCand[k], nombresAutorises)) continue;
       meilleur = Math.max(meilleur, similarite(p, c));
       if (meilleur >= 0.999) break;
     }
@@ -2201,7 +2253,7 @@ export async function adapterRubrique(rubrique: RubriqueMemoireType, textePublip
   const seuil = options.seuilFidelite ?? SEUIL_FIDELITE;
   const reference = textePubliposte;
   const sortie = (texte: string, repli: boolean, raison?: string, appliquees: ModificationTraitee[] = [], refusees: ModificationTraitee[] = []): ResultatAdaptation =>
-    ({ id: rubrique.id, texte, fidelite: fidelite(reference, texte), repli, raison, appliquees, refusees });
+    ({ id: rubrique.id, texte, fidelite: fidelite(reference, texte, 0.8, ctx.dce || ''), repli, raison, appliquees, refusees });
   if (rubrique.mode !== 'adapte') return sortie(reference, false, `rubrique « ${rubrique.mode} » : pas d'adaptation`);
   let mods: ModificationsProposees | null = null;
   try {
@@ -2212,9 +2264,10 @@ export async function adapterRubrique(rubrique: RubriqueMemoireType, textePublip
   if (!mods || typeof mods !== 'object') return sortie(reference, true, 'réponse du modèle illisible');
   const opts: OptionsModifications = { ...options, dce: ctx.dce, reference, sujetAjouts: options.sujetAjouts ?? sujetDeRubrique(rubrique) };
   const tout = appliquerModifications(reference, mods, opts);
-  if (fidelite(reference, tout.texte) >= seuil) return sortie(tout.texte, false, undefined, tout.appliquees, tout.refusees);
+  const fid = (t: string) => fidelite(reference, t, 0.8, ctx.dce || '');
+  if (fid(tout.texte) >= seuil) return sortie(tout.texte, false, undefined, tout.appliquees, tout.refusees);
   if (options.repli === 'reference') {
-    return sortie(reference, true, `fidélité ${fidelite(reference, tout.texte).toFixed(2)} < ${seuil}`, [], [...tout.appliquees, ...tout.refusees].map((m) => ({ ...m, raison: m.raison || 'fidélité insuffisante' })));
+    return sortie(reference, true, `fidélité ${fid(tout.texte).toFixed(2)} < ${seuil}`, [], [...tout.appliquees, ...tout.refusees].map((m) => ({ ...m, raison: m.raison || 'fidélité insuffisante' })));
   }
   // Repli progressif : les modifications acceptées une à une tant que la fidélité reste au-dessus du seuil.
   let texte = reference;
@@ -2225,7 +2278,7 @@ export async function adapterRubrique(rubrique: RubriqueMemoireType, textePublip
       : m.type === 'retrait' ? { retraits: [{ extrait: m.extrait, motif: m.motif }] }
         : { ajouts: [{ apres: m.extrait, texte: m.par || '', motif: m.motif }] };
     const essai = appliquerModifications(texte, une, { ...opts, maxModifications: 1 });
-    if (essai.appliquees.length && fidelite(reference, essai.texte) >= seuil) {
+    if (essai.appliquees.length && fid(essai.texte) >= seuil) {
       texte = essai.texte;
       appliquees.push(m);
     } else refusees.push({ ...m, raison: essai.refusees[0]?.raison || 'fidélité au texte de référence insuffisante' });

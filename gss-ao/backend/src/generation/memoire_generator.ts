@@ -4626,7 +4626,7 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
             // remise à sa place, phrases propres à la question gardées ; avec une limite de longueur, dans la limite de
             // mots (les ajouts cèdent la place au texte de GSS). Une phrase de GSS contraire au DCE n'est pas remise.
             const rec = recalerSurReference(retenus.map((c) => c.texte).join('\n\n'), String(value), {
-              limite: limiteChamp, maxMots: motsMaxChamp(f.context), exclure: (ph) => phraseContraireAuDce(ph, dceContext),
+              limite: limiteChamp, maxMots: motsMaxChamp(f.context), exclure: (ph) => phraseContraireAuDce(ph, dceContext), dce: dceContext,
             });
             if (rec.fideliteAvant < SEUIL_FIDELITE_CADRE && !strict) {
               console.log(`[MemoireGenerator] ${label} : fidélité ${rec.fideliteAvant.toFixed(2)} au mémoire type (${retenus.map((c) => c.id).join(', ')}) < ${SEUIL_FIDELITE_CADRE} → nouvel essai strict.`);
