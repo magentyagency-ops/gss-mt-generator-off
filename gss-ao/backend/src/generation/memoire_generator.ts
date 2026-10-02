@@ -2489,7 +2489,7 @@ ${rubriques.map((x) => `- ${x.id} : ${x.title}`).join('\n')}` },
     try {
       await client.connect();
       const res = await client.query(
-        `select categorie, source_file, text
+        `select source, categorie, source_file, text
            from public.rag_chunk
           where source in ('GSS', 'WEB', 'SOLLICITATION') and actif
           order by categorie, source_file, chunk_index`
@@ -2517,12 +2517,12 @@ ${rubriques.map((x) => `- ${x.id} : ${x.title}`).join('\n')}` },
           cats['RECHERCHES WEB BDD'] = webRes.rows.map(r => `--- Recherche Web : ${r.query} ---\nQuestion : ${r.query}\nRéponse BDD (${r.statut}) : ${r.valeur_retenue || r.answer}`).join('\n\n');
         }
         const qRes = await client.query(
-          `select question, reponse
+          `select question, reponse_contenu
              from public.question_interne
-            where reponse is not null and reponse != ''`
+            where reponse_contenu is not null and reponse_contenu != ''`
         );
         if (qRes.rows.length > 0) {
-          cats['QUESTIONS INTERNES BDD'] = qRes.rows.map(r => `--- Question Équipe : ${r.question} ---\nQuestion : ${r.question}\nRéponse Équipe : ${r.reponse}`).join('\n\n');
+          cats['QUESTIONS INTERNES BDD'] = qRes.rows.map(r => `--- Question Équipe : ${r.question} ---\nQuestion : ${r.question}\nRéponse Équipe : ${r.reponse_contenu}`).join('\n\n');
         }
       } catch (eWeb: any) {
         console.warn(`[MemoireGenerator] Lecture recherche_web/question_interne depuis BDD ignorée : ${eWeb?.message || eWeb}`);
