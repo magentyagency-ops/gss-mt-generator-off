@@ -378,6 +378,38 @@ export function montantsRegistre(): string[] {
 }
 
 /**
+ * Question à GSS sans les données CNAPS déjà connues du registre (havre2 341 : « Pour l'autorisation d'exercer du
+ * dirigeant, quels sont le numéro, la date d'obtention et la date de fin de validité ? » alors que le numéro AGD est
+ * imprimé dans le même tableau). Le numéro de l'autorisation de l'entreprise (AUT) ou de l'agrément du dirigeant (AGD),
+ * et la date d'obtention de l'autorisation de l'entreprise, ne sont jamais redemandés ; une question qui ne demandait
+ * que cela est retirée (null). Les cartes et agréments des agents ne sont pas concernés.
+ */
+export function sansDonneesCnapsConnues(question: string): string | null {
+  const q = String(question || '');
+  if (/\bagents?\b|carte(?:s)? professionnelle/i.test(q) || !/autorisation|agr[ée]ment|cnaps/i.test(q)) return q;
+  const dirigeant = /dirigeant|g[ée]rant|\bAGD\b/i.test(q);
+  const entreprise = /entreprise|soci[ée]t[ée]|\bGSS\b|GLOBAL SECURITY|\bAUT\b|autorisation d.exercer(?! du dirigeant)/i.test(q) && !/autorisation d.exercer du dirigeant/i.test(q);
+  if (!dirigeant && !entreprise) return q;
+  const numeroConnu = (!dirigeant || !!valeurRegistre('agrement_dirigeant')) && (!entreprise || !!valeurRegistre('autorisation_cnaps'));
+  const obtentionConnue = entreprise && !dirigeant && !!valeurRegistre('date_autorisation_cnaps');
+  const NUM = "(?:le |son |leur )?num[ée]ro(?: d['’](?:autorisation(?: d['’]exercer)?|agr[ée]ment))?";
+  const OBT = "(?:la |sa )?date d['’](?:obtention|d[ée]livrance)";
+  let t = q;
+  const retirer = (motif: string) => {
+    t = t.replace(new RegExp(`\\b${motif}\\s*,\\s*`, 'i'), '').replace(new RegExp(`\\b${motif}\\s+et\\s+`, 'i'), '').replace(new RegExp(`(?:\\s*,\\s*|\\s+et\\s+)${motif}(?=\\s*[?,.])`, 'i'), '');
+  };
+  if (numeroConnu) retirer(NUM);
+  if (obtentionConnue) retirer(OBT);
+  const reste = t.replace(/[^a-zà-ÿ ]/gi, ' ');
+  if ((numeroConnu && new RegExp(`^\\s*(?:quel est|indiquez|pouvez-vous (?:indiquer|communiquer|confirmer))\\s+${NUM}\\s*(?:[^,]*)\\?\\s*$`, 'i').test(t) && !/date|validit/i.test(reste))) return null;
+  t = t.replace(/\bquels sont (la|les) (dates?)\b/i, 'quelles sont $1 $2').replace(/\s{2,}/g, ' ');
+  // Une seule donnée restante : « quelle est la date … ? ».
+  const m = /\bquelles sont (la date\b[^?]*)\?/i.exec(t);
+  if (m && !/\s(?:et|,)\s|,/.test(m[1])) t = t.replace(/\bquelles sont la date\b/i, 'quelle est la date');
+  return t;
+}
+
+/**
  * Suite des jalons d'un calendrier (une ligne par jalon, « - J-10 : … », « - J-7 : … ») dans l'ordre chronologique :
  * J-10, J-7, J-7, J-3, J+1… Vrai s'il n'y a pas de calendrier.
  */

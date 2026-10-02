@@ -28,7 +28,7 @@ import {
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides,
 } from './memoire_type_cadre';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -3095,6 +3095,13 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
   }
 
   private async consoliderAvecSourcesBrut(liste: string[]): Promise<Array<{ question: string; sources: number[] }>> {
+    // Données CNAPS déjà connues du registre (numéros AUT et AGD, date d'obtention de l'autorisation) : jamais redemandées,
+    // même dans une question fusionnée (havre2 341, T3C-8).
+    const connues = (l: Array<{ question: string; sources: number[] }>) => l.map((q) => ({ ...q, question: sansDonneesCnapsConnues(q.question) || '' })).filter((q) => q.question);
+    return connues(await this.consoliderAvecSourcesFusion(liste));
+  }
+
+  private async consoliderAvecSourcesFusion(liste: string[]): Promise<Array<{ question: string; sources: number[] }>> {
     const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
     const uniques: Array<{ texte: string; origines: number[] }> = [];
     // Réponse connue de GSS (registre recours_sous_traitance : « Non ») : aucune question sur ses sous-traitants ;
@@ -3119,6 +3126,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
 - Une demande « Confirmer … — dernière valeur connue : … » porte sur UNE information (un responsable, un effectif, un outil…) : ne la fusionne qu'avec des demandes sur cette MÊME information.
 - Une demande qui ne peut être renseignée que par l'ACHETEUR (données qu'il doit transmettre, ses préférences, ses choix) commence par « À demander à l'acheteur : ».
 - La validation par GSS de ce que propose le mémoire (dimensionnement, organisation, délais) est une question pour GSS, jamais « à demander à l'acheteur ».
+- Ne redemande jamais une donnée déjà écrite dans une demande ou connue de GSS (numéro d'autorisation AUT ou d'agrément AGD du CNAPS) : en fusionnant, reprends seulement les données réellement demandées.
 - Une phrase par question, sans Markdown.
 - Pour chaque question, indique dans "sources" les numéros des demandes qu'elle regroupe.
 Renvoie UNIQUEMENT un objet JSON : {"questions": [{"question": "...", "sources": [1, 4]}]}`,
