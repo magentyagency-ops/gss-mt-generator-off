@@ -359,6 +359,19 @@ export function exigenceDePosteDimensionne(exigence: string, d: Dimensionnement 
   });
 }
 
+/**
+ * Mises en situation déjà proposées à GSS pour le même DCE (même empreinte de l'extrait, mêmes mises en situation) :
+ * reprises telles quelles, pour que la proposition ne change pas d'une génération à l'autre (vitry 241 puis 351 : forum
+ * à 22 puis 45 agents, concert à 40 puis 78). Sinon, les nouvelles.
+ */
+export function reprendreMisesEnSituation(nouvelles: MiseEnSituation[], precedent: { empreinte: string; misesEnSituation: any[] } | undefined, empreinte: string): { misesEnSituation: MiseEnSituation[]; reprises: boolean } {
+  const anciennes = Array.isArray(precedent?.misesEnSituation) ? precedent!.misesEnSituation as MiseEnSituation[] : [];
+  const cle = (m: MiseEnSituation) => `${normaliser(String(m?.libelle || '')).replace(/[^a-z0-9]+/g, ' ').trim()}|${m?.capacite ?? ''}`;
+  const memes = !!precedent && precedent.empreinte === empreinte && anciennes.length === nouvelles.length && anciennes.length > 0
+    && anciennes.every((a) => Array.isArray(a?.fonctions) && a.fonctions.length > 0 && nouvelles.some((n) => cle(n) === cle(a)));
+  return memes ? { misesEnSituation: nouvelles.map((n) => anciennes.find((a) => cle(a) === cle(n))!), reprises: true } : { misesEnSituation: nouvelles, reprises: false };
+}
+
 /** Phrase de synthèse du dispositif d'un cas pratique, plage par plage. */
 export function syntheseCasPratique(d: Dimensionnement): string {
   const plages = [...new Set(d.casPratique.map((l) => l.plage))];

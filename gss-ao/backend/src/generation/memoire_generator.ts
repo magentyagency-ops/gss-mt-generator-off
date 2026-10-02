@@ -6,7 +6,7 @@ import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce, 
 import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque, estRetourArriere } from './themes';
-import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements } from './completion';
+import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, lireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements } from './completion';
 import {
   chargerMemoireType, preparerMemoireType, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
@@ -20,7 +20,7 @@ import {
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, planSelonRC, passagesPlanImpose, controlerProposition,
   type AjoutLibre, type GroupeNouveau,
 } from './reponse_libre_v2';
-import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, type Dimensionnement } from './dimensionnement';
+import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, type Dimensionnement } from './dimensionnement';
 import {
   type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, phrasesThematiques, completerParThematiques, textesSchemaSvg, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
@@ -30,6 +30,7 @@ import {
 } from './memoire_type_cadre';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
 import fs from 'fs';
+import crypto from 'crypto';
 import os from 'os';
 import path from 'path';
 import { spawnSync, spawn } from 'child_process';
@@ -2228,6 +2229,8 @@ export class MemoireGenerator {
   // Modèle de rédaction effectif (core/modeles_ia.ts), noté dans le journal et les métadonnées du mémoire.
   private memoireModel: string = MEMOIRE_MODEL;
   /** « Demande particulière » saisie juste avant la génération (consigne et/ou document complémentaire). */
+  /** Mises en situation proposées par la dernière lecture du DCE (état du dossier, reprises à la génération suivante). */
+  private dimensionnementEtat?: { empreinte: string; misesEnSituation: any[] };
   private demandeParticuliere: DemandeParticuliere | null = null;
   /** Crédit OpenAI épuisé pendant cette génération : plus aucun appel, aucun document produit (CreditOpenAIEpuise). */
   private creditOpenAIEpuise = false;
@@ -4468,7 +4471,7 @@ Renvoie un JSON valide :
     // Effectifs proposés à partir des postes, des horaires et du cas pratique du DCE (proposition à valider, D5) : repris
     // par les réponses au lieu de « [À COMPLÉTER] ».
     const texteDuCadre = getElementsWithLocalName(xmlDoc, 'p').map((p: any) => getElementsWithLocalName(p, 't').map((t: any) => t.textContent || '').join('')).filter((t: string) => t.trim()).join('\n').replace(/\[CHAMP_\d+\]/g, '');
-    const dimensionnementCadre = await this.dimensionner(dceContext, texteDuCadre);
+    const dimensionnementCadre = await this.dimensionner(dceContext, texteDuCadre, dossierId);
     const systemPrompt = `Tu es un rédacteur chevronné de mémoires techniques pour l'entreprise GSS (Global Security Service, ex-GIS), expert des marchés publics de sécurité privée.
 On te fournit (1) l'ANALYSE stratégique et opérationnelle du marché issue du DCE (client, sites, exigences, rapport de visite de Sacha, arguments différenciants de GSS, problématiques terrain anticipées), (2) la DOCUMENTATION GSS (moyens, procédures, organisation, formations… — connaissances internes), (3) les RÉFÉRENTS GSS (dossier « Personnes ») et (4) une liste de champs [CHAMP_X] repérés dans le cadre de réponse de l'acheteur. Tu rédiges la valeur à insérer dans chacun.
 
@@ -6108,6 +6111,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       ecrireEtat({
         dossierId, mode: 'cadre', fichier: outputPath, majLe: '', elements: elementsSansDoublon(elementsACompleter), reponsesTraitees: [],
         champs: champsEtat, demande: this.demandeParticuliere?.demande || undefined, conversation,
+        ...(this.dimensionnementEtat ? { dimensionnement: this.dimensionnementEtat } : {}),
       });
     } catch (e: any) {
       console.warn(`[MemoireGenerator] État de complétion non enregistré (non bloquant) : ${e?.message || e}`);
@@ -7215,7 +7219,7 @@ RÈGLES DE FORME (rendu Marp) :
     const horsNormandie = marcheHorsNormandie(analysisData, dceContext);
     const ctxBase: ContexteMarche = { analyse: analysisData, dce: dceContext, cover, referents, horsNormandie };
     // Effectifs proposés à partir des postes et des horaires du DCE (proposition à valider par GSS, D5).
-    ctxBase.dimensionnement = await this.dimensionner(dceContext);
+    ctxBase.dimensionnement = await this.dimensionner(dceContext, '', dossierId);
     let prep: MemoirePrepare = preparerMemoireType(ctxBase, { memoireType: mt });
 
     const gssDocs = await this.getGssDocumentation();
@@ -7511,6 +7515,7 @@ RÈGLES DE FORME (rendu Marp) :
       dossierId, mode: 'libre', fichier: rendu.filePath, majLe: '', elements: elementsLibres, reponsesTraitees: [],
       libre: { sections, schemas: Object.fromEntries(rendu.schemas), cover: rendu.cover, theme, version: 2, plan, titresSchemas, ajouts, indicateurs: indicateursVrais(prep.etatsIndicateurs) },
       demande: this.demandeParticuliere?.demande || undefined,
+      ...(this.dimensionnementEtat ? { dimensionnement: this.dimensionnementEtat } : {}),
     };
     if (ajouts.length) {
       try {
@@ -7927,7 +7932,8 @@ RÈGLES DE FORME (rendu Marp) :
    * horaires et, s'il y en a un, le cas pratique ; les effectifs sont calculés sans modèle (dimensionnement.ts). null si
    * rien d'exploitable ou modèle indisponible. Étape non bloquante.
    */
-  private async dimensionner(dce: string, cadre = ''): Promise<Dimensionnement | null> {
+  private async dimensionner(dce: string, cadre = '', dossierId = ''): Promise<Dimensionnement | null> {
+    this.dimensionnementEtat = undefined;
     try {
       const extrait = extraitDimensionnement(dce, cadre);
       if (!extrait.trim()) return null;
@@ -7936,6 +7942,14 @@ RÈGLES DE FORME (rendu Marp) :
         { role: 'user', content: extrait },
       ], 0.1, 'Dimensionnement (lecture du DCE)', true, 'analyse');
       const d = calculerDimensionnement(lireJson(r || ''), dce + (cadre ? `\n${cadre}` : ''));
+      // Mises en situation : la proposition déjà présentée à GSS pour ce même DCE est reprise telle quelle (D5).
+      const empreinte = crypto.createHash('sha1').update(extrait).digest('hex');
+      if (d?.misesEnSituation?.length) {
+        const r2 = reprendreMisesEnSituation(d.misesEnSituation, dossierId ? lireEtat(dossierId)?.dimensionnement : undefined, empreinte);
+        if (r2.reprises) console.log(`[MemoireGenerator] Mises en situation : dispositif de la génération précédente repris tel quel (même DCE).`);
+        d.misesEnSituation = r2.misesEnSituation;
+        this.dimensionnementEtat = { empreinte, misesEnSituation: d.misesEnSituation };
+      }
       if (d) console.log(`[MemoireGenerator] Dimensionnement proposé : ${d.profils.map((x) => `${x.profil} ${x.heuresSemaine} h/sem → ${x.etp} ETP → ${x.titulaires}`).join(' ; ') || 'aucun poste'} ; titulaires ${d.titulaires}, suppléants ${d.suppleants} ; cas pratique : ${d.casPratique.length} ligne(s).`);
       else console.log('[MemoireGenerator] Dimensionnement : aucun poste ni cas pratique exploitable dans le DCE.');
       return d;
@@ -8529,7 +8543,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const ctxBase: ContexteMarche = { analyse: analysisData, dce: dceContext, cover, referents, horsNormandie };
     // Effectifs proposés à partir des postes et des horaires du DCE (proposition à valider par GSS, D5), comme en réponse
     // libre : sans eux, le tableau de l'équipe dédiée restait à « [À COMPLÉTER] » (génération réelle imm 15).
-    ctxBase.dimensionnement = await this.dimensionner(dceContext);
+    ctxBase.dimensionnement = await this.dimensionner(dceContext, '', dossierId);
     let prep: MemoirePrepare = preparerMemoireType(ctxBase, { memoireType: mt });
     const gssDocs = await this.getGssDocumentation();
     if (valeurRegistre('effectif_total')) for (const k of Object.keys(gssDocs)) if (/^EFFECTIFS/i.test(k)) delete gssDocs[k];
@@ -8924,6 +8938,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
         dossierId, mode: 'libre', fichier: rendu.filePath, majLe: '', elements: elementsSansDoublon(elements), reponsesTraitees: [],
         libre: { sections, schemas, cover, court: { pagesMax: format.pagesMax, plan, source: format.source }, theme: themeActif(), ...(ajoutsCourt.length ? { ajouts: ajoutsCourt } : {}) },
         demande: this.demandeParticuliere?.demande || undefined, conversation,
+        ...(this.dimensionnementEtat ? { dimensionnement: this.dimensionnementEtat } : {}),
       });
     } catch (e: any) {
       console.warn(`[MemoireGenerator] État de complétion non enregistré (non bloquant) : ${e?.message || e}`);

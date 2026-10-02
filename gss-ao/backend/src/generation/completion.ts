@@ -117,6 +117,9 @@ export interface EtatCompletion {
   demande?: string;
   /** Échanges avec l'assistant de modification. */
   conversation?: Array<{ role: 'utilisateur' | 'assistant'; texte: string; date: string; modifies?: string[]; pieces?: string[] }>;
+  /** Dispositif proposé pour les mises en situation (D5), avec l'empreinte de l'extrait du DCE dont il vient : repris tel
+   *  quel à la génération suivante tant que le DCE ne change pas (vitry : 22 puis 45 agents d'une génération à l'autre). */
+  dimensionnement?: { empreinte: string; misesEnSituation: any[] };
 }
 
 // ─── État ────────────────────────────────────────────────────────────────────────────────
@@ -149,7 +152,7 @@ export function ecrireEtat(etat: EtatCompletion): void {
 
 /** Vue publique de l'état (sans le texte des rubriques ni les schémas). */
 export function vueEtat(etat: EtatCompletion) {
-  const { libre, reponsesTraitees, champs, ...reste } = etat;
+  const { libre, reponsesTraitees, champs, dimensionnement, ...reste } = etat;
   return {
     ...reste,
     restants: etat.elements.filter((e) => e.statut === 'ouvert').length,
