@@ -5,7 +5,8 @@
  *  - références : mémoire type publiposté pour le même acheteur (analyse du fichier de test pour becquerel, caen et ign,
  *    sinon nom de l'acheteur seul), rubriques « fixe » et « adapte » ;
  *  - mesure : fidelite(référence, rubrique remise, seuil de phrase, DCE) (même mesure que l'adaptation au CCTP), au seuil
- *    de phrase courant (0,8) et au seuil de phrase de 0,9.
+ *    de phrase courant (0,8) et au seuil de phrase de 0,9. Limite : la référence est rebâtie sans l'analyse réelle de la
+ *    génération (valeurs imposées par le CCTP, vocabulaire du CCTP) : un nom ou un délai imposé par le DCE y compte comme un écart.
  * Usage : npx ts-node --transpile-only -P tsconfig.json _verif/seuils_rl_reel.ts <runs.json> <sortie.json>
  *   runs.json : [{ "run": "v-ign-16", "code": "ign", "client": "IGN" }]
  */
@@ -32,8 +33,8 @@ for (const r of runs) {
     if (!p.texte || (p.mode !== 'fixe' && p.mode !== 'adapte')) continue;
     const t = sections[p.id];
     if (!t) continue;
-    const ref = p.texte.replace(/⟦AC:\d+⟧/g, '[À COMPLÉTER]');
-    const remis = t.replace(/⟦AC:\d+⟧/g, '[À COMPLÉTER]');
+    const ref = p.texte.replace(/⟦AC:\d+⟧/g, '').replace(/\[CONSULTATION REQUISE[^\]]*\]/g, '[À COMPLÉTER]');
+    const remis = t.replace(/⟦AC:\d+⟧/g, '');
     lignes.push({ run: r.run, id: p.id, mode: p.mode, f08: +fidelite(ref, remis, 0.8, dce).toFixed(3), f09: +fidelite(ref, remis, 0.9, dce).toFixed(3) });
   }
 }
