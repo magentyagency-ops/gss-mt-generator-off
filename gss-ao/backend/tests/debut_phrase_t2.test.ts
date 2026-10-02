@@ -21,7 +21,11 @@ describe('début de phrase de GSS (T2N-9)', () => {
   });
   it('début de puce ou de ligne', () => {
     const l = '- Les rondes : elles sont tracées.\n- Le contrôle est mensuel.';
-    expect(debutDePhraseRetire(l, l.indexOf('Les'), l.replace('Les rondes : ', ''))).toBe(true);
-    expect(debutDePhraseRetire(l, l.indexOf('Le contrôle'), l.replace('Le contrôle', 'Le suivi'))).toBe(false);
+    expect(debutDePhraseRetire(l, l.indexOf('Les'), l.indexOf('Les') + 'Les rondes : '.length, l.replace('Les rondes : ', ''))).toBe(true);
+    expect(debutDePhraseRetire(l, l.indexOf('Le contrôle'), l.indexOf('Le contrôle') + 'Le contrôle'.length, l.replace('Le contrôle', 'Le suivi'))).toBe(false);
+    // Phrase entière retirée, la suivante commence par une minuscule dans le texte d'origine : accepté.
+    expect(appliquerModifications('a b c. d e f.', { retraits: [{ extrait: 'a b c.' }] } as any).appliquees).toHaveLength(1);
+    // Phrase entière remplacée par un texte sans majuscule : refusé.
+    expect(appliquerModifications('Il pleut. Le site ferme.', { remplacements: [{ extrait: 'Il pleut.', par: 'il pleut fort.' }] } as any).appliquees).toHaveLength(0);
   });
 });

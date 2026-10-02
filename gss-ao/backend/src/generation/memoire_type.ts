@@ -2068,7 +2068,9 @@ export function etapesRetirees(avant: string, apres: string): string[] {
  * b5_equipe_controle : retrait de « Étant lui-même en poste sur le site, » → « …de GSS. il alerte l'équipe encadrante… ») :
  * le début de la phrase ne se retire pas seul, la phrase de GSS reste entière.
  */
-export function debutDePhraseRetire(avant: string, debut: number, apres: string): boolean {
+export function debutDePhraseRetire(avant: string, debut: number, fin: number, apres: string): boolean {
+  // Phrase entière retirée : la suite est le texte d'origine de la phrase suivante, inchangé.
+  if (apres.slice(debut) === avant.slice(fin) && /[.!?…]["»”)]?$/.test(avant.slice(debut, fin).trimEnd())) return false;
   const amont = avant.slice(0, debut).replace(/[ \t]+$/, '');
   const debutPhrase = amont === '' || /(?:[.!?…]|\n|^\s*(?:[-*•]|\d+[.)])|\*\*)$/.test(amont) || /\n\s*(?:[-*•]|\d+[.)])$/.test(amont);
   if (!debutPhrase) return false;
@@ -2107,7 +2109,7 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     if (/\bJ\s?[-–]\s?\d+/.test(ligne) && APRES_J.test(m.par!) && !APRES_J.test(m.extrait)) { refusees.push({ ...m, raison: 'échéance postérieure au démarrage placée avant le jour J' }); continue; }
     const essai = t.slice(0, pos[0].debut) + m.par + t.slice(pos[0].fin);
     if (etapesRetirees(t, essai).length) { refusees.push({ ...m, raison: 'une étape de procédure ne se retire pas' }); continue; }
-    if (debutDePhraseRetire(t, pos[0].debut, essai)) { refusees.push({ ...m, raison: 'début de phrase de GSS remplacé par un texte sans majuscule' }); continue; }
+    if (debutDePhraseRetire(t, pos[0].debut, pos[0].fin, essai)) { refusees.push({ ...m, raison: 'début de phrase de GSS remplacé par un texte sans majuscule' }); continue; }
     t = essai;
     appliquees.push(m);
   }
@@ -2119,7 +2121,7 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     if (/\[À COMPLÉTER\]/.test(m.extrait)) { refusees.push({ ...m, raison: 'un repère à compléter ne se retire pas' }); continue; }
     const essai = t.slice(0, pos[0].debut) + t.slice(pos[0].fin);
     if (etapesRetirees(t, essai).length) { refusees.push({ ...m, raison: 'une étape de procédure ne se retire pas' }); continue; }
-    if (debutDePhraseRetire(t, pos[0].debut, essai)) { refusees.push({ ...m, raison: 'début de phrase de GSS retiré seul (phrase gardée entière)' }); continue; }
+    if (debutDePhraseRetire(t, pos[0].debut, pos[0].fin, essai)) { refusees.push({ ...m, raison: 'début de phrase de GSS retiré seul (phrase gardée entière)' }); continue; }
     t = essai;
     appliquees.push(m);
   }
