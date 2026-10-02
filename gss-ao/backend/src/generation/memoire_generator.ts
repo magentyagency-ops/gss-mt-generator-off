@@ -1236,8 +1236,12 @@ export function motifRefusEngagement(x: string): string {
   const t = String(x || '');
   if (PIECES_OFFRE.test(t)) return 'pièce de l\'offre';
   if (/p[ée]nalit|plafonnement/i.test(t)) return 'pénalité';
+  // « GSS s'engage à préciser / indiquer / détailler… » (cstb 221, b4_equipements : « s'engage à préciser les moyens
+  // matériels envisagés…, notamment le nombre de véhicules affectés ») : une promesse de donner l'information, pas la réponse.
+  if (/\bs.engage(?:ra)? [àa] (?:lui )?(?:pr[ée]ciser|indiquer|d[ée]tailler|communiquer|fournir|transmettre|mentionner|renseigner|pr[ée]senter|d[ée]terminer|d[ée]finir)\b/i.test(t)) return 'phrase sur le mémoire, sans réponse';
   if (/\b(?:indiquera|précisera|détaillera|déterminera|communiquera ultérieurement|fournira|transmettra)\b/i.test(t)) return 'engagement futur sans réponse';
-  if (/\b(?:pr[ée]cise|indique|d[ée]taille|communique|fournit|transmet|mentionne|pr[ée]sente|renseigne)(?:ra)?\b[^.]{0,60}\b(?:le nombre|les effectifs|l.effectif|dans (?:le|son|ce|notre) m[ée]moire|dans (?:l.|son |notre )offre|ult[ée]rieurement)/i.test(t)
+  if (/\b(?:pr[ée]cis|indiqu|d[ée]taill|communiqu|mentionn|pr[ée]sent|renseign)(?:e|er|era|ent)?\b[^.]{0,60}\b(?:le nombre|les effectifs|l.effectif|dans (?:le|son|ce|notre) m[ée]moire|dans (?:l.|son |notre )offre|ult[ée]rieurement)/i.test(t)
+    || /\b(?:fourni(?:t|r|ra)?|transmet(?:tre|tra)?)\b[^.]{0,60}\b(?:le nombre|les effectifs|l.effectif|dans (?:le|son|ce|notre) m[ée]moire|dans (?:l.|son |notre )offre|ult[ée]rieurement)/i.test(t)
     || /dans (?:le|son|ce|notre) m[ée]moire technique/i.test(t)) return 'phrase sur le mémoire, sans réponse';
   if (/sous[- ]?trait|int[ée]rim|covid/i.test(t)) return 'fait interdit (faits_gss.md)';
   if (/\ben cas de recours\b|\bsi (?:GSS|le titulaire) (?:recourt|fait appel)/i.test(t)) return 'exigence conditionnelle qui ne s\'applique pas à GSS';
@@ -1247,13 +1251,19 @@ export function motifRefusEngagement(x: string): string {
 /** Question à GSS tirée d'une puce refusée parce qu'elle parle du mémoire au lieu de répondre (« GSS précise le nombre
  *  de contrôleurs affectés au site » → « Combien de contrôleurs seront affectés au site ? »). */
 export function questionDEngagement(x: string): string {
-  const t = String(x || '').replace(/^[-•]\s*/, '').trim();
-  const m = /\ble nombre (d['’]|de |des )(.+?)\s*\.?$/i.exec(t);
+  const t = String(x || '').replace(/^[-•]\s*/, '').trim().replace(/[.;…]+\s*$/, '');
+  const sansMemoire = (s: string) => s.replace(/\s+(?:dans|pour) (?:le|son|ce|notre) m[ée]moire(?: technique)?/i, '').trim();
+  // Nombre seul (« GSS précise le nombre de contrôleurs affectés au site ») → « Combien de contrôleurs seront affectés au site ? ».
+  const m = /^[^,]*?\ble nombre (d['’]|de |des )([^,;]+?)\s*$/i.exec(t);
   if (m) {
-    const reste = m[2].replace(/\s+(?:dans|pour) (?:le|son|ce|notre) m[ée]moire(?: technique)?/i, '').replace(/\baffect[ée]s\b/, 'seront affectés').replace(/\bpr[ée]sents\b/, 'seront présents').trim();
+    const reste = sansMemoire(m[2]).replace(/\baffect[ée]s\b/, 'seront affectés').replace(/\bpr[ée]sents\b/, 'seront présents').trim();
     return `Combien ${m[1].toLowerCase() === 'des ' ? 'de ' : m[1].toLowerCase()}${reste} ? (exigence du CCTP à laquelle le mémoire doit répondre par un nombre)`;
   }
-  return `Exigence du CCTP à laquelle le mémoire ne répond pas encore (donnée à fournir par GSS) : ${t}`;
+  // Objet annoncé (« s'engage à préciser les moyens matériels envisagés…, notamment le nombre de véhicules… ») : la donnée
+  // attendue est demandée telle que le DCE la formule.
+  const o = /\b(?:s.engage(?:ra)? [àa] (?:lui )?)?(?:pr[ée]cis|indiqu|d[ée]taill|communiqu|fourni|transmet|mentionn|pr[ée]sent|renseign|d[ée]termin|d[ée]fini)[a-zé]*\s+(.+)$/i.exec(t);
+  const objet = sansMemoire(o ? o[1] : t).replace(/\s+ult[ée]rieurement\b/i, '');
+  return `Que prévoyez-vous pour répondre à cette exigence du CCTP : ${objet} ?`;
 }
 /** Rubriques et chapitres de la réponse libre (lecture seule, pour l'assistant de modification). */
 export { AI_SECTIONS_B as SECTIONS_REPONSE_LIBRE, CHAPTER_TITLES_B as CHAPITRES_REPONSE_LIBRE };
@@ -5576,7 +5586,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       }));
       for (const el of elementsACompleter) { const q = precises.get(el.cle); if (q) { el.question = q.question; el.groupe = q.groupe; } }
       // Aucune question ne cite un repère technique (« le champ GSS_AC_3 ») : question d'après la phrase de l'emplacement.
-      for (const el of elementsACompleter) if (REPERE_TECHNIQUE.test(el.question)) el.question = `Information à fournir pour compléter : « ${el.contexte.replace(REPERE_TECHNIQUE, '').trim()} »`;
+      for (const el of elementsACompleter) if (REPERE_TECHNIQUE.test(el.question)) el.question = `Information à fournir pour compléter : « ${el.contexte.replace(REPERE_TECHNIQUE, '').trim()} »`;
       // Question générique (« Quelle donnée précise doit figurer dans le passage laissé vide… ? », « … la partie manquante du
       // mémoire technique relative au site concerné ? », havre1 21) : elle cite la question du cadre et la phrase exacte.
       for (const el of elementsACompleter) {

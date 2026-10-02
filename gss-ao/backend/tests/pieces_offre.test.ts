@@ -42,3 +42,24 @@ describe('questionDEngagement', () => {
     expect(questionDEngagement('GSS précise le nombre d’agents présents au centre de permanence.')).toMatch(/^Combien d’agents seront présents au centre de permanence \?/);
   });
 });
+
+/** Tour 2 (T2C-3, cstb 221, b4_equipements) : « s'engage à préciser… » parle du mémoire au lieu de répondre. */
+describe('motifRefusEngagement — infinitif et « s’engage à »', () => {
+  const cstb = 'GSS s’engage à préciser les moyens matériels envisagés pour la prestation et son suivi, notamment le nombre de véhicules affectés, avec distinction jour/nuit si pertinente, les téléphones et leurs fonctionnalités.';
+  it('refuse la promesse de donner l’information', () => {
+    expect(motifRefusEngagement(cstb)).toMatch(/sans réponse/);
+    expect(motifRefusEngagement('GSS s’engage à indiquer les effectifs affectés au site.')).toMatch(/sans réponse/);
+    expect(motifRefusEngagement('GSS s’engage à communiquer le nombre d’agents.')).toMatch(/sans réponse/);
+    expect(motifRefusEngagement('GSS va préciser le nombre de véhicules dans son offre.')).toMatch(/sans réponse/);
+  });
+  it('en tire une vraie question', () => {
+    const q = questionDEngagement(cstb);
+    expect(q).toMatch(/\?$/);
+    expect(q).toMatch(/véhicules affectés/);
+    expect(q).not.toMatch(/s’engage/);
+  });
+  it('garde un engagement de service', () => {
+    expect(motifRefusEngagement('GSS s’engage à remplacer tout agent absent sous 2 heures.')).toBe('');
+    expect(motifRefusEngagement('GSS transmet le planning mensuel au plus tard 10 jours avant le début du mois.')).toBe('');
+  });
+});
