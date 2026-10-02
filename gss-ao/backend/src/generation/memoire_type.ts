@@ -1490,6 +1490,20 @@ export function nettoyerPubliposte(texte: string): string {
     .trim();
 }
 
+/** Verbes du mémoire type accordés au singulier après un effectif de 1 (« 1 agent titulaire, qui assure »). */
+const VERBES_SINGULIER: Record<string, string> = { sont: 'est', ont: 'a', interviennent: 'intervient', viennent: 'vient', tiennent: 'tient', peuvent: 'peut', doivent: 'doit' };
+/**
+ * Effectif publiposté égal à 1 (havre2 : « une équipe de {{EFFECTIF_AGENTS}} agents titulaires, qui assurent… » avec
+ * 1 titulaire) : nom, adjectif et verbe de la relative accordés au singulier, sans autre changement du texte de GSS.
+ */
+export function accorderEffectifUn(texte: string): string {
+  return String(texte || '').replace(/(?<![\d,.\u00a0\u202f]|\d[ \u00a0\u202f])\b1 (agent|titulaire|suppl[ée]ant|salari[ée])s\b((?: (?!qui\b)[a-zà-ÿ'’-]+?s\b)?)((?:, qui [a-zà-ÿ]+\b)?)/g, (_m, nom: string, adj: string, rel: string) => {
+    const adjectif = adj.replace(/s$/, '');
+    const relative = rel.replace(/([a-zà-ÿ]+)$/, (v: string) => VERBES_SINGULIER[v] || (/ent$/.test(v) ? v.replace(/nt$/, '') : v));
+    return `1 ${nom}${adjectif}${relative}`;
+  });
+}
+
 /**
  * Publipostage déterministe d'un texte de référence : sections conditionnelles, puis variables. Une variable
  * inconnue ou sans valeur suit sa règle « si_absente » ; aucun {{…}} ne reste dans le résultat.
@@ -1567,7 +1581,7 @@ export function publiposter(texte: string, variables: Variables, options: Option
       }
     }
   }
-  let resultat = nettoyerPubliposte(retirerPhrasesMarquees(sortie));
+  let resultat = accorderEffectifUn(nettoyerPubliposte(retirerPhrasesMarquees(sortie)));
   // Garde-fou : aucune variable ni section ne doit rester.
   if (/\{\{|\}\}/.test(resultat)) {
     resultat = resultat.replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, (_x, nom: string) => A_COMPLETER + manque(nom, `Valeur à fournir : ${nom}.`, true))
