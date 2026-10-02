@@ -22,7 +22,7 @@ import {
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, type Dimensionnement } from './dimensionnement';
 import {
-  type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
+  type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
@@ -4913,7 +4913,7 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
           const consigneSeule = !!sectionChamp && sectionChamp !== (questionMT || '').trim() && !/^\d/.test((questionMT || '').trim())
             && (!/[a-zà-ÿ]/.test(sectionChamp) || /^(?:le renvoi|cela peut|le soumissionnaire|le candidat|le prestataire|il est demand|il convient)/i.test((questionMT || '').trim()));
           const titreSection = /[a-zà-ÿ]/.test(sectionChamp) ? sectionChamp : sectionChamp.charAt(0) + sectionChamp.slice(1).toLowerCase();
-          const libelle = (consigneSeule ? titreSection : questionMT || `Champ ${f.id}`).replace(/\s+/g, ' ').slice(0, 160);
+          const libelle = libelleQuestionCadre(consigneSeule ? titreSection : questionMT || `Champ ${f.id}`);
           if (retenus.length) {
             // Consigne 5 et décision D7 : le texte de GSS repris EXACTEMENT, à 90 % au moins. Réponse du modèle sous ce
             // seuil : nouvel essai strict (recopie mot pour mot), gardé s'il est plus fidèle. Puis la réponse est recalée
@@ -5673,7 +5673,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         if (p.retires.length) {
           confirmationsGss.add(`Partie « ${libellePartie} » : pour tenir dans ${p.pages === 1 ? '1 page' : `${p.pages} pages`}, ${p.retires.length === 1 ? 'ce passage n\'a pas été repris' : `ces ${p.retires.length} passages n'ont pas été repris`} : ${p.retires.map((x) => `« ${x.texte.length > 140 ? `${x.texte.slice(0, 140).replace(/\s+\S*$/, '')}…` : x.texte} »`).join(' ; ')}. Faut-il en rétablir un à la place d'un autre ?`);
           for (const id of new Set(p.retires.filter((x) => x.origine === 'memoire_type').map((x) => x.id))) {
-            const libelle = ((descriptors.find((d) => d.id === id)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || `Champ ${id}`).replace(/\s+/g, ' ').slice(0, 160);
+            const libelle = libelleQuestionCadre((descriptors.find((d) => d.id === id)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || `Champ ${id}`);
             propositionsCadre.set(id, `Réponse à relire (mémoire type de GSS repris en partie pour tenir dans la limite de ${p.pages === 1 ? '1 page' : `${p.pages} pages`}) : ${libelle}`);
           }
         }
@@ -5960,7 +5960,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       const conversation = aRelire.length || dimRepris ? [{ role: 'assistant' as const, date: new Date().toISOString(), texte: [
         ...(aRelire.length ? [
           `J'ai rempli le cadre de réponse avec le mémoire type de GSS. ${aRelire.length === 1 ? 'Une réponse est à relire' : `${aRelire.length} réponses sont à relire`} avant la remise :`,
-          ...aRelire.map(([id, c]) => `- ${court(champsEtat.find((x) => x.cle === `GSS_CH_${id}`)?.libelle || c.split(' : ').slice(1).join(' : '), 160)} (${/^Proposition/.test(c) ? 'proposition de réponse : question que le mémoire type ne traite pas' : c.split(' : ')[0].replace(/^Réponse à relire \(/, '').replace(/\)$/, '')})`),
+          ...aRelire.map(([id, c]) => `- ${libelleQuestionCadre(champsEtat.find((x) => x.cle === `GSS_CH_${id}`)?.libelle || c.split(' : ').slice(1).join(' : '))} (${/^Proposition/.test(c) ? 'proposition de réponse : question que le mémoire type ne traite pas' : c.split(' : ')[0].replace(/^Réponse à relire \(/, '').replace(/\)$/, '')})`),
           '',
           'Pour chacune, vous pouvez :',
           '- la valider telle quelle : « Je valide la réponse sur … » (rien n\'est modifié) ;',

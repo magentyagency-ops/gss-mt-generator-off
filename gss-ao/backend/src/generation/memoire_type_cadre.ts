@@ -355,6 +355,34 @@ export function intitulePrincipal(question: string): string {
 }
 
 /**
+ * Libellé court d'une question du cadre pour les consultations et le premier message de l'assistant (vitry 202 : « SOUS
+ * CRITERE 1 : Mises en situation (sur 20 points) ; DESCRIPTION DES ATTENTES DE L'ACHETEUR ; Sous critère 1 : … Vous devez
+ * assurer la sécur », « 2023 - Dénomination sociale… ; 2025 : ….. € ; 2024 : ….. € ; 2023 : ») : intitulé du critère seul
+ * (« Sous-critère 1 : Mises en situation »), sans barème, sans pointillés ni fragments de tableau (années, montants vides),
+ * coupé à un mot entier.
+ */
+export function libelleQuestionCadre(question: string, max = 160): string {
+  const segments = String(question || '').replace(/\s+/g, ' ').split(/\s*;\s*/).map((x) => x.trim()).filter(Boolean);
+  const fin = segments.findIndex((x, i) => i > 0 && /^description (?:des attentes|argument[ée]e)/i.test(x));
+  let garde = fin > 0 ? segments.slice(0, fin) : segments;
+  if (/^(?:sous[- ]?)?crit[eè]re\b/i.test(garde[0] || '')) garde = garde.slice(0, 1);
+  const nets = garde.map((x) => x
+    .replace(/[–-]?\s*\(?\s*sur \d+ points?\s*\)?/gi, '')
+    .replace(/\s*[–-]?\s*\(?\s*pond[ée]ration\s*:?\s*\d+(?:[.,]\d+)?\s*%\s*\)?/gi, '')
+    .replace(/(?:[.…_]\s*){3,}/g, ' ')
+    .replace(/^(?:\d{4}\s*[-–—]\s*|[-–—•*]\s*)+/, '')
+    .replace(/\s{2,}/g, ' ').trim())
+    // Segment sans mot (« 2025 : € », « 2023 : », « ) ») : fragment de tableau.
+    .filter((x) => (x.replace(/\b\d{4}\b|€/g, '').match(/[A-Za-zÀ-ÿ]{2,}/g) || []).length > 0);
+  let t = nets.join(' ; ').replace(/\s*:\s*$/, '');
+  // « SOUS CRITERE 2 : VALEUR TECHNIQUE » → « Sous-critère 2 : Valeur technique ».
+  t = t.replace(/^(sous[- ]?)?crit[eè]re\b/i, (x, sous) => (sous ? 'Sous-critère' : 'Critère'))
+    .replace(/^((?:Sous-critère|Critère)\s*n?°?\s*\d+(?:\.\d+)*\s*:\s*)([^a-zà-ÿ]+)$/, (x, debut, reste) => `${debut}${reste.charAt(0)}${reste.slice(1).toLowerCase()}`);
+  if (t.length > max) t = `${t.slice(0, max).replace(/\s+\S*$/, '').replace(/[\s;:,]+$/, '')}…`;
+  return t || String(question || '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+/**
  * Questions auxquelles le mémoire type ne répond jamais, reconnues à leur INTITULÉ PRINCIPAL (ou à celui du critère
  * parent) : cas pratique et mise en situation propres au site décrit. Un mot de la liste des éléments attendus
  * (« dimensionnement des équipes », « annexe autorisée (rétroplanning) », « enjeux environnementaux ») ne suffit pas :
