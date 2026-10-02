@@ -13,6 +13,8 @@
 //  • « Horaires du CCTP » (verifierHoraires) : horaire du CCTP cité par le contrôle ;
 //  • délais normands retirés sur un marché hors Normandie ou à sites mixtes, au publipostage ({{#si !HORS_NORMANDIE}},
 //    variables « normandie_seulement ») et par le filtre delaisHorsNormandie ;
+//  • passages retirés au publipostage par une interdiction ou une exclusion du DCE (rondes imposées à pied, photos
+//    interdites, télésurveillance hors marché) ;
 //  • interdits explicites du DCE (interditsDce) : rondes « à pied », photographies interdites, qualifications exigées
 //    de tous les agents (condition retirée).
 // Ne sont PAS signalés : les variables du publipostage (nom de l'acheteur, valeurs imposées par le CCTP prévues par le
@@ -421,25 +423,42 @@ export function exigenceProche(phrase: string, exigences: string[]): string {
   return score >= 0.2 ? meilleure : '';
 }
 
-// ─── Publipostage : délais normands retirés hors Normandie ────────────────────────────────
+// ─── Publipostage : passages du texte de GSS retirés par une contrainte du CCTP ─────────────────
 
 /**
- * Délais normands retirés du texte de GSS au publipostage (marché hors Normandie ou à sites mixtes) : le texte de chaque
- * rubrique publiposté comme pour un marché normand est comparé au texte publiposté pour ce marché. Aucun appel au modèle.
+ * Indicateurs du mémoire type qui retirent ou changent un passage du texte de GSS parce que le DCE l'impose : marché hors
+ * Normandie ou à sites mixtes (délais normands), rondes imposées à pied, photos interdites, télésurveillance hors marché.
  */
-export function adaptationsHorsNormandie(mt: MemoireType, ctx: ContexteMarche, ids: string[], options: { marquerConsultations?: boolean } = {}): Array<{ rubrique: string; avant: string; apres: string; exigence: string; etape: string; reference: string }> {
-  if (!ctx.horsNormandie) return [];
-  const sansImposees = { ...ctx, imposees: undefined };
-  const normand = preparerMemoireType({ ...sansImposees, horsNormandie: false }, { memoireType: mt });
-  const reel = preparerMemoireType(sansImposees, { memoireType: mt });
-  const exigence = exigenceHorsNormandie(ctx.dce || '', ctx.analyse);
+export const CONTRAINTES_CCTP: Record<string, string> = {
+  HORS_NORMANDIE: 'Délais normands retirés (marché hors Normandie)',
+  RONDES_A_PIED: 'Rondes imposées à pied par le CCTP',
+  PHOTOS_INTERDITES: 'Photos interdites par le CCTP',
+  TELESURVEILLANCE_HORS_MARCHE: 'Télésurveillance hors du marché (CCTP)',
+};
+
+/**
+ * Passages du texte de GSS retirés ou changés au publipostage par une contrainte du CCTP : chaque rubrique est publipostée
+ * comme si la contrainte n'existait pas (marché normand, rondes libres…), puis comparée au texte publiposté pour ce
+ * marché ; une contrainte à la fois, avec l'exigence du DCE qui la déclenche. Aucun appel au modèle. Les valeurs imposées
+ * par le CCTP (variables prévues par le mémoire type) ne sont pas comparées.
+ */
+export function adaptationsDuPubliposte(mt: MemoireType, ctx: ContexteMarche, ids: string[], options: { marquerConsultations?: boolean } = {}): Array<{ rubrique: string; avant: string; apres: string; exigence: string; etape: string; reference: string }> {
+  const base: ContexteMarche = { ...ctx, imposees: undefined };
+  const reel = preparerMemoireType(base, { memoireType: mt });
+  const actives = Object.keys(CONTRAINTES_CCTP).filter((k) => reel.indicateurs[k] && mt.indicateurs[k]);
   const out: Array<{ rubrique: string; avant: string; apres: string; exigence: string; etape: string; reference: string }> = [];
-  for (const id of ids) {
-    const r = mt.rubriques.find((x) => x.id === id);
-    if (!r || r.mode === 'besoin' || !r.texte) continue;
-    const a = publierRubrique(mt, r, normand.variables, normand.indicateurs, '', options).texte || '';
-    const b = publierRubrique(mt, r, reel.variables, reel.indicateurs, '', options).texte || '';
-    if (a !== b) out.push({ rubrique: id, avant: a, apres: b, exigence, etape: 'Délais normands retirés (marché hors Normandie)', reference: a });
+  for (const k of actives) {
+    const sans = preparerMemoireType({ ...base, ...(k === 'HORS_NORMANDIE' ? { horsNormandie: false } : {}), choix: { ...(base.choix || {}), indicateurs: { ...(base.choix?.indicateurs || {}), [k]: false } } }, { memoireType: mt });
+    const def = mt.indicateurs[k];
+    const exigence = k === 'HORS_NORMANDIE' ? exigenceHorsNormandie(ctx.dce || '', ctx.analyse)
+      : (def.dce ? citerDce(ctx.dce || '', new RegExp(def.dce, 'i')) : '') || (reel.etatsIndicateurs[k]?.raisons || []).find((r) => /^DCE/.test(r)) || def.description;
+    for (const id of ids) {
+      const r = mt.rubriques.find((x) => x.id === id);
+      if (!r || r.mode === 'besoin' || !r.texte) continue;
+      const a = publierRubrique(mt, r, sans.variables, sans.indicateurs, '', options).texte || '';
+      const b = publierRubrique(mt, r, reel.variables, reel.indicateurs, '', options).texte || '';
+      if (a !== b) out.push({ rubrique: id, avant: a, apres: b, exigence, etape: CONTRAINTES_CCTP[k], reference: a });
+    }
   }
   return out;
 }

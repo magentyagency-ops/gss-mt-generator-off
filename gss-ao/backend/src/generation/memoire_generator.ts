@@ -28,7 +28,7 @@ import {
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides,
 } from './memoire_type_cadre';
-import { SuiviAdaptations, adaptationsHorsNormandie, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, type PhraseAdaptee } from './adaptations_cctp';
+import { SuiviAdaptations, adaptationsDuPubliposte, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, type PhraseAdaptee } from './adaptations_cctp';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -8239,9 +8239,9 @@ Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "tex
    * du dossier (état de complétion).
    */
   private suiviAdaptations(dossierId: string, mt: MemoireType, ctx: ContexteMarche, ids: string[], textes: string[], options: { marquerConsultations?: boolean } = {}): SuiviAdaptations {
-    let horsNormandie: ReturnType<typeof adaptationsHorsNormandie> = [];
+    let horsNormandie: ReturnType<typeof adaptationsDuPubliposte> = [];
     try {
-      horsNormandie = adaptationsHorsNormandie(mt, ctx, ids, options);
+      horsNormandie = adaptationsDuPubliposte(mt, ctx, ids, options);
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Délais normands retirés au publipostage : comparaison indisponible (${e?.message || e}).`);
     }

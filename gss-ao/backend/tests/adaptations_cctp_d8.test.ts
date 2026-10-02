@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   SuiviAdaptations, changements, consultationsAdaptations, messageAdaptations, deciderAdaptation, exigenceDuFiltre,
-  adaptationsHorsNormandie, TITRE_ADAPTATIONS, type PhraseAdaptee,
+  adaptationsDuPubliposte, TITRE_ADAPTATIONS, type PhraseAdaptee,
 } from '../src/generation/adaptations_cctp';
 import { delaisHorsNormandie, interditsDce } from '../src/generation/base_memoires';
 import { chargerMemoireType } from '../src/generation/memoire_type';
@@ -186,7 +186,7 @@ describe('D8 : phrases de GSS adaptées au CCTP, signalées', () => {
     const mt = chargerMemoireType();
     const ctx = { analyse: { clientName: 'IFITS', sites: [{ name: 'IFITS', address: '1 rue Théodore Simon, 93330 Neuilly-sur-Marne' }] }, dce: DCE_IFITS, horsNormandie: true };
     const ids = ['b4_pti', 'b4_proc_alarme', 'b5_remplacement_imprevu', 'b3_adequation'];
-    const l = adaptationsHorsNormandie(mt, ctx, ids, { marquerConsultations: true });
+    const l = adaptationsDuPubliposte(mt, ctx, ids, { marquerConsultations: true });
     const suivi = new SuiviAdaptations({ reference: l.map((x) => x.reference) });
     suivi.noterPubliposte(l);
     const sections = Object.fromEntries(l.map((x) => [x.rubrique, x.apres]));
@@ -198,6 +198,29 @@ describe('D8 : phrases de GSS adaptées au CCTP, signalées', () => {
     expect(pti.etape).toBe('Délais normands retirés (marché hors Normandie)');
     expect(pti.exigence).toContain('Neuilly-sur-Marne');
     // Marché normand : rien.
-    expect(adaptationsHorsNormandie(mt, { ...ctx, horsNormandie: false }, ids)).toEqual([]);
+    expect(adaptationsDuPubliposte(mt, { ...ctx, horsNormandie: false }, ids)).toEqual([]);
+  });
+
+  it('publipostage, interdits du CCTP (cstb : rondes à pied, photos interdites) : passages de GSS retirés et signalés avec la phrase du DCE', () => {
+    const mt = chargerMemoireType();
+    const dce = `CSTB Grenoble, situé au 24 rue Joseph Fourier 38400 Saint Martin d'Hères.
+Les rondes de surveillance sont effectuées à pied. Le véhicule de l’intervenant rondier reste le moins possible sur le site.
+Le prestataire s'engage à :
+    -    Ne pas prendre de photo des bâtiments, équipements scientifiques ou installations ;`;
+    const ctx = { analyse: { clientName: 'CSTB' }, dce, horsNormandie: true };
+    const l = adaptationsDuPubliposte(mt, ctx, ['b4_vehicules', 'b4_main_courante'], { marquerConsultations: true });
+    const suivi = new SuiviAdaptations({ reference: l.map((x) => x.reference) });
+    suivi.noterPubliposte(l);
+    const sections: Record<string, string> = {};
+    for (const x of l) sections[x.rubrique] = x.apres;
+    const liste = suivi.finaliser(sections, (id) => id);
+    const rondes = liste.find((x) => x.etape === 'Rondes imposées à pied par le CCTP')!;
+    expect(rondes.origine).toMatch(/à vélo ou en trottinette/);
+    expect(rondes.adaptee).toBe('');
+    expect(rondes.exigence).toBe('Les rondes de surveillance sont effectuées à pied.');
+    const photos = liste.find((x) => x.etape === 'Photos interdites par le CCTP')!;
+    expect(photos.origine).toMatch(/illustrer de photos ou de vidéos/);
+    expect(photos.adaptee).not.toMatch(/photos/);
+    expect(photos.exigence).toMatch(/Ne pas prendre de photo des bâtiments/);
   });
 });
