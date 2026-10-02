@@ -795,6 +795,39 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     reformulees++;
   }
   for (const it of items) if (it.ref === undefined && it.mots.length >= 3) it.ajout = true;
+  // Tableau de GSS (lignes « Catégorie : Qualification : Nombre : Observations » issues d'un tableau Markdown, deux au
+  // moins de suite) : toutes ses lignes ou aucune, quelle que soit la limite de mots (ca_normandie 221 : tableau de
+  // l'équipe dédiée réduit à ses 2 lignes SSIAP, 41 agents, sous la phrase « une équipe de 83 agents titulaires »).
+  let lignesTableauRemises = 0;
+  {
+    const LIGNE_TABLEAU = /^(?![•\-*]\s)[^:\n]{2,}(?:\s:\s[^:\n]+){2,}$/;
+    const estTableau = (i: number) => LIGNE_TABLEAU.test((lignesRef[i] || []).join(' ').trim());
+    for (let i = 0; i < lignesRef.length; i++) {
+      if (!estTableau(i) || (i > 0 && estTableau(i - 1))) continue;
+      let j = i;
+      while (j + 1 < lignesRef.length && estTableau(j + 1)) j++;
+      if (j === i) continue;
+      const indices = (l: number) => ref.map((_, k) => k).filter((k) => ref[k].ligne === l);
+      const presentes = Array.from({ length: j - i + 1 }, (_, n) => i + n).filter((l) => indices(l).some((k) => position.has(k)));
+      if (!presentes.length) continue;
+      for (let l = i; l <= j; l++) {
+        const ks = indices(l);
+        if (ks.some((k) => position.has(k))) continue;
+        const ligne: Ligne = { items: ks.map((k) => ({ brut: ref[k].brut, mots: ref[k].mots, ref: k })) };
+        // Après la ligne précédente du tableau déjà placée ; sinon avant la suivante.
+        let apres: Ligne | undefined;
+        for (let m = l - 1; m >= i && !apres; m--) { const k = indices(m).find((x) => position.has(x)); if (k !== undefined) apres = position.get(k)!.ligne; }
+        if (apres) sortie.splice(sortie.indexOf(apres) + 1, 0, ligne);
+        else {
+          let avant: Ligne | undefined;
+          for (let m = l + 1; m <= j && !avant; m++) { const k = indices(m).find((x) => position.has(x)); if (k !== undefined) avant = position.get(k)!.ligne; }
+          sortie.splice(avant ? sortie.indexOf(avant) : sortie.length, 0, ligne);
+        }
+        ligne.items.forEach((it) => position.set(it.ref!, { ligne, item: it }));
+        lignesTableauRemises++;
+      }
+    }
+  }
   // Phrases propres à la question (ajouts) écrites par le modèle à la suite d'une puce de GSS (« • d'un téléphone portable :
   // … si nécessaire. Pour le lot 1, GSS met à disposition les deux véhicules… », génération réelle rouen_univ 15 : quatre
   // phrases, une centaine de mots, sur d'autres sujets) : elles ne prolongent pas la puce de GSS ; elles forment leur propre
@@ -819,12 +852,12 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   const compter = (t: string) => (t.match(/[\wÀ-ÿ'’-]+/g) || []).length;
   let texte = rendre();
   if (o.limite && mesure(texte) >= seuil) {
-    return { texte, fideliteAvant, fidelite: mesure(texte), reformulees, reinserees: 0, ajoutsRetires: 0, bribesRetirees: 0 };
+    return { texte, fideliteAvant, fidelite: mesure(texte), reformulees, reinserees: lignesTableauRemises, ajoutsRetires: 0, bribesRetirees: 0 };
   }
   // 2. Phrases de GSS omises remises à leur place (dans la limite de mots s'il y en a une).
   const budget = o.maxMots !== undefined ? Math.max(o.maxMots, compter(texte)) : Infinity;
   let mots = compter(texte);
-  let reinserees = 0;
+  let reinserees = lignesTableauRemises;
   const inserer = (k: number, ligneEntiere: boolean): boolean => {
     const ks = ref.map((_, j) => j).filter((j) => ref[j].ligne === ref[k].ligne && !exclus[j]);
     const n = ligneEntiere ? ks.reduce((a, j) => a + compter(ref[j].brut), 0) : compter(ref[k].brut);

@@ -396,6 +396,44 @@ function replaceTextInElement(xmlDoc: any, tEl: any, placeholder: string, value:
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
+/** Éléments de <w:compat> placés APRÈS doNotExpandShiftReturn dans l'ordre du schéma OOXML (CT_Compat). */
+const COMPAT_APRES_SHIFT_RETURN = ['spacingInWholePoints', 'lineWrapLikeWord6', 'printBodyTextBeforeHeader', 'printColBlack', 'wpSpaceWidth', 'showBreaksInFrames', 'subFontBySize', 'suppressBottomSpacing', 'suppressTopSpacing', 'suppressSpacingAtTopOfPage', 'suppressTopSpacingWP', 'suppressSpBfAfterPgBrk', 'swapBordersFacingPages', 'convMailMergeEsc', 'truncateFontHeightsLikeWP6', 'mwSmallCaps', 'usePrinterMetrics', 'doNotSuppressParagraphBorders', 'wrapTrailSpaces', 'footnoteLayoutLikeWW8', 'shapeLayoutLikeWW8', 'alignTablesRowByRow', 'forgetLastTabAlignment', 'adjustLineHeightInTable', 'autoSpaceLikeWord95', 'noSpaceRaiseLower', 'doNotUseHTMLParagraphAutoSpacing', 'layoutRawTableWidth', 'layoutTableRowsApart', 'useWord97LineBreakRules', 'doNotBreakWrappedTables', 'doNotSnapToGridInCell', 'selectFldWithFirstOrLastChar', 'applyBreakingRules', 'doNotWrapTextWithPunct', 'doNotUseEastAsianBreakRules', 'useWord2002TableStyleRules', 'growAutofit', 'useFELayout', 'useNormalStyleForList', 'doNotUseIndentAsNumberingTabStop', 'useAltKinsokuLineBreakRules', 'allowSpaceOfSameStyleInTable', 'doNotSuppressIndentation', 'doNotAutofitConstrainedTables', 'autofitToFirstFixedWidthCell', 'underlineTabInNumList', 'displayHangulFixedWidth', 'splitPgBreakAndParaMark', 'doNotVertAlignCellWithSp', 'doNotBreakConstrainedForcedTable', 'doNotVertAlignInTxbx', 'useAnsiKerningPairs', 'cachedColBand', 'compatSetting'];
+/** Éléments de <w:settings> placés APRÈS <w:compat> dans l'ordre du schéma OOXML (CT_Settings). */
+const SETTINGS_APRES_COMPAT = ['docVars', 'rsids', 'mathPr', 'attachedSchema', 'themeFontLang', 'clrSchemeMapping', 'doNotIncludeSubdocsInStats', 'doNotAutoCompressPictures', 'forceUpgrade', 'captions', 'readModeInkLockDown', 'smartTagType', 'schemaLibrary', 'shapeDefaults', 'doNotEmbedSmartTags', 'decimalSymbol', 'listSeparator'];
+
+/**
+ * Option de compatibilité Word « ne pas étirer une ligne qui finit par un retour à la ligne » (<w:doNotExpandShiftReturn/>)
+ * posée dans word/settings.xml, à sa place dans l'ordre du schéma : dans un paragraphe justifié, une réponse écrite sur
+ * plusieurs lignes (<w:br/>) n'a plus ses lignes courtes étirées sur toute la largeur. Seul le rendu change.
+ */
+export function sansEtirementRetourLigne(zip: any): boolean {
+  const f = zip?.file?.('word/settings.xml');
+  if (!f) return false;
+  let s: string = f.asText();
+  if (/doNotExpandShiftReturn/.test(s)) return false;
+  const balise = '<w:doNotExpandShiftReturn/>';
+  const compat = /<w:compat\s*\/>|<w:compat>([\s\S]*?)<\/w:compat>/.exec(s);
+  if (compat) {
+    if (/^<w:compat\s*\/>$/.test(compat[0])) s = s.replace(compat[0], `<w:compat>${balise}</w:compat>`);
+    else {
+      const interieur = compat[1];
+      const rx = new RegExp(`<w:(?:${COMPAT_APRES_SHIFT_RETURN.join('|')})\\b`);
+      const m = rx.exec(interieur);
+      const nouveau = m ? `${interieur.slice(0, m.index)}${balise}${interieur.slice(m.index)}` : `${interieur}${balise}`;
+      s = s.replace(compat[0], `<w:compat>${nouveau}</w:compat>`);
+    }
+  } else {
+    const rx = new RegExp(`<(?:w|m):(?:${SETTINGS_APRES_COMPAT.join('|')})\\b`);
+    const m = rx.exec(s);
+    const element = `<w:compat>${balise}</w:compat>`;
+    if (m) s = `${s.slice(0, m.index)}${element}${s.slice(m.index)}`;
+    else if (/<\/w:settings>/.test(s)) s = s.replace(/<\/w:settings>/, `${element}</w:settings>`);
+    else return false;
+  }
+  zip.file('word/settings.xml', s);
+  return true;
+}
+
 function getParagraphStyle(p: any): string {
   const pPr = findLocalNameChild(p, 'pPr');
   if (!pPr) return '';
@@ -5826,6 +5864,9 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     // 8. Serialize and save (jamais de document si le crédit OpenAI s'est épuisé en cours de génération)
     this.verifierCredit();
     if (onProgress) onProgress(98, 'Génération du document Word…');
+    // Réponses écrites sur plusieurs lignes (<w:br/>) dans des paragraphes justifiés : la ligne qui finit par un retour à
+    // la ligne n'est plus étirée sur toute la largeur (ca_normandie 221 : tableau de l'équipe dédiée « A : B : C »).
+    sansEtirementRetourLigne(zip);
     const serializer = new XMLSerializer();
     zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
     const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });

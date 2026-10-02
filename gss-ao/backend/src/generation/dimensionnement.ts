@@ -88,6 +88,20 @@ const nombre = (x: unknown): number | null => {
 const POSTE_OPTIONNEL = /\boptions?\b|\boptionnel(?:le)?s?\b|agents? suppl[ée]mentaires?|\bà la demande\b|bons? de commande|\bponctuel(?:le)?s?\b|\brenforts? ponctuels?\b/i;
 
 /**
+ * Profil d'agent de sécurité (ADS, agent de sécurité, de surveillance ou de sûreté, qualification CQP APS ou carte
+ * professionnelle), sans qualification incendie ni cynophile ni d'encadrement : renvoie la qualification à afficher
+ * (celle du DCE, ou « CQP APS » si elle se réduit à l'intitulé du poste), '' sinon.
+ */
+export function profilAgentSecurite(profil: string, qualification: string): string {
+  const p = normaliser(`${profil} ${qualification}`);
+  if (/ssiap|incendie|cynophil|maitre.chien|chef|encadr|responsable|superviseur|controleur|rondier|accueil|hotesse|standard|operateur|pc\b/.test(p)) return '';
+  if (!/\bads\b|agent de (?:securite|surveillance|surete)|\bcqp\b|\baps\b|carte professionnelle/.test(p)) return '';
+  const q = String(qualification || '').trim();
+  // Qualification réduite à l'intitulé du poste (« ADS », « Agent de sécurité ») : « CQP APS » ; sinon celle du DCE.
+  return !q || /^(?:ads|agents? de (?:s[ée]curit[ée]|surveillance|s[ûu]ret[ée]))$/i.test(q) ? 'CQP APS' : q;
+}
+
+/**
  * Calcul du dimensionnement à partir de la lecture du DCE par le modèle (`rep` : {postes, cas_pratique}). Renvoie
  * null si aucun poste ni cas pratique n'est exploitable.
  */
@@ -121,8 +135,12 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
       console.log(`[Dimensionnement] ${profil} : ${hs} h/sem d'après les plages, ${ha} h/an dans le DCE → ${Math.round((ha / 52) * 100) / 100} h/sem retenues.`);
       hs = Math.round((ha / 52) * 100) / 100;
     }
-    const qualification = String(p?.qualification || profil).replace(/\s+/g, ' ').trim();
-    const cle = normaliser(`${profil}|${qualification}`);
+    let qualification = String(p?.qualification || profil).replace(/\s+/g, ' ').trim();
+    // Profils équivalents (« ADS », « Agent de sécurité », « agent de sûreté » : le même agent de sécurité CQP APS) :
+    // une seule catégorie, heures additionnées (ca_normandie 221 : « Agent de sécurité » 22 et « ADS » 20 sur deux lignes).
+    const equivalentAds = profilAgentSecurite(profil, qualification);
+    if (equivalentAds) qualification = equivalentAds;
+    const cle = equivalentAds ? 'agent de securite|ads' : normaliser(`${profil}|${qualification}`);
     const x = profils.get(cle) || { profil, qualification, lieux: [], heuresSemaine: 0, heuresAn: 0, etp: 0, titulaires: 0 };
     x.heuresSemaine = Math.round((x.heuresSemaine + hs) * 100) / 100;
     x.heuresAn += heuresAn;
