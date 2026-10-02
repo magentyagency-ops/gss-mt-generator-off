@@ -28,7 +28,7 @@ import {
   attribuerRubriques, blocRenvois, questionHorsMemoireType, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides,
 } from './memoire_type_cadre';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -7965,7 +7965,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
         if (proteges.some((x) => extrait.includes(x) && !remplacement.includes(x))) continue;
         // Fait de GSS (montant d'assurance, numéro de contrat, valeur du registre) : jamais remplacé par le seuil du DCE ;
         // l'écart est demandé à GSS (parc_expo 202 : RC professionnelle Hiscox 300 000 € devenue « 10 000 000 € »).
-        const motif = motifRefusAlignement(extrait, remplacement);
+        const motif = motifRefusAlignement(extrait, remplacement)
+          || (jalonsChronologiques(sections[id]) && !jalonsChronologiques(sections[id].replace(extrait, remplacement)) ? 'jalon du calendrier de GSS' : '');
         if (motif) {
           console.warn(`[MemoireGenerator] Cohérence ${id} avec le CCTP : remplacement refusé (${motif}) : « ${extrait.slice(0, 100)} ».`);
           const exigence = String(c?.exigence || '').replace(/\s+/g, ' ').trim();

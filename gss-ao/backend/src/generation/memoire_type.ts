@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { lignesEquipe, questionDimensionnement, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, jalonsDe, marcheHorsNormandie, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss } from './base_memoires';
+import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -2064,7 +2064,7 @@ function refusTexteNouveau(nouveau: string, ancien: string, o: OptionsModificati
   if (/L\.?\s?1224/.test(nouveau) && !/L\.?\s?1224/.test(o.dce || '')) return 'article L. 1224-1 absent du DCE';
   if (retirerCommentairesInternes(nouveau).retires.length) return 'commentaire interne';
   // Jalon du calendrier de GSS (« J-10 », « J-3 ») : jamais remplacé par un délai du DCE (ifsem 335).
-  if (jalonsDe(ancien).some((j) => !jalonsDe(nouveau).includes(j))) return 'jalon du calendrier de GSS';
+  if (jalonsDe(ancien).some((j) => !jalonsDe(nouveau).includes(j)) && !jalonsDe(nouveau).length) return 'jalon du calendrier de GSS';
   // Phrase du CCTP recopiée (« son remplaçant devra être présent … », « À Coriolis, l'accueil des premiers
   // utilisateurs … ») : ce n'est pas une adaptation du texte de GSS, et l'exigence est traitée par sa rubrique.
   const motsAncien = new Set(normaliser(ancien).split(/[^a-z0-9]+/));
@@ -2147,6 +2147,7 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     const APRES_J = /suivant (?:la |le )?(?:prise d.effet|d[ée]marrage|notification|d[ée]but)|apr[èe]s (?:la |le )?(?:prise d.effet|d[ée]marrage)/i;
     if (/\bJ\s?[-–]\s?\d+/.test(ligne) && APRES_J.test(m.par!) && !APRES_J.test(m.extrait)) { refusees.push({ ...m, raison: 'échéance postérieure au démarrage placée avant le jour J' }); continue; }
     const essai = t.slice(0, pos[0].debut) + m.par + t.slice(pos[0].fin);
+    if (jalonsChronologiques(t) && !jalonsChronologiques(essai)) { refusees.push({ ...m, raison: 'suite de jalons non chronologique' }); continue; }
     if (etapesRetirees(t, essai).length) { refusees.push({ ...m, raison: 'une étape de procédure ne se retire pas' }); continue; }
     if (debutDePhraseRetire(t, pos[0].debut, pos[0].fin, essai)) { refusees.push({ ...m, raison: 'début de phrase de GSS remplacé par un texte sans majuscule' }); continue; }
     t = essai;

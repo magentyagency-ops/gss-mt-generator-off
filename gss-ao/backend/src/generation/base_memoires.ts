@@ -377,6 +377,16 @@ export function montantsRegistre(): string[] {
   return charger().registre.flatMap((e) => String(e.valeur_retenue || '').match(/\d[\d\s\u00a0\u202f.,]*\s*(?:€|euros?\b)/gi) || []);
 }
 
+/**
+ * Suite des jalons d'un calendrier (une ligne par jalon, « - J-10 : … », « - J-7 : … ») dans l'ordre chronologique :
+ * J-10, J-7, J-7, J-3, J+1… Vrai s'il n'y a pas de calendrier.
+ */
+export function jalonsChronologiques(texte: string): boolean {
+  const v = String(texte || '').split('\n').map((l) => /^\s*(?:[-*•]\s*)?(?:\*\*)?J\s*([-−–+])\s*(\d{1,3})(?!\d)/.exec(l)).filter(Boolean)
+    .map((m) => (m![1] === '+' ? 1 : -1) * Number(m![2]));
+  return v.every((x, i) => i === 0 || x >= v[i - 1]);
+}
+
 /** Jalons « J-n » / « J+n » d'un texte, normalisés (« J - 10 » → « J-10 »). */
 export function jalonsDe(t: string): string[] {
   return [...String(t || '').matchAll(/(?<![A-Za-z0-9])J\s*([-−–+])\s*(\d{1,3})(?!\d)/g)].map((m) => `J${m[1] === '+' ? '+' : '-'}${m[2]}`);
@@ -396,7 +406,9 @@ export function motifRefusAlignement(extrait: string, remplacement: string): str
   // Jalon du calendrier de GSS (« J-10 : envoi des plannings », « J-3 : envoi des plannings au CNRS », confirmés par GSS) :
   // jamais remplacé par le délai du CCTP, sinon la suite des jalons n'est plus chronologique (ifsem 335 : planning envoyé au
   // CNRS avant d'être validé par les agents). L'écart est demandé à GSS.
-  if (jalonsDe(extrait).some((j) => !jalonsDe(remplacement).includes(j))) return 'jalon du calendrier de GSS';
+  // Un jalon peut devenir un autre jalon (J-3 → J-7 quand le DCE exige 7 jours pour l'envoi au client) ; la suite reste
+  // contrôlée par jalonsChronologiques là où le texte entier est connu.
+  if (jalonsDe(extrait).some((j) => !jalonsDe(remplacement).includes(j)) && !jalonsDe(remplacement).length) return 'jalon du calendrier de GSS';
   const n = (t: string) => normTxt(String(t || '')).replace(/\s+/g, ' ');
   const ext = n(extrait), rem = n(remplacement);
   for (const e of charger().registre) {
