@@ -28,6 +28,7 @@ import { dimensions, insererPhotoDocx, paragrapheDuChamp } from './docx_images';
 import { estPlanV2, type PlanMemoireType } from './memoire_type';
 import { sectionsV2, chapitresV2, schemaFixe } from './reponse_libre_v2';
 import { nombrePages } from './format_court';
+import { deciderAdaptation, blocAdaptationsAssistant, ACTION_ADAPTATION, aValider, type PhraseAdaptee } from './adaptations_cctp';
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const EMBED_MODEL = process.env.RAG_EMBEDDING_MODEL || process.env.EMBEDDING_MODEL_MEMOIRE || 'text-embedding-3-small';
@@ -200,18 +201,22 @@ async function assistantCadre(etat: EtatCompletion, message: string, pieces: Pie
   if (!champs.length) {
     return { reponse: "Ce document a été généré avant l'arrivée de l'assistant : ses réponses ne sont pas repérées. Relancez la génération pour pouvoir le modifier ici.", modifies: [] };
   }
+  // Phrases de GSS adaptées au cahier des charges (D8) : validées, modifiées ou rétablies une à une.
+  const adaptations = etat.adaptations || [];
+  const messagesAdaptations: string[] = [];
 
   const plan = await json(
     `Tu es l'assistant de modification d'un mémoire technique GSS (sécurité privée) rédigé dans le CADRE IMPOSÉ par l'acheteur. Actions possibles :
 1. "modifier" : réécrire, corriger, compléter, développer, raccourcir ou enrichir UNE réponse de GSS (repérée par sa clé GSS_CH_…). Ajouter du contenu à une réponse existante passe aussi par "modifier".
 2. "annexe" : ajouter une ou plusieurs pages en annexe, à la fin du document (titre + contenu).
 3. "image" : insérer une photo jointe (P1, P2…) dans le document, UNIQUEMENT si l'utilisateur le demande : sous une réponse ("cle": GSS_CH_…) ou sur une nouvelle page d'annexe ("annexe": "titre de la page"), avec une légende courte qui décrit UNIQUEMENT ce que montre la photo (d'après sa description) ou ce que l'utilisateur en dit, sans rien affirmer d'autre ("legende").
-4. Aucune action : si l'utilisateur pose une question, réponds-lui simplement.
+4. Aucune action : si l'utilisateur pose une question, réponds-lui simplement.${adaptations.length ? `
+5. ${ACTION_ADAPTATION}` : ''}
 Les documents et photos joints sont des sources valables : utilise leurs informations dans les consignes quand l'utilisateur le demande. Une photo sans rapport avec la sécurité privée ou avec la partie visée (d'après sa description) n'est PAS insérée : explique-le dans ta réponse et demande confirmation.
 Tu ne peux PAS modifier le texte de l'acheteur (intitulés, critères, barème, mise en page du cadre) : si on te le demande, explique-le poliment.
 Identifie précisément la ou les réponses visées d'après leur libellé et leur contenu. Si la demande est ambiguë (plusieurs réponses possibles et aucune plus évidente), n'agis pas et demande laquelle. Dans chaque action, la "consigne" reprend fidèlement et complètement ce que veut l'utilisateur pour CETTE réponse (y compris les informations qu'il donne).
-Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce qui est fait", "actions": [{"type": "modifier", "cle": "GSS_CH_…", "consigne": "…"} ou {"type": "annexe", "titre": "…", "consigne": "…", "nouvellePage": true} ou {"type": "image", "piece": "P1", "cle": "GSS_CH_…", "legende": "…"} ou {"type": "image", "piece": "P1", "annexe": "…", "legende": "…"}]}.`,
-    `${etat.demande ? `Demande particulière saisie avant la génération : ${etat.demande}\n\n` : ''}Échanges précédents :\n${historique(etat) || '(aucun)'}\n\nRéponses de GSS dans le document :\n${champs.map((c) => `- ${c.cle} | ${c.libelle} | ${c.texte.replace(/\s+/g, ' ').slice(0, 700)}`).join('\n')}${blocPieces(pieces, false)}\n\nDemande de l'utilisateur : ${message}`,
+Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce qui est fait", "actions": [{"type": "modifier", "cle": "GSS_CH_…", "consigne": "…"} ou {"type": "annexe", "titre": "…", "consigne": "…", "nouvellePage": true} ou {"type": "image", "piece": "P1", "cle": "GSS_CH_…", "legende": "…"} ou {"type": "image", "piece": "P1", "annexe": "…", "legende": "…"}${adaptations.length ? ' ou {"type": "adaptation", "n": 1, "choix": "valider"}' : ''}]}.`,
+    `${etat.demande ? `Demande particulière saisie avant la génération : ${etat.demande}\n\n` : ''}Échanges précédents :\n${historique(etat) || '(aucun)'}\n\nRéponses de GSS dans le document :\n${champs.map((c) => `- ${c.cle} | ${c.libelle} | ${c.texte.replace(/\s+/g, ' ').slice(0, 700)}`).join('\n')}${blocAdaptationsAssistant(adaptations)}${blocPieces(pieces, false)}\n\nDemande de l'utilisateur : ${message}`,
   );
   const actions: any[] = Array.isArray(plan.actions) ? plan.actions : [];
   const modifies: string[] = [];
@@ -266,6 +271,20 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
         insererPhotoDocx(zip, xmlDoc, piece, '', paragrapheDuChamp(xmlDoc, cle), modifies.length);
         modifies.push(cle);
       }
+    } else if (a?.type === 'adaptation') {
+      // Phrase adaptée au CCTP (D8) : seule la phrase change, à sa place dans la réponse ; rien d'autre n'est réécrit.
+      const ad = adaptations.find((x) => x.n === Number(a.n));
+      const champ = ad && champs.find((c) => c.cle === ad.rubrique);
+      if (!ad || !champ) { messagesAdaptations.push(`Je n'ai pas trouvé la phrase adaptée n° ${a.n}.`); continue; }
+      const sauvegarde = { ...ad };
+      const r = deciderAdaptation(champ.texte, ad, String(a.choix || ''), String(a.texte || ''));
+      if (r.ok && r.change && !remplacerDansChamp(xmlDoc, champ.cle, champ.texte, r.texte)) {
+        Object.assign(ad, sauvegarde);
+        messagesAdaptations.push(`Je n'ai pas pu modifier la phrase adaptée n° ${ad.n} dans le document.`);
+        continue;
+      }
+      messagesAdaptations.push(r.message);
+      if (r.ok && r.change) { champ.texte = r.texte; if (!modifies.includes(champ.cle)) modifies.push(champ.cle); }
     }
   }
 
@@ -290,7 +309,73 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
     fs.writeFileSync(sortie, zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }));
     etat.fichier = sortie;
   }
-  return { reponse: String(plan.reponse || (modifies.length ? 'Modification effectuée.' : "Je n'ai rien modifié.")).trim(), modifies };
+  return { reponse: avecAdaptations(String(plan.reponse || (modifies.length || messagesAdaptations.length ? 'Modification effectuée.' : "Je n'ai rien modifié.")).trim(), messagesAdaptations, adaptations), modifies };
+}
+
+/** Réponse de l'assistant complétée par le résultat de chaque choix sur une phrase adaptée et ce qui reste à valider (D8). */
+function avecAdaptations(reponse: string, messages: string[], adaptations: PhraseAdaptee[]): string {
+  if (!messages.length) return reponse;
+  const reste = aValider(adaptations);
+  return [reponse, ...messages.filter((m) => !reponse.includes(m)),
+    reste.length ? `${reste.length === 1 ? 'Il reste une phrase adaptée' : `Il reste ${reste.length} phrases adaptées`} au cahier des charges à valider (n° ${reste.map((x) => x.n).join(', ')}).` : 'Toutes les phrases adaptées au cahier des charges ont reçu votre choix.'].join(' ');
+}
+
+/**
+ * Remplace, dans une réponse du cadre (entre ses signets), le texte `ancien` (texte actuel de la réponse) par `nouveau`
+ * en ne touchant qu'au passage qui change : mise en forme, signets des « [À COMPLÉTER] » et reste de la réponse gardés.
+ * Faux si le passage n'a pas pu être placé (le document n'est alors pas modifié).
+ */
+export function remplacerDansChamp(xmlDoc: any, cle: string, ancien: string, nouveau: string): boolean {
+  const c = noeudsDuChamp(xmlDoc, cle);
+  if (!c) return false;
+  const segs: Array<{ n: any; t: string; br: boolean }> = [];
+  const walk = (n: any) => {
+    if (n.nodeType !== 1) return;
+    if (n.localName === 't') { segs.push({ n, t: n.textContent || '', br: false }); return; }
+    if (n.localName === 'br') { segs.push({ n, t: '\n', br: true }); return; }
+    if (n.childNodes) for (let i = 0; i < n.childNodes.length; i++) walk(n.childNodes[i]);
+  };
+  c.noeuds.forEach(walk);
+  const plein = segs.map((s) => s.t).join('');
+  if (plein.trim() !== ancien) return false;
+  // Seul le passage différent est réécrit (préfixe et suffixe communs gardés tels quels).
+  let p = 0;
+  while (p < ancien.length && p < nouveau.length && ancien[p] === nouveau[p]) p++;
+  let s = 0;
+  while (s < ancien.length - p && s < nouveau.length - p && ancien[ancien.length - 1 - s] === nouveau[nouveau.length - 1 - s]) s++;
+  const decalage = plein.length - plein.trimStart().length;
+  const debut = decalage + p, fin = decalage + ancien.length - s;
+  const insertion = nouveau.slice(p, nouveau.length - s);
+  let pos = 0;
+  let cible: { seg: typeof segs[number]; rel: number } | null = null;
+  const bornes = segs.map((seg) => { const b = { seg, deb: pos, fin: pos + seg.t.length }; pos = b.fin; return b; });
+  for (const b of bornes) if (!b.seg.br && debut >= b.deb && debut <= b.fin && (!cible || debut < b.fin)) { cible = { seg: b.seg, rel: debut - b.deb }; if (debut < b.fin) break; }
+  if (!cible) return false;
+  for (const b of bornes) {
+    const a = Math.max(debut, b.deb), z = Math.min(fin, b.fin);
+    if (b.seg === cible.seg) continue;
+    if (z > a) {
+      if (b.seg.br) b.seg.n.parentNode.removeChild(b.seg.n);
+      else { b.seg.n.textContent = b.seg.t.slice(0, a - b.deb) + b.seg.t.slice(z - b.deb); b.seg.n.setAttribute('xml:space', 'preserve'); }
+    }
+  }
+  const bc = bornes.find((b) => b.seg === cible!.seg)!;
+  const avantTxt = bc.seg.t.slice(0, cible.rel);
+  const apresTxt = bc.seg.t.slice(Math.min(bc.seg.t.length, Math.max(cible.rel, fin - bc.deb)));
+  const lignes = insertion.split('\n');
+  const t0 = bc.seg.n;
+  t0.setAttribute('xml:space', 'preserve');
+  if (lignes.length === 1) { t0.textContent = avantTxt + lignes[0] + apresTxt; return true; }
+  t0.textContent = avantTxt + lignes[0];
+  let dernier = t0;
+  lignes.slice(1).forEach((l, i) => {
+    const br = xmlDoc.createElementNS(W_NS, 'w:br');
+    const t = nouveauT(xmlDoc, l + (i === lignes.length - 2 ? apresTxt : ''));
+    dernier.parentNode.insertBefore(br, dernier.nextSibling);
+    br.parentNode.insertBefore(t, br.nextSibling);
+    dernier = t;
+  });
+  return true;
 }
 
 // ─── Réponse libre ────────────────────────────────────────────────────────────────────────
@@ -352,6 +437,9 @@ async function assistantLibre(etat: EtatCompletion, message: string, pieces: Pie
   // Propositions de réponse de l'IA aux questions nouvelles du DCE, encore à valider par GSS.
   const enAttente = (id: string) => !!lib.ajouts!.find((a) => a.id === id && a.proposition);
   const propositions = ids.filter(enAttente);
+  // Phrases de GSS adaptées au cahier des charges (D8) : validées, modifiées ou rétablies une à une.
+  const adaptations = imposees ? [] : (etat.adaptations || []);
+  const messagesAdaptations: string[] = [];
   // Format court imposé par le RC : le plan est celui du RC (pas d'ajout de partie) et la limite de pages s'impose.
   const organisation = court
     ? `au FORMAT IMPOSÉ PAR LE RÈGLEMENT DE CONSULTATION (${court.pagesMax} pages maximum), organisé selon le plan du RC en parties (les « rubriques » ci-dessous). Une nouvelle demande de contenu s'intègre à la partie concernée (action "modifier") : les actions "ajouter" et "image" ne sont pas disponibles dans ce format (limite de pages) : explique-le si l'utilisateur les demande. Une partie du RC ne se supprime pas (action "supprimer" indisponible). Une proposition de réponse de l'IA ([PROPOSITION À VALIDER]) est un PASSAGE de la partie, pas la partie entière : pour la retirer, action "modifier" sur la partie avec la consigne « retire uniquement le passage proposé sur <sujet> »`
@@ -364,11 +452,12 @@ async function assistantLibre(etat: EtatCompletion, message: string, pieces: Pie
 3. "supprimer" : retirer une rubrique, UNIQUEMENT si l'utilisateur le demande explicitement.
 4. "image" : insérer une photo jointe (P1, P2…) sur une page dédiée à la suite d'une rubrique ("id"), UNIQUEMENT si l'utilisateur le demande, avec une légende courte qui décrit UNIQUEMENT ce que montre la photo (d'après sa description) ou ce que l'utilisateur en dit, sans rien affirmer d'autre ("legende").
 5. Aucune action : si l'utilisateur pose une question, réponds-lui simplement.${propositions.length ? `
-6. "valider" : l'utilisateur valide TELLE QUELLE une proposition de réponse de l'IA (rubrique marquée [PROPOSITION À VALIDER]) ; s'il demande en même temps un changement, c'est l'action "modifier" (puis "valider" s'il valide aussi le résultat).` : ''}
+6. "valider" : l'utilisateur valide TELLE QUELLE une proposition de réponse de l'IA (rubrique marquée [PROPOSITION À VALIDER]) ; s'il demande en même temps un changement, c'est l'action "modifier" (puis "valider" s'il valide aussi le résultat).` : ''}${adaptations.length ? `
+7. ${ACTION_ADAPTATION}` : ''}
 Les documents et photos joints sont des sources valables : utilise leurs informations dans les consignes quand l'utilisateur le demande. Une photo sans rapport avec la sécurité privée ou avec la partie visée (d'après sa description) n'est PAS insérée : explique-le dans ta réponse et demande confirmation.
 Identifie précisément la ou les rubriques visées. Si la demande est ambiguë, n'agis pas et demande une précision. Dans chaque action, la "consigne" reprend fidèlement et complètement ce que veut l'utilisateur (y compris les informations qu'il donne).
-Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce qui est fait", "actions": [{"type": "modifier", "id": "…", "consigne": "…"} ou {"type": "ajouter", "chapitre": "II", "titre": "…", "apres": "…", "consigne": "…"} ou {"type": "supprimer", "id": "…"} ou {"type": "image", "piece": "P1", "id": "…", "legende": "…"}${propositions.length ? ' ou {"type": "valider", "id": "…"}' : ''}]}.`,
-    `${etat.demande ? `Demande particulière saisie avant la génération : ${etat.demande}\n\n` : ''}Échanges précédents :\n${historique(etat) || '(aucun)'}\n\nRubriques du mémoire :\n${ids.map((id) => `- ${id} | chapitre ${chapitreRubrique(etat, id)} | ${titreRubrique(etat, id)}${enAttente(id) ? ' [PROPOSITION À VALIDER]' : ''} | ${lib.sections[id].replace(/⟦AC:\d+⟧/g, '').replace(/\s+/g, ' ').slice(0, 300)}`).join('\n')}${blocPieces(pieces, false)}\n\nDemande de l'utilisateur : ${message}`,
+Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce qui est fait", "actions": [{"type": "modifier", "id": "…", "consigne": "…"} ou {"type": "ajouter", "chapitre": "II", "titre": "…", "apres": "…", "consigne": "…"} ou {"type": "supprimer", "id": "…"} ou {"type": "image", "piece": "P1", "id": "…", "legende": "…"}${propositions.length ? ' ou {"type": "valider", "id": "…"}' : ''}${adaptations.length ? ' ou {"type": "adaptation", "n": 1, "choix": "valider"}' : ''}]}.`,
+    `${etat.demande ? `Demande particulière saisie avant la génération : ${etat.demande}\n\n` : ''}Échanges précédents :\n${historique(etat) || '(aucun)'}\n\nRubriques du mémoire :\n${ids.map((id) => `- ${id} | chapitre ${chapitreRubrique(etat, id)} | ${titreRubrique(etat, id)}${enAttente(id) ? ' [PROPOSITION À VALIDER]' : ''} | ${lib.sections[id].replace(/⟦AC:\d+⟧/g, '').replace(/\s+/g, ' ').slice(0, 300)}`).join('\n')}${blocAdaptationsAssistant(adaptations)}${blocPieces(pieces, false)}\n\nDemande de l'utilisateur : ${message}`,
   );
   const actions: any[] = Array.isArray(plan.actions) ? plan.actions : [];
   const modifies: string[] = [];
@@ -441,6 +530,20 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       aj.proposition = false;
       aj.valideLe = new Date().toISOString();
       valides.push(aj.title);
+    } else if (a?.type === 'adaptation') {
+      // Phrase adaptée au CCTP (D8) : seule la phrase change, à sa place ; rien d'autre n'est réécrit (schéma gardé).
+      const ad = adaptations.find((x) => x.n === Number(a.n));
+      if (!ad || lib.sections[ad.rubrique] === undefined) { messagesAdaptations.push(`Je n'ai pas trouvé la phrase adaptée n° ${a.n}.`); continue; }
+      const r = deciderAdaptation(lib.sections[ad.rubrique], ad, String(a.choix || ''), String(a.texte || ''));
+      messagesAdaptations.push(r.message);
+      if (r.ok && r.change) {
+        const avant = lib.sections[ad.rubrique];
+        lib.sections[ad.rubrique] = r.texte;
+        if (!modifies.includes(ad.rubrique)) modifies.push(ad.rubrique);
+        // Emplacement « [À COMPLÉTER] » disparu avec la phrase adaptée : sa question n'est plus posée.
+        const tout = Object.values(lib.sections).join('\n');
+        etat.elements = etat.elements.filter((e) => !(e.statut === 'ouvert' && e.reperes?.length && e.reperes.every((n) => avant.includes(REPERE(n)) && !tout.includes(REPERE(n)))));
+      }
     } else if (a?.type === 'supprimer' && ids.includes(a.id)) {
       lib.sections[a.id] = '';
       lib.ajouts = lib.ajouts.filter((x) => x.id !== a.id);
@@ -505,7 +608,7 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
     const photo = actions.some((a) => a?.type === 'image' && a.id === visible);
     if (visible) page = pageDe(etat.fichier, titreRubrique(etat, visible), photo);
   }
-  let reponse = String(plan.reponse || (modifies.length || valides.length ? 'Modification effectuée.' : "Je n'ai rien modifié.")).trim();
+  let reponse = avecAdaptations(String(plan.reponse || (modifies.length || valides.length || messagesAdaptations.length ? 'Modification effectuée.' : "Je n'ai rien modifié.")).trim(), messagesAdaptations, adaptations);
   if (partiesGardees.length) reponse += ` ${partiesGardees.length > 1 ? 'Les parties' : 'La partie'} ${partiesGardees.map((t) => `« ${t} »`).join(', ')} ${partiesGardees.length > 1 ? 'sont imposées' : 'est imposée'} par le règlement de consultation : je ne peux pas ${partiesGardees.length > 1 ? 'les' : 'la'} supprimer. Dites-moi plutôt quel passage retirer.`;
   if (valides.length && !/valid/i.test(reponse)) reponse += ` Proposition${valides.length > 1 ? 's' : ''} validée${valides.length > 1 ? 's' : ''} : ${valides.map((t) => `« ${t} »`).join(', ')}.`;
   const aValider = modifies.filter(enAttente).map((id) => titreRubrique(etat, id));

@@ -66,10 +66,11 @@ EP.create = async function (body: any) {
   const adapte = String((globalThis as any).__adapte || '').replace(/(\d+)/, (x) => String(Number(x) + 7));
   const ou = Object.keys(sections).filter((k) => /imprimons les rapports d'intervention requis/.test(sections[k]) || (adapte && sections[k].includes(adapte)));
   console.log('adaptation simulée :', (globalThis as any).__adapte, '→', adapte);
-  const lignes = (r.consultations || []).filter((c: string) => /adaptée au cahier des charges/.test(c));
+  // Liste unique D8 depuis la fusion de signalement-cctp : « Phrases adaptées au cahier des charges du client (n) — n° … ».
+  const lignes = (r.consultations || []).filter((c: string) => /adaptées? au cahier des charges/.test(c));
   const msg = String(etat?.conversation?.[0]?.texte || '');
-  console.log(JSON.stringify({ rubriques_adaptees: ou, consultations: lignes, premier_message_adaptation: msg.split('\n').filter((l) => /adapté|devient|rétablir/.test(l)) }, null, 1));
-  const ok = ou.length > 0 && lignes.length === ou.length && /devient/.test(msg);
+  console.log(JSON.stringify({ rubriques_adaptees: ou, consultations: lignes, premier_message_adaptation: msg.split('\n').filter((l) => /adapté|Phrase adaptée|rétablir/.test(l)) }, null, 1));
+  const ok = ou.length > 0 && lignes.length >= ou.length && /Phrases adaptées au cahier des charges du client/.test(msg) && lignes.some((l: string) => /imprimons les rapports d'intervention requis|\d+ (?:heures?|minutes)/.test(l));
   console.log(ok ? 'OK' : 'KO');
   process.exit(ok ? 0 : 1);
 })().catch((e) => { console.error(e); process.exit(2); });
