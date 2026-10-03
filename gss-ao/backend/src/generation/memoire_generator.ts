@@ -29,7 +29,7 @@ import {
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, attendusDuChamp, attendusSansReponse,
 } from './memoire_type_cadre';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
 import os from 'os';
@@ -1375,6 +1375,9 @@ export function questionExacte(q: string): string {
   if (aConfirmer) return `Confirmez-vous ce point : « ${sansFin(aConfirmer[1])} » ?`;
   const delaiPropose = /^Délai proposé hors Normandie, à confirmer par GSS \(organisation locale\)\s*:\s*(.+)$/i.exec(t);
   if (delaiPropose) return `Hors Normandie, validez-vous ce délai proposé (organisation locale) : « ${sansFin(delaiPropose[1])} » ?`;
+  // Lieu du site introuvable dans le DCE (T7-COH-2) : le délai de GSS n'est valable que si le site est en Normandie.
+  const delaiLieu = /^Délai retiré faute de lieu du site dans le DCE, à confirmer par GSS\s*:\s*(.+)$/i.exec(t);
+  if (delaiLieu) return `Le DCE ne donne pas la commune du site : si le site est en Normandie, validez-vous ce délai : « ${sansFin(delaiLieu[1])} » ? Sinon, quel délai GSS annonce-t-elle ?`;
   const horsNormandie = /^Marché hors Normandie\s*:\s*délai à confirmer par GSS \((.+)\)\.?$/i.exec(t);
   if (horsNormandie) return `Marché hors Normandie : quel délai GSS annonce-t-elle (${horsNormandie[1]}) ?`;
   const exigence = /^Exigence du (DCE|CCTP)( sans réponse dans le mémoire| à laquelle le mémoire (?:doit répondre|ne répond pas encore)[^:]*)\s*:\s*(.+)$/i.exec(t);
@@ -2221,6 +2224,11 @@ function inferFieldHint(context: string): string {
  * Le DCE cite un cadre de réponse imposé (« cadre de réponse technique », « cadre du mémoire ») mais aucun
  * n'est dans les pièces : la réponse libre risque d'être jugée irrégulière. GSS est prévenu.
  */
+/** Libellé d'un délai normand retiré (hors Normandie, ou lieu du site introuvable : T7-COH-2). */
+export function libelleDelaiRetire(analyse: any, dce: string): string {
+  return lieuDuMarche(analyse || {}, dce || '').statut === 'inconnu' ? 'Délai retiré faute de lieu du site dans le DCE, à confirmer par GSS : ' : 'Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ';
+}
+
 export function alerteCadreAbsent(dce: string): string[] {
   const t = String(dce || '');
   // Nom du document seul (« cadre de réponse technique », « cadre de réponse technique et RSE », « cadre du mémoire
@@ -5701,7 +5709,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       if (repriseMT?.prep.variables.CLIENT?.valeur) r.value = harmoniserNomClient(String(r.value), String(repriseMT.prep.variables.CLIENT.valeur));
       if (recopie.retires.length) console.log(`[MemoireGenerator] Champ ${r.id} : ${recopie.retires.length} phrase(s) du CCTP recopiée(s) à la voix de l'acheteur retirée(s).`);
       retires.forEach((x) => confirmationsGss.add(`À confirmer : ${x}`));
-      delais.retires.forEach((x) => confirmationsGss.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
+      delais.retires.forEach((x) => confirmationsGss.add(`${libelleDelaiRetire(analysisData, dceContext)}${x}`));
     }
     // Forme longue de l'acheteur à la première mention, forme courte ensuite (ca_normandie 221 : « Ministère de la Justice –
     // Service administratif régional de Rouen / BOP Normand (…) » 11 fois → « le SAR de Rouen » après la première).
@@ -6594,6 +6602,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
               return precises.length ? precises : [q];
             }), ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))]),
         ].map((c) => (/p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(c) ? 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».' : c).replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean).map(questionDonneeGss).map(questionExacte)),
+        // Lieu du site introuvable dans le DCE (T7-COH-2) : une seule question, aucun délai normand promis en attendant.
+        ...questionLieuInconnu(analysisData, dceContext),
         // Grille de candidature : une question exacte par donnée de GSS (effectif, cadres, chiffre d'affaires, référence).
         ...questionsGrilleCandidature,
         // Une ligne par réponse à relire ou à valider ; jamais un repère interne (« [champ_24] ») : l'intitulé du champ ;
@@ -7516,7 +7526,7 @@ RÈGLES DE FORME (rendu Marp) :
         nettoye.retires.forEach((x) => commentairesRetires.add(`À confirmer : ${x}`));
         const delais = delaisHorsNormandie(text, dceContext, horsNormandieLibre);
         text = delais.texte;
-        delais.retires.forEach((x) => commentairesRetires.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
+        delais.retires.forEach((x) => commentairesRetires.add(`${libelleDelaiRetire(analysisData, dceContext)}${x}`));
       }
       sectionsMap[section.id] = text || '';
       if (!text) console.error(`[MemoireGenerator] Rubrique « ${section.title} » non rédigée (IA indisponible, aucune réponse GSS à reprendre).`);
@@ -7539,7 +7549,7 @@ RÈGLES DE FORME (rendu Marp) :
     // Deux sources : (1) les écarts détectés par la matrice de conformité ; (2) les marqueurs
     // [CONSULTATION REQUISE : …] que le rédacteur a insérés faute de réponse spécifique dans la Doc GSS.
     const consultations = new Set<string>([
-      ...alerteCadreAbsent(dceContext),
+      ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),
       ...commentairesRetires,
       // Valeurs du registre encore « à confirmer » reprises dans le texte : GSS est prévenu.
       ...confirmationsRegistreUtilisees(Object.values(sectionsMap).join('\n'), horsNormandieLibre),
@@ -7880,7 +7890,7 @@ RÈGLES DE FORME (rendu Marp) :
       const nettoye = retirerCommentairesInternes(protegerGras(sections[id]));
       nettoye.retires.forEach((x) => commentairesRetires.add(`À confirmer : ${retablirGras(x)}`));
       const delais = delaisHorsNormandie(retablirGras(nettoye.texte), dceContext, horsNormandie);
-      delais.retires.forEach((x) => commentairesRetires.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
+      delais.retires.forEach((x) => commentairesRetires.add(`${libelleDelaiRetire(analysisData, dceContext)}${x}`));
       suivi.noterFiltres(id, retablirGras(nettoye.texte), delais.texte, dceContext, horsNormandie, analysisData);
       sections[id] = delais.texte;
     }
@@ -7930,7 +7940,7 @@ RÈGLES DE FORME (rendu Marp) :
     progres(80, 'Données à compléter et questions à GSS…');
     const titreDe = (id: string) => rubriquesDoc.find((r) => r.id === id)?.title || id;
     const consultations = new Set<string>([
-      ...alerteCadreAbsent(dceContext),
+      ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),
       ...commentairesRetires,
       ...alertesAcheteurs,
       ...questionsCouverture,
@@ -9122,7 +9132,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
         nettoye.retires.forEach((x) => commentairesRetires.add(`À confirmer : ${x}`));
         const delais = delaisHorsNormandie(texte, dceContext, horsNormandie);
         texte = delais.texte;
-        delais.retires.forEach((x) => commentairesRetires.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
+        delais.retires.forEach((x) => commentairesRetires.add(`${libelleDelaiRetire(analysisData, dceContext)}${x}`));
       }
       sections[p.id] = (texte || '').replace(/^#\s+[^\n]*\n+/, '').trim();
     }
@@ -9142,7 +9152,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
 
     // ── Points à compléter (même logique que la réponse libre) ──
     const consultations = new Set<string>([
-      ...alerteCadreAbsent(dceContext),...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie)]);
+      ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie)]);
     for (const r of requirementsMatrix) if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence)) consultations.add(r.exigence.trim());
     const markerRe = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
     const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
@@ -9428,7 +9438,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       const nettoye = retirerCommentairesInternes(protegerGras(sections[id]));
       nettoye.retires.forEach((x) => commentairesRetires.add(`À confirmer : ${retablirGras(x)}`));
       const delais = delaisHorsNormandie(retablirGras(nettoye.texte), dceContext, horsNormandie);
-      delais.retires.forEach((x) => commentairesRetires.add(`Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ${x}`));
+      delais.retires.forEach((x) => commentairesRetires.add(`${libelleDelaiRetire(analysisData, dceContext)}${x}`));
       suivi.noterFiltres(id, retablirGras(nettoye.texte), delais.texte, dceContext, horsNormandie, analysisData);
       sections[id] = delais.texte;
     }
@@ -9449,7 +9459,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     // ── 8. Points à compléter (même logique que le format court d'avant) ──
     const confirmationsAvantSelection = confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie);
     const consultations = new Set<string>([
-      ...alerteCadreAbsent(dceContext), ...commentairesRetires, ...questionsCouverture, ...formalitesCourt.map(questionFormalite), ...confirmationsAvantSelection,
+      ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext), ...commentairesRetires, ...questionsCouverture, ...formalitesCourt.map(questionFormalite), ...confirmationsAvantSelection,
       ...publiees.filter((p) => toutesRetenues.includes(p.id)).flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)])
         .flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
     ]);

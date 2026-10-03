@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { lignesEquipe, questionDimensionnement, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, sitesDuMarche, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss } from './base_memoires';
+import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -523,7 +523,8 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
       if (valeur) raisons.push('choix de GSS');
     } else if (def.calcul === 'hors_normandie') {
       valeur = ctx.horsNormandie ?? marcheHorsNormandie(ctx.analyse || {}, ctx.dce || '');
-      raisons.push(valeur ? 'codes postaux hors Normandie' : 'site en Normandie (ou aucun code postal)');
+      const lieu = ctx.horsNormandie === undefined ? lieuDuMarche(ctx.analyse || {}, ctx.dce || '') : null;
+      raisons.push(lieu ? `${lieu.statut === 'inconnu' ? 'lieu du site introuvable dans le DCE' : lieu.statut === 'mixte' ? 'sites en Normandie et hors Normandie' : lieu.statut === 'hors' ? 'site hors Normandie' : 'site en Normandie'} (${lieu.source})` : valeur ? 'marché hors Normandie (choix)' : 'marché en Normandie (choix)');
     } else {
       if (def.dce) {
         const rx = new RegExp(def.dce, 'i');
@@ -1307,6 +1308,13 @@ function delai(c: CalculVariables, nom: string, sujet: keyof typeof SUJETS_DELAI
     if (sites.mixte) {
       const normand = def.registre ? depuisRegistre(c, def.registre, normaliserDelai).valeur : def.valeur_gss || '';
       return { valeur: null, question: `Marché en partie hors Normandie (${sites.horsNormandie.length > 1 ? 'sites' : 'site'} de ${listeFr(sites.horsNormandie)}) : ${normand ? `GSS annonce ${normand} en Normandie pour ce délai (${objet}) ; ` : ''}quel délai GSS annonce-t-elle pour ${sites.horsNormandie.length > 1 ? 'les sites' : 'le site'} de ${listeFr(sites.horsNormandie)}${normand ? '' : ` (${objet})`} ?` };
+    }
+    // Lieu du site introuvable dans le DCE (T7-COH-2) : aucun délai normand promis ; la question le dit et rappelle le délai
+    // de GSS en Normandie, pour que GSS réponde le bon délai.
+    if (c.ctx.horsNormandie === undefined && c.ctx.choix?.indicateurs?.HORS_NORMANDIE === undefined
+      && lieuDuMarche(c.ctx.analyse || {}, c.ctx.dce || '').statut === 'inconnu') {
+      const normand = def.registre ? depuisRegistre(c, def.registre, normaliserDelai).valeur : def.valeur_gss || '';
+      return { valeur: null, question: `Le DCE ne donne pas la commune du site : quel délai GSS annonce-t-elle (${objet}) ?${normand ? ` Si le site est en Normandie, GSS annonce ${normand}.` : ''}` };
     }
     return { valeur: null, question: `Marché hors Normandie : quel délai GSS annonce-t-elle (${objet}) ?` };
   }

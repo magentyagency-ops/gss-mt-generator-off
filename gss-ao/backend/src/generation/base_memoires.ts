@@ -598,33 +598,124 @@ export function questionDelaiInapplicable(question: string, dce: string, horsNor
 /** Départements cités en toutes lettres entre parenthèses (Normandie et départements les plus fréquents des DCE). */
 const DEPARTEMENTS: Record<string, string> = { 'calvados': '14', 'eure': '27', 'manche': '50', 'orne': '61', 'seine maritime': '76', 'nord': '59', 'pas de calais': '62', 'somme': '80', 'oise': '60', 'aisne': '02', 'paris': '75', 'seine et marne': '77', 'yvelines': '78', 'essonne': '91', 'hauts de seine': '92', 'seine saint denis': '93', 'val de marne': '94', 'val d oise': '95', 'eure et loir': '28', 'sarthe': '72', 'mayenne': '53', 'ille et vilaine': '35', 'loiret': '45', 'marne': '51', 'bas rhin': '67', 'haut rhin': '68', 'rhone': '69', 'gironde': '33', 'loire atlantique': '44', 'isere': '38', 'bouches du rhone': '13', 'haute garonne': '31', 'herault': '34', 'alpes maritimes': '06', 'var': '83', 'moselle': '57', 'meurthe et moselle': '54', 'finistere': '29', 'morbihan': '56', 'cotes d armor': '22', 'maine et loire': '49', 'indre et loire': '37', 'loir et cher': '41', 'cher': '18', 'vienne': '86', 'charente maritime': '17' };
 
+/** Lieu du marché (T7-COH-2) : sites du DCE, puis communes nommées, puis toutes les adresses ; « inconnu » sans indice. */
+export type LieuMarche = { statut: 'normandie' | 'hors' | 'mixte' | 'inconnu'; normands: string[]; horsNormandie: string[]; source: string };
+
+/** Communes de Normandie les plus citées (sites des marchés de GSS) et grandes villes hors Normandie, pour un DCE sans code postal. */
+const COMMUNES_NORMANDES = ['Rouen', 'Le Havre', 'Caen', 'Cherbourg', 'Cherbourg-en-Cotentin', 'Évreux', 'Dieppe', 'Saint-Étienne-du-Rouvray',
+  'Sotteville-lès-Rouen', 'Grand-Quevilly', 'Petit-Quevilly', 'Alençon', 'Vernon', 'Lisieux', 'Saint-Lô', 'Fécamp', 'Elbeuf', 'Mont-Saint-Aignan',
+  'Louviers', 'Hérouville-Saint-Clair', 'Montivilliers', 'Bayeux', 'Granville', 'Argentan', 'Flers', 'Val-de-Reuil', 'Bois-Guillaume', 'Déville-lès-Rouen',
+  'Maromme', 'Canteleu', 'Darnétal', 'Barentin', 'Yvetot', 'Bolbec', 'Lillebonne', 'Harfleur', "Gonfreville-l'Orcher", 'Honfleur', 'Deauville',
+  'Trouville-sur-Mer', 'Coutances', 'Avranches', 'Bernay', 'Pont-Audemer', 'Gisors', 'Les Andelys', 'Vire', 'Falaise', 'Mondeville', 'Ouistreham',
+  'Le Tréport', 'Grand-Couronne', 'Oissel', 'Isneauville', 'Petit-Couronne', 'Bihorel', 'Seine-Maritime', 'Calvados'];
+const VILLES_HORS_NORMANDIE = ['Paris', 'Marseille', 'Lyon', 'Toulouse', 'Nice', 'Nantes', 'Montpellier', 'Strasbourg', 'Bordeaux', 'Lille', 'Rennes',
+  'Reims', 'Toulon', 'Saint-Étienne', 'Grenoble', 'Dijon', 'Angers', 'Nîmes', 'Villeurbanne', 'Clermont-Ferrand', 'Le Mans', 'Aix-en-Provence', 'Brest',
+  'Limoges', 'Amiens', 'Perpignan', 'Metz', 'Besançon', 'Orléans', 'Mulhouse', 'Boulogne-Billancourt', 'Montreuil', 'Saint-Denis', 'Argenteuil', 'Nancy',
+  'Roubaix', 'Tourcoing', 'Nanterre', 'Vitry-sur-Seine', 'Créteil', 'Avignon', 'Poitiers', 'Versailles', 'Courbevoie', 'Colombes', 'Asnières-sur-Seine',
+  'Aulnay-sous-Bois', 'Rueil-Malmaison', 'La Rochelle', 'Calais', 'Champigny-sur-Marne', 'Antibes', 'Béziers', 'Cannes', 'Saint-Maur-des-Fossés',
+  'Dunkerque', 'Bourges', 'Ivry-sur-Seine', 'Quimper', 'Troyes', 'Chartres', 'Beauvais', 'Évry', 'Étampes', 'Fontainebleau', 'Melun', 'Meaux', 'Cergy',
+  'Pontoise', 'Laval', 'Lorient', 'Vannes', 'Saint-Malo', 'Saint-Nazaire', 'Niort', 'Angoulême', 'Chambéry', 'Annecy', 'Belfort', 'Colmar', 'Arras',
+  'Douai', 'Valenciennes', 'Compiègne', 'Soissons', 'Châlons-en-Champagne', 'Charleville-Mézières', 'Bayonne', 'Tarbes', 'Ajaccio', 'Bastia', 'Villejuif',
+  'Thiais', 'Saint-Mandé', 'Neuilly-sur-Marne', 'Neuilly-sur-Seine', "Saint-Martin-d'Hères", 'Montrouge', 'Vincennes', 'Issy-les-Moulineaux', 'Puteaux',
+  'Massy', 'Palaiseau', 'Saclay'];
+const ADMIN_LIEU = /cedex|\bB\.?P\.?\s*\d|bo[îi]te postale|si[èe]ge|DREETS|DIRECCTE|DDETS|DRFIP|DGFIP|finances publiques|tribunal|cour administrative|cour d.appel|pr[ée]fecture|CNAPS|inspection du travail|URSSAF|tr[ée]sor|paierie|comptable|greffe|minist[èe]re/i;
+/** Expression d'une commune : accents et tirets libres, jamais le début d'un nom composé (« Saint-Étienne-du-Rouvray »). */
+function rxCommune(nom: string): RegExp {
+  const corps = nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/[aeiouc]/gi, (c) => ({ a: '[aàâä]', e: '[eéèêë]', i: '[iîï]', o: '[oôö]', u: '[uùûü]', c: '[cç]' } as Record<string, string>)[c.toLowerCase()] || c)
+    .replace(/[- ]/g, "[-\u2011 ]+").replace(/'/g, "['’]");
+  return new RegExp(`(?<![\\wÀ-ÿ'’-])${corps}(?![\\wÀ-ÿ]|[-\u2011'’][A-Za-zÀ-ÿ]|[-\u2011 ]+(?:du|de|des|sur|sous|lès|les|lez|en)[- ][A-ZÀ-Ýa-zà-ÿ])`, 'gi');
+}
+const RX_NORMANDES = COMMUNES_NORMANDES.map((n) => ({ nom: n, rx: rxCommune(n) }));
+const RX_HORS = VILLES_HORS_NORMANDIE.map((n) => ({ nom: n, rx: rxCommune(n) }));
+/** Communes nommées hors adresse postale et hors adresse administrative (tribunal, préfecture…), avec leur nombre de citations. */
+function communesNommees(texte: string): { normands: Map<string, number>; hors: Map<string, number> } {
+  const compter = (liste: Array<{ nom: string; rx: RegExp }>) => {
+    const out = new Map<string, number>();
+    for (const { nom, rx } of liste) {
+      for (const m of texte.matchAll(rx)) {
+        if (!/^[A-ZÀ-Ý]/.test(m[0])) continue;                         // nom propre : « Lyon », « LYON », jamais « lyon »
+        const debut = m.index || 0;
+        const avant = texte.slice(Math.max(0, debut - 80), debut);
+        if (/\d{5}\s*[–—,-]?\s*$/.test(avant)) continue;              // adresse postale : déjà lue par code postal
+        // Nom de voie (« 12 rue de Paris », « route de Lyon ») : pas une commune.
+        if (/\b(?:rue|avenue|av\.|boulevard|bd|route|chemin|place|quai|all[ée]e|cours|impasse|porte|gare|pont|square|esplanade)\s+(?:de\s+(?:la\s+)?|d['’]|du\s+|des\s+)?$/i.test(avant)) continue;
+        if (ADMIN_LIEU.test(avant.slice(-60)) || ADMIN_LIEU.test(texte.slice(debut + m[0].length, debut + m[0].length + 14))) continue;
+        out.set(nom, (out.get(nom) || 0) + 1);
+      }
+    }
+    return out;
+  };
+  return { normands: compter(RX_NORMANDES), hors: compter(RX_HORS) };
+}
+
+const cacheLieux = new Map<string, LieuMarche>();
 /**
- * Vrai si le marché se situe hors de Normandie (zone d'intervention habituelle de GSS), d'après les codes
- * postaux de l'analyse du DCE et du début du DCE. Faux si aucun code postal n'est trouvé (doute → pas de filtre).
+ * Lieu du marché, dans l'ordre (T7-COH-2) : 1) les sites du DCE par code postal (adresses administratives et adresse
+ * d'identification de l'acheteur exclues) ; 2) sans site par code postal, les communes et départements nommés (« Métropole
+ * de Lyon … Lyon 3e », « site de Caen ») ; 3) toutes les adresses du DCE (mairie « BP 109 / 91152 ETAMPES CEDEX ») ; 4) sinon
+ * « inconnu » : aucun délai normand n'est promis et la question est posée à GSS (questionLieuInconnu).
  */
-export function marcheHorsNormandie(analyse: any, dce: string): boolean {
-  const texte = `${JSON.stringify(analyse || {})} ${String(dce || '').slice(0, 40000)}`;
-  // Code postal suivi de la commune, avec ou sans séparateur (« 93330 Neuilly », « 93330 – Neuilly-sur-Marne »,
-  // « 93330, Neuilly »), ou code entre parenthèses après la commune (« Lille (59000) »). Le \b initial écarte les
-  // longues suites de chiffres des formulaires. La commune commence par une majuscule et n'est jamais une unité : une
-  // surface ou une jauge écrite en chiffres (« 12000 m² », « 18962 m2 », « 45000 visiteurs ») n'est pas un code postal
-  // (T3-COH-1 : becquerel avec « 12000 m² » passait hors Normandie).
-  const UNITE = /^(?:m[²³23]?|km|ha|h|heures?|€|eur|euros?|ht|ttc|personnes?|visiteurs?|spectateurs?|places?|agents?|salari[ée]s?|habitants?|usagers?|[ée]l[èe]ves?|[ée]tudiants?|passages?|entr[ée]es?|lits?|logements?|v[ée]hicules?)$/i;
-  const codes = [
-    ...[...texte.matchAll(/\b(\d{2})\d{3}\s*(?:[–—,-]\s*)?([A-ZÉÈÀÂÎÔÛ][\wÀ-ÿ²³]*)/g)].filter((m) => !UNITE.test(m[2])).map((m) => m[1]),
-    ...[...texte.matchAll(/\(\s*(\d{2})\d{3}\s*\)/g)].map((m) => m[1]),
-  ].filter((d) => Number(d) >= 1 && Number(d) <= 95);
-  // Département nommé entre parenthèses après la commune (« Neuilly-sur-Marne (Seine-Saint-Denis) »).
+export function lieuDuMarche(analyse: any, dce: string): LieuMarche {
+  const cle = `${JSON.stringify(analyse || {})}\u0000${dce || ''}`;
+  const connu = cacheLieux.get(cle);
+  if (connu) return connu;
+  const r = calculerLieu(analyse, dce);
+  if (cacheLieux.size > 8) cacheLieux.clear();
+  cacheLieux.set(cle, r);
+  return r;
+}
+function calculerLieu(analyse: any, dce: string): LieuMarche {
+  const sites = sitesDuMarche(analyse, dce);
+  if (sites.normands.length || sites.horsNormandie.length) {
+    return { statut: sites.mixte ? 'mixte' : sites.horsNormandie.length ? 'hors' : 'normandie', normands: sites.normands, horsNormandie: sites.horsNormandie, source: 'sites du DCE (codes postaux)' };
+  }
+  const texte = `${JSON.stringify(analyse || {})}\n${String(dce || '')}`.replace(/\\n/g, '\n');
+  // Département nommé entre parenthèses après la commune (« Neuilly-sur-Marne (Seine-Saint-Denis) », « Strasbourg (Bas-Rhin) »).
+  const deps: string[] = [];
   for (const m of texte.matchAll(/\(\s*([A-ZÉÈa-zéè][A-Za-zÀ-ÿ' -]{2,30}?)\s*\)/g)) {
     const d = DEPARTEMENTS[m[1].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[\s'-]+/g, ' ').trim()];
-    if (d) codes.push(d);
+    if (d) deps.push(d);
   }
-  if (!codes.length) return false;
-  const normands = codes.filter((d) => ['14', '27', '50', '61', '76'].includes(d)).length;
-  // Sites mixtes (T4-COH-3 : « site A à Rouen (76000) et site B à Paris (75013) ») : un délai normand de GSS ne se promet
-  // jamais pour tout le marché ; le marché est traité comme hors Normandie (aucun délai chiffré non imposé, question à GSS).
-  if (sitesDuMarche(analyse, dce).mixte) return true;
-  return normands < codes.length / 2;
+  const noms = communesNommees(texte);
+  const nN = [...noms.normands.values()].reduce((a, b) => a + b, 0) + deps.filter((d) => NORMANDIE.includes(d)).length;
+  const nH = [...noms.hors.values()].reduce((a, b) => a + b, 0) + deps.filter((d) => !NORMANDIE.includes(d)).length;
+  if (nN || nH) {
+    const normands = [...noms.normands.keys()];
+    const hors = [...noms.hors.keys()];
+    // Les deux régions citées : la région largement majoritaire l'emporte ; sinon le marché est traité comme mixte
+    // (aucun délai normand promis pour tout le marché).
+    const statut = nN && nH ? (nN >= 3 * nH ? 'normandie' : nH >= 3 * nN ? 'hors' : 'mixte') : nN ? 'normandie' : 'hors';
+    return { statut, normands, horsNormandie: hors, source: 'communes nommées dans le DCE' };
+  }
+  // Toutes les adresses du début du DCE, administratives comprises (etampes1 : seule l'adresse postale de la mairie), comme
+  // avant T7-COH-2.
+  const debut = `${JSON.stringify(analyse || {})} ${String(dce || '').slice(0, 40000)}`;
+  const UNITE = /^(?:m[²³23]?|km|ha|h|heures?|€|eur|euros?|ht|ttc|personnes?|visiteurs?|spectateurs?|places?|agents?|salari[ée]s?|habitants?|usagers?|[ée]l[èe]ves?|[ée]tudiants?|passages?|entr[ée]es?|lits?|logements?|v[ée]hicules?)$/i;
+  const codes = [
+    ...[...debut.matchAll(/\b(\d{2})\d{3}\s*(?:[–—,-]\s*)?([A-ZÉÈÀÂÎÔÛ][\wÀ-ÿ²³]*)/g)].filter((m) => !UNITE.test(m[2])).map((m) => m[1]),
+    ...[...debut.matchAll(/\(\s*(\d{2})\d{3}\s*\)/g)].map((m) => m[1]),
+  ].filter((d) => Number(d) >= 1 && Number(d) <= 95);
+  if (codes.length) {
+    const normands = codes.filter((d) => NORMANDIE.includes(d)).length;
+    return { statut: normands < codes.length / 2 ? 'hors' : 'normandie', normands: [], horsNormandie: [], source: 'adresses du DCE (codes postaux)' };
+  }
+  return { statut: 'inconnu', normands: [], horsNormandie: [], source: 'aucun lieu trouvé dans le DCE' };
+}
+
+/**
+ * Vrai si le marché se situe hors de Normandie (zone d'intervention habituelle de GSS), ou s'il est à sites mixtes, ou si
+ * le DCE ne permet pas de situer le site (T7-COH-2 : sans code postal, les délais normands étaient promis à Lyon ou Lille ;
+ * le doute ne promet plus aucun délai normand, et la question est posée à GSS par questionLieuInconnu).
+ */
+export function marcheHorsNormandie(analyse: any, dce: string): boolean {
+  return lieuDuMarche(analyse, dce).statut !== 'normandie';
+}
+
+/** Question à GSS quand le DCE ne permet pas de situer le site du marché (une seule, posée dans les consultations). */
+export function questionLieuInconnu(analyse: any, dce: string): string[] {
+  if (!String(dce || '').trim() || lieuDuMarche(analyse, dce).statut !== 'inconnu') return [];
+  return ["Le DCE ne donne pas la commune du site : le marché est-il en Normandie ? En attendant votre réponse, le mémoire ne promet aucun délai d'intervention normand de GSS."];
 }
 
 const NORMANDIE = ['14', '27', '50', '61', '76'];
@@ -647,11 +738,14 @@ export function sitesDuMarche(analyse: any, dce: string): { normands: string[]; 
     const avant = texte.slice(Math.max(0, debut - 200), debut).split('\n').slice(-3).join(' ');
     const apres = texte.slice(fin, fin + 12);
     if (ADMIN.test(apres) || ADMIN.test(avant.slice(-140))) return;
+    // Adresse d'identification de l'acheteur (« Pouvoir adjudicateur : … 93100 Montreuil », T7-COH-2) : pas un site.
+    if (/(?:pouvoir adjudicateur|acheteur|ma[îi]tre d.ouvrage|entit[ée] adjudicatrice)\s*:|(?:nom et adresse|identification|coordonn[ée]es)\s+(?:officiel(?:le)?s?\s+)?(?:du|de l.|de la)\s*(?:pouvoir adjudicateur|acheteur|organisme|entit[ée])/i.test(avant.slice(-140))) return;
     const c = commune.replace(/\s+(?:t[ée]l|tel|fax|courriel|mail|et|pour|le|la|les)\b.*$/i, '').replace(/\s+-/g, '-').trim();
     (NORMANDIE.includes(dep) ? normands : hors).set(code, c);
   };
   // « 76000 Rouen », « 93330 – Neuilly-sur-Marne »
-  for (const m of texte.matchAll(/\b(\d{5})\s*(?:[–—,-]\s*)?([A-ZÉÈÀÂÎÔÛ][\wÀ-ÿ²³'’-]*(?:[ -](?!cedex|CEDEX|Cedex)[A-Za-zÀ-ÿ'’-]+){0,4})/g)) {
+  // Jamais un identifiant d'adresse web (« jsessionid=13653C8FC4… », ca_normandie) : la commune ne contient aucun chiffre.
+  for (const m of texte.matchAll(/(?<![=/?&#.])\b(\d{5})\s*(?:[–—,-]\s*)?([A-ZÉÈÀÂÎÔÛ][A-Za-zÀ-ÿ²³'’-]*(?![\d])(?:[ -](?!cedex|CEDEX|Cedex)[A-Za-zÀ-ÿ'’-]+){0,4})/g)) {
     if (!UNITE.test(m[2])) ajouter(m[1], m[2], m.index || 0, (m.index || 0) + m[0].length);
   }
   // « Rouen (76000) », « Paris (75013) »

@@ -27,7 +27,7 @@
 // comme une exigence du CCTP (T6C-10).
 
 import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, variableRenseignee, phraseDelaiDuDce, phraseDuDceContenant, VARIABLES_IMPOSABLES, SUJET_VARIABLE_DELAI, type MemoireType, type ContexteMarche } from './memoire_type';
-import { sitesDuMarche } from './base_memoires';
+import { sitesDuMarche, lieuDuMarche } from './base_memoires';
 
 export type StatutAdaptation = 'a_valider' | 'validee' | 'modifiee' | 'retablie';
 
@@ -275,8 +275,13 @@ export function exigenceHorsNormandie(dce: string, analyse: any): string {
     return '';
   })();
   const de = (x: string) => (/^[aeiouyàâéèêëîïôöûüh]/i.test(x) ? `d'${x}` : `de ${x}`);
-  const lieu = hors.length ? `${hors.length > 1 ? 'sites' : 'site'} ${de(listeFr(hors))}` : commune ? `marché ${de(commune)}` : 'site du marché';
-  const motif = `${sites.mixte ? 'Marché en partie hors Normandie' : 'Marché hors Normandie'} (${lieu}) : les délais et les moyens de mobilisation que GSS annonce en Normandie ne sont pas promis ici, et le DCE n'en impose aucun pour ce point`;
+  // Communes nommées sans code postal (« Métropole de Lyon … Lyon 3e », T7-COH-2) ; lieu introuvable : dit tel quel.
+  const lieuMarche = lieuDuMarche(analyse || {}, dce || '');
+  const nommees = !hors.length && !commune ? lieuMarche.horsNormandie : [];
+  const lieu = hors.length ? `${hors.length > 1 ? 'sites' : 'site'} ${de(listeFr(hors))}` : commune ? `marché ${de(commune)}` : nommees.length ? `marché ${de(listeFr(nommees))}` : 'site du marché';
+  const motif = lieuMarche.statut === 'inconnu' && !hors.length && !commune
+    ? "Lieu du site introuvable dans le DCE : les délais et les moyens de mobilisation que GSS annonce en Normandie ne sont pas promis tant que GSS n'a pas confirmé que le site est en Normandie, et le DCE n'en impose aucun pour ce point"
+    : `${sites.mixte ? 'Marché en partie hors Normandie' : 'Marché hors Normandie'} (${lieu}) : les délais et les moyens de mobilisation que GSS annonce en Normandie ne sont pas promis ici, et le DCE n'en impose aucun pour ce point`;
   return citation ? `${motif}. Lieu d'exécution cité par le DCE : « ${citation.length > 220 ? `${citation.slice(0, 220).replace(/\s+\S*$/, '')}…` : citation} »` : `${motif}.`;
 }
 
