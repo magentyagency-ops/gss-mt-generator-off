@@ -12,7 +12,7 @@ import {
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
   type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, harmoniserVariantesAcheteur, formeCourteApresPremiere, phrasesGeneralesProtegees, ajoutContraireAuxDelaisGss,
-  variablesDesSchemas, lotsDuMemoire,
+  variablesDesSchemas, lotsDuMemoire, nomAcheteurAffiche,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
@@ -8504,6 +8504,8 @@ RÈGLES DE FORME (rendu Marp) :
     actualiserOrganigramme(referents);
     await this.schemasMemoireType(plan, mt, publiees, propres, schemasGeneres, titresSchemas, theme);
     progres(90, 'Assemblage final du mémoire…');
+    // Nom de l'acheteur affiché (couverture, sommaire, ouvertures, pieds de page) : forme corrigée de CLIENT (T1-COH-6).
+    cover.client = nomAcheteurAffiche(prep.variables.CLIENT, cover.client);
     const rendu = await this.rendreDepuisSections(propres, dossierId, { onProgress, cover, schemas: schemasGeneres, ajouts, theme, plan, titresSchemas });
     // Page de schéma prévue et absente du document rendu (moteur de schémas indisponible ou hors délai, schéma refusé :
     // T6-COH-4, T6N-6) : signalée à GSS, compréhension du besoin en tête (consigne 3, D4). Rien n'est imprimé dans le mémoire.
@@ -9969,6 +9971,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const infosRubriques = plan.flatMap((p) => infosDe(p.id));
     // Organigramme et schéma de process de la compréhension : jamais retirés pour gagner de la place.
     const schemas: Record<string, string> = Object.fromEntries(choixSchemas.map((c) => [c.id === 'organigramme' ? `${c.cle}#court#organigramme` : c.id === 'comprehension' ? `${c.cle}#court#process` : `${c.cle}#court`, c.svg]));
+    // Nom de l'acheteur affiché (couverture, en-têtes) : forme corrigée de CLIENT (T1-COH-6).
+    cover.client = nomAcheteurAffiche(prep.variables.CLIENT, cover.client);
     let rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
     // Le rendu mesuré fait foi : on garde la plus grande part des passages de GSS qui tient dans la limite à la police
     // normale (10 pt), en retirant d'abord les passages de plus faible priorité (jamais de réécriture). Recherche par
