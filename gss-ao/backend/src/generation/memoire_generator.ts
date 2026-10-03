@@ -1521,6 +1521,15 @@ export function motifRefusEngagement(x: string): string {
     || /\b(?:fourni(?:t|r|ra)?|transmet(?:tre|tra)?)\b[^.]{0,60}\b(?:le nombre|les effectifs|l.effectif|dans (?:le|son|ce|notre) m[ée]moire|dans (?:l.|son |notre )offre|ult[ée]rieurement)/i.test(t)
     || /dans (?:le|son|ce|notre) m[ée]moire technique/i.test(t)) return 'phrase sur le mémoire, sans réponse';
   if (/sous[- ]?trait|int[ée]rim|covid/i.test(t)) return 'fait interdit (faits_gss.md)';
+  // Délai annoncé sans sa valeur (cstb 551, T5CP-7 : « dans un délai moyen maximum après l'appel de la télésurveillance… »,
+  // « le délai d'intervention de levée de doute indiqué pour le marché » alors qu'aucun délai n'est indiqué).
+  if (/d[ée]lai (?:moyen )?(?:maximum|maximal|minimum)(?! de\s*\d)\s+(?:apr[èe]s|[àa] compter|suivant|pour|d['’]intervention)|d[ée]lai[^.;]{0,60}\b(?:indiqu[ée]|pr[ée]vu|fix[ée]|demand[ée]|propos[ée])\s+(?:pour|dans|par|au)\s+(?:le|ce|la) (?:march[ée]|CCTP|contrat)/i.test(t) && !/\d/.test(t)) return 'délai sans valeur, sans réponse';
+  // Faculté de l'acheteur écrite comme un acte de GSS (« GSS autorise l'intervenant à utiliser le portillon piéton » pour « Celui-ci
+  // peut utiliser le portillon piéton ») : rôles inversés, pas un engagement de GSS.
+  if (/^(?:GSS|le titulaire|nous)\s+(?:autoris|permet|accord|laisse)\w*\b/i.test(t.replace(/^[-•]\s*/, ''))) return 'faculté de l\'acheteur écrite comme un acte de GSS';
+  // Garantie d'assurance absente de l'attestation de GSS (Hiscox : responsabilité civile professionnelle, exploitation et
+  // employeur ; faits_gss.md) : « … en cas d'accident, d'incendie ou d'explosion, ainsi qu'en cas de perte de clés ».
+  if (/assuranc|assur[ée]|garanti(?:e|t|ssant)/i.test(t) && /perte (?:de |des )?cl[ée]s|(?<![\p{L}])vols?(?![\p{L}])|incendie|explosion|d[ée]g[âa]ts? des eaux|bris de|catastrophe/iu.test(t)) return 'garantie d\'assurance absente de l\'attestation de GSS, sans réponse';
   // « … dans le délai contractuel » sans délai chiffré (cstb 221 : « GSS s'engage à remplacer toute absence imprévue dans le
   // délai contractuel », alors que le CCTP ne fixe aucun délai de remplacement) : renvoi à un délai qui n'existe pas.
   if (/d[ée]lais? contractuels?|d[ée]lais? (?:pr[ée]vus?|fix[ée]s?) (?:au|par le) (?:contrat|march[ée]|CCTP|CCAP)/i.test(t) && !/\d/.test(t)) return 'renvoi à un délai que le DCE ne fixe pas';
@@ -1532,6 +1541,12 @@ export function motifRefusEngagement(x: string): string {
  *  de contrôleurs affectés au site » → « Combien de contrôleurs seront affectés au site ? »). */
 export function questionDEngagement(x: string): string {
   const t = String(x || '').replace(/^[-•]\s*/, '').trim().replace(/[.;…]+\s*$/, '');
+  const motif = motifRefusEngagement(t);
+  const exigence = t.replace(/^(?:GSS|le titulaire|nous)\s+(?:s['’]engage(?:ra)?\s+[àa]\s+)?/i, '');
+  // Délai annoncé sans valeur (T5CP-7) : la valeur exacte est demandée à GSS.
+  if (/^délai sans valeur/.test(motif)) return `Quel délai GSS annonce-t-elle pour cette exigence du CCTP : « ${exigence} » ?`;
+  // Garantie absente de l'attestation d'assurance de GSS (T5CP-7) : jamais affirmée, demandée à GSS.
+  if (/^garantie d'assurance/.test(motif)) return `Votre attestation d'assurance (Hiscox, contrat HA RCP0242762) couvre-t-elle ce que demande le CCTP : « ${exigence} » ? Si oui, quelle garantie et quel montant faut-il indiquer ; sinon, faut-il le signaler à l'acheteur ?`;
   const sansMemoire = (s: string) => s.replace(/\s+(?:dans|pour) (?:le|son|ce|notre) m[ée]moire(?: technique)?/i, '').trim();
   // Nombre seul (« GSS précise le nombre de contrôleurs affectés au site ») → « Combien de contrôleurs seront affectés au site ? ».
   const m = /^[^,]*?\ble nombre (d['’]|de |des )([^,;]+?)\s*$/i.exec(t);

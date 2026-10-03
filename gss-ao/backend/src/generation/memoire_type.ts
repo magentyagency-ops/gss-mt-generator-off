@@ -2059,6 +2059,14 @@ export function rechercherRubriques(mt: MemoireType, texte: string, n = 2, parmi
  *  ajoutée (génération réelle cstb 221 : 7 engagements sur les rondes dans « Notre catalogue de prestations »). */
 const SUJET_PRESENTATION = /autoris|agr[ée]ment|cnaps|carte professionnelle|certifi|\biso\b|\brse\b|responsabilit[ée] soci|environnement|[ée]cologi|d[ée]veloppement durable|carbone|d[ée]chets|recycl|r[ée]f[ée]rences?\b|exp[ée]rience|chiffre d.affaires|assurance|responsabilit[ée] civile|implantation|agences?\b|si[èe]ge social|organigramme|valeurs|[ée]thique|d[ée]ontolog|insertion|handicap|[ée]galit[ée]|kbis|attestation/i;
 
+/** Thèmes nets d'une exigence du CCTP et rubriques de GSS qui les traitent, par ordre de préférence (T5CP-7). */
+const THEMES_EXIGENCE: Array<{ sujet: RegExp; rubriques: string[] }> = [
+  { sujet: /(?<![\p{L}])assurances?(?![\p{L}])|responsabilit[ée] civile|garantissant (?:la )?responsabilit/iu, rubriques: ['b2_identite'] },
+  { sujet: /(?<![\p{L}])(?:alcool|tabac|fumer|radios?|baladeurs?)(?![\p{L}])|t[ée]l[ée]phones? (?:portables? )?personnels?|tenue correcte|comportement des (?:agents|intervenants)|courtoisie|politesse/iu, rubriques: ['b4_lmc', 'b5_controle_technique', 'b5_controle_trois_niveaux'] },
+  { sujet: /(?<![\p{L}])cong[ée]s(?![\p{L}])|en nombre suffisant|remplacements? des (?:agents|intervenants|personnels)/iu, rubriques: ['b5_remplacement_prevu', 'b5_remplacement_imprevu', 'b3_adequation'] },
+  { sujet: /rondes? d['’]ouverture|rondes? de fermeture/i, rubriques: ['b4_rondes', 'b4_planification'] },
+];
+
 /**
  * Rattache les exigences de la matrice aux rubriques du plan : rubrique du plan citée ; ancienne rubrique (b_*) →
  * rubrique correspondante la plus proche ; sinon recherche lexicale (score ≥ 2). Le reste forme les questions
@@ -2089,6 +2097,12 @@ export function exigencesParRubrique(mt: MemoireType, plan: PlanMemoireType, mat
   };
   for (const e of matrice || []) {
     if (!e?.exigence || PIECES_OFFRE.test(e.exigence)) continue;
+    // Thème net de l'exigence (cstb 551, T5CP-7 : assurance sous « La gestion d'un incendie », alcool et tabac sous « Nos
+    // valeurs », congés et effectif sous « Un interlocuteur unique », rondes d'ouverture sous « L'ordre d'alerte ») : la
+    // rubrique de GSS qui traite ce thème, si elle est au plan et l'admet.
+    const theme = THEMES_EXIGENCE.find((t) => t.sujet.test(e.exigence));
+    const cible = theme?.rubriques.find((id) => ids.includes(id) && admise(id, e));
+    if (cible) { ajouter(cible, e); continue; }
     if (e.rubrique && ids.includes(e.rubrique)) {
       // Rubrique de la matrice sans aucun lien lexical avec l'exigence alors qu'une rubrique du plan en a un net (caen 471 :
       // la fin du marché sous « l'agent SSIAP 1 », la mobilisation sur sinistre sous « Le dispositif événementiel », les
