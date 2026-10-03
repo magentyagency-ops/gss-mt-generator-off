@@ -4,8 +4,9 @@
 // Un thème habille les pages du mémoire (thème Marp : variables CSS --gss-…, polices libres embarquées), les schémas
 // (moteur python/schemas_gss : 1 schéma = 1 page A4 portrait, ou schéma placé dans le texte), l'organigramme, le format
 // court et les images des schémas insérées dans les cadres imposés.
-//  · Choix : variable d'environnement GSS_THEME ; à défaut, « style_par_defaut » de themes.json (« marine », le style
-//    recommandé par l'agent design) ; à défaut, THEME_PAR_DEFAUT. Changer de style = une seule valeur.
+//  · Choix : variable d'environnement GSS_THEME ; à défaut, « style_par_defaut » de themes.json (« marine » : le style
+//    « Marine & signal » version 3 validé par le patron de GSS, décisions D3 et D11) ; à défaut, THEME_PAR_DEFAUT.
+//    Changer de style = une seule valeur.
 //  · « gss-2026-09 » (RETOUR_ARRIERE) : rendu d'avant les thèmes, à l'identique (pages, schémas, organigramme).
 //  · Registre unique : python/schemas_gss/themes/themes.json (lu aussi par le moteur Python).
 // Forme seulement : aucun texte, aucune consigne, aucune logique de génération ne dépend du thème.
@@ -15,7 +16,7 @@ import path from 'path';
 import { spawnSync } from 'child_process';
 
 export const RETOUR_ARRIERE = 'gss-2026-09';
-/** Style recommandé par l'agent design (repli si themes.json est illisible). */
+/** Style « Marine & signal » v3 validé par le patron de GSS (D11), repli si themes.json est illisible. */
 const THEME_PAR_DEFAUT = 'marine';
 export type FormatSchema = 'page' | 'paysage';
 

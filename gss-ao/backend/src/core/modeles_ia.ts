@@ -8,7 +8,7 @@
 //   GSS_IA_EFFORT            effort de tous les usages                                (défaut : effort par usage)
 //   GSS_IA_EFFORT_REDACTION  rédaction, adaptation, contrôles, cadre, schémas, assistant (défaut : low)
 //   GSS_IA_EFFORT_ANALYSE    analyse du DCE, exigences, format imposé, propositions    (défaut : medium)
-//   GSS_IA_EFFORT_MECANIQUE  OCR, description de photo, évaluation d'une réponse courte (défaut : none)
+//   GSS_IA_EFFORT_MECANIQUE  description des photos de l'assistant, seul usage « mecanique » (défaut : none)
 //   GSS_IA_CACHE             « implicite » : cache de prompt implicite d'OpenAI, sans point d'arrêt
 //                            (défaut : explicite sur GPT-5.6 et suivants)
 //   GSS_IA_SERVICE_TIER      niveau de service OpenAI (défaut : « flex » pour gpt-6-luna, −50 % sur tous les jetons,
