@@ -3087,6 +3087,10 @@
    "condition": "toujours",
    "condition_texte": "toujours",
    "priorite": 1,
+   "sujet_ajouts": {
+    "exclut": "plan de pr[ée]vention|\\bPPSPS\\b|hygi[èe]ne et (?:de )?s[ée]curit[ée]|organismes? d.hygi[èe]ne|risques professionnels|document unique",
+    "motif": "Rubrique de la planification des agents (plannings, vacations) : une exigence d'hygiène et de sécurité (plan de prévention, PPSPS) n'y est pas rattachée (caen 475, T6C-9 : « plan de prévention … circulations verticales et horizontales d'engins » ajouté sous « La planification »)."
+   },
    "texte": "La planification est un pôle primordial de notre organisation : elle nous permet d'anticiper, d'organiser et de limiter tout aléa. Nous travaillons avec le logiciel Comète, choisi pour sa notoriété dans le secteur de la sécurité, ses interfaces parfaitement adaptées à nos besoins et la fiabilité de son éditeur. Tous nos responsables de site sont formés à son utilisation et gèrent chacun leur planification : ce sont eux qui connaissent le mieux les besoins de leur site.\n\nComète nous permet de nous adapter très facilement en cas de modification de dernière minute ou de commande supplémentaire, tout en garantissant le respect du code du travail et de la convention collective des entreprises de prévention et de sécurité, dont les obligations sont intégrées au logiciel. Il nous donne une vision en temps réel des prises et fins de service, génère la facturation à partir des heures planifiées et nous apporte plus de rigueur dans le suivi des visites médicales, des formations et des recyclages obligatoires. Son extension Comète Link nous permet d'envoyer en temps réel de nouvelles consignes ou des modifications de consignes, ce qui est très efficace pour les missions des rondiers intervenants sur alarme.\n\nNotre calendrier de planification :\n- {{DELAI_ENVOI_PLANNINGS}} : envoi des plannings du mois suivant ;\n- J-7 : validation des plannings par les agents, avec accusé de réception ;\n- J-3 : envoi des plannings à {{CLIENT}} ;\n- en cas de commande supplémentaire ou de modification : envoi du nouveau planning à l'agent et à {{CLIENT}}.",
    "sous_parties": [],
    "schema": {

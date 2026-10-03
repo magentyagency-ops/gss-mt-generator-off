@@ -34,3 +34,15 @@ describe('Exigence dont la rubrique de la matrice est hors du plan (T6C-1)', () 
     expect(Object.keys(r.parRubrique)).toEqual(['b4_proc_ordre_alerte']);
   });
 });
+
+describe('Plan de prévention : rubrique du démarrage, jamais la planification (T6C-9)', () => {
+  it('caen : l\'exigence du plan de prévention va à « L\'intégration d\'un nouveau marché » ; la planification refuse cet ajout', async () => {
+    const { preparerMemoireType, exigencesParRubrique, sujetDeRubrique, dansLeSujet } = await import('../src/generation/memoire_type');
+    const e = { rubrique: 'b4_planification', exigence: "Établir et remettre au pouvoir adjudicateur et aux organismes d'hygiène et de sécurité un plan de prévention dans les 15 jours suivant la notification." };
+    const p = preparerMemoireType({ dce: DCE('caen'), analyse: { clientName: 'ACOSS' }, matrice: [e] } as any);
+    expect(Object.keys(exigencesParRubrique(p.mt, p.plan, [e]).parRubrique)).toEqual(['b5_nouveau_marche']);
+    const planif = p.mt.rubriques.find((r) => r.id === 'b4_planification')!;
+    expect(dansLeSujet('Nous établissons et remettons au pouvoir adjudicateur un plan de prévention détaillant les risques.', sujetDeRubrique(planif))).toBe(false);
+    expect(dansLeSujet('Les plannings mensuels sont transmis 10 jours avant le début du mois.', sujetDeRubrique(planif))).toBe(true);
+  });
+});

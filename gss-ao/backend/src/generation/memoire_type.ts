@@ -2182,6 +2182,9 @@ const THEMES_EXIGENCE: Array<{ sujet: RegExp; rubriques: string[] }> = [
   { sujet: /(?<![\p{L}])(?:alcool|tabac|fumer|radios?|baladeurs?)(?![\p{L}])|t[ée]l[ée]phones? (?:portables? )?personnels?|tenue correcte|comportement des (?:agents|intervenants)|courtoisie|politesse/iu, rubriques: ['b4_lmc', 'b5_controle_technique', 'b5_controle_trois_niveaux'] },
   { sujet: /(?<![\p{L}])cong[ée]s(?![\p{L}])|en nombre suffisant|remplacements? des (?:agents|intervenants|personnels)/iu, rubriques: ['b5_remplacement_prevu', 'b5_remplacement_imprevu', 'b3_adequation'] },
   { sujet: /rondes? d['’]ouverture|rondes? de fermeture/i, rubriques: ['b4_rondes', 'b4_planification'] },
+  // Plan de prévention (hygiène et sécurité) à remettre après la notification : un livrable du démarrage du marché, jamais
+  // la planification des agents (caen 475, T6C-9).
+  { sujet: /plan de pr[ée]vention|(?<![\p{L}])PPSPS(?![\p{L}])|hygi[èe]ne et (?:de )?s[ée]curit[ée]|organismes? d.hygi[èe]ne/iu, rubriques: ['b5_nouveau_marche'] },
 ];
 
 /**
