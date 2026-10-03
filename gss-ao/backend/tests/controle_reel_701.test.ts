@@ -242,3 +242,11 @@ describe('Contrôle réel 705 : réponse collée à son intitulé dans le cadre'
     expect(intituleColleAvant(t(doc('<w:p><w:r><w:t>[CHAMP_4]</w:t></w:r></w:p>')), '[CHAMP_4]')).toBe(false);
   });
 });
+
+describe('Contrôle réel 708 : méta-commentaire sur les pièces', () => {
+  it('« Les extraits fournis ne précisent pas… » retiré du document (rouen_univ 708)', () => {
+    const r = retirerCommentairesInternes('La tenue est complète. Les extraits fournis ne précisent pas la localisation des agences ou centres opérationnels dans les départements 76 et 27.');
+    expect(r.texte).toBe('La tenue est complète.');
+    expect(r.retires).toHaveLength(1);
+  });
+});

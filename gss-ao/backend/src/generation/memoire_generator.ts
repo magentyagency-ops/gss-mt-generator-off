@@ -6428,7 +6428,12 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
           const neufs = propres.filter((w) => !deja.has(w)).length;
           // Ligne qui parle du sujet de sa propre question (« Plan qualité interne – responsable qualité » : « Responsable
           // qualité : VATTIER Marie… ») : jamais vidée ; seule une redite hors sujet l'est (sous « Certification… »).
-          const libelleQ = ((d.context.match(/Contexte(?: proche)?:\s*"([^"]*)"/) || [])[1] || '').split('/').map((x) => x.trim()).filter(Boolean).pop() || '';
+          // Question de la ligne : celle qui la précède dans le document (rouen_univ 708 : les lignes « : …… » sous « Certification
+          // de service ISO / APSAD » portent dans leur contexte l'intitulé du plan qualité, au-dessus).
+          const precedente = descriptors.filter((o) => o.id < d.id && o.kind !== 'checkbox' && !continuationAvecPrincipale(o)
+            && ((o.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').replace(/[\s.:;,…\-—–/|()]+/g, '')).sort((a, b) => b.id - a.id)[0];
+          const libelleQ = ((precedente?.context.match(/Question:\s*"([^"]*)"/) || [])[1])
+            || ((d.context.match(/Contexte(?: proche)?:\s*"([^"]*)"/) || [])[1] || '').split('/').map((x) => x.trim()).filter(Boolean).pop() || '';
           const motsQ = new Set([...sigWords(libelleQ)].map(racine));
           const dansLeSujet = propres.some((w) => motsQ.has(w));
           // Sujet d'une autre question de la même section (« Responsable qualité : VATTIER Marie… » sous « Certification de
@@ -6439,7 +6444,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
           // Redite pure (aucun mot porteur nouveau, rouen_univ 707 : « Responsable qualité : VATTIER Marie — contrôle global
           // trimestriel, réunions de suivi… » sous la certification, mots tous écrits dans le plan qualité) : vidée même dans le sujet.
           const rediteePure = neufs === 0 && propres.length >= 5;
-          if (continuationAvecPrincipale(d) && section && (rediteePure || (!dansLeSujet && propres.length >= 3 && (neufs / propres.length <= 0.35 || autreSujet)))) {
+          if (continuationAvecPrincipale(d) && section && (rediteePure || (!dansLeSujet && propres.length >= 3 && (neufs / propres.length <= 0.4 || autreSujet)))) {
             valById.set(d.id, '');
             console.log(`[MemoireGenerator] Ligne de continuation vidée : CHAMP_${d.id} (redite de la section)`);
             continue;
