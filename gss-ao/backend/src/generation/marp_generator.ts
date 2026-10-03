@@ -216,8 +216,11 @@ const SEUIL_PAGE_ORPHELINE = 0.25;
 const MARGE_PAGE_SERREE = 1.1;
 
 /** Découpage d'un texte de rubrique en pages de texte seules (mise en page v2 de la refonte), pour les contrôles. */
-export function decouperPagesTexte(texte: string, retourArriere = false): string[] {
+export function decouperPagesTexte(texte: string, retourArriere = false, bloc1 = false): string[] {
   if (retourArriere) return splitIntoSlideChunks(texte, LIMITES_TEXTE_SEUL.origine);
+  // Bloc 1 du style « marine » v3 : mesuré avec sa mise en page complète (bandeau des chiffres clés, sources, tableaux), comme
+  // au rendu (génération réelle fontainebleau 901 : bloc 1 mesuré en 2 pages sans elle, imprimé sur 3 pages).
+  if (bloc1 && pagesMarineV3(themeActif())) return splitIntoSlideChunks(intertitresV3(cleanTextForMarp(pageBloc1Marine(texte, {}))), LIMITES_MARINE_V3 as LimitesPage);
   // Style « marine » v3 : les mêmes limites et les mêmes intertitres que le rendu (génération réelle ifits 702 : bloc 1 mesuré
   // en 2 pages avec les limites des autres styles, imprimé sur 3 pages de texte ; consigne 3 : 1 à 2 pages).
   if (pagesMarineV3(themeActif())) return splitIntoSlideChunks(intertitresV3(texte), LIMITES_MARINE_V3 as LimitesPage);

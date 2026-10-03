@@ -1,8 +1,11 @@
 // Campagne « zéro défaut », tour 1 : style « marine » v3 (T1-CONS-5 bloc 1 comme la maquette, T1-CONS-6 intertitre jamais en
 // bas de page, tableau coupé entre deux rangs).
+import fs from 'fs';
+import path from 'path';
 import { describe, it, expect } from 'vitest';
 import { articlesBloc1, chiffresCles, pageBloc1Marine, sousPartiesBloc1 } from '../src/generation/bloc1_marine';
-import { splitIntoSlideChunks } from '../src/generation/marp_generator';
+import { decouperPagesTexte, splitIntoSlideChunks } from '../src/generation/marp_generator';
+import { reduireBesoinAPages } from '../src/generation/reponse_libre_v2';
 import { LIMITES_MARINE_V3, intertitresV3 } from '../src/generation/marp_pages_marine';
 
 const B1 = `L'Établissement public lance le marché « Prestations de surveillance », d'une durée de 3 ans.
@@ -57,5 +60,23 @@ describe('pagination du style v3 (T1-CONS-6)', () => {
     const avecTableau = pages.filter((p) => /\| A \| B \| C \|/.test(p));
     expect(avecTableau.length).toBeGreaterThanOrEqual(2);
     for (const p of avecTableau) expect(p).toMatch(/\| A \| B \| C \|\n\|---\|---\|---\|/);
+  });
+});
+
+describe('bloc 1 « marine » réduit à 2 pages mesurées avec sa mise en page complète (génération réelle fontainebleau 901)', () => {
+  it('le compte des pages inclut bandeau, sources et tableaux ; la réduction vise ce compte', () => {
+    const avant = process.env.GSS_THEME;
+    process.env.GSS_THEME = 'marine';
+    try {
+      // Bloc 1 de la génération réelle : réduit à 2 pages avec l'ancien compte, imprimé sur 3 pages de texte.
+      const t = fs.readFileSync(path.join(__dirname, 'fixtures', 'bloc1_fontainebleau_901.md'), 'utf-8');
+      expect(decouperPagesTexte(t).length).toBe(2);
+      expect(decouperPagesTexte(t, false, true).length).toBe(3);
+      const r = reduireBesoinAPages(t, (x) => decouperPagesTexte(x, false, true).length);
+      expect(decouperPagesTexte(r.texte, false, true).length).toBeLessThanOrEqual(2);
+      expect(r.retirees.length).toBeGreaterThan(0);
+    } finally {
+      if (avant === undefined) delete process.env.GSS_THEME; else process.env.GSS_THEME = avant;
+    }
   });
 });

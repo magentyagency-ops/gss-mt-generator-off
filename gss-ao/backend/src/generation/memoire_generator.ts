@@ -8294,7 +8294,7 @@ RÈGLES DE FORME (rendu Marp) :
       sections[b1.id] = remarques ? `${c.texte.trim()}\n\n${remarques}` : c.texte;
       // 1 à 2 pages d'explication (consigne 3) : la rédaction qui dépasse sa limite de mots est ramenée à 2 pages, sans modèle.
       if (!estRetourArriere(themeActif())) {
-        const r = reduireBesoinAPages(sections[b1.id], (t) => decouperPagesTexte(t).length);
+        const r = reduireBesoinAPages(sections[b1.id], (t) => decouperPagesTexte(t, false, true).length);
         if (r.retirees.length) { sections[b1.id] = r.texte; console.log(`[MemoireGenerator] Compréhension du besoin : ${r.retirees.length} ligne(s) retirée(s) pour tenir en 2 pages de texte.`); }
       }
       titresSchemas[b1.id] = c.titre;
