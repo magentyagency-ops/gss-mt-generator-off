@@ -110,6 +110,20 @@ const motsEngagement = (t: string) => new Set(t.toLowerCase().normalize('NFD').r
  * (diplôme, poste tenu par un agent) n'est pas touché.
  */
 export function voixDeGss(texte: string): string {
+  // Citation du DCE entre guillemets (« … », “ … ” ou " … ") : gardée mot pour mot (cstb 551 : « Le titulaire devra donc
+  // veiller… » ne devient jamais « GSS devra donc veiller… »). Seul le texte hors citation passe à la voix de GSS.
+  const s = String(texte || '');
+  const CITATION = /«[^«»]*»|“[^“”]*”|"[^"\n]*"/g;
+  let sortie = '', dernier = 0;
+  for (let m: RegExpExecArray | null; (m = CITATION.exec(s)); ) {
+    sortie += voixDeGssHorsCitation(s.slice(dernier, m.index)) + m[0];
+    dernier = m.index + m[0].length;
+  }
+  return sortie + voixDeGssHorsCitation(s.slice(dernier));
+}
+
+function voixDeGssHorsCitation(texte: string): string {
+  if (!texte) return texte;
   // Autre titulaire que GSS (citedia 341 : « le cas échéant, avec le Titulaire sortant » devenu « GSS sortant ») : le
   // titulaire sortant, précédent, actuel, en place, antérieur, ancien, entrant, futur… n'est jamais GSS.
   const AUTRE = String.raw`(?!(?:\s+du\s+march[ée])?\s+(?:sortants?|pr[ée]c[ée]dents?|actuels?|en\s+place|ant[ée]rieurs?|anciens?|nouveaux?|entrants?|suivants?|futurs?|initial|retenus?|pressentis?)(?![\p{L}]))`;
