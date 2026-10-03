@@ -19,7 +19,7 @@ const SORTIE = path.resolve(SORTIE_REL);
 const FAUX = process.env.FAUX || 'vide';
 const enreg = FAUX === 'enreg' ? JSON.parse(fs.readFileSync(process.env.ENREG, 'utf-8')) : { chat: {}, emb: {} };
 const cleChat = (body: any) => crypto.createHash('sha1').update(JSON.stringify(body?.messages || [])).digest('hex');
-let nAppels = 0; const tiers: Record<string, number> = {};
+let nAppels = 0; let nOcr = 0; const tiers: Record<string, number> = {};
 const systemes: string[] = []; const tailles: number[] = [];
 {
   const cli: any = new OpenAI({ apiKey: 'rejeu' });
@@ -36,6 +36,12 @@ const systemes: string[] = []; const tailles: number[] = [];
     if (FAUX === 'ctx' && JSON.stringify(body?.messages||[]).length > Number(process.env.CTX_MAX||400000)) { const e: any = new Error("400 This model's maximum context length is exceeded"); e.status = 400; e.code='context_length_exceeded'; throw e; }
     if (FAUX === 'flex429' && body?.service_tier === 'flex') { const e: any = new Error('429 Resource unavailable'); e.status = 429; throw e; }
     if (FAUX === 'analyse' && JSON.stringify(body?.messages || []).includes('gssStrategicRecommendations')) return { choices: [{ message: { content: process.env.ANALYSE_JSON || '{}' } }], usage: {}, model: body.model };
+    // FAUX_OCR (correction T10-COH-4) : transcription d'un PDF scanné en erreur 500, ou crédit épuisé.
+    if (process.env.FAUX_OCR && JSON.stringify(body?.messages || []).includes('Transcris intégralement')) {
+      nOcr++;
+      const e: any = new Error(process.env.FAUX_OCR === 'quota' ? '429 You have no credits remaining. Add credits to continue.' : '500 Internal server error');
+      e.status = process.env.FAUX_OCR === 'quota' ? 429 : 500; throw e;
+    }
     // FAUX=champ (correction T10-COH-2) : chaque champ du cadre reçoit une réponse qui reprend le premier texte de GSS proposé.
     if (FAUX === 'champ') {
       const u = JSON.stringify(body?.messages || []);
@@ -82,6 +88,6 @@ const t0 = Date.now();
   if (r?.filePath && /\.pdf$/.test(r.filePath) && fs.existsSync(r.filePath)) fs.copyFileSync(r.filePath, path.join(SORTIE, code + '.pdf'));
   if (r?.markdown) fs.writeFileSync(path.join(SORTIE, 'memoire.md'), String(r.markdown));
   fs.writeFileSync(path.join(SORTIE, 'resultat.json'), JSON.stringify(res, null, 1));
-  console.log('FIN', id, 'duree', res.duree_s, 's appels', nAppels, JSON.stringify(tiers), 'erreur', JSON.stringify(erreur));
+  console.log('FIN', id, 'duree', res.duree_s, 's appels', nAppels, 'ocr', nOcr, JSON.stringify(tiers), 'erreur', JSON.stringify(erreur));
   process.exit(0);
 })().catch((e) => { console.error(e); process.exit(2); });

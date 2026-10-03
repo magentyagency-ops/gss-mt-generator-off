@@ -434,6 +434,12 @@ function rendrePagePdf(pageData: any): Promise<string> {
   });
 }
 
+/**
+ * PDF sans couche texte dont la transcription a échoué (T10-COH-4) : chemins, pour que la génération dise à GSS quelle pièce
+ * n'a pas pu être lue (jamais « aucun cahier des charges n'a été trouvé » quand le fichier est dans le dossier).
+ */
+export const pdfsIllisibles = new Set<string>();
+
 export async function extractPdfText(filePath: string): Promise<string> {
   if (!fs.existsSync(filePath)) {
     throw new DocConverterError(`Fichier non trouvé : ${filePath}`);
@@ -450,10 +456,11 @@ export async function extractPdfText(filePath: string): Promise<string> {
   if (texteTropPauvre(data.text || '', data.numpages || 0)) {
     try {
       const transcrit = await transcrirePdf(filePath);
-      if (transcrit.replace(/\s+/g, '').length > (data.text || '').replace(/\s+/g, '').length) return transcrit;
+      if (transcrit.replace(/\s+/g, '').length > (data.text || '').replace(/\s+/g, '').length) { pdfsIllisibles.delete(filePath); return transcrit; }
     } catch (e: any) {
       console.warn(`[docConverter] Transcription du PDF ${path.basename(filePath)} impossible : ${e?.message || e}`);
     }
+    pdfsIllisibles.add(filePath);
   }
   return data.text;
 }

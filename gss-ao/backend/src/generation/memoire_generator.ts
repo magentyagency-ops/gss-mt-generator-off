@@ -44,7 +44,7 @@ import { getSettings } from '../core/config';
 import { modeleIA, reglagesIA, prefixeEnCache, UsageIA, creditEpuise, CreditOpenAIEpuise } from '../core/modeles_ia';
 import { DB, FichiersDB } from '../core/db';
 import { getScopedClient } from '../core/supabase';
-import { extractText, loadDocxStructure, loadDocxTemplateAnnotated, convertDocToDocx, findTextutil, convertirDocAvecWord } from '../ingestion/docConverter';
+import { extractText, loadDocxStructure, loadDocxTemplateAnnotated, convertDocToDocx, findTextutil, convertirDocAvecWord, pdfsIllisibles } from '../ingestion/docConverter';
 import { overlaySynthesis, loadTrebuchetFont, measureZonesCapacity, RefReplacement, RefContext } from './pdf_overlay';
 import { resolveMissingInfo, classifyFieldsLLM, MissingField } from './missing_info_resolver';
 import { uploadTempDocx, downloadTempDocx } from '../core/temp_storage';
@@ -2354,7 +2354,21 @@ export function alerteLots(analyse: any, dce: string): string[] {
   return q ? [q] : [];
 }
 
-export function alerteCctpAbsent(dce: string): string[] {
+export function alerteCctpAbsent(dce: string, illisibles: string[] = []): string[] {
+  // Pièce scannée illisible (T10-COH-4) : nommée à GSS ; un CCTP illisible n'est jamais annoncé « absent du dossier ».
+  const NOM_CCTP_ILLISIBLE = /cctp|\bccp\b|cahier\s*des\s*(?:clauses\s*(?:techniques|particuli)|charges)|clauses?\s*techniques|programme\s*fonctionnel/i;
+  const nomPropre = (n: string) => n.replace(/_/g, ' ');
+  const cctpIllisibles = illisibles.filter((n) => NOM_CCTP_ILLISIBLE.test(nomPropre(n)) && !/ccap|clauses\s*administratives/i.test(nomPropre(n)));
+  const autresIllisibles = illisibles.filter((n) => !cctpIllisibles.includes(n));
+  const alertesIllisibles = [
+    ...cctpIllisibles.map((n) => `Le cahier des charges « ${n} » est un PDF scanné qui n'a pas pu être lu (transcription impossible) : relancez la génération, ou ajoutez au dossier une version texte (PDF texte ou Word) ; en attendant, le mémoire n'est pas adapté au CCTP.`),
+    ...autresIllisibles.map((n) => `La pièce « ${n} » est un PDF scanné qui n'a pas pu être lu (transcription impossible) : relancez la génération, ou ajoutez au dossier une version texte (PDF texte ou Word) ; en attendant, le mémoire n'en tient pas compte.`),
+  ];
+  if (cctpIllisibles.length) return alertesIllisibles;
+  return [...alerteCctpAbsentLu(dce), ...alertesIllisibles];
+}
+
+function alerteCctpAbsentLu(dce: string): string[] {
   const t = String(dce || '');
   const blocs = t.split(/\n\n--- (.+?) ---\n|\n?===== PIÈCE : (.+?) =====\n/);
   const pieces: Array<{ nom: string; corps: string }> = [];
@@ -2631,6 +2645,8 @@ export class MemoireGenerator {
   private appelsEchoues: string[] = [];
   /** Limite de pages du RC lue sans le modèle, ou non lue (T7CS-1) : alerte en tête des consultations et du premier message. */
   private alertesFormat: string[] = [];
+  /** Pièces du DCE (PDF scannés) dont la transcription a échoué (T10-COH-4). */
+  private piecesIllisibles: string[] = [];
   private verifierCredit(): void {
     if (this.creditOpenAIEpuise) throw new CreditOpenAIEpuise();
   }
@@ -2850,6 +2866,7 @@ export class MemoireGenerator {
     };
 
     const loadedFiles = new Set<string>();
+    this.piecesIllisibles = [];
     const scanDir = async (dir: string) => {
       if (!fs.existsSync(dir)) return;
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -2899,6 +2916,8 @@ export class MemoireGenerator {
           } catch { /* table non exploitable → on garde le texte plat */ }
         }
 
+        // PDF scanné dont la transcription a échoué (T10-COH-4) : nommé à GSS dans les alertes.
+        if (ext === '.pdf' && pdfsIllisibles.has(fullPath) && !this.piecesIllisibles.includes(entry.name)) this.piecesIllisibles.push(entry.name);
         if (text.length > 100) {
           pieces.push({ label: entry.name.replace(/\.(doc|docx|pdf|xlsx)$/i, ''), text, priority: priorityOf(normalized) });
           console.log(`[MemoireGenerator] DCE chargé: ${entry.name} (${text.length} chars, prio ${priorityOf(normalized)})`);
@@ -6829,7 +6848,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         ? (conversation?.length ? [{ ...conversation[0], texte: `${conversation[0].texte}\n\n${texteAdaptations}` }] : [{ role: 'assistant' as const, date: new Date().toISOString(), texte: texteAdaptations }])
         : conversation;
       // DCE sans CCTP (T8-COH-2), rubriques du cadre sans réponse (T10-COH-2) : en tête du premier message de l'assistant.
-      const alerteCctp = [...alerteCctpAbsent(dceContext), ...alerteLots(analysisData, dceContext), ...alertesRubriquesCadre];
+      const alerteCctp = [...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...alerteLots(analysisData, dceContext), ...alertesRubriquesCadre];
       if (alerteCctp.length) conversationFinale = conversationFinale?.length ? [{ ...conversationFinale[0], texte: `${alerteCctp.join('\n\n')}\n\n${conversationFinale[0].texte}` }] : [{ role: 'assistant' as const, date: new Date().toISOString(), texte: alerteCctp.join('\n\n') }];
       // Schémas non insérés (T6-COH-3) : en tête du premier message de l'assistant.
       if (alertesSchemasCadre.length) {
@@ -6862,7 +6881,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       // Aucun repère technique (« [CHAMP_14] ») ni doublon dans les questions remises à GSS (havre1 21).
       consultations: [
         // DCE sans CCTP (T8-COH-2), rubriques du cadre sans réponse (T10-COH-2) : en tête des consultations.
-        ...alerteCctpAbsent(dceContext), ...alerteLots(analysisData, dceContext),
+        ...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...alerteLots(analysisData, dceContext),
         ...alertesRubriquesCadre,
         ...new Set([
           ...(descriptors.some((d) => d.grille)
@@ -7830,7 +7849,7 @@ RÈGLES DE FORME (rendu Marp) :
     // Deux sources : (1) les écarts détectés par la matrice de conformité ; (2) les marqueurs
     // [CONSULTATION REQUISE : …] que le rédacteur a insérés faute de réponse spécifique dans la Doc GSS.
     const consultations = new Set<string>([
-      ...this.alertesFormat, ...alerteCctpAbsent(dceContext), ...alerteLots(analysisData, dceContext), ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),
+      ...this.alertesFormat, ...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...alerteLots(analysisData, dceContext), ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),
       ...commentairesRetires,
       // Valeurs du registre encore « à confirmer » reprises dans le texte : GSS est prévenu.
       ...confirmationsRegistreUtilisees(Object.values(sectionsMap).join('\n'), horsNormandieLibre),
@@ -8318,7 +8337,7 @@ RÈGLES DE FORME (rendu Marp) :
     const consultationList = questionsUniques(elementsSansDoublon(elementsLibres));
     // OpenAI en panne pendant la génération (T5-COH-2) : jamais un publipostage non adapté présenté comme complet.
     // DCE sans CCTP (T8-COH-2) : en tête des consultations et du premier message de l'assistant, comme la limite de pages.
-    const alertePanne = [...alerteCctpAbsent(dceContext), ...alerteLots(analysisData, dceContext), ...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, rubriquesNonAdaptees)].filter(Boolean).join('\n\n');
+    const alertePanne = [...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...alerteLots(analysisData, dceContext), ...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, rubriquesNonAdaptees)].filter(Boolean).join('\n\n');
     if (alertePanne) { consultationList.unshift(...alertePanne.split('\n\n')); console.warn(`[MemoireGenerator] ${alertePanne}`); }
     consultationList.push(...avisSecours);
     // Propositions de réponse de l'IA : signalées APRÈS les éléments (jamais envoyées à l'équipe comme des questions).
@@ -9475,7 +9494,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
 
     // ── Points à compléter (même logique que la réponse libre) ──
     const consultations = new Set<string>([
-      ...this.alertesFormat, ...alerteCctpAbsent(dceContext), ...alerteLots(analysisData, dceContext), ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie)]);
+      ...this.alertesFormat, ...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...alerteLots(analysisData, dceContext), ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie)]);
     for (const r of requirementsMatrix) if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence)) consultations.add(r.exigence.trim());
     const markerRe = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
     const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
@@ -9969,7 +9988,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     }
     const consultationList = questionsUniques(elementsSansDoublon(elements));
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
-    const alertePanneCourt = [...alerteCctpAbsent(dceContext), ...alerteLots(analysisData, dceContext), ...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, nonAdapteesCourt)].filter(Boolean).join('\n\n');
+    const alertePanneCourt = [...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...alerteLots(analysisData, dceContext), ...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, nonAdapteesCourt)].filter(Boolean).join('\n\n');
     if (alertePanneCourt) { consultationList.unshift(...alertePanneCourt.split('\n\n')); console.warn(`[MemoireGenerator] ${alertePanneCourt}`); }
     consultationList.push(...rubriquesExcluesCourt, ...avisSecours, ...propositions);
     // Phrases de GSS adaptées au CCTP (D8) : une ligne par phrase à valider (aucune s'il n'y en a pas).

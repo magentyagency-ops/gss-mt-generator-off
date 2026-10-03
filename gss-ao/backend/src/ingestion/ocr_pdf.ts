@@ -13,6 +13,7 @@ import crypto from 'crypto';
 import OpenAI from 'openai';
 import { PDFDocument } from 'pdf-lib';
 import { getSettings } from '../core/config';
+import { creditEpuise } from '../core/modeles_ia';
 
 const CACHE = path.resolve(__dirname, '../../response/ocr_cache');
 const PAGES_PAR_BLOC = 4;
@@ -58,7 +59,8 @@ export async function transcrirePdf(fichier: string): Promise<string> {
         });
         return r.choices[0]?.message?.content || '';
       } catch (e: any) {
-        if (essai === 3 || e?.code === 'insufficient_quota') { console.warn(`[OCR] Pages ${pages[0] + 1}-${pages[pages.length - 1] + 1} illisibles (${e?.message || e}).`); return ''; }
+        // Crédit OpenAI épuisé (« 429 You have no credits remaining… », T10-COH-4) : arrêt immédiat, sans nouvel essai ni attente.
+        if (essai === 3 || creditEpuise(e)) { console.warn(`[OCR] Pages ${pages[0] + 1}-${pages[pages.length - 1] + 1} illisibles (${e?.message || e}).`); return ''; }
         await new Promise((ok) => setTimeout(ok, 10_000 * essai));
       }
     }
