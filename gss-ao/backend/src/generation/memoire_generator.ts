@@ -8365,7 +8365,7 @@ RÈGLES DE FORME (rendu Marp) :
         if (valide) { texte = r.texte; console.log(`[MemoireGenerator] Compréhension du besoin : paragraphe des textes d'étapes non retenues retiré (« ${r.retire.slice(0, 80)}… »).`); }
       }
     }
-    if (!schema.svg) console.warn(`[MemoireGenerator] Compréhension du besoin : étapes du schéma refusées (${schema.erreurs.slice(0, 3).join(' | ')}) ; schéma de secours d'après les points de vigilance et les attentes.`);
+    if (!schema.svg) console.warn(`[MemoireGenerator] Compréhension du besoin : étapes du schéma refusées (${schema.erreurs.slice(0, 3).join(' | ')}) ; schéma de secours d'après le périmètre, les attentes et les points de vigilance.`);
     // Secours sur le contenu : d'abord le périmètre du DCE (postes et horaires), puis les attentes et les points de vigilance
     // (caen 475, T6C-6 : un marché de rondes dont le schéma ne montrait aucune ronde) ; sinon attentes et vigilance seules.
     // Le titre de la page est alors celui du mémoire type : jamais le titre que le modèle avait donné à ses étapes refusées

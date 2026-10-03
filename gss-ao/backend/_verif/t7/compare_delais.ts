@@ -1,4 +1,5 @@
 // Tour 7 (REG7-1, T7N-4) : filtre des délais hors Normandie, avant (189ce28) et après, sur toutes les sections du corpus.
+// Préparer d'abord : git show 189ce28:gss-ao/backend/src/generation/base_memoires.ts > _verif/t7/base_memoires_avant.ts
 import fs from 'fs';
 import path from 'path';
 import * as avant from './base_memoires_avant';
