@@ -52,6 +52,8 @@ export interface MiseEnSituation { libelle: string; capacite: number | null; fon
 
 export interface Dimensionnement {
   profils: ProfilDimensionne[];
+  /** Écarts relevés sans modèle entre les postes retenus et le DCE (total hebdomadaire du DQE), posés à GSS. */
+  alertes?: string[];
   titulaires: number;
   suppleants: number;
   casPratique: LigneCasPratique[];
@@ -88,9 +90,14 @@ export function heuresSemaine(plages: PlageHoraire[]): number {
   return Math.round(plages.reduce((s, p) => s + dureePlage(p.debut, p.fin) * joursDe(p.jours).length, 0) * 100) / 100;
 }
 
-/** Vrai si la citation vient du DCE : six mots consécutifs au moins s'y retrouvent tels quels (accents et ponctuation ignorés). */
+/**
+ * Vrai si la citation vient du DCE : six mots consécutifs au moins s'y retrouvent tels quels (accents et ponctuation ignorés).
+ * Ligne d'un tableau (DQE, BPU) plus courte (« Dimanche 21h00 - 06h00 (nuit) | 10 », citedia2 474, T5-COH-1 : poste du
+ * dimanche écarté sans trace, 74 h au lieu de 84 h) : trois mots au moins, dont un nombre, retrouvés tous de suite dans le DCE.
+ */
 function citationDansDce(citation: string, dceMots: string): boolean {
   const mots = normaliser(citation).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+  if (mots.length >= 3 && mots.length < 6) return mots.some((w) => /^\d+$/.test(w)) && mots.some((w) => /[a-z]/.test(w)) && dceMots.includes(` ${mots.join(' ')} `);
   if (mots.length < 6) return false;
   for (let i = 0; i + 6 <= mots.length; i++) if (dceMots.includes(` ${mots.slice(i, i + 6).join(' ')} `)) return true;
   return false;
@@ -153,6 +160,8 @@ export function profilSansNombre(profil: string): string {
 export function calculerDimensionnement(rep: any, dce: string): Dimensionnement | null {
   const dceMots = ` ${normaliser(String(dce || '')).replace(/[^a-z0-9]+/g, ' ').trim()} `;
   const profils = new Map<string, ProfilDimensionne>();
+  /** Profil dont toutes les heures viennent des volumes hebdomadaires du DQE. */
+  const dqeParProfil = new Map<string, boolean>();
   for (const p of Array.isArray(rep?.postes) ? rep.postes : []) {
     // Intitulé en capitales (« AGENT DE SECURITE ») : écrit en minuscules, initiale en majuscule.
     // Nombre recopié dans l'intitulé (ca_normandie 241 : « 2 agents », « 1 agente », « 1 ADS », « 1 SSIAP 1 », « SSIAP1 ») :
@@ -192,12 +201,32 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     if (equivalentAds) qualification = equivalentAds;
     const cle = equivalentAds ? 'agent de securite|ads' : normaliser(`${profil}|${qualification}`);
     const x = profils.get(cle) || { profil, qualification, lieux: [], heuresSemaine: 0, heuresAn: 0, etp: 0, titulaires: 0 };
+    if (hebdoDuDce) dqeParProfil.set(cle, (dqeParProfil.get(cle) ?? true) && true); else dqeParProfil.set(cle, false);
     x.heuresSemaine = Math.round((x.heuresSemaine + hs) * 100) / 100;
     x.heuresAn += heuresAn;
     const lieu = String(p?.lieu || '').trim();
     if (lieu && !x.lieux.includes(lieu)) x.lieux.push(lieu);
     if (simultanes > 1) x.simultanes = Math.max(x.simultanes || 1, simultanes);
     profils.set(cle, x);
+  }
+  // Total du DQE (« TOTAL HEBDOMADAIRE | 84 », « ESTIMATION ANNUELLE (… 47 semaines) | 3948 ») : la somme des postes retenus
+  // doit l'égaler, sinon l'écart est posé à GSS ; égale, l'estimation annuelle du DQE donne les heures par an (citedia2 :
+  // 84 h, 3 948 h, 2,46 ETP).
+  const alertes: string[] = [];
+  {
+    const t = String(dce || '');
+    const total = nombre((/TOTAL\s+HEBDOMADAIRE\s*\|\s*(\d+(?:[.,]\d+)?)/i.exec(t) || [])[1]);
+    const annuel = nombre(((/ESTIMATION\s+ANNUELLE[^|\n]*\|\s*(\d[\d\s\u00a0\u202f]*(?:[.,]\d+)?)/i.exec(t) || [])[1] || '').replace(/[\s\u00a0\u202f]/g, ''));
+    const duDqe = [...profils.entries()].filter(([k]) => dqeParProfil.get(k));
+    const somme = Math.round(duDqe.reduce((a, [, x]) => a + x.heuresSemaine, 0) * 100) / 100;
+    if (total && duDqe.length) {
+      if (Math.abs(somme - total) > 0.01) {
+        alertes.push(`les postes relevés dans le DQE totalisent ${fr(somme)} h par semaine alors que le DQE indique un total hebdomadaire de ${fr(total)} h : quels postes et quels volumes faut-il retenir ?`);
+        console.warn(`[Dimensionnement] Somme des postes du DQE (${somme} h) différente du total hebdomadaire du DQE (${total} h) : question posée à GSS.`);
+      } else if (annuel && duDqe.length === profils.size) {
+        for (const [, x] of duDqe) x.heuresAn = Math.round((annuel * x.heuresSemaine) / total);
+      }
+    }
   }
   for (const x of profils.values()) {
     if (x.observation !== undefined) continue;
@@ -240,7 +269,7 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     return { profils: [...profils.values()], titulaires: t, suppleants: t ? Math.max(2, Math.ceil(t * PART_SUPPLEANTS)) : 0, casPratique, ...(misesEnSituation.length ? { misesEnSituation } : {}) };
   }
   if (!profils.size && !casPratique.length && !misesEnSituation.length) return null;
-  return { profils: [...profils.values()], titulaires, suppleants, casPratique, ...(misesEnSituation.length ? { misesEnSituation } : {}) };
+  return { profils: [...profils.values()], titulaires, suppleants, casPratique, ...(misesEnSituation.length ? { misesEnSituation } : {}), ...(alertes.length ? { alertes } : {}) };
 }
 
 /**
@@ -479,7 +508,7 @@ export function questionDimensionnement(d: Dimensionnement): string {
     parts.push(`équipe dédiée de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} (${d.profils.map((x) => `${normaliser(categorieDe(x.profil)) === normaliser(x.profil) ? categorieDe(x.profil) : `${x.profil} (${categorieDe(x.profil).toLowerCase()})`} : ${pluriel(x.titulaires, 'titulaire')} pour ${fr(x.heuresSemaine)} h par semaine${simultanesTexte(x)}`).join(' ; ')}, base de 1 607 heures par an et par ETP) et équipe suppléante de ${pluriel(d.suppleants, 'agent formé', 'agents formés')} au site`);
   }
   if (d.casPratique.length) parts.push(`dispositif du cas pratique (${syntheseCasPratique(d)} ; vacations de ${VACATION_MAX_H} heures au plus)${d.titulaires ? `, d'où une équipe de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} (${d.profils.map((x) => effectifProfil(x.titulaires, x.profil)).join(', ')}) et une équipe suppléante de ${pluriel(d.suppleants, 'agent', 'agents')}` : ''}`);
-  return `Proposition à valider : dimensionnement calculé à partir des postes et des horaires du DCE — ${parts.join(' ; ')}. GSS valide ces effectifs ou les modifie dans l'assistant.`;
+  return `Proposition à valider : dimensionnement calculé à partir des postes et des horaires du DCE — ${parts.join(' ; ')}. GSS valide ces effectifs ou les modifie dans l'assistant.${(d.alertes || []).length ? ` Attention : ${d.alertes!.join(' ; ')}` : ''}`;
 }
 
 /** Bloc des consignes de rédaction (cadre imposé) : les chiffres proposés, à reprendre tels quels. */
@@ -595,6 +624,7 @@ export function messageDimensionnement(d: Dimensionnement, dce?: string): string
   if (d.profils.length) l.push(`- équipe dédiée de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} et équipe suppléante de ${pluriel(d.suppleants, 'agent formé', 'agents formés')} au site ;`);
   for (const m of d.misesEnSituation || []) l.push(`- ${m.libelle.charAt(0).toLowerCase()}${m.libelle.slice(1)} : ${dispositifMiseEnSituation(m)} ;`);
   for (const p of [...new Set(d.casPratique.map((x) => x.plage))]) l.push(`- cas pratique, ${p} : ${d.casPratique.filter((x) => x.plage === p && x.enService > 0).map((x) => `${effectifProfil(x.enService, x.profil)} (rotation ${x.rotation})`).join(', ') || 'aucun agent'} ;`);
+  for (const a of d.alertes || []) l.push(`- attention : ${a}`);
   // Couverture horaire incomplète du cas pratique : signalée à GSS (T5CP-5).
   const ecarts = dce === undefined ? [] : ecartsCouvertureCasPratique(d, dce);
   if (ecarts.length) l.push(`- attention, couverture du cas pratique : ${ecarts.join(' ; ')} ;`);

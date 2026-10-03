@@ -1,0 +1,16 @@
+===== PIÈCE : B_P_U_ - D_Q_E_ LOT N°2.xlsx =====
+LOT N°2 - PRESTATIONS DE SURETE ET DE SECURITE, MISE EN PLACE DE PERSONNEL POSTÉ
+BORDEREAU DES PRIX UNITAIRES
+AGENT DE SECURITE Titulaire d'une carte professionnelle et de l’agrément aux palpations de sécurité délivrés par le C.N.A.P.S., qualification CQP APS ou CAP Agent de Sécurité – SSIAP1 | Taux horaire en € H.T.
+Lundi au samedi 06h00 - 21h00 (jour)
+Lundi au samedi 21h00 - 06h00 (nuit)
+Dimanche 06h00 - 21h00 (jour)
+Dimanche 21h00 - 06h00 (nuit)
+Jour férié 06h00 - 21h00 (jour)
+DETAIL QUANTITATIF ESTIMATIF
+AGENT DE SECURITE Titulaire d'une carte professionnelle et de l’agrément aux palpations de sécurité délivrés par le C.N.A.P.S., qualification CQP APS ou CAP Agent de Sécurité – SSIAP1 | Taux horaire en € H.T. | Quantité estimée (heures hebdomadaires)* | TOTAL H.T.
+Lundi au samedi 06h00 - 21h00 (jour) | 8
+Lundi au samedi 21h00 - 06h00 (nuit) | 66
+Dimanche 21h00 - 06h00 (nuit) | 10
+TOTAL HEBDOMADAIRE | 84
+ESTIMATION ANNUELLE (hors période d'été et fériés, soit 47 semaines) | 3948
