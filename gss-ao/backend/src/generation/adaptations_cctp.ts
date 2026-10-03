@@ -556,6 +556,9 @@ export function adaptationsDesValeursImposees(mt: MemoireType, ctx: ContexteMarc
     if (!/imposé par le DCE/.test(source)) continue;
     const g = gss.variables[nom];
     if (!variableRenseignee(g) || !variableRenseignee(r)) continue;
+    // Valeur « de GSS » elle-même lue dans le DCE (fréquence des réunions, cstb 551 : « chaque année » puis « une fois par
+    // an ; … ») : pas une phrase de GSS, rien à signaler.
+    if (/^(?:DCE$|délai imposé par le DCE|imposé par le DCE|déduit de la fréquence imposée)/.test(String(g.source || '').trim())) continue;
     const vr = texte(r.valeur), vg = texte(g.valeur);
     if (normaliser(vr) === normaliser(vg)) continue;
     const sujet = SUJET_VARIABLE_DELAI[nom];

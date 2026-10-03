@@ -52,3 +52,10 @@ describe('Délai normand retiré hors Normandie : motif, pas exigence du CCTP (T
     expect(phraseLisible(' Délai maximal d’intervention : 30 minutes.')).toBe('Délai maximal d’intervention : 30 minutes.');
   });
 });
+
+describe('Valeur « de GSS » lue elle aussi dans le DCE', () => {
+  it('cstb : la fréquence des réunions (DCE) remplacée par celle extraite du DCE n\'est pas une phrase adaptée de GSS', () => {
+    const l = signaler({ dce: DCE('cstb'), analyse: { clientName: 'CSTB' }, imposees: { FREQ_REUNIONS: { valeur: 'une fois par an ; la première année, un point intermédiaire à mi-année', citation: 'Des rencontres annuelles seront organisées' } } });
+    expect(l.some((a) => a.rubrique === 'b5_reunions_indicateurs')).toBe(false);
+  });
+});
