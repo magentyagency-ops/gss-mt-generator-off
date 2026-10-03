@@ -231,3 +231,16 @@ describe('cadre imposé : faits de GSS (T1F-5, T1-CONS-2)', () => {
     expect(controlerFaitsNouveauxCadre('Interlocuteur principal : MARCHANI Adil — 06 58 06 32 25 / 09 62 21 24 75', 'Question: "Interlocuteur"', s).texte).toBe('Interlocuteur principal : MARCHANI Adil — 06 58 06 32 25 / 09 62 21 24 75');
   });
 });
+
+import { renvoisHorsCadreRetires } from '../src/generation/reponse_libre_v2';
+
+describe('cadre imposé : compréhension sans renvoi à une rubrique absente du cadre (T1-COH-4)', () => {
+  it('« → notre réponse : « La planification » » retiré, la phrase gardée ; un intitulé du cadre reste', () => {
+    const cadre = 'Section: "1.1 - Compréhension des sujétions du site et du contrat" | Question: "5.1 Moyens matériels"';
+    expect(renvoisHorsCadreRetires('Horaires SSIAP 1 : … → notre réponse : « La planification » distingue les vacations prévues.', cadre))
+      .toBe('Horaires SSIAP 1 : … → notre réponse : notre organisation distingue les vacations prévues.');
+    expect(renvoisHorsCadreRetires("Continuité multisite → notre réponse : « Le remplacement d'un agent absent : absence non prévue » et « La gestion d'une commande supplémentaire » organisent la continuité.", cadre))
+      .toBe('Continuité multisite → notre réponse : nos procédures organisent la continuité.');
+    expect(renvoisHorsCadreRetires('Matériel → notre réponse : « Moyens matériels » détaille les équipements.', cadre)).toBe('Matériel → notre réponse : « Moyens matériels » détaille les équipements.');
+  });
+});

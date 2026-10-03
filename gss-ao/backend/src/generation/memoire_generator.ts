@@ -17,7 +17,7 @@ import {
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
-  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
+  sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   sansEngagementsEnDouble, sansEngagementsDejaDits, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
@@ -5177,10 +5177,12 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
       try {
         const b1 = repriseMT.mt.rubriques.find((r) => r.mode === 'besoin');
         const c = await this.redigerComprehension(repriseMT.prep, repriseMT.ctx, donneesBesoin(repriseMT.prep, repriseMT.ctx), {
-          analyse: analyseCompacte(analysisData), format: 'paysage',
-          demande: "Cette réponse est placée dans le cadre de réponse imposé par l'acheteur, sous sa question : ne renvoie à aucun bloc ni à aucun numéro de bloc du mémoire (écris « notre réponse : … » sans « développée au bloc n »).",
+          analyse: analyseCompacte(analysisData), format: 'paysage', sansSommaire: true,
+          demande: "Cette réponse est placée dans le cadre de réponse imposé par l'acheteur, sous sa question : ne renvoie à aucun bloc ni à aucun numéro de bloc du mémoire (écris « notre réponse : … » sans « développée au bloc n »), ni à aucune rubrique entre guillemets.",
         });
-        return { id: b1?.id || 'b1_comprehension', titre: b1?.titre || 'Notre compréhension de votre besoin', texte: texteBrut(c.texte), svg: c.svg };
+        // Renvoi à un titre absent du cadre (« → notre réponse : « La planification » … », T1-COH-4) : retiré, la phrase reste.
+        const intitulesCadre = descriptors.map((d) => d.context).join(' ');
+        return { id: b1?.id || 'b1_comprehension', titre: b1?.titre || 'Notre compréhension de votre besoin', texte: renvoisHorsCadreRetires(texteBrut(c.texte), intitulesCadre), svg: c.svg };
       } catch (e: any) {
         console.warn(`[MemoireGenerator] Compréhension du besoin (cadre) indisponible (${e?.message || e}) : réponse rédigée comme les autres.`);
         return null;
@@ -8698,11 +8700,12 @@ RÈGLES DE FORME (rendu Marp) :
     prep: MemoirePrepare,
     ctx: ContexteMarche,
     besoin: DonneesBesoin,
-    o: { perimetre?: string; exigences?: ExigenceMatrice[]; remarques?: string; analyse?: string; demande?: string; format?: 'page' | 'paysage' },
+    o: { perimetre?: string; exigences?: ExigenceMatrice[]; remarques?: string; analyse?: string; demande?: string; format?: 'page' | 'paysage'; sansSommaire?: boolean },
   ): Promise<{ texte: string; titre: string; svg?: string; secours: boolean }> {
     const titreDefaut = prep.mt.rubriques.find((r) => r.mode === 'besoin')?.schema?.titre || 'Votre besoin, notre réponse en un process';
     const messages = consigneComprehension(besoin, {
-      perimetre: o.perimetre, exigences: o.exigences, remarques: o.remarques, sommaire: sommaireProcess(prep.plan), analyse: o.analyse,
+      // Cadre imposé (T1-COH-4) : jamais les rubriques du mémoire type comme renvois, elles ne sont pas des parties du cadre.
+      perimetre: o.perimetre, exigences: o.exigences, remarques: o.remarques, sommaire: o.sansSommaire ? undefined : sommaireProcess(prep.plan), analyse: o.analyse,
       dce: dceCctpDAbord(String(ctx.dce || ''), 60_000), demande: o.demande, motsMin: o.remarques ? 350 : 400, motsMax: o.remarques ? 600 : 700,
     });
     let rep: any = null;

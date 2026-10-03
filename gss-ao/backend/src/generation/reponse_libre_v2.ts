@@ -2278,6 +2278,28 @@ export function sansLigneVideDuPerimetre(texte: string): { texte: string; retire
 }
 
 /** Rubriques du plan par bloc, pour que la compréhension renvoie aux process GSS qui la démontrent. */
+/**
+ * Cadre imposé (T1-COH-4) : renvoi « notre réponse : « Titre » » à une rubrique qui n'est ni une question ni un intitulé du
+ * cadre (« → notre réponse : « La planification » distingue les vacations… ») : le titre est retiré et la phrase gardée
+ * (« notre organisation distingue les vacations… », « nos procédures organisent la continuité »). `intitules` : texte des
+ * questions et sections du cadre.
+ */
+export function renvoisHorsCadreRetires(texte: string, intitules: string): string {
+  const cadre = ` ${normaliser(intitules).replace(/[^a-z0-9]+/g, ' ').trim()} `;
+  const present = (titre: string) => {
+    const t = normaliser(titre).replace(/[^a-z0-9]+/g, ' ').trim();
+    return t.length >= 3 && cadre.includes(` ${t} `);
+  };
+  return String(texte || '').replace(/(notre\s+r[ée]ponse\s*:\s*)((?:«\s*[^«»]{2,120}?\s*»(?:\s*(?:,|et)\s*)?)+)/gi, (m, debut: string, titres: string) => {
+    const liste = [...titres.matchAll(/«\s*([^«»]{2,120}?)\s*»/g)].map((x) => x[1]);
+    if (liste.every(present)) return m;
+    const gardes = liste.filter(present);
+    const fin = /\s$/.test(titres) ? ' ' : '';
+    if (gardes.length) return `${debut}${gardes.map((t) => `« ${t} »`).join(gardes.length > 1 ? ' et ' : '')}${fin}`;
+    return `${debut}${liste.length > 1 ? 'nos procédures' : 'notre organisation'}${fin}`;
+  });
+}
+
 export function sommaireProcess(plan: PlanMemoireType): string {
   return plan.blocs.filter((b) => !b.rubriques.every((id) => /^b1_/.test(id)))
     .map((b) => `Bloc ${b.numero} — ${b.titre} : ${plan.rubriques.filter((r) => r.bloc === b.id && r.ancienne_rubrique !== 'b_references').map((r) => r.titre).join(' ; ')}`)
