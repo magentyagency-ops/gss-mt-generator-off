@@ -27,7 +27,7 @@ import {
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, completerDelaisCadre, ordonnerSelonReponse, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, attendusDuChamp, attendusSansReponse,
-  questionsPubliposteParEmplacement, questionDeLEmplacement, completerFamilles,
+  questionsPubliposteParEmplacement, questionDeLEmplacement, completerFamilles, referencesDeSecours,
 } from './memoire_type_cadre';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche } from './base_memoires';
@@ -5436,11 +5436,24 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
           }
           if (titre) lib = `${titre} — ${lib}`;
         }
-        const ref = developpee && candidats.length ? texteBrut(String(candidats[0].texte || '')).trim() : '';
+        // Tous les textes de GSS attribués à cette réponse (les mêmes que le chemin normal sans le choix du modèle), dans l'ordre
+        // de la question, jamais le premier seul (citedia2 474, T10C-3 : sous-critère des moyens humains réduit à l'adéquation).
+        // Reprise enregistrée (fidélité 1) : phrases adaptées au CCTP signalées (D8), schéma de la bibliothèque et questions
+        // d'échéance comme pour une réponse rédigée.
+        const secours = developpee && candidats.length ? referencesDeSecours(candidats, `${questionMT || ''}\n${f.context}`) : [];
+        const textes = secours.map((c) => ({ c, t: texteBrut(String(c.texte || '')).trim() })).filter((x) => x.t);
+        const ref = textes.map((x) => (textes.length > 1 && !comprehension ? `${String(x.c.titre || '').replace(/[.:\s]+$/, '')}\n${x.t}` : x.t)).join('\n\n');
         if (ref) {
           replacements.push({ id: f.id, value: ref });
-          questionsReprise.set(f.id, repriseMT?.emplacements?.[candidats[0].id] || []);
-          propositionsCadre.set(f.id, `Réponse à relire (rédaction automatique indisponible : texte du mémoire type de GSS repris tel quel) : ${lib}`);
+          questionsReprise.set(f.id, textes.flatMap((x) => repriseMT?.emplacements?.[x.c.id] || []));
+          repriseParChamp.set(f.id, { ids: textes.map((x) => x.c.id), fidelite: 1, brute: 1 });
+          console.warn(`[MemoireGenerator] Champ ${f.id} : rédaction indisponible, texte du mémoire type repris tel quel (${textes.map((x) => x.c.id).join(', ')} ; candidats : ${candidats.map((c) => c.id).join(', ')}${renvois.length ? ` ; repris ailleurs : ${renvois.map((r) => r.titre).join(', ')}` : ''}).`);
+          if (comprehension?.svg && ![...svgComprehension.keys()].some((id) => id !== f.id)) svgComprehension.set(f.id, comprehension.svg);
+          else if (comprehension && !comprehension.svg) alertesComprehension.add(`Réponse « ${lib} » : le schéma de process de la compréhension du besoin n'a pas pu être dessiné ; à demander via l'assistant avant la remise.`);
+          // Éléments attendus du cadre qu'aucun texte repris ne traite : nommés à GSS (même règle que le chemin normal, T4N-4).
+          const attendusE = attendusDuChamp(f.context).length ? attendusDuChamp(f.context) : attendusDuChamp(String(questionMT || ''));
+          const sansRep = attendusSansReponse(ref, attendusE);
+          propositionsCadre.set(f.id, `Réponse à relire (rédaction automatique indisponible : texte du mémoire type de GSS repris tel quel${sansRep.length ? ` ; élément${sansRep.length > 1 ? 's' : ''} attendu${sansRep.length > 1 ? 's' : ''} sans réponse : ${sansRep.map((x) => `« ${x} »`).join(', ')}` : ''}) : ${lib}`);
         }
         echecsRedaction.set(f.id, { libelle: lib, reference: !!ref, developpee });
       };

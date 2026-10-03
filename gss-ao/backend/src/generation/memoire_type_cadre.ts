@@ -518,7 +518,7 @@ export function cosinus(a: number[], b: number[]): number {
 export const THEMES_CADRE: Array<{ sujet: RegExp; rubriques: string[]; situation?: boolean; evenementiel?: boolean }> = [
   { sujet: /interlocut(?:eur|rice) unique|r[ée]f[ée]rent unique|contact unique|num[ée]ro unique/i, rubriques: ['b3_interlocuteur_unique'] },
   { sujet: /(?<![\p{L}])agr[ée]ments?(?![\p{L}])|autorisations? (?:d['’]exercer|cnaps|administrative|pr[ée]fectorale)/iu, rubriques: ['b2_identite'] },
-  { sujet: /(?<![\p{L}])absen(?:ce|ts?|tes?)(?![\p{L}])|remplacement (?:d['’]un |des |du )?(?:agents?|personnels?|salari)|mode de remplacement|agents? indisponibles?/iu, rubriques: ['b5_remplacement_prevu', 'b5_remplacement_imprevu'], situation: true },
+  { sujet: /(?<![\p{L}])absen(?:ces?|ts?|tes?)(?![\p{L}])|rempla(?:cement|cer) (?:d['’]un |des |du |un |les )?(?:agents?|personnels?|salari)|mode de remplacement|agents? indisponibles?/iu, rubriques: ['b5_remplacement_prevu', 'b5_remplacement_imprevu'], situation: true },
   { sujet: /intrusions?|effractions?/i, rubriques: ['b4_proc_intrusion'], situation: true },
   { sujet: /individus? suspects?|colis suspects?/i, rubriques: ['b4_proc_individu_suspect'], situation: true },
   { sujet: /(?<![\p{L}])malaises?(?![\p{L}])|victimes?|secours [àa] (?:la )?personne/iu, rubriques: ['b4_proc_victime'], situation: true },
@@ -971,6 +971,37 @@ export function completerFamilles(retenus: CandidatReference[], candidats: Candi
     }
   }
   return out;
+}
+
+/**
+ * Textes de GSS repris quand la rédaction automatique d'une réponse développée du cadre est indisponible (T10C-3) : tous les
+ * textes attribués à cette réponse (attribuerRubriques : chacun n'est repris que dans une réponse), sans le choix du modèle,
+ * dans l'ordre de la question : les rubriques les plus proches de la question d'abord (score), puis celles des composantes
+ * dans l'ordre où la question les nomme, les familles inséparables côte à côte.
+ */
+export function referencesDeSecours(candidats: CandidatReference[], question: string): CandidatReference[] {
+  const retenus = completerFamilles(candidats, candidats);
+  if (retenus.length <= 1) return retenus;
+  const q = String(question || '');
+  const position = (c: CandidatReference): number => {
+    if (!c.theme) return -2 + (1 - c.score) / 10;
+    let min = Infinity;
+    for (const t of THEMES_CADRE) {
+      if (!t.rubriques.includes(c.id)) continue;
+      const k = q.search(t.sujet);
+      if (k >= 0 && k < min) min = k + t.rubriques.indexOf(c.id) / 100;
+    }
+    return min;
+  };
+  const places = retenus.map((c, i) => ({ c, i, p: position(c) }));
+  const famille = (id: string) => FAMILLES_INSEPARABLES.find((f) => f.includes(id));
+  for (const x of places) {
+    if (x.p !== Infinity) continue;
+    const f = famille(x.c.id);
+    const soeur = f ? places.find((y) => y !== x && y.p !== Infinity && f.includes(y.c.id)) : undefined;
+    if (soeur) x.p = soeur.p + (f!.indexOf(x.c.id) - f!.indexOf(soeur.c.id)) / 1000;
+  }
+  return places.sort((a, b) => a.p - b.p || a.i - b.i).map((x) => x.c);
 }
 
 /**
