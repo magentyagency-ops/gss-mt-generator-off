@@ -4,12 +4,12 @@ import path from 'path';
 import { marcheHorsNormandie, sitesDuMarche, questionDelaiInapplicable } from '../src/generation/base_memoires';
 import { preparerMemoireType, publierMemoire, questionsDuPubliposte } from '../src/generation/memoire_type';
 
-const DCE = (n: string) => fs.readFileSync(path.join(__dirname, '../../_corpus_verif/_dce_textes', `${n}.txt`), 'utf-8');
+import { DCE, aCorpus } from './fixtures/corpus';
 
 /** Tour 4 (T4-COH-3) : un marché à sites mixtes ne reçoit jamais les délais normands de GSS pour tous ses sites. */
 describe('sites mixtes Normandie / hors Normandie (T4-COH-3)', () => {
   const mixte = 'Marché de surveillance de deux sites : site A à Rouen (76000) et site B à Paris (75013). Rondes, SSIAP 1, astreinte, PTI.';
-  it('les sites sont comptés par code postal distinct ; une adresse administrative (Cedex, DREETS) n\'est pas un site', () => {
+  it.skipIf(!aCorpus('becquerel', 'caen', 'cstb', 'havre2', 'ifsem', 'imm', 'parc_expo', 'rouen_univ', 's2e', 'vitry'))('les sites sont comptés par code postal distinct ; une adresse administrative (Cedex, DREETS) n\'est pas un site', () => {
     expect(sitesDuMarche({}, mixte)).toEqual({ normands: ['Rouen'], horsNormandie: ['Paris'], mixte: true });
     expect(marcheHorsNormandie({}, mixte)).toBe(true);
     expect(sitesDuMarche({}, DCE('rouen_univ')).mixte).toBe(false);

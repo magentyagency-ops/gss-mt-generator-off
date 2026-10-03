@@ -6,7 +6,7 @@ import path from 'path';
 import { chargerMemoireType, preparerMemoireType, publierMemoire } from '../src/generation/memoire_type';
 import { adaptationsDesValeursImposees, exigenceHorsNormandie, consultationsAdaptations, messageAdaptations, estRegleGss, phraseLisible, type PhraseAdaptee } from '../src/generation/adaptations_cctp';
 
-const DCE = (n: string) => fs.readFileSync(path.join(__dirname, '../../_corpus_verif/_dce_textes', `${n}.txt`), 'utf-8');
+import { DCE, aCorpus } from './fixtures/corpus';
 const mt = chargerMemoireType();
 const signaler = (ctx: any) => {
   const ids = publierMemoire(preparerMemoireType(ctx, { memoireType: mt })).filter((p) => p.texte).map((p) => p.id);
@@ -14,7 +14,7 @@ const signaler = (ctx: any) => {
 };
 
 describe('Délai imposé par le CCTP à la place de celui de GSS (D8)', () => {
-  it('caen 475 : « en 45 minutes » de GSS devenu « en 30 minutes » est signalé, avec la phrase du CCTP', () => {
+  it.skipIf(!aCorpus('caen'))('caen 475 : « en 45 minutes » de GSS devenu « en 30 minutes » est signalé, avec la phrase du CCTP', () => {
     const l = signaler({ dce: DCE('caen'), analyse: { clientName: 'ACOSS' } });
     const alarme = l.filter((a) => a.rubrique === 'b4_proc_alarme');
     expect(alarme.length).toBe(1);
@@ -38,7 +38,7 @@ describe('Délai imposé par le CCTP à la place de celui de GSS (D8)', () => {
 });
 
 describe('Délai normand retiré hors Normandie : motif, pas exigence du CCTP (T6C-10)', () => {
-  it('etampes1 : lieu nommé d\'après le DCE, libellé « motif (règle de GSS) »', () => {
+  it.skipIf(!aCorpus('etampes1'))('etampes1 : lieu nommé d\'après le DCE, libellé « motif (règle de GSS) »', () => {
     const e = exigenceHorsNormandie(DCE('etampes1'), {});
     expect(e).toMatch(/^Marché hors Normandie \(marché d'Etampes\)/);
     expect(estRegleGss(e)).toBe(true);
@@ -54,7 +54,7 @@ describe('Délai normand retiré hors Normandie : motif, pas exigence du CCTP (T
 });
 
 describe('Valeur « de GSS » lue elle aussi dans le DCE', () => {
-  it('cstb : la fréquence des réunions (DCE) remplacée par celle extraite du DCE n\'est pas une phrase adaptée de GSS', () => {
+  it.skipIf(!aCorpus('cstb'))('cstb : la fréquence des réunions (DCE) remplacée par celle extraite du DCE n\'est pas une phrase adaptée de GSS', () => {
     const l = signaler({ dce: DCE('cstb'), analyse: { clientName: 'CSTB' }, imposees: { FREQ_REUNIONS: { valeur: 'une fois par an ; la première année, un point intermédiaire à mi-année', citation: 'Des rencontres annuelles seront organisées' } } });
     expect(l.some((a) => a.rubrique === 'b5_reunions_indicateurs')).toBe(false);
   });

@@ -6,7 +6,7 @@ import { ajoutContraireAuxDelaisGss, dureesIntervention } from '../src/generatio
 import { phraseDuDceProche } from '../src/generation/adaptations_cctp';
 import { questionAlignementRefuse, questionAjoutRefuse } from '../src/generation/memoire_generator';
 
-const DCE = (n: string) => fs.readFileSync(path.join(__dirname, '../../_corpus_verif/_dce_textes', `${n}.txt`), 'utf-8');
+import { DCE, aCorpus } from './fixtures/corpus';
 const GSS = "- si l'agent prévient de son absence au moins 24 heures avant le début de la prestation, nous replanifions en interne.\n- si le responsable de site n'a pas reçu de prise de service 10 minutes avant le début de la prestation, il appelle l'agent et mobilise automatiquement l'agent d'astreinte, qui est sur site en 60 minutes maximum ;";
 const AJOUT = "En cas de défaillance de l'effectif prévu, le personnel de remplacement est dépêché sur le site dans l'heure suivant la constatation.";
 
@@ -27,7 +27,7 @@ describe('Ajout de l\'adaptation sur un délai (caen 475)', () => {
     expect(ajoutContraireAuxDelaisGss("Le remplacement d'un agent absent intervient en 30 minutes.", GSS)).toMatch(/60 minutes maximum/);
     expect(ajoutContraireAuxDelaisGss("Nous assurons le remplacement immédiat d'un agent absent.", GSS)).toMatch(/60 minutes maximum/);
   });
-  it('la question cite la phrase du CCTP, jamais la justification du modèle', () => {
+  it.skipIf(!aCorpus('caen'))('la question cite la phrase du CCTP, jamais la justification du modèle', () => {
     const f = phraseDuDceProche(AJOUT, DCE('caen'));
     expect(f).toMatch(/personnel de remplacement dans les UNE \(1\) heure/);
     const q = questionAlignementRefuse(f, 'qui est sur site en 60 minutes maximum');

@@ -5,15 +5,15 @@ import { chargerMemoireType, evaluerIndicateurs } from '../src/generation/memoir
 
 // T6C-1 : un rattachement de la matrice (fait par le modèle) ne rend un indicateur vrai que si le texte de l'exigence
 // contient le motif de l'indicateur.
-const DCE = (n: string) => fs.readFileSync(path.join(__dirname, '../../_corpus_verif/_dce_textes', `${n}.txt`), 'utf-8');
+import { DCE, aCorpus } from './fixtures/corpus';
 const mt = chargerMemoireType();
 
 describe('Indicateurs : rattachement de la matrice contrôlé par le motif (T6C-1)', () => {
-  it('caen : « mobiliser les équipes … en cas de sinistre » rattaché à b5_evenementiel n\'ouvre pas l\'événementiel', () => {
+  it.skipIf(!aCorpus('caen'))('caen : « mobiliser les équipes … en cas de sinistre » rattaché à b5_evenementiel n\'ouvre pas l\'événementiel', () => {
     const e = evaluerIndicateurs(mt, { dce: DCE('caen'), analyse: { clientName: 'ACOSS' }, matrice: [{ rubrique: 'b5_evenementiel', exigence: "Pouvoir mobiliser les équipes nécessaires dans un délai de 2 heures en cas de sinistre ou d'incident grave mettant en jeu la sécurité des biens et des personnes." }] } as any);
     expect(e.EVENEMENTIEL.valeur).toBe(false);
   });
-  it('cstb : une levée de doute rattachée à b5_defaillance_ssi n\'ouvre pas la défaillance SSI', () => {
+  it.skipIf(!aCorpus('cstb'))('cstb : une levée de doute rattachée à b5_defaillance_ssi n\'ouvre pas la défaillance SSI', () => {
     const e = evaluerIndicateurs(mt, { dce: DCE('cstb'), analyse: { clientName: 'CSTB' }, matrice: [{ rubrique: 'b5_defaillance_ssi', exigence: "Le candidat doit indiquer le délai moyen maximum d'intervention sur site pour une levée de doute après appel de la télésurveillance." }] } as any);
     expect(e.DEFAILLANCE_SSI.valeur).toBe(false);
   });
@@ -24,7 +24,7 @@ describe('Indicateurs : rattachement de la matrice contrôlé par le motif (T6C-
 });
 
 describe('Exigence dont la rubrique de la matrice est hors du plan (T6C-1)', () => {
-  it('caen : la mobilisation sur sinistre rattachée à b5_evenementiel (hors plan) va à la rubrique de son thème, pas aux questions nouvelles', async () => {
+  it.skipIf(!aCorpus('caen'))('caen : la mobilisation sur sinistre rattachée à b5_evenementiel (hors plan) va à la rubrique de son thème, pas aux questions nouvelles', async () => {
     const { preparerMemoireType, exigencesParRubrique } = await import('../src/generation/memoire_type');
     const ctx: any = { dce: DCE('caen'), analyse: { clientName: 'ACOSS' }, matrice: [{ rubrique: 'b5_evenementiel', exigence: "Pouvoir mobiliser les équipes nécessaires dans un délai de 2 heures en cas de sinistre ou d'incident grave mettant en jeu la sécurité des biens et des personnes." }] };
     const p = preparerMemoireType(ctx);
@@ -36,7 +36,7 @@ describe('Exigence dont la rubrique de la matrice est hors du plan (T6C-1)', () 
 });
 
 describe('Plan de prévention : rubrique du démarrage, jamais la planification (T6C-9)', () => {
-  it('caen : l\'exigence du plan de prévention va à « L\'intégration d\'un nouveau marché » ; la planification refuse cet ajout', async () => {
+  it.skipIf(!aCorpus('caen'))('caen : l\'exigence du plan de prévention va à « L\'intégration d\'un nouveau marché » ; la planification refuse cet ajout', async () => {
     const { preparerMemoireType, exigencesParRubrique, sujetDeRubrique, dansLeSujet } = await import('../src/generation/memoire_type');
     const e = { rubrique: 'b4_planification', exigence: "Établir et remettre au pouvoir adjudicateur et aux organismes d'hygiène et de sécurité un plan de prévention dans les 15 jours suivant la notification." };
     const p = preparerMemoireType({ dce: DCE('caen'), analyse: { clientName: 'ACOSS' }, matrice: [e] } as any);

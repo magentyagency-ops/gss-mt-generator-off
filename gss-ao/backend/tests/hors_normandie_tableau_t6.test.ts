@@ -4,7 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import { delaisHorsNormandie } from '../src/generation/base_memoires';
 
-const DCE = fs.readFileSync(path.join(__dirname, '../../_corpus_verif/_dce_textes/cstb.txt'), 'utf-8');
+import { DCE as dceCorpus, aCorpus } from './fixtures/corpus';
+const DCE = dceCorpus('cstb');
 const T = `L'équipe suivante :
 
 | Catégorie de personnel | Qualification | Nombre | Observations |
@@ -15,7 +16,7 @@ const T = `L'équipe suivante :
 
 Nous mettons en place une équipe de 4 agents titulaires. L'agent d'astreinte intervient en 45 minutes au maximum.`;
 
-describe('delaisHorsNormandie et le tableau de l\'équipe dédiée (cstb 551)', () => {
+describe.skipIf(!aCorpus('cstb'))('delaisHorsNormandie et le tableau de l\'équipe dédiée (cstb 551)', () => {
   it('le tableau reste entier ; seul le délai normand est retiré', () => {
     const r = delaisHorsNormandie(T, DCE, true);
     expect(r.texte).toContain('| Intervenant rondier |');

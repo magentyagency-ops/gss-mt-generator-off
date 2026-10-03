@@ -3,17 +3,17 @@ import fs from 'fs';
 import path from 'path';
 import { formesClient, preparerMemoireType, publierMemoire, sansFormeJuridiqueFinale, teteNominale } from '../src/generation/memoire_type';
 
-const DCE = (n: string) => fs.readFileSync(path.join(__dirname, '../../_corpus_verif/_dce_textes', `${n}.txt`), 'utf-8');
+import { DCE, aCorpus } from './fixtures/corpus';
 
 /** Tour 4 (T4C-3, T4-COH-4) : jamais le nom long de l'acheteur, forme juridique ou service compris, à chaque mention. */
 describe('nom de l\'acheteur : forme juridique, capitales et noms très longs (T4C-3, T4-COH-4)', () => {
   const IMM = 'ASSOCIATION NOUVEL INSTITUT MÉDICO-CHIRURGICAL MONTSOURIS (Nouvel IMM) – Association régie par la loi du 1er juillet 1901';
-  it('la forme juridique après le tiret est retirée ; « l\'IMM » après la première mention', () => {
+  it.skipIf(!aCorpus('imm'))('la forme juridique après le tiret est retirée ; « l\'IMM » après la première mention', () => {
     expect(sansFormeJuridiqueFinale(IMM)).toBe('ASSOCIATION NOUVEL INSTITUT MÉDICO-CHIRURGICAL MONTSOURIS (Nouvel IMM)');
     expect(sansFormeJuridiqueFinale('Ville du Havre - Direction de la commande publique')).toBe('Ville du Havre - Direction de la commande publique');
     expect(formesClient(IMM, DCE('imm')).court).toMatchObject({ article: "l'", nom: 'IMM' });
   });
-  it('publipostage imm : nom écrit comme dans le DCE, sans la loi de 1901, puis « l\'IMM »', () => {
+  it.skipIf(!aCorpus('imm'))('publipostage imm : nom écrit comme dans le DCE, sans la loi de 1901, puis « l\'IMM »', () => {
     const prep: any = preparerMemoireType({ dce: DCE('imm'), analyse: { clientName: IMM } } as any);
     expect(prep.variables.CLIENT.valeur).toBe('Association Nouvel Institut Médico-Chirurgical Montsouris (Nouvel IMM)');
     const t = publierMemoire(prep).map((r: any) => r.texte || '').join('\n');
