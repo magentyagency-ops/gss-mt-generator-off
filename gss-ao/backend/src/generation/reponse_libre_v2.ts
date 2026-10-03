@@ -1958,7 +1958,7 @@ export function messageAdaptations(adaptations: Array<AdaptationCctp & { titre: 
   const n = adaptations.length;
   return [
     `J'ai adapté ${n === 1 ? 'une phrase' : `${n} phrases`} du texte de GSS que le cahier des charges contredisait (le cahier des charges prime). À valider avant la remise :`,
-    ...adaptations.map((a) => `- « ${a.titre} » : « ${c(a.avant)} » devient « ${c(a.apres)} »${a.exigence ? ` (exigence du CCTP : « ${c(a.exigence).slice(0, 300)} »)` : ''}`),
+    ...adaptations.map((a) => `- « ${a.titre} » : « ${c(a.avant)} » devient « ${c(a.apres)} »${a.exigence ? ` (exigence du CCTP : « ${((t) => (t.length <= 300 ? t : `${t.slice(0, 301).replace(/\s+\S*$/, '').replace(/[\s,;:]+$/, '')}…`))(c(a.exigence))} »)` : ''}`),
     '',
     'Pour chacune, vous pouvez garder la phrase adaptée, la modifier (« Dans la rubrique …, remplace … par … ») ou rétablir la phrase d\'origine (« Dans la rubrique …, remplace la phrase adaptée par la phrase d\'origine : … »).',
   ].join('\n');

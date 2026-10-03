@@ -28,7 +28,7 @@ import {
   attribuerRubriques, blocRenvois, completerDelaisCadre, ordonnerSelonReponse, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, attendusDuChamp, attendusSansReponse,
 } from './memoire_type_cadre';
-import { SuiviAdaptations, adaptationsDuPubliposte, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, type PhraseAdaptee } from './adaptations_cctp';
+import { SuiviAdaptations, adaptationsDuPubliposte, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -1317,16 +1317,25 @@ export function frequencesRetirees(extrait: string, remplacement: string): strin
  * de garantie ; un délai, une fréquence ou un jalon demande si GSS s'engage sur l'exigence, ou quelle valeur écrire.
  */
 export function questionAlignementRefuse(exigence: string, extrait: string, autres: string[] = []): string {
-  const e = exigence.replace(/[.\s]+$/, '').slice(0, 300);
-  const x = extrait.replace(/[*_#]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  const e = phraseLisible(exigence, 420).replace(/[.\s]+$/, '');
+  const x = phraseLisible(extrait.replace(/[*_#]/g, ''), 420);
   if (/€|\beuros?\b|\bk€|\bM€/i.test(`${e} ${x}`) && !/minutes?|heures?|jours?|par (?:mois|an|trimestre|semaine)/i.test(e)) {
     return `Le DCE exige : « ${e} ». Le mémoire indique la valeur de GSS : « ${x} ». Disposez-vous d'une garantie ou d'une valeur conforme à cette exigence (extension, attestation), et laquelle faut-il écrire ?`;
   }
   return `Le DCE exige : « ${e} ». Le mémoire indique la pratique de GSS : « ${x} »${autres.length ? ` (même valeur écrite aussi dans ${autres.map((t) => `« ${t} »`).join(', ')})` : ''}. Pouvez-vous vous engager sur l'exigence du DCE${autres.length ? ' dans toutes ces rubriques' : ''}, ou quelle valeur faut-il écrire ?`;
 }
 
+/**
+ * Question exacte à GSS pour une phrase ajoutée par l'IA (adaptation au CCTP) et refusée parce qu'elle promet un délai plus
+ * court que celui de GSS, quand aucune phrase du DCE ne la fonde mot pour mot (T6C-2) : la phrase de l'IA est citée comme
+ * telle, jamais comme une exigence du DCE.
+ */
+export function questionAjoutRefuse(phraseIA: string, extrait: string): string {
+  return `Phrase proposée par l'IA d'après le cahier des charges : « ${phraseLisible(phraseIA, 420).replace(/[.\s]+$/, '')} ». Le mémoire indique la pratique de GSS : « ${phraseLisible(extrait.replace(/[*_#]/g, ''), 420)} ». Pouvez-vous vous engager sur cette phrase, ou quelle valeur faut-il écrire ?`;
+}
+
 /** Ligne de consultation déjà formulée sans modèle (jamais envoyée à la fusion par le modèle, jamais reformulée). */
-export const LIGNE_DETERMINISTE = /^(?:Proposition à valider|Proposition de réponse à valider|Réponse à relire|Réponse «|Réponse du cadre\s*:|Phrases adaptées au cahier des charges|Partie «|Rubrique «|Rédaction automatique indisponible)/;
+export const LIGNE_DETERMINISTE = /^(?:Proposition à valider|Proposition de réponse à valider|Réponse à relire|Réponse «|Réponse du cadre\s*:|Phrases adaptées au cahier des charges|Partie «|Rubrique «|Rédaction automatique indisponible|Phrase proposée par l'IA d'après le cahier des charges|Phrase ajoutée au texte de GSS)/;
 
 export function questionExacte(q: string): string {
   const t = String(q || '').replace(/\s+/g, ' ').trim();
@@ -2424,7 +2433,7 @@ export function demandesDesPassagesRepris<T extends { texte: string; repere?: nu
 export function questionJalons(questions: Set<string>, exigence: string, section: string): string {
   const calendrier = section.split('\n').map((l) => l.replace(/^\s*[-*•]\s*/, '').replace(/[*_]/g, '').replace(/\s*;\s*$/, '').trim())
     .filter((l) => /(?<![A-Za-z0-9])J\s*[-−–+]\s*\d/.test(l));
-  const ex = exigence.replace(/[.\s]+$/, '').slice(0, 300);
+  const ex = phraseLisible(exigence, 420).replace(/[.\s]+$/, '');
   const objet = (/(planning|rapport|bilan|compte rendu|facture|consigne|liste)s?/i.exec(ex) || [])[1]?.toLowerCase() || '';
   const delai = (/\d+\s*(?:jours?|heures?|h|semaines?|mois)(?:\s+(?:ouvr[ée]s|calendaires|francs|ouvrables))?/i.exec(ex) || [])[0] || '';
   const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ');
@@ -7730,8 +7739,10 @@ RÈGLES DE FORME (rendu Marp) :
         const contraire = ajoutContraireAuxDelaisGss(m.par!, texteGssPublie);
         if (contraire && sections[rp.id].includes(m.par!)) {
           sections[rp.id] = sections[rp.id].replace(m.par!, '').replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;])/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
-          questionsAjoutsRefuses.push(questionAlignementRefuse(m.motif || m.par!, contraire));
-          ajoutsRefusesExigences.push(m.motif || m.par!);
+          // Exigence citée : la phrase du DCE qui fonde l'ajout, jamais la justification du modèle (m.motif, T6C-2).
+          const fondement = phraseDuDceProche(m.par!, dceContext);
+          questionsAjoutsRefuses.push(fondement ? questionAlignementRefuse(fondement, contraire) : questionAjoutRefuse(m.par!, contraire));
+          ajoutsRefusesExigences.push(fondement || m.par!);
           console.warn(`[MemoireGenerator] Adaptation ${rp.id} : ajout refusé, contraire au délai de GSS (« ${m.par!.slice(0, 100)} »).`);
           continue;
         }
@@ -7753,7 +7764,7 @@ RÈGLES DE FORME (rendu Marp) :
     const remarques = await this.remarquesCahierDesCharges(dceContext);
     const schemasGeneres = new Map<string, string>();
     const titresSchemas: Record<string, string> = {};
-    const avisSecours: string[] = rubriquesExclues.map((x) => `Rubrique « ${x.titre} » retirée du mémoire : le cahier des charges exclut la mission qu'elle décrit (à la place de « ${x.extrait.slice(0, 160)} », le modèle proposait « ${x.par.slice(0, 160)} »). Si GSS assure bien cette mission sur ce marché, demandez via l'assistant de rétablir la rubrique.`);
+    const avisSecours: string[] = rubriquesExclues.map((x) => `Rubrique « ${x.titre} » retirée du mémoire : le cahier des charges exclut la mission qu'elle décrit (à la place de « ${phraseLisible(x.extrait, 160)} », le modèle proposait « ${phraseLisible(x.par, 160)} »). Si GSS assure bien cette mission sur ce marché, demandez via l'assistant de rétablir la rubrique.`);
     const b1 = plan.rubriques.find((r) => r.mode === 'besoin');
     if (b1) {
       progres(50, 'Notre compréhension de votre besoin : explication et schéma de process…');
@@ -7978,7 +7989,7 @@ RÈGLES DE FORME (rendu Marp) :
     for (const x of engagementsIA) consultationList.push(`Engagements à valider (exigences du CCTP rédigées par l'IA) : « ${titreDe(x.id)} » — ${x.n} engagement${x.n > 1 ? 's' : ''}`);
     // Phrases ajoutées au texte de GSS par l'adaptation au CCTP et restées dans le texte (T5N-5) : signalées à GSS.
     const ajoutsRestes = ajoutsAdaptation.filter((a) => (sections[a.id] || '').includes(a.phrase.slice(0, 60)));
-    for (const a of ajoutsRestes) consultationList.push(`Phrase ajoutée au texte de GSS d'après le cahier des charges (rédigée par l'IA), à valider : « ${titreDe(a.id)} » — « ${a.phrase.replace(/\s+/g, ' ').trim().slice(0, 300)} »`);
+    for (const a of ajoutsRestes) consultationList.push(`Phrase ajoutée au texte de GSS d'après le cahier des charges (rédigée par l'IA), à valider : « ${titreDe(a.id)} » — « ${phraseLisible(a.phrase, 600)} »`);
     // Phrases de GSS adaptées au CCTP (D8) : une ligne par phrase à valider (aucune s'il n'y en a pas).
     consultationList.push(...consultationsAdaptations(adaptations));
     if (consultationList.length) {
@@ -9286,7 +9297,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       });
       textes[rp.id] = res.texte;
       // Mission niée par le cahier des charges : rubrique non reprise, signalée (T5CP-1) ; échec du modèle signalé (T5-COH-2).
-      if (res.missionExclue) { textes[rp.id] = ''; rubriquesExcluesCourt.push(`Rubrique « ${r.titre} » non reprise : le cahier des charges exclut la mission qu'elle décrit (à la place de « ${res.missionExclue.extrait.slice(0, 160)} », le modèle proposait « ${res.missionExclue.par.slice(0, 160)} »). Si GSS assure bien cette mission sur ce marché, demandez via l'assistant de la rétablir.`); }
+      if (res.missionExclue) { textes[rp.id] = ''; rubriquesExcluesCourt.push(`Rubrique « ${r.titre} » non reprise : le cahier des charges exclut la mission qu'elle décrit (à la place de « ${phraseLisible(res.missionExclue.extrait, 160)} », le modèle proposait « ${phraseLisible(res.missionExclue.par, 160)} »). Si GSS assure bien cette mission sur ce marché, demandez via l'assistant de la rétablir.`); }
       if (res.repli && /appel au modèle impossible|réponse du modèle illisible/.test(res.raison || '')) nonAdapteesCourt.push(r.titre);
       adaptees++;
       progres(26 + Math.round((24 * adaptees) / Math.max(1, aAdapter.length)), `Adaptation au CCTP : ${adaptees}/${aAdapter.length} rubrique(s)…`);

@@ -21,7 +21,7 @@
 // mémoire type), le terme du CCTP (« chef de poste ») qui remplace celui de GSS (phrase conservée au sens de D7), et
 // les règles propres à GSS (Covid, article L. 1224-1, orthographe des noms du DCE), qui ne viennent pas du CCTP.
 
-import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, type MemoireType, type ContexteMarche } from './memoire_type';
+import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, type MemoireType, type ContexteMarche } from './memoire_type';
 import { sitesDuMarche } from './base_memoires';
 
 export type StatutAdaptation = 'a_valider' | 'validee' | 'modifiee' | 'retablie';
@@ -435,6 +435,17 @@ export class SuiviAdaptations {
     tous.forEach((a, i) => { a.n = i + 1; });
     return tous;
   }
+}
+
+/**
+ * Phrase du DCE, citée mot pour mot, qui fonde une phrase ajoutée par l'adaptation sur un délai (caen 475, T6C-2 : « le
+ * personnel de remplacement est dépêché sur le site dans l'heure » → « … dépêcher sur le site le personnel de remplacement
+ * dans les UNE (1) heure suivant la constatation ») : la phrase du DCE la plus proche parmi celles qui écrivent un délai ;
+ * '' si aucune n'est assez proche (la justification du modèle n'est jamais citée comme exigence).
+ */
+export function phraseDuDceProche(phrase: string, dce: string): string {
+  const p = exigenceProche(phrase, phrasesDce(dce).filter((x) => dureesIntervention(x).length > 0));
+  return p ? phraseLisible(p, 420) : '';
 }
 
 /** Exigence de la liste la plus proche d'une phrase (mots en commun). */

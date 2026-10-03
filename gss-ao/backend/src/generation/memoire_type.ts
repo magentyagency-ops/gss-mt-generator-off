@@ -2067,28 +2067,54 @@ export function rechercherRubriques(mt: MemoireType, texte: string, n = 2, parmi
 const SUJET_PRESENTATION = /autoris|agr[ée]ment|cnaps|carte professionnelle|certifi|\biso\b|\brse\b|responsabilit[ée] soci|environnement|[ée]cologi|d[ée]veloppement durable|carbone|d[ée]chets|recycl|r[ée]f[ée]rences?\b|exp[ée]rience|chiffre d.affaires|assurance|responsabilit[ée] civile|implantation|agences?\b|si[èe]ge social|organigramme|valeurs|[ée]thique|d[ée]ontolog|insertion|handicap|[ée]galit[ée]|kbis|attestation/i;
 
 /**
+ * Durées d'intervention écrites dans un texte, en minutes : « immédiat » et « sans délai » = 0, « dans l'heure » = 60,
+ * « 45 minutes », « 1 h », « UNE (1) heure », « deux heures ». Les valeurs qui ne sont pas un délai d'intervention ne
+ * comptent pas (caen 475, T6-COH-1) : préavis (« au moins 24 heures avant », « 10 minutes avant le début », « à
+ * l'avance »), fréquences (« toutes les 24 heures »), « 24 h/24 », durées d'une vacation ou d'une ronde (« ronde de
+ * 30 minutes », « au-delà d'une heure »).
+ */
+export function dureesIntervention(texte: string): number[] {
+  const t = String(texte || '').replace(/[’`]/g, "'");
+  const out: number[] = [];
+  if (/imm[ée]diat|sans d[ée]lai/i.test(t)) out.push(0);
+  if (/dans l'heure|en moins d'une heure|sous une heure/i.test(t)) out.push(60);
+  const rx = /(?<![\p{L}\d,.])(\d{1,3}|une?|deux|trois|quatre|cinq|six|huit|dix|douze|quinze|vingt|trente|quarante-cinq|quarante|soixante)\s*(?:\(\s*(\d{1,3})\s*\)\s*)?(minutes?|mn|min|heures?|h)(?![\p{L}\d/])/giu;
+  for (const m of t.matchAll(rx)) {
+    const avant = t.slice(Math.max(0, m.index! - 30), m.index!);
+    const apres = t.slice(m.index! + m[0].length, m.index! + m[0].length + 40);
+    if (/(?:toutes|tous) les\s*$|chaque\s*$|(?:ronde|vacation|poste|pr[ée]sence|dur[ée]e)s?(?: [a-zà-ÿ'-]+){0,2} (?:de |d'une |d'un )?$|au-del[àa] d'(?:une?\s*)?$|par (?:jour|nuit)\s*$/i.test(avant)) continue;
+    if (/^\s*(?:au moins\s+)?(?:avant|[àa] l'avance|plus t[ôo]t)|^\s*\/\s*24|^\s*(?:par|sur) (?:jour|semaine|mois|an)|^\s*(?:de (?:pr[ée]avis|pr[ée]venance))/i.test(apres)) continue;
+    if (/au moins\s*$/i.test(avant) && /^\s*[^.;]{0,40}\bavant\b/i.test(apres)) continue;
+    const n = m[2] ? Number(m[2]) : (/^\d+$/.test(m[1]) ? Number(m[1]) : NOMBRES_LETTRES[m[1].toLowerCase()]);
+    if (!n) continue;
+    out.push(/^h/i.test(m[3]) ? n * 60 : n);
+  }
+  return out;
+}
+
+/**
  * Ajout de l'adaptation qui promet, sur un sujet de délai (remplacement d'un agent, intervention sur alarme, PTI, commande,
- * SSI), autre chose que le délai de GSS écrit dans le mémoire (becquerel 591, T5N-5 : « remplacement immédiat d'un agent
- * absent » ajouté alors que l'agent d'astreinte « est sur site en 60 minutes maximum ») : renvoie la phrase de GSS
- * contredite, '' sinon.
+ * SSI), un délai PLUS COURT que celui de GSS écrit dans le mémoire (becquerel 591, T5N-5 : « remplacement immédiat d'un
+ * agent absent » ajouté alors que l'agent d'astreinte « est sur site en 60 minutes maximum ») : renvoie la phrase de GSS
+ * contredite, '' sinon. Un délai égal ou plus long que celui de GSS (« dans l'heure » face à « 60 minutes », caen 475,
+ * T6-COH-1) n'est pas contraire ; les préavis et les fréquences ne sont pas des délais (dureesIntervention).
  */
 export function ajoutContraireAuxDelaisGss(ajout: string, texteGss: string): string {
-  const DELAI = /imm[ée]diat|sans d[ée]lai|dans l['’]heure|(?<![\d,.])\d+\s*(?:min(?:utes?)?|h(?:eures?)?)(?![\p{L}])/iu;
-  const VALEUR = /(?<![\d,.])\d+\s*(?:min(?:utes?)?|h(?:eures?)?)(?![\p{L}])/giu;
   const a = String(ajout || '');
-  if (!DELAI.test(a)) return '';
+  const valeursA = dureesIntervention(a);
+  if (!valeursA.length) return '';
+  const minA = Math.min(...valeursA);
   const phrasesGss = String(texteGss || '').replace(/\*\*/g, '').split(/(?<=[.!?;])\s+|\n+/);
   for (const [nom, def] of Object.entries(SUJETS_DELAI)) {
     const dansSujet = (t: string) => def.sujet.test(t) && !def.exclure?.test(t) && !(def.objet?.test(t) && !def.personnel?.test(t));
     if (!dansSujet(a)) continue;
-    const valeursA = (a.match(VALEUR) || []).map((x) => x.replace(/\s+/g, ''));
     // Remplacement d'un agent : la phrase de GSS parle de l'agent d'astreinte mobilisé (« qui est sur site en 60 minutes »).
     const sujetGss = (t: string) => dansSujet(t) || (nom === 'remplacement' && /agent d['’]astreinte/i.test(t));
     for (const ph of phrasesGss) {
       if (!sujetGss(ph) || ph.includes(a.trim())) continue;
-      const valeursG = (ph.match(VALEUR) || []).map((x) => x.replace(/\s+/g, ''));
+      const valeursG = dureesIntervention(ph);
       if (!valeursG.length) continue;
-      if (!valeursA.length || !valeursA.every((v) => valeursG.includes(v))) return ph.trim();
+      if (minA < Math.min(...valeursG)) return ph.trim();
     }
   }
   return '';

@@ -71,7 +71,8 @@ export function questionsDesEmplacements(sections: Record<string, string>, eleme
       for (const ligne of bloc.split('\n').filter((l) => l.includes('[À COMPLÉTER]'))) {
         const propre = ligne.replace(REPERE_RE, '').trim();
         const libelle = propre.replace(/\*\*/g, '').replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').split('[À COMPLÉTER]')[0].replace(/[\s:,;–—-]+$/, '').trim();
-        const question = `Information à fournir pour compléter le mémoire : « ${(libelle || propre).slice(0, 160)} ».`;
+        const lib = (libelle || propre).replace(/\s+/g, ' ').trim();
+        const question = `Information à fournir pour compléter le mémoire : « ${lib.length <= 160 ? lib : `${lib.slice(0, 161).replace(/\s+\S*$/, '').replace(/[\s,;:]+$/, '')}…`} ».`;
         if ([...elements, ...ajouts].some((e) => e.question === question)) continue;
         ajouts.push({ cle: `Q${elements.length + ajouts.length + 1}`, question, contexte: `${titreDe(id)} — …${propre.slice(0, 220)}`, statut: 'ouvert', reperes, pourAcheteur: false });
         reperes.forEach((r) => couverts.add(r));
