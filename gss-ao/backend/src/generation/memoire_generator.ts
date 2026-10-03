@@ -6431,7 +6431,15 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
           const libelleQ = ((d.context.match(/Contexte(?: proche)?:\s*"([^"]*)"/) || [])[1] || '').split('/').map((x) => x.trim()).filter(Boolean).pop() || '';
           const motsQ = new Set([...sigWords(libelleQ)].map(racine));
           const dansLeSujet = propres.some((w) => motsQ.has(w));
-          if (continuationAvecPrincipale(d) && section && !dansLeSujet && propres.length >= 3 && neufs / propres.length <= 0.35) {
+          // Sujet d'une autre question de la même section (« Responsable qualité : VATTIER Marie… » sous « Certification de
+          // service ISO / APSAD », alors que « Plan qualité interne – responsable qualité » est une autre question, rouen_univ 707).
+          const autreSujet = !dansLeSujet && descriptors.some((o) => o.id !== d.id && o.kind !== 'checkbox'
+            && normCtx((o.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '') === section
+            && (() => { const q = new Set([...sigWords((o.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '')].map(racine)); return propres.filter((w) => q.has(w)).length >= 2; })());
+          // Redite pure (aucun mot porteur nouveau, rouen_univ 707 : « Responsable qualité : VATTIER Marie — contrôle global
+          // trimestriel, réunions de suivi… » sous la certification, mots tous écrits dans le plan qualité) : vidée même dans le sujet.
+          const rediteePure = neufs === 0 && propres.length >= 5;
+          if (continuationAvecPrincipale(d) && section && (rediteePure || (!dansLeSujet && propres.length >= 3 && (neufs / propres.length <= 0.35 || autreSujet)))) {
             valById.set(d.id, '');
             console.log(`[MemoireGenerator] Ligne de continuation vidée : CHAMP_${d.id} (redite de la section)`);
             continue;
