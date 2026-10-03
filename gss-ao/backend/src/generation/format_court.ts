@@ -38,6 +38,34 @@ export function passagesLimitePages(dce: string): string[] {
 }
 
 /**
+ * Limite de pages du MÉMOIRE TECHNIQUE lue sans modèle dans les passages du RC (T7CS-1 : rédaction indisponible, imm « un
+ * mémoire technique (douze (12) pages maximum) ») : la phrase qui nomme le mémoire technique (ou offre technique, note
+ * méthodologique, mémoire justificatif, réponse technique) avec un nombre de pages et un terme de limite. null si aucune
+ * phrase ne le dit clairement, ou si la phrase porte aussi sur une autre pièce (CV, annexe, lettre).
+ */
+export function limitePagesMemoire(passages: string[]): { pages: number; citation: string } | null {
+  const MEMOIRE = /m[ée]moire\s+(?:technique|justificatif)|offre\s+technique|note\s+m[ée]thodologique|r[ée]ponse\s+technique|proposition\s+technique/i;
+  const LIMITE = /maxim|limit|d[ée]pass|exc[èé]d|au plus|plafon/i;
+  const AUTRE = /\bCV\b|curriculum|annexe|lettre|fiche|attestation|bordereau|DPGF|BPU/i;
+  for (const passage of passages) {
+    const phrases = String(passage || '').replace(/\s+/g, ' ').split(/(?<=[.;])\s+(?=[A-ZÀ-Ý•-])/);
+    for (const ph of phrases) {
+      if (!MEMOIRE.test(ph) || !LIMITE.test(ph)) continue;
+      const m = /\(?\b(\d{1,3})\)?\s*(?:pages?|feuillets?|faces?)\b/i.exec(ph);
+      if (!m) continue;
+      const n = Number(m[1]);
+      // Distance entre le mémoire et le nombre : même proposition (120 caractères au plus).
+      const iMem = ph.search(MEMOIRE);
+      if (n < 2 || n > 40 || Math.abs(m.index - iMem) > 120) continue;
+      const voisinage = ph.slice(Math.min(iMem, m.index), Math.max(iMem, m.index) + m[0].length + 20);
+      if (AUTRE.test(voisinage)) continue;
+      return { pages: n, citation: ph.trim().slice(0, 300) };
+    }
+  }
+  return null;
+}
+
+/**
  * Format court : le texte de compréhension renvoie aux « blocs » du mémoire type (« développée au bloc 5 »), alors que le
  * mémoire suit les parties du RC. Chaque renvoi devient celui de la partie du RC qui reprend réellement les rubriques
  * du bloc (« dans la partie 2 « Continuité de service » ») ; un bloc dont aucune rubrique n'a été reprise, ou réparti

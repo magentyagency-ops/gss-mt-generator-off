@@ -3,7 +3,7 @@ import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema, dessinerSpecs, finaliserSvg } from './schema_service';
 import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce, phraseContraireAuDce } from './visuels_cadre';
-import { FormatImpose, PartieCourte, passagesLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
+import { FormatImpose, PartieCourte, passagesLimitePages, limitePagesMemoire, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque, estRetourArriere } from './themes';
 import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, lireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements } from './completion';
@@ -1269,6 +1269,7 @@ export function alerteRedactionIndisponible(labels: string[], nonAdaptees: strin
   const etapes: string[] = [];
   const a = (rx: RegExp, nom: string) => { if (labels.some((l) => rx.test(l)) && !etapes.includes(nom)) etapes.push(nom); };
   a(/analyse dce/i, 'analyse du DCE');
+  a(/format impos/i, 'lecture du format imposé par le RC (limite de pages et plan)');
   a(/matrice|exigences|couverture|coh[ée]rence/i, 'lecture et contrôle des exigences du CCTP');
   a(/obligations|horaires|valeurs impos/i, 'délais, fréquences et horaires imposés par le CCTP');
   a(/proposition|nouvelle/i, 'propositions de réponse aux questions nouvelles');
@@ -2512,6 +2513,8 @@ export class MemoireGenerator {
   private creditOpenAIEpuise = false;
   /** Appels au modèle échoués pendant cette génération (OpenAI en panne, erreur 5xx…) : libellés des étapes (T5-COH-2). */
   private appelsEchoues: string[] = [];
+  /** Limite de pages du RC lue sans le modèle, ou non lue (T7CS-1) : alerte en tête des consultations et du premier message. */
+  private alertesFormat: string[] = [];
   private verifierCredit(): void {
     if (this.creditOpenAIEpuise) throw new CreditOpenAIEpuise();
   }
@@ -7575,7 +7578,7 @@ RÈGLES DE FORME (rendu Marp) :
     // Deux sources : (1) les écarts détectés par la matrice de conformité ; (2) les marqueurs
     // [CONSULTATION REQUISE : …] que le rédacteur a insérés faute de réponse spécifique dans la Doc GSS.
     const consultations = new Set<string>([
-      ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),
+      ...this.alertesFormat, ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),
       ...commentairesRetires,
       // Valeurs du registre encore « à confirmer » reprises dans le texte : GSS est prévenu.
       ...confirmationsRegistreUtilisees(Object.values(sectionsMap).join('\n'), horsNormandieLibre),
@@ -8059,8 +8062,8 @@ RÈGLES DE FORME (rendu Marp) :
     // Questions à GSS mises en forme (vraies questions, sans doublon) comme dans l'état de l'assistant.
     const consultationList = questionsUniques(elementsSansDoublon(elementsLibres));
     // OpenAI en panne pendant la génération (T5-COH-2) : jamais un publipostage non adapté présenté comme complet.
-    const alertePanne = alerteRedactionIndisponible(this.appelsEchoues, rubriquesNonAdaptees);
-    if (alertePanne) { consultationList.unshift(alertePanne); console.warn(`[MemoireGenerator] ${alertePanne}`); }
+    const alertePanne = [...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, rubriquesNonAdaptees)].filter(Boolean).join('\n\n');
+    if (alertePanne) { consultationList.unshift(...alertePanne.split('\n\n')); console.warn(`[MemoireGenerator] ${alertePanne}`); }
     consultationList.push(...avisSecours);
     // Propositions de réponse de l'IA : signalées APRÈS les éléments (jamais envoyées à l'équipe comme des questions).
     for (const a of ajouts) consultationList.push(`Proposition de réponse à valider (question nouvelle du DCE) : ${a.title}`);
@@ -9032,7 +9035,7 @@ Renvoie UNIQUEMENT un objet JSON : {"impose": true|false, "parties": [{"numero":
     const reC = /crit[èe]res?\s+(de\s+jugement|d.attribution|de\s+choix|de\s+s[ée]lection|pond[ée]r)/gi;
     let m: RegExpExecArray | null;
     while ((m = reC.exec(dce)) && criteres.length < 3) criteres.push(dce.slice(m.index, m.index + 2500));
-    const r = await this.callOpenAI([
+    const messages: any[] = [
       {
         role: 'system',
         content: `Tu lis des extraits du règlement de consultation d'un marché de sécurité privée.
@@ -9043,9 +9046,28 @@ Renvoie UNIQUEMENT un objet JSON : {"impose": true|false, "parties": [{"numero":
 Renvoie UNIQUEMENT un objet JSON : {"limite": true|false, "pagesMax": nombre, "citation": "phrase exacte du RC", "plan": [{"titre": "…", "attendu": "…"}], "criteres": [{"libelle": "…", "poids": "…", "partie": 0}]}`,
       },
       { role: 'user', content: `EXTRAITS QUI MENTIONNENT UN NOMBRE DE PAGES :\n${passages.join('\n---\n')}\n\nEXTRAITS SUR LES CRITÈRES DE JUGEMENT :\n${criteres.join('\n---\n') || '(aucun)'}` },
-    ], 0.1, 'Format imposé par le RC', true, 'analyse');
+    ];
+    // Réponse absente, illisible ou sans « limite » (T7CS-1 : imm sans réponse du modèle, 135 pages remises pour un RC limité à
+    // 12) : un second essai, puis la limite lue sans modèle dans la phrase du RC ; jamais la réponse libre en silence.
+    let d: any = null;
+    for (let essai = 1; essai <= 2 && typeof d?.limite !== 'boolean'; essai++) {
+      const r = await this.callOpenAI(messages, 0.1, `Format imposé par le RC${essai > 1 ? ' (essai 2)' : ''}`, true, 'analyse');
+      try { d = JSON.parse(r || 'null'); } catch { d = null; }
+    }
+    if (typeof d?.limite !== 'boolean') {
+      const lue = limitePagesMemoire(passages);
+      const extrait = (x: string) => (x.length > 220 ? `${x.slice(0, 220).replace(/\s+\S*$/, '')}…` : x);
+      if (lue) {
+        const plan = CHAPTER_ORDER_B.map((ch, i) => ({ id: `c${i + 1}`, title: CHAPTER_TITLES_B[ch], attendu: AI_SECTIONS_B.filter((s) => s.chapter === ch).map((s) => s.title).join(' ; ') }));
+        this.alertesFormat.push(`Le RC limite le mémoire technique à ${lue.pages} pages (« ${extrait(lue.citation)} ») : la rédaction automatique n'a pas pu lire le plan que le RC impose, le mémoire est rédigé en ${lue.pages} pages au plus selon le plan par défaut. Vérifiez le plan du RC et relancez la génération avant la remise.`);
+        console.warn(`[MemoireGenerator] Format imposé par le RC : réponse du modèle indisponible ; ${lue.pages} pages maximum lues dans le RC (plan par défaut).`);
+        return { pagesMax: lue.pages, plan, source: lue.citation };
+      }
+      this.alertesFormat.push(`Le RC mentionne une limite de pages (« ${extrait(passages[0].replace(/\s+/g, ' ').trim())} ») que la rédaction automatique n'a pas pu lire : le mémoire est rédigé sans limite de pages. Vérifiez si cette limite porte sur le mémoire technique et relancez la génération avant la remise.`);
+      console.warn('[MemoireGenerator] Format imposé par le RC : réponse du modèle indisponible et limite du mémoire technique non lue dans le RC ; alerte posée.');
+      return null;
+    }
     try {
-      const d = JSON.parse(r || '{}');
       const pagesMax = Number(d.pagesMax);
       if (!d.limite || !Number.isFinite(pagesMax) || pagesMax < 2 || pagesMax > 40) return null;
       let plan: PartieCourte[] = (Array.isArray(d.plan) ? d.plan : [])
@@ -9187,7 +9209,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
 
     // ── Points à compléter (même logique que la réponse libre) ──
     const consultations = new Set<string>([
-      ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie)]);
+      ...this.alertesFormat, ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie)]);
     for (const r of requirementsMatrix) if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence)) consultations.add(r.exigence.trim());
     const markerRe = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
     const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
@@ -9681,8 +9703,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     }
     const consultationList = questionsUniques(elementsSansDoublon(elements));
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
-    const alertePanneCourt = alerteRedactionIndisponible(this.appelsEchoues, nonAdapteesCourt);
-    if (alertePanneCourt) { consultationList.unshift(alertePanneCourt); console.warn(`[MemoireGenerator] ${alertePanneCourt}`); }
+    const alertePanneCourt = [...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, nonAdapteesCourt)].filter(Boolean).join('\n\n');
+    if (alertePanneCourt) { consultationList.unshift(...alertePanneCourt.split('\n\n')); console.warn(`[MemoireGenerator] ${alertePanneCourt}`); }
     consultationList.push(...rubriquesExcluesCourt, ...avisSecours, ...propositions);
     // Phrases de GSS adaptées au CCTP (D8) : une ligne par phrase à valider (aucune s'il n'y en a pas).
     consultationList.push(...consultationsAdaptations(adaptations));
