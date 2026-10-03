@@ -140,7 +140,8 @@ const texteDocx = (f: string) => new PizZip(fs.readFileSync(f)).file('word/docum
     res.conversation = etat?.conversation || null;
     // Correction 7 : une ligne « - … » par réponse à relire, sans repère technique (« [GSS_CH_n] ») montré à GSS.
     const premier = etat?.conversation?.[0]?.role === 'assistant' ? etat.conversation[0].texte : '';
-    const lignesARelire = premier.split('\n\n')[0].split('\n').filter((l: string) => /^- /.test(l));
+    // (paragraphe des réponses à relire : depuis le tour 8, les alertes — schéma manquant, DCE sans CCTP — le précèdent)
+    const lignesARelire = (premier.split('\n\n').find((b: string) => /réponses? (?:sont|est) à relire/.test(b)) || premier.split('\n\n')[0]).split('\n').filter((l: string) => /^- /.test(l));
     res.premier_message_lignes = lignesARelire.length;
     if (res.propositions.length && lignesARelire.length !== res.propositions.length) anomalie('propositions absentes du premier message de l\'assistant');
     if (/GSS_CH|GSS_AC/.test(premier)) anomalie('repère technique (GSS_CH_n) dans le premier message de l\'assistant');
