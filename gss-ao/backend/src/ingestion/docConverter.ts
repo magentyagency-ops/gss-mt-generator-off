@@ -533,7 +533,17 @@ export function extractDocText(src: string): { text: string; method: ExtractionM
 export async function extractText(filePath: string): Promise<string> {
   const ext = path.extname(filePath).toLowerCase();
   if (ext === '.docx') {
-    return loadDocxText(filePath);
+    try {
+      return loadDocxText(filePath);
+    } catch (e: any) {
+      // Lecture structurée impossible (fast-xml-parser : « Cannot read properties of undefined (reading 'addChild') » sur
+      // rouen_univ « Annexe 3 CCTP - Pointeaux à installer v2026.docx », REG6-1) : texte brut par mammoth, plutôt que de
+      // retirer la pièce du DCE sans le dire. Les documents lisibles aujourd'hui ne changent pas.
+      const mammoth = require('mammoth');
+      const r = await mammoth.extractRawText({ path: filePath });
+      console.warn(`[docConverter] ${path.basename(filePath)} : lecture structurée impossible (${e?.message || e}) → texte brut (mammoth, ${String(r?.value || '').length} caractères).`);
+      return String(r?.value || '');
+    }
   }
   if (ext === '.doc') {
     return extractDocText(filePath).text;
