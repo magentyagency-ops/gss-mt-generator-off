@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 import { lignesEquipe, questionDimensionnement, questionRondes, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe } from './base_memoires';
+import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -195,7 +195,9 @@ export function lotsDuMemoire(analyse: any, dce: string): { lots: string[]; ques
   if (/\bnon[- ]allotie?s?\b|(?<!en cas de )\bnon[- ]allotissement\b|\blot unique\b|\bmarch[ée] unique\b|n.est pas allotie?\b|ne fait pas l.objet d.un allotissement|pas d.allotissement|sans allotissement/i.test(plat)) return { lots: [] };
   const lots: Array<{ num: string; perimetre: string }> = [];
   for (const l of Array.isArray(analyse?.lots) ? analyse.lots : []) {
-    const m = /^(?:lot\s*(?:n\s*[°o.]?\s*)?)?(\d{1,3}|[A-Z])(?![\wÀ-ÿ])/i.exec(valeurPropre(typeof l === 'object' ? l?.num : l));
+    // « lot » et « n° / no / n. » facultatifs l'un sans l'autre (T1-COH-2 : « N°1 » lu « lot N ») ; une lettre suivie de
+    // « ° » n'est jamais un lot.
+    const m = /^(?:lots?\s*)?(?:n\s*[°ºo.]\s*(?=\d))?(\d{1,3}|[A-Z])(?![\wÀ-ÿ°º/])/i.exec(valeurPropre(typeof l === 'object' ? l?.num : l));
     if (m && !lots.some((x) => x.num === m[1].toUpperCase())) lots.push({ num: m[1].toUpperCase(), perimetre: valeurPropre(typeof l === 'object' ? l?.perimetre : '') });
   }
   if (lots.length <= 1) return { lots: lots.map((x) => x.num) };
@@ -449,6 +451,9 @@ export function delaiNu(v: string): string {
 }
 
 export function normaliserDelai(v: string): string {
+  // Heures et minutes (« 1h30 », « 1 h 30 », « 1 heure 30 ») : « 1 h 30 » (T1-GEN-3), jamais « 1 heure ».
+  const hm = /(?<![\d.,])(\d{1,2})\s*(?:h|heures?)\s*(\d{2})(?![\d])/i.exec(v || '');
+  if (hm && Number(hm[2]) > 0 && Number(hm[2]) < 60) return `${Number(hm[1])} h ${hm[2]}`;
   const m = /(\d+)\s*(minutes?|mn|min|heures?|h)(?![\wÀ-ÿ])/i.exec(v || '');
   if (!m) return valeurPropre(v);
   const n = Number(m[1]);
@@ -1394,8 +1399,13 @@ const SUJETS_DELAI: Record<string, { sujet: RegExp; exclure?: RegExp; objet?: Re
   // Le remplacement d'un OBJET (rouen_univ : « En cas de panne ils devront être remplacés en moins de 24H par un véhicule
   // équivalent ») n'est pas le remplacement d'un agent : la phrase est écartée quand elle nomme un objet sans nommer le
   // personnel (T4C-4 : l'agent d'astreinte était annoncé « sur site en 24 heures maximum »).
+  // Remplacement d'un agent : « rempla… », ou « relevé / suppléé / pourvu » d'un agent absent ou défaillant, ou poste
+  // vacant (T1-GEN-2). Exclus, dans la proposition qui porte le délai : absence prévue (préavis), modification du planning,
+  // et remplacement d'un agent récusé par l'acheteur pour sa tenue ou son comportement (T1-GEN-12 : « Tout agent faisant
+  // preuve d'une tenue non conforme… devra être remplacé dans les deux (2) heures » n'est pas l'astreinte d'une absence).
   remplacement: {
-    sujet: /rempla[cç]/i, exclure: /absences? (?:pr[ée]vues?|pr[ée]visibles?)|(?<![\wÀ-ÿ])pr[ée]visibles?(?![\wÀ-ÿ])|[àa] l.avance|planning/i,
+    sujet: /rempla[cç]|^(?=.*(?:absen|d[ée]faillan)).*(?<![\wÀ-ÿ])(?:relev[ée]e?s?|rel[èe]ve|suppl[ée][ée]e?s?|pourvue?s?)(?![\wÀ-ÿ])|postes? (?:vacants?|non (?:tenus?|pourvus?|occup[ée]s?))/i,
+    exclure: /absences? (?:pr[ée]vues?|pr[ée]visibles?|programm[ée]es?)|(?<![\wÀ-ÿ])pr[ée]visibles?(?![\wÀ-ÿ])|[àa] l.avance|modifications? (?:du|de|des) plannings?|plannings? pr[ée]visionnels?|changements? (?:du |de )?planning|faisant preuve|ne donnant pas satisfaction|dont le comportement|(?<![\wÀ-ÿ])(?:attitude|comportement)s?(?![\wÀ-ÿ])|tenue (?:non conforme|incorrecte|n[ée]glig)|(?<![\wÀ-ÿ])fautes?(?![\wÀ-ÿ])|r[ée]cus[ée]|insuffisance professionnelle|[àa] la (?:demande|requ[êe]te) (?:du|de la|de l['’]|des)|(?:demander|exiger|solliciter)[^.;]{0,60}(?:remplacement|changement|retrait|[ée]loignement)|[ée]loignement|changement d['’](?:un|l['’])\s*agent/i,
     objet: /v[ée]hicules?|t[ée]l[ée]phones?|mat[ée]riels?|(?<![\wÀ-ÿ])cl[ée]s?(?![\wÀ-ÿ])|cylindres?|badges?|[ée]quipements?|batteries?|(?<![\wÀ-ÿ])pannes?(?![\wÀ-ÿ])|appareils?|terminal|terminaux|radios?|talkies?|uniformes?|tenues?/i,
     personnel: /agents?|personnels?|effectifs?|postes?|absen|d[ée]faillan|salari[ée]s?|vacations?|rondiers?|gardiens?|SSIAP|chefs?|rempla[cç]ants?/i,
   },
@@ -1413,13 +1423,46 @@ const SUJETS_DELAI: Record<string, { sujet: RegExp; exclure?: RegExp; objet?: Re
  * information du client, contre-appel) n'est pas un délai d'arrivée sur site (citedia, T10C-2).
  */
 export function delaisDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): Array<{ valeur: string; minutes: number; phrase: string }> {
-  const def = SUJETS_DELAI[sujet];
   const out: Array<{ valeur: string; minutes: number; phrase: string }> = [];
-  for (const ph of phrasesDuDce(dce)) {
-    if (!def.sujet.test(ph) || def.exclure?.test(ph)) continue;
-    if (def.objet?.test(ph) && !def.personnel?.test(ph)) continue;
-    if (sujet === 'ssi' && !/d[ée]faillan|hors service|d[ée]rangement/i.test(ph)) continue;
-    const lu = normaliserExpressionsDelai(ph);
+  for (const ph of phrasesEntieresDuDce(dce)) for (const d of delaisDePhrase(ph, sujet)) out.push({ ...d, phrase: ph });
+  return out;
+}
+
+/** Phrases entières du DCE (coupées sur « . ! ? » et les puces, jamais sur « ; ») : le sujet d'un délai peut précéder le « ; ». */
+function phrasesEntieresDuDce(dce: string): string[] {
+  return String(dce || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ')
+    .split(/(?<=[.!?])\s+|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n{2,}/)
+    .map((x) => x.replace(/\s+/g, ' ').replace(/^[-•▪●○◦−]\s*/, '').trim())
+    .filter((x) => x.length >= 12 && x.length <= 900);
+}
+
+/**
+ * Propositions d'une phrase (« … dans un délai de 24 heures pour les absences prévisibles et dans un délai d'une heure pour
+ * les absences imprévues » → deux propositions) : coupe sur « ; » et sur « et » / « , » suivis d'un nouveau délai.
+ */
+function propositionsDe(ph: string): string[] {
+  return ph.split(/\s*;\s*|\s+et\s+(?=(?:dans|sous|en moins|au plus tard|pour (?:les|une?|toute?))\s)|,\s+(?=(?:et\s+)?(?:dans|sous)\s+(?:un\s+d[ée]lai|les?\s|\d))/i).filter((x) => x.trim());
+}
+
+/** La proposition (ou, à défaut d'un autre sujet nommé, la phrase entière) porte-t-elle le sujet du délai ? */
+function propositionDuSujet(prop: string, ph: string, sujet: keyof typeof SUJETS_DELAI): boolean {
+  const def = SUJETS_DELAI[sujet];
+  if (def.exclure?.test(prop)) return false;
+  if (def.sujet.test(prop)) return !(def.objet?.test(prop) && !def.personnel?.test(prop));
+  // Proposition sans sujet propre (« l'intervenant arrive sur site dans un délai de 20 minutes ») : sujet de la phrase,
+  // seulement si aucun autre sujet de délai n'y est nommé.
+  const autre = (Object.keys(SUJETS_DELAI) as Array<keyof typeof SUJETS_DELAI>).some((s) => s !== sujet && SUJETS_DELAI[s].sujet.test(prop) && !SUJETS_DELAI[s].exclure?.test(prop));
+  if (autre || !def.sujet.test(ph)) return false;
+  return !(def.objet?.test(ph) && !def.personnel?.test(ph));
+}
+
+/** Délais d'un sujet lus dans une phrase du DCE, proposition par proposition (même règle pour le modèle et le secours). */
+export function delaisDePhrase(ph: string, sujet: keyof typeof SUJETS_DELAI): Array<{ valeur: string; minutes: number }> {
+  const out: Array<{ valeur: string; minutes: number }> = [];
+  if (sujet === 'ssi' && !/d[ée]faillan|hors service|d[ée]rangement/i.test(ph)) return out;
+  for (const prop of propositionsDe(ph)) {
+    if (!propositionDuSujet(prop, ph, sujet)) continue;
+    const lu = normaliserExpressionsDelai(prop);
     for (const m of lu.matchAll(RX_DELAI)) {
       // Alarme : délai d'une action au PC (« appliquer les consignes… sous un délai de 3 minutes », « être informé… dans
       // les 3 minutes ») écrite avant le délai, pas un délai d'arrivée sur site.
@@ -1427,8 +1470,7 @@ export function delaisDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): Arra
       // « UNE (1) heure » : le chiffre entre parenthèses ; « 30 (trente) minutes » (ifits, T9CS-1) : le chiffre écrit avant.
       const n = m[2] && /^\d+$/.test(m[2]) ? Number(m[2]) : (/^\d+$/.test(m[1]) ? Number(m[1]) : NOMBRES_LETTRES[m[1].toLowerCase()]);
       if (!n) continue;
-      const valeur = normaliserDelai(`${n} ${m[3]}`);
-      out.push({ valeur, minutes: minutesDe(n, m[3]), phrase: ph });
+      out.push({ valeur: normaliserDelai(`${n} ${m[3]}`), minutes: minutesDe(n, m[3]) });
     }
   }
   return out;
@@ -1439,14 +1481,24 @@ export function delaisDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): Arra
  * Plusieurs durées différentes pour le même sujet : '' (delai() cite alors les phrases du CCTP à GSS, T10C-2).
  */
 export function delaiDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): string {
-  const minutes = new Map<number, string>();
-  for (const d of delaisDuDce(dce, sujet)) if (!minutes.has(d.minutes)) minutes.set(d.minutes, d.valeur);
-  return minutes.size === 1 ? [...minutes.values()][0] : '';
+  const unique = (l: Array<{ minutes: number; valeur: string }>) => {
+    const minutes = new Map<number, string>();
+    for (const d of l) if (!minutes.has(d.minutes)) minutes.set(d.minutes, d.valeur);
+    return minutes.size === 1 ? [...minutes.values()][0] : '';
+  };
+  const tous = delaisDuDce(dce, sujet);
+  const v = unique(tous);
+  if (v || sujet !== 'remplacement') return v;
+  // Remplacement : plusieurs délais (défaillance générale sous 24 heures, absence imprévue sous 2 heures) → celui de
+  // l'absence imprévue, seul délai de l'agent d'astreinte (T1-GEN-2).
+  return unique(tous.filter((d) => /impr[ée]vu|inopin|non pr[ée]vu|derni[èe]re minute|impr[ée]visible|inattendu/i.test(d.phrase)));
 }
 
 /** Phrase du DCE d'où delaiDuDce tire le délai imposé d'un sujet ('' si aucune) : citée à GSS comme exigence du CCTP (D8). */
 export function phraseDelaiDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): string {
-  return delaisDuDce(dce, sujet)[0]?.phrase || '';
+  const v = delaiDuDce(dce, sujet);
+  const l = delaisDuDce(dce, sujet);
+  return (v ? l.find((d) => d.valeur === v && (sujet !== 'remplacement' || l.every((x) => x.valeur === v) || /impr[ée]vu|inopin|non pr[ée]vu|derni[èe]re minute|impr[ée]visible|inattendu/i.test(d.phrase))) : undefined)?.phrase || l[0]?.phrase || '';
 }
 
 /** Phrases du DCE qui imposent un délai pour un sujet (sans doublon), citées à GSS quand le CCTP en impose plusieurs. */
@@ -2890,8 +2942,10 @@ function positionsExtrait(texte: string, extrait: string): Array<{ debut: number
 /** Nombres d'un texte (chiffres, et nombres en lettres courants). */
 function nombresDe(t: string): string[] {
   const out = (String(t || '').match(/\d+(?:[.,]\d+)?/g) || []).map((x) => x.replace(',', '.').replace(/^0+(?=\d)/, ''));
-  for (const m of normaliser(t).matchAll(/(?<![a-z])(une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|douze|quinze|vingt|trente|quarante-cinq|quarante|cinquante|soixante)(?![a-z])/g)) {
-    out.push(String(NOMBRES_LETTRES[m[1]]));
+  // Nombres en lettres, formes composées comprises (« vingt-cinq », « quatre-vingt-dix », T1-GEN-3).
+  for (const m of normaliser(t).matchAll(new RegExp(`(?<![a-z-])(${RX_NOMBRE_LETTRES})(?![a-z-])`, 'g'))) {
+    const n = nombreFr(m[1]);
+    if (Number.isFinite(n)) out.push(String(n));
   }
   return out;
 }
@@ -3462,14 +3516,31 @@ Réponds UNIQUEMENT par un objet JSON : {"valeurs":[{"variable":"NOM","valeur":"
       // Phrase du DCE qui contient la citation (une citation peut n'être qu'un fragment : « présent sur site dans un délai
       // maximal de 30 minutes »).
       const cit = normaliser(citation).replace(/[^a-z0-9']+/g, ' ').trim();
-      const phrase = phrasesDuDce(dce).find((ph) => normaliser(ph).replace(/[^a-z0-9']+/g, ' ').includes(cit)) || citation;
-      if (!def || !def.sujet.test(phrase) || def.exclure?.test(phrase) || (def.objet?.test(phrase) && !def.personnel?.test(phrase))) {
+      const phrase = phrasesEntieresDuDce(dce).find((ph) => normaliser(ph).replace(/[^a-z0-9']+/g, ' ').includes(cit)) || citation;
+      // Même classement, proposition par proposition, que la lecture de secours (T1-GEN-2) : la durée du modèle doit être
+      // un délai du sujet lu dans la phrase ; une phrase dont aucun délai n'est lisible garde le contrôle par sujet.
+      const lus = sujetV ? delaisDePhrase(phrase, sujetV as keyof typeof SUJETS_DELAI) : [];
+      const minutesValeur = dureesEnMinutes(valeur)[0];
+      const tousDelais = (Object.keys(SUJETS_DELAI) as Array<keyof typeof SUJETS_DELAI>).flatMap((s2) => delaisDePhrase(phrase, s2));
+      const accepte = !def ? false
+        : lus.length ? (minutesValeur === undefined || lus.some((d) => d.minutes === minutesValeur))
+          : !tousDelais.length && propositionsDe(phrase).some((p2) => propositionDuSujet(p2, phrase, sujetV as keyof typeof SUJETS_DELAI));
+      if (!accepte) {
         refusees.push({ variable: nom, raison: 'citation d\'un autre sujet que celui du délai' }); continue;
       }
     }
-    const nombresCitation = new Set(nombresDe(citation));
-    const etrangers = nombresDe(valeur).filter((n) => !nombresCitation.has(n));
-    if (etrangers.length) { refusees.push({ variable: nom, raison: `chiffre absent de la citation (${etrangers.join(', ')})` }); continue; }
+    // Durée : comparée en minutes à celles de la citation (« vingt-cinq minutes » = « 25 minutes », « 1 h 30 » = « 90
+    // minutes », T1-GEN-3) ; autre valeur : chiffres comparés.
+    const dureeValeur = dureesEnMinutes(valeur);
+    if (dureeValeur.length) {
+      const dureesCitation = new Set(dureesEnMinutes(citation));
+      const absentes = dureeValeur.filter((d) => !dureesCitation.has(d));
+      if (absentes.length) { refusees.push({ variable: nom, raison: `durée absente de la citation (${absentes.join(', ')} minutes)` }); continue; }
+    } else {
+      const nombresCitation = new Set(nombresDe(citation));
+      const etrangers = nombresDe(valeur).filter((n) => !nombresCitation.has(n));
+      if (etrangers.length) { refusees.push({ variable: nom, raison: `chiffre absent de la citation (${etrangers.join(', ')})` }); continue; }
+    }
     // Délai : la durée seule, la phrase de GSS porte déjà « en … au maximum ».
     imposees[nom] = { valeur: sujetV !== undefined ? delaiNu(valeur) || valeur : valeur, citation };
   }

@@ -1124,8 +1124,64 @@ export function fondementReprise(texte: string, dce: string): string {
  * « de 1 heure », « au plus tard une heure après » → « au plus tard dans une heure après ». Le texte cité n'est pas changé :
  * seule la copie lue l'est.
  */
+const MOTS_NOMBRES: Record<string, number> = {
+  zero: 0, un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, neuf: 9, dix: 10, onze: 11,
+  douze: 12, treize: 13, quatorze: 14, quinze: 15, seize: 16, vingt: 20, vingts: 20, trente: 30, quarante: 40,
+  cinquante: 50, soixante: 60, cent: 100, cents: 100,
+};
+/** Nombre écrit en lettres, formes composées comprises (« vingt-cinq », « quatre-vingt-dix », « trente et un »). */
+export const RX_NOMBRE_LETTRES = String.raw`(?:z[ée]ro|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingts?|trente|quarante|cinquante|soixante|cents?)(?:(?:-et-|\s+et\s+|-)(?:une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingts?|cents?))*`;
+/** Valeur d'un nombre en lettres (« quatre-vingt-dix » → 90) ; NaN si illisible. Un nombre en chiffres est lu tel quel. */
+export function nombreFr(t: string): number {
+  const x = String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  if (/^\d+(?:[.,]\d+)?$/.test(x)) return Number(x.replace(',', '.'));
+  const mots = x.split(/-et-|\s+et\s+|[-\s]+/).filter(Boolean);
+  if (!mots.length) return NaN;
+  let total = 0, courant = 0;
+  for (const m of mots) {
+    const v = MOTS_NOMBRES[m];
+    if (v === undefined) return NaN;
+    if (v === 20 && courant === 4) courant = 80;
+    else if (v === 100) courant = (courant || 1) * 100;
+    else courant += v;
+  }
+  total += courant;
+  return total;
+}
+
+const UNITE_DUREE = String.raw`(?:minutes?|mn|min|heures?|h)(?![\p{L}])`;
+
+/** Durées d'un texte en minutes, après remise des délais à la forme chiffrée (« vingt-cinq minutes », « 1 h 30 », « 30' »). */
+export function dureesEnMinutes(t: string): number[] {
+  // Valeur seule (« 1 h 30 ») : lue comme un délai.
+  const lu = normaliserExpressionsDelai(/^\s*\d/.test(String(t || '')) ? `dans ${t}` : t);
+  return [...lu.matchAll(new RegExp(String.raw`(?<![\p{L}\d,.])(\d{1,4}(?:[.,]\d+)?)\s*(?:\(\s*[^()]{1,20}\)\s*)?(minutes?|mn|min|heures?|h)(?![\p{L}\d])`, 'giu'))]
+    .map((m) => minutesDe(m[1], m[2])).filter((n) => Number.isFinite(n));
+}
+
 export function normaliserExpressionsDelai(t: string): string {
   return String(t || '')
+    // Nombre en lettres devant une unité de durée (T1-GEN-3 : « vingt-cinq minutes », « quatre-vingt-dix minutes »,
+    // « UNE (1) heure ») : en chiffres.
+    .replace(new RegExp(String.raw`(?<![\p{L}-])(${RX_NOMBRE_LETTRES})(?=\s*(?:\(\s*[\d\p{L} -]{1,25}\)\s*)?${UNITE_DUREE})`, 'giu'), (m) => {
+      const n = nombreFr(m);
+      return Number.isFinite(n) ? String(n) : m;
+    })
+    // « d'1 heure » (ou « d'une heure » devenu « d'1 heure ») : « de 1 heure ».
+    .replace(/(?<![\p{L}])d['’]\s*(?=\d{1,4}\s*(?:\(\s*[^()]{1,25}\)\s*)?(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/giu, 'de ')
+    // Heures et minutes (« 1h30 », « 1 h 30 », « 1 heure 30 », « 1 heure et demie », « 1,5 heure ») : en minutes. Jamais
+    // une plage horaire (« de 8h30 à 19h30 ») ni une heure sans contexte de délai.
+    .replace(/(?<=(?:dans|sous|en|de|d['’]|moins de|plus de|maximum|maximal|tard|délai|delai)\s+(?:un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?(?:de\s+)?)?)(\d{1,2})\s*(?:h|heures?)\s*(?:(\d{2})(?:\s*(?:min(?:utes?)?|mn))?|et\s+demie)(?![\d\p{L}])(?!\s*(?:à|-|–)\s*\d)/giu,
+      (_m, h: string, mm?: string) => `${Number(h) * 60 + (mm ? Number(mm) : 30)} minutes`)
+    .replace(/(?<![\d.,])(\d{1,2})[.,](\d{1,2})\s*(?:h|heures?)(?![\p{L}\d])/giu, (_m, a: string, b: string) => `${Math.round(Number(`${a}.${b}`) * 60)} minutes`)
+    // « 30' » : 30 minutes.
+    .replace(/(?<![\d.,])(\d{1,3})\s*['’′](?![\p{L}\d])/gu, '$1 minutes')
+    // Tournures d'attribut (« Le délai d'intervention sur alarme est fixé à 25 minutes », « … ne doit pas dépasser
+    // 25 minutes », « Délai de remplacement d'un agent absent : 45 minutes », « au maximum 45 minutes après ») : « dans N ».
+    .replace(/(d[ée]lais?(?:\s+maxim(?:al|um))?\b[^.;]{0,90}?)\s+(?:est|sera|doit [êe]tre)\s+(?:(?:fix[ée]e?|limit[ée]e?|port[ée]e?|ramen[ée]e?)\s+[àa]|de)\s+(?=\d)/giu, '$1 dans ')
+    .replace(/(?<![\p{L}])(?:ne\s+(?:doit|peut|pourra|devra|saurait)\s+(?:pas\s+|en aucun cas\s+|jamais\s+)?(?:d[ée]passer|exc[ée]der))\s+(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/giu, 'dans ')
+    .replace(/(d[ée]lais?(?:\s+maxim(?:al|um))?\b[^.;:]{0,90}?)\s*:\s*(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/giu, '$1 dans ')
+    .replace(/(?<![\p{L}])au\s+maximum\s+(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/giu, 'dans ')
     .replace(/\bdans l['’]heure(?![a-zà-ÿ])/gi, 'dans 1 heure')
     .replace(/(\bd['’]\s*|\bde\s+)?(?<![a-zà-ÿ])une?\s+demi-heure/gi, (_m, de) => `${de ? 'de ' : ''}30 minutes`)
     .replace(/\bd['’]\s*une?\s+(?=(?:heures?|h)(?![a-zà-ÿ]))/gi, 'de 1 ')
