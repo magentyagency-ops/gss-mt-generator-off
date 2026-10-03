@@ -17,7 +17,7 @@ pour documenter les constats effectués et étayer leurs rapports d’interventi
 reproduisent aucun des éléments confidentiels précités.
 Le chef d'équipe SSIAP 2 est chargé de réaliser des levées de doute à distance au moyen du système de vidéosurveillance.`;
 
-const MAIN_COURANTE = "- **la réactivité** : l'agent envoie en temps réel ses rapports sur les événements de sa vacation, qu'il peut illustrer de photos ou de vidéos ; l'équipe encadrante contrôle ainsi le contenu des événements remontés ;";
+const MAIN_COURANTE = "- **la réactivité** : l'agent envoie en temps réel ses rapports sur les événements de sa vacation, qu'il peut illustrer de photos ou de vidéos ; l'équipe encadrante contrôle ainsi le contenu des événements remontés, et le client peut, s'il le souhaite, être destinataire de ces rapports ;";
 const VIDEOSURVEILLANCE = "- les systèmes de vidéosurveillance : lorsque le site en est équipé, nous formons nos agents à une utilisation ciblée du système du site : présentation du système, repérage d'une situation suspecte, suivi d'un individu en vidéo, traitement des images, communication avec l'équipe terrain.";
 
 describe('interdit des photos avec son exception (T10C-1)', () => {
@@ -50,6 +50,13 @@ describe('interdit des photos avec son exception (T10C-1)', () => {
     expect(interditsDce(MAIN_COURANTE, dce)).toBe('');
     expect(interditsDce(VIDEOSURVEILLANCE, dce)).toBe(VIDEOSURVEILLANCE);
     expect(interditsDce("Formations :\n- les talkies-walkies, oreillettes, PTI ;\n- la prise de photos de constat.\n\nSuite.", dce)).toBe('Formations :\n- les talkies-walkies, oreillettes, PTI.\n\nSuite.');
+  });
+});
+
+describe('rondes à pied : seul le moyen interdit est retiré, la ponctuation du reste est gardée', () => {
+  it('vélos retirés de l’énumération', () => {
+    const dce = 'Les rondes sont effectuées exclusivement à pied.';
+    expect(interditsDce('Nos agents disposent de lampes, de vélos ou trottinettes électriques et de contrôleurs de rondes.', dce)).toBe('Nos agents disposent de lampes et de contrôleurs de rondes.');
   });
 });
 

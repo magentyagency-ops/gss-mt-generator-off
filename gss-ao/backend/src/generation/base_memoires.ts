@@ -1519,7 +1519,10 @@ export function interditsDce(texte: string, dce: string): string {
   // Élément d'une énumération (« des lampes, des vélos ou trottinettes électriques et des contrôleurs », « de photos ou de
   // vidéos ») : seul cet élément est retiré ; la phrase ou la puce part si elle reste contraire.
   const allege = (ph: string) => {
-    let a = ph.replace(/(?:,\s*(?:et |ou )?|\s+(?:et|ou)\s+)(?:des |de |du |les )?(?:vélos?|trottinettes?)(?:\s+(?:ou|et)\s+(?:des |de )?(?:vélos?|trottinettes?))?(?:\s+électriques?)?(?=[\s,.;]|$)/gi, '').replace(/\s+,/g, ',').replace(/,\s*et\s+/g, ' et ');
+    let a = ph;
+    // Ponctuation reprise seulement là où un élément a été retiré (jamais la virgule « remontés, et le client » ailleurs).
+    const sansVelo = a.replace(/(?:,\s*(?:et |ou )?|\s+(?:et|ou)\s+)(?:des |de |du |les )?(?:vélos?|trottinettes?)(?:\s+(?:ou|et)\s+(?:des |de )?(?:vélos?|trottinettes?))?(?:\s+électriques?)?(?=[\s,.;]|$)/gi, '\u0003');
+    if (sansVelo !== a) a = sansVelo.replace(/\s*\u0003\s*,\s*et\s+/g, ' et ').replace(/\s*\u0003/g, '').replace(/\s+,/g, ',');
     if (photos && !photos.photos) a = a.replace(/\s+(?:ou|et)\s+(?:de |des |en )?vidéos?(?![a-zà-ÿ])/gi, '').replace(/(?<![a-zà-ÿ])vidéos?\s+(?:ou|et)\s+(?=(?:de |des )?photo)/gi, '');
     return a;
   };
