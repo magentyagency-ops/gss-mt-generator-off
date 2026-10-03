@@ -882,6 +882,20 @@ export function completerSousTitresVides(texte: string, sources: Array<{ texte?:
       && sources.some((src) => String(src.texte || '').split('\n').some((l) => n(l) === n(lignes[j])));
     const vide = j >= lignes.length || repere || (estSousTitreCadre(lignes[j]) && !amorce && !suiteDeGss && !blocDeGss && !sousTitreParent(lignes[i], lignes[j], question));
     if (!vide) continue;
+    // Sous-titre de GSS équivalent dans les textes fournis (« La stabilité des équipes : » pour « Stabilité des équipes »,
+    // etampes1 594, T8N-1) : le paragraphe de GSS qui le suit, tel quel.
+    const cleST = (t: string) => normaliser(t.replace(/[#*]/g, ' ')).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^(?:le|la|les|l|un|une|des|du|notre|nos)\s+/, '');
+    let duSousTitre = '';
+    for (const src of sources) {
+      const ls = String(src.texte || '').split('\n');
+      for (let k = 0; k < ls.length && !duSousTitre; k++) {
+        if (!estSousTitreCadre(ls[k]) || !cleST(ls[k]) || cleST(ls[k]) !== cleST(lignes[i])) continue;
+        let y = k + 1;
+        while (y < ls.length && !ls[y].trim()) y++;
+        if (y < ls.length && !estSousTitreCadre(ls[y]) && !/\[À COMPLÉTER\]|\{\{/.test(ls[y]) && !/:\s*$/.test(ls[y])) duSousTitre = ls[y].trim();
+      }
+      if (duSousTitre) break;
+    }
     const cible = racines(lignes[i].replace(/[#*]/g, ''));
     let meilleure = '', score = 0, exaequo = 0;
     for (const p of phrases) {
@@ -889,8 +903,15 @@ export function completerSousTitresVides(texte: string, sources: Array<{ texte?:
       const n = [...cible].filter((w) => r.has(w)).length;
       if (n > score) { score = n; meilleure = p; exaequo = 0; } else if (n === score && n > 0 && p !== meilleure) exaequo++;
     }
+    // Ex aequo sur un seul mot porteur (« stabilité » ou « équipes ») : le mot le plus rare dans les textes de GSS départage,
+    // s'il ne désigne qu'une phrase (« stabilité » plutôt que « équipe », T8N-1).
+    if (score === 1 && exaequo) {
+      const frequence = new Map([...cible].map((w) => [w, phrases.filter((p) => racines(p).has(w)).length] as const));
+      const rare = [...cible].filter((w) => frequence.get(w)! > 0).sort((a, b) => frequence.get(a)! - frequence.get(b)!)[0];
+      if (rare && frequence.get(rare) === 1) { meilleure = phrases.find((p) => racines(p).has(rare))!; exaequo = 0; }
+    }
     // Deux mots porteurs en commun, ou un seul s'il ne désigne qu'une phrase des textes de GSS.
-    const valeur = score >= 2 || (score === 1 && !exaequo) ? meilleure : '[À COMPLÉTER]';
+    const valeur = duSousTitre || (score >= 2 || (score === 1 && !exaequo) ? meilleure : '[À COMPLÉTER]');
     if (valeur !== '[À COMPLÉTER]') completes.push(lignes[i].trim());
     // Phrase de GSS déjà présente plus loin dans la réponse (citedia2 442, T4N-5 : « Nous privilégions la stabilité… »
     // sous « La stabilité des équipes : ») : déplacée sous ce sous-titre, jamais recopiée (le doublon retiré ensuite
