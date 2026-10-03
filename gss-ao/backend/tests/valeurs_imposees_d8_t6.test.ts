@@ -40,7 +40,7 @@ describe('Délai imposé par le CCTP à la place de celui de GSS (D8)', () => {
 describe('Délai normand retiré hors Normandie : motif, pas exigence du CCTP (T6C-10)', () => {
   it.skipIf(!aCorpus('etampes1'))('etampes1 : lieu nommé d\'après le DCE, libellé « motif (règle de GSS) »', () => {
     const e = exigenceHorsNormandie(DCE('etampes1'), {});
-    expect(e).toMatch(/^Marché hors Normandie \(marché d'Etampes\)/);
+    expect(e).toMatch(/^Marché hors Normandie \(marché d'Étampes\)/);
     expect(estRegleGss(e)).toBe(true);
     const a: PhraseAdaptee = { n: 1, rubrique: 'x', titre: 'T', origine: 'dont 100 mobilisables en 48 heures.', adaptee: '', exigence: e, etape: 'x', statut: 'a_valider' };
     expect(consultationsAdaptations([a])[0]).toMatch(/motif \(règle de GSS, pas une exigence du CCTP\) : Marché hors Normandie/);

@@ -17,7 +17,7 @@ import {
   chargerMemoireType, normaliser, rechercherRubriques, similarite, motsDePhrase, faitsDePhrase, listeFr, cleCommune,
   type DonneesBesoin, type ExigenceMatrice, type MemoireType, type PlanMemoireType, type SchemaRubrique,
 } from './memoire_type';
-import { ZONE_GSS, vocabulaireDuCctp } from './base_memoires';
+import { ZONE_GSS, vocabulaireDuCctp, periodeEnTete } from './base_memoires';
 import { insecablesNombres } from './dimensionnement';
 
 export const PLACEHOLDER_V2 = '[À COMPLÉTER]';
@@ -863,46 +863,173 @@ export function exigenceTraitee(exigence: string, texte: string): boolean {
 export const CLAUSE_CONTRACTUELLE = /confidentialit|divulgation|diff[ée]rend|litiges?\b|forclusion|contentieux|tribunal|recours (?:gracieux|contentieux)|r[ée]siliation|reconduction|avenant|facturation|factures?\b|paiement|r[èe]glement des (?:litiges|comptes)|cautionnement|garantie financi|sous peine de/i;
 
 /**
- * Horaires du DCE lisibles pour le texte de secours du bloc 1 (T6N-5, cstb 551) : sans le repère « [section] » de
- * horairesImposes (prévu pour le contrôle des contradictions), et seulement des phrases entières (majuscule initiale,
- * ponctuation finale), jamais un fragment de tableau ou une phrase coupée (« … (Cf. », « (Note 3) », « X] »).
+ * Phrase du CCTP citée dans le texte de secours du bloc 1 (horaire ou obligation chiffrée), nettoyée de ce que la
+ * lecture du PDF y a collé (T8CS-1, T8-COH-1) : repère « [section] », puce, caractère à usage privé du DCE (puce
+ * Wingdings U+F0D8), pied de page « Page 9 sur 11 », numéro de partie suivi de son titre en capitales (« 3.6 DELAIS
+ * D'INTERVENTION », « 11 DOCUMENTS EXIGIBLES », « ARTICLE 3 - MODALITES… »), titre de paragraphe collé à la phrase
+ * (« Plannings Les plannings… » → « Les plannings… » ; « Poste PC sécurité Le poste… » → « Poste PC sécurité : Le
+ * poste… »). Renvoie '' quand la phrase ne peut pas être citée seule : titre en minuscules dont la fin est introuvable
+ * (« 5-1- Délais de livraison Suite à… »), deux phrases collées au milieu (« … de 8h00 à 1h00 Les horaires… »).
  */
-export function horairesLisibles(horaires: string[]): string[] {
-  // Le repère « [section] » est retiré sans être écrit devant l'horaire : le titre de partie qui précède une phrase n'est pas
-  // toujours son site (ign l. 194 : phrase générale rangée sous « Bâtiment Coriolis : »). Les doublons sont fusionnés plus bas.
-  const lisibles = horaires.map((h) => {
-    let t = String(h || '').replace(/^\s*\[[^\]]*\]\s*/, '').replace(/\s+/g, ' ').trim();
-    // Ligne de tableau à deux cellules (« Horaires d'ouverture au public | Lundi au vendredi de 8h30 à 12h00. ») : « libellé :
-    // valeur » ; plus de deux cellules : un tableau aplati, refusé plus bas.
-    if ((t.match(/\|/g) || []).length === 1) t = t.replace(/\s*\|\s*/, ' : ');
-    // Puces « o » et numéros de liste après un deux-points (« : 1- Pour les jardins suspendus : o Du 1 er avril… », havre),
-    // ordinal coupé (« 1 er » → « 1er »).
-    return t.replace(/(:\s*)(?:\d+\s*[-–)]\s*)?o\s+(?=[A-ZÀ-Ý0-9])/g, '$1').replace(/(:\s*)\d+\s*[-–)]\s+(?=[A-ZÀ-Ý])/g, '$1').replace(/\b(\d) er\b/g, '$1er');
-  }).filter((h) => /^[A-ZÀ-Ý]/.test(h) && /[.!?]$/.test(h) && h.split(' ').length >= 5
-    && !/\(\s*Cf\.?\s*$|\(Note\s*\d|\bNote\s*\d+\s*:|\bX\]|\[|\]|\||<br\s*\/?>/i.test(h)
-    // En-têtes d'un tableau aplati (« SITE Adresse Surface Utile Brute Horaires d'ouverture CAEN 20 rue… », caen 475, T7-COH-3).
-    && (h.match(/\b(?:SITE|Site|Adresse|Surface|Superficie|Horaires|Effectifs?|B[âa]timent|D[ée]signation|Nombre|Qualification)\b/g) || []).length < 3
-    // Numéro de partie suivi de son titre (« 1.2 DEBUT D'EXECUTION »), pied de page (« CCTP- Gardiennage-consultation
-    // 202617 »), renvoi à une annexe au milieu de la phrase (« Cf Annexe-CCTP-Plannings Permanence… »), puce « o » restante.
-    && !/(?:^|\s)\d+(?:\.\d+)+\s+[A-ZÀ-Ý]{3,}|\bCCTP\s*-|\bconsultation\s+\d{4,}|\bpage\s+\d+\s*(?:\/|sur)\s*\d+|\bCf\.?\s+Annexe\b(?!.{0,3}$)|(?:^|[:;]\s*)o\s+[A-ZÀ-Ýa-zà-ÿ0-9]/i.test(h));
-  // Doublons (CCTP commun et CCTP d'un campus, ifsem, T7CS-4) : même phrase à la ponctuation près, presque mot pour mot
-  // (« Les rondes à réaliser / à effectuer sont les suivantes »), ou phrase contenue dans une autre : la première est gardée,
-  // sauf si l'autre la contient.
+function citationNettoyee(brut: string): string {
+  let t = String(brut || '').replace(/[-]/g, ' ').replace(/^\s*\[[^\]]*\]\s*/, '').replace(/\s+/g, ' ').trim();
+  t = t.replace(/\bpage\s+\d+\s*(?:\/|sur)\s*\d+\b/gi, ' ').replace(/\s+/g, ' ').replace(/^[-–−•▪●○◦➢>*]\s*/, '').trim();
+  // Numéro de partie (« 3.6 », « 4.4.2 », « 5-1- », « 11 », « ARTICLE 3 - ») suivi ou non d'un titre en capitales.
+  let numero = false;
+  const num = /^(?:article\s+\d+(?:[.-]\d+)*\s*[-–:.]?|\d+(?:[.-]\d+)+[.-]?(?=\s)|\d+[.)-](?=\s)|\d+(?=\s+[A-ZÀ-Ý]{3,}[A-ZÀ-Ý'’-]*\s))\s*[-–:]?\s*/i.exec(t);
+  if (num) { t = t.slice(num[0].length); numero = true; }
+  const titreCaps = /^(?:(?:[A-ZÀ-Ý0-9][A-ZÀ-Ý0-9'’/&()-]*|[DL]['’][A-ZÀ-Ý]+[A-ZÀ-Ý'’-]*)\s+){1,14}(?=[A-ZÀ-Ý][a-zà-ÿ])/.exec(t);
+  let titreRetire = false;
+  if (titreCaps && /[A-ZÀ-Ý]{3,}/.test(titreCaps[0]) && /[A-ZÀ-Ý]{3,}/.test(titreCaps[0].replace(/\b(?:SSIAP|ADS|APS|PC|PCS|CNAPS|CQP|SST)\b/g, ''))) { t = t.slice(titreCaps[0].length); titreRetire = true; }
+  // Ligne de tableau à deux cellules (« Horaires d'ouverture au public | Lundi au vendredi de 8h30 à 12h00. ») : « libellé :
+  // valeur » ; plus de deux cellules : un tableau aplati, refusé plus loin. Puces « o » et numéros de liste après un
+  // deux-points (« : 1- Pour les jardins suspendus : o Du 1 er avril… », havre), ordinal coupé (« 1 er » → « 1er »).
+  if ((t.match(/\|/g) || []).length === 1) t = t.replace(/\s*\|\s*/, ' : ');
+  t = t.replace(/(:\s*)(?:\d+\s*[-–)]\s*)?o\s+(?=[A-ZÀ-Ý0-9])/g, '$1').replace(/(:\s*)\d+\s*[-–)]\s+(?=[A-ZÀ-Ý])/g, '$1').replace(/\b(\d) er\b/g, '$1er');
+  // Titre de paragraphe collé (« Poste PC sécurité Le poste devra… ») : mot de début de phrase en majuscule après une
+  // minuscule, un chiffre ou une parenthèse.
+  const DEBUT = /(?<=[A-Za-zÀ-ÿ0-9)])\s+(?=(?:Le|La|Les|Un|Une|Des|Ce|Cet|Cette|Ces|Il|Ils|Elle|Elles|En|Dans|Au|Aux|Pour|Chaque|Tout|Toute|Tous|Toutes|Si|Lorsque|Afin|Suite|Sur|Sous|Par|Avant|Après|Dès|Durant|Pendant)\s+[a-zà-ÿ]|L['’][a-zà-ÿ])/g;
+  const coupes = [...t.matchAll(DEBUT)].map((m) => m.index!);
+  if (coupes.length) {
+    const avant = t.slice(0, coupes[0]).trim();
+    const apres = t.slice(coupes[0]).trim();
+    const titre = avant.split(' ').length <= 7 && !/[.;:,!?]/.test(avant) && !VERBE_CITATION.test(avant) && /^[A-ZÀ-Ý]/.test(avant);
+    if (!titre || coupes.length > 1) return '';
+    const mots = normaliser(avant).split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
+    const reste = normaliser(apres);
+    t = mots.every((w) => reste.includes(w.slice(0, 5))) ? apres : `${avant} : ${apres}`;
+  } else if (numero && !titreRetire && !/^(?:Le|La|Les|L['’]|Un|Une|En|Dans|Au|Aux|Pour|Chaque|Tout|Toute|Tous|Toutes|Si|Lorsque|A|À)\b/.test(t)) {
+    return '';   // titre en minuscules dont la fin est introuvable (« 5-1- Délais de livraison Suite à… », vitry)
+  }
+  return t.trim();
+}
+
+/** Verbe conjugué (forme fréquente dans un CCTP) : sans lui, une « phrase » est un fragment (« Une fois par mois de nuit »). */
+const VERBE_CITATION = new RegExp(String.raw`(?<![\p{L}])(?:est|sont|sera|seront|serait|seraient|soit|soient|a|ont|aura|auront|doit|doivent|devra|devront|devrait|peut|peuvent|pourra|pourront|fait|font|va|vont|faut|incombe|incombent|appartient|convient|reste|restent|court|courent|s['’]engage|s['’]engagent|s['’]effectue|s['’]effectuent|se\s+fait|se\s+font|se\s+d[ée]roule|se\s+d[ée]roulent|dispose|disposent|(?:effectu|assur|r[ée]alis|inform|organis|appliqu|proc[èe]d|r[ée]dig|mobilis|d[ée]p[êe]ch|remplac|communiqu|ex[ée]cut|accueill|surveill|d[ée]clench|v[ée]rifi|s[ée]curis|g[èe]r|utilis|constat|d[ée]livr|contact|appell?|accompagn|transf[èe]r|command)(?:e|ent)|(?:transmet|transmettent|remet|remettent|met|mettent|permet|permettent|fournit|fournissent|[ée]tablit|[ée]tablissent|garantit|garantissent|intervient|interviennent|pr[ée]voit|pr[ée]voient|comprend|comprennent|prend|prennent|tient|tiennent|maintient|maintiennent|re[çc]oit|re[çc]oivent|r[ée]pond|r[ée]pondent|rend|rendent|ouvre|ouvrent|ferme|ferment|pr[ée]vient|pr[ée]viennent|avertit|avertissent))(?![\p{L}])|(?<![\p{L}])[\p{Ll}]{2,}(?:era|eront|erait|eraient|ira|iront|irait|dra|dront|drait|vra|vront|tra|tront|rra|rront)(?![\p{L}])`, 'iu');
+
+/** Début de phrase qui renvoie à la phrase précédente du CCTP : incompréhensible seule (« Dans ce cas… », « Ce CR… »). */
+const DEBUT_ANAPHORIQUE = /^(?:il|ils|elle|elles|ce|cet|cette|ces|ceci|cela|celui|celle|ceux|celles|s['’]ils?|dans\s+ces?\s+cas|en\s+ce\s+cas|dans\s+cette|enfin|[àa]\s+ce\s+titre|[àa]\s+cet\s+effet|[àa]\s+cette\s+fin|pour\s+ce\s+faire|de\s+m[êe]me|ledit|ladite|lesdit(?:e)?s|le\s+cas\s+[ée]ch[ée]ant|par\s+ailleurs|en\s+outre|de\s+plus|aussi|alors|toutefois|cependant|n[ée]anmoins|en\s+revanche|lequel|laquelle|lesquel(?:le)?s|celle-ci|celui-ci|ceux-ci|au-del[àa]|en-de[çc][àa])(?![\p{L}])/iu;
+
+/** Contrôles communs d'une citation du CCTP (horaire ou obligation) : '' si elle ne peut pas être imprimée seule. */
+function citationImprimable(brut: string, fin: RegExp): string {
+  const t = citationNettoyee(brut);
+  if (!t) return '';
+  if (!/^[A-ZÀ-Ý]/.test(t) || !fin.test(t) || t.split(' ').length < 5) return '';
+  if (DEBUT_ANAPHORIQUE.test(t)) return '';
+  if (/\(\s*Cf\.?\s*$|\(Note\s*\d|\bNote\s*\d+\s*:|\bX\]|\[|\]|\||<br\s*\/?>/i.test(t)) return '';
+  // En-têtes d'un tableau aplati (« SITE Adresse Surface Utile Brute Horaires d'ouverture CAEN 20 rue… », caen 475, T7-COH-3).
+  if ((t.match(/\b(?:SITE|Site|Adresse|Surface|Superficie|Horaires|Effectifs?|B[âa]timent|D[ée]signation|Nombre|Qualification)\b/g) || []).length >= 3) return '';
+  // Trois mots en capitales de suite : tableau aplati (« SEMAINE (LUNDI AU VENDREDI) WEEK-END ET/OU JOURS FÉRIÉS… », ifits).
+  if (/(?:(?<![\p{L}])[\p{Lu}][\p{Lu}'’/-]{2,}(?![\p{L}])[\s,()&/-]*){3,}/u.test(t)) return '';
+  // Numéro de partie au milieu, pied de page, renvoi à une annexe au milieu de la phrase, puce « o » restante.
+  if (/(?:^|\s)\d+(?:\.\d+)+\s+[A-ZÀ-Ý]{3,}|\bCCTP\s*-|\bconsultation\s+\d{4,}|\bCf\.?\s+Annexe\b(?!.{0,3}$)|(?:^|[:;]\s*)o\s+[A-ZÀ-Ýa-zà-ÿ0-9]/i.test(t)) return '';
+  // Liste annoncée et coupée (« … les pièces suivantes : − CV de l'agent ; »), renvoi à un passage non cité.
+  if (/:\s*[-–−•]\s|:\s*$|\bci-(?:dessus|dessous|apr[èe]s)\b|\bsusvis[ée]|\bpr[ée]cit[ée]|suivant(?:e)?s\s*:\s*(?:[-–−•]|$)/i.test(t)) return '';
+  if ((t.match(/:/g) || []).length >= 4) return '';
+  // Libellé de tableau collé au milieu de la phrase (« … à l'intérieur et l'extérieur des locaux Horaires : du lundi… », ign).
+  if (/[a-zà-ÿ)]\s+(?:Horaires?|Fr[ée]quence|Dur[ée]e|Missions?|Effectifs?|Qualifications?|Lieu|Adresse|Jours|Plannings?|Remarques?|Observations?|Nota|NB|Consignes?|Postes?)\s*:/.test(t)) return '';
+  // Cellules de tableau mises bout à bout (« Du Mardi Bureau du Parc Lices ouvert : Les 4 401 Rue du Louis d'Or Les Lices au
+  // Samedi de 7h00 à 2h00 Lundis… », citedia) : une majuscule sur près de la moitié des mots.
+  // (période de l'année en tête et mot qui suit un deux-points non comptés : « Mars, Avril et octobre : Grand Parterre… »).
+  const sansPeriode = periodeEnTete(t) ? t.replace(/^[^:]*:\s*/, '') : t;
+  const mots = sansPeriode.replace(/:\s*\p{Lu}/gu, ': x').split(/\s+/).slice(1).filter((w) => /\p{L}/u.test(w));
+  if (mots.length >= 8 && mots.filter((w) => /^[«("]?\p{Lu}/u.test(w)).length / mots.length >= 0.4) return '';
+  // Pronom sujet sans antécédent dans la phrase (« En cas de panne ils devront être remplacés… », rouen_univ).
+  const pronom = /(?<![\p{L}'’])(?:il|ils|elle|elles)\s+(?!y\s+a\b|est\s+(?:interdit|demand|rappel|pr[ée]cis|entendu|convenu|imp[ée]ratif|n[ée]cessaire|obligatoire|indispensable))/iu.exec(t);
+  if (pronom && !/(?<![\p{L}])(?:le|la|les|l['’]|un|une|des|du|au|aux|chaque|son|sa|ses|leur|leurs|ce|cet|cette|ces)\s*\p{L}/iu.test(t.slice(0, pronom.index))) return '';
+  return t.replace(/\s*;\s*$/, '.');
+}
+
+/** Doublons (CCTP commun et CCTP d'un campus, ifsem, T7CS-4) : même phrase à la ponctuation près, presque mot pour mot, ou contenue dans une autre. */
+function sansDoublons(phrases: string[], seuil: number): string[] {
   const coeur = (x: string) => normaliser(x).replace(/[^a-z0-9]+/g, ' ').trim();
   const mots = (x: string) => new Set(coeur(x).split(' ').filter((w) => w.length > 2));
+  const chiffres = (x: string) => [...new Set(coeur(x).match(/\d+/g) || [])].sort().join(' ');
   const proches = (a: string, b: string) => {
     const ca = coeur(a), cb = coeur(b);
     if (ca === cb || ca.includes(cb) || cb.includes(ca)) return true;
     const ma = mots(a), mb = mots(b);
-    return [...ma].filter((w) => mb.has(w)).length / Math.max(1, ma.size, mb.size) >= 0.9;
+    const communs = [...ma].filter((w) => mb.has(w)).length;
+    // Mots presque tous communs mais heures ou chiffres différents (« de 9h20 à 17h40 » / « de 9h20 à 18h10 ») : deux horaires.
+    if (chiffres(a) !== chiffres(b)) return false;
+    if (communs / Math.max(1, ma.size, mb.size) >= 0.9) return true;
+    // Même obligation réécrite (citedia : « sous un délai de 3 minutes maximum » / « dans un délai maximal de 3 minutes ») :
+    // mêmes chiffres et la plupart des mots de la plus courte.
+    return seuil < 0.9 && chiffres(a) === chiffres(b) && communs / Math.max(1, Math.min(ma.size, mb.size)) >= seuil;
   };
   const out: string[] = [];
-  for (const h of lisibles) {
+  for (const h of phrases) {
     const k = out.findIndex((x) => proches(x, h));
     if (k < 0) out.push(h);
     else if (coeur(h) !== coeur(out[k]) && coeur(h).includes(coeur(out[k]))) out[k] = h;   // la phrase qui contient l'autre
   }
   return out;
+}
+
+/** Heure de la journée (« 9h20 », « à 7h », « de 20h à 7h », « 24h / 24h ») : un délai (« dans les 3 minutes », « minimum 4h ») n'est pas un horaire. */
+const HEURE_DU_JOUR = /\b\d{1,2}\s*h\s*\d{2}\b|(?<![\p{L}])(?:à|a|de|dès|des|entre|et|jusqu['’]à|avant|après|vers|partir de)\s+\d{1,2}\s*h\b|\b\d{1,2}\s*h\s*(?:\/|à|-|–)\s*\d{1,2}\s*h\b/iu;
+
+/**
+ * Horaires du DCE lisibles pour le texte de secours du bloc 1 (T6N-5, cstb 551, T8CS-1, T8-COH-1) : sans le repère
+ * « [section] » de horairesImposes (prévu pour le contrôle des contradictions), et seulement des phrases entières
+ * (majuscule initiale, ponctuation finale), jamais un fragment de tableau, une phrase coupée ou collée à un titre, une
+ * phrase qui renvoie à la précédente, ni une ligne sans heure de la journée (délai, durée minimale). Deux horaires qui
+ * ne diffèrent que par leurs heures (période de l'année absente : « de 9h20 à 18h10 » puis « de 9h20 à 17h40 ») ne sont
+ * pas imprimés : ils sembleraient se contredire.
+ */
+export function horairesLisibles(horaires: string[]): string[] {
+  // Le repère « [section] » est retiré sans être écrit devant l'horaire : le titre de partie qui précède une phrase n'est pas
+  // toujours son site (ign l. 194 : phrase générale rangée sous « Bâtiment Coriolis : »). Seule exception : un horaire qui
+  // n'est qu'un libellé « Horaires : … », imprimé avec son bâtiment ou son site (« Bâtiment Coriolis : Horaires : du lundi au
+  // vendredi de 7h00 à 19h00. »), sinon pas du tout (horaires de quoi ?).
+  const lisibles = horaires.map((brut) => {
+    const section = (/^\s*\[([^\]]*)\]/.exec(String(brut || '')) || [])[1]?.trim() || '';
+    let h = citationImprimable(brut, /[.!?;]$/);
+    if (h && /^Horaires?\s*:/i.test(h)) h = /^(?:b[âa]timent|campus|site|parc|parking|antenne|tribunal|palais|poste)\b/i.test(section) && !/\d/.test(section) ? `${section} : ${h}` : '';
+    return h;
+  }).filter((h) => {
+    if (!h) return false;
+    if (HEURE_DU_JOUR.test(h)) return true;
+    // « 24h/24 » : présence continue, sauf dans une phrase de délai (« basé 24h/24 … dans les 3 minutes », citedia).
+    return /\b24\s*h\s*\/\s*24/i.test(h) && /couvert|ouvert|assur|pr[ée]sence|permanence|gardiennage|surveillance|tenu/i.test(h)
+      && !/\bdans\s+(?:les|un\s+d[ée]lai)|\bsous\s+(?:un\s+d[ée]lai|\d)|\bd[ée]lai\b/i.test(h);
+  });
+  const uniques = sansDoublons(lisibles, 0.9);
+  // Deux horaires qui ne diffèrent que par leurs heures se contredisent en apparence (deux sites, deux périodes de l'année
+  // dont la période n'a pas été lue) : aucun des deux n'est imprimé. Seule la même période écrite en tête des deux (« Du
+  // 1er avril au 30 septembre : Prévoir deux agents … de 9h20 à 17h40. » puis « … de 9h20 à 18h10. ») les distingue :
+  // ce sont alors deux postes de la même période, cités tels que le CCTP les écrit.
+  const sansHeures = (x: string) => normaliser(x).replace(/\d{1,2}\s*h\s*\d{0,2}/g, 'H').replace(/[^a-z0-9]+/g, ' ').trim();
+  return uniques.filter((h) => !uniques.some((x) => x !== h && sansHeures(x) === sansHeures(h) && !(periodeEnTete(h) && periodeEnTete(h) === periodeEnTete(x))));
+}
+
+/**
+ * Obligations chiffrées du CCTP imprimées dans le texte de secours du bloc 1 (T8CS-1, T8-COH-1) : mêmes contrôles que
+ * les horaires, plus une phrase entière avec un verbe conjugué (« Une fois par mois de nuit », « Prendre connaissance
+ * … ; » refusés), sans renvoi à ce qui précède (« A partir de ces consignes », « aura alors »), dont GSS est bien
+ * l'acteur (jamais une obligation de l'acheteur ou des deux parties : « Si le Pouvoir Adjudicateur souhaite… », « …
+ * le retourner au Titulaire »), sans doublon. Citées mot pour mot : le texte de secours les écrit entre guillemets.
+ */
+export function obligationsLisibles(obligations: string[]): string[] {
+  const ACHETEUR = /^(?:(?:si|lorsque|quand|d[èe]s\s+que|dans\s+le\s+cas\s+o[ùu]|en\s+cas\s+de\s+d[ée]saccord\s+avec)\s+)?(?:le\s+pouvoir\s+adjudicateur|l['’]acheteur|l['’]administration|la\s+personne\s+(?:publique|responsable|charg[ée]e)|le\s+ma[îi]tre\s+d['’]ouvrage|la\s+ville|la\s+collectivit[ée]|le\s+repr[ée]sentant\s+du\s+pouvoir)(?![\p{L}])|(?<![\p{L}])(?:les\s+deux\s+parties|d['’]un\s+commun\s+accord)(?![\p{L}])/iu;
+  const lisibles = obligations.map((o) => citationImprimable(o, /[.!?;]$/)).filter((o) => {
+    if (!o) return false;
+    if (!VERBE_CITATION.test(o.replace(/\([^()]*\)/g, ' '))) return false;
+    if (ACHETEUR.test(o)) return false;
+    // Clause réputée acquise (« La commande est réputée acceptée par le Titulaire… », imm) : une règle du contrat, pas un engagement.
+    if (/(?<![\p{L}])r[ée]put[ée]e?s?(?![\p{L}])/iu.test(o)) return false;
+    // GSS seulement destinataire (« … devra l'annoter et le retourner au Titulaire ») : l'obligation est celle de l'acheteur.
+    if (/(?<![\p{L}])(?:au|aux)\s+titulaires?(?![\p{L}])/iu.test(o) && !/(?<![\p{L}])(?:le|les)\s+titulaires?(?![\p{L}])/iu.test(o)) return false;
+    if (/(?<![\p{L}])alors(?![\p{L}])/iu.test(o)) return false;
+    // Démonstratif dont le nom n'a pas été écrit plus tôt dans la phrase (« cette attestation », « ces demandes ») : renvoi
+    // à une phrase du CCTP qui n'est pas citée.
+    const n = normaliser(o);
+    for (const m of n.matchAll(/(?<![a-z])(?:ce|cet|cette|ces)\s+(?!dernier|derniere|meme)([a-z]{3,})/g)) {
+      if (!n.slice(0, m.index).includes(m[1].slice(0, Math.min(5, m[1].length)))) return false;
+    }
+    return true;
+  });
+  return sansDoublons(lisibles, 0.7);
 }
 
 export function completerBesoinMinimum(
@@ -2135,10 +2262,12 @@ export function siteDansPhrase(nom: string, villes: string[] = []): string {
   if (/^(?:le|la|les)\s+\S|^l['’]\s*\S/i.test(n)) return n.charAt(0).toLowerCase() + n.slice(1);
   const [tete, ...reste] = n.split(/\s+[—–-]\s+/);
   const suite = reste.length ? ` — ${reste.join(' — ')}` : '';
-  const ville = villes.find((v) => cleCommune(v) === cleCommune(tete));
-  if (ville) return `le site ${deCommune(ville)}${suite}`;
   const premier = (/^[\p{L}]+/u.exec(n) || [''])[0];
   const k = premier.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  // Nom qui commence par un nom de lieu (« Site VESTA », « Parc des Expositions de Rouen », « Lycée de Beauvais ») : jamais
+  // lu comme une commune (« le site de Site VESTA », T8-COH-3).
+  const ville = ARTICLE_NOM_COMMUN[k] || ARTICLE_NOM_PROPRE[k] ? undefined : villes.find((v) => cleCommune(v) === cleCommune(tete));
+  if (ville) return `le site ${deCommune(ville)}${suite}`;
   const lier = (a: string, x: string) => (a.endsWith("'") ? `${a.replace("'", '’')}${x}` : `${a} ${x}`);
   if (ARTICLE_NOM_COMMUN[k] && premier !== premier.toUpperCase()) return lier(ARTICLE_NOM_COMMUN[k], `${premier.toLowerCase()}${n.slice(premier.length)}`);
   if (ARTICLE_NOM_COMMUN[k]) return lier(ARTICLE_NOM_COMMUN[k], `${premier.toLowerCase()}${n.slice(premier.length)}`);
@@ -2186,17 +2315,22 @@ export function texteSecoursBesoin(d: DonneesBesoin, perimetre = ''): string {
   const parties: string[] = ['## Votre contexte et votre site', d.amorce || (d.client ? `${d.client.charAt(0).toUpperCase() + d.client.slice(1)} lance le marché ${d.objet ? `« ${d.objet} »` : 'de sécurité privée'}.` : `Vous nous consultez pour ${d.objet || 'une prestation de sécurité privée'}.`)];
   const sites = phraseSites(d.sites, d.villes);
   if (sites) parties.push(sites);
-  parties.push('## Le périmètre de la prestation demandée');
-  if (perimetre) parties.push(perimetreSecours(perimetre));
-  else if (d.prestations.length) parties.push(`Le marché comprend : ${d.prestations.join(', ')}.`);
+  // Horaires et obligations du CCTP cités mot pour mot, entre guillemets : jamais passés à la voix de GSS (« au
+  // titulaire » devenu « à GSS » au nettoyage final, caen 475, T8CS-1).
+  // (guillemets intérieurs écrits “ ” : la citation entière reste une seule citation pour le passage à la voix de GSS).
+  const cite = (x: string) => `- « ${x.replace(/\s+/g, ' ').trim().replace(/«\s*/g, '“').replace(/\s*»/g, '”')} »`;
+  const perimetreEcrit = perimetre ? perimetreSecours(perimetre) : d.prestations.length ? `Le marché comprend : ${d.prestations.join(', ')}.` : '';
   const horaires = horairesLisibles(d.horaires);
-  if (horaires.length) parties.push(`Horaires imposés par le cahier des charges :\n${horaires.map((h) => `- ${h}`).join('\n')}`);
+  // Sous-titre imprimé seulement s'il a un contenu (jamais suivi directement d'un autre titre, T8-COH-1).
+  if (perimetreEcrit || horaires.length) parties.push('## Le périmètre de la prestation demandée');
+  if (perimetreEcrit) parties.push(perimetreEcrit);
+  if (horaires.length) parties.push(`Horaires imposés par le cahier des charges :\n${horaires.map(cite).join('\n')}`);
   // Une obligation qui annonce une liste (« Au minimum 72 heures avant la prise de service d'un agent, le titulaire
   // doit : ») n'est jamais imprimée seule, sans sa liste (ifsem, T7CS-4).
-  const obligations = d.obligations.filter((o) => !CLAUSE_CONTRACTUELLE.test(o) && !/:\s*$/.test(o.trim()));
+  const obligations = obligationsLisibles(d.obligations).filter((o) => !CLAUSE_CONTRACTUELLE.test(o));
   if (obligations.length) {
     parties.push('## Vos attentes et nos engagements');
-    parties.push(`Nous nous engageons sur chacune des obligations chiffrées du cahier des charges :\n${obligations.slice(0, 8).map((o) => `- ${o.trim()}`).join('\n')}`);
+    parties.push(`Nous nous engageons sur chacune des obligations chiffrées du cahier des charges :\n${obligations.slice(0, 8).map(cite).join('\n')}`);
   }
   return parties.join('\n\n');
 }

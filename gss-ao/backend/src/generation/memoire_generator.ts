@@ -15,7 +15,7 @@ import {
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
-  grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
+  grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
@@ -8289,7 +8289,8 @@ RÈGLES DE FORME (rendu Marp) :
     // Minimum de la compréhension (consigne 3) : 4 attentes et 3 points de vigilance, complétés depuis les exigences
     // du DCE (sanctionnées d'abord) quand la rédaction en donne moins.
     {
-      const sources = (o.exigences || []).length ? o.exigences! : besoin.obligations.map((x) => ({ exigence: x }));
+      // Sans matrice, les obligations chiffrées du CCTP passent par les mêmes contrôles que dans le texte de secours (T8CS-1).
+      const sources = (o.exigences || []).length ? o.exigences! : obligationsLisibles(besoin.obligations).map((x) => ({ exigence: x }));
       // Méta-commentaires retirés d'abord (retirés de toute façon au nettoyage final) : le minimum compte les puces remises.
       texte = retirerCommentairesInternes(texte).texte;
       // Citation du CCTP sans rapport avec le contenu de sa puce : retirée, la puce reste (génération réelle ign 14).

@@ -65,7 +65,7 @@ describe('texte de secours du bloc 1 (T7CS-4, T7N-6, T7-COH-3)', () => {
   it('attente qui annonce une liste (« … GSS doit : ») jamais imprimée seule (ifsem)', () => {
     const t = texteSecoursBesoin({ ...base, obligations: ['Au minimum 72 heures avant la prise de service d’un agent, le titulaire doit :', 'Le titulaire intervient sous 30 minutes.'] });
     expect(t).not.toMatch(/doit :/);
-    expect(t).toContain('- Le titulaire intervient sous 30 minutes.');
+    expect(t).toContain('- « Le titulaire intervient sous 30 minutes. »');
   });
   it.skipIf(!aCorpus('ifsem'))('ifsem : chaque horaire du DCE une seule fois', () => {
     const h = horairesLisibles(horairesImposes(DCE('ifsem'), 15));

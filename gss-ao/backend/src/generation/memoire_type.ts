@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { lignesEquipe, questionDimensionnement, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss } from './base_memoires';
+import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -1230,17 +1230,23 @@ export function cleCommune(v: string): string {
     .replace(/\bste\b/g, 'sainte').replace(/\bst\b/g, 'saint').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-/** Communes des sites (codes postaux du début du DCE, sinon noms des sites), sans variante d'écriture en double. */
+/**
+ * Communes des sites (codes postaux du début du DCE, lus sur la ligne du code : T8REG-1, T8-COH-3), sans variante
+ * d'écriture en double ni commune qui n'est que le début d'une autre (« Mont » et « Mont-Saint-Aignan »). Sans code
+ * postal : les communes nommées dans le DCE (lieuDuMarche), jamais un nom de site (« Parc des Expositions de Rouen »).
+ */
 function villesDuMarche(dce: string, analyse: any): string[] {
   const out: string[] = [];
-  for (const m of String(dce || '').slice(0, 30000).matchAll(/(?<!\d)(\d{5})\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ'’-]+(?:[ -][A-Za-zÀ-ÿ'’]+){0,4})/g)) {
-    const ville = m[2].replace(/\s+(?:cedex|CEDEX|Cedex).*$/, '').replace(/\s+(?:t[ée]l|tel|fax|courriel|mail)\b.*$/i, '').trim();
-    const propre = ville === ville.toUpperCase() ? ville.charAt(0) + ville.slice(1).toLowerCase() : ville;
-    if (propre.length >= 3 && !out.some((x) => cleCommune(x) === cleCommune(propre))) out.push(propre);
+  const prefixe = (a: string, b: string) => `${cleCommune(b)} `.startsWith(`${cleCommune(a)} `);
+  for (const { commune } of communesParCodePostal(String(dce || '').slice(0, 30000), String(dce || ''))) {
+    if (commune.length < 3 || out.some((x) => prefixe(commune, x))) continue;
+    const k = out.findIndex((x) => prefixe(x, commune));
+    if (k >= 0) out[k] = commune; else out.push(commune);
     if (out.length >= 3) break;
   }
   if (out.length) return out;
-  return (Array.isArray(analyse?.sites) ? analyse.sites : []).map((s: any) => textePropre(s?.name)).filter(Boolean).slice(0, 3);
+  const lieu = lieuDuMarche(analyse || {}, String(dce || ''));
+  return [...lieu.normands, ...lieu.horsNormandie].filter((v) => !/^(?:Seine-Maritime|Calvados)$/.test(v)).slice(0, 3);
 }
 
 /** Organigramme de référence (annuaire « Personnes » + registre) en liste Markdown, rôles regroupés par personne. */
@@ -2137,7 +2143,9 @@ export function donneesBesoin(prep: MemoirePrepare, ctx: ContexteMarche): Donnee
     client,
     objet: texte('OBJET_MARCHE'), lots: texte('LOTS'), duree: texte('DUREE_MARCHE'), sites: liste('SITE'), villes: liste('VILLE'),
     secteur: texte('SECTEUR_CLIENT'),
-    horaires: horairesImposes(ctx.dce || '', 15),
+    // Période de l'année gardée devant ses horaires (« Du 1er avril au 30 septembre : … », T8CS-1) ; 20 au plus, une
+    // période dont la liste dépasse ce maximum n'est pas citée à moitié.
+    horaires: horairesImposes(ctx.dce || '', 20, undefined, { periodes: true }),
     obligations: obligationsChiffrees(ctx.dce || '').slice(0, 25).map((o) => o.phrase),
     qualifications: liste('QUALIFICATIONS_REQUISES'),
     enjeux: (Array.isArray(ctx.analyse?.keyRisks) ? ctx.analyse.keyRisks : []).map((x: unknown) => textePropre(x)).filter(Boolean).slice(0, 5),

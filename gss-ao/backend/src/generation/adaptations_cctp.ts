@@ -27,7 +27,7 @@
 // comme une exigence du CCTP (T6C-10).
 
 import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, variableRenseignee, phraseDelaiDuDce, phraseDuDceContenant, VARIABLES_IMPOSABLES, SUJET_VARIABLE_DELAI, type MemoireType, type ContexteMarche } from './memoire_type';
-import { sitesDuMarche, lieuDuMarche } from './base_memoires';
+import { sitesDuMarche, lieuDuMarche, communesParCodePostal } from './base_memoires';
 
 export type StatutAdaptation = 'a_valider' | 'validee' | 'modifiee' | 'retablie';
 
@@ -265,12 +265,12 @@ export function exigenceHorsNormandie(dce: string, analyse: any): string {
   }
   // Aucun site hors Normandie reconnu (etampes1 : seule l'adresse de la mairie, « BP 109 / 91152 ETAMPES CEDEX ») : la
   // commune hors Normandie écrite avec son code postal dans le DCE, même dans une adresse postale (T6C-10).
+  // (commune lue sur la ligne du code postal, jamais un pays : « Fontainebleau 77300 France », T8CS-2).
   const commune = hors.length ? '' : (() => {
-    for (const m of String(dce || '').matchAll(/\b(\d{2})\d{3}\s*(?:[–—,-]\s*)?([A-ZÉÈÀÂÎÔÛ][A-Za-zÀ-ÿ'’-]+(?:[ -](?!cedex|CEDEX|Cedex)[A-Za-zÀ-ÿ'’-]+){0,3})/g)) {
-      const dep = Number(m[1]);
-      if (dep < 1 || dep > 95 || [14, 27, 50, 61, 76].includes(dep) || /^(?:m[²³23]?|km|ha|h|heures?|€|euros?|ht|ttc|personnes?|agents?)$/i.test(m[2])) continue;
-      const c = m[2].replace(/\s+(?:cedex|t[ée]l|tel|fax)\b.*$/i, '').trim();
-      return c === c.toUpperCase() ? c.charAt(0) + c.slice(1).toLowerCase() : c;
+    for (const c of communesParCodePostal(String(dce || ''))) {
+      const dep = Number(c.code.slice(0, 2));
+      if (dep < 1 || dep > 95 || [14, 27, 50, 61, 76].includes(dep)) continue;
+      return c.commune;
     }
     return '';
   })();

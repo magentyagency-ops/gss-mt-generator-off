@@ -720,6 +720,83 @@ export function questionLieuInconnu(analyse: any, dce: string): string[] {
 
 const NORMANDIE = ['14', '27', '50', '61', '76'];
 
+/** Mot qui suit ou précède un code postal sans être une commune (pays, mention postale, libellé de tableau, T8CS-2, T8REG-1). */
+const PAS_COMMUNE = /^(?:france|cedex|cs|tsa|b\.?p\.?|t[ée]l\.?|t[ée]l[ée]phone|fax|courriel|e-?mail|mail|classification|adresse|site|lot|code|siret|siren|n°|num[ée]ro|horaires?|surface|superficie|effectifs?|nombre)$/i;
+const UNITE_CP = /^(?:m[²³23]?|km|ha|h|heures?|€|eur|euros?|ht|ttc|personnes?|visiteurs?|spectateurs?|places?|agents?|salari[ée]s?|habitants?|usagers?|[ée]l[èe]ves?|[ée]tudiants?|passages?|entr[ée]es?|lits?|logements?|v[ée]hicules?)$/i;
+
+/** Clé d'une commune (accents, tirets, apostrophes, « St ») : même règle que cleCommune de memoire_type.ts. */
+function cleCommune2(v: string): string {
+  return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/['’`\u2011-]/g, ' ')
+    .replace(/\bste\b/g, 'sainte').replace(/\bst\b/g, 'saint').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Commune écrite en capitales mise en casse de nom propre (« LE HAVRE » → « Le Havre », « SAINT-ETIENNE-DU-ROUVRAY » → « Saint-Etienne-du-Rouvray »). */
+function casseCommune(c: string): string {
+  return c.toLowerCase().split(/([ '’-])/).map((w, i, t) => {
+    if (!w || /^[ '’-]$/.test(w)) return w;
+    if (i > 0 && (/^(?:de|du|des|sur|sous|lès|les|lez|en|et|aux|au|la|le)$/.test(w) || (/^[dl]$/.test(w) && /['’]/.test(t[i + 1] || '')))) return w;
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }).join('');
+}
+
+/**
+ * Commune lue à côté d'un code postal, propre (T8CS-2, T8REG-1, T8-COH-3) : espaces autour des traits d'union retirés
+ * (« Mont -Saint-Aignan »), mention postale retirée (« Cedex », « Tél. »), jamais un pays ni un libellé (« France »,
+ * « Classification »), écrite comme le DCE l'écrit en minuscules ailleurs (« Le Grand-Quevilly »), sinon en casse de nom
+ * propre. '' si ce n'est pas une commune.
+ */
+export function communeLisible(brut: string, dce = ''): string {
+  let c = String(brut || '').replace(/[ \t]*[-\u2011][ \t]*/g, '-').replace(/\s+/g, ' ').trim()
+    .replace(/\s+(?:cedex|t[ée]l|tel|fax|courriel|mail|et|pour|france)\b.*$/i, '').replace(/\s+(?:le|la|les)\s+(?=[a-zà-ÿ\d]).*$/, '').replace(/[\s,;:.-]+$/, '').trim();
+  const premier = c.split(/[ -]/)[0] || '';
+  if (c.replace(/[^A-Za-zÀ-ÿ]/g, '').length < 3 || PAS_COMMUNE.test(premier) || UNITE_CP.test(premier) || /\d/.test(c)) return '';
+  if (c === c.toUpperCase()) {
+    // Graphie du DCE en casse mixte (« Le Grand-Quevilly »), sinon casse de nom propre.
+    // (chaque mot plein avec sa majuscule : jamais « Le grand-quevilly » écrit ainsi par erreur dans le DCE).
+    const mixte = [...String(dce || '').matchAll(rxCommune(c))].map((m) => m[0])
+      .find((x) => x !== x.toUpperCase() && x.split(/[ '’-]/).filter(Boolean).every((w, i) => /^[A-ZÀ-Ý]/.test(w) || (i > 0 && /^(?:de|du|des|sur|sous|lès|les|lez|en|et|aux|au|la|le|d|l)$/.test(w))));
+    // Graphie officielle d'une commune connue (« LE GRAND QUEVILLY » → « Le Grand-Quevilly »).
+    const connue = [...COMMUNES_NORMANDES, ...VILLES_HORS_NORMANDIE].find((k) => [cleCommune2(k), `le ${cleCommune2(k)}`].includes(cleCommune2(c)));
+    c = mixte || (connue ? `${cleCommune2(c).startsWith('le ') && !cleCommune2(connue).startsWith('le ') ? 'Le ' : ''}${connue}` : casseCommune(c));
+  }
+  return c;
+}
+
+/**
+ * Communes lues par code postal sur une même ligne : « 76000 Rouen », « 93330 – Neuilly-sur-Marne », et « Fontainebleau
+ * 77300 France » (commune écrite avant le code, pays après). Jamais le mot de la ligne suivante (« à DIEPPE 76200 ⏎
+ * Classification établissement », ca_normandie), jamais un identifiant d'adresse web (« jsessionid=13653C8FC4… »).
+ */
+export function communesParCodePostal(texte: string, dce = texte): Array<{ code: string; commune: string; debut: number; fin: number }> {
+  const out: Array<{ code: string; commune: string; debut: number; fin: number }> = [];
+  const SUITE = String.raw`[A-Za-zÀ-ÿ'’]*(?:[ \t]*[-\u2011][ \t]*[A-Za-zÀ-ÿ'’]+)*`;
+  const MOT = String.raw`[A-Za-zÀ-ÿ'’]${SUITE}`;
+  const rx = new RegExp(String.raw`(?<![=/?&#.\d])\b(\d{5})\b(?![\d])[ \t]*(?:[–—,-][ \t]*)?([A-ZÉÈÀÂÎÔÛ]${SUITE}(?:[ \t]+(?!cedex|CEDEX|Cedex)${MOT}){0,4})?`, 'g');
+  for (const m of String(texte || '').matchAll(rx)) {
+    const debut = m.index || 0;
+    let commune = m[2] && !UNITE_CP.test(m[2].split(/\s/)[0]) ? communeLisible(m[2], dce) : '';
+    if (!commune && !(m[2] && UNITE_CP.test(m[2].split(/\s/)[0]))) {
+      // Commune écrite avant le code, sur la même ligne (« Adresse : Fontainebleau 77300 France », « à DIEPPE 76200 »).
+      const ligne = String(texte).slice(Math.max(0, debut - 80), debut).split('\n').pop() || '';
+      const av = new RegExp(String.raw`([A-ZÀ-Ý]${SUITE}(?:[ \t]+${MOT}){0,3})[ \t,]*$`).exec(ligne);
+      if (av) {
+        // Seuls les derniers mots écrits comme un nom de commune (majuscule ou particule : « à DIEPPE » → DIEPPE, « Sa
+        // superficie sera d'environ 15000 » → rien), après le nom du site ou de la voie (« Château de Fontainebleau » → Fontainebleau).
+        const PARTICULE = /^(?:de|du|des|la|le|les|sur|sous|lès|lez|en|[dl]['’]\S*)$/;
+        const LIEU = /^(?:ch[âa]teau|parc|site|h[ôo]tel|mairie|centre|campus|b[âa]timent|lyc[ée]e|coll[èe]ge|[ée]cole|universit[ée]|domaine|mus[ée]e|palais|tribunal|cour|maison|r[ée]sidence|immeuble|rue|avenue|boulevard|place|chemin|route|all[ée]e|quai|impasse|adresse)$/i;
+        let mots = av[1].split(/[ \t]+/);
+        let k = mots.length;
+        while (k > 0 && (/^[A-ZÀ-Ý]/.test(mots[k - 1]) || PARTICULE.test(mots[k - 1])) && !LIEU.test(mots[k - 1])) k--;
+        mots = mots.slice(k);
+        while (mots.length && PARTICULE.test(mots[0])) mots.shift();
+        commune = communeLisible(mots.join(' '), dce);
+      }
+    }
+    if (commune) out.push({ code: m[1], commune, debut, fin: debut + m[0].length });
+  }
+  return out;
+}
+
 /**
  * Sites du marché par code postal DISTINCT (et non par occurrence), en Normandie et hors Normandie. Une adresse postale
  * administrative n'est pas un site : « Cedex », boîte postale, siège, administrations (rouen_univ : « DREETS des pays de
@@ -727,7 +804,6 @@ const NORMANDIE = ['14', '27', '50', '61', '76'];
  */
 export function sitesDuMarche(analyse: any, dce: string): { normands: string[]; horsNormandie: string[]; mixte: boolean } {
   const texte = `${JSON.stringify(analyse || {})} ${String(dce || '').slice(0, 40000)}`.replace(/\\n/g, '\n');
-  const UNITE = /^(?:m[²³23]?|km|ha|h|heures?|€|eur|euros?|ht|ttc|personnes?|visiteurs?|spectateurs?|places?|agents?|salari[ée]s?|habitants?|usagers?|[ée]l[èe]ves?|[ée]tudiants?|passages?|entr[ée]es?|lits?|logements?|v[ée]hicules?)$/i;
   const ADMIN = /cedex|\bB\.?P\.?\s*\d|bo[îi]te postale|si[èe]ge|DREETS|DIRECCTE|DDETS|tribunal|pr[ée]fecture|CNAPS|inspection du travail|URSSAF|tr[ée]sor|paierie|comptable public|greffe|minist[èe]re/i;
   const normands = new Map<string, string>();
   const hors = new Map<string, string>();
@@ -745,14 +821,13 @@ export function sitesDuMarche(analyse: any, dce: string): { normands: string[]; 
   };
   // « 76000 Rouen », « 93330 – Neuilly-sur-Marne »
   // Jamais un identifiant d'adresse web (« jsessionid=13653C8FC4… », ca_normandie) : la commune ne contient aucun chiffre.
-  for (const m of texte.matchAll(/(?<![=/?&#.])\b(\d{5})\s*(?:[–—,-]\s*)?([A-ZÉÈÀÂÎÔÛ][A-Za-zÀ-ÿ²³'’-]*(?![\d])(?:[ -](?!cedex|CEDEX|Cedex)[A-Za-zÀ-ÿ'’-]+){0,4})/g)) {
-    if (!UNITE.test(m[2])) ajouter(m[1], m[2], m.index || 0, (m.index || 0) + m[0].length);
-  }
+  // Commune lue sur la ligne du code postal (« Fontainebleau 77300 France » : Fontainebleau, jamais « France », T8CS-2).
+  for (const c of communesParCodePostal(texte, String(dce || ''))) ajouter(c.code, c.commune, c.debut, c.fin);
   // « Rouen (76000) », « Paris (75013) »
   for (const m of texte.matchAll(/([A-ZÉÈÀÂÎÔÛ][A-Za-zÀ-ÿ'’-]+(?:[ -][A-Za-zÀ-ÿ'’-]+){0,3})\s*\(\s*(\d{5})\s*\)/g)) {
     ajouter(m[2], m[1].split(/\s+(?:à|a|de|du|des)\s+/).pop() || m[1], m.index || 0, (m.index || 0) + m[0].length);
   }
-  const fmt = (x: Map<string, string>) => [...new Set([...x.values()].map((c) => (c === c.toUpperCase() ? c.charAt(0) + c.slice(1).toLowerCase() : c)))];
+  const fmt = (x: Map<string, string>) => [...new Set([...x.values()].map((c) => communeLisible(c, String(dce || '')) || c))];
   return { normands: fmt(normands), horsNormandie: fmt(hors), mixte: normands.size > 0 && hors.size > 0 };
 }
 
@@ -1450,45 +1525,103 @@ export function texteCctp(dce: string, max = 120_000): string {
   return t.length > max ? t.slice(0, max) : t;
 }
 
+const MOIS_RX = String.raw`(?:janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre)`;
+const PERIODE_RX = new RegExp(String.raw`^(?:[-•▪●○◦➢>]\s*)?((?:(?:du|de|à partir du|a partir du)\s+)?\d{1,2}\s*(?:er)?\s+${MOIS_RX}(?:\s+\d{4})?\s+(?:au|à|a|jusqu['’]au)\s+\d{1,2}\s*(?:er)?\s+${MOIS_RX}(?:\s+\d{4})?(?:\s+inclus)?|${MOIS_RX}(?:\s*(?:,|\bet\b)\s*${MOIS_RX})*|(?:en\s+|pendant\s+(?:la\s+|les\s+)?)?(?:p[ée]riode|saison)\s+(?:estivale|hivernale|scolaire|haute|basse)|(?:haute|basse|hors)\s+saison|(?:hors\s+|pendant\s+les\s+)?vacances\s+scolaires|en\s+[ée]t[ée]|en\s+hiver)\s*:`, 'i');
+
+/**
+ * Période de l'année écrite en tête d'une ligne (« Du 1er avril au 30 septembre : », « Janvier, février, novembre et
+ * décembre : », « Hors saison : ») : la période, avec sa majuscule, sinon ''.
+ */
+export function periodeEnTete(ligne: string): string {
+  const m = PERIODE_RX.exec(String(ligne || '').replace(/\s+/g, ' ').trim());
+  if (!m) return '';
+  const p = m[1].replace(/\s+/g, ' ').trim();
+  return p.charAt(0).toUpperCase() + p.slice(1);
+}
+
 /**
  * Horaires imposés par le cahier des charges (ouverture, fermeture, mise sous alarme, vacations, rondes, relèves) :
  * phrases citées telles quelles, pour le contrôle des contradictions (« fermeture de Coriolis à 19 h » alors que le
  * CCTP fixe la fermeture aux usagers à 21 h et la mise sous alarme à 22 h).
  */
-export function horairesImposes(dce: string, max = 30, objet = /ouvert|ferm|alarme|vacation|ronde|relève|pr[ée]sence|poste|horaire|pause|accueil/i): string[] {
+export function horairesImposes(dce: string, max = 30, objet = /ouvert|ferm|alarme|vacation|ronde|relève|pr[ée]sence|poste|horaire|pause|accueil/i, o: { periodes?: boolean } = {}): string[] {
   const out: string[] = [];
   const vues = new Set<string>();
+  // Option « periodes » (texte de secours du bloc 1, T8CS-1) : la période de l'année écrite seule sur sa ligne avant une
+  // liste d'horaires (« Du 1er avril au 30 septembre : », « Janvier, février, novembre et décembre : ») est écrite devant
+  // chacun d'eux ; sans elle, « de 9h20 à 18h10 » puis « de 9h20 à 17h40 » semblaient se contredire (fontainebleau).
+  let periode = '';
   // Titre de partie propre à un site (« Campus de Thiais », « Bâtiment Coriolis : ») : il précède chaque horaire cité,
   // sinon les horaires de deux campus aux phrases identiques étaient confondus (ou fusionnés en un seul).
   const TITRE = /(?:campus|site|b[âa]timent|parc|parking|lot\b|antenne|tribunal|palais|juridiction|poste de)/i;
+  let plein = false;
   for (const piece of piecesTechniques(dce)) {
     let section = '';
     let tampon: string[] = [];
     const vider = () => {
       const texte = tampon.join('\n');
       tampon = [];
-      const phrases = texte.replace(/[ \t]+/g, ' ').split(/(?<=[.;!?])\s+|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n{2,}/).map((x) => x.replace(/\s+/g, ' ').replace(/^[-•▪●○◦−]\s*/, '').trim()).filter((x) => x.length >= 30 && x.length <= 350);
+      const phrases = texte.replace(/[ \t]+/g, ' ').split(/(?<=[.;!?])\s+|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n{2,}/).map((x) => x.replace(/\s+/g, ' ').trim().replace(/^[-•▪●○◦−]\s*/, '').trim()).filter((x) => x.length >= 30 && x.length <= 350);
       for (const ph of phrases) {
-        if (out.length >= max) return;
+        if (plein) return;
+        if (out.length >= max) {
+          // Option « periodes » : la liste d'une période coupée par le maximum est retirée entière (jamais « Mai, juin… :
+          // Jardin Anglais » sans les autres jardins de la même période).
+          if (o.periodes && periode) while (out.length && out[out.length - 1].replace(/^\[[^\]]*\]\s*/, '').startsWith(`${periode} : `)) out.pop();
+          plein = true;
+          return;
+        }
         if (!/\b\d{1,2}\s*h\s*\d{0,2}\b/i.test(ph) || !objet.test(ph)) continue;
         if (/p[ée]nalit|€|euros?\b|taux horaire|\b(?:J|N)\s+(?:J|N)\b/i.test(ph)) continue;
-        const cle = `${section}|${ph}`.toLowerCase().replace(/[^a-z0-9|]+/g, ' ');
+        const phrase = periode && !ph.toLowerCase().includes(periode.toLowerCase()) ? `${periode} : ${ph}` : ph;
+        const cle = `${section}|${phrase}`.toLowerCase().replace(/[^a-z0-9|]+/g, ' ');
         if (vues.has(cle)) continue;
         vues.add(cle);
-        out.push(section && !ph.toLowerCase().includes(section.toLowerCase()) ? `[${section}] ${ph}` : ph);
+        out.push(section && !phrase.toLowerCase().includes(section.toLowerCase()) ? `[${section}] ${phrase}` : phrase);
       }
     };
-    for (const ligne of piece.split('\n')) {
+    periode = '';
+    let retraitItems = -1;
+    let premierPuce = false;
+    let finListe = false;
+    // Ordinal en exposant écrit sur sa propre ligne par la lecture du PDF (« Du 1 ⏎ er ⏎ avril au 30 septembre : »).
+    const lignes = (o.periodes ? piece.replace(/(\d)[ \t]*\n[ \t]*(er|re|e|ème)[ \t]*\n[ \t]*/g, '$1$2 ') : piece).split('\n');
+    for (const ligne of lignes) {
       const l = ligne.replace(/\s+/g, ' ').trim();
+      if (o.periodes) {
+        // La période vaut pour les lignes qui la suivent, jusqu'à une ligne vide, une autre période ou une ligne moins
+        // en retrait que ses éléments (« Le parc … est quant à lui ouvert 24h/24h », fontainebleau).
+        const retrait = (/^\s*/.exec(ligne) || [''])[0].replace(/\t/g, '    ').length;
+        const enTete = l.length <= 90 && /:\s*$/.test(l) ? periodeEnTete(l) : '';
+        // La ligne n'est faite que de la période (« Du 1er avril au 30 septembre : »).
+        const p = enTete && l.replace(/^[-•▪●○◦➢>]\s*/, '').replace(/\s*:\s*$/, '').length <= enTete.length + 1 ? enTete : '';
+        if (p) {
+          vider();
+          periode = p;
+          retraitItems = -1;
+          finListe = false;
+          continue;
+        }
+        if (periode) {
+          const puce = /^[-•▪●○◦]/.test(l);
+          if (!l) { vider(); periode = ''; }
+          else if (retraitItems < 0) { retraitItems = retrait; premierPuce = puce; }
+          // Fin de la liste : ligne moins en retrait que ses éléments, ligne sans puce après des éléments à puce, ou ligne
+          // qui suit le dernier élément (« … 19h30. » après des éléments terminés par « ; »).
+          else if ((retrait < retraitItems || (premierPuce && !puce) || finListe) && !puce) { vider(); periode = ''; }
+          finListe = !!periode && /\.\s*$/.test(l);
+        }
+      }
       if (l && l.length <= 60 && /^[A-ZÀ-Ý0-9]/.test(l) && !/[.;,]/.test(l.replace(/^\d+(?:\.\d+)*\s*/, '')) && TITRE.test(l) && !/\b\d{1,2}\s*h\s*\d{0,2}\b/i.test(l)
         && !/\b(?:doi(?:t|vent)|veill\w*|dispose\w*|concerne\w*|est|sont|sera|seront|assur\w+|effectu\w+)\b/i.test(l)) {
         vider();
         section = l.replace(/\s*:\s*$/, '');
+        periode = '';
       }
       tampon.push(ligne);
     }
     vider();
-    if (out.length >= max) break;
+    if (plein || out.length >= max) break;
   }
   return out;
 }
