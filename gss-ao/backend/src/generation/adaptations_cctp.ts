@@ -137,7 +137,10 @@ export function changements(avant: string, apres: string): Changement[] {
     if (!vieux.length) continue;
     const pris = new Set<number>();
     for (const [k, v] of vieux.entries()) {
-      let meilleur = -1, score = 0;
+      // Score initial négatif : une seule phrase ancienne face à une seule nouvelle est appariée même sans aucun mot commun
+      // (T1F-4 : « Selon la nature de leur mission… » remplacée par « Nos agents disposent chacun d'un émetteur-récepteur… »
+      // était signalée « phrase retirée », et la nouvelle phrase n'était signalée nulle part).
+      let meilleur = -1, score = -1;
       neufs.forEach((x, q) => { if (pris.has(q)) return; const s = similarite(mots(v), mots(x)); if (s > score) { score = s; meilleur = q; } });
       // Une seule phrase de chaque côté : remplacement (« Le marché fixe des délais… » à la place du délai normand).
       if (meilleur >= 0 && (score >= 0.4 || (vieux.length === 1 && neufs.length === 1) || (k === 0 && neufs.length === 1))) {
@@ -192,6 +195,17 @@ export function appliquerChoix(texte: string, a: PhraseAdaptee, cible: string): 
   if (localiser(texte, cible, 0.95)) return { texte, ok: true };
   const ligne = LIGNE_ENTIERE.test(a.origine.trim());
   const av = a.avant ? localiser(texte, a.avant) : null;
+  // Phrase « retirée » dont la place est prise par une seule phrase nouvelle, entre ses deux voisines : rétablir remplace
+  // cette phrase nouvelle, jamais deux amorces côte à côte (T1F-4).
+  const ap0 = a.apres ? localiser(texte, a.apres) : null;
+  if (av && ap0) {
+    const us = unites(texte);
+    const i = us.indexOf(av), j = us.indexOf(ap0);
+    if (i >= 0 && j === i + 2) {
+      const entre = us[i + 1];
+      return { texte: texte.replace(entre, forme(entre, cible)), ok: true };
+    }
+  }
   if (av) {
     if (ligne || LIGNE_ENTIERE.test(av)) {
       const lignes = texte.split('\n');

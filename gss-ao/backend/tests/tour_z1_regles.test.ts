@@ -198,3 +198,17 @@ describe('voix de GSS : jamais le candidat à l’embauche (T1F-1)', () => {
     expect(voixDeGss('Le candidat assure la surveillance du site. Le titulaire gère les clés.')).toBe('GSS assure la surveillance du site. GSS gère les clés.');
   });
 });
+
+import { changements, appliquerChoix } from '../src/generation/adaptations_cctp';
+
+describe('D8 : phrase remplacée sans mot commun (T1F-4)', () => {
+  const avant = "La communication est au cœur des missions de l'agent. Selon la nature de leur mission et leurs besoins, nos agents disposent :\n- de **talkies-walkies et d'oreillettes** : x ;";
+  const apres = "La communication est au cœur des missions de l'agent. Nos agents disposent chacun d'un émetteur-récepteur et d'une oreillette :\n- de **talkies-walkies et d'oreillettes** : x ;";
+  it('une phrase ancienne et une nouvelle : remplacement signalé avec la nouvelle phrase', () => {
+    expect(changements(avant, apres)).toEqual([{ origine: 'Selon la nature de leur mission et leurs besoins, nos agents disposent :', adaptee: "Nos agents disposent chacun d'un émetteur-récepteur et d'une oreillette :" }]);
+  });
+  it('rétablir une phrase signalée « retirée » remplace la phrase nouvelle placée entre ses voisines', () => {
+    const r = appliquerChoix(apres, { origine: 'Selon la nature de leur mission et leurs besoins, nos agents disposent :', adaptee: '', avant: "La communication est au cœur des missions de l'agent.", apres: "- de **talkies-walkies et d'oreillettes** : x ;" } as any, 'Selon la nature de leur mission et leurs besoins, nos agents disposent :');
+    expect(r.texte).toBe(avant);
+  });
+});
