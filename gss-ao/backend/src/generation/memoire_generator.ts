@@ -11,7 +11,7 @@ import {
   chargerMemoireType, preparerMemoireType, reinitialiserJournalIndicateurs, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
-  type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, formeCourteApresPremiere, phrasesGeneralesProtegees, ajoutContraireAuxDelaisGss,
+  type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, harmoniserVariantesAcheteur, formeCourteApresPremiere, phrasesGeneralesProtegees, ajoutContraireAuxDelaisGss,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
@@ -27,7 +27,7 @@ import {
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, completerDelaisCadre, ordonnerSelonReponse, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, attendusDuChamp, attendusSansReponse,
-  questionsPubliposteParEmplacement, questionDeLEmplacement,
+  questionsPubliposteParEmplacement, questionDeLEmplacement, completerFamilles,
 } from './memoire_type_cadre';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche } from './base_memoires';
@@ -5344,7 +5344,8 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
           // Plusieurs textes de GSS repris (une rubrique par composante) : dans l'ordre où la réponse les emploie, pour que chaque
           // texte reste sous l'intitulé de sa composante au recalage (etampes2 553, T5CP-2 : « Absence de 2 agents… » suivi du
           // texte de l'intrusion, sous-titre « Intrusion… » resté vide).
-          const retenus = ordonnerSelonReponse(referencesPrincipales(referencesRetenues(candidats, data.reference)), String(value));
+          // Familles inséparables (absence prévue puis non prévue, T7CS-2) gardées entières après le choix de la rubrique principale.
+          const retenus = ordonnerSelonReponse(completerFamilles(referencesPrincipales(referencesRetenues(candidats, data.reference)), candidats), String(value));
           // Intitulé de la rubrique du cadre (titre de section) quand la « question » n'est qu'un paragraphe de consigne
           // (havre1 : « Le renvoi vers un rapport général… est à proscrire » au lieu de « Mesures et initiatives sociétales »).
           const sectionChamp = ((f.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '').replace(/\[CHAMP_\d+\]/gi, '').replace(/\s+/g, ' ').trim();
@@ -5739,7 +5740,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         }
       }
       // Nom de l'acheteur écrit d'une seule façon (graphie de la variable CLIENT).
-      if (repriseMT?.prep.variables.CLIENT?.valeur) r.value = harmoniserNomClient(String(r.value), String(repriseMT.prep.variables.CLIENT.valeur));
+      // Variantes d'une commune acheteuse (« la Ville d’Étampes » pour « la Mairie d'Etampes », T7CS-8) : même nom partout.
+      if (repriseMT?.prep.variables.CLIENT?.valeur) r.value = harmoniserVariantesAcheteur(harmoniserNomClient(String(r.value), String(repriseMT.prep.variables.CLIENT.valeur)), String(repriseMT.prep.variables.CLIENT.valeur));
       if (recopie.retires.length) console.log(`[MemoireGenerator] Champ ${r.id} : ${recopie.retires.length} phrase(s) du CCTP recopiée(s) à la voix de l'acheteur retirée(s).`);
       retires.forEach((x) => confirmationsGss.add(`À confirmer : ${x}`));
       delais.retires.forEach((x) => confirmationsGss.add(`${libelleDelaiRetire(analysisData, dceContext)}${x}`));
@@ -8065,7 +8067,7 @@ RÈGLES DE FORME (rendu Marp) :
       sections[id] = voixDeGss(sansRecopie(id, nettoyerStructure(filtre)));
     }
     // Nom de l'acheteur écrit d'une seule façon partout (casse et accents de la variable CLIENT, parc_expo 202).
-    { const nomClient = String(prep.variables.CLIENT?.valeur || ''); if (nomClient) for (const id of Object.keys(sections)) sections[id] = harmoniserNomClient(sections[id], nomClient); }
+    { const nomClient = String(prep.variables.CLIENT?.valeur || ''); if (nomClient) for (const id of Object.keys(sections)) sections[id] = harmoniserVariantesAcheteur(harmoniserNomClient(sections[id], nomClient), nomClient); }
     nomClientCourtApresPremiere(sections, prep.variables.CLIENT as any, analysisData?.clientName || '');
     // 1 à 2 pages d'explication par rubrique (consignes 3 et 6) : puces de couverture au-delà retirées, texte de GSS intact.
     if (!estRetourArriere(themeActif())) {
@@ -9699,7 +9701,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       sections[id] = voixDeGss(nettoyerStructure(filtre));
     }
     // Nom de l'acheteur écrit d'une seule façon partout (casse et accents de la variable CLIENT, parc_expo 202).
-    { const nomClient = String(prep.variables.CLIENT?.valeur || ''); if (nomClient) for (const id of Object.keys(sections)) sections[id] = harmoniserNomClient(sections[id], nomClient); }
+    { const nomClient = String(prep.variables.CLIENT?.valeur || ''); if (nomClient) for (const id of Object.keys(sections)) sections[id] = harmoniserVariantesAcheteur(harmoniserNomClient(sections[id], nomClient), nomClient); }
     nomClientCourtApresPremiere(sections, prep.variables.CLIENT as any, analysisData?.clientName || '');
     // Phrases de GSS adaptées au CCTP (D8) : retrouvées dans les parties finales (rubriques du mémoire type reprises par
     // chaque partie) ; choix de GSS de la génération précédente appliqués, les autres signalées.

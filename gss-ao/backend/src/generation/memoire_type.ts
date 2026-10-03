@@ -823,6 +823,26 @@ export function harmoniserNomClient(texte: string, nom: string): string {
 }
 
 /**
+ * Variantes du nom d'une commune acheteuse écrites par la rédaction (T7CS-8, etampes2 553 : « la Ville d’Étampes », forme
+ * absente du DCE, à côté de « la Mairie d'Etampes ») : « Ville / Mairie / Commune de X », accents et casse compris, sont
+ * ramenées au nom retenu pour le publipostage (« Mairie d'Etampes »). Sans effet si le nom n'a pas cette forme.
+ */
+export function harmoniserVariantesAcheteur(texte: string, nom: string): string {
+  const m = /^(?:mairie|ville|commune)\s+(?:de\s+|d['’]\s*)(.+)$/i.exec(String(nom || '').trim());
+  const t = String(texte || '');
+  if (!m || !t) return t;
+  const commune = m[1].normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/[aeiouc]/gi, (c) => ({ a: '[aàâäAÀÂÄ]', e: '[eéèêëEÉÈÊË]', i: '[iîïIÎÏ]', o: '[oôöOÔÖ]', u: '[uùûüUÙÛÜ]', c: '[cçCÇ]' } as Record<string, string>)[c.toLowerCase()] || c)
+    .replace(/[- ]/g, "[-\u2011 ]+").replace(/'/g, "['’]");
+  const rx = new RegExp(`(?<![\\p{L}])(?:mairie|ville|commune)\\s+(?:de\\s+|d['’]\\s*)${commune}(?![\\p{L}])`, 'giu');
+  return t.replace(rx, (x: string, off: number, tout: string) => {
+    if (x === nom) return x;
+    const debut = /(?:^|[.!?:]\s+|\n\s*(?:[-*•]\s+)?|«\s*)$/.test(tout.slice(Math.max(0, off - 4), off));
+    return debut ? nom.charAt(0).toUpperCase() + nom.slice(1) : nom;
+  });
+}
+
+/**
  * Forme longue de l'acheteur à la première mention du document, forme courte ensuite (consigne 2 : on met le bon nom, sans
  * alourdir ; règle déjà appliquée par la réponse libre) : textes donnés dans l'ordre du document (réponses du cadre).
  * Seul le nom est remplacé (l'article et la préposition qui le précèdent restent : « au Ministère … » → « au SAR de Rouen ») ;

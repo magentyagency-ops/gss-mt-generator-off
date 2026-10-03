@@ -923,7 +923,33 @@ export function completerSousTitresVides(texte: string, sources: Array<{ texte?:
 /** Repères « R1 »… cités par le modèle, limités aux candidats fournis. */
 export function referencesRetenues(candidats: CandidatReference[], valeur: unknown): CandidatReference[] {
   const l = (Array.isArray(valeur) ? valeur : typeof valeur === 'string' ? valeur.split(/[\s,;]+/) : []).map((x) => String(x || '').trim().toUpperCase());
-  return candidats.filter((c) => l.includes(c.cle));
+  return completerFamilles(candidats.filter((c) => l.includes(c.cle)), candidats);
+}
+
+/**
+ * Rubriques qui ne vont jamais l'une sans l'autre : l'absence prévue annonce « Nous distinguons deux types d'absence » et
+ * l'absence non prévue en est la suite (etampes2 553, T7CS-2 : seule l'absence prévue reprise pour « Absence de 2 agents et
+ * d'1 chien », la procédure d'absence non prévue, celle d'une absence le jour même, manquait).
+ */
+export const FAMILLES_INSEPARABLES: string[][] = [['b5_remplacement_prevu', 'b5_remplacement_imprevu']];
+/** Une rubrique d'une famille inséparable retenue : l'autre aussi (si elle fait partie des candidats), dans l'ordre de la famille. */
+export function completerFamilles(retenus: CandidatReference[], candidats: CandidatReference[]): CandidatReference[] {
+  const out = [...retenus];
+  for (const famille of FAMILLES_INSEPARABLES) {
+    if (!famille.some((id) => out.some((c) => c.id === id))) continue;
+    for (const id of famille) {
+      if (out.some((c) => c.id === id)) continue;
+      const c = candidats.find((x) => x.id === id);
+      if (!c) continue;
+      // Placée juste après (ou avant) sa sœur, selon l'ordre de la famille.
+      const rang = famille.indexOf(id);
+      const soeurs = out.map((x, i) => ({ i, r: famille.indexOf(x.id) })).filter((x) => x.r >= 0);
+      const apres = soeurs.filter((x) => x.r < rang).pop();
+      const avant = soeurs.find((x) => x.r > rang);
+      out.splice(apres ? apres.i + 1 : avant ? avant.i : out.length, 0, c);
+    }
+  }
+  return out;
 }
 
 /**
