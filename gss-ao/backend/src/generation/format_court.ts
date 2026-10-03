@@ -231,6 +231,19 @@ function schemaPortrait(svg?: string): boolean {
   return !!m && Number(m[2]) > Number(m[1]);
 }
 
+/** Sous-titres du texte « Notre compréhension de votre besoin » (bloc 1) dans une partie du format court. */
+const SOUS_TITRES_COMPREHENSION = /^#{1,3}\s+(?:Notre compr[ée]hension|Votre contexte|Le p[ée]rim[èe]tre|Vos attentes|Les points de vigilance|Nos engagements sur les exigences|Nos remarques)/i;
+
+/** Texte d'une partie coupé à la fin de l'explication de la compréhension du besoin (premier sous-titre « ## » d'une autre
+ *  rubrique qui suit les sous-titres du bloc 1) ; tout le texte sinon. */
+export function coupeApresComprehension(texte: string): { avant: string; apres: string } {
+  const lignes = String(texte || '').split('\n');
+  const debut = lignes.findIndex((l) => SOUS_TITRES_COMPREHENSION.test(l));
+  if (debut < 0) return { avant: texte, apres: '' };
+  const fin = lignes.findIndex((l, k) => k > debut && /^#{1,3}\s+\S/.test(l) && !SOUS_TITRES_COMPREHENSION.test(l));
+  return fin < 0 ? { avant: texte, apres: '' } : { avant: lignes.slice(0, fin).join('\n'), apres: lignes.slice(fin).join('\n') };
+}
+
 function html(
   parties: Array<{ titre: string; texte: string; schema?: string; garder?: boolean; tete?: boolean }>,
   cover: { client?: string; title?: string; ref?: string },
@@ -244,15 +257,21 @@ function html(
   // Objet du marché ; « Mémoire technique » (valeur par défaut) ferait doublon avec le bandeau.
   const objet = /^m[ée]moire technique$/i.test((cover.title || '').trim()) ? '' : (cover.title || '').trim();
   // Schéma de toile portrait (process de la compréhension, organigramme) : en grand (consigne 3 : lisible en 5 secondes),
-  // en tête de sa partie pour le process ; schéma paysage : dans le texte, comme avant.
+  // après l'explication de la compréhension pour le process ; schéma paysage : dans le texte, comme avant.
   const figure = (p: { schema?: string }) => (p.schema ? `<figure class="schema${schemaPortrait(p.schema) ? ' grand' : ''}">${p.schema}</figure>` : '');
-  const blocs = parties.map((p, i) => `
+  const rendre = (t: string) => md.render(t.replace(/^#\s+/gm, '## ').replace(/«[ \t]+/g, '«\u00a0').replace(/[ \t]+»/g, '\u00a0»'));
+  const blocs = parties.map((p, i) => {
+    // Process de la compréhension (consigne 6 : « 1 à 2 pages d'explication suivies d'1 page de schéma », T5CP-12) : placé
+    // juste après l'explication de la compréhension du besoin, avant les rubriques suivantes de la partie.
+    const { avant, apres } = p.tete ? coupeApresComprehension(p.texte) : { avant: p.texte, apres: '' };
+    return `
 <section>
   <h1><span class="num">${i + 1}.</span> ${echapper(p.titre)}</h1>
-  ${p.tete ? figure(p) : ''}
-  ${md.render(p.texte.replace(/^#\s+/gm, '## ').replace(/«[ \t]+/g, '«\u00a0').replace(/[ \t]+»/g, '\u00a0»'))}
-  ${p.tete ? '' : figure(p)}
-</section>`).join('\n');
+  ${rendre(avant)}
+  ${figure(p)}
+  ${apres.trim() ? rendre(apres) : ''}
+</section>`;
+  }).join('\n');
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><style>
 ${police}
 @page { size: A4; margin: 13mm 14mm 14mm 14mm; }

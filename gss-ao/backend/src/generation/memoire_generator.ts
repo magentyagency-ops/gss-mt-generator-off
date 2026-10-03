@@ -17,7 +17,7 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, FORMALITES_OFFRE, questionFormalite,
-  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin,
+  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, type Dimensionnement } from './dimensionnement';
@@ -8077,6 +8077,9 @@ RÈGLES DE FORME (rendu Marp) :
     const defautsInitiaux = initiales.defauts;
     let schema = secours ? { erreurs: ['texte de secours'] } as { svg?: string; erreurs: string[] }
       : defautsInitiaux.length ? { erreurs: defautsInitiaux } : await dessiner(specProcessBesoin(initiales.etapes, 'flux'));
+    /** Étapes du modèle (première réponse et correction) et étapes du schéma dessiné (T5CP-9). */
+    const etapesModele: Array<{ texte?: string }> = Array.isArray(rep?.etapes) ? [...rep.etapes] : [];
+    let etapesDessinees: any[] | null = schema.svg ? initiales.etapes : null;
     if (!schema.svg && !secours && brut) {
       const correction = await this.callOpenAI([
         ...messages,
@@ -8084,7 +8087,18 @@ RÈGLES DE FORME (rendu Marp) :
         { role: 'user', content: `Le schéma de process est refusé :\n- ${schema.erreurs.slice(0, 8).join('\n- ')}\nCorrige SEULEMENT les étapes (4 ou 5, dernière étape verte) en recopiant des mots EXACTS de ton texte (même orthographe, mêmes accords), sans aucun chiffre absent du texte. Renvoie UNIQUEMENT {"etapes": [{"titre": "…", "texte": "…", "role": "…"}]}.` },
       ], 0.2, 'Compréhension du besoin : schéma corrigé', true, 'redaction', 0);
       const corrigees = etapesRecevables(lireJson(correction || '')?.etapes);
+      if (Array.isArray(corrigees.etapes)) etapesModele.push(...corrigees.etapes);
       schema = corrigees.defauts.length ? { erreurs: corrigees.defauts } : await dessiner(specProcessBesoin(corrigees.etapes, 'flux'));
+      if (schema.svg) etapesDessinees = corrigees.etapes;
+    }
+    // Paragraphe fait des seuls textes d'étapes non retenues (cstb 551, T5CP-9) : retiré avant les schémas de secours ; après un
+    // schéma dessiné sur d'autres étapes, retiré seulement si ce schéma reste valide sur le texte sans lui.
+    {
+      const r = retirerParagrapheEtapes(texte, etapesModele, etapesDessinees || []);
+      if (r.retire) {
+        const valide = !schema.svg || !etapesDessinees ? true : !!(await dessiner(specProcessBesoin(etapesDessinees, 'flux')).then((x) => x.svg).catch(() => undefined));
+        if (valide) { texte = r.texte; console.log(`[MemoireGenerator] Compréhension du besoin : paragraphe des textes d'étapes non retenues retiré (« ${r.retire.slice(0, 80)}… »).`); }
+      }
     }
     if (!schema.svg) console.warn(`[MemoireGenerator] Compréhension du besoin : étapes du schéma refusées (${schema.erreurs.slice(0, 3).join(' | ')}) ; schéma de secours d'après les points de vigilance et les attentes.`);
     // Secours sur le contenu (points de vigilance et attentes du texte), puis sur les sous-titres.
@@ -9494,7 +9508,8 @@ FORME : sous-titres « ## » courts (un par élément), paragraphes courts et li
         texte: sections[p.id].replace(new RegExp(`${REPERE_RE.source}[ \\t]*[.;,]?`, 'g'), '').replace(/^[ \t]*[.;,][ \t]*$/gm, '').replace(/\n{3,}/g, '\n\n').trim(),
         schema: schemas[`${p.id}#court`] ?? schemas[`${p.id}#court#organigramme`] ?? schemas[`${p.id}#court#process`],
         garder: !!(schemas[`${p.id}#court#organigramme`] || schemas[`${p.id}#court#process`]),
-        // Process de la compréhension : en tête de sa partie (et non en bandeau en fin de partie).
+        // Process de la compréhension : juste après l'explication de la compréhension (consigne 6), avant les autres rubriques
+        // de la partie (format_court.coupeApresComprehension).
         tete: !schemas[`${p.id}#court`] && !schemas[`${p.id}#court#organigramme`] && !!schemas[`${p.id}#court#process`],
       }));
     const r = await rendreFormatCourt(parties, cover || {}, court.pagesMax, this.responseDir, theme, policeMin);

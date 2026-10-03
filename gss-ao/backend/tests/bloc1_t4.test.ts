@@ -26,10 +26,11 @@ describe('schéma de secours du bloc 1 sur les textes réels (T4C-1, T4C-2, T4N-
       }
     });
   }
-  it('caen 471 : titres tirés de l\'exigence, texte = réponse entière de GSS', () => {
+  it('caen 471 : titres tirés de l\'exigence, texte = réponse entière de GSS ; le besoin (attentes) avant les points de vigilance (T5CP-12)', () => {
     const l = lignes(specSecoursPuces(F('bloc1_caen_471.md'))).join(' | ');
-    expect(l).toContain('L’arrivée sur site :: L’intervention sur alarme et la télésurveillance distingue le traitement de l’alarme');
-    expect(l).toContain('La planification et le contrôleur de rondes organisent et suivent ces passages');
+    expect(l).toContain('Mobiliser les équipes nécessaires :: La mobilisation est préparée et coordonnée par la planification');
+    expect(l).toContain('Dépêcher sur le site le personnel :: Le remplacement d\'un agent absent organise la réponse à une défaillance');
+    expect(l.indexOf('Mobiliser les équipes')).toBeLessThan(l.indexOf('Votre résultat'));
   });
   it('becquerel (R4-3) : jamais « Nos trois niveaux de contrôle » / « Notre contrôleur de rondes »', () => {
     const t = '## Les points de vigilance identifiés et nos réponses\n- **Point de vigilance** : environ 50 puis 120 pointeaux à contrôler → notre réponse : nos trois niveaux de contrôle et notre contrôleur de rondes, développés au bloc 5.\n- **Point de vigilance** : le PC est tenu 24 h/24 → notre réponse : notre interlocuteur unique et nos réunions de suivi, développés au bloc 5.';
@@ -102,11 +103,15 @@ describe('texte du bloc 1 lu par l\'acheteur (T4N-8)', () => {
 describe('schéma du bloc 1, format court hors ligne (T4C-2)', () => {
   it('puces ajoutées dans une seconde partie « Vos attentes » lues aussi ; texte qui redit le titre écarté ; préfixe de catégorie retiré', () => {
     const t = "## Vos attentes et nos engagements\nVous attendez un poste tenu sans interruption.\n\n## Vos attentes et nos engagements\n- **Ce que vous attendez** : poste permanent de sécurité incendie et de sûreté 24 h/24, 7 j/7 → notre réponse : « L'adéquation de nos moyens humains avec votre besoin ».\n- **Ce que vous attendez** : agents titulaires du SSIAP 1 à jour → notre réponse : « Formations et certifications : l'agent SSIAP 1 (le feu, la sécurité incendie, les moyens de secours) ».\n\n## Les points de vigilance identifiés et nos réponses\n- **Point de vigilance** : reprise du personnel en place selon l'accord du 5 mars 2002 → notre réponse : « La reprise du personnel en place ».\n- **Point de vigilance** : réunion de suivi trimestrielle avec le responsable sécurité → notre réponse : « Les réunions de suivi et la remontée des indicateurs ».";
-    const s = specSecoursPuces(t)!;
+    // Tour 5 (T5CP-12, T5N-9) : une réponse qui n'est que le titre d'une rubrique (« L'agent SSIAP 1 ») n'est jamais le texte
+    // d'une étape : le process de GSS devient le titre, le besoin du DCE le texte ; le besoin d'abord, le pilotage en dernier.
+    const s = specSecoursPuces(`${t}\n\nLe poste est ainsi tenu sans interruption.`)!;
     expect(s).not.toBeNull();
     expect(anomaliesSchemaBloc1(s)).toEqual([]);
-    const l = lignes(s).join(' | ');
-    expect(l).not.toMatch(/Reprise du personnel en place :: La reprise du personnel en place|Formations et certifications/);
-    expect(l).toContain("L'agent SSIAP 1");
+    const l = lignes(s).map((x) => x.replace(/\u00a0/g, ' '));
+    expect(l[0]).toBe("L'adéquation de nos moyens humains :: Poste permanent de sécurité incendie et de sûreté 24 h/24, 7 j/7");
+    expect(l).toContain("L'agent SSIAP 1 :: Agents titulaires du SSIAP 1 à jour");
+    expect(l.join(' | ')).not.toMatch(/:: (?:L'agent SSIAP 1|La reprise du personnel en place|Les réunions de suivi et la remontée)|Formations et certifications/);
+    expect(l[l.length - 2]).toMatch(/^Les réunions de suivi ::/);
   });
 });

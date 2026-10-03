@@ -642,6 +642,13 @@ export function specProcessBesoin(etapes: Array<{ titre?: string; texte?: string
     .filter((e) => e.titre)
     .slice(0, max);
   if (propres.length < (gabarit === 'chevrons' ? 3 : 2)) return null;
+  // Texte qui redit le titre avant « : » (« La continuité des deux postes : remplacement immédiat d'un agent absent », T5N-8) :
+  // seule la suite, qui apporte l'information, reste sur la carte.
+  for (const e of propres) {
+    const m = /^\s*(?:(?:le|la|les|un|une|des|du)\s+|l['’]\s*)?(.+?)\s*:\s+(.+)$/i.exec(e.texte || '');
+    const n = (x: string) => normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^(?:le|la|les|l|un|une|des|du)\s+/, '');
+    if (m && n(m[1]) === n(e.titre) && m[2].split(/\s+/).length >= 3) e.texte = m[2].charAt(0).toUpperCase() + m[2].slice(1);
+  }
   const etapesSpec = propres.map((e, i) => {
     const role = i === propres.length - 1 ? 'vert' : (ROLES.includes(e.role) && e.role !== 'vert' ? e.role : (i < 2 ? 'rouge' : i === propres.length - 2 ? 'bleu' : 'orange'));
     return { titre: e.titre.charAt(0).toUpperCase() + e.titre.slice(1), ...(e.texte ? { texte: e.texte.charAt(0).toUpperCase() + e.texte.slice(1) } : {}), role };
@@ -1132,7 +1139,10 @@ export function anomaliesSchemaBloc1(spec: { gabarit?: string; params?: any } | 
     // Verbe coupé de son complément (« … permettent de transmettre ») : infinitif final après « de », « à », « pour ».
     else if (/(?:^|\s)(?:de|d['’]|à|pour)\s*[a-zàâçéèêëîïôûù]{3,}(?<!i)(?:er|ir|tre|dre|oir)$/i.test(t.replace(/[.;,:\s]+$/, ''))) out.push(`${n} : texte coupé en plein groupe (« …${t.slice(-30)} »)`);
     const ti = norm(String(e?.titre || ''));
-    if (ti.length >= 4 && i < etapes.length - 1 && norm(t).startsWith(ti)) out.push(`${n} : le texte redit le titre`);
+    // Texte qui commence par le titre, article compris (becquerel 591, T5N-8 : « Continuité des deux postes » / « La continuité
+    // des deux postes : … »), dernière étape comprise.
+    const sansArticle = (x: string) => norm(x).replace(/^(?:le|la|les|l|un|une|des|du)\s+/, '');
+    if (ti.length >= 4 && (norm(t).startsWith(ti) || sansArticle(t).startsWith(sansArticle(String(e?.titre || ''))))) out.push(`${n} : le texte redit le titre`);
     if (/\bblocs?\s+\d/i.test(t) || INTERNE.test(`${e?.titre || ''} ${t}`)) out.push(`${n} : renvoi ou repère interne dans le schéma`);
   });
   for (let i = 1; i < etapes.length; i++) {
@@ -1310,6 +1320,50 @@ export function libellesBloc1(texte: string): string {
   }).join('\n');
 }
 
+/**
+ * Paragraphe isolé en fin de partie du bloc 1 fait des seuls textes d'étapes d'un schéma de process refusé ou non retenu
+ * (cstb 551, T5CP-9 : « Le CCTP prévoit 3 rondes de nuit… Les agents réalisent les rondes à pied… La main courante
+ * enregistre… Le CSTB dispose de… », écrit par le modèle pour ses étapes, puis inutile) : retiré. Un paragraphe qui porte
+ * les textes du schéma dessiné (source du contrôle du moteur) est gardé.
+ */
+export function retirerParagrapheEtapes(texte: string, candidates: Array<{ texte?: string }>, retenues: Array<{ texte?: string }> = []): { texte: string; retire: string } {
+  const n = (x: string) => normaliser(String(x || '')).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const etapes = candidates.map((e) => n(e?.texte || '')).filter((x) => x.length >= 15);
+  const gardees = new Set(retenues.map((e) => n(e?.texte || '')).filter(Boolean));
+  if (!etapes.length) return { texte, retire: '' };
+  const paras = String(texte || '').split(/\n{2,}/);
+  let retire = '';
+  const garder = paras.filter((p, i) => {
+    const t = p.trim();
+    if (retire || !t || /^(?:#|\||[-*•]\s|\d+[.)]\s)/.test(t)) return true;
+    const suivant = (paras[i + 1] || '').trim();
+    if (suivant && !/^#/.test(suivant)) return true;
+    const phrases = t.split(/(?<=[.!?])\s+/).map(n).filter(Boolean);
+    if (phrases.length < 2 || !phrases.every((ph) => etapes.includes(ph)) || phrases.some((ph) => gardees.has(ph))) return true;
+    retire = t;
+    return false;
+  });
+  return { texte: retire ? garder.join('\n\n') : texte, retire };
+}
+
+let titresRubriques: Set<string> | null = null;
+/** Texte qui n'est que le titre d'une rubrique du mémoire type (ou sa partie après « : », sans parenthèse finale). */
+export function titreDeRubriqueSeul(y: string): boolean {
+  const n = (x: string) => normaliser(x).replace(/\([^)]*\)/g, ' ').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!titresRubriques) {
+    titresRubriques = new Set<string>();
+    try {
+      for (const r of chargerMemoireType().rubriques) {
+        titresRubriques.add(n(r.titre));
+        const apres = r.titre.split(/\s:\s/).slice(1).join(' : ');
+        if (apres) titresRubriques.add(n(apres));
+      }
+    } catch { /* mémoire type indisponible : aucun titre reconnu */ }
+  }
+  const t = n(String(y || '').replace(/\*\*/g, ''));
+  return !!t && titresRubriques.has(t);
+}
+
 export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: string; role?: string }> {
   const puces = (titre: RegExp) => {
     // Toutes les parties de ce titre (texte rédigé puis puces ajoutées pour le minimum, format court hors ligne imm).
@@ -1351,7 +1405,10 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
       // Réponse sans « ** » ni guillemets autour des titres de rubrique (caen 471 : « **La planification** » imprimé tel
       // quel ; imm 473 : guillemet ouvrant perdu, « Le livre … (LMC) » structure… »).
       .map((m) => ({ x: m.x.replace(/\*\*/g, '').trim(), y: sansRenvoiRedondant(reponsePourSchema(sansRenvoiBloc(sansIncisesRenvoi(m.y).split(/\s*;\s*/)[0]).replace(/\s+(?:est|sont|sera|seront)$/i, '').trim())), citation: m.citation }))
-      .filter((c) => c.y);
+      // Réponse réduite au titre d'une rubrique (« → notre réponse : « L'agent SSIAP 1 » », imm, T5CP-12, T5N-9) : jamais le
+      // texte d'une étape (le titre n'explique rien) ; l'étape porte alors le process de GSS en titre et le besoin du DCE en texte.
+      .filter((c) => c.y)
+      .map((c) => ({ ...c, renvoi: titreDeRubriqueSeul(c.y) }));
   };
   const vigilance = puces(/^##\s+Les points de vigilance/i);
   const attentes = puces(/^##\s+Vos attentes/i);
@@ -1398,7 +1455,11 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
   // Trois étapes distinctes : titre nominal, texte entier (fin de phrase ou de proposition) qui ne redit pas le titre,
   // titres jamais quasi identiques (le moteur refuse un élément en double ; le lecteur ne voit pas deux fois la même idée).
   const etapes: Array<{ titre: string; texte?: string; role?: string }> = [];
-  const ordre = [...vigilance.slice(0, 2), ...attentes, ...vigilance.slice(2)];
+  // « On pense à ça, puis à ça, pour arriver à ça » (consigne 6, T5CP-12) : le besoin (attentes) avant les points de vigilance,
+  // le pilotage (réunions, indicateurs, reporting) en dernier avant le résultat.
+  const PILOTAGE = /r[ée]unions?|pilotage|indicateurs?|reporting|comit[ée]|bilan|tableau de bord/i;
+  const base = [...attentes, ...vigilance];
+  const ordre = [...base.filter((c) => !PILOTAGE.test(`${c.x} ${c.y}`)), ...base.filter((c) => PILOTAGE.test(`${c.x} ${c.y}`))];
   // Exigence citée du DCE, courte et nominale (« Main courante tenue en temps réel », « Délai maximum de 20 minutes ») :
   // elle sert de titre telle quelle.
   const citationTitre = (c: { x: string; citation: boolean }): string => {
@@ -1413,9 +1474,19 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
     let titre = titreDe(c);
     let y = c.y;
     let corps = titre ? texteEtapeCoordination(y.charAt(0).toUpperCase() + y.slice(1)) : '';
+    if (c.renvoi) {
+      // Process de GSS (titre de la rubrique) en titre, besoin du DCE (exigence) en texte.
+      titre = titreEtape(c.y.replace(/[.;:!?\s]+$/, ''), 34);
+      const x = c.x.replace(/\s+/g, ' ').trim();
+      corps = texteEtapeCoordination(x.charAt(0).toUpperCase() + x.slice(1));
+      const sansArt = (v: string) => normaliser(v).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^(?:le|la|les|l|un|une|des|du)\s+/, '');
+      // Besoin qui redit le titre du process (« La reprise du personnel en place » / « Reprise du personnel en place… ») : l'étape
+      // n'apporte rien.
+      if (!titre || !corps || sansArt(corps).startsWith(sansArt(titre))) continue;
+    }
     // Sans titre tiré de l'exigence, ou réponse trop longue pour la carte : tête de la réponse comme titre, sa suite
     // comme texte (ca_normandie 241 : « Intégration du marché » / « Mise en place de la prestation… »).
-    if (!corps) {
+    if (!corps && !c.renvoi) {
       const tr = teteReponse(c.y);
       if (!tr.titre || tr.reste.split(/\s+/).length < 3) continue;
       titre = tr.titre;
