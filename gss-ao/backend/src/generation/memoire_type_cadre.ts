@@ -1617,7 +1617,11 @@ export interface SourcesFaitsCadre {
 }
 
 const echapperRx = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const SIGLES_ADMIS = new Set(['gss', 'cnaps', 'apsad', 'ssiap', 'cqp', 'aps', 'sst', 'pti', 'dati', 'erp', 'iso', 'rse', 'cctp', 'ccap', 'dce', 'pdf', 'ads', 'etp', 'idcc', 'urssaf', 'siret', 'tel', 'mme']);
+// Abréviations du métier qui ne sont pas des faits (etampes1 592 : « RAS » — rien à signaler — pris pour un fait inventé) :
+// rien à signaler, système de sécurité incendie, équipements de protection, équipier de seconde intervention, poste central de
+// sécurité, immeuble de grande hauteur, défibrillateur, services de secours, ressources humaines (T5N-3).
+const SIGLES_ADMIS = new Set(['gss', 'cnaps', 'apsad', 'ssiap', 'cqp', 'aps', 'sst', 'pti', 'dati', 'erp', 'iso', 'rse', 'cctp', 'ccap', 'dce', 'pdf', 'ads', 'etp', 'idcc', 'urssaf', 'siret', 'tel', 'mme',
+  'ras', 'ssi', 'epi', 'esi', 'pcs', 'igh', 'dae', 'sdis', 'samu', 'smur', 'vip', 'dpae', 'lmc', 'cmsi', 'ria', 'baes', 'psc1']);
 const CERTIF_TYPE = /\bAPSAD\b[^.;\n]{0,25}?\bP\s?\d\b|\bstations?\s+(?:de\s+t[ée]l[ée]surveillance\s+)?certifi[ée]es?\b/gi;
 const AUDIT_FREQ = /\baudits?\b[^.;\n]{0,80}?\b(?:annuel|semestriel|trimestriel|mensuel|bimestriel)(?:le)?s?\b/i;
 
@@ -1720,7 +1724,26 @@ export function controlerFaitsNouveauxCadre(valeur: string, contexte: string, s:
   // proposition à valider (relais par un autre binôme cynophile de GSS), pour ne pas laisser la question sans réponse.
   const situationChien = /chien[^.]{0,40}(?:ne pouvant|ne peut|indisponib|inapte)|indisponibilit[ée] (?:du|d.un) chien/i.test(contexte || '');
   let relaisPropose = false;
-  const texte = v.split('\n').map((ligne) => ligne.split(/(?<=[.;!?])\s+/).map((ph) => {
+  // Après un retrait, la phrase suivante garde une ponctuation juste (etampes1 592 : « … en service. toute intrusion … » après
+  // le retrait de « Événement type : ronde de surveillance effectuée, RAS ; ») : majuscule en début de phrase, et « ; » final
+  // du segment précédent changé en point devant une phrase qui commence par une majuscule.
+  const recoller = (segments: Array<string | null>): string => {
+    const gardes: string[] = [];
+    let retire = false;
+    for (const s0 of segments) {
+      if (s0 === null) { retire = true; continue; }
+      let x = s0;
+      if (retire && gardes.length) {
+        const k = gardes.length - 1;
+        if (/[.!?]$/.test(gardes[k]) && /^[a-zà-ÿ]/.test(x)) x = x.charAt(0).toUpperCase() + x.slice(1);
+        else if (/;$/.test(gardes[k]) && /^[A-ZÀ-Ý]/.test(x)) gardes[k] = gardes[k].replace(/\s*;$/, '.');
+      } else if (retire && /^[a-zà-ÿ]/.test(x)) x = x.charAt(0).toUpperCase() + x.slice(1);
+      retire = false;
+      gardes.push(x);
+    }
+    return gardes.join(' ');
+  };
+  const texte = v.split('\n').map((ligne) => recoller(ligne.split(/(?<=[.;!?])\s+/).map((ph) => {
     const m = motifs(ph);
     if (!m.length) return ph;
     if (situationChien && !relaisPropose && /\bchiens?\b|cynophil|ma[îi]tres?-chiens?/i.test(ph)) {
@@ -1730,7 +1753,7 @@ export function controlerFaitsNouveauxCadre(valeur: string, contexte: string, s:
     }
     questions.push(question(ph.replace(/\s+/g, ' ').trim(), m, true));
     return null;
-  }).filter((ph): ph is string => ph !== null).join(' ')).join('\n').replace(/\s*;\s*$/gm, '.').replace(/\n{3,}/g, '\n\n').trim();
+  }))).join('\n').replace(/\s*;\s*$/gm, '.').replace(/\n{3,}/g, '\n\n').trim();
   // La réponse ne dit rien du chien alors que la mise en situation le demande : proposition ajoutée, à valider.
   if (situationChien && !relaisPropose && !/\bchiens?\b|cynophil/i.test(texte)) {
     questions.push(`Proposition à valider${libelle ? ` (champ « ${libelle} »)` : ''} : « ${RELAIS_CYNOPHILE} » (indisponibilité du chien, demandée par la mise en situation).`);

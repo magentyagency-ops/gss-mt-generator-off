@@ -1,0 +1,7 @@
+import { controlerFaitsNouveauxCadre } from '/Users/stanislastolegano/GSS-Version Finale/clarencegss/gss-ao/backend/src/generation/memoire_type_cadre';
+import { questionExacte } from '/Users/stanislastolegano/GSS-Version Finale/clarencegss/gss-ao/backend/src/generation/memoire_generator';
+const v = "Exemple de rapport d'exécution rempli\nMission : sécurisation du groupe scolaire Jean de la Fontaine, dimanche férié 6 h–lundi férié 21 h. Dimanche 6 h–21 h : 2 agents de sécurité en service ; nuit 21 h–6 h : 2 agents de sécurité et 1 maître-chien en service ; lundi 6 h–21 h : 2 agents de sécurité en service. Événement type : ronde de surveillance effectuée, RAS ; toute intrusion ou dégradation constatée est décrite, horodatée et accompagnée des alertes et mesures prises. Fin de mission : consignes et événements consignés dans la main courante, rapport transmis à la mairie.";
+const src = "groupe scolaire jean de la fontaine mission securisation dimanche lundi mairie main courante";
+const r = controlerFaitsNouveauxCadre(v, 'Question: "Mise en situation appliquée : Fourniture d’un rapport d’exécution rempli"', { toutes: src, gss: src });
+console.log(JSON.stringify(r, null, 1));
+for (const t of ["GSS doit valider ou modifier dans l’assistant le dimensionnement proposé pour le cas pratique, calculé à partir des postes et horaires du DCE", "GSS doit préciser les délais d’intervention courante et d’urgence applicables aux sites d’Étampes"]) console.log(questionExacte(t));

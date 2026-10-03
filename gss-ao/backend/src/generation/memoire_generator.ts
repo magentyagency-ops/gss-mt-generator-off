@@ -1260,6 +1260,9 @@ const LIBELLES_IDENTITE_DETERMINISTES = 'Surveillance humaine et gardiennage (ac
  * cynophile affecté, le chien doit être tenu en laisse… », « durée du marché prévue aux pièces contractuelles ») est
  * présentée comme l'exigence du DCE à laquelle GSS doit répondre, avec une vraie question.
  */
+/** Ligne de consultation déjà formulée sans modèle (jamais envoyée à la fusion par le modèle, jamais reformulée). */
+export const LIGNE_DETERMINISTE = /^(?:Proposition à valider|Proposition de réponse à valider|Réponse à relire|Réponse «|Réponse du cadre\s*:|Phrases adaptées au cahier des charges|Partie «|Rubrique «|Rédaction automatique indisponible)/;
+
 export function questionExacte(q: string): string {
   const t = String(q || '').replace(/\s+/g, ' ').trim();
   if (!t) return t;
@@ -1357,6 +1360,15 @@ export function questionExacte(q: string): string {
     const article = /^(?:quels|quelles)/i.test(GENRES[premier]) ? 'les' : /^(?:date|liste|composition|duree|frequence|periodicite|adresse)$/.test(premier) ? 'la' : 'le';
     const corps = min(sansFin(t));
     return `${GENRES[premier]} ${/^[aeiouyhàâéèêîïôûü]/i.test(corps) && article !== 'les' ? `l'${corps}` : `${article} ${corps}`} ?`;
+  }
+  // Phrase dont GSS est le sujet (« GSS doit préciser les délais… », « GSS devra valider ou modifier dans l'assistant le
+  // dimensionnement… ») : une question à GSS, jamais une « Exigence du DCE » (etampes1 592, T5N-1).
+  const sujetGss = /^GSS\s+(?:doit|devra|devrait|est invitée? à|a à)\s+(.+)$/i.exec(t);
+  if (sujetGss) {
+    const reste = sansFin(sujetGss[1]);
+    const valider = /^(?:valider|confirmer)(?:\s+ou\s+modifier)?(?:\s+dans\s+l['’]assistant)?\s+(.+)$/i.exec(reste);
+    if (valider) return `Validez-vous ${valider[1]} ? Sinon, modifiez-le dans l'assistant.`;
+    return `Pouvez-vous ${min(reste)} ?`;
   }
   // Exigence du DCE (phrase à la voix de l'acheteur, ou fragment en minuscule tiré du cahier des charges).
   if (/^[a-zà-ÿ]/.test(t) || /\b(?:doit|doivent|devra|devront|est tenue?|sont tenus|le titulaire|le prestataire|le candidat|exig|obligatoire|imp[ée]ratif)\b/i.test(t)) {
@@ -3210,7 +3222,18 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
       if (u) u.origines.push(i); else uniques.push({ texte: t, origines: [i] });
     });
     const brut = () => uniques.map((u) => ({ question: u.texte, sources: u.origines }));
-    if (uniques.length <= 3) return brut();
+    // Lignes déjà formulées sans modèle (proposition de dimensionnement, de mise en situation ou de couverture, phrase de GSS
+    // retirée par un garde-fou, réponse à relire, phrases adaptées au CCTP, alertes) : jamais réécrites par la fusion, qui en
+    // faisait une « Exigence du DCE » (etampes1 592 : « GSS doit valider ou modifier dans l'assistant le dimensionnement… ») ou
+    // une question « À demander à l'acheteur » sur un texte de GSS (T5N-1, T5N-3). Elles sont gardées telles quelles, à leur
+    // place dans la liste.
+    const deterministe = (t: string) => LIGNE_DETERMINISTE.test(t);
+    const fixes = uniques.filter((u) => deterministe(u.texte)).map((u) => ({ question: u.texte, sources: u.origines }));
+    const aFusionner = uniques.filter((u) => !deterministe(u.texte));
+    const avecFixes = (l: Array<{ question: string; sources: number[] }>) => [...l, ...fixes]
+      .map((q, i) => ({ q, i, rang: q.sources.length ? Math.min(...q.sources) : Number.MAX_SAFE_INTEGER }))
+      .sort((a, b) => a.rang - b.rang || a.i - b.i).map((x) => x.q);
+    if (aFusionner.length <= 3) return brut();
     const reponse = await this.callOpenAI([
       {
         role: 'system',
@@ -3228,7 +3251,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
 - Pour chaque question, indique dans "sources" les numéros des demandes qu'elle regroupe.
 Renvoie UNIQUEMENT un objet JSON : {"questions": [{"question": "...", "sources": [1, 4]}]}`,
       },
-      { role: 'user', content: uniques.map((u, i) => `${i + 1}. ${u.texte}`).join('\n') },
+      { role: 'user', content: aFusionner.map((u, i) => `${i + 1}. ${u.texte}`).join('\n') },
     ], 0.1, 'Consolidation des consultations', true);
     try {
       const qs = JSON.parse(reponse || '{}').questions;
@@ -3237,12 +3260,12 @@ Renvoie UNIQUEMENT un objet JSON : {"questions": [{"question": "...", "sources":
           .map((q: any) => ({
             question: String((typeof q === 'string' ? q : q?.question) ?? '').trim(),
             sources: (Array.isArray(q?.sources) ? q.sources : []).map(Number)
-              .filter((n: number) => n >= 1 && n <= uniques.length).flatMap((n: number) => uniques[n - 1].origines),
+              .filter((n: number) => n >= 1 && n <= aFusionner.length).flatMap((n: number) => aFusionner[n - 1].origines),
           }))
           .filter((q: { question: string }) => q.question);
-        if (out.length && out.length <= uniques.length) {
-          console.log(`[MemoireGenerator] Consultations : ${liste.length} demande(s) → ${out.length} question(s) après fusion des doublons.`);
-          return out;
+        if (out.length && out.length <= aFusionner.length) {
+          console.log(`[MemoireGenerator] Consultations : ${liste.length} demande(s) → ${out.length + fixes.length} question(s) après fusion des doublons (${fixes.length} déjà formulée(s), gardée(s) telle(s) quelle(s)).`);
+          return avecFixes(out);
         }
       }
     } catch { /* repli ci-dessous */ }
