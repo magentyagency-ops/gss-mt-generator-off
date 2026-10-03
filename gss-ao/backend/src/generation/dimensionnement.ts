@@ -52,6 +52,12 @@ export interface MiseEnSituation { libelle: string; capacite: number | null; fon
 
 export interface Dimensionnement {
   profils: ProfilDimensionne[];
+  /**
+   * Rondes ou passages ponctuels relevés comme des postes (cstb 551 : « 3 rondes, entre 21h30 et 06h30 », T9N-1) : une
+   * fenêtre horaire n'est pas une présence continue ; jamais comptés en heures de poste, citations gardées pour la question
+   * posée à GSS (durée d'une ronde, nombre d'intervenants).
+   */
+  rondesSansDuree?: string[];
   /** Écarts relevés sans modèle entre les postes retenus et le DCE (total hebdomadaire du DQE), posés à GSS. */
   alertes?: string[];
   titulaires: number;
@@ -144,6 +150,26 @@ const nombre = (x: unknown): number | null => {
   return Number.isFinite(n) && n > 0 ? n : null;
 };
 
+/**
+ * Citation qui décrit un nombre de rondes ou de passages dans une fenêtre horaire (« 3 rondes, entre 21h30 et 06h30 »,
+ * « 1 ronde, de 19h30 à 20h30 », cstb 551, T9N-1) et non un poste tenu en continu (« poste », « présence »,
+ * « vacation », « permanence », « 24h/24 ») : la fenêtre n'est pas une durée de présence.
+ */
+const RONDES_PONCTUELLES = /(?<![\p{L}\d])(?:\d{1,2}|une?|deux|trois|quatre|cinq|six)\s+(?:rondes?|passages?)(?![\p{L}])/iu;
+const PRESENCE_CONTINUE = /\bpostes?\b|pr[ée]sence|vacations?|permanence|en continu|24\s*h\s*\/\s*24|\bH24\b/i;
+export function citationDeRondes(citation: string): boolean {
+  const c = String(citation || '');
+  return RONDES_PONCTUELLES.test(c) && !PRESENCE_CONTINUE.test(c);
+}
+
+/** Question exacte posée à GSS pour des rondes ponctuelles sans durée (T9N-1). '' sans rondes. */
+export function questionRondes(d: Dimensionnement | null | undefined): string {
+  const r = d?.rondesSansDuree || [];
+  if (!r.length) return '';
+  const cites = r.slice(0, 3).map((c) => `« ${c.replace(/\s+/g, ' ').trim().slice(0, 90)} »`).join(', ');
+  return `Le cahier des charges prévoit des rondes ponctuelles sans durée de présence (${cites}) : elles ne sont pas comptées en heures de poste. Combien de temps dure une ronde sur le site, et combien d'intervenants rondiers dédiez-vous au marché ?`;
+}
+
 /** Poste qui n'est pas permanent : option, tranche optionnelle, agent supplémentaire, prestation à la demande ou ponctuelle. */
 const POSTE_OPTIONNEL = /\boptions?\b|\boptionnel(?:le)?s?\b|agents? suppl[ée]mentaires?|\bà la demande\b|bons? de commande|\bponctuel(?:le)?s?\b|\brenforts? ponctuels?\b/i;
 
@@ -181,6 +207,7 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
   const profils = new Map<string, ProfilDimensionne>();
   /** Profil dont toutes les heures viennent des volumes hebdomadaires du DQE. */
   const dqeParProfil = new Map<string, boolean>();
+  const rondes: string[] = [];
   for (const p of Array.isArray(rep?.postes) ? rep.postes : []) {
     // Intitulé en capitales (« AGENT DE SECURITE ») : écrit en minuscules, initiale en majuscule.
     // Nombre recopié dans l'intitulé (ca_normandie 241 : « 2 agents », « 1 agente », « 1 ADS », « 1 SSIAP 1 », « SSIAP1 ») :
@@ -191,6 +218,12 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     // Poste optionnel ou ponctuel (« l'option 1 : 1 SSIAP 1 7j/7 24h/24… », génération réelle imm 16 : trois options
     // comptées comme postes permanents, 36 titulaires au lieu de 18) : jamais dans l'équipe dédiée.
     if (POSTE_OPTIONNEL.test(`${p?.citation || ''} ${brut}`)) continue;
+    // Rondes ponctuelles (« 3 rondes, entre 21h30 et 06h30 ») : jamais des heures de poste (T9N-1) ; posées à GSS.
+    // (un volume horaire du DQE pour ce poste reste, lui, un volume de poste)
+    if (citationDeRondes(String(p?.citation || '')) && !nombre(p?.heures_hebdo) && !nombre(p?.heures_an)) {
+      rondes.push(String(p?.citation || '').replace(/\s+/g, ' ').trim());
+      continue;
+    }
     const plages: PlageHoraire[] = (Array.isArray(p?.plages) ? p.plages : [])
       .map((x: any) => ({ jours: joursDe(x?.jours), debut: String(x?.debut || ''), fin: String(x?.fin || '') }))
       .filter((x: PlageHoraire) => x.jours.length && dureePlage(x.debut, x.fin) > 0);
@@ -274,6 +307,26 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     if (!plage || !profil || !d || !Number.isInteger(n) || n < 0 || n > 10) continue;
     casPratique.push({ plage, profil, enService: n, rotation: n * Math.ceil(d / VACATION_MAX_H), dureeH: d, justification: String(l?.justification || '').trim(), ...bornesCas.get(plage) });
   }
+  // Encadrement (T9N-5, etampes2 553 : 12 agents en service le dimanche férié, « Encadrant | 0 ») : règle de GSS écrite
+  // dans le mémoire type (« Sur les grands dispositifs, nous prévoyons 1 responsable pour 10 agents », réponse Région
+  // Normandie 2024) ; quand le DCE demande un encadrant, une plage à 10 agents ou plus en service en compte 1 par tranche
+  // de 10.
+  {
+    const ENCADRANT = /encadr|chef d.[ée]quipe|chef de (?:poste|site|s[ée]curit[ée])|responsable|superviseur|coordinat/i;
+    for (const plage of [...new Set(casPratique.map((l) => l.plage))]) {
+      const lignes = casPratique.filter((l) => l.plage === plage);
+      const enc = lignes.filter((l) => ENCADRANT.test(l.profil));
+      const agents = lignes.filter((l) => !ENCADRANT.test(l.profil)).reduce((a, l) => a + l.enService, 0);
+      const besoin = Math.floor(agents / 10);
+      const actuel = enc.reduce((a, l) => a + l.enService, 0);
+      if (!enc.length || !besoin || actuel >= besoin) continue;
+      const l = enc[0];
+      l.enService += besoin - actuel;
+      l.rotation = l.enService * Math.ceil(l.dureeH / VACATION_MAX_H);
+      l.justification = `GSS prévoit 1 responsable pour 10 agents sur les grands dispositifs : ${agents} agents en service sur cette plage.`;
+      console.log(`[Dimensionnement] Cas pratique, ${plage} : ${agents} agents en service, ${l.enService} ${l.profil} (1 responsable pour 10 agents).`);
+    }
+  }
   // Le scénario du cas pratique n'est jamais aussi une mise en situation (T7N-1, etampes2 553 : « fête communale sur la place
   // Saint Gilles, 48 heures » relevée deux fois, avec deux dispositifs contradictoires) : le cas pratique, demandé par le DQE,
   // fait foi ; une mise en situation dont la citation est le texte qui suit l'intitulé « Cas pratique » du DCE est écartée.
@@ -292,8 +345,16 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     const t = [...profils.values()].reduce((s2, x) => s2 + x.titulaires, 0);
     return { profils: [...profils.values()], titulaires: t, suppleants: t ? Math.max(2, Math.ceil(t * PART_SUPPLEANTS)) : 0, casPratique, ...(misesEnSituation.length ? { misesEnSituation } : {}) };
   }
-  if (!profils.size && !casPratique.length && !misesEnSituation.length) return null;
-  return { profils: [...profils.values()], titulaires, suppleants, casPratique, ...(misesEnSituation.length ? { misesEnSituation } : {}), ...(alertes.length ? { alertes } : {}) };
+  // Rondes ponctuelles écartées : posées à GSS (durée d'une ronde, nombre d'intervenants), jamais converties en heures.
+  if (rondes.length) {
+    const q = questionRondes({ profils: [], titulaires: 0, suppleants: 0, casPratique: [], rondesSansDuree: rondes });
+    console.warn(`[Dimensionnement] ${rondes.length} ronde(s) ponctuelle(s) sans durée de présence : non comptée(s) en heures de poste, question posée à GSS.`);
+    if (profils.size) alertes.push(q.charAt(0).toLowerCase() + q.slice(1));
+  }
+  if (!profils.size && !casPratique.length && !misesEnSituation.length) {
+    return rondes.length ? { profils: [], titulaires: 0, suppleants: 0, casPratique: [], rondesSansDuree: rondes } : null;
+  }
+  return { profils: [...profils.values()], titulaires, suppleants, casPratique, ...(misesEnSituation.length ? { misesEnSituation } : {}), ...(alertes.length ? { alertes } : {}), ...(rondes.length ? { rondesSansDuree: rondes } : {}) };
 }
 
 /**
@@ -539,6 +600,8 @@ export function questionDimensionnement(d: Dimensionnement): string {
 
 /** Bloc des consignes de rédaction (cadre imposé) : les chiffres proposés, à reprendre tels quels. */
 export function texteDimensionnement(d: Dimensionnement): string {
+  // Rien à reprendre (seulement des rondes ponctuelles sans durée, T9N-1) : aucune consigne de chiffres.
+  if (!d.profils.length && !d.casPratique.length && !(d.misesEnSituation || []).length) return '';
   const l: string[] = ['', '', 'DIMENSIONNEMENT PROPOSÉ PAR GSS (calculé à partir des postes et des horaires du DCE ; proposition que GSS validera en interne : n\'écris jamais dans le texte que ces chiffres sont proposés, à valider ou à confirmer — reprends ces chiffres EXACTEMENT là où l\'effectif, le nombre d\'agents, de maîtres-chiens, d\'équipes ou les rotations sont demandés, au lieu d\'écrire [À COMPLÉTER]) :'];
   for (const x of d.profils) l.push(x.observation ? `- ${x.profil} (${x.qualification}) : ${pluriel(x.titulaires, 'titulaire')} (${x.observation})` : `- ${x.profil} (${x.qualification}) : ${fr(x.heuresSemaine)} h par semaine, ${fr(x.heuresAn)} h par an, soit ${fr(x.etp)} ETP → ${pluriel(x.titulaires, 'titulaire')}${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}${simultanesTexte(x)}`);
   if (d.profils.length) l.push(`- Équipe dédiée : ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} ; équipe suppléante formée au site : ${pluriel(d.suppleants, 'agent', 'agents')}.`);
@@ -632,9 +695,10 @@ export const CONSIGNE_DIMENSIONNEMENT = `Tu lis le DCE d'un marché de sécurit�
    - "heures_an" : le volume annuel en heures si le DCE le donne, sinon null ;
    - "citation" : la phrase ou la ligne du DCE d'où vient le poste, recopiée mot pour mot.
    Ne relève pas les prestations ponctuelles sur bon de commande sans horaires fixés, ni les interventions sur alarme, ni les options (« option », « agent supplémentaire » que l'acheteur se réserve d'ajouter).
+   Des rondes ou passages ponctuels (« 3 rondes entre 21h30 et 06h30 ») ne sont pas des plages de poste : relève leur nombre et leur fenêtre dans la citation, sans "plages" (liste vide) ni heures.
 2. "cas_pratique" : seulement si le DCE ou le cadre de réponse pose un cas pratique ou une mise en situation qui demande le nombre d'agents par plage (sinon null). Ici, et seulement ici, tu PROPOSES le dispositif de GSS : c'est ce que l'acheteur demande au candidat.
    - "plages" : [{"libelle": "Dimanche férié, 6 h–21 h", "debut": "06:00", "fin": "21:00"}, …], libellés courts (jour et horaires) ;
-   - "dispositif" (OBLIGATOIRE, jamais vide) : une entrée pour CHAQUE plage et CHAQUE profil demandé (agent de sécurité, maître-chien, agent de sécurité incendie, encadrant…), {"plage": "<libelle exact de la plage>", "profil": "<profil du DCE>", "en_service": <entier>, "justification": "<une phrase>"} : l'effectif EN SERVICE que GSS propose, argumenté par le site décrit (surface, nombre de bâtiments, accès, clôture, quartier, risques de jour et de nuit) ; 0 si le profil n'est pas utile sur cette plage (dis pourquoi). Un maître-chien travaille en binôme avec son chien ; un encadrant peut passer ponctuellement (0 en service, contrôle par passage).
+   - "dispositif" (OBLIGATOIRE, jamais vide) : une entrée pour CHAQUE plage et CHAQUE profil demandé (agent de sécurité, maître-chien, agent de sécurité incendie, encadrant…), {"plage": "<libelle exact de la plage>", "profil": "<profil du DCE>", "en_service": <entier>, "justification": "<une phrase>"} : l'effectif EN SERVICE que GSS propose, argumenté par le site décrit (surface, nombre de bâtiments, accès, clôture, quartier, risques de jour et de nuit) ; 0 si le profil n'est pas utile sur cette plage (dis pourquoi). Un maître-chien travaille en binôme avec son chien ; sous 10 agents en service sur la plage, un encadrant peut passer ponctuellement (0 en service, contrôle par passage) ; à partir de 10 agents en service, GSS prévoit 1 responsable pour 10 agents (règle de GSS sur les grands dispositifs).
 3. "mises_en_situation" : seulement si le DCE (règlement de consultation ou cadre de réponse) décrit une mise en situation ou un cas pratique ÉVÉNEMENTIEL (forum, concert, salon, manifestation : capacité d'accueil, plein air, nocturne…) et demande le nombre d'agents et les catégories de personnel (sinon []). Ici aussi tu PROPOSES le dispositif de GSS, une entrée par mise en situation :
    - "libelle" : nom court, ex. « Mise en situation 1 : forum des associations (journée, plein air, enceinte fermée) » ;
    - "citation" : la phrase du DCE qui la décrit, recopiée mot pour mot ;

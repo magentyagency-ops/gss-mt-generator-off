@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { lignesEquipe, questionDimensionnement, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
+import { lignesEquipe, questionDimensionnement, questionRondes, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
 import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss } from './base_memoires';
 
 /**
@@ -1569,7 +1569,9 @@ const CALCULS: Record<string, Calculateur> = {
     if (dim?.profils.length) return { valeur: lignesEquipe(dim), source: 'dimensionnement calculé à partir des postes et des horaires du DCE', aConfirmer: questionDimensionnement(dim) };
     const ac = '[À COMPLÉTER]';
     const lignes = lignesEquipeParQualification(c).map(([categorie, qualif]) => `| ${categorie} | ${qualif} | ${ac} | |`);
-    return { valeur: lignes.join('\n'), question: "Combien d'agents de cette catégorie compte l'équipe dédiée au marché (tableau de l'adéquation des moyens humains) ?", source: 'qualifications exigées par le DCE' };
+    // Rondes ponctuelles du DCE sans durée (cstb, T9N-1) : la question exacte sur la durée d'une ronde et les intervenants.
+    const rondes = questionRondes(dim);
+    return { valeur: lignes.join('\n'), question: rondes || "Combien d'agents de cette catégorie compte l'équipe dédiée au marché (tableau de l'adéquation des moyens humains) ?", source: 'qualifications exigées par le DCE' };
   },
   EFFECTIF_AGENTS: (c) => (c.ctx.dimensionnement?.titulaires
     ? { valeur: String(c.ctx.dimensionnement.titulaires), source: 'dimensionnement calculé à partir des postes et des horaires du DCE', aConfirmer: questionDimensionnement(c.ctx.dimensionnement) }
