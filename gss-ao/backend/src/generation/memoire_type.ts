@@ -1381,9 +1381,19 @@ const MOIS = 'janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre
 /** Date de début d'exécution écrite dans le DCE (« date prévisionnelle de démarrage … fixée au 1er janvier 2027 »). */
 export function dateDebutMarche(dce: string): string {
   const d = String(dce || '').replace(/\s+/g, ' ');
-  const rx = new RegExp(`(?:date (?:pr[ée]visionnelle |effective )?de d[ée]marrage|d[ée]marrage (?:effectif )?des prestations|d[ée]but (?:d.ex[ée]cution|des prestations)|prise d.effet)[^.;]{0,160}?(?:fix[ée]e?|estim[ée]e?|pr[ée]vue?)?\\s*(?:au|le|à compter du)\\s+((?:1er|\\d{1,2})\\s+(?:${MOIS})\\s+\\d{4})`, 'i');
+  // Date en lettres (« 1er janvier 2027 ») ou en chiffres (« 01/01/2027 », réécrite « 1er janvier 2027 »), T1-GEN-15.
+  const DATE = `((?:1er|\\d{1,2})\\s+(?:${MOIS})\\s+\\d{4}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{4})`;
+  const LIBELLE = `(?:date (?:pr[ée]visionnelle |effective )?(?:de d[ée]marrage|de d[ée]but)(?: (?:d.ex[ée]cution|des prestations|du march[ée]))?|d[ée]marrage (?:effectif )?(?:des prestations|du march[ée])|d[ée]but (?:d.ex[ée]cution|des prestations|du march[ée])|prise d.effet)`;
+  const VERBE = `(?:les prestations|le march[ée]|l.ex[ée]cution(?: du march[ée]| des prestations)?)\\s+(?:d[ée]but\\w*|commenc\\w*|d[ée]marr\\w*|pren\\w* effet|entr\\w* en vigueur)`;
+  const rx = new RegExp(`(?:${LIBELLE}[^.;]{0,160}?(?:fix[ée]e?|estim[ée]e?|pr[ée]vue?)?\\s*(?:au|le|à compter du|:)\\s*(?:le\\s+)?|${VERBE}\\s+(?:au|le|à compter du|à partir du)\\s+)${DATE}`, 'i');
   const m = rx.exec(d);
-  return m ? m[1].replace(/\s+/g, ' ') : '';
+  if (!m) return '';
+  const v = m[1].replace(/\s+/g, ' ');
+  const n = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(v);
+  if (!n) return v;
+  const mois = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'][Number(n[2]) - 1];
+  if (!mois || Number(n[1]) < 1 || Number(n[1]) > 31) return '';
+  return `${Number(n[1]) === 1 ? '1er' : Number(n[1])} ${mois} ${n[3]}`;
 }
 
 const NOMBRES_LETTRES: Record<string, number> = {
@@ -1524,21 +1534,49 @@ export function phraseDuDceContenant(dce: string, citation: string): string {
 }
 
 const FREQUENCES: Array<[RegExp, string]> = [
-  [/bimestriel(?:le)?s?|tous les deux mois/i, 'tous les deux mois'],
-  [/semestriel(?:le)?s?|tous les six mois|chaque semestre/i, 'chaque semestre'],
-  [/trimestriel(?:le)?s?|tous les trois mois|chaque trimestre|une fois par trimestre/i, 'chaque trimestre'],
+  [/bimestriel(?:le)?s?|tous les (?:deux|2) mois|une fois tous les (?:deux|2) mois/i, 'tous les deux mois'],
+  [/semestriel(?:le)?s?|tous les (?:six|6) mois|chaque semestre|tous les semestres|une fois par semestre/i, 'chaque semestre'],
+  [/trimestriel(?:le)?s?|tous les (?:trois|3) mois|chaque trimestre|tous les trimestres|une fois par trimestre/i, 'chaque trimestre'],
   [/(?<!bi|tri|se)mensuel(?:le)?s?|tous les mois|chaque mois|une fois par mois/i, 'chaque mois'],
+  [/bimensuel(?:le)?s?|deux fois par mois/i, 'deux fois par mois'],
+  [/toutes les (?:deux|2) semaines|tous les quinze jours|tous les 15 jours/i, 'toutes les deux semaines'],
+  [/toutes les (?:quatre|4) semaines/i, 'toutes les quatre semaines'],
   [/hebdomadaires?|chaque semaine|toutes les semaines|une fois par semaine/i, 'chaque semaine'],
   [/(?<![\wÀ-ÿ])annuel(?:le)?s?|chaque ann[ée]e|une fois par an(?![\wÀ-ÿ])/i, 'chaque année'],
 ];
+
+/**
+ * La fréquence qualifie-t-elle la réunion (T1-GEN-11) ? Adjectif accolé (« réunion mensuelle »), réunion sujet de la
+ * proposition (« des réunions de suivi sont organisées tous les 3 mois », « Réunion de suivi : trimestrielle »), ou
+ * « périodicité des réunions » ; jamais la fréquence d'un autre document (« Le titulaire remet chaque mois un rapport
+ * d'activité qui sert de support à la réunion de suivi »).
+ */
+function frequenceDeLaReunion(prop: string, debut: number, fin: number): boolean {
+  // « Les fréquences des réunions sont les suivantes : … », « Une réunion de suivi sera mise en place…, sa périodicité sera
+  // bimestrielle » : toute fréquence de la proposition est celle des réunions.
+  if (/(?:fr[ée]quences?|p[ée]riodicit[ée]s?)\s+(?:des|de la|de ces|de cette)\s+r[ée]unions?|r[ée]unions?[^.]{0,100}(?:sa|leur)\s+(?:fr[ée]quence|p[ée]riodicit[ée])/i.test(prop)) return true;
+  for (const r of prop.matchAll(/r[ée]unions?/gi)) {
+    const entre = r.index! < debut ? prop.slice(r.index! + r[0].length, debut) : prop.slice(fin, r.index!);
+    if (entre.length > 70) continue;
+    if (/(?<![\wÀ-ÿ])(?:qui|que|dont|lequel|laquelle|remet\w*|transmet\w*|transmis\w*|adress\w*|envoi\w*|envoy\w*|fourni\w*|communiqu\w*|produi\w*|[ée]tabli\w*|r[ée]dig\w*|sert|servent|support|valid\w*|pr[ée]sent[ée]\w*|rapports?|tableaux?|plannings?|comptes? rendus?|bilans?)(?![\wÀ-ÿ])/i.test(entre)) continue;
+    return true;
+  }
+  return false;
+}
 
 /** Fréquence des réunions de suivi imposée par le DCE (une seule fréquence citée, sinon ''). */
 export function frequenceReunionsDce(dce: string): string {
   const trouvees = new Map<string, boolean>();
   for (const ph of phrasesDuDce(dce)) {
     if (!/r[ée]unions?/i.test(ph)) continue;
-    for (const [rx, libelle] of FREQUENCES) {
-      if (rx.test(ph)) trouvees.set(libelle, (trouvees.get(libelle) || false) || /au (?:minimum|moins)/i.test(ph));
+    for (const prop of ph.split(/\s*;\s*/)) {
+      if (!/r[ée]unions?/i.test(prop)) continue;
+      for (const [rx, libelle] of FREQUENCES) {
+        for (const m of prop.matchAll(new RegExp(rx.source, 'gi'))) {
+          if (!frequenceDeLaReunion(prop, m.index!, m.index! + m[0].length)) continue;
+          trouvees.set(libelle, (trouvees.get(libelle) || false) || /au (?:minimum|moins)/i.test(prop));
+        }
+      }
     }
   }
   if (trouvees.size !== 1) return '';
@@ -1568,12 +1606,19 @@ export function qualificationsDuDce(dce: string, analyse?: any): string[] {
   const texteDce = String(dce || '');
   const an = texteAnalyse(analyse);
   const incendie = texteDce.replace(/\s+/g, ' ').length < 2000 || PREUVE_INCENDIE.test(texteDce.replace(/\s+/g, ' '));
-  const t = `${texteDce} ${incendie ? an : an.replace(/S\.?S\.?I\.?A\.?P\.?(?:\s*(?:[123]|I{1,3})(?![\wÀ-ÿ]))?/gi, '')}`.replace(/\s+/g, ' ');
+  // Écritures ramenées à une forme unique (T1-GEN-10) : « S.S.I.A.P. » → « SSIAP » ; « SSIAP (de) niveau 2 » → « SSIAP 2 » ;
+  // « SSIAP2 » → « SSIAP 2 ».
+  const t = `${texteDce} ${incendie ? an : an.replace(/S\.?S\.?I\.?A\.?P\.?(?:\s*(?:[123]|I{1,3})(?![\wÀ-ÿ]))?/gi, '')}`.replace(/\s+/g, ' ')
+    .replace(/(?<![\wÀ-ÿ])S\.\s?S\.\s?I\.\s?A\.\s?P\.?/gi, 'SSIAP')
+    .replace(/SSIAP\s*(?:\(\s*)?(?:de\s+)?niveau\s*(?:n°\s*)?([123]|I{1,3})(?![\wÀ-ÿ])\s*\)?/gi, (_m, n: string) => `SSIAP ${({ I: '1', II: '2', III: '3' } as Record<string, string>)[n.toUpperCase()] || n}`)
+    .replace(/SSIAP(?=[123](?!\d))/gi, 'SSIAP ');
   const out: string[] = [];
   if (/SSIAP\s*(?:3|III)(?![\wÀ-ÿ])/i.test(t)) out.push('SSIAP 3');
   if (/SSIAP\s*(?:2|II)(?![\wÀ-ÿ])/i.test(t)) out.push('SSIAP 2');
   if (/SSIAP\s*(?:1|I)(?![\wÀ-ÿ])|SSIAP(?!\s*(?:[23]|II))/i.test(t)) out.push('SSIAP 1');
-  if (/CQP\s*-?\s*APS|CQPAPS|certificat de qualification professionnelle d.agent de pr[ée]vention/i.test(t)) out.push('CQP APS');
+  // CQP APS et ses équivalents : C.Q.P.A.D.S., CQP ADS, certificat des agents de sécurité, TFP APS (titre qui l'a remplacé),
+  // T1-GEN-10, T1F-13.
+  if (/C\.?\s?Q\.?\s?P\.?\s?-?\s?A\.?\s?[PD]\.?\s?S(?![\wÀ-ÿ])|CQPAPS|certificat de qualification professionnelle (?:d.|des\s+)agents?\s+de\s+(?:pr[ée]vention|s[ée]curit[ée])|(?<![\wÀ-ÿ])TFP\s*-?\s*APS(?![\wÀ-ÿ])|titre [àa] finalit[ée] professionnelle d.agent de pr[ée]vention/i.test(t)) out.push('CQP APS');
   if (/(?<![\wÀ-ÿ])SST(?![\wÀ-ÿ])|sauveteur secouriste du travail/i.test(t)) out.push('SST');
   if (/PSC\s*1/i.test(t)) out.push('PSC1');
   if (/H0\s*-?\s*B0|H0V|habilitation [ée]lectrique/i.test(t)) out.push('habilitation électrique H0B0');

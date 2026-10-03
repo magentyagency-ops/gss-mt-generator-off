@@ -31,7 +31,7 @@ import {
   questionsPubliposteParEmplacement, questionDeLEmplacement, completerFamilles, referencesDeSecours, ecartEquipeTableau,
 } from './memoire_type_cadre';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
 import os from 'os';
@@ -2434,7 +2434,7 @@ function alerteCctpAbsentLu(dce: string): string[] {
   const ENTETE_CCTP = /^[ \t]*(?:CCTP|C\.C\.T\.P\.?)[ \t]*$/gm;
   const present = pieces.some((p) => {
     const nom = `${p.nom} ${p.nom.replace(/[_.\s-]+/g, '')}`;
-    if (NOM_CCTP.test(nom) && !/ccap|clauses\s*administratives/i.test(nom)) return true;
+    if ((NOM_CCTP.test(nom) || estCahierDesCharges(p.nom)) && !/ccap|clauses\s*administratives/i.test(nom)) return true;
     if (AUTRE.test(nom)) return false;
     return DEBUT_CCTP.test(p.corps.slice(0, 3000)) || TITRE_CCTP.test(p.corps) || (p.corps.match(ENTETE_CCTP) || []).length >= 3;
   });
@@ -2697,6 +2697,8 @@ export class MemoireGenerator {
   private alertesFormat: string[] = [];
   /** Pièces du DCE (PDF scannés) dont la transcription a échoué (T10-COH-4). */
   private piecesIllisibles: string[] = [];
+  /** Pièces du cahier des charges tronquées ou écartées par le budget de lecture du DCE (T1-COH-3) : signalées à GSS. */
+  private alertesDceTronque: string[] = [];
   private verifierCredit(): void {
     if (this.creditOpenAIEpuise) throw new CreditOpenAIEpuise();
   }
@@ -2884,7 +2886,10 @@ export class MemoireGenerator {
 
     // Score de priorité d'après le nom de fichier (le mémoire porte d'abord sur le CCTP et les effectifs)
     const priorityOf = (n: string): number => {
-      if (n.includes('cctp')) return 100;
+      // Cahier des charges sous tous ses noms (« C_C_T_P_ COMMUN », « CCP VF SECU EVEN », « Cahierdesclausesparticulieres »,
+      // T1-COH-3) : toujours en tête, jamais derrière une annexe ou le CCAP.
+      // Annexe du CCTP (« Annexe 1 CCTP - Besoin par sites ») : après le CCTP lui-même.
+      if (estCahierDesCharges(n)) return /annexe/.test(n) ? 95 : 100;
       if (n.includes('rc ') || n.includes('reglement') || /\brc\b/.test(n)) return 90;
       if (n.includes('annexe 1') || n.includes('effectif') || n.includes('horaire')) return 85;
       if (n.includes('annexe 2') || n.includes('profil')) return 80;
@@ -2917,6 +2922,7 @@ export class MemoireGenerator {
 
     const loadedFiles = new Set<string>();
     this.piecesIllisibles = [];
+    this.alertesDceTronque = [];
     const scanDir = async (dir: string) => {
       if (!fs.existsSync(dir)) return;
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -2988,12 +2994,15 @@ export class MemoireGenerator {
     for (const p of pieces) {
       if (used >= TOTAL_BUDGET) {
         console.log(`[MemoireGenerator] DCE budget atteint — fichier ignoré: ${p.label}`);
+        if (estCahierDesCharges(p.label)) this.alertesDceTronque.push(`Le cahier des charges « ${p.label} » n'a pas pu être lu (dossier trop volumineux) : le mémoire n'en tient pas compte. Vérifiez avant la remise que ses exigences sont traitées.`);
         continue;
       }
       const remaining = TOTAL_BUDGET - used;
       let body = p.text;
       const cap = Math.min(PER_FILE_CAP, remaining);
       if (body.length > cap) body = body.slice(0, cap) + `\n[… document tronqué (${p.text.length - cap} caractères omis) …]`;
+      // Pièce du cahier des charges tronquée (T1-COH-3) : GSS est prévenu, rien ne se perd en silence.
+      if (p.text.length > cap && estCahierDesCharges(p.label)) this.alertesDceTronque.push(`Le cahier des charges « ${p.label} » est trop long pour être lu en entier : seuls ses ${cap.toLocaleString('fr-FR')} premiers caractères sur ${p.text.length.toLocaleString('fr-FR')} ont été pris en compte. Vérifiez avant la remise que les exigences de la fin de cette pièce sont traitées dans le mémoire.`);
       const block = `\n\n--- ${p.label} ---\n${body}`;
       context += block;
       used += block.length;
@@ -6959,7 +6968,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         ? (conversation?.length ? [{ ...conversation[0], texte: `${conversation[0].texte}\n\n${texteAdaptations}` }] : [{ role: 'assistant' as const, date: new Date().toISOString(), texte: texteAdaptations }])
         : conversation;
       // DCE sans CCTP (T8-COH-2), rubriques du cadre sans réponse (T10-COH-2) : en tête du premier message de l'assistant.
-      const alerteCctp = [...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...alertesRubriquesCadre];
+      const alerteCctp = [...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...alertesRubriquesCadre];
       if (alerteCctp.length) conversationFinale = conversationFinale?.length ? [{ ...conversationFinale[0], texte: `${alerteCctp.join('\n\n')}\n\n${conversationFinale[0].texte}` }] : [{ role: 'assistant' as const, date: new Date().toISOString(), texte: alerteCctp.join('\n\n') }];
       // Schémas non insérés (T6-COH-3) : en tête du premier message de l'assistant.
       if (alertesSchemasCadre.length) {
@@ -6992,7 +7001,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       // Aucun repère technique (« [CHAMP_14] ») ni doublon dans les questions remises à GSS (havre1 21).
       consultations: [
         // DCE sans CCTP (T8-COH-2), rubriques du cadre sans réponse (T10-COH-2) : en tête des consultations.
-        ...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext),
+        ...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext),
         ...alertesRubriquesCadre,
         ...new Set([
           ...(descriptors.some((d) => d.grille)
@@ -7960,7 +7969,7 @@ RÈGLES DE FORME (rendu Marp) :
     // Deux sources : (1) les écarts détectés par la matrice de conformité ; (2) les marqueurs
     // [CONSULTATION REQUISE : …] que le rédacteur a insérés faute de réponse spécifique dans la Doc GSS.
     const consultations = new Set<string>([
-      ...this.alertesFormat, ...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),
+      ...this.alertesFormat, ...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),
       ...commentairesRetires,
       // Valeurs du registre encore « à confirmer » reprises dans le texte : GSS est prévenu.
       ...confirmationsRegistreUtilisees(Object.values(sectionsMap).join('\n'), horsNormandieLibre),
@@ -8474,7 +8483,7 @@ RÈGLES DE FORME (rendu Marp) :
     const consultationList = questionsUniques(elementsSansDoublon(elementsLibres));
     // OpenAI en panne pendant la génération (T5-COH-2) : jamais un publipostage non adapté présenté comme complet.
     // DCE sans CCTP (T8-COH-2) : en tête des consultations et du premier message de l'assistant, comme la limite de pages.
-    const alertePanne = [...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, rubriquesNonAdaptees)].filter(Boolean).join('\n\n');
+    const alertePanne = [...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, rubriquesNonAdaptees)].filter(Boolean).join('\n\n');
     if (alertePanne) { consultationList.unshift(...alertePanne.split('\n\n')); console.warn(`[MemoireGenerator] ${alertePanne}`); }
     consultationList.push(...avisSecours);
     // Propositions de réponse de l'IA : signalées APRÈS les éléments (jamais envoyées à l'équipe comme des questions).
@@ -8666,7 +8675,7 @@ RÈGLES DE FORME (rendu Marp) :
     const titreDefaut = prep.mt.rubriques.find((r) => r.mode === 'besoin')?.schema?.titre || 'Votre besoin, notre réponse en un process';
     const messages = consigneComprehension(besoin, {
       perimetre: o.perimetre, exigences: o.exigences, remarques: o.remarques, sommaire: sommaireProcess(prep.plan), analyse: o.analyse,
-      dce: String(ctx.dce || '').slice(0, 60_000), demande: o.demande, motsMin: o.remarques ? 350 : 400, motsMax: o.remarques ? 600 : 700,
+      dce: dceCctpDAbord(String(ctx.dce || ''), 60_000), demande: o.demande, motsMin: o.remarques ? 350 : 400, motsMax: o.remarques ? 600 : 700,
     });
     let rep: any = null;
     let brut = '';
@@ -9637,7 +9646,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
 
     // ── Points à compléter (même logique que la réponse libre) ──
     const consultations = new Set<string>([
-      ...this.alertesFormat, ...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie)]);
+      ...this.alertesFormat, ...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie)]);
     for (const r of requirementsMatrix) if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence)) consultations.add(r.exigence.trim());
     const markerRe = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
     const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
@@ -10133,7 +10142,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     }
     const consultationList = questionsUniques(elementsSansDoublon(elements));
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
-    const alertePanneCourt = [...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, nonAdapteesCourt)].filter(Boolean).join('\n\n');
+    const alertePanneCourt = [...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, nonAdapteesCourt)].filter(Boolean).join('\n\n');
     if (alertePanneCourt) { consultationList.unshift(...alertePanneCourt.split('\n\n')); console.warn(`[MemoireGenerator] ${alertePanneCourt}`); }
     consultationList.push(...rubriquesExcluesCourt, ...avisSecours, ...propositions);
     // Phrases de GSS adaptées au CCTP (D8) : une ligne par phrase à valider (aucune s'il n'y en a pas).

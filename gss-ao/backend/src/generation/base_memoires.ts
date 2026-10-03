@@ -1793,6 +1793,27 @@ export function obligationsChiffrees(dce: string): Array<{ phrase: string; cle: 
 }
 
 /** Pièces techniques du DCE (CCTP, CCAP, annexes) : le RC, l'acte d'engagement et les bordereaux de prix ne décrivent pas la prestation. */
+/**
+ * Pièce du cahier des charges (CCTP et ses autres noms : « C_C_T_P_ COMMUN », « CCP VF SECU EVEN »,
+ * « Cahierdesclausesparticulieres », « Cahier des charges », « Prescriptions techniques », « Spécifications techniques »,
+ * « CdC »), jamais le CCAP : une seule règle pour l'ordre de lecture du DCE, texteCctp, piecesTechniques et l'alerte du
+ * CCTP absent (T1-COH-3, T1-GEN-13). Le nom est comparé avec et sans séparateurs.
+ */
+export function estCahierDesCharges(nomPiece: string): boolean {
+  const n = String(nomPiece || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/_/g, ' ');
+  const colle = n.replace(/[^a-z0-9]+/g, '');
+  if (/ccap|clauses ?administratives|clausesadministratives/.test(`${n} ${colle}`)) return false;
+  return /cctp|(?<![a-z])ccp(?![a-z])|(?<![a-z])cdc(?![a-z])|cahier des (?:clauses|charges)|clauses techniques|prescriptions techniques|specifications techniques|programme fonctionnel/.test(n)
+    || /cctp|cahierdes(?:clauses|charges)|clausestechniques|prescriptionstechniques|specificationstechniques/.test(colle);
+}
+
+/** Pièce sans exigence technique (RC, AE, bordereaux, formulaires, cadre de réponse, CCAP…). */
+export function estPieceAdministrative(nomPiece: string): boolean {
+  const brut = String(nomPiece || '');
+  const nom = `${brut} ${brut.replace(/[_.\s-]+/g, '')}`;
+  return /\bRC\b|r[èe]glement (?:de (?:la )?)?consultation|acte d.engagement|\bAE\b|DPGF|BPU|DQE|bordereau|\bDC\s?\d|attestation|cadre de r[ée]ponse|m[ée]moire|candidature|lettre|avis|ccap|clauses administratives/i.test(nom);
+}
+
 function piecesTechniques(dce: string): string[] {
   const blocs = (dce || '').split(/\n\n--- (.+?) ---\n|\n?===== PIÈCE : (.+?) =====\n/);
   const pieces: string[] = [];
@@ -1800,8 +1821,11 @@ function piecesTechniques(dce: string): string[] {
     const brut = blocs[i] || blocs[i + 1] || '';
     const nom = `${brut} ${brut.replace(/[_.\s-]+/g, '')}`;  // « C_C_T_P_ COMMUN » → « CCTPCOMMUN »
     const corps = blocs[i + 2] || '';
-    if (/\bRC\b|r[èe]glement (?:de (?:la )?)?consultation|acte d.engagement|\bAE\b|DPGF|BPU|DQE|bordereau|\bDC\s?\d|attestation|cadre de r[ée]ponse|m[ée]moire|candidature|lettre|avis/i.test(nom)) continue;
-    if (/cctp|ccap|ccp\b|cahier des (?:clauses|charges)|clauses techniques|programme|annexe|besoin|consignes?|proc[ée]dure|analys/i.test(nom)) pieces.push(corps);
+    // CCAP gardé (obligations chiffrées) ; toute autre pièce non administrative est lue, même nommée autrement
+    // (« DCE_Gardiennage_2026.pdf », « Prescriptions techniques », T1-GEN-13).
+    if (/ccap/i.test(nom)) { pieces.push(corps); continue; }
+    if (estPieceAdministrative(brut)) continue;
+    pieces.push(corps);
   }
   if (!pieces.length && !/--- .+? ---|===== PIÈCE/.test(dce || '')) pieces.push(dce || '');
   return pieces;
@@ -1814,16 +1838,37 @@ function piecesTechniques(dce: string): string[] {
 export function texteCctp(dce: string, max = 120_000): string {
   const blocs = (dce || '').split(/\n\n--- (.+?) ---\n|\n?===== PIÈCE : (.+?) =====\n/);
   const pieces: string[] = [];
+  const cahiers: string[] = [];
+  const autres: string[] = [];
   for (let i = 1; i < blocs.length; i += 3) {
     const brut = blocs[i] || blocs[i + 1] || '';
     const nom = `${brut} ${brut.replace(/[_.\s-]+/g, '')}`;
-    if (/ccap|\bRC\b|r[èe]glement (?:de (?:la )?)?consultation|acte d.engagement|\bAE\b|DPGF|BPU|DQE|bordereau|\bDC\s?\d|attestation|cadre de r[ée]ponse|m[ée]moire|candidature|lettre|avis|d[ée]claration/i.test(nom)) continue;
-    // Le CCTP d'abord, ses annexes ensuite (la troncature porte sur les annexes).
-    if (/cctp|cahier des (?:clauses|charges)|clauses techniques/i.test(nom)) pieces.unshift(`=== ${brut} ===\n${blocs[i + 2] || ''}`);
+    if (estPieceAdministrative(brut) || /d[ée]claration/i.test(nom)) continue;
+    // Le cahier des charges d'abord (tous ses noms, T1-COH-3), ses annexes ensuite, puis les pièces non classées (la
+    // troncature porte sur elles).
+    if (estCahierDesCharges(brut)) cahiers.push(`=== ${brut} ===\n${blocs[i + 2] || ''}`);
     else if (/programme|annexe|besoin|consignes?|proc[ée]dure/i.test(nom)) pieces.push(`=== ${brut} ===\n${blocs[i + 2] || ''}`);
+    else autres.push(`=== ${brut} ===\n${blocs[i + 2] || ''}`);
   }
+  pieces.unshift(...cahiers);
+  pieces.push(...autres);
   const t = pieces.length ? pieces.join('\n\n') : (dce || '');
   return t.length > max ? t.slice(0, max) : t;
+}
+
+/**
+ * DCE réordonné, cahier des charges en tête (tous ses noms), puis les autres pièces dans leur ordre, tronqué à `max` : ce
+ * que lit la compréhension du besoin (T1-COH-3 : pour citedia2, le CCTP commençait au caractère 74 645 et n'était jamais lu).
+ */
+export function dceCctpDAbord(dce: string, max = 60_000): string {
+  const t = String(dce || '');
+  const blocs = t.split(/(?=\n\n--- .+? ---\n|\n?===== PIÈCE : .+? =====\n)/);
+  if (blocs.length <= 1) return t.slice(0, max);
+  const nomDe = (b: string) => (/--- (.+?) ---|===== PIÈCE : (.+?) =====/.exec(b) || [])[1] || (/===== PIÈCE : (.+?) =====/.exec(b) || [])[1] || '';
+  // Le CCTP lui-même, puis ses annexes (« Annexe 1 CCTP - Besoin par sites »).
+  const cahiers = [...blocs.filter((b) => estCahierDesCharges(nomDe(b)) && !/annexe/i.test(nomDe(b))), ...blocs.filter((b) => estCahierDesCharges(nomDe(b)) && /annexe/i.test(nomDe(b)))];
+  const reste = blocs.filter((b) => !cahiers.includes(b));
+  return [...cahiers, ...reste].join('').slice(0, max);
 }
 
 const MOIS_RX = String.raw`(?:janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre)`;
@@ -1845,6 +1890,23 @@ export function periodeEnTete(ligne: string): string {
  * phrases citées telles quelles, pour le contrôle des contradictions (« fermeture de Coriolis à 19 h » alors que le
  * CCTP fixe la fermeture aux usagers à 21 h et la mise sous alarme à 22 h).
  */
+/**
+ * Heure lisible dans un texte (T1-GEN-14) : « 8h », « 8h00 », « 8 h 30 », « 08:00 », « 8 heures », « 8 heures 30 »,
+ * « 19.30 » (après « de », « à », « entre », « et », « dès »), « huit heures », « midi », « minuit ». Même lecture que
+ * dimensionnement.heureDe.
+ */
+// « N heures » n'est une heure que dans une plage (« de 8 heures à 18 heures », « entre 19.30 et 7.30 ») ou après « à »,
+// « dès », « jusqu'à », « vers », « avant », « après » ; jamais une durée (« par période de douze heures », « d'une durée de
+// 4 heures », « sous 2 heures »).
+const LETTRES_HEURE = String.raw`(?:une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|dix-sept|dix-huit|dix-neuf|vingt|vingt-et-une|vingt-deux|vingt-trois|vingt-quatre)`;
+const HEURE_MOT = String.raw`(?:(?:[01]?\d|2[0-4])\s*heures?(?:\s*[0-5]\d)?(?![\d\p{L}])|(?:[01]?\d|2[0-3])\.[0-5]\d(?![\d])|${LETTRES_HEURE}\s+heures?(?![\p{L}]))`;
+const POINT = String.raw`(?<=(?:^|[^\p{L}])(?:à|dès|jusqu['’]à|vers|avant|après|depuis)\s)`;
+const PLAGE = String.raw`(?<=(?:^|[^\p{L}])(?:de|entre)\s)(?=${HEURE_MOT}\s*(?:à|et|-|–)\s*(?:\d|${LETTRES_HEURE}|midi|minuit))`;
+export const RX_HEURE = new RegExp(String.raw`(?<![\d.,:])(?:[01]?\d|2[0-4])\s*h(?:\s*[0-5]\d)?(?![\d\p{L}])|(?<![\d.,:])(?:[01]?\d|2[0-4]):[0-5]\d(?![\d])|${POINT}${HEURE_MOT}(?!\s*(?:de\s|d['’]|par\s|sur\s|cons[ée]cutives|maxim|minim|au plus|au moins))|${PLAGE}${HEURE_MOT}|(?<![\p{L}-])(?<!apr[èe]s[- ])(?:midi|minuit)(?![\p{L}-])`, 'iu');
+export function contientHeure(t: string): boolean {
+  return RX_HEURE.test(String(t || ''));
+}
+
 export function horairesImposes(dce: string, max = 30, objet = /ouvert|ferm|alarme|vacation|ronde|relève|pr[ée]sence|poste|horaire|pause|accueil/i, o: { periodes?: boolean } = {}): string[] {
   const out: string[] = [];
   const vues = new Set<string>();
@@ -1872,7 +1934,7 @@ export function horairesImposes(dce: string, max = 30, objet = /ouvert|ferm|alar
           plein = true;
           return;
         }
-        if (!/\b\d{1,2}\s*h\s*\d{0,2}\b/i.test(ph) || !objet.test(ph)) continue;
+        if (!contientHeure(ph) || !objet.test(ph)) continue;
         if (/p[ée]nalit|€|euros?\b|taux horaire|\b(?:J|N)\s+(?:J|N)\b/i.test(ph)) continue;
         const phrase = periode && !ph.toLowerCase().includes(periode.toLowerCase()) ? `${periode} : ${ph}` : ph;
         const cle = `${section}|${phrase}`.toLowerCase().replace(/[^a-z0-9|]+/g, ' ');

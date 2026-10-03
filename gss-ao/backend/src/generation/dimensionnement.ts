@@ -69,7 +69,8 @@ export interface Dimensionnement {
 
 /** « 7h00 », « 07:00 », « 19 h », « 1h » → heures décimales ; NaN si illisible. */
 export function heureDe(t: string): number {
-  const m = /^\s*(\d{1,2})\s*(?:h|:)?\s*(\d{2})?\s*$/i.exec(String(t || ''));
+  // « 8h », « 8h30 », « 08:00 », « 8 heures », « 8 heures 30 », « 19.30 » (même lecture que base_memoires.RX_HEURE).
+  const m = /^\s*(\d{1,2})\s*(?:h|:|\.|heures?)?\s*(\d{2})?\s*$/i.exec(String(t || '').replace(/^\s*midi\s*$/i, '12h').replace(/^\s*minuit\s*$/i, '0h'));
   if (!m) return NaN;
   const h = Number(m[1]);
   const mn = Number(m[2] || 0);
@@ -183,8 +184,12 @@ export function profilAgentSecurite(profil: string, qualification: string): stri
   if (/ssiap|incendie|cynophil|maitre.chien|chef|encadr|responsable|superviseur|controleur|rondier|accueil|hotesse|standard|operateur|pc\b/.test(p)) return '';
   if (!/\bads\b|agent de (?:securite|surveillance|surete)|\bcqp\b|\baps\b|carte professionnelle/.test(p)) return '';
   const q = String(qualification || '').trim();
-  // Qualification réduite à l'intitulé du poste (« ADS », « Agent de sécurité ») : « CQP APS » ; sinon celle du DCE.
-  return !q || /^(?:ads|agents? de (?:s[ée]curit[ée]|surveillance|s[ûu]ret[ée]))$/i.test(q) ? 'CQP APS' : q;
+  // Qualification réduite à l'intitulé du poste (« ADS », « Agent de sécurité », « Agent de sécurité (ADS) », T1F-13) ou à
+  // un équivalent du CQP APS (« C.Q.P.A.D.S. », « CQP ADS », « TFP APS ») : « CQP APS » ; sinon celle du DCE.
+  // Complément entre parenthèses qui n'est que le sigle du poste (« (ADS) ») ; un grade (« ADS (niveau 2, échelon 2) ») reste.
+  const intitule = q.replace(/\s*\(\s*(?:ads|agents? de s[ée]curit[ée])\s*\)\s*/gi, ' ').trim();
+  return !q || /^(?:ads|agents? de (?:s[ée]curit[ée]|surveillance|s[ûu]ret[ée]))$/i.test(intitule)
+    || /^(?:C\.?\s?Q\.?\s?P\.?\s?-?\s?A\.?\s?[PD]\.?\s?S\.?|TFP\s*-?\s*APS)$/i.test(q) ? 'CQP APS' : q;
 }
 
 /**

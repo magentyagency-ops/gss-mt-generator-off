@@ -132,3 +132,56 @@ describe('interdits du CCTP écrits autrement (T1-GEN-6)', () => {
     expect(publierMemoire(prep).find((r: any) => r.id === 'b4_vehicules')?.texte || '').not.toMatch(/vélo|trottinette/);
   });
 });
+
+import { qualificationsDuDce, frequenceReunionsDce, dateDebutMarche } from '../src/generation/memoire_type';
+import { profilAgentSecurite } from '../src/generation/dimensionnement';
+import { horairesImposes, texteCctp, estCahierDesCharges, dceCctpDAbord, obligationsChiffrees } from '../src/generation/base_memoires';
+
+describe('qualifications écrites autrement (T1-GEN-10, T1F-13)', () => {
+  it('SSIAP de niveau n, S.S.I.A.P., SSIAPn ; C.Q.P.A.D.S., TFP APS', () => {
+    expect(qualificationsDuDce("Le chef d'équipe est titulaire du SSIAP niveau 2.")).toEqual(['SSIAP 2']);
+    expect(qualificationsDuDce("Le chef d'équipe est titulaire du SSIAP de niveau 2.")).toEqual(['SSIAP 2']);
+    expect(qualificationsDuDce('Le chef de service est titulaire du diplôme SSIAP de niveau 3.')).toEqual(['SSIAP 3']);
+    expect(qualificationsDuDce("Le chef d'équipe est titulaire du S.S.I.A.P. 2.")).toEqual(['SSIAP 2']);
+    expect(qualificationsDuDce('Les agents sont titulaires du C.Q.P.A.D.S. (Certificat de Qualification Professionnelle des Agents De Sécurité).')).toEqual(['CQP APS']);
+    expect(qualificationsDuDce("Les agents sont titulaires du titre à finalité professionnelle d'agent de prévention et de sécurité (TFP APS).")).toEqual(['CQP APS']);
+  });
+  it('« Agent de sécurité (ADS) » : qualification CQP APS ; un grade entre parenthèses reste', () => {
+    expect(profilAgentSecurite('Agent de sécurité (ADS)', 'Agent de sécurité (ADS)')).toBe('CQP APS');
+    expect(profilAgentSecurite('ADS', 'ADS (niveau 2, échelon 2)')).toBe('ADS (niveau 2, échelon 2)');
+  });
+});
+
+describe('réunions de suivi et date de début (T1-GEN-11, T1-GEN-15)', () => {
+  it('fréquence d’un autre document : jamais celle des réunions', () => {
+    expect(frequenceReunionsDce("Le titulaire remet chaque mois un rapport d'activité qui sert de support à la réunion de suivi.")).toBe('');
+    expect(frequenceReunionsDce('Le compte rendu de chaque réunion est transmis sous huit jours. Le titulaire transmet tous les mois le planning prévisionnel, validé en réunion.')).toBe('');
+    expect(frequenceReunionsDce('Une réunion de suivi est organisée tous les trimestres.')).toBe('chaque trimestre');
+    expect(frequenceReunionsDce('Des réunions de suivi sont organisées tous les 3 mois.')).toBe('chaque trimestre');
+    expect(frequenceReunionsDce('Une réunion de suivi sera mise en place dès le démarrage des prestations, sa périodicité sera bimestrielle.')).toBe('tous les deux mois');
+    expect(frequenceReunionsDce('Les fréquences des réunions sont les suivantes : Site de Pouchet : Une fois tous les trois mois L’ensemble des autres sites : Une fois tous les mois')).toBe('');
+  });
+  it('date de début écrite autrement', () => {
+    for (const t of ["Date prévisionnelle de début d'exécution : 1er janvier 2027.", 'Le marché prend effet le 01/01/2027.', 'Les prestations débuteront le 1er janvier 2027.', 'Début des prestations : 1er janvier 2027']) expect(dateDebutMarche(t)).toBe('1er janvier 2027');
+  });
+});
+
+describe('horaires et pièces techniques (T1-GEN-13, T1-GEN-14, T1-COH-3)', () => {
+  it('heures « 08:00 », « 8 heures », « huit heures », « 19.30 » ; jamais une durée', () => {
+    for (const ph of ["Le poste d'accueil est ouvert du lundi au vendredi de 08:00 à 18:00.", "Le poste d'accueil est ouvert du lundi au vendredi de 8 heures à 18 heures.",
+      "Le poste d'accueil est ouvert du lundi au vendredi de huit heures à dix-huit heures.", "La vacation de nuit est assurée de 19.30 à 07.30 tous les jours de l'année."]) {
+      expect(horairesImposes(`\n\n--- CCTP ---\nARTICLE 3 - HORAIRES\n${ph}\n`).length).toBe(1);
+    }
+    expect(horairesImposes("\n\n--- CCTP ---\nLes vacations seront d'une durée minimale de 4 heures.\nLe planning des rondes ne pourra prévoir moins de quatre rondes par période de douze heures.\n").length).toBe(0);
+  });
+  it('cahier des charges sous tous ses noms, lu en premier', () => {
+    for (const n of ['C_C_T_P_ COMMUN - LOT N°1 et N°2', 'CCP VF SECU EVEN', 'Cahierdesclausesparticulieres', 'CdC sécurité 2026', 'Prescriptions techniques', 'Spécifications techniques particulières']) expect(estCahierDesCharges(n)).toBe(true);
+    for (const n of ['A_E_ - C_C_A_P_ LOT N°2', 'CCAP MP GARDIENNAGE', 'R_C']) expect(estCahierDesCharges(n)).toBe(false);
+    const dce = '\n\n--- RC VF ---\nRèglement.\n\n--- CCP VF SECU EVEN ---\nLe poste est ouvert de 7h00 à 19h00. Le rapport mensuel est remis avant le 5 du mois suivant.\n\n--- 2026_04_10_ANNEXE_EGAL ---\nÉgalité.';
+    expect(texteCctp(dce)).toMatch(/^=== CCP VF SECU EVEN ===/);
+    expect(dceCctpDAbord(dce)).toMatch(/^\n\n--- CCP VF SECU EVEN ---/);
+    const autre = '\n\n--- DCE_Gardiennage_2026 ---\nLe poste est ouvert de 7h00 à 19h00 pour la présence des agents. Le rapport mensuel est remis avant le 5 du mois suivant.';
+    expect(horairesImposes(autre).length).toBe(1);
+    expect(obligationsChiffrees(autre).length).toBeGreaterThan(0);
+  });
+});
