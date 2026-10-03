@@ -28,6 +28,7 @@ import { RETOUR_ARRIERE } from './themes';
 import type { PlanMemoireType } from './memoire_type';
 import type { AjoutLibre } from './reponse_libre_v2';
 import type { PhraseAdaptee } from './adaptations_cctp';
+import { categorieDe } from './dimensionnement';
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const RESPONSE_DIR = path.resolve(__dirname, '../../response');
@@ -711,7 +712,7 @@ export async function remplir(
     // Proposition de dimensionnement (D5) : « je valide » la garde telle quelle ; une autre réponse change les effectifs
     // publipostés (phrase, tableau de l'équipe dédiée), jamais une phrase de plus collée ailleurs (deux chiffres).
     if (etat.mode === 'libre' && PROPOSITION_DIMENSIONNEMENT.test(el.question)) {
-      if (!VALIDATION.test(v)) { effectifs.push({ el, v }); continue; }
+      if (!estValidation(v)) { effectifs.push({ el, v }); continue; }
     } else if (etat.mode === 'cadre') {
       fichier = remplirSignet(fichier, cle, v);
     } else {
@@ -752,6 +753,59 @@ export async function remplir(
 export const PROPOSITION_DIMENSIONNEMENT = /^Proposition à valider\s*:\s*dimensionnement/i;
 /** Réponse qui valide une proposition telle quelle. */
 const VALIDATION = /^\s*(?:oui|ok|okay|d['’]accord|je valide|valid[ée]e?s?|c['’]est (?:bon|ok|validé)|confirm[ée]e?s?|je confirme|parfait|ça me va|cela me va)\b[\s.!]*$/i;
+const DEBUT_VALIDATION = /^\s*(?:oui|ok|okay|d['’]accord|je valide|nous validons|on valide|valid[ée]e?s?|c['’]est (?:bon|ok|validé)|confirm[ée]e?s?|je confirme|nous confirmons|parfait|ça me va|cela me va)(?![\p{L}])/iu;
+/**
+ * Réponse qui valide la proposition sans rien changer (T9N-3 : « Je valide les effectifs proposés », exemple donné par le
+ * premier message de l'assistant, n'était pas reconnu) : formule de validation, sans aucun chiffre, sans réserve ni
+ * demande de changement (« mais », « sauf », « pas », « mets », « retire »…).
+ */
+export function estValidation(v: string): boolean {
+  const t = String(v || '');
+  if (VALIDATION.test(t)) return true;
+  return DEBUT_VALIDATION.test(t) && !/\d/.test(t) && !/(?<![\p{L}])(?:mais|sauf|pas|ne|n['’]|non|plut[ôo]t|chang|modifi|remplac|retir|ajout|mets?|mettez|passe[rz]?|enl[èe]v|r[ée]dui|augment|diminu|corrig)/iu.test(t);
+}
+
+/** Profil nommé après un effectif dans une saisie de GSS (« 7 agents SSIAP 2 », « 6 ADS », « 2 maîtres-chiens »). */
+const PROFIL_SAISI = /(?<![\d,.])(\d+)\s+((?:agents?\s+)?(?:SSIAP\s*(?:[123]|I{1,3})(?![\wÀ-ÿ])|ADS(?![\wÀ-ÿ])|CQP(?:\s*APS)?|cynophiles?|rondiers?(?:\s+intervenants?)?)|agents?\s+de\s+s[ée]curit[ée](?:\s+incendie)?|agents?\s+cynophiles?|ma[îi]tres?[- ]chiens?|encadrants?|chefs?\s+d['’][ée]quipe(?:\s+(?:SSIAP\s*\d|de\s+s[ée]curit[ée]\s+incendie))?|chefs?\s+de\s+(?:poste|site|service))/giu;
+
+/** Effectifs par profil donnés par GSS (« Mets 7 agents SSIAP 2 dans l'équipe dédiée » → [{nombre: 7, profil: « agents SSIAP 2 »}]). */
+export function lireEffectifsParProfil(v: string): Array<{ nombre: number; profil: string }> {
+  return [...String(v || '').matchAll(PROFIL_SAISI)].map((m) => ({ nombre: Number(m[1]), profil: m[2].replace(/\s+/g, ' ').trim() }));
+}
+
+/**
+ * Effectifs par profil reportés sans modèle dans le tableau de l'équipe dédiée (T9N-3 : « Mets 7 agents SSIAP 2 dans
+ * l'équipe dédiée » ne change que la ligne SSIAP 2) : chaque profil saisi doit correspondre à une seule ligne (même
+ * catégorie de personnel, ou même qualification) ; le nombre de titulaires écrit dans les rubriques (« équipe de N agents
+ * titulaires ») devient la somme du tableau. null si une saisie ne correspond à aucune ligne, ou à plusieurs.
+ */
+export function appliquerEffectifsParProfil(sections: Record<string, string>, saisies: Array<{ nombre: number; profil: string }>, ancien?: string): { sections: Record<string, string>; total: number; lignes: string[] } | null {
+  if (!saisies.length) return null;
+  const norm = (t: string) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const id = Object.keys(sections).find((k) => lignesTableauEquipe(sections[k]).length);
+  if (!id) return null;
+  const lignes = lignesTableauEquipe(sections[id]);
+  if (lignes.some((l) => l.nombre === null)) return null;
+  const brut = sections[id].split('\n');
+  const touchees: string[] = [];
+  for (const s of saisies) {
+    const profil = s.profil.replace(/^agents?\s+(?=SSIAP|ADS|CQP|cynophile|rondier)/i, '');
+    const cat = norm(categorieDe(profil));
+    const q = norm(profil);
+    const ok = lignes.filter((l) => norm(l.categorie) === cat || norm(l.qualification) === q);
+    if (ok.length !== 1) return null;
+    const c = brut[ok[0].index].split('|');
+    c[3] = ` ${s.nombre} `;
+    brut[ok[0].index] = c.join('|');
+    ok[0].nombre = s.nombre;
+    touchees.push(`${ok[0].categorie}${ok[0].qualification ? ` · ${ok[0].qualification}` : ''}`);
+  }
+  const total = lignes.reduce((t, l) => t + (l.nombre || 0), 0);
+  const out: Record<string, string> = { ...sections, [id]: brut.join('\n') };
+  const rx = new RegExp(`(équipe (?:dédiée )?de )${ancien || '\\d+'}( agents?) (titulaires?)`, 'gi');
+  for (const k of Object.keys(out)) out[k] = out[k].replace(rx, (_m, a: string) => `${a}${total} ${total > 1 ? 'agents titulaires' : 'agent titulaire'}`);
+  return { sections: out, total, lignes: touchees };
+}
 
 /**
  * Effectifs donnés par GSS en réponse à la proposition de dimensionnement : total des titulaires, suppléants, et nombre
@@ -766,7 +820,8 @@ export function lireEffectifsSaisis(v: string): { titulaires?: number; suppleant
   const tit = /(\d+)\s*(?:agents?\s+)?titulaires?/i.exec(t);
   if (tit) { titulaires = Number(tit[1]); t = t.replace(tit[0], ' '); }
   const restes = (t.match(/\d+/g) || []).map(Number);
-  if (titulaires === undefined && restes.length === 1) return { titulaires: restes[0], suppleants, details: 0 };
+  // « 7 agents SSIAP 2 » : un effectif par profil, jamais un total (T9N-3).
+  if (titulaires === undefined && restes.length === 1 && !lireEffectifsParProfil(v).length) return { titulaires: restes[0], suppleants, details: 0 };
   return { titulaires, suppleants, details: restes.length };
 }
 
@@ -828,6 +883,25 @@ async function appliquerEffectifs(dossierId: string, effectifs: Array<{ el: Elem
   for (const { el, v } of effectifs) {
     const sections = etat.libre!.sections;
     const ancien = (/équipe dédiée de (\d+) agents? titulaires?/i.exec(el.question) || [])[1];
+    // Effectifs par profil seulement (« Mets 7 agents SSIAP 2 dans l'équipe dédiée », T9N-3) : la ligne du profil change,
+    // et le nombre de titulaires devient la somme du tableau, sans modèle ; jamais toutes les lignes en [À COMPLÉTER].
+    const parProfilSaisi = lireEffectifsParProfil(v);
+    const saisieBrute = lireEffectifsSaisis(v);
+    if (parProfilSaisi.length && saisieBrute.titulaires === undefined && saisieBrute.suppleants === undefined) {
+      const r = appliquerEffectifsParProfil(sections, parProfilSaisi, ancien);
+      if (r) {
+        etat.libre!.sections = r.sections;
+        etat.fichier = await recomposerPdf(etat);
+        const e = etat.elements.find((x) => x.cle === el.cle)!;
+        e.statut = 'complete';
+        e.valeur = v;
+        e.source = source;
+        e.completeLe = new Date().toISOString();
+        (etat.conversation ||= []).push({ role: 'assistant', texte: `J'ai reporté vos effectifs dans le tableau de l'équipe dédiée (${parProfilSaisi.map((x, i) => `${x.nombre} pour « ${r.lignes[i]} »`).join(', ')}) : l'équipe dédiée compte désormais ${r.total} ${r.total > 1 ? 'agents titulaires' : 'agent titulaire'}.`, date: new Date().toISOString() });
+        ecrireEtat(etat);
+        continue;
+      }
+    }
     const PORTE = new RegExp(`(?:équipe (?:dédiée )?de ${ancien || '\\d+'} agents? titulaires?|équipe suppléante de \\d+|^\\|[^\\n]*\\|\\s*\\d+\\s*\\|[^\\n]*ETP)`, 'im');
     const ids = Object.keys(sections).filter((id) => PORTE.test(sections[id] || ''));
     if (!ids.length) continue;
