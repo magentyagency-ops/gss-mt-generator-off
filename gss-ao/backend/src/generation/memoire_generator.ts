@@ -212,6 +212,41 @@ function getElementsWithLocalName(node: any, name: string): any[] {
   return results;
 }
 
+/** Pose [CHAMP_id] dans le 1er run pointillé d'un paragraphe du cadre (id != null) puis vide les autres runs pointillés. */
+export function placerOuEffacerPointilles(pNode: any, placeId: number | null): boolean {
+  // Mêmes règles que la détection des zones (generate) : une ligne à remplir compte au moins 5 points ou tirets.
+  const DOT_RUN = /(?:[_.\-…]\s*){5,}/;
+  const DOT_RUN_G = /(?:[_.\-…]\s*){5,}/g;
+  const isDottedOnly = (s: string) => s.trim().length >= 5 && /^[_.\-…\s]+$/.test(s);
+  const hasDottedRun = (s: string) => DOT_RUN.test(s);
+  let placed = false;
+  // Zone pointillée commencée : les restes qui la suivent dans le paragraphe (« … », « .. », « …… » dans d'autres
+  // runs, point ASCII au milieu d'une suite de « … ») sont effacés, sinon ils restent imprimés après la réponse
+  // (rouen_univ, T9CS-3 : « [À COMPLÉTER]… » puis « .. »). Le texte écrit avant la zone n'est jamais touché.
+  let zone = false;
+  const RESTE = (s: string) => s !== '' && /^[\s_.…]+$/.test(s) && /[_.…]/.test(s);
+  getElementsWithLocalName(pNode, 't').forEach((tEl: any) => {
+    const text = tEl.textContent || '';
+    const dots = isDottedOnly(text) || hasDottedRun(text);
+    if (!dots && !(zone && RESTE(text))) return;
+    zone = true;
+    if (placeId !== null && !placed && dots) {
+      tEl.textContent = isDottedOnly(text)
+        ? `[CHAMP_${placeId}]`
+        : text.replace(DOT_RUN, `[CHAMP_${placeId}]`).replace(DOT_RUN_G, '').replace(/(\[CHAMP_\d+\])(?:[\s_.…]{2,}|[\s_…]*[_…][\s_.…]*)$/, '$1').replace(/(\[CHAMP_\d+\])[\s_.…]{2,}/, '$1');
+      placed = true;
+    } else {
+      tEl.textContent = isDottedOnly(text) || RESTE(text) ? '' : text.replace(DOT_RUN_G, '');
+    }
+  });
+  // Restes courts de pointillés (« …….. » dans un autre run) : effacés, sinon ils suivent la réponse.
+  if (placeId !== null) getElementsWithLocalName(pNode, 't').forEach((tEl: any) => {
+    const text = tEl.textContent || '';
+    if (/^[\s_.…]+$/.test(text) && (text.match(/[_.…]/g) || []).length >= 2) tEl.textContent = '';
+  });
+  return placed;
+}
+
 function getParentWithLocalName(node: any, name: string): any {
   let parent = node.parentNode;
   while (parent) {
@@ -4365,28 +4400,8 @@ Renvoie un JSON valide :
       return fd;
     };
 
-    /** Pose [CHAMP_id] dans le 1er run pointillé (id != null) puis vide les autres runs pointillés. */
-    const placeOrClearDotted = (pNode: any, placeId: number | null) => {
-      let placed = false;
-      getElementsWithLocalName(pNode, 't').forEach((tEl: any) => {
-        const text = tEl.textContent || '';
-        if (!isDottedOnly(text) && !hasDottedRun(text)) return;
-        if (placeId !== null && !placed) {
-          tEl.textContent = isDottedOnly(text)
-            ? `[CHAMP_${placeId}]`
-            : text.replace(DOT_RUN, `[CHAMP_${placeId}]`).replace(DOT_RUN_G, '').replace(/(\[CHAMP_\d+\])[\s_.…]{2,}/, '$1');
-          placed = true;
-        } else {
-          tEl.textContent = isDottedOnly(text) ? '' : text.replace(DOT_RUN_G, '');
-        }
-      });
-      // Restes courts de pointillés (« …….. » dans un autre run) : effacés, sinon ils suivent la réponse.
-      if (placeId !== null) getElementsWithLocalName(pNode, 't').forEach((tEl: any) => {
-        const text = tEl.textContent || '';
-        if (/^[\s_.…]+$/.test(text) && (text.match(/[_.…]/g) || []).length >= 2) tEl.textContent = '';
-      });
-      return placed;
-    };
+    /** Pose [CHAMP_id] dans le 1er run pointillé (id != null) puis vide les autres runs pointillés (placerOuEffacerPointilles). */
+    const placeOrClearDotted = placerOuEffacerPointilles;
 
     // ── GRILLES DE NOTATION ──
     // Cadre du type « Critère / Sous-critère : composantes… | ……/10 points » (ex. Mairie d'Étampes) :
