@@ -309,10 +309,19 @@ const MENTION_NON_RENSEIGNEE = /^\s*(?:non[\s-]+(?:communiqu|pr[ée]cis|d[ée]te
 /** Valeur exploitable (texte court non vide, sans mention de remplissage), sinon ''. */
 export function valeurPropre(v: unknown): string {
   if (v === null || v === undefined) return '';
+  // Objet renvoyé par l'analyse (« lance le marché « [object Object] » », T7-COH-1) ou liste d'objets : jamais imprimé ; une
+  // liste de textes garde sa forme d'avant (« a,b »).
+  if (typeof v === 'object' && (!Array.isArray(v) || v.some((x) => x !== null && typeof x === 'object'))) return '';
   const t = String(v).replace(/\s+/g, ' ').trim();
   if (!t || t.length > 400) return '';
   if (MENTION_NON_RENSEIGNEE.test(t) || /^(acheteur inconnu|objet non sp[ée]cifi[ée]|non sp[ée]cifi[ée]|undefined|null)$/i.test(t)) return '';
   return t;
+}
+
+/** Texte propre qui contient au moins un mot : un nom, un intitulé, un site (jamais « 42 » ni « 12 », T7-COH-1). */
+export function textePropre(v: unknown): string {
+  const t = valeurPropre(v);
+  return /[A-Za-zÀ-ÿ]{2}/.test(t) ? t : '';
 }
 
 /** Normalisation pour comparer des mots : minuscules, sans accents, apostrophes droites, espaces simples. */
@@ -1205,7 +1214,7 @@ function villesDuMarche(dce: string, analyse: any): string[] {
     if (out.length >= 3) break;
   }
   if (out.length) return out;
-  return (Array.isArray(analyse?.sites) ? analyse.sites : []).map((s: any) => valeurPropre(s?.name)).filter(Boolean).slice(0, 3);
+  return (Array.isArray(analyse?.sites) ? analyse.sites : []).map((s: any) => textePropre(s?.name)).filter(Boolean).slice(0, 3);
 }
 
 /** Organigramme de référence (annuaire « Personnes » + registre) en liste Markdown, rôles regroupés par personne. */
@@ -1340,8 +1349,8 @@ function valeurSiExige(c: CalculVariables, nom: string): ValeurVariable | null {
 
 const CALCULS: Record<string, Calculateur> = {
   CLIENT: (c) => {
-    const couverture = valeurPropre(c.ctx.cover?.client);
-    const analyse = valeurPropre(c.ctx.analyse?.clientName);
+    const couverture = textePropre(c.ctx.cover?.client);
+    const analyse = textePropre(c.ctx.analyse?.clientName);
     let brut = couverture || analyse;
     if (!brut) return { valeur: null };
     // Raison sociale en capitales (« S.P.L. CITEDIA METROPOLE ») : le nom d'usage de l'analyse (« Citédia
@@ -1370,17 +1379,36 @@ const CALCULS: Record<string, Calculateur> = {
   OBJET_MARCHE: (c) => {
     const titre = valeurPropre(c.ctx.cover?.title);
     const v = titre && !/^m[ée]moire technique$/i.test(titre) ? titre : valeurPropre(c.ctx.analyse?.projectTitle);
-    return { valeur: v ? v.replace(/\.$/, '') : null, source: 'analyse du DCE (projectTitle)' };
+    // Un intitulé contient au moins un mot (jamais un nombre seul, T7-COH-1).
+    return { valeur: textePropre(v) ? v.replace(/\.$/, '') : null, source: 'analyse du DCE (projectTitle)' };
   },
   REF_MARCHE: (c) => ({ valeur: valeurPropre(c.ctx.cover?.ref) || valeurPropre(c.ctx.analyse?.marketRef) || null }),
   LOTS: (c) => {
-    const lots = (Array.isArray(c.ctx.analyse?.lots) ? c.ctx.analyse.lots : []).map((l: any) => valeurPropre(l?.num)).filter(Boolean);
+    // Numéros de lot seulement (T7-COH-1) : « Lot 2 » → « 2 » ; « Unique », « Marché unique », « Non alloti », « N/A » ne
+    // sont pas des lots. Marché non alloti, ou intitulé qui nomme déjà le lot (« … — Lot 5, site de Caen ») : rien.
+    const dce = String(c.ctx.dce || '').replace(/\s+/g, ' ');
+    if (/\bnon[- ]allotie?s?\b|\bnon[- ]allotissement\b|\blot unique\b|\bmarch[ée] unique\b|n.est pas allotie?\b|ne fait pas l.objet d.un allotissement|pas d.allotissement|sans allotissement/i.test(dce)) return { valeur: null };
+    const lots: string[] = [];
+    for (const l of Array.isArray(c.ctx.analyse?.lots) ? c.ctx.analyse.lots : []) {
+      const m = /^(?:lot\s*(?:n\s*[°o.]?\s*)?)?(\d{1,3}|[A-Z])(?![\wÀ-ÿ])/i.exec(valeurPropre(typeof l === 'object' ? l?.num : l));
+      if (m && !lots.includes(m[1].toUpperCase())) lots.push(m[1].toUpperCase());
+    }
     if (!lots.length) return { valeur: null };
+    const objet = normaliser(`${valeurPropre(c.ctx.cover?.title)} ${valeurPropre(c.ctx.analyse?.projectTitle)}`);
+    if (lots.every((n) => new RegExp(`\\blots?\\s*(?:n\\s*[°o.]?\\s*)?${n.toLowerCase()}\\b`).test(objet))) return { valeur: null };
     return { valeur: `${lots.length > 1 ? 'lots' : 'lot'} ${listeFr(lots)}` };
   },
-  DUREE_MARCHE: (c) => ({ valeur: valeurPropre(c.ctx.analyse?.duration) || null }),
+  DUREE_MARCHE: (c) => {
+    // Une durée seulement (« 3 ans », « 12 mois à compter de la notification », « Un an renouvelable ») : jamais une date
+    // ou une période (« d'une durée d'À compter de la notification… », « d'une durée de 1er janvier… »), ni un nombre seul
+    // (« d'une durée de 36 »), T7-COH-1.
+    const v = valeurPropre(c.ctx.analyse?.duration);
+    const coeur = v.replace(/^(?:p[ée]riode\s+initiale|(?:est\s+)?(?:d['’]une\s+)?dur[ée]e(?:\s+(?:initiale|ferme|globale|totale|ma[xi]imale|de base))?)\s*(?:est\s+)?(?:de\s+|d['’]\s*|:\s*)?/i, '');
+    const DUREE = /^(?:\d+(?:[,.]\d+)?|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|dix-huit|vingt-quatre|trente-six|quarante-huit)\s*(?:\(\s*\d+\s*\)\s*)?(?:ans?|ann[ée]es?|mois|semaines?|jours?)\b/i;
+    return { valeur: v && DUREE.test(coeur) ? v : null };
+  },
   DATE_DEBUT_MARCHE: (c) => ({ valeur: dateDebutMarche(c.ctx.dce || '') || null, source: 'DCE' }),
-  SITE: (c) => ({ valeur: (Array.isArray(c.ctx.analyse?.sites) ? c.ctx.analyse.sites : []).map((s: any) => valeurPropre(s?.name)).filter(Boolean) }),
+  SITE: (c) => ({ valeur: (Array.isArray(c.ctx.analyse?.sites) ? c.ctx.analyse.sites : []).map((s: any) => textePropre(s?.name)).filter(Boolean) }),
   VILLE: (c) => ({ valeur: villesDuMarche(c.ctx.dce || '', c.ctx.analyse) }),
   SECTEUR_CLIENT: (c) => ({ valeur: valeurPropre(c.ctx.analyse?.clientSector) || null }),
   SECTEUR_REFERENCE: (c) => ({ valeur: c.plan?.secteurReference?.libelle || null }),
@@ -2086,7 +2114,7 @@ export function donneesBesoin(prep: MemoirePrepare, ctx: ContexteMarche): Donnee
     horaires: horairesImposes(ctx.dce || '', 15),
     obligations: obligationsChiffrees(ctx.dce || '').slice(0, 25).map((o) => o.phrase),
     qualifications: liste('QUALIFICATIONS_REQUISES'),
-    enjeux: (Array.isArray(ctx.analyse?.keyRisks) ? ctx.analyse.keyRisks : []).map((x: unknown) => valeurPropre(x)).filter(Boolean).slice(0, 5),
+    enjeux: (Array.isArray(ctx.analyse?.keyRisks) ? ctx.analyse.keyRisks : []).map((x: unknown) => textePropre(x)).filter(Boolean).slice(0, 5),
     prestations,
     horsNormandie: !!ind.HORS_NORMANDIE,
     amorce: trame ? publiposter(trame, v, { definitions: prep.mt.variables, indicateurs: ind, clientLong: true }).texte : '',
