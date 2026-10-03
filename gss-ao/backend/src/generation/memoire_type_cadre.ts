@@ -1068,8 +1068,16 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   // Découpage en phrases sans couper après « : » : « - Dénomination : Global Security Services » reste une seule phrase
   // (havre1 : libellés séparés de leur valeur puis remis à côté d'une autre phrase, « • Dénomination : Autorisation
   // d'exercer… », « • Autorisation entreprise : » vide). Une ligne qui finit par « : » reste un sous-titre.
+  // Numéro d'une liste numérotée de GSS (« 1. Sélection du profil : … ») : jamais une phrase à part (etampes2 552, T5CP-10 :
+  // « 1. » isolé, numéros 1 à 4 perdus au recalage et « 5. » gardé) ; il reste la puce de la première phrase de la ligne.
   const decouper = (t: string) => String(t || '').replace(/\r/g, '').split('\n')
-    .map((l) => l.trim() ? l.split(/(?<=[.!?;])\s+/).filter((x) => x.trim()) : []);
+    .map((l) => {
+      if (!l.trim()) return [];
+      const num = /^(\s*\d+[.)]\s+)(.*)$/.exec(l);
+      const parts = (num ? num[2] : l).split(/(?<=[.!?;])\s+/).filter((x) => x.trim());
+      if (num && parts.length) parts[0] = `${num[1].trimStart()}${parts[0]}`;
+      return parts;
+    });
   // Phrases de GSS (référence), ligne par ligne.
   const lignesRef = decouper(reference);
   const ref: Array<{ brut: string; mots: string[]; ligne: number }> = [];
@@ -1123,8 +1131,24 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     // trois fois par mois »). Seul un nombre imposé par le DCE peut remplacer celui de GSS.
     const faitsChanges = !faitsCompatibles(faitsDePhrase(r.brut), faitsDePhrase(p.i.brut), autorises)
       || nomsPropresAjoutes(r.brut, p.i.brut, o.dce || '').length > 0;
+    // Élément d'une liste à « ; » de GSS (« … ; posture rassurante… ; en cas d'incivilité, l'agent… ; appel aux forces de l'ordre…
+    // ; prise en charge des malaises… ») réécrit par le modèle, même à 80 % (citedia2 474, T5-COH-3 : préfixe « Sur un site qui
+    // accueille du public, » ajouté, « . » à la place de « ; » puis « prise en charge… » en minuscule après un point) : l'élément
+    // de GSS est rétabli tel quel, sauf un nombre imposé par le DCE.
+    const nouveauxDce = chiffres(p.i.brut).filter((c) => !chiffres(r.brut).includes(c));
+    const segments = lignesRef[r.ligne] || [];
+    const elementListe = segments.length >= 2 && segments.some((x) => /;\s*$/.test(x));
+    const memeTexte = normaliser(p.i.brut.replace(PUCE, '')).replace(/[^a-z0-9]+/g, ' ').trim() === normaliser(r.brut.replace(PUCE, '')).replace(/[^a-z0-9]+/g, ' ').trim()
+      && /[;.!?:]\s*$/.exec(p.i.brut)?.[0].trim() === /[;.!?:]\s*$/.exec(r.brut)?.[0].trim();
+    if (elementListe && !memeTexte && !nouveauxDce.length && !faitsChanges) {
+      const puceL = (PUCE.exec(p.i.brut) || [''])[0];
+      p.i.brut = `${puceL}${r.brut.replace(PUCE, '')}`;
+      p.i.mots = r.mots;
+      reformulees++;
+      continue;
+    }
     if (p.s >= 0.8 && !faitsChanges) continue;
-    const nouveaux = chiffres(p.i.brut).filter((c) => !chiffres(r.brut).includes(c));
+    const nouveaux = nouveauxDce;
     if (nouveaux.length && !faitsChanges) continue;
     const puce = (PUCE.exec(p.i.brut) || [''])[0];
     p.i.brut = `${puce}${r.brut.replace(PUCE, '')}`;
@@ -1342,8 +1366,29 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   // des rapports… », citedia2 442, T4N-4) : son antécédent a été retiré ou n'est pas là ; elle est retirée.
   // « Il » impersonnel (« Il peut arriver que… », « Il est », « Il faut ») : jamais un pronom sans antécédent.
   const PRONOM = /^(?:Elle|Il(?!\s+(?:peut arriver|arrive|est|faut|s['’]agit|existe|convient|y a|importe|appara[iî]t)\b)|Ils|Elles|Celle-ci|Celui-ci|Ceux-ci|Celles-ci|Cela|Ce dernier|Cette derni[èe]re)\s/;
-  const retirerOrphelines = (): number => {
+  // Phrase qui renvoie à ce qui précède (« Dans les deux cas, l'agent rédige un rapport… », citedia2 474, T5-COH-3 : phrase
+  // d'une procédure de GSS déplacée sous « Compte-rendu et traçabilité », sans les deux cas) : gardée seulement juste après la
+  // phrase qui pose ces cas (« S'il accepte… S'il refuse… », « si … ; dans le cas contraire … »), sinon retirée.
+  const RENVOI_CAS = /^(?:Dans (?:les|ces) deux cas|Dans ce cas|Dans ces cas|Dans chacun des (?:deux )?cas|Quelle que soit l['’]issue)\b/i;
+  const CAS_POSES = /\bs['’]il(?:s)?\b|\bsi\b|\bsinon\b|dans le cas contraire|\bsoit\b/i;
+  const retirerRenvoisCas = (): number => {
     let n = 0;
+    const plat = sortie.flatMap((l) => l.items.map((it) => ({ l, it })));
+    for (let k = 0; k < plat.length; k++) {
+      const { l, it } = plat[k];
+      if (!RENVOI_CAS.test(it.brut.replace(PUCE, ''))) continue;
+      // Phrase de GSS reprise juste après la phrase de GSS qui la précède dans la référence : à sa place.
+      if (it.ref !== undefined && it.ref > 0 && plat[k - 1]?.it.ref === it.ref - 1) continue;
+      // Les cas posés dans les phrases qui précèdent (même paragraphe ou liste qui le suit) : à sa place.
+      const avant = plat.slice(Math.max(0, k - 3), k).map((x) => x.it.brut).join(' ');
+      if (CAS_POSES.test(avant)) continue;
+      l.items.splice(l.items.indexOf(it), 1);
+      n++;
+    }
+    return n;
+  };
+  const retirerOrphelines = (): number => {
+    let n = retirerRenvoisCas();
     for (let li = 0; li < sortie.length; li++) {
       const l = sortie[li];
       const premier = l.items[0];
@@ -1396,7 +1441,11 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   const pseudoTableau = retirerPseudoTableau();
   retirerOrphelines();
   let texte = rendre();
-  if (o.limite && mesure(texte) >= seuil) {
+  // Amorce de GSS d'une liste reprise (« Nous suivons pour cela un rétroplanning : » devant « 1. Sélection du profil… »,
+  // etampes2 552, T5CP-10) : jamais omise ; si elle manque, les phrases omises sont remises (étape 2).
+  const amorceManquante = ref.some((p, k) => !position.has(k) && !exclus[k] && /:\s*$/.test(p.brut) && !sousTitre(k)
+    && estPuce(p.ligne + 1) && ref.some((q, j) => q.ligne === p.ligne + 1 && position.has(j)));
+  if (o.limite && mesure(texte) >= seuil && !amorceManquante) {
     return { texte, fideliteAvant, fidelite: mesure(texte), reformulees, reinserees: lignesTableauRemises, ajoutsRetires: 0, bribesRetirees: pseudoTableau };
   }
   // 2. Phrases de GSS omises remises à leur place (dans la limite de mots s'il y en a une).
