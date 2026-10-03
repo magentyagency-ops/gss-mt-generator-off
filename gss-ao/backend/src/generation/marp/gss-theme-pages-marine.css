@@ -171,7 +171,7 @@ section.intercalaire::before, section.intercalaire::after { display: none; }
 section.intercalaire footer { display: none; }
 .gss-ouv .arc { position: absolute; left: 0; top: 0; width: 210mm; height: 297mm; }
 .gss-ouv .logo { position: absolute; left: 15mm; top: 15mm; width: 21mm; height: 15.5mm; background: url('logogss_blanc.svg') left center / contain no-repeat; }
-.gss-ouv .lab { position: absolute; right: 15mm; top: 21mm; font: 500 7.6pt/1 var(--gss-police-texte); letter-spacing: .16em; text-transform: uppercase; color: var(--gss-clair-sur-structure); }
+.gss-ouv .lab { position: absolute; right: 15mm; left: 44mm; text-align: right; top: 21mm; font: 500 7.6pt/1.2 var(--gss-police-texte); letter-spacing: .16em; text-transform: uppercase; color: var(--gss-clair-sur-structure); }
 .gss-ouv .num { position: absolute; left: 12.4mm; top: 52mm; font: 700 168pt/.8 var(--gss-police-titre); color: var(--gss-intercalaire-numero); letter-spacing: -.04em; }
 .gss-ouv .titre { position: absolute; left: 15mm; right: 24mm; top: 112mm; font: 700 31pt/1.06 var(--gss-police-titre); color: #FFFFFF; text-wrap: balance; }
 .gss-ouv ul { position: absolute; left: 15mm; right: 40mm; top: 160mm; list-style: none; padding: 0; margin: 0; }

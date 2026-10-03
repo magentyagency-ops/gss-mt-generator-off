@@ -1626,7 +1626,7 @@
    "schema": {
     "source": "spec",
     "gabarit": "fiche",
-    "titre": "Référence : les établissements bancaires",
+    "titre": "Référence banque — CIC Amiens",
     "params": {
      "nom": "Agence CIC",
      "lieu": "Amiens, 80000",
@@ -1863,7 +1863,7 @@
    "schema": {
     "source": "spec",
     "gabarit": "fiche",
-    "titre": "Référence : les sites logistiques",
+    "titre": "Référence logistique — FM Logistic",
     "params": {
      "nom": "FM Logistic",
      "lieu": "Heudebouville, 27600",
@@ -1942,7 +1942,7 @@
    "schema": {
     "source": "spec",
     "gabarit": "fiche",
-    "titre": "Référence : les hébergements touristiques",
+    "titre": "Référence hébergement — Hôtel B&B Rennes",
     "params": {
      "nom": "Hôtel B&B",
      "lieu": "Rennes",
@@ -2698,6 +2698,7 @@
       },
       {
        "titre": "Un mail unique",
+       "texte": "contact@gss-securite.fr",
        "role": "orange",
        "icone": "mail"
       },

@@ -852,13 +852,62 @@ export function completerParThematiques(texte: string, thematiques: PhraseThemat
  * urgent de renfort hors astreinte » ← « Pour les renforts ponctuels, nous disposons d'un vivier de 500 agents… »). Sans
  * phrase de GSS, le sous-titre reçoit « [À COMPLÉTER] » (donnée demandée à GSS) : jamais un sous-titre seul.
  */
+/**
+ * Dernier sous-titre d'une réponse du cadre resté sans texte (seul en fin de réponse, ou suivi d'un seul « [À COMPLÉTER] ») alors
+ * que son sujet est traité plus haut, sous le sous-titre précédent (générations réelles etampes2 701 : « Intrusion dans le
+ * périmètre et dégradation de type vandalisme » puis « [À COMPLÉTER] » après la procédure d'intrusion de GSS ; « Écogestes,
+ * énergie et recyclage » seul en fin de réponse après « Les économies d'énergie » et « Le recyclage de nos tenues ») : le
+ * sous-titre remonte devant la première ligne qui traite son sujet (un mot porteur en commun), le repère est retiré ; les
+ * lignes qui le suivent et ne parlent que du sujet du sous-titre précédent remontent avec ce dernier. Le sous-titre précédent
+ * garde toujours au moins une ligne. Aucun mot n'est changé.
+ */
+export function remonterSousTitreFinal(lignesEntree: string[], racines: (t: string) => Set<string>): string[] {
+  const lignes = [...lignesEntree];
+  const pleines = lignes.map((l, k) => ({ l, k })).filter((x) => x.l.trim());
+  if (pleines.length < 3) return lignes;
+  let dernier = pleines[pleines.length - 1];
+  let repere = -1;
+  if (/^\s*\[À COMPLÉTER\][.;]?\s*$/.test(dernier.l) && pleines.length >= 2) { repere = dernier.k; dernier = pleines[pleines.length - 2]; }
+  if (!estSousTitreCadre(dernier.l)) return lignes;
+  const i = dernier.k;
+  const cible = racines(lignes[i].replace(/[#*]/g, ''));
+  if (!cible.size) return lignes;
+  let precedent = -1;
+  // Sous-titre du cadre (jamais une amorce de liste de GSS terminée par « : », « Pour l'absence prévue, notre procédure … : »).
+  for (let k = i - 1; k >= 0; k--) if (estSousTitreCadre(lignes[k]) && !/:\s*$/.test(lignes[k].trim())) { precedent = k; break; }
+  if (precedent < 0) return lignes;
+  // Première ligne qui traite le sujet du sous-titre, après au moins une ligne laissée au sous-titre précédent.
+  // Mots porteurs comparés sur 6 lettres (« recyclage » et « recycler »).
+  const commun = (a: Set<string>, b: Set<string>) => [...a].some((w) => [...b].some((c) => c.slice(0, 6) === w.slice(0, 6)));
+  let premiere = -1, gardees = 0;
+  for (let k = precedent + 1; k < i; k++) {
+    if (!lignes[k].trim()) continue;
+    // Une ligne de texte, ou un intertitre de GSS terminé par « : » (« Les économies d'énergie : »).
+    const candidate = !estSousTitreCadre(lignes[k]) || /:\s*$/.test(lignes[k].trim());
+    if (gardees >= 1 && candidate && commun(racines(lignes[k]), cible)) { premiere = k; break; }
+    gardees++;
+  }
+  if (premiere < 0) return lignes;
+  const titre = lignes[i];
+  const anciens = racines(lignes[precedent].replace(/[#*]/g, ''));
+  const sousLeTitre: string[] = [];
+  const remontees: string[] = [];
+  for (let k = premiere; k < i; k++) {
+    const r = racines(lignes[k]);
+    const duPrecedent = commun(r, anciens) && !commun(r, cible);
+    (duPrecedent && lignes[k].trim() ? remontees : sousLeTitre).push(lignes[k]);
+  }
+  const apres = lignes.slice(i + 1).filter((_l, n) => i + 1 + n !== repere);
+  return [...lignes.slice(0, premiere), ...remontees, ...(remontees.length ? [''] : []), titre, ...sousLeTitre, ...apres];
+}
+
 export function completerSousTitresVides(texte: string, sources: Array<{ texte?: string }>, thematiques: PhraseThematique[] = [], question = ''): { texte: string; completes: string[] } {
-  const VIDES_ST = new Set(['besoin', 'moyen', 'moyens', 'mise', 'oeuvre', 'description', 'gestion', 'organisation', 'politique', 'personnel', 'service', 'prestation', 'mesure', 'mesures']);
+  const VIDES_ST = new Set(['besoin', 'moyen', 'moyens', 'mise', 'oeuvre', 'description', 'gestion', 'organisation', 'politique', 'personnel', 'service', 'prestation', 'mesure', 'mesures', 'agent', 'agents']);
   const racines = (t: string) => new Set(normaliser(t).replace(/[^a-z ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 5 && !VIDES_ST.has(w)).map((w) => w.replace(/s$/, '').slice(0, 7)));
   const phrases = sources.flatMap((s) => String(s.texte || '').split('\n')).filter((l) => l.trim() && !estSousTitreCadre(l) && !/\[À COMPLÉTER\]|\{\{/.test(l))
     .flatMap((l) => l.replace(/^\s*(?:[•\-*]|\d+[.)])\s+/, '').split(/(?<=[.!?])\s+/)).map((p) => p.trim()).filter((p) => p.split(/\s+/).length >= 6);
   const theme = completerParThematiques(texte, thematiques, question);
-  const lignes = theme.texte.split('\n');
+  const lignes = remonterSousTitreFinal(theme.texte.split('\n'), racines);
   const completes: string[] = [...theme.completes];
   for (let i = 0; i < lignes.length; i++) {
     if (!estSousTitreCadre(lignes[i])) continue;
@@ -880,7 +929,11 @@ export function completerSousTitresVides(texte: string, sources: Array<{ texte?:
     while (k2 < lignes.length && !lignes[k2].trim()) k2++;
     const blocDeGss = j < lignes.length && estSousTitreCadre(lignes[j]) && k2 < lignes.length && !estSousTitreCadre(lignes[k2]) && !/^\s*\[À COMPLÉTER\][.;]?\s*$/.test(lignes[k2])
       && sources.some((src) => String(src.texte || '').split('\n').some((l) => n(l) === n(lignes[j])));
-    const vide = j >= lignes.length || repere || (estSousTitreCadre(lignes[j]) && !amorce && !suiteDeGss && !blocDeGss && !sousTitreParent(lignes[i], lignes[j], question));
+    // Intertitre de GSS terminé par « : » suivi de son contenu dans les 3 lignes (« Les économies d'énergie : » puis « Nous
+    // veillons au respect de bonnes pratiques dans nos locaux : » et sa liste, etampes2 701) : le sous-titre a son texte.
+    const intertitreGss = j < lignes.length && /:\s*$/.test(lignes[j].trim())
+      && lignes.slice(j + 1, j + 4).some((l) => /^\s*(?:[•\-*]|\d+[.)])\s/.test(l) || (l.trim() && !estSousTitreCadre(l)));
+    const vide = j >= lignes.length || repere || (estSousTitreCadre(lignes[j]) && !amorce && !suiteDeGss && !blocDeGss && !intertitreGss && !sousTitreParent(lignes[i], lignes[j], question));
     if (!vide) continue;
     // Sous-titre de GSS équivalent dans les textes fournis (« La stabilité des équipes : » pour « Stabilité des équipes »,
     // etampes1 594, T8N-1) : le paragraphe de GSS qui le suit, tel quel.
@@ -2567,4 +2620,27 @@ export function completerDelaisCadre(texte: string, question: string, o: { clien
     ajouts.push({ ligne, question: questionDe(sp) });
   }
   return { texte: `${String(texte).trimEnd()}\n${ajouts.map((a) => a.ligne).join('\n')}`, ajouts };
+}
+
+/**
+ * Ligne « libellé : valeur » de GSS (identité, registre) dont le modèle a changé la structure (havre2 701 : « • Agrément
+ * dirigeant CNAPS : M. Autorisation dirigeant : MARCHANI Adil — AGD-076-… », libellé du tableau du cadre collé dans la
+ * valeur ; le recalage, phrase par phrase, coupe la ligne après « M. » et garde chaque morceau) : la ligne entière de GSS
+ * est rétablie, avec la puce de la réponse. Seulement une ligne de même libellé, qui a gagné un « : » et garde les faits de GSS.
+ */
+export function retablirLignesLibelle(texte: string, reference: string): string {
+  const PUCE = /^(\s*(?:[•\-*]|\d+[.)])\s+)/;
+  const cle = (l: string) => normaliser(l.replace(PUCE, '').split(/\s:\s/)[0] || '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const refs = String(reference || '').split('\n').filter((l) => /^\s*(?:[•\-*]\s+)?[^:\n]{2,60}\s:\s\S/.test(l));
+  return String(texte || '').split('\n').map((l) => {
+    if (!/\s:\s/.test(l)) return l;
+    const r = refs.find((x) => cle(x) && cle(x) === cle(l));
+    if (!r) return l;
+    const deuxPoints = (x: string) => (x.match(/\s:\s/g) || []).length;
+    if (deuxPoints(l) <= deuxPoints(r)) return l;
+    // Mêmes faits (numéros, nombres) : seule la forme a changé.
+    const faits = (x: string) => (x.match(/[A-Z]{2,}-[\d-]+|\d[\d\s]*\d|\d/g) || []).map((f) => f.replace(/\s/g, '')).sort().join('|');
+    if (faits(l) !== faits(r)) return l;
+    return `${(PUCE.exec(l) || [''])[0]}${r.replace(PUCE, '').trim()}`;
+  }).join('\n');
 }

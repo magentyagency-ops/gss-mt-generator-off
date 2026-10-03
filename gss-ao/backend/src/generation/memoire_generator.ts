@@ -19,7 +19,7 @@ import {
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
-  sansEngagementsEnDouble, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
+  sansEngagementsEnDouble, sansEngagementsDejaDits, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, questionRondes, casPratiqueRepris, type Dimensionnement } from './dimensionnement';
 import {
@@ -27,7 +27,7 @@ import {
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, completerDelaisCadre, ordonnerSelonReponse, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
-  controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, attendusDuChamp, attendusSansReponse,
+  controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, retablirLignesLibelle, attendusDuChamp, attendusSansReponse,
   questionsPubliposteParEmplacement, questionDeLEmplacement, completerFamilles, referencesDeSecours, ecartEquipeTableau,
 } from './memoire_type_cadre';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
@@ -1262,7 +1262,9 @@ const CHAPTER_ORDER_B = ['I', 'II', 'III', 'IV'];
 // engagement du mémoire technique (génération réelle imm 15 : « GSS complétera le BPU des prestations ponctuelles avec
 // des taux distincts… »). Une prestation qui cite seulement le bordereau reste un engagement (Becquerel : « renforts
 // exceptionnels commandés sur la base du BPU avec un délai de prévenance de 48 heures ouvrées »).
-export const PIECES_OFFRE = /acte d.engagement|bordereau de prix|(?:compl[ée]t|rempli|renseign|chiffr|joindr|fourni)[^.]{0,40}(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)|(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)[^.]{0,30}(?:compl[ée]t|rempli|renseign)|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?/i;
+/** Montants de l'attestation d'assurance de GSS (Hiscox, contrat HA RCP0242762, réponse de GSS du 1er octobre 2026), en euros. */
+export const MONTANTS_ATTESTATION_GSS = new Set(['300000', '50000', '8000000', '1500000', '500000', '800000', '30000']);
+export const PIECES_OFFRE = /acte d.engagement|bordereau de prix|\b(?:compl[èée]t|rempli|renseign|chiffr|fourni)[a-zé]*\s+(?:aussi\s+|également\s+)?(?:les |le |des )?prix\b|(?:compl[ée]t|rempli|renseign|chiffr|joindr|fourni)[^.]{0,40}(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)|(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)[^.]{0,30}(?:compl[ée]t|rempli|renseign)|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?/i;
 /**
  * Forme de comparaison d'un texte (cadre : garde-fous et libellés) : minuscules, sans accents, apostrophes typographiques
  * (’ ‘ ʼ) ramenées à « ' » et espaces insécables à l'espace (rouen_univ 472 : « Prime de fin d’année » rédigée avec ’ était
@@ -1511,6 +1513,9 @@ export function questionExacte(q: string): string {
   if (sujetGss) {
     const reste = sansFin(sujetGss[1]);
     const valider = /^(?:valider|confirmer)(?:\s+ou\s+modifier)?(?:\s+dans\s+l['’]assistant)?\s+(.+)$/i.exec(reste);
+    // Délais que le mémoire laisse à compléter (etampes2 701 : « Validez-vous les délais chiffrés de prise en compte… ? » alors
+    // qu'aucun délai n'est écrit, hors Normandie) : la valeur est demandée, jamais une validation.
+    if (valider && /^les\s+d[ée]lais\b/i.test(valider[1])) return `Quels ${valider[1].replace(/^les\s+/i, '')} GSS annonce-t-elle ?`;
     if (valider) return `Validez-vous ${valider[1]} ? Sinon, modifiez-le dans l'assistant.`;
     return `Pouvez-vous ${min(reste)} ?`;
   }
@@ -1665,7 +1670,14 @@ export function motifRefusEngagement(x: string): string {
   if (/^(?:GSS|le titulaire|nous)\s+(?:autoris|permet|accord|laisse)\w*\b/i.test(t.replace(/^[-•]\s*/, ''))) return 'faculté de l\'acheteur écrite comme un acte de GSS';
   // Garantie d'assurance absente de l'attestation de GSS (Hiscox : responsabilité civile professionnelle, exploitation et
   // employeur ; faits_gss.md) : « … en cas d'accident, d'incendie ou d'explosion, ainsi qu'en cas de perte de clés ».
-  if (/assuranc|assur[ée]|garanti(?:e|t|ssant)/i.test(t) && /perte (?:de |des )?cl[ée]s|(?<![\p{L}])vols?(?![\p{L}])|incendie|explosion|d[ée]g[âa]ts? des eaux|bris de|catastrophe/iu.test(t)) return 'garantie d\'assurance absente de l\'attestation de GSS, sans réponse';
+  // Seulement une phrase qui parle d'assurance (caen 701 : « assurera la surveillance… protégera le site contre les risques
+  // d'intrusion, de vol et de dégâts des eaux » est une mission, pas une garantie d'assurance : « assurera » n'est pas « assuré »).
+  if (/\bassurances?\b|\bassureurs?\b|\bassur[ée]e?s?\s+(?:contre|pour|aupr[èe]s)\b|\bpolices? d['’]assurance|responsabilit[ée] civile/i.test(t) && /perte (?:de |des )?cl[ée]s|(?<![\p{L}])vols?(?![\p{L}])|incendie|explosion|d[ée]g[âa]ts? des eaux|bris de|catastrophe/iu.test(t)) return 'garantie d\'assurance absente de l\'attestation de GSS, sans réponse';
+  // Montant de garantie ou garantie illimitée qui n'est pas sur l'attestation Hiscox de GSS (ifits 701 : « GSS souscrira une
+  // assurance responsabilité civile… dommages corporels sans limitation de montant… 5 000 000 € par sinistre », sous la ligne
+  // qui donne 300 000 €) : jamais promis, demandé à GSS.
+  if (/\bassurances?\b|\bassureurs?\b|responsabilit[ée] civile|\bgaranties?\b/i.test(t)
+    && (/sans limitation de montant|illimit[ée]e?s?/i.test(t) || (t.match(/\d[\d\s\u00a0\u202f.]*\s*(?:€|euros?\b|M€|millions? d.euros)/gi) || []).some((m) => !MONTANTS_ATTESTATION_GSS.has(m.replace(/[^\d]/g, ''))))) return 'garantie d\'assurance absente de l\'attestation de GSS, sans réponse';
   // « … dans le délai contractuel » sans délai chiffré (cstb 221 : « GSS s'engage à remplacer toute absence imprévue dans le
   // délai contractuel », alors que le CCTP ne fixe aucun délai de remplacement) : renvoi à un délai qui n'existe pas.
   if (/d[ée]lais? contractuels?|d[ée]lais? (?:pr[ée]vus?|fix[ée]s?) (?:au|par le) (?:contrat|march[ée]|CCTP|CCAP)/i.test(t) && !/\d/.test(t)) return 'renvoi à un délai que le DCE ne fixe pas';
@@ -5579,7 +5591,7 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
                   const k = replacements.map((x) => x.id).lastIndexOf(f.id);
                   // Première réponse gardée : mêmes nettoyages que ci-dessous (etampes1 594, T6N-2 : sans eux, « CV détaillés,
                   // agréments, certificats et cartes professionnelles » restait un intitulé sans texte).
-                  if (k >= 0) replacements[k].value = completerSousTitresVides(nettoyerReponseCadre(rec.texte), [...retenus, ...renvois], phrasesThematiques(repriseMT!.textes), `${questionMT || ''}\n${f.context}`).texte;
+                  if (k >= 0) replacements[k].value = completerSousTitresVides(retablirLignesLibelle(nettoyerReponseCadre(rec.texte), retenus.map((c) => c.texte).join('\n\n')), [...retenus, ...renvois], phrasesThematiques(repriseMT!.textes), `${questionMT || ''}\n${f.context}`).texte;
                   repriseParChamp.set(f.id, { ids: retenus.map((c) => c.id), fidelite: rec.fidelite, brute: rec.fideliteAvant });
                   if (rec.fidelite < SEUIL_FIDELITE_CADRE) propositionsCadre.set(f.id, `Réponse à relire (mémoire type de GSS repris en partie, fidélité ${Math.round(rec.fidelite * 100)} %) : ${libelle}`);
                   else propositionsCadre.delete(f.id);
@@ -5587,7 +5599,8 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
                 return;
               }
             }
-            rec.texte = nettoyerReponseCadre(rec.texte);
+            // Ligne « libellé : valeur » de GSS dont le modèle a changé la structure (havre2 701) : rétablie telle quelle.
+            rec.texte = retablirLignesLibelle(nettoyerReponseCadre(rec.texte), retenus.map((c) => c.texte).join('\n\n'));
             // Sous-titre resté sans texte (ca_normandie 221, 2.2 « Besoin urgent de renfort hors astreinte ») : la phrase de GSS
             // qui traite ce sujet (rubriques reprises ici ou dans une autre réponse), sinon « [À COMPLÉTER] » demandé à GSS.
             const sousTitres = completerSousTitresVides(rec.texte, [...retenus, ...renvois], phrasesThematiques(repriseMT!.textes), `${questionMT || ''}\n${f.context}`);
@@ -8101,7 +8114,19 @@ RÈGLES DE FORME (rendu Marp) :
           console.warn(`[MemoireGenerator] Adaptation ${rp.id} : ajout refusé, contraire au délai de GSS (« ${m.par!.slice(0, 100)} »).`);
           continue;
         }
-        ajoutsAdaptation.push({ id: rp.id, titre: r.titre, phrase: m.par! });
+        // Phrase qui parle du mémoire au lieu de répondre (ifits 701 : « Les CV et attestations de formation des équipes… sont
+        // présentés dans le mémoire », alors qu'aucun CV n'y figure) : retirée, la donnée est demandée à GSS.
+        const motifAjout = motifRefusEngagement(m.par!);
+        if (/^(?:phrase sur le mémoire|renvoi à un document|engagement futur|plan du mémoire)/.test(motifAjout) && sections[rp.id].includes(m.par!)) {
+          sections[rp.id] = sections[rp.id].replace(m.par!, '').replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;])/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+          questionsAjoutsRefuses.push(questionDEngagement(m.par!));
+          console.warn(`[MemoireGenerator] Adaptation ${rp.id} : ajout refusé (${motifAjout}) : « ${m.par!.slice(0, 100)} ».`);
+          continue;
+        }
+        // Phrase recopiée du CCTP à l'infinitif (« Effectuer la ronde d'ouverture… ») : engagement de GSS (« GSS s'engage à… »).
+        const conjuguee = phraseAjouteeConjuguee(m.par!);
+        if (conjuguee !== m.par && sections[rp.id].includes(m.par!)) sections[rp.id] = sections[rp.id].replace(m.par!, conjuguee);
+        ajoutsAdaptation.push({ id: rp.id, titre: r.titre, phrase: sections[rp.id].includes(conjuguee) ? conjuguee : m.par! });
       }
       adaptees++;
       progres(18 + Math.round((30 * adaptees) / Math.max(1, aAdapter.length)), `Adaptation au CCTP : ${adaptees}/${aAdapter.length} rubrique(s)…`);
@@ -8182,6 +8207,17 @@ RÈGLES DE FORME (rendu Marp) :
       for (const id of aCouvrir) {
         const r = sansRediteDuPerimetre(sections[id], sections[b1.id]);
         if (r.retirees.length) { sections[id] = r.texte; console.log(`[MemoireGenerator] Rubrique ${id} : ${r.retirees.length} engagement(s) déjà présenté(s) dans le périmètre du bloc 1 retiré(s).`); }
+      }
+    }
+
+    // Jalon d'envoi des plannings au client : celui de « La planification », jamais un autre dans un texte rédigé par l'IA
+    // (génération réelle caen 701 : proposition « … transmis à l'ACOSS à J-10 » face à « J-3 : envoi des plannings à l'ACOSS »).
+    {
+      const jalon = jalonEnvoiClient(sections['b4_planification'] || '');
+      if (jalon) for (const id of Object.keys(sections)) {
+        if (id === 'b4_planification') continue;
+        const h = harmoniserJalonPlanning(sections[id], jalon, besoin.client);
+        if (h.corriges.length) { sections[id] = h.texte; console.log(`[MemoireGenerator] Rubrique ${id} : jalon d'envoi des plannings au client ramené à ${jalon} (${h.corriges.length} phrase(s)).`); }
       }
     }
 
@@ -8318,6 +8354,9 @@ RÈGLES DE FORME (rendu Marp) :
       // Engagement en double dans la même liste (T9N-4) : la puce la plus complète reste.
       const doubles = sansEngagementsEnDouble(sections[id]);
       if (doubles.retirees.length) { sections[id] = doubles.texte; console.log(`[MemoireGenerator] Rubrique ${id} : ${doubles.retirees.length} engagement(s) en double retiré(s) : ${doubles.retirees.map((x) => x.slice(0, 80)).join(' ; ')}.`); }
+      // Engagement qui redit une phrase du texte de la rubrique (citedia 701, « Le contrôleur de rondes ») : retiré.
+      const dits = sansEngagementsDejaDits(sections[id]);
+      if (dits.retirees.length) { sections[id] = dits.texte; console.log(`[MemoireGenerator] Rubrique ${id} : ${dits.retirees.length} engagement(s) déjà écrit(s) dans le texte retiré(s) : ${dits.retirees.map((x) => x.slice(0, 80)).join(' ; ')}.`); }
     }
     // Nom de l'acheteur écrit d'une seule façon partout (casse et accents de la variable CLIENT, parc_expo 202).
     { const nomClient = String(prep.variables.CLIENT?.valeur || ''); if (nomClient) for (const id of Object.keys(sections)) sections[id] = harmoniserVariantesAcheteur(harmoniserNomClient(sections[id], nomClient), nomClient); }
@@ -8601,16 +8640,20 @@ RÈGLES DE FORME (rendu Marp) :
     /** Étapes du modèle (première réponse et correction) et étapes du schéma dessiné (T5CP-9). */
     const etapesModele: Array<{ texte?: string }> = Array.isArray(rep?.etapes) ? [...rep.etapes] : [];
     let etapesDessinees: any[] | null = schema.svg ? initiales.etapes : null;
+    // Deux corrections au plus des seules étapes (générations réelles du 3 octobre 2026 : 3 schémas de process sur 4 refusés
+    // après une seule correction, « rennais », « doit », étapes qui recopient la conclusion) avant les schémas de secours.
     if (!schema.svg && !secours && brut) {
-      const correction = await this.callOpenAI([
-        ...messages,
-        { role: 'assistant', content: brut },
-        { role: 'user', content: `Le schéma de process est refusé :\n- ${schema.erreurs.slice(0, 8).join('\n- ')}\nCorrige SEULEMENT les étapes (4 ou 5, dernière étape verte) en recopiant des mots EXACTS de ton texte (même orthographe, mêmes accords), sans aucun chiffre absent du texte. Renvoie UNIQUEMENT {"etapes": [{"titre": "…", "texte": "…", "role": "…"}]}.` },
-      ], 0.2, 'Compréhension du besoin : schéma corrigé', true, 'redaction', 0);
-      const corrigees = etapesRecevables(lireJson(correction || '')?.etapes);
-      if (Array.isArray(corrigees.etapes)) etapesModele.push(...corrigees.etapes);
-      schema = corrigees.defauts.length ? { erreurs: corrigees.defauts } : await dessiner(specProcessBesoin(corrigees.etapes, 'flux'));
-      if (schema.svg) etapesDessinees = corrigees.etapes;
+      const echanges: Array<{ role: 'assistant' | 'user'; content: string }> = [{ role: 'assistant', content: brut }];
+      for (let essai = 0; essai < 2 && !schema.svg; essai++) {
+        echanges.push({ role: 'user', content: `Le schéma de process est refusé :\n- ${schema.erreurs.slice(0, 8).join('\n- ')}\nCorrige SEULEMENT les étapes (4 ou 5, dernière étape verte) en recopiant des mots EXACTS de ton texte (même orthographe, mêmes accords), sans aucun chiffre absent du texte. Renvoie UNIQUEMENT {"etapes": [{"titre": "…", "texte": "…", "role": "…"}]}.` });
+        const correction = await this.callOpenAI([...messages, ...echanges], 0.2, 'Compréhension du besoin : schéma corrigé', true, 'redaction', 0);
+        if (!correction) break;
+        echanges.push({ role: 'assistant', content: correction });
+        const corrigees = etapesRecevables(lireJson(correction || '')?.etapes);
+        if (Array.isArray(corrigees.etapes)) etapesModele.push(...corrigees.etapes);
+        schema = corrigees.defauts.length ? { erreurs: corrigees.defauts } : await dessiner(specProcessBesoin(corrigees.etapes, 'flux'));
+        if (schema.svg) etapesDessinees = corrigees.etapes;
+      }
     }
     // Paragraphe fait des seuls textes d'étapes non retenues (cstb 551, T5CP-9) : retiré avant les schémas de secours ; après un
     // schéma dessiné sur d'autres étapes, retiré seulement si ce schéma reste valide sur le texte sans lui.

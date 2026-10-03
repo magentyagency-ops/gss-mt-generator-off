@@ -84,7 +84,12 @@ export function valeursImposeesValides<T extends { valeur: string }>(imposees: R
   const ecartees: Array<{ variable: string; valeur: string }> = [];
   for (const [nom, v] of Object.entries(imposees || {})) {
     const forme = FORME_VALEUR_IMPOSEE.find(([rx]) => rx.test(nom))?.[1];
-    if (!forme || forme.test(String(v?.valeur || ''))) valides[nom] = v;
+    // Valeur recopiée avec la majuscule de sa phrase du CCTP (citedia 701 : « les réunions de suivi ont lieu Au minimum une
+    // fois par trimestre ») : elle est insérée au milieu d'une phrase de GSS, en minuscule.
+    const brute = String(v?.valeur || '');
+    const valeur = /^(?:Au|Aux|Une?|Deux|Trois|Quatre|Cinq|Six|Sept|Huit|Neuf|Dix|Douze|Quinze|Trente|Dans|Sous|En|Chaque|Tous|Toutes|Tout|Toute|Le|La|Les|Des|Par|Selon|Entre|Avant|Après|Dès|Mensuel\w*|Trimestriel\w*|Hebdomadaire\w*|Annuel\w*|Semestriel\w*|Quotidien\w*|Journali\w*)(?=[\s'’-])/.test(brute)
+      ? brute.charAt(0).toLowerCase() + brute.slice(1) : brute;
+    if (!forme || forme.test(valeur)) valides[nom] = valeur === brute ? v : { ...v, valeur };
     else ecartees.push({ variable: nom, valeur: String(v?.valeur || '') });
   }
   return { valides, ecartees };
@@ -1391,6 +1396,19 @@ const VERBE_TITRE = /^(?:est|sont|doit|doivent|devra|devront|peut|peuvent|a|ont|
 const COUPE_TITRE = /^(?:à|au|aux|dans|sur|pour|avec|par|en|sous|après|avant|entre|hors|selon|suivant|lors|dès|depuis|vers|chez|et|ou|de|du|des|d['’]\S*|pendant|durant|afin|sans|y|[a-zà-ÿ]{3,}ant)$/i;
 
 /**
+ * Titre d'une exigence au sujet négatif (« Aucun poste ne doit être laissé vacant ») : le groupe nominal seul (« Aucun
+ * poste ») dirait le contraire de l'exigence (génération réelle imm 701, carte « Aucun poste » du schéma du bloc 1) ; le
+ * titre garde la négation (« Aucun poste laissé vacant »), sinon '' (pas de titre).
+ */
+export function titreNegatif(x: string, max = 34): string {
+  const e = String(x || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').replace(/^[«"“\s]+|[»"”\s.;:!]+$/g, '').trim();
+  const m = /^(Aucune?|Nulle?)\s+(.+?)\s+(?:ne|n['’])\s*(?:(?:doit|doivent|devra|devront|peut|peuvent|pourra|pourront|sera|seront|est|sont|reste|restent)\s+)?(?:pas\s+|jamais\s+)?(?:(?:être|rester|demeurer)\s+)?(\S.*)$/i.exec(e);
+  if (!m) return '';
+  const t = `${m[1]} ${m[2]} ${m[3]}`.replace(/\s+/g, ' ').trim();
+  return t.length <= max && !/[,;:«»"]/.test(t) ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+}
+
+/**
  * Titre court (34 caractères au plus) d'une exigence du DCE, pour une étape du schéma du bloc 1 ou le libellé d'un point
  * de vigilance : le groupe nominal qui précède le premier verbe, arrêté avant une préposition, une coordination ou un
  * participe (« les rondes d'ouverture à 05H30 et de fermeture… encadrent… » → « Les rondes d'ouverture » ; « remplacement
@@ -1400,6 +1418,8 @@ const COUPE_TITRE = /^(?:à|au|aux|dans|sur|pour|avec|par|en|sous|après|avant|e
 export function titreExigence(x: string, max = 34): string {
   const e = String(x || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').replace(/^[«"“\s]+|[»"”\s.;:]+$/g, '').trim();
   if (!e) return '';
+  if (/^(?:aucune?|nulle?)\s/i.test(e)) return titreNegatif(e, max);
+  if (/^(?:il|elle|ils|elles|on|nous|vous|cela|ceci|celui-ci|celle-ci)\s/i.test(e)) return '';
   const mots0 = e.split(' ');
   const k = mots0.findIndex((m, i) => i > 0 && (VERBE_TITRE.test(m) || /^(?:ne|n['’]\S*)$/i.test(m)));
   const gn = (k > 0 ? mots0.slice(0, k) : mots0).join(' ').split(/\s*[,;:]\s+|\s+[—–]\s+/)[0].trim();
@@ -1525,7 +1545,12 @@ export function libellesBloc1(texte: string): string {
     const tete = (/^\*\*[^*]+\*\*/.exec(corps) || [''])[0];
     const reste = corps.slice(tete.length)
       .replace(/\*\*\s*«\s*([^»*]+?)\s*»\s*\*\*/g, '« $1 »')
-      .replace(/\*\*([^*]+)\*\*/g, (m, x: string) => (/^[A-ZÀ-Ý]/.test(x.trim()) ? `« ${x.trim()} »` : x));
+      .replace(/\*\*([^*]+)\*\*/g, (m, x: string) => (/^[A-ZÀ-Ý]/.test(x.trim()) ? `« ${x.trim()} »` : x))
+      // Titre de rubrique entre parenthèses à la place de la réponse (génération réelle caen 701 : « → notre réponse :
+      // (« Le remplacement d'un agent absent : absence non prévue »), bloc 5 », « s'inscrit dans (« Les réunions… ») ») :
+      // sans parenthèses, et le renvoi « , bloc n » écrit « (bloc n) ».
+      .replace(/(notre réponse\s*:\s*|\b(?:dans|par|selon|sur|via|avec|et)\s+)\(\s*(«[^»()]+(?:\([^)]*\)[^»()]*)*»)\s*\)/g, '$1$2')
+      .replace(/(»)\s*,\s*bloc\s+(\d)\b/g, '$1 (bloc $2)');
     return `${puce}${tete}${reste}`;
   }).join('\n');
 }
@@ -1717,6 +1742,9 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
   /** Titre nominal (groupe nominal avant le premier verbe), '' s'il n'y en a pas de propre : jamais une phrase tronquée
    *  (« Le site associe un bâtiment ») ni un mot seul (« Le service »). */
   const nominal = (x: string): string => {
+    if (/^\s*(?:aucune?|nulle?)\s/i.test(x.replace(/\*\*/g, ''))) return titreNegatif(x);
+    // Sujet pronom (imm 701 : « il prend en compte la continuité des soins » → titre « Il prend ») : pas de titre nominal.
+    if (/^\s*(?:il|elle|ils|elles|on|nous|vous|cela|ceci|celui-ci|celle-ci)\s/i.test(x.replace(/\*\*/g, ''))) return '';
     const mots = x.replace(/\*\*/g, '').split(/\s+/);
     const k = mots.findIndex((m, i) => i > 0 && (VERBE.test(m) || /^(?:ne|n['’]\S*)$/i.test(m)));
     if (k <= 0) return '';
@@ -1763,8 +1791,10 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
   // elle sert de titre telle quelle.
   const citationTitre = (c: { x: string; citation: boolean }): string => {
     if (!c.citation) return '';
-    const x = c.x.replace(/\s+/g, ' ').trim();
+    // Sans le point final de la citation (imm 701 : carte « Remplacement sous 4h maximum. »).
+    const x = c.x.replace(/\s+/g, ' ').trim().replace(/\s*[.;!]+$/, '');
     const pleins = pleinsDe(x);
+    if (/^(?:aucune?|nulle?)\s/i.test(x)) return titreNegatif(x, 40);
     return x.length <= 40 && pleins.length >= 2 && !/[,;:«»"]/.test(x) && !x.split(/\s+/).some((w, i) => i > 0 && VERBE.test(w)) ? x : '';
   };
   // Titre tiré d'une exigence chiffrée : la valeur du DCE reste dans le titre (« Mobiliser les équipes en 2 heures »), ou
@@ -1919,6 +1949,8 @@ export function specSecoursBesoin(texte: string): { gabarit: string; params: any
     const poste = brutPoste.length <= 34 ? brutPoste : apresDeuxPoints && apresDeuxPoints.length <= 34 ? apresDeuxPoints : titreExigence(apresDeuxPoints || brutPoste);
     const horaires = texteEtapeEntier(String(c[2] || '').replace(/\*\*/g, ''));
     if (!poste || pleinsDe(poste).length < 1 || !horaires || horaires.split(/\s+/).length < 3 || INTERNE.test(l)) continue;
+    // Renfort en option (imm 701 : « Option 1 : 1 SSIAP 1 ») : pas une étape du process de la prestation demandée.
+    if (/^option\b/i.test(brutPoste)) continue;
     if (etapes.some((e) => proches(e.titre, poste) || normaliser(e.texte) === normaliser(horaires))) continue;
     etapes.push({ titre: poste.charAt(0).toUpperCase() + poste.slice(1), texte: horaires.charAt(0).toUpperCase() + horaires.slice(1), role: 'rouge' });
   }
@@ -2166,7 +2198,50 @@ export function nettoyerBloc1(texte: string, plan: PlanMemoireType | undefined, 
       return distincts.sort((a, b) => a - b).map((b, i) => `${i === 0 ? prep : 'au'} bloc ${b}${sep || ','} ${liste(titres.filter((_, k) => nums[k] === b))}`).join(', et ');
     });
   }
+  // 3 bis. Rythme recopié deux fois du DCE (imm 701 : « 7j/7 7j/7 24h/24 », coquille du CCTP) : écrit une fois.
+  t = t.replace(/(\d+\s?[a-zA-Z]{1,2}\s?\/\s?\d+)(?:\s+\1)+(?![\w/])/g, '$1');
+  // 4. Ligne vide du tableau du périmètre (génération réelle caen 701 : « CAEN | Aucun poste fixe permanent prévu au CCTP |
+  //    Sans objet | Sans objet | Sans objet ») : retirée ; sans autre ligne, le tableau entier (les prestations du périmètre
+  //    sont décrites par les phrases qui le suivent).
+  {
+    const r = sansLigneVideDuPerimetre(t);
+    t = r.texte;
+    retirees.push(...r.retirees);
+  }
   return { texte: t.trim(), retirees, renvois };
+}
+
+/** Cellule du tableau du périmètre qui ne dit rien (« Sans objet », « Aucun poste fixe… », « Non précisé », « — »). */
+const CELLULE_VIDE = /^(?:sans objet|n\/?a|néant|aucun(?:e)?\b.*|non (?:précisé|prévu|applicable|concerné)e?s?|[—–-]*)$/i;
+
+/**
+ * Tableau « Le périmètre de la prestation demandée » du bloc 1 : une ligne dont la moitié au moins des cellules (hors site)
+ * ne dit rien est retirée ; s'il ne reste aucune ligne, le tableau entier est retiré, ses phrases restent.
+ */
+export function sansLigneVideDuPerimetre(texte: string): { texte: string; retirees: string[] } {
+  const lignes = String(texte || '').split('\n');
+  const i = lignes.findIndex((l) => /^##\s+Le périmètre de la prestation demandée/.test(l.trim()));
+  if (i < 0) return { texte, retirees: [] };
+  let debut = i + 1;
+  while (debut < lignes.length && !lignes[debut].trim()) debut++;
+  if (debut >= lignes.length || !/^\s*\|/.test(lignes[debut])) return { texte, retirees: [] };
+  let fin = debut;
+  while (fin < lignes.length && /^\s*\|/.test(lignes[fin])) fin++;
+  const cellules = (l: string) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.replace(/\*\*/g, '').trim());
+  const separateur = (l: string) => /^\s*\|[\s:|-]+\|\s*$/.test(l);
+  const retirees: string[] = [];
+  const donnees: string[] = [];
+  for (let k = debut + 1; k < fin; k++) {
+    const l = lignes[k];
+    if (separateur(l)) continue;
+    const c = cellules(l).slice(1);
+    const vides = c.filter((x) => CELLULE_VIDE.test(x)).length;
+    if (c.length && vides * 2 >= c.length) retirees.push(l.trim()); else donnees.push(l);
+  }
+  if (!retirees.length) return { texte, retirees };
+  const tableau = donnees.length ? lignes.slice(debut, fin).filter((l) => !retirees.includes(l.trim())) : [];
+  const out = [...lignes.slice(0, debut), ...tableau, ...lignes.slice(fin)];
+  return { texte: out.join('\n').replace(/\n{3,}/g, '\n\n'), retirees };
 }
 
 /** Rubriques du plan par bloc, pour que la compréhension renvoie aux process GSS qui la démontrent. */
@@ -2181,7 +2256,7 @@ Sois force de proposition : montre que GSS a lu le cahier des charges en détail
 
 TEXTE (Markdown, __MOTS__ mots, jamais plus), en quatre sous-parties « ## », dans cet ordre :
 ## Votre contexte et votre site — 3 à 6 lignes : l'acheteur, l'objet du marché, le ou les sites, la durée (seulement si elle figure dans les DONNÉES DU MARCHÉ ; sinon n'en parle pas, jamais [À COMPLÉTER] pour une donnée de l'acheteur) ; faits du DCE uniquement, sans qualificatif promotionnel ; ne redis pas la première phrase.
-## Le périmètre de la prestation demandée — un tableau Markdown « Site | Poste | Jours et horaires | Qualification | Missions principales », une ligne par poste prévu au CCTP (aucun poste, horaire ni effectif ajouté), puis une phrase par prestation complémentaire prévue (rondes, interventions sur alarme, bons de commande, reprise du personnel…).
+## Le périmètre de la prestation demandée — un tableau Markdown « Site | Poste | Jours et horaires | Qualification | Missions principales », une ligne par poste prévu au CCTP (aucun poste, horaire ni effectif ajouté ; sans poste fixe au CCTP, une ligne par prestation prévue, par exemple les rondes avec leurs jours et heures, jamais une ligne « Aucun poste » ou « Sans objet »), puis une phrase par prestation complémentaire prévue (rondes, interventions sur alarme, bons de commande, reprise du personnel…).
 ## Vos attentes et nos engagements — 3 à 6 puces de la forme « **« ce que vous attendez, avec les mots exacts de l'acheteur »** : … → notre réponse : … (le process GSS qui y répond, nommé par le titre de sa rubrique entre guillemets « … », sans écrire « process GSS »), développée au bloc n ».
 ## Les points de vigilance identifiés et nos réponses — 2 à 4 puces de la forme « **<le point de vigilance, nommé en 2 à 5 mots>** : … (fait du DCE) → notre réponse : … (un process GSS existant, nommé par le titre de sa rubrique entre guillemets « … », sans écrire « process GSS ») » ; jamais le libellé « Point de vigilance » lui-même.
 Un titre de rubrique cité au milieu d'une phrase s'écrit entre guillemets (« coordonnée par « La planification » »), jamais en gras.
@@ -2288,6 +2363,16 @@ export function controlerProposition(texte: string, montantsGss: string[] = []):
       // Engagement réduit à un oui ou non laissé en blanc (ifsem 335 : « Engagement de GSS sur la couverture permanente de ce
       // poste et ces horaires : [À COMPLÉTER]. ») : la proposition est déjà « à valider », la phrase et sa question partent.
       if (/^\s*(?:\*\*)?\s*(?:engagement|confirmation|validation)\b[^:]{0,200}:\s*\[À COMPLÉTER\]\s*\.?\s*(?:\*\*)?\s*$/i.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion = true; return false; }
+      // Consigne à l'infinitif laissée en blanc (ifits 701 : « Définir avec GSS les consignes et modalités opérationnelles
+      // spécifiques de la vacation de gardiennage du 30 : [À COMPLÉTER]. ») : une instruction, pas une réponse ; retirée, la
+      // question reste posée à GSS.
+      const instruction = /^\s*(?:\*\*)?\s*([A-ZÀ-Ý][a-zà-ÿ]+)\s[^:]{0,240}:\s*\[À COMPLÉTER\]/.exec(ph);
+      if (instruction && /(?:er|ir|re)$/.test(normaliser(instruction[1])) && !PAS_INFINITIF.has(normaliser(instruction[1]))) {
+        retirees.push(ph.trim());
+        retireAvecQuestion = true;
+        questions.push(`Quelle réponse GSS apporte-t-elle sur ce point : « ${ph.replace(/\[À COMPLÉTER\]|⟦AC:\d+⟧|[*_]/g, '').replace(/\s*:\s*\.?\s*$/, '').trim()} » ?`);
+        return false;
+      }
       // Fait accompli ou pièce jointe affirmés par GSS sans source (citedia 341 : « La visite obligatoire des lieux a été
       // effectuée le 7 octobre 2026 », « L'attestation… est jointe à l'offre ») : retiré, demandé à GSS.
       if (FAIT_ACCOMPLI.test(ph)) {
@@ -2531,4 +2616,98 @@ export function messagePropositions(propositions: Array<{ titre: string; page?: 
     '- la modifier : « Dans la proposition sur …, précise que … » ;',
     '- la supprimer : « Supprime la proposition sur … ».',
   ].join('\n');
+}
+
+/**
+ * Jalon d'envoi des plannings au client dans « La planification » du mémoire (« J-3 : envoi des plannings à l'ACOSS »), tel
+ * que le mémoire l'imprime (jalon de GSS, ou celui que le DCE impose). null s'il n'y en a pas.
+ */
+export function jalonEnvoiClient(planification: string): string | null {
+  const m = /^\s*(?:[-*•]\s*)?(J\s*-\s*\d+)\s*:\s*envoi des plannings\s+(?:au|à|aux)\s/im.exec(String(planification || '').replace(/\*\*/g, ''));
+  return m ? m[1].replace(/\s+/g, '') : null;
+}
+
+/**
+ * Texte rédigé par l'IA (proposition D5, engagement) qui donne au client un autre jalon d'envoi des plannings que « La
+ * planification » (génération réelle caen 701 : « le planning mensuel nominatif … est transmis à l'ACOSS à J-10 » alors que
+ * le calendrier de GSS imprime « J-3 : envoi des plannings à l'ACOSS ») : le jalon de « La planification » est repris.
+ * Seulement une phrase qui parle de planning, d'un envoi et du client (son nom ou « au client »).
+ */
+export function harmoniserJalonPlanning(texte: string, jalon: string, client: string): { texte: string; corriges: string[] } {
+  const corriges: string[] = [];
+  const nomClient = normaliser(String(client || '')).replace(/^(?:l|la|le|les)\s*['’]?\s*/, '').trim();
+  const sortie = String(texte || '').split('\n').map((l) => l.split(/(?<=[.!?])\s+/).map((ph) => {
+    const n = normaliser(ph);
+    if (!/planning/.test(n) || !/transmis|envoy|communiqu|remis|adress/.test(n)) return ph;
+    if (!(nomClient && n.includes(nomClient)) && !/\bau client\b/.test(n)) return ph;
+    // Un seul jalon dans la phrase (jamais « J-10 aux agents, J-3 au client » ramené à un seul jalon).
+    if ((ph.match(/\bJ\s*-\s*\d+\b/g) || []).length !== 1) return ph;
+    const nouvelle = ph.replace(/\bJ\s*-\s*(\d+)\b/g, (m) => (m.replace(/\s+/g, '') === jalon ? m : jalon));
+    if (nouvelle !== ph) corriges.push(ph.trim());
+    return nouvelle;
+  }).join(' ')).join('\n');
+  return { texte: sortie, corriges };
+}
+
+/**
+ * Engagement de couverture qui redit une phrase déjà écrite dans le texte de la même rubrique (génération réelle citedia 701,
+ * « Le contrôleur de rondes » : « Au minimum trois rondes distinctes sont réalisées… » dans le texte, puis l'engagement « GSS
+ * assurera au minimum trois rondes distinctes… » ; « Toutes les rondes planifiées, sauf dans les parcs en enclos, sont tracées
+ * par des pointeaux NFC/RFID… » puis « GSS tracera toutes les rondes planifiées… ») : la puce est retirée quand 80 % de ses mots
+ * porteurs (radicaux de 6 lettres, hors verbes d'engagement) et tous ses chiffres sont dans une phrase du texte, ou dans
+ * deux phrases qui se suivent. Le texte de GSS n'est jamais touché ; le sous-titre est retiré s'il ne reste aucune puce.
+ */
+export function sansEngagementsDejaDits(texte: string): { texte: string; retirees: string[] } {
+  const TITRE = '## Nos engagements sur les exigences du cahier des charges';
+  const i = texte.indexOf(TITRE);
+  if (i < 0) return { texte, retirees: [] };
+  const NEUTRES = /^(?:respec|fera|ferons|faire|veille|engage|mettra|mettre|oeuvre|garant|sera|seront|pourra|devra|toutes?|tous|leurs?|avec|dans|pour|sans|sous|ainsi|chaque|selon|cette|ces|ses|aupres|assure|assura|tracer|traces|realis)/;
+  const radicaux = (t: string) => new Set(normaliser(t).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 4 && !/^\d+$/.test(w) && !NEUTRES.test(w)).map((w) => w.slice(0, 6)));
+  const chiffres = (t: string) => new Set(t.match(/\d+(?:[.,]\d+)?/g) || []);
+  const avant = texte.slice(0, i);
+  const phrases = avant.replace(/\*\*/g, '').split(/(?<=[.!?;])\s+|\n+/).map((p) => p.trim()).filter((p) => p.split(/\s+/).length >= 5);
+  const fenetres = phrases.map((p, k) => `${p} ${phrases[k + 1] || ''}`);
+  const lignes = texte.slice(i + TITRE.length).split('\n');
+  const retirees: string[] = [];
+  const gardees = lignes.filter((l) => {
+    if (!/^\s*[-*•]\s/.test(l)) return true;
+    const r = radicaux(l), c = chiffres(l);
+    if (r.size < 4) return true;
+    const dit = fenetres.some((f) => {
+      const rf = radicaux(f), cf = chiffres(f);
+      return [...c].every((x) => cf.has(x)) && [...r].filter((w) => rf.has(w)).length >= 0.8 * r.size;
+    });
+    if (dit) retirees.push(l.replace(/^\s*[-*•]\s*/, '').trim());
+    return !dit;
+  });
+  if (!retirees.length) return { texte, retirees };
+  const reste = gardees.join('\n').trim();
+  return { texte: /^\s*[-*•]\s/m.test(reste) ? `${avant.trimEnd()}\n\n${TITRE}\n\n${reste}` : `${avant.trimEnd()}${reste ? `\n\n${reste}` : ''}`, retirees };
+}
+
+/** Mots en -er, -ir, -re qui ne sont pas des infinitifs (noms, adjectifs, possessifs). */
+const PAS_INFINITIF = new Set(['premier', 'dernier', 'cahier', 'quartier', 'dossier', 'papier', 'fichier', 'chantier', 'metier', 'calendrier', 'palier',
+  'escalier', 'particulier', 'regulier', 'entier', 'hier', 'cher', 'fer', 'mer', 'hiver', 'super', 'laser', 'leader', 'plaisir', 'avenir', 'loisir',
+  'soir', 'espoir', 'desir', 'manoir', 'couloir', 'trottoir', 'miroir', 'cadre', 'ordre', 'titre', 'nombre', 'membre', 'centre', 'registre', 'lettre',
+  'livre', 'chiffre', 'metre', 'offre', 'autre', 'notre', 'votre', 'entre', 'contre', 'outre', 'quatre', 'libre', 'propre', 'sobre', 'pupitre', 'acier',
+  'atelier', 'clavier', 'collier', 'courrier', 'denier', 'foyer', 'loyer', 'pompier', 'routier', 'sentier', 'usager', 'voisinage', 'tiers', 'ouvrier',
+  'gardiennage', 'tir', 'noir', 'mur', 'sur', 'pur', 'sir', 'lire', 'faire']);
+
+/**
+ * Phrase ajoutée au texte de GSS par l'adaptation, recopiée du CCTP à l'infinitif (générations réelles du 3 octobre 2026 :
+ * caen 701 « Effectuer la ronde d'ouverture du lundi au vendredi à 05 h 30… », citedia 701 « Avant démarrage, raccorder et
+ * paramétrer les communications nécessaires au PC TLS… ») : une phrase sans sujet au milieu du texte de GSS. Elle devient un
+ * engagement de GSS (« GSS s'engage à effectuer… », « Avant démarrage, GSS s'engage à raccorder… »), mots du CCTP gardés.
+ */
+export function phraseAjouteeConjuguee(phrase: string): string {
+  const t = String(phrase || '');
+  const m = /^(\s*(?:[-*•]\s+)?)((?:(?:Avant|Après|Dès|Lors|Pendant|En cas|Au|À|Pour|Sur|Dans|Chaque|Tous|Toutes)\b[^,.;:]{0,70},\s*)?)([A-ZÀ-Ýa-zà-ÿ][a-zà-ÿ]+)(\s+.*)$/su.exec(t);
+  if (!m) return t;
+  const mot = normaliser(m[3]);
+  if (!/(?:er|ir|re|oir)$/.test(mot) || PAS_INFINITIF.has(mot) || mot.length < 4) return t;
+  // Infinitif confirmé par ce qui le suit : un déterminant, une préposition, un adverbe ou un second infinitif coordonné.
+  if (!/^\s+(?:la|le|les|l['’]|un|une|des|du|de|d['’]|à|au|aux|chaque|tout|toute|tous|toutes|son|sa|ses|leur|leurs|sans|immédiatement|systématiquement|en|sur|et\s+[a-zà-ÿ]+(?:er|ir|re))(?=[\s,.;'’]|$)/i.test(m[4])) return t;
+  const verbe = m[2] ? m[3].charAt(0).toLowerCase() + m[3].slice(1) : m[3].charAt(0).toLowerCase() + m[3].slice(1);
+  const tete = m[2] ? `${m[2]}GSS s'engage à ` : "GSS s'engage à ";
+  return `${m[1]}${tete}${verbe}${m[4]}`;
 }

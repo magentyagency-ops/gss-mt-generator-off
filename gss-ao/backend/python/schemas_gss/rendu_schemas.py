@@ -51,6 +51,7 @@ THEME = themes_gss.theme_actif()
 ROLES = {"bleu", "orange", "rouge", "vert", "sable", "creme", "or"}
 ICONES = set(gss_lib.ICONES)
 MOTS = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿŒœ]+")
+ADRESSE = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+|https?://\S+|www\.[\w-]+(?:\.[\w-]+)+")
 NOMBRES = re.compile(r"\d+(?:[.,]\d+)?")
 VOCAB = set()
 for _m in json.load(open(os.path.join(ICI, "vocabulaire_valide.json"), encoding="utf-8")):
@@ -117,11 +118,38 @@ def _distance1(a, b):
     return any(b[:i] + b[i + 1:] == a for i in range(len(b)))
 
 
+# Préfixes savants : « télésécurité », « vidéoprotection », « anti » de « anti-intrusion » (coupé au trait d'union) sont des
+# mots du DCE, pas des fautes (génération réelle caen 701 : schéma du bloc 1 refusé pour « télésécurité » et « anti »).
+PREFIXES = ("anti", "auto", "multi", "semi", "télé", "inter", "extra", "contre", "micro", "mini", "demi", "post", "sous",
+            "super", "ultra", "quasi", "vidéo", "radio", "cyber", "électro", "hydro", "thermo", "photo", "géo", "bio", "éco",
+            "pré", "non")
+
+
+# Mots français courants du métier absents de la liste Gutenberg (génération réelle ifits 701 : « courriel » refusé comme
+# faute de « courrier »).
+MOTS_SUPPLEMENT = {"courriel", "courriels", "horodatage", "horodatages", "tuilage", "tuilages", "smartphone", "smartphones",
+                   "digicode", "digicodes", "badgeuse", "badgeuses",
+                   # Commune de la référence FM Logistic écrite par GSS (le vocabulaire validé porte la coquille « Eudebouville ») :
+                   # sans elle, le schéma de la rubrique b2_ref_logistique n'était jamais dessiné.
+                   "heudebouville"}
+
+
+def _compose_connu(lw):
+    """Préfixe seul (partie d'un mot à trait d'union) ou préfixe suivi d'un mot du dictionnaire ou du vocabulaire validé."""
+    if lw in PREFIXES or lw in MOTS_SUPPLEMENT:
+        return True
+    for p in PREFIXES:
+        reste = lw[len(p):]
+        if lw.startswith(p) and len(reste) >= 4 and (reste in DICO or reste in VOCAB):
+            return True
+    return False
+
+
 def _orthographe_page(w, mots_minuscules):
     """Mot repris de la page mais absent du dictionnaire et du vocabulaire validé : nom propre
     ou sigle accepté, sauf s'il ressemble à une lettre près à un mot validé GSS (faute probable)."""
     lw = w.lower()
-    if lw in DICO or lw in VOCAB:
+    if lw in DICO or lw in VOCAB or _compose_connu(lw):
         return None
     proche = next((v for v in VOCAB if len(v) >= 4 and _distance1(lw, v)), None)
     if proche:
@@ -140,6 +168,12 @@ def controler_fond(params, source, titre_section):
     mots_minuscules = {w for w in MOTS.findall(source) if w[0].islower()}
     for cle, t in _chaines(params):
         t = unicodedata.normalize("NFC", t)
+        # Adresse électronique ou site (« contact@gss-securite.fr ») : recopiée telle quelle de la page, jamais lue
+        # comme des mots français (carte « Un mail unique » restée vide, génération réelle caen 701).
+        for adr in ADRESSE.findall(t):
+            if adr.lower().rstrip(".") not in source.lower():
+                erreurs.append(f"L'adresse « {adr} » n'apparaît pas dans le texte de la page : recopie-la exactement.")
+        t = ADRESSE.sub(" ", t)
         for n in _norm_nombres(t):
             if n not in nombres_source:
                 erreurs.append(f"Le nombre « {n} » (dans « {t} ») n'apparaît pas dans le texte de la page : "

@@ -1071,6 +1071,10 @@ export function retirerCommentairesInternes(texte: string): { texte: string; ret
     })
     .replace(/\bvérification\s+de\s+l['’]identité(?![a-zà-ÿ])/gi, (m, pos, tout) => (negationAvant(String(tout), pos) ? m : 'vérification de l’autorisation de présence'))
     .replace(/\bcontr[ôo]l(ent|e) les accès et les identités\b/gi, 'contrôl$1 les accès et les autorisations de présence')
+    // Identité en second complément du verbe (génération réelle caen 701 : « GSS contrôlera les accès au site et à son enceinte
+    // ainsi que l'identité des personnes entrant sur le site ») : l'autorisation de présence des personnes.
+    .replace(/\b((?:contr[ôo]l|v[ée]rifi)[a-zé]*\b[^.;\n]{0,80}?\s(?:ainsi que|et))\s+l['’]\s*identit[ée]\s+(des|de la|du|de l['’])/gi, (m, debut: string, art: string, pos: number, tout: string) =>
+      (negationAvant(String(tout), pos) ? m : `${debut} l’autorisation de présence ${art}`))
     // Forme nominale (caen 471, puce d'engagement : « GSS assurera la surveillance des sites, […] le contrôle des
     // identités, les premiers secours ») : « la vérification des autorisations de présence », article accordé.
     .replace(/\b(?:(le|du|au|un|les|des|aux)\s+)?(contr[ôo]les?|v[ée]rifications?)\s+(?:des\s+identit[ée]s|d['’]\s*identit[ée]s?|de\s+l['’]\s*identit[ée](?![a-zà-ÿ])(?!\s+(?:de|du|des)\s))/gi, (m, art: string | undefined, _n, pos: number, tout: string) => {

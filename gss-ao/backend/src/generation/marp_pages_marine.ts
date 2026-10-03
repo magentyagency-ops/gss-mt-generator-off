@@ -26,7 +26,9 @@ const norm = (t: string) => String(t || '').normalize('NFD').replace(/[\u0300-\u
 export function typoV3(texte: string): string {
   return texte.split(/(<[^>]+>)/).map((morceau) => (morceau.startsWith('<') ? morceau : morceau
     .replace(/(?<=[A-Za-zÀ-ÖØ-öø-ÿŒœ])'(?=[A-Za-zÀ-ÖØ-öø-ÿŒœ])/g, '’')
-    .replace(/(?<![\w.,])(\d{1,3})(er|re|e|ème)(?=[\s\u00a0.,;:!?)]|$)/g, '$1<sup>$2</sup>'))).join('');
+    .replace(/(?<![\w.,])(\d{1,3})(er|re|e|ème)(?=[\s\u00a0.,;:!?)]|$)/g, '$1<sup>$2</sup>')
+    // Espace avant « ; : ! ? » insécable (ifits 701 : « … zones industrielles) » puis « ; » seul en début de ligne suivante).
+    .replace(/(?<=[^\s|])[ \t]([;:!?])(?=\s|$)/g, '\u202f$1'))).join('');
 }
 
 /** Intertitres de la colonne de titrage : une ligne entièrement en gras (« **Les transports** ») devient un intertitre
@@ -106,7 +108,9 @@ function lignesStation(titre: string, max = 15): string[] {
     if (cour && (cour + ' ' + m).length > max) { lignes.push(cour); cour = m; } else cour = cour ? `${cour} ${m}` : m;
   }
   if (cour) lignes.push(cour);
-  return lignes.length <= 3 ? lignes : [...lignes.slice(0, 2), lignes.slice(2).join(' ')];
+  // Quatre lignes au plus (titres de partie du RC, ifits 701 : « Pièce 2-3 Moyens techniques et matériels » coupé à
+  // « MATÉRI » quand la troisième ligne recevait toute la fin du titre).
+  return lignes.length <= 4 ? lignes : [...lignes.slice(0, 3), lignes.slice(3).join(' ')];
 }
 
 /** Parcours du mémoire en pied d'ouverture de bloc : une station par bloc sur le fil, la station du bloc en cours en
@@ -128,9 +132,15 @@ function routeBlocs(ici: number, titres: string[], c: { marine: string; accent: 
       o.push(`<circle cx="${x}" cy="${y}" r="3.2" fill="${c.marine}" stroke="#7F98BA" stroke-width="0.6"/><text x="${x}" `
         + `y="${y + 0.95}" text-anchor="middle" font-family="IBM Plex Mono" font-weight="600" font-size="2.6" fill="${c.clair}">${num}</text>`);
     }
-    lignesStation(t, n > 5 ? 11 : 15).forEach((l, j) => {
+    // Ligne plus longue que la place de la station (mot de plus de 15 signes, « ORGANISATIONNELS », ifits 701 : libellés de
+    // deux stations voisines collés) : taille réduite pour cette station seulement.
+    const maxSignes = n > 5 ? 11 : 15;
+    const lignes = lignesStation(t, maxSignes);
+    const plusLongue = Math.max(...lignes.map((l) => l.length));
+    const taille = plusLongue > maxSignes ? (2.9 * maxSignes) / plusLongue : 2.9;
+    lignes.forEach((l, j) => {
       o.push(`<text x="${x}" y="${(y + 10.6 + j * 3.6).toFixed(1)}" text-anchor="middle" font-family="IBM Plex Sans" `
-        + `font-weight="${i === ici ? 600 : 500}" font-size="2.9" letter-spacing=".22" fill="${i === ici ? '#FFFFFF' : '#B5C4D8'}">${echapper(l)}</text>`);
+        + `font-weight="${i === ici ? 600 : 500}" font-size="${+taille.toFixed(2)}" letter-spacing="${+(0.22 * taille / 2.9).toFixed(3)}" fill="${i === ici ? '#FFFFFF' : '#B5C4D8'}">${echapper(l)}</text>`);
     });
   });
   o.push('</svg>');
@@ -139,6 +149,26 @@ function routeBlocs(ici: number, titres: string[], c: { marine: string; accent: 
 
 export interface CouleursV3 { marine: string; accent: string; clair: string; structure2: string }
 
+/**
+ * Taille (pt) de l'objet du marché sur la couverture : 36 pt (planche validée) tant qu'il tient entre « MÉMOIRE TECHNIQUE »
+ * (100 mm) et le nom de l'acheteur (bas du bandeau marine, 23 mm) ; sinon la plus grande taille qui tient (génération réelle
+ * citedia 701 : objet de 170 signes en 36 pt, débordant sur l'acheteur et coupé par le bas du bandeau). Mesure de la
+ * planche : 31 signes par ligne de 167 mm en 36 pt (IBM Plex Sans Condensed gras), interligne 1,02.
+ */
+export function taillePoliceObjet(objet: string, client = ''): number {
+  const n = String(objet || '').trim().length;
+  // Jusqu'à 95 signes, 3 lignes en 36 pt (couvertures des générations réelles relues) : taille de la planche.
+  const lignesClient = Math.max(1, Math.ceil(String(client || '').trim().length / 60));
+  if (n <= 95 && lignesClient === 1) return 36;
+  const place = 184 - 23 - lignesClient * 7.2 - 100 - 3;
+  for (const pt of [36, 32, 28, 25, 22, 20, 18]) {
+    // 12 % de marge pour les coupures de ligne entre les mots.
+    const lignes = Math.ceil((n * 1.12) / (1113 / pt));
+    if (lignes * 1.02 * pt * 0.3528 <= place) return pt;
+  }
+  return 16;
+}
+
 /** Couverture : haut marine (arc, logo blanc, « mémoire technique », objet, acheteur, référence), fiche de la
  *  consultation (faits de la page de garde et identité de GSS), marque. */
 export function couvertureV3(cover: { client?: string; title?: string; ref?: string; objet?: string }, c: CouleursV3, date: Date = new Date()): string {
@@ -146,6 +176,7 @@ export function couvertureV3(cover: { client?: string; title?: string; ref?: str
   const client = String(cover.client || '').trim();
   const ref = String(cover.ref || '').trim();
   const mois = date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+  const taille = (t: string) => { const pt = taillePoliceObjet(t, client); return pt < 36 ? ` style="font-size:${pt}pt"` : ''; };
   const infos: Array<[string, string]> = [];
   if (client) infos.push(['Acheteur', echapper(client)]);
   if (objet) infos.push(['Objet du marché', echapper(objet)]);
@@ -156,7 +187,7 @@ export function couvertureV3(cover: { client?: string; title?: string; ref?: str
     '<div class="gss-couv"><div class="haut">',
     arcLogo(210, 184, 168, 120, 92, '#FFFFFF', 0.9, 198, 342, [168, 72, 5.2], 0.14),
     '<span class="logo"></span><div class="lab">MÉMOIRE TECHNIQUE</div>',
-    objet ? `<div class="obj">${echapper(apostrophes(objet))}</div>` : '',
+    objet ? `<div class="obj"${taille(objet)}>${echapper(apostrophes(objet))}</div>` : '',
     client ? `<div class="cli">${echapper(apostrophes(client))}</div>` : '',
     ref ? `<div class="ref">${echapper(ref)}</div>` : '',
     '</div>',

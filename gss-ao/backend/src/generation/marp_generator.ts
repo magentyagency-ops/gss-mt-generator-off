@@ -189,7 +189,7 @@ export function decouperPagesTexte(texte: string, retourArriere = false): string
   return splitIntoSlideChunks(texte, retourArriere ? LIMITES_TEXTE_SEUL.origine : LIMITES_TEXTE_SEUL.refonte);
 }
 
-function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots: MAX_WORDS_PER_SLIDE, lignes: MAX_LINES_PER_SLIDE }): string[] {
+export function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots: MAX_WORDS_PER_SLIDE, lignes: MAX_LINES_PER_SLIDE }): string[] {
   const paragraphs = text
     .split(/\n{2,}/)
     .map((p) => p.trim())
@@ -254,6 +254,21 @@ function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots: MAX_W
         flush();
       }
     } else if ((currentWords + paraWords > limites.mots || currentLines + lineCount(para) > limites.lignes) && current.trim()) {
+      // Style « marine » v3 : une liste qui ne tient pas sous un court début de page (introduction de 2 lignes, générations
+      // réelles caen et citedia 701 : « L'agent de sécurité (CQP APS) », page presque vide puis la liste seule) continue sur la
+      // page suivante : la page en cours reçoit autant de puces qu'elle peut (2 au moins de chaque côté).
+      const puces = para.split('\n');
+      if (limites.reserve && currentLines < limites.lignes * 0.5 && puces.length >= 4 && puces.every((l) => /^\s*(?:[-*•]|\d+[.)])\s/.test(l))) {
+        let k = 0;
+        while (k < puces.length && currentLines + lineCount(puces.slice(0, k + 1).join('\n')) <= limites.lignes
+          && currentWords + wordCount(puces.slice(0, k + 1).join('\n')) <= limites.mots) k++;
+        if (k >= 2 && puces.length - k >= 2) {
+          current += `\n\n${puces.slice(0, k).join('\n')}`;
+          flush();
+          paragraphs.splice(i + 1, 0, puces.slice(k).join('\n'));
+          continue;
+        }
+      }
       flush();
     }
 

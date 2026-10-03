@@ -213,7 +213,8 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     // Nombre recopié dans l'intitulé (ca_normandie 241 : « 2 agents », « 1 agente », « 1 ADS », « 1 SSIAP 1 », « SSIAP1 ») :
     // retiré ; « agent(s) » seul, relevé sous « Gardiennage de surveillance », est un agent de sécurité.
     const brut = profilSansNombre(String(p?.profil || ''));
-    const profil = /[A-ZÀ-Ý]{5,}/.test(brut) && (brut.match(/[A-Za-zÀ-ÿ]{2,}/g) || []).length >= 2 && brut === brut.toUpperCase() ? brut.charAt(0) + brut.slice(1).toLowerCase().replace(/\b(ssiap|ads|cqp|aps)\b/g, (m) => m.toUpperCase()) : brut;
+    // Sigles remis en capitales sur tout l'intitulé, premier mot compris (citedia 701 : « SSIAP 1 CQP APS » devenait « Ssiap 1 CQP APS »).
+    const profil = /[A-ZÀ-Ý]{5,}/.test(brut) && (brut.match(/[A-Za-zÀ-ÿ]{2,}/g) || []).length >= 2 && brut === brut.toUpperCase() ? (brut.charAt(0) + brut.slice(1).toLowerCase()).replace(/\b(ssiap|ads|cqp|aps|sst|pse|pcs?|erp|igh|tfp)\b/gi, (m) => m.toUpperCase()) : brut;
     if (!profil || !citationDansDce(String(p?.citation || ''), dceMots)) continue;
     // Poste optionnel ou ponctuel (« l'option 1 : 1 SSIAP 1 7j/7 24h/24… », génération réelle imm 16 : trois options
     // comptées comme postes permanents, 36 titulaires au lieu de 18) : jamais dans l'équipe dédiée.
@@ -250,6 +251,9 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     let qualification = String(p?.qualification || profil).replace(/\s+/g, ' ').trim().replace(/(?<![A-Za-z])CNPAS(?![A-Za-z])/g, 'CNAPS');
     // Profils équivalents (« ADS », « Agent de sécurité », « agent de sûreté » : le même agent de sécurité CQP APS) :
     // une seule catégorie, heures additionnées (ca_normandie 221 : « Agent de sécurité » 22 et « ADS » 20 sur deux lignes).
+    // Qualification réduite à l'intitulé d'un poste cynophile (ifits 701 : « Agent conducteur de chien » imprimé dans la colonne
+    // « Qualification », diplômes de l'équipe dédiée laissés « [À COMPLÉTER] ») : celle du catalogue de GSS.
+    if (categorieDe(profil) === 'Agent cynophile' && !/cqp|aps|cynophil|carte|ssiap|dipl|certific/i.test(normaliser(qualification))) qualification = 'CQP APS – qualification cynophile';
     const equivalentAds = profilAgentSecurite(profil, qualification);
     if (equivalentAds) qualification = equivalentAds;
     const cle = equivalentAds ? 'agent de securite|ads' : normaliser(`${profil}|${qualification}`);
@@ -455,7 +459,8 @@ const pluriel = (n: number, s: string, p = `${s}s`) => `${n} ${n > 1 ? p : s}`;
 /** Catégorie de personnel du tableau de l'équipe dédiée (vocabulaire du mémoire type), d'après le profil du DCE. */
 export function categorieDe(profil: string): string {
   const p = normaliser(profil);
-  if (/cynophil|maitre.chien/.test(p)) return 'Agent cynophile';
+  // « Agent conducteur de chien » (ifits 701) : un agent cynophile.
+  if (/cynophil|maitre.chien|conducteurs? (?:de )?chiens?/.test(p)) return 'Agent cynophile';
   if (/ssiap\s*3/.test(p)) return 'Chef de service de sécurité incendie';
   if (/ssiap\s*2/.test(p)) return 'Chef d\'équipe de sécurité incendie';
   if (/ssiap\s*1/.test(p) && !/\bads\b|cqp|agent de securite(?! incendie)/.test(p)) return 'Agent de sécurité incendie';

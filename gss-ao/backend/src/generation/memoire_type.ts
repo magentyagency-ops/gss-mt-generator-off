@@ -1465,6 +1465,11 @@ function diplomesEquipe(c: CalculVariables): string[] {
   const profils = c.ctx.dimensionnement?.profils || [];
   if (profils.length) {
     const q = qualificationsDuDce(profils.map((p) => `${p.profil} : ${p.qualification}`).join(' ; '));
+    // Agents cynophiles de l'équipe dédiée (ifits 701) : leur qualification cynophile s'ajoute au CQP APS.
+    if (profils.some((p) => /cynophil|ma[iî]tres?[- ]chiens?|conducteurs? (?:de )?chiens?/i.test(`${p.profil} ${p.qualification}`))) {
+      if (!q.includes('CQP APS')) q.push('CQP APS');
+      q.push('qualification cynophile');
+    }
     return q.length ? q : c.qualifs;
   }
   const tableau = lignesEquipeParQualification(c).map(([, q]) => q).join(' ; ');
