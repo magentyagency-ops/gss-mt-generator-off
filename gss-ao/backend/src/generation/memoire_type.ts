@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 import { lignesEquipe, questionDimensionnement, questionRondes, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES } from './base_memoires';
+import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -1595,17 +1595,21 @@ function villesDuMarche(dce: string, analyse: any): string[] {
   const out: string[] = [];
   const prefixe = (a: string, b: string) => `${cleCommune(b)} `.startsWith(`${cleCommune(a)} `);
   const debutDce = String(dce || '').slice(0, 30000);
-  for (const { commune, debut } of communesParCodePostal(debutDce, String(dce || ''))) {
-    if (commune.length < 3 || out.some((x) => prefixe(commune, x))) continue;
-    // Adresse du siège ou d'identification de l'acheteur (« dont le siège est situé … 75014 Paris », « Pouvoir
-    // adjudicateur : … ») : pas la commune d'un site (T9REG-2).
-    const avant = debutDce.slice(Math.max(0, debut - 200), debut).split('\n').slice(-3).join(' ').slice(-140);
-    if (/si[èe]ge|(?:pouvoir adjudicateur|acheteur|ma[îi]tre d.ouvrage|entit[ée] adjudicatrice)\s*:/i.test(avant)) continue;
-    const k = out.findIndex((x) => prefixe(x, commune));
-    if (k >= 0) out[k] = commune; else out.push(commune);
-    if (out.length >= 3) break;
+  // Adresse administrative (siège, tribunal administratif, voies de recours, facturation, comptable) ou d'identification de
+  // l'acheteur : pas la commune d'un site (T9REG-2, T1-GEN-8 : « Tribunal Administratif de Versailles … 78010 Versailles »,
+  // « 91025 Évry-Courcouronnes Cedex » des adresses de facturation). Même règle que les sites du lieu du marché ; une adresse
+  // Cedex n'est retenue que s'il n'y a aucune autre adresse (ign : « 77455 Marne la Vallée cedex 2 », adresse du site).
+  const communes = communesParCodePostal(debutDce, String(dce || ''));
+  for (const postale of [true, false]) {
+    for (const { commune, debut, fin } of communes) {
+      if (commune.length < 3 || out.some((x) => prefixe(commune, x))) continue;
+      if (adresseAdministrative(debutDce, debut, fin, { postale })) continue;
+      const k = out.findIndex((x) => prefixe(x, commune));
+      if (k >= 0) out[k] = commune; else out.push(commune);
+      if (out.length >= 3) break;
+    }
+    if (out.length) return out;
   }
-  if (out.length) return out;
   const lieu = lieuDuMarche(analyse || {}, String(dce || ''));
   return [...lieu.normands, ...lieu.horsNormandie].filter((v) => !/^(?:Seine-Maritime|Calvados)$/.test(v)).slice(0, 3);
 }

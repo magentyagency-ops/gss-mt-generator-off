@@ -705,9 +705,15 @@ function calculerLieu(analyse: any, dce: string): LieuMarche {
   // avant T7-COH-2.
   const debut = `${JSON.stringify(analyse || {})} ${String(dce || '').slice(0, 40000)}`;
   const UNITE = /^(?:m[²³23]?|km|ha|h|heures?|€|eur|euros?|ht|ttc|personnes?|visiteurs?|spectateurs?|places?|agents?|salari[ée]s?|habitants?|usagers?|[ée]l[èe]ves?|[ée]tudiants?|passages?|entr[ée]es?|lits?|logements?|v[ée]hicules?)$/i;
+  // L'adresse d'identification de l'acheteur ou une adresse administrative ne tranche jamais seule (T1-GEN-4 : acheteur à
+  // Rouen, site écrit autrement à Gennevilliers) : seulement si sa commune est aussi celle nommée dans l'objet du marché
+  // (etampes1 : « … de la Ville d'Étampes », adresse « 91152 ETAMPES CEDEX »).
+  const objet = cleCommune2(`${analyse?.projectTitle || ''} ${analyse?.objet || ''} ${(/objet[^\n]{0,200}/i.exec(String(dce || '')) || [''])[0]}`);
+  const retenu = (m: RegExpMatchArray, commune: string) => !adresseAdministrative(debut, m.index || 0, (m.index || 0) + m[0].length)
+    || (!!commune && commune.length >= 3 && ` ${objet} `.includes(` ${cleCommune2(commune)} `));
   const codes = [
-    ...[...debut.matchAll(/\b(\d{2})\d{3}\s*(?:[–—,-]\s*)?([A-ZÉÈÀÂÎÔÛ][\wÀ-ÿ²³]*)/g)].filter((m) => !UNITE.test(m[2])).map((m) => m[1]),
-    ...[...debut.matchAll(/\(\s*(\d{2})\d{3}\s*\)/g)].map((m) => m[1]),
+    ...[...debut.matchAll(/\b(\d{2})\d{3}\s*(?:[–—,-]\s*)?([A-ZÉÈÀÂÎÔÛ][\wÀ-ÿ²³]*)/g)].filter((m) => !UNITE.test(m[2]) && retenu(m, m[2])).map((m) => m[1]),
+    ...[...debut.matchAll(/\(\s*(\d{2})\d{3}\s*\)/g)].filter((m) => retenu(m, '')).map((m) => m[1]),
   ].filter((d) => Number(d) >= 1 && Number(d) <= 95);
   if (codes.length) {
     const normands = codes.filter((d) => NORMANDIE.includes(d)).length;
@@ -785,10 +791,23 @@ export function communesParCodePostal(texte: string, dce = texte): Array<{ code:
   const SUITE = String.raw`[A-Za-zÀ-ÿ'’]*(?:[ \t]*[-\u2011][ \t]*[A-Za-zÀ-ÿ'’]+)*`;
   const MOT = String.raw`[A-Za-zÀ-ÿ'’]${SUITE}`;
   // Jamais le numéro d'un tri postal (« CS 31402 », « BP 21 », « TSA 70011 », « SP 51000 », T9REG-1) : ce n'est pas un code postal.
-  const rx = new RegExp(String.raw`(?<![=/?&#.\d])(?<!(?<![A-Za-zÀ-ÿ])(?:CS|C\.S\.|BP|B\.P\.?|TSA|SP|cs|bp|tsa)[ \t]*(?:n°[ \t]*)?)\b(\d{5})\b(?![\d])[ \t]*(?:[–—,-][ \t]*)?([A-ZÉÈÀÂÎÔÛ]${SUITE}(?:[ \t]+(?!cedex|CEDEX|Cedex)${MOT}){0,4})?`, 'g');
-  for (const m of String(texte || '').matchAll(rx)) {
+  // Code postal collé (« 14460 ») ou espacé (« 14 460 », T1-GEN-4), jamais un groupe de milliers (« 1 214 460 »).
+  const rx = new RegExp(String.raw`(?<![=/?&#.\d])(?<!(?<![A-Za-zÀ-ÿ])(?:CS|C\.S\.|BP|B\.P\.?|TSA|SP|cs|bp|tsa)[ \t]*(?:n°[ \t]*)?)\b(\d{5}|(?<!\d[ \u00a0\u202f])\d{2}[ \u00a0\u202f]\d{3})\b(?![\d]|[ \u00a0\u202f]\d{3}|[,.]\d)[ \t]*(?:[–—,-][ \t]*)?([A-ZÉÈÀÂÎÔÛ]${SUITE}(?:[ \t]+(?!cedex|CEDEX|Cedex)${MOT}){0,4})?`, 'g');
+  for (const m0 of String(texte || '').matchAll(rx)) {
+    const espace = /\D/.test(m0[1]);
+    const m = [m0[0], m0[1].replace(/\D/g, ''), m0[2]] as unknown as RegExpMatchArray;
+    m.index = m0.index;
     const debut = m.index || 0;
     let commune = m[2] && !UNITE_CP.test(m[2].split(/\s/)[0]) ? communeLisible(m[2], dce) : '';
+    // Tableau (une cellule par ligne : « 92230 | ⏎ Gennevilliers | ») : la ligne du code ne porte que lui, la commune est
+    // la cellule suivante.
+    const finLigne = String(texte).slice(debut + m0[0].length).split('\n')[0];
+    const debutLigne = String(texte).slice(Math.max(0, debut - 80), debut).split('\n').pop() || '';
+    if (!commune && !m[2] && /^[\s|]*$/.test(finLigne) && /^[\s|]*$/.test(debutLigne)) {
+      const suivante = (String(texte).slice(debut + m0[0].length + finLigne.length + 1).split('\n').find((l) => l.replace(/[\s|]/g, '')) || '').replace(/^[\s|]+|[\s|]+$/g, '');
+      if (/^[A-ZÀ-Ý]/.test(suivante) && suivante.split(/\s+/).length <= 5) commune = communeLisible(suivante, dce);
+    }
+
     if (!commune && !(m[2] && UNITE_CP.test(m[2].split(/\s/)[0]))) {
       // Commune écrite avant le code, sur la même ligne (« Adresse : Fontainebleau 77300 France », « à DIEPPE 76200 »).
       const ligne = String(texte).slice(Math.max(0, debut - 80), debut).split('\n').pop() || '';
@@ -813,6 +832,10 @@ export function communesParCodePostal(texte: string, dce = texte): Array<{ code:
         commune = mots.length ? communeLisible(mots.join(' '), dce) : '';
       }
     }
+    // Code espacé : seulement une commune connue, ou écrite après le code dans une adresse (voie, « adresse »), jamais
+    // « 15 000 Visiteurs » ni « Total 40 000,00 € ».
+    if (espace && commune && !(m[2] && ([...COMMUNES_NORMANDES, ...VILLES_HORS_NORMANDIE].some((k) => cleCommune2(k) === cleCommune2(commune))
+      || /(?:rue|avenue|boulevard|bd|route|chemin|place|quai|all[ée]e|impasse|cours|adresse|zone|za|zi|zac|parc)\b/i.test(debutLigne)))) commune = '';
     if (commune) out.push({ code: m[1], commune, debut, fin: debut + m[0].length });
   }
   return out;
@@ -828,21 +851,61 @@ export function sitesDuMarche(analyse: any, dce: string): { normands: string[]; 
   return { normands: r.normands, horsNormandie: r.horsNormandie, mixte: r.mixte };
 }
 
+/**
+ * Adresse administrative, jamais un site du marché (T1-GEN-8 : une seule règle pour villesDuMarche, sitesParCodePostal et
+ * calculerLieu) : tribunal, greffe, voies de recours, Cedex, CS / BP / TSA, facturation, comptable, trésorerie, siège,
+ * administrations ; et l'adresse d'identification de l'acheteur (« Pouvoir adjudicateur : … 93100 Montreuil »).
+ */
+const ADMIN_ADRESSE = /tribunal administratif|voies? de recours|factur|cedex|(?<![A-Za-zÀ-ÿ])(?:BP|B\.P\.?)\s*(?:n°\s*)?\d|bo[îi]te postale|si[èe]ge|DREETS|DIRECCTE|DDETS|DRFIP|DGFIP|finances publiques|tribunal|cour administrative|cour d.appel|voies? de recours|introduction des recours|greffe|pr[ée]fecture|CNAPS|inspection du travail|URSSAF|tr[ée]sor|paierie|comptable|factur|minist[èe]re/i;
+const IDENTIFICATION_ACHETEUR = /(?:pouvoir adjudicateur|acheteur|ma[îi]tre d.ouvrage|entit[ée] adjudicatrice|personne publique)\s*:|(?:nom et adresse|identification|coordonn[ée]es|adresse)\s+(?:officiel(?:le)?s?\s+)?(?:du|de l.|de la)\s*(?:pouvoir adjudicateur|acheteur|organisme|entit[ée]|personne publique)/i;
+// Un numéro CS ou TSA accompagne souvent l'adresse même du site (« Hôtel de Ville … CS 31402 76037 Rouen », T9REG-1) : seuls
+// Cedex et la boîte postale marquent une adresse postale.
+const ADMIN_POSTALE = /cedex|(?<![A-Za-zÀ-ÿ])(?:BP|B\.P\.?)\s*(?:n°\s*)?\d|bo[îi]te postale/i;
+const ADMIN_RECOURS = /si[èe]ge|tribunal administratif|cour administrative|voies? de recours|introduction des recours|instance charg[ée]e des proc[ée]dures de recours|greffe du tribunal administratif|factur|comptable|(?<![A-Za-z])SGC(?![A-Za-z])|paiements?|mandatement|ordonnateur|tr[ée]sor(?:erie)?|paierie|finances publiques|DGFIP|DRFIP/i;
+/**
+ * `strict` (sites du lieu du marché, avec les administrations : tribunal, ministère, DREETS…) ; sinon (communes des sites
+ * imprimées) seulement le siège, les recours, la facturation, le comptable et l'identification de l'acheteur, et, avec
+ * `postale`, les adresses Cedex / CS / BP (ca_normandie : les tribunaux judiciaires sont les sites du marché).
+ */
+export function adresseAdministrative(texte: string, debut: number, fin: number, opts: { strict?: boolean; postale?: boolean } = { strict: true }): boolean {
+  // Bloc d'adresse : les deux lignes qui précèdent, jamais au-delà de la phrase précédente (« Acheteur : Ministère, 75007
+  // Paris. Lieu d'exécution : site de Rouen (76000) » : Rouen est un site).
+  const avant = String(texte || '').slice(Math.max(0, debut - 200), debut).split('\n').slice(-3).join(' ').slice(-140).split(/(?<![A-Z]\.?[A-Z]?)[.;!?]\s+(?=[A-ZÀ-Ý])/).pop() || '';
+  const apres = String(texte || '').slice(fin, fin + 14);
+  const rx = opts.strict ? ADMIN_ADRESSE : null;
+  if (rx && (rx.test(apres) || rx.test(avant))) return true;
+  if ((opts.strict || opts.postale) && (ADMIN_POSTALE.test(apres) || ADMIN_POSTALE.test(avant))) return true;
+  return ADMIN_RECOURS.test(apres) || ADMIN_RECOURS.test(avant) || IDENTIFICATION_ACHETEUR.test(avant);
+}
+
+/** Commune suivie de son département en chiffres entre parenthèses (« Colombelles (14) », « Aubagne (13) »), T1-GEN-4. */
+export function communesParDepartement(texte: string): Array<{ dep: string; commune: string; debut: number; fin: number }> {
+  const out: Array<{ dep: string; commune: string; debut: number; fin: number }> = [];
+  const PAS_COMMUNE_DEP = /^(?:article|annexe|lot|chapitre|page|pi[èe]ce|tableau|figure|note|point|partie|section|titre|tome|niveau|cat[ée]gorie|type|classe|zone|b[âa]timent|bloc|salle|porte|poste|[ée]tage|code|phase|tranche|option|variante|cf|voir|art)$/i;
+  const rx = /(?:(?<![A-Za-zÀ-ÿ])(à|a|de|d['’]|du|sur|lès|commune de|ville de|site de)\s*)?([A-ZÉÈÀÂÎÔÛ][A-Za-zÀ-ÿ'’]+(?:[ -](?:(?:sur|sous|en|de|du|des|la|le|les|l[èe]s|lez|aux?|et|d['’])|[A-ZÉÈÀÂÎÔÛ][A-Za-zÀ-ÿ'’]+)){0,4})\s*\(\s*(0[1-9]|[1-8]\d|9[0-5])\s*\)(?!\s*(?:jours?|heures?|h\b|mois|ans?|ann[ée]es?|semaines?|minutes?|mn|min|%|€|euros?|fois|agents?|personnes?|postes?|exemplaires?|pages?))/g;
+  for (const m of String(texte || '').matchAll(rx)) {
+    const commune = m[2].trim();
+    const premier = commune.split(/[ -]/)[0];
+    // Jamais un nombre en lettres (« dans les QUINZE (15) jours »).
+    if (PAS_COMMUNE_DEP.test(premier) || new RegExp(`^${RX_NOMBRE_LETTRES}$`, 'i').test(commune)) continue;
+    const connue = [...COMMUNES_NORMANDES, ...VILLES_HORS_NORMANDIE].some((k) => cleCommune2(k) === cleCommune2(commune));
+    if (!m[1] && !connue) continue;
+    out.push({ dep: m[3], commune, debut: m.index || 0, fin: (m.index || 0) + m[0].length });
+  }
+  return out;
+}
+
 /** Sites du marché (sitesDuMarche) avec le code postal de chaque site hors Normandie. */
 function sitesParCodePostal(analyse: any, dce: string): { normands: string[]; horsNormandie: string[]; mixte: boolean; codesHors: Array<{ code: string; commune: string }> } {
   const texte = `${JSON.stringify(analyse || {})} ${String(dce || '').slice(0, 40000)}`.replace(/\\n/g, '\n');
-  const ADMIN = /cedex|\bB\.?P\.?\s*\d|bo[îi]te postale|si[èe]ge|DREETS|DIRECCTE|DDETS|tribunal|pr[ée]fecture|CNAPS|inspection du travail|URSSAF|tr[ée]sor|paierie|comptable public|greffe|minist[èe]re/i;
   const normands = new Map<string, string>();
   const hors = new Map<string, string>();
   const ajouter = (code: string, commune: string, debut: number, fin: number) => {
     const dep = code.slice(0, 2);
     if (Number(dep) < 1 || Number(dep) > 95) return;
-    // Contexte administratif : la suite immédiate (« Cedex ») et les deux lignes qui précèdent (bloc d'adresse).
-    const avant = texte.slice(Math.max(0, debut - 200), debut).split('\n').slice(-3).join(' ');
-    const apres = texte.slice(fin, fin + 12);
-    if (ADMIN.test(apres) || ADMIN.test(avant.slice(-140))) return;
-    // Adresse d'identification de l'acheteur (« Pouvoir adjudicateur : … 93100 Montreuil », T7-COH-2) : pas un site.
-    if (/(?:pouvoir adjudicateur|acheteur|ma[îi]tre d.ouvrage|entit[ée] adjudicatrice)\s*:|(?:nom et adresse|identification|coordonn[ée]es)\s+(?:officiel(?:le)?s?\s+)?(?:du|de l.|de la)\s*(?:pouvoir adjudicateur|acheteur|organisme|entit[ée])/i.test(avant.slice(-140))) return;
+    // Contexte administratif (« Cedex », bloc d'adresse du tribunal, du comptable…) et adresse d'identification de l'acheteur
+    // (« Pouvoir adjudicateur : … 93100 Montreuil », T7-COH-2) : pas un site (règle partagée, T1-GEN-8).
+    if (adresseAdministrative(texte, debut, fin)) return;
     const c = commune.replace(/\s+(?:t[ée]l|tel|fax|courriel|mail|et|pour|le|la|les)\b.*$/i, '').replace(/\s+-/g, '-').trim();
     (NORMANDIE.includes(dep) ? normands : hors).set(code, c);
   };
@@ -853,6 +916,12 @@ function sitesParCodePostal(analyse: any, dce: string): { normands: string[]; ho
   // « Rouen (76000) », « Paris (75013) »
   for (const m of texte.matchAll(/([A-ZÉÈÀÂÎÔÛ][A-Za-zÀ-ÿ'’-]+(?:[ -][A-Za-zÀ-ÿ'’-]+){0,3})\s*\(\s*(\d{5})\s*\)/g)) {
     ajouter(m[2], m[1].split(/\s+(?:à|a|de|du|des)\s+/).pop() || m[1], m.index || 0, (m.index || 0) + m[0].length);
+  }
+  // « Colombelles (14) », « l'entrepôt de Gennevilliers (92) » : département en chiffres (T1-GEN-4).
+  for (const c of communesParDepartement(texte)) {
+    const code = `${c.dep}000`;
+    if ([...normands.values(), ...hors.values()].some((x) => cleCommune2(x) === cleCommune2(c.commune))) continue;
+    ajouter(code, c.commune, c.debut, c.fin);
   }
   const fmt = (x: Map<string, string>) => [...new Set([...x.values()].map((c) => communeLisible(c, String(dce || '')) || c))];
   return { normands: fmt(normands), horsNormandie: fmt(hors), mixte: normands.size > 0 && hors.size > 0, codesHors: [...hors.entries()].map(([code, commune]) => ({ code, commune: communeLisible(commune, String(dce || '')) || commune })) };

@@ -72,3 +72,43 @@ describe('délais du DCE rédigés autrement (T1-GEN-2, T1-GEN-3, T1-GEN-12)', (
     }
   });
 });
+
+import { lieuDuMarche, alerteHorsZone, communesParCodePostal } from '../src/generation/base_memoires';
+
+describe('lieu du marché : site écrit en tableau, code postal espacé, département en chiffres (T1-GEN-4, T1-GEN-8)', () => {
+  const tete = (acheteur: string) => `REGLEMENT DE LA CONSULTATION\nPouvoir adjudicateur : ${acheteur}\n\nCCTP\nArticle 2 - Lieu d'exécution\n`;
+  const PARIS = 'Agence centrale, 36 rue de Valmy, 93100 Montreuil';
+  const ROUEN = 'Société normande de logistique, 12 quai de Boisguilbert, 76000 Rouen';
+  const corps = "\nArticle 3 - Horaires\nLe poste est tenu de 19h00 à 7h00.\n";
+  it('site normand, acheteur hors Normandie', () => {
+    for (const site of ['Site | \nAdresse | \nCode postal | \nCommune | \nSite de Colombelles | \n3 rue Alfred Kastler | \n14460 | \nColombelles | \n',
+      'Adresse du site : 3 rue Alfred Kastler, 14 460 Colombelles.', 'Les prestations sont exécutées sur le site de Colombelles (14).']) {
+      expect(lieuDuMarche({}, tete(PARIS) + site + corps)).toMatchObject({ statut: 'normandie', normands: ['Colombelles'] });
+    }
+  });
+  it('site hors Normandie, acheteur à Rouen : jamais les délais normands', () => {
+    for (const site of ['Site | \nAdresse | \nCode postal | \nCommune | \nEntrepôt de Gennevilliers | \n4 route du Bassin n°6 | \n92230 | \nGennevilliers | \n',
+      "Les prestations sont exécutées à l'entrepôt de Gennevilliers (92)."]) {
+      expect(lieuDuMarche({}, tete(ROUEN) + site + corps)).toMatchObject({ statut: 'hors', horsNormandie: ['Gennevilliers'] });
+    }
+  });
+  it('adresse de l’acheteur seule : lieu inconnu, jamais tranché par elle', () => {
+    expect(lieuDuMarche({}, tete(ROUEN) + 'Le site est décrit en annexe.' + corps).statut).toBe('inconnu');
+  });
+  it('alerte hors zone : code espacé, tableau, département en chiffres', () => {
+    const t = 'REGLEMENT DE LA CONSULTATION\nPouvoir adjudicateur : Assistance publique, 80 rue Brochier, 13005 Marseille\n\nCCTP\n';
+    for (const site of ["Les prestations sont exécutées à l'Hôpital Nord, chemin des Bourrely, 13 015 Marseille.",
+      'Site | \nAdresse | \nCode postal | \nVille | \nHôpital Nord | \nChemin des Bourrely | \n13015 | \nMarseille | \n',
+      "Les prestations sont exécutées au centre hospitalier d'Aubagne (13)."]) expect(alerteHorsZone({}, t + site).length).toBe(1);
+  });
+  it('jamais un montant, un nombre en lettres ni un groupe de milliers', () => {
+    expect(communesParCodePostal('Total            40 000,00 €').length).toBe(0);
+    expect(communesParCodePostal('Sa capacité est de 15 000 Visiteurs par jour.').length).toBe(0);
+    expect(lieuDuMarche({}, "Le titulaire remet le plan dans les QUINZE (15) jours. Site : 3 rue de la Paix, 14000 Caen.").horsNormandie).toEqual([]);
+  });
+  it('communes imprimées : jamais le tribunal administratif ni le service comptable (T1-GEN-8)', () => {
+    const dce = "CCTP\nLieu d'exécution : campus, 3 rue X, 76130 Mont-Saint-Aignan.\nVoies de recours :\nTribunal Administratif de Versailles\n56 avenue de Saint Cloud\n78010 Versailles\nComptable assignataire des paiements :\nSGC d'Ivry sur Seine\n94-96 rue Victor Hugo\n94205 Ivry-sur-Seine\n";
+    const prep: any = preparerMemoireType({ analyse: {}, dce, referents: '' } as any);
+    expect(prep.variables.VILLE.valeur).toEqual(['Mont-Saint-Aignan']);
+  });
+});
