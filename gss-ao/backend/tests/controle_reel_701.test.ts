@@ -229,3 +229,16 @@ describe('Contrôle réel 705 : titre d’étape', () => {
     expect(titreExigence('Effectuer les tests avant mise en service de la télésurveillance')).toBe('Effectuer les tests');
   });
 });
+
+describe('Contrôle réel 705 : réponse collée à son intitulé dans le cadre', () => {
+  it('intitulé sans ponctuation juste avant l’emplacement : la réponse commence à la ligne (rouen_univ 705)', async () => {
+    const { intituleColleAvant } = await import('../src/generation/memoire_generator');
+    const { DOMParser } = await import('@xmldom/xmldom');
+    const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+    const doc = (xml: string) => new DOMParser().parseFromString(`<w:document ${W}><w:body>${xml}</w:body></w:document>`, 'text/xml');
+    const t = (d: any) => { const l = d.getElementsByTagName('w:t'); return l[l.length - 1]; };
+    expect(intituleColleAvant(t(doc('<w:p><w:r><w:t>Réduction des émissions de la flotte de véhicules</w:t></w:r><w:r><w:t>[CHAMP_55]</w:t></w:r></w:p>')), '[CHAMP_55]')).toBe(true);
+    expect(intituleColleAvant(t(doc('<w:p><w:r><w:t>Nom : </w:t></w:r><w:r><w:t>[CHAMP_3]</w:t></w:r></w:p>')), '[CHAMP_3]')).toBe(false);
+    expect(intituleColleAvant(t(doc('<w:p><w:r><w:t>[CHAMP_4]</w:t></w:r></w:p>')), '[CHAMP_4]')).toBe(false);
+  });
+});

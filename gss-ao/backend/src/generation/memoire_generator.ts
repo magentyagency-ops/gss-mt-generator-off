@@ -390,6 +390,28 @@ function intituleColleApres(tEl: any, placeholder: string): boolean {
   return false;
 }
 
+/**
+ * Intitulé du cadre écrit juste avant l'emplacement dans le même paragraphe, sans ponctuation finale (génération réelle
+ * rouen_univ 705 : « Réduction des émissions de la flotte de véhicules……… » rempli en « … de véhiculesNous avons conscience… ») :
+ * une réponse rédigée commence alors sur la ligne suivante.
+ */
+export function intituleColleAvant(tEl: any, placeholder: string): boolean {
+  const text = String(tEl?.textContent || '');
+  const i = text.indexOf(placeholder);
+  if (i < 0) return false;
+  let avant = text.slice(0, i);
+  const run = tEl.parentNode;
+  if (run && run.localName === 'r' && run.parentNode && run.parentNode.localName === 'p') {
+    const textes = (n: any) => getElementsWithLocalName(n, 't').map((t: any) => t.textContent || '').join('');
+    const precedents: string[] = [];
+    for (let n = run.previousSibling; n; n = n.previousSibling) if (n.localName === 'r') precedents.unshift(textes(n));
+    avant = `${precedents.join('')}${avant}`;
+  }
+  const t = avant.replace(/[\s\u00a0]+$/, '');
+  // Un intitulé (trois mots au moins) qui finit par une lettre : pas « Nom : », ni une ligne vide, ni des pointillés.
+  return /[A-Za-zÀ-ÿ)]$/.test(t) && /(?:\S+\s+){2,}\S+$/.test(t.split('\n').pop() || '');
+}
+
 function replaceTextInElement(xmlDoc: any, tEl: any, placeholder: string, value: string) {
   const text = tEl.textContent || '';
   if (!text.includes(placeholder)) return;
@@ -6357,6 +6379,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         return n / Math.min(a.size, b.size);
       };
       const zoneWordSets = new Map<string, Array<Set<string>>>();   // mots déjà vus par zone (lineSig)
+      const motsSection = new Map<string, Set<string>>();             // mots déjà écrits par section du cadre
       for (const d of descriptors.slice().sort((a, b) => a.id - b.id)) {
         if (d.kind === 'checkbox') continue;
         const v = (valById.get(d.id) ?? '').trim();
@@ -6394,6 +6417,22 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         set.add(nv);
         // Quasi-doublon dans la MÊME zone (lignes d'une même question/zone) → vidé.
         const ws = sigWords(v);
+        // Ligne de continuation « : …… » remplie de mots déjà écrits plus haut dans la même section (génération réelle
+        // rouen_univ 705 : sous « Certification de service ISO / APSAD », « Responsable qualité : VATTIER Marie — contrôles
+        // inopinés, mensuels et trimestriels… » puis « … contrôle interne annuel… », redites du plan qualité) : vidée.
+        {
+          const section = normCtx((d.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '');
+          const racine = (w: string) => w.replace(/(?:s|x)$/, '').slice(0, 7);
+          const deja = new Set([...(motsSection.get(section) || [])].map(racine));
+          const propres = [...ws].map(racine);
+          const neufs = propres.filter((w) => !deja.has(w)).length;
+          if (continuationAvecPrincipale(d) && section && propres.length >= 3 && neufs / propres.length <= 0.35) {
+            valById.set(d.id, '');
+            console.log(`[MemoireGenerator] Ligne de continuation vidée : CHAMP_${d.id} (redite de la section)`);
+            continue;
+          }
+          ws.forEach((w) => (motsSection.get(section) ?? motsSection.set(section, new Set()).get(section)!).add(w));
+        }
         const ls = lineSig(d.context);
         const arr = zoneWordSets.get(ls) ?? zoneWordSets.set(ls, []).get(ls)!;
         if (ws.size >= 3 && !coordonnees && arr.some((prev) => overlap(ws, prev) >= 0.78)) {
@@ -6589,7 +6628,9 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         // Intitulé suivant collé dans le même paragraphe que la ligne pointillée (cadre de l'université de Rouen : « ………Moyens
         // d'ouverture des locaux pour la levée de doute », génération réelle rouen_univ 15 : « … : [À COMPLÉTER].Moyens
         // d'ouverture… ») : une réponse rédigée est suivie d'un retour à la ligne, l'intitulé garde sa ligne.
-        tEls.forEach((tEl: any) => replaceTextInElement(xmlDoc, tEl, `[CHAMP_${rep.id}]`, writeVal + (desc.kind !== 'checkbox' && value.trim().length >= 40 && intituleColleApres(tEl, `[CHAMP_${rep.id}]`) ? '\n' : '')));
+        tEls.forEach((tEl: any) => replaceTextInElement(xmlDoc, tEl, `[CHAMP_${rep.id}]`,
+          (desc.kind !== 'checkbox' && /\n/.test(value.trim()) && intituleColleAvant(tEl, `[CHAMP_${rep.id}]`) ? '\n' : '')
+          + writeVal + (desc.kind !== 'checkbox' && value.trim().length >= 40 && intituleColleApres(tEl, `[CHAMP_${rep.id}]`) ? '\n' : '')));
         applied++;
       } else if (desc.type === 'legacy_checkbox') {
         let checkedEl = findLocalNameChild(desc.element, 'checked');
