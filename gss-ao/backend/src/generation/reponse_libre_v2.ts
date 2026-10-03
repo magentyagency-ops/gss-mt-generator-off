@@ -1459,6 +1459,48 @@ export function titreDeRubriqueSeul(y: string): boolean {
   return !!t && titresRubriques.has(t);
 }
 
+/** Rubrique du mémoire type de présentation de GSS (bloc 2) : jamais le titre d'une étape du process du besoin (T7CS-5). */
+export function rubriqueDePresentation(titre: string): boolean {
+  const n = (x: string) => normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  try { return chargerMemoireType().rubriques.some((r) => r.bloc === 'presentation' && n(r.titre) === n(titre)); } catch { return false; }
+}
+/**
+ * Titre de rubrique en titre d'étape (34 caractères au plus), jamais coupé au milieu de son groupe nominal (« La gestion d'une
+ * commande » pour « … supplémentaire », T7CS-5) : entier ; sans sa parenthèse finale ; sa partie après « : » (« Formations et
+ * certifications : l'agent SSIAP 1 » → « L'agent SSIAP 1 ») ; ou arrêté avant un complément ou une coordination (« L'adéquation
+ * de nos moyens humains avec votre besoin » → « L'adéquation de nos moyens humains »). '' sinon : l'étape n'est pas prise.
+ */
+export function titreRubriqueEtape(rubrique: string): string {
+  const pleins = (x: string) => normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 3 && !MOTS_OUTILS.has(w)).length;
+  const cap = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
+  const t = String(rubrique || '').replace(/\s+/g, ' ').trim();
+  const essais = [t, t.replace(/\s*\([^)]*\)\s*$/, '')];
+  const apres = t.replace(/\s*\([^)]*\)\s*$/, '').split(/\s:\s/);
+  if (apres.length > 1) essais.push(cap(apres.slice(1).join(' : ')));
+  for (const m of t.matchAll(/\s(?:avec|et|pour|dans|selon|via|au service|en cas)\s/g)) essais.push(t.slice(0, m.index).replace(/[,;:\s]+$/, ''));
+  return essais.find((x) => x && x.length <= 34 && pleins(x) >= 2 && !/[«»(]/.test(x)) || '';
+}
+
+/** Mots en -er, -ir, -re qui ne sont pas des infinitifs. */
+const NOMS_EN_R = /^(?:suppl[ée]mentaires?|horaires?|mati[èe]res?|mani[èe]res?|fronti[èe]res?|carri[èe]res?|premi[èe]re?s?|derni[èe]re?s?|enti[èe]re?s?|n[ée]cessaires?|ordinaires?|titres?|centres?|ordres?|nombres?|membres?|lettres?|cadres?|autres?|notre|votre|entre|contre|quartier|dossier|chantier|courrier|papier|premier|dernier|entier|cahier|calendrier|fichier|registre|p[ée]rim[èe]tre|param[èe]tre|ministre|syst[èe]me|hiver|pouvoir|devoir|savoir|soir|couloir|trottoir|comptoir|tiroir|r[ée]servoir|loisir|plaisir|avenir|d[ée]sir|sinistre|mesure|nature|ouverture|fermeture|structure|proc[ée]dure|voiture|lecture|facture|culture|clôture|cl[ôo]ture|signature|tenue|mobilier|[ée]clairage)$/i;
+/** Texte d'étape qui commence par une préposition sans verbe (« Pour une ronde supplémentaire commandée par écrit par la
+ *  Direction ») : la proposition principale qui suit (« Intervenir selon les jours et horaires indiqués »), sinon ''. */
+export function texteEtapeAvecVerbe(x: string): string {
+  const t = String(x || '').replace(/\s+/g, ' ').trim();
+  const cap = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
+  const infinitif = (v: string) => { const w = (/^[a-zà-ÿ]+/i.exec(v) || [''])[0]; return w.length >= 4 && /(?:er|ir|oir|re)$/i.test(w) && !NOMS_EN_R.test(w); };
+  const premier = texteEtapeCoordination(cap(t));
+  const fragment = (v: string) => /^(?:pour|par|dans|selon|lors|en cas|en|apr[èe]s|avant|d[èe]s|sur|sous|avec|sans|au|aux|à|de|du|des|d['’])\b/i.test(v) && !VERBE_CONJUGUE.test(v) && !v.split(/\s+/).some((w, i) => i > 0 && infinitif(w) && /^(?:de|d['’]|à|pour)$/i.test(v.split(/\s+/)[i - 1] || ''));
+  if (premier && !fragment(premier)) return premier;
+  for (const m of t.matchAll(/[,;]\s+/g)) {
+    const suite = t.slice((m.index || 0) + m[0].length).split(/\s*;\s*/)[0];
+    if (!infinitif(suite)) continue;
+    const e = texteEtapeCoordination(cap(suite));
+    if (e) return e;
+  }
+  return '';
+}
+
 export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: string; role?: string }> {
   const puces = (titre: RegExp) => {
     // Toutes les parties de ce titre (texte rédigé puis puces ajoutées pour le minimum, format court hors ligne imm).
@@ -1584,10 +1626,15 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
     let y = c.y;
     let corps = titre ? texteEtapeCoordination(y.charAt(0).toUpperCase() + y.slice(1)) : '';
     if (c.renvoi) {
-      // Process de GSS (titre de la rubrique) en titre, besoin du DCE (exigence) en texte.
-      titre = titreEtape(c.y.replace(/[.;:!?\s]+$/, ''), 34);
+      // Process de GSS (titre de la rubrique) en titre, besoin du DCE (exigence) en texte. Titre de rubrique jamais coupé
+      // (« La gestion d'une commande » pour « … supplémentaire », cstb 551, T7CS-5) : trop long pour la carte, l'étape n'est
+      // pas prise ; jamais une rubrique de présentation de GSS (« Notre catalogue de prestations ») comme étape du process.
+      const rubrique = c.y.replace(/[.;:!?\s]+$/, '').replace(/^«\s*|\s*»$/g, '').trim();
+      titre = rubriqueDePresentation(rubrique) ? '' : titreRubriqueEtape(rubrique);
+      if (!titre) continue;
       const x = c.x.replace(/\s+/g, ' ').trim();
-      corps = texteEtapeCoordination(x.charAt(0).toUpperCase() + x.slice(1));
+      // Texte avec son verbe : jamais un complément seul (« Pour une ronde supplémentaire commandée par écrit… »).
+      corps = texteEtapeAvecVerbe(x);
       const sansArt = (v: string) => normaliser(v).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^(?:le|la|les|l|un|une|des|du)\s+/, '');
       // Besoin qui redit le titre du process (« La reprise du personnel en place » / « Reprise du personnel en place… ») : l'étape
       // n'apporte rien.
@@ -1649,6 +1696,52 @@ export function specSecoursPuces(texte: string): { gabarit: string; params: any 
  * Chaque étape porte une phrase de sa partie. null si moins de deux étapes de contenu ou aucun résultat : le défaut est
  * alors signalé à GSS.
  */
+/**
+ * Étapes tirées du périmètre écrit en puces (T7CS-5, T7N-5), dans l'ordre du texte :
+ * - « Période : prestation horaire ; prestation horaire » (« Du lundi au vendredi : ronde d'ouverture pour ouverture effective
+ *   à 07 h 20 ; ronde de fermeture de 19 h 30 à 20 h 30 ; trois rondes de nuit entre 21 h 30 et 06 h 30 ») : la période en
+ *   titre, les prestations en texte (« Ronde d'ouverture, ronde de fermeture et trois rondes de nuit ») ;
+ * - « Libellé : oui, en quoi elle consiste » (« Levée de doute : oui, sur appel de la télésurveillance… ») : le libellé en
+ *   titre, la suite en texte.
+ * Jamais ce qui est hors périmètre (« Postes fixes : non », « … ne prévoit ni … »), ni un repère interne, ni un titre coupé.
+ */
+export function etapesDuPerimetre(partie: string): Array<{ titre: string; texte: string }> {
+  const PERIODE = /^(?:du|les?|jours?|week|samedis?|dimanches?|nuits?|semaine|lundis?|mardis?|mercredis?|jeudis?|vendredis?|en semaine|tous les|chaque)\b/i;
+  const GENERIQUE = /^(?:p[ée]rim[èe]tre|sites?|lots?|postes? fixes?|hors p[ée]rim[èe]tre|exclusions?|remarques?|nota|observations?)$/i;
+  const HORS = /\bnon\b\s*[;,.]|\bne pr[ée]voit (?:ni|pas|aucun)|\bhors (?:march[ée]|p[ée]rim[èe]tre)|\bexclue?s?\b|\baucune?\b/i;
+  const QUANTITE = '(?:une?|deux|trois|quatre|cinq|six|\\d+|la|le|les|l[\'’])';
+  const cap = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
+  const out: Array<{ titre: string; texte: string }> = [];
+  for (const l of String(partie || '').split('\n')) {
+    if (!/^\s*[-*•]\s+/.test(l)) continue;
+    const puce = l.replace(/^\s*[-*•]\s+/, '').replace(/\*\*/g, '').trim();
+    for (const phrase of puce.split(/(?<=\.)\s+(?=[A-ZÀ-Ý])/)) {
+      const m = /^([^:;.]{3,60}?)\s*:\s*(.+)$/.exec(phrase.trim());
+      if (!m) continue;
+      const libelle = m[1].trim();
+      // Segments qui portent un repère interne (« délai d'intervention : [À COMPLÉTER] ») : jamais dans le schéma.
+      const valeur = m[2].split(/\s*;\s*/).filter((x) => !INTERNE.test(x)).join(' ; ').trim().replace(/[.\s]+$/, '');
+      if (!valeur || GENERIQUE.test(libelle) || libelle.length > 34 || /^non\b/i.test(valeur) || HORS.test(libelle)) continue;
+      if (PERIODE.test(libelle)) {
+        const tetes: string[] = [];
+        for (const item of valeur.split(/\s*;\s*/).flatMap((x) => x.split(new RegExp(`\\s+et\\s+(?=${QUANTITE}\\s)`, 'i')))) {
+          if (HORS.test(item)) continue;
+          const k = /^(.{3,40}?)\s+(?:pour|de \d+|d['’]\d+|entre|à \d+|dès|avant|apr[èe]s|chaque|tous|toutes|les (?:jours|nuits))\b/i.exec(item.trim());
+          const tete = (k ? k[1] : item).trim();
+          if (tete && tete.length <= 40 && !/\d{1,2}\s*h/i.test(tete) && !tetes.some((t) => normaliser(t) === normaliser(tete))) tetes.push(tete);
+        }
+        const texte = tetes.length ? cap(listeFr(tetes)) : '';
+        if (texte && texte.length <= 86 && texte.split(/\s+/).length >= 2) out.push({ titre: cap(libelle), texte });
+      } else if (/^oui\b/i.test(valeur)) {
+        const suite = valeur.replace(/^oui\s*[,;:]?\s*/i, '').split(/\s*;\s*/)[0];
+        const texte = suite ? texteEtapeEntier(cap(suite)) || texteEtapeCoordination(cap(suite)) : '';
+        if (texte && texte.split(/\s+/).length >= 3) out.push({ titre: cap(libelle), texte });
+      }
+    }
+  }
+  return out.slice(0, 4);
+}
+
 export function specSecoursBesoin(texte: string): { gabarit: string; params: any } | null {
   const t = String(texte || '');
   const partie = (titre: RegExp) => t.split(/^(?=##\s)/m).find((p) => titre.test(p)) || '';
@@ -1669,6 +1762,12 @@ export function specSecoursBesoin(texte: string): { gabarit: string; params: any
     if (!poste || pleinsDe(poste).length < 1 || !horaires || horaires.split(/\s+/).length < 3 || INTERNE.test(l)) continue;
     if (etapes.some((e) => proches(e.titre, poste) || normaliser(e.texte) === normaliser(horaires))) continue;
     etapes.push({ titre: poste.charAt(0).toUpperCase() + poste.slice(1), texte: horaires.charAt(0).toUpperCase() + horaires.slice(1), role: 'rouge' });
+  }
+  // 1 bis. Périmètre écrit en puces (cstb 551, T7CS-5) : prestations et horaires du DCE, avant les attentes.
+  if (!lignes.length) for (const e of etapesDuPerimetre(partie(/^##\s+Le périmètre/i))) {
+    if (etapes.length >= 4) break;
+    if (etapes.some((d) => proches(d.titre, e.titre) || normaliser(d.texte) === normaliser(e.texte))) continue;
+    etapes.push({ ...e, role: etapes.length < 2 ? 'rouge' : 'bleu' });
   }
   // 2. Attentes et points de vigilance : exigence → réponse de GSS.
   for (const e of etapesDesPuces(t)) {
