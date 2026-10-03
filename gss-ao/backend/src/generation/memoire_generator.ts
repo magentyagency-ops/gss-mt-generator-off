@@ -8241,10 +8241,11 @@ RÈGLES DE FORME (rendu Marp) :
       texte = libellesBloc1(texte);
     }
     const titre = court(rep?.titre_schema, 70) || titreDefaut;
+    let titreFinal = titre;
     // Schéma de process : étapes de la réponse, puis correction des seules étapes, puis sous-titres du texte en phases.
     const dessiner = async (spec: { gabarit: string; params: any } | null): Promise<{ svg?: string; erreurs: string[] }> => {
       if (!spec) return { erreurs: ['étapes absentes ou incomplètes'] };
-      const r = (await dessinerSpecs([{ id: 'b1_comprehension', gabarit: spec.gabarit, params: spec.params, source: texte, titre_section: titre }], o.format || 'page')).get('b1_comprehension');
+      const r = (await dessinerSpecs([{ id: 'b1_comprehension', gabarit: spec.gabarit, params: spec.params, source: texte, titre_section: titreFinal }], o.format || 'page')).get('b1_comprehension');
       return r?.ok ? { svg: r.svg, erreurs: [] } : { erreurs: r?.erreurs || ['moteur de schémas indisponible'] };
     };
     // Étapes sans contenu propre au marché (titre « Votre besoin », « … nous consulte pour le marché », « Le PC réalise
@@ -8296,11 +8297,17 @@ RÈGLES DE FORME (rendu Marp) :
       }
     }
     if (!schema.svg) console.warn(`[MemoireGenerator] Compréhension du besoin : étapes du schéma refusées (${schema.erreurs.slice(0, 3).join(' | ')}) ; schéma de secours d'après les points de vigilance et les attentes.`);
-    // Secours sur le contenu (points de vigilance et attentes du texte), puis sur les sous-titres.
-    if (!schema.svg) schema = await dessiner(specSecoursPuces(texte));
-    if (!schema.svg) schema = await dessiner(specSecoursBesoin(texte));
+    // Secours sur le contenu : d'abord le périmètre du DCE (postes et horaires), puis les attentes et les points de vigilance
+    // (caen 475, T6C-6 : un marché de rondes dont le schéma ne montrait aucune ronde) ; sinon attentes et vigilance seules.
+    // Le titre de la page est alors celui du mémoire type : jamais le titre que le modèle avait donné à ses étapes refusées
+    // (« Des rondes suivies, des alarmes tracées… » au-dessus de cartes qui n'en parlaient pas).
+    if (!schema.svg) {
+      titreFinal = titreDefaut;
+      schema = await dessiner(specSecoursBesoin(texte));
+      if (!schema.svg) schema = await dessiner(specSecoursPuces(texte));
+    }
     if (!schema.svg) console.warn(`[MemoireGenerator] Compréhension du besoin : schéma de process non dessiné (${schema.erreurs.slice(0, 3).join(' | ')}) ${o.format === 'paysage' ? '' : ' ; en réponse libre, construit au rendu d\'après le texte'}.`);
-    return { texte, titre, svg: schema.svg, secours };
+    return { texte, titre: titreFinal, svg: schema.svg, secours };
   }
 
   /**

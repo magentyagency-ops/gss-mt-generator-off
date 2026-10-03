@@ -859,6 +859,20 @@ export function exigenceTraitee(exigence: string, texte: string): boolean {
   });
 }
 
+/** Clause contractuelle ou de procédure du DCE (confidentialité, litiges, forclusion, résiliation…) : pas un besoin de prestation. */
+export const CLAUSE_CONTRACTUELLE = /confidentialit|divulgation|diff[ée]rend|litiges?\b|forclusion|contentieux|tribunal|recours (?:gracieux|contentieux)|r[ée]siliation|reconduction|avenant|facturation|factures?\b|paiement|r[èe]glement des (?:litiges|comptes)|cautionnement|garantie financi|sous peine de/i;
+
+/**
+ * Horaires du DCE lisibles pour le texte de secours du bloc 1 (T6N-5, cstb 551) : sans le repère « [section] » de
+ * horairesImposes (prévu pour le contrôle des contradictions), et seulement des phrases entières (majuscule initiale,
+ * ponctuation finale), jamais un fragment de tableau ou une phrase coupée (« … (Cf. », « (Note 3) », « X] »).
+ */
+export function horairesLisibles(horaires: string[]): string[] {
+  return horaires
+    .map((h) => String(h || '').replace(/^\s*\[[^\]]*\]\s*/, '').replace(/\s+/g, ' ').trim())
+    .filter((h) => /^[A-ZÀ-Ý]/.test(h) && /[.!?]$/.test(h) && !/\(\s*Cf\.?\s*$|\(Note\s*\d|\bNote\s*\d+\s*:|\bX\]|\[|\]/i.test(h) && h.split(' ').length >= 5);
+}
+
 export function completerBesoinMinimum(
   texte: string,
   sources: Array<{ exigence: string; rubrique?: string; criticite?: string }>,
@@ -895,7 +909,12 @@ export function completerBesoinMinimum(
     .map((e) => ({ ...e, exigence: String(e.exigence || '').replace(/\s+/g, ' ').trim() }))
     .filter((e) => e.exigence.split(' ').length >= 5 && e.exigence.length <= 330 && !/p[ée]nalit[ée]s?[^.]{0,80}\d[\d\s]*(?:€|euros?)|€/i.test(e.exigence)
       // Phrase qui dépend de la précédente (« Dans ce cas, … », « Ce CR devra… ») : incompréhensible seule.
-      && !/^(?:dans ce cas|en ce cas|de m[êe]me|ce|cet|cette|ces|il|elle|ils|elles|celui|celle|ceux|ledit|ladite)\b/i.test(e.exigence))
+      && !/^(?:dans ce cas|en ce cas|de m[êe]me|ce|cet|cette|ces|il|elle|ils|elles|celui|celle|ceux|ledit|ladite)\b/i.test(e.exigence)
+      // Clause contractuelle ou de procédure (confidentialité, litige, forclusion…) : ni une attente ni un point de vigilance
+      // de la prestation (cstb 551, T6N-5).
+      && !CLAUSE_CONTRACTUELLE.test(e.exigence)
+      // Exigence rattachée au bloc de la compréhension lui-même : jamais un renvoi du bloc 1 vers lui-même (T6N-5).
+      && !(e.rubrique && plan?.rubriques.find((x) => x.id === e.rubrique)?.mode === 'besoin'))
     .sort((a, b) => rang(a) - rang(b));
   const renvoi = (id?: string) => {
     const r = id && plan ? plan.rubriques.find((x) => x.id === id) : undefined;
@@ -1339,7 +1358,18 @@ export function retirerParagrapheEtapes(texte: string, candidates: Array<{ texte
     const suivant = (paras[i + 1] || '').trim();
     if (suivant && !/^#/.test(suivant)) return true;
     const phrases = t.split(/(?<=[.!?])\s+/).map(n).filter(Boolean);
-    if (phrases.length < 2 || !phrases.every((ph) => etapes.includes(ph)) || phrases.some((ph) => gardees.has(ph))) return true;
+    if (phrases.length < 2 || phrases.some((ph) => gardees.has(ph))) return true;
+    const dEtapes = phrases.filter((ph) => etapes.includes(ph));
+    // Toutes les phrases sont des textes d'étapes ; ou, sur 4 phrases et plus, les trois quarts au moins, les autres ne
+    // portant aucune donnée absente du reste du bloc (chiffre, nom propre) : caen 475, T6C-7 (« Les rondes d'ouverture et de
+    // fermeture assurent les passages prévus à Caen. » suivie de trois textes d'étapes, redites de la page).
+    if (dEtapes.length < phrases.length) {
+      if (phrases.length < 4 || dEtapes.length / phrases.length < 0.75) return true;
+      const reste = n(paras.filter((_, k) => k !== i).join(' '));
+      const brutes = t.split(/(?<=[.!?])\s+/).filter((ph) => !etapes.includes(n(ph)));
+      const donnees = brutes.flatMap((ph) => [...(ph.match(/\d+(?:[,.]\d+)?/g) || []), ...(ph.match(/(?<=\s)[A-ZÀ-Ý][\p{L}'’-]{2,}/gu) || [])]);
+      if (donnees.some((d) => !reste.includes(n(d)))) return true;
+    }
     retire = t;
     return false;
   });
@@ -1437,7 +1467,10 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
       // le renvoi était toute la réponse.
       // Réponse sans « ** » ni guillemets autour des titres de rubrique (caen 471 : « **La planification** » imprimé tel
       // quel ; imm 473 : guillemet ouvrant perdu, « Le livre … (LMC) » structure… »).
-      .map((m) => ({ x: m.x.replace(/\*\*/g, '').trim(), y: sansRenvoiRedondant(reponsePourSchema(sansRenvoiBloc(sansIncisesRenvoi(m.y).split(/\s*;\s*/)[0]).replace(/\s+(?:est|sont|sera|seront)$/i, '').trim())), citation: m.citation }))
+      .map((m) => ({ x: m.x.replace(/\*\*/g, '').trim(), y: sansRenvoiRedondant(reponsePourSchema(sansRenvoiBloc(sansIncisesRenvoi(m.y).split(/\s*;\s*/)[0]).replace(/\s+(?:est|sont|sera|seront)$/i, '').trim())), citation: m.citation,
+        // Titres de rubrique cités dans la réponse (« Le remplacement d'un agent absent : absence non prévue ») : jamais le texte
+        // d'une étape (caen 475, T6C-6 : « Nous traitons l'absence non prévue avec le remplacement d'un agent absent »).
+        rubriques: [...m.y.matchAll(/«\s*([^»]+?)\s*»/g)].map((r) => r[1]) }))
       // Réponse réduite au titre d'une rubrique (« → notre réponse : « L'agent SSIAP 1 » », imm, T5CP-12, T5N-9) : jamais le
       // texte d'une étape (le titre n'explique rien) ; l'étape porte alors le process de GSS en titre et le besoin du DCE en texte.
       .filter((c) => c.y)
@@ -1501,7 +1534,18 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
     const pleins = pleinsDe(x);
     return x.length <= 40 && pleins.length >= 2 && !/[,;:«»"]/.test(x) && !x.split(/\s+/).some((w, i) => i > 0 && VERBE.test(w)) ? x : '';
   };
-  const titreDe = (c: { x: string; citation: boolean }) => citationTitre(c) || nominal(c.x) || titreExigence(c.x);
+  // Titre tiré d'une exigence chiffrée : la valeur du DCE reste dans le titre (« Mobiliser les équipes en 2 heures »), ou
+  // l'exigence ne donne pas de titre ; jamais un titre coupé qui perd la valeur (caen 475, T6C-6 : « Dépêcher sur le site le
+  // personnel », sans « de remplacement dans les UNE (1) heure »). Les mots de la valeur sont ceux de l'exigence (texte).
+  const avecValeur = (x: string, titre: string): string => {
+    if (!titre) return '';
+    const v = /(?:\(\s*)?(\d{1,3})\s*\)?\s*(minutes?|heures?|jours?(?: ouvrés| ouvrables| calendaires)?|semaines?|mois)(?![\p{L}])/iu.exec(x);
+    if (!v || new RegExp(`(?<![\\d])${v[1]}(?![\\d])`).test(titre)) return titre;
+    const valeur = `${v[1]} ${v[2].toLowerCase()}`;
+    const court = titreExigence(x, 34 - valeur.length - 4);
+    return court ? `${court} en ${valeur}` : '';
+  };
+  const titreDe = (c: { x: string; citation: boolean }) => citationTitre(c) || avecValeur(c.x, nominal(c.x)) || avecValeur(c.x, titreExigence(c.x));
   for (const c of [...ordre.filter((x) => titreDe(x)), ...ordre.filter((x) => !titreDe(x))]) {
     if (etapes.length >= 3) break;
     let titre = titreDe(c);
@@ -1527,6 +1571,13 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
       corps = texteEtapeCoordination(y.charAt(0).toUpperCase() + y.slice(1));
     }
     if (!corps) continue;
+    // Texte fait d'un titre de rubrique citée, plus un verbe au plus (« Nous traitons l'absence non prévue avec le remplacement
+    // d'un agent absent ») : l'étape n'explique rien (T6C-6). Une réponse qui dit ce que fait la procédure (« la procédure … organise
+    // la continuité et le remplacement par un agent de réserve ») reste.
+    if (!c.renvoi && (c as any).rubriques?.length) {
+      const deRubriques = new Set(((c as any).rubriques as string[]).flatMap((r) => pleinsDe(r)));
+      if (pleinsDe(corps).filter((w) => !deRubriques.has(w) && w !== 'nous').length <= 1) continue;
+    }
     // Texte qui commence par le titre : la suite seulement, si elle dit encore quelque chose (3 mots au moins).
     const nt = normaliser(titre).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
     const nc = normaliser(corps).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -1896,10 +1947,12 @@ export function texteSecoursBesoin(d: DonneesBesoin, perimetre = ''): string {
   parties.push('## Le périmètre de la prestation demandée');
   if (perimetre) parties.push(perimetre.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => (/^[-*•]/.test(l) ? l : `- ${l}`)).join('\n'));
   else if (d.prestations.length) parties.push(`Le marché comprend : ${d.prestations.join(', ')}.`);
-  if (d.horaires.length) parties.push(`Horaires imposés par le cahier des charges :\n${d.horaires.map((h) => `- ${h}`).join('\n')}`);
-  if (d.obligations.length) {
+  const horaires = horairesLisibles(d.horaires);
+  if (horaires.length) parties.push(`Horaires imposés par le cahier des charges :\n${horaires.map((h) => `- ${h}`).join('\n')}`);
+  const obligations = d.obligations.filter((o) => !CLAUSE_CONTRACTUELLE.test(o));
+  if (obligations.length) {
     parties.push('## Vos attentes et nos engagements');
-    parties.push(`Nous nous engageons sur chacune des obligations chiffrées du cahier des charges :\n${d.obligations.slice(0, 8).map((o) => `- ${o.trim()}`).join('\n')}`);
+    parties.push(`Nous nous engageons sur chacune des obligations chiffrées du cahier des charges :\n${obligations.slice(0, 8).map((o) => `- ${o.trim()}`).join('\n')}`);
   }
   return parties.join('\n\n');
 }

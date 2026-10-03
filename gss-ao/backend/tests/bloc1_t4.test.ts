@@ -8,7 +8,7 @@ import {
 import { reduireComprehensionCadre } from '../src/generation/memoire_type_cadre';
 
 const F = (n: string) => fs.readFileSync(path.join(__dirname, 'fixtures', n), 'utf-8');
-const lignes = (s: any) => s.params.etapes.map((e: any) => `${e.titre} :: ${e.texte || ''}`);
+const lignes = (s: any) => s.params.etapes.map((e: any) => `${e.titre} :: ${e.texte || ''}`.replace(/\u00a0/g, ' '));
 
 /** Tour 4 : schéma de process du bloc 1 sur les textes réels caen 471, caen 441 (réponse libre) et imm 473 (format court). */
 describe('schéma de secours du bloc 1 sur les textes réels (T4C-1, T4C-2, T4N-7, R4-3)', () => {
@@ -28,8 +28,10 @@ describe('schéma de secours du bloc 1 sur les textes réels (T4C-1, T4C-2, T4N-
   }
   it('caen 471 : titres tirés de l\'exigence, texte = réponse entière de GSS ; le besoin (attentes) avant les points de vigilance (T5CP-12)', () => {
     const l = lignes(specSecoursPuces(F('bloc1_caen_471.md'))).join(' | ');
-    expect(l).toContain('Mobiliser les équipes nécessaires :: La mobilisation est préparée et coordonnée par la planification');
-    expect(l).toContain('Dépêcher sur le site le personnel :: Le remplacement d\'un agent absent organise la réponse à une défaillance');
+    // Tour 6 (T6C-6) : la valeur du DCE reste dans le titre ; un titre qui la perdrait (« Dépêcher sur le site le personnel »,
+    // sans « de remplacement dans les UNE (1) heure ») n'est pas pris.
+    expect(l).toContain('Mobiliser les équipes en 2 heures :: La mobilisation est préparée et coordonnée par la planification');
+    expect(l).not.toContain('Dépêcher sur le site le personnel ::');
     expect(l.indexOf('Mobiliser les équipes')).toBeLessThan(l.indexOf('Votre résultat'));
   });
   it('becquerel (R4-3) : jamais « Nos trois niveaux de contrôle » / « Notre contrôleur de rondes »', () => {

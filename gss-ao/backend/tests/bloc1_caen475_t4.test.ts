@@ -14,8 +14,9 @@ describe('bloc 1, génération réelle caen 475 : schéma de process entier', ()
   it('schéma de secours : trois étapes entières puis le résultat, sans anomalie', () => {
     const spec = specSecoursPuces(TEXTE)!;
     expect(spec).toBeTruthy();
-    const etapes = spec.params.etapes.map((e: any) => `${e.titre} :: ${e.texte}`);
-    expect(etapes).toContain('Mobiliser les équipes nécessaires :: Nous organisons la disponibilité et la planification des moyens');
+    const etapes = spec.params.etapes.map((e: any) => `${e.titre} :: ${e.texte}`.replace(/\u00a0/g, ' '));
+    // Tour 6 (T6C-6) : la valeur du DCE reste dans le titre (« … en 2 heures »), jamais un titre coupé qui la perd.
+    expect(etapes).toContain('Mobiliser les équipes en 2 heures :: Nous organisons la disponibilité et la planification des moyens');
     expect(etapes[etapes.length - 1]).toMatch(/^Votre résultat :: /);
     expect(anomaliesSchemaBloc1(spec)).toEqual([]);
   });
