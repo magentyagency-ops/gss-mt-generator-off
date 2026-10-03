@@ -763,6 +763,36 @@ export function sansRediteDuPerimetre(texte: string, besoin: string): { texte: s
 }
 
 /**
+ * Engagement en double dans une même liste « Nos engagements sur les exigences du cahier des charges » (T9N-4, cstb 551 :
+ * « GSS interdira à ses personnels … de photographier les bâtiments, équipements scientifiques ou installations… » puis
+ * « GSS respectera et fera respecter l'interdiction de photographier les bâtiments, les équipements scientifiques et les
+ * installations du CSTB ») : une puce dont tous les mots porteurs (radicaux de 6 lettres, hors verbes d'engagement) et
+ * tous les chiffres sont dans une puce plus longue de la même liste est retirée ; la plus complète reste. Un seul mot
+ * qui diffère (« de nuit » / « en journée », « à Thiais » / « à Villejuif ») suffit à garder les deux. Le texte de GSS,
+ * hors de la liste, n'est jamais touché.
+ */
+export function sansEngagementsEnDouble(texte: string): { texte: string; retirees: string[] } {
+  const TITRE = '## Nos engagements sur les exigences du cahier des charges';
+  const i = texte.indexOf(TITRE);
+  if (i < 0) return { texte, retirees: [] };
+  const NEUTRES = /^(?:respec|fera|ferons|faire|veille|engage|mettra|mettre|oeuvre|garant|sera|seront|pourra|devra|toutes?|tous|leurs?|avec|dans|pour|sans|sous|ainsi|chaque|selon|cette|ces|ses|aupres)/;
+  const radicaux = (t: string) => new Set(normaliser(t).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 4 && !/^\d+$/.test(w) && !NEUTRES.test(w)).map((w) => w.slice(0, 6)));
+  const chiffres = (t: string) => new Set(t.match(/\d+(?:[.,]\d+)?/g) || []);
+  const lignes = texte.slice(i + TITRE.length).split('\n');
+  const puces = lignes.map((l, k) => ({ l, k, r: radicaux(l), c: chiffres(l) })).filter((x) => /^\s*[-*•]\s/.test(x.l));
+  const otees = new Set<number>();
+  for (const b of puces) {
+    if (b.r.size < 3) continue;
+    const plusComplete = puces.find((a) => a.k !== b.k && !otees.has(a.k) && (a.r.size > b.r.size || (a.r.size === b.r.size && a.k < b.k))
+      && [...b.r].every((w) => a.r.has(w)) && [...b.c].every((x) => a.c.has(x)));
+    if (plusComplete) otees.add(b.k);
+  }
+  if (!otees.size) return { texte, retirees: [] };
+  const retirees = puces.filter((x) => otees.has(x.k)).map((x) => x.l.replace(/^\s*[-*•]\s*/, '').trim());
+  return { texte: `${texte.slice(0, i + TITRE.length)}${lignes.filter((_, k) => !otees.has(k)).join('\n')}`, retirees };
+}
+
+/**
  * Rubrique « 1 à 2 pages d'explication, puis 1 page de schéma » (consignes 3 et 6) : quand les puces ajoutées par le
  * contrôle de couverture (« ## Nos engagements sur les exigences du cahier des charges ») font dépasser 2 pages de texte,
  * les puces sont retirées jusqu'à tenir dans 2 pages, en commençant par les plus longues sans chiffre (listes de missions

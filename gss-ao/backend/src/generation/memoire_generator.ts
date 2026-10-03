@@ -18,7 +18,7 @@ import {
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
-  type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
+  sansEngagementsEnDouble, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, questionRondes, type Dimensionnement } from './dimensionnement';
 import {
@@ -8216,6 +8216,9 @@ RÈGLES DE FORME (rendu Marp) :
       const filtre = interditsDce(delaisHorsNormandie(avantFiltres, dceContext, horsNormandie).texte, dceContext);
       suivi.noterFiltres(id, avantFiltres, filtre, dceContext, horsNormandie, analysisData);
       sections[id] = voixDeGss(sansRecopie(id, nettoyerStructure(filtre)));
+      // Engagement en double dans la même liste (T9N-4) : la puce la plus complète reste.
+      const doubles = sansEngagementsEnDouble(sections[id]);
+      if (doubles.retirees.length) { sections[id] = doubles.texte; console.log(`[MemoireGenerator] Rubrique ${id} : ${doubles.retirees.length} engagement(s) en double retiré(s) : ${doubles.retirees.map((x) => x.slice(0, 80)).join(' ; ')}.`); }
     }
     // Nom de l'acheteur écrit d'une seule façon partout (casse et accents de la variable CLIENT, parc_expo 202).
     { const nomClient = String(prep.variables.CLIENT?.valeur || ''); if (nomClient) for (const id of Object.keys(sections)) sections[id] = harmoniserVariantesAcheteur(harmoniserNomClient(sections[id], nomClient), nomClient); }
