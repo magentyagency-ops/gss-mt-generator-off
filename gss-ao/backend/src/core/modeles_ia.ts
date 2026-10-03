@@ -170,12 +170,26 @@ export class CreditOpenAIEpuise extends Error {
 // d'attente allongé à 15 minutes en Flex, sans nouvelle tentative du SDK en Flex (repli au bout de 15 min au plus). Un crédit épuisé (insufficient_quota) n'est jamais réessayé.
 // Le repli est posé une seule fois sur le SDK : il vaut pour tous les clients OpenAI du serveur.
 const FLEX_DELAI_MS = 15 * 60 * 1000;
+// Disjoncteur (T6-COH-7) : après un appel Flex resté sans réponse jusqu'au délai, la file Flex est jugée saturée ; pendant
+// FLEX_SUSPENSION_MS, les appels Flex du serveur partent directement en niveau standard (avertissement unique au journal),
+// au lieu d'attendre chacun 15 minutes (caen 475 : 97 appels Flex, plus de 6 h). Un 429 rapide ne déclenche rien (repli
+// immédiat de l'appel). Hors suspension, le Flex fonctionne comme avant.
+const FLEX_SUSPENSION_MS = 30 * 60 * 1000;
+let flexSuspenduJusqua = 0;
+/** Fin de la suspension du Flex (horodatage, 0 si aucune) ; pour les tests et le journal. */
+export function flexSuspendu(): number { return flexSuspenduJusqua > Date.now() ? flexSuspenduJusqua : 0; }
+/** Lève la suspension du Flex (tests). */
+export function reprendreFlex(): void { flexSuspenduJusqua = 0; }
 {
   const proto: any = Object.getPrototypeOf(new OpenAI({ apiKey: 'sans-cle' }).chat.completions);
   if (!proto.__repliFlexGss) {
     const creer = proto.create;
     proto.create = function (corps: any, options?: any) {
       if (!corps || corps.service_tier !== 'flex' || corps.stream) return creer.call(this, corps, options);
+      if (flexSuspendu()) {
+        const { service_tier: _f, ...standardDirect } = corps;
+        return creer.call(this, standardDirect, options);
+      }
       // maxRetries: 0 en Flex : sans cela le SDK refait jusqu'à 2 fois une requête expirée (3 × 15 min = 45 min
       // avant le repli). Le repli standard ci-dessous garde, lui, les nouvelles tentatives normales du SDK.
       const opts = { ...(options || {}), timeout: Math.max(options?.timeout || 0, FLEX_DELAI_MS), maxRetries: 0 };
@@ -195,6 +209,11 @@ const FLEX_DELAI_MS = 15 * 60 * 1000;
           const flexIndisponible = passagere || /timed? ?out|timeout/i.test(`${e?.name || ''} ${e?.message || ''}`);
           if (!flexIndisponible) throw e;
           console.warn(`[ModelesIA] Flex indisponible (${e?.status || e?.name || 'délai dépassé'}) : appel refait en niveau standard.`);
+          // Délai dépassé (pas un refus rapide) : file Flex saturée, disjoncteur.
+          if (!statut && /timed? ?out|timeout/i.test(`${e?.name || ''} ${e?.constructor?.name || ''} ${e?.message || ''}`) && !flexSuspendu()) {
+            flexSuspenduJusqua = Date.now() + FLEX_SUSPENSION_MS;
+            console.warn(`[ModelesIA] File Flex saturée (délai de ${FLEX_DELAI_MS / 60000} min dépassé) : les appels Flex partent en niveau standard pendant ${FLEX_SUSPENSION_MS / 60000} min.`);
+          }
           const { service_tier: _niveau, ...standard } = corps;
           return creer.call(this, standard, options);
         }
