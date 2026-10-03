@@ -1,6 +1,6 @@
 // Campagne « zéro défaut », tour 1 : règles de lecture du DCE rédigé autrement (lots, délais, lieu, interdits…).
 import { describe, it, expect } from 'vitest';
-import { lotsDuMemoire } from '../src/generation/memoire_type';
+import { lotsDuMemoire, publierMemoire } from '../src/generation/memoire_type';
 
 describe('numéros de lot (T1-COH-2)', () => {
   it('« N°1 », « n° 2 », « LOT N° 3 », « Lot A » : jamais « lot N »', () => {
@@ -110,5 +110,25 @@ describe('lieu du marché : site écrit en tableau, code postal espacé, départ
     const dce = "CCTP\nLieu d'exécution : campus, 3 rue X, 76130 Mont-Saint-Aignan.\nVoies de recours :\nTribunal Administratif de Versailles\n56 avenue de Saint Cloud\n78010 Versailles\nComptable assignataire des paiements :\nSGC d'Ivry sur Seine\n94-96 rue Victor Hugo\n94205 Ivry-sur-Seine\n";
     const prep: any = preparerMemoireType({ analyse: {}, dce, referents: '' } as any);
     expect(prep.variables.VILLE.valeur).toEqual(['Mont-Saint-Aignan']);
+  });
+});
+
+import { interditPhotosDce, RX_RONDES_A_PIED } from '../src/generation/base_memoires';
+
+describe('interdits du CCTP écrits autrement (T1-GEN-6)', () => {
+  it('photos interdites : objet et interdiction dans la même proposition, dans les deux sens', () => {
+    for (const ph of ['Il est strictement interdit de photographier les locaux et les patients.', "La prise de photos est interdite dans l'enceinte de l'établissement.",
+      'Il est interdit aux agents de prendre des photographies.', 'Interdiction formelle de prendre des photographies ou de filmer.',
+      'Les photographies et les vidéos sont strictement interdites sur le site.', "L'usage d'appareils photographiques, y compris celui du téléphone, est interdit."]) {
+      expect(interditPhotosDce(`Article 14. ${ph}`)?.photos).toBe(true);
+    }
+    expect(interditPhotosDce('Il est interdit de toucher au système de vidéosurveillance.')).toBeNull();
+    expect(interditPhotosDce('La prise de photos, à titre personnel, est strictement interdite.')).toBeNull();
+  });
+  it('rondes à pied : « se font exclusivement à pied », « sont pédestres »', () => {
+    for (const ph of ['Les rondes se font exclusivement à pied.', 'Toutes les rondes sont pédestres.', 'Les rondes devront impérativement être réalisées à pied.']) expect(RX_RONDES_A_PIED.test(ph)).toBe(true);
+    const prep: any = preparerMemoireType({ analyse: {}, dce: 'Surveillance du site de Rouen (76000). Les rondes se font exclusivement à pied.', referents: '' } as any);
+    expect(prep.indicateurs.RONDES_A_PIED).toBe(true);
+    expect(publierMemoire(prep).find((r: any) => r.id === 'b4_vehicules')?.texte || '').not.toMatch(/vélo|trottinette/);
   });
 });

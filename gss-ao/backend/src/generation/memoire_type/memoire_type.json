@@ -190,7 +190,7 @@
   },
   "RONDES_A_PIED": {
    "description": "Le DCE impose des rondes à pied (pas de vélo ni de trottinette).",
-   "dce": "rondes?[^.]{0,60}(?:effectu[ée]es|r[ée]alis[ée]es|faites|assur[ée]es)\\s+(?:exclusivement\\s+)?[àa] pied"
+   "dce": "rondes?[^.]{0,60}(?:se font|se feront|sont|seront|effectu[ée]es|r[ée]alis[ée]es|faites|assur[ée]es)\\s+(?:(?:exclusivement|uniquement|obligatoirement|imp[ée]rativement|toujours)\\s+)?(?:[àa] pied|p[ée]destres?)|rondes? p[ée]destres?"
   },
   "REPRISE_PERSONNEL": {
    "description": "Le DCE prévoit la reprise du personnel en place.",

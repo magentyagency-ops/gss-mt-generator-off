@@ -1625,7 +1625,31 @@ export function vocabulaireSchemas(dce: string): Array<[string, string]> {
 // interdit de prendre des photos »), et exception que le DCE lui donne lui-même (citedia, T10C-1 : « Cette interdiction ne
 // s'applique pas aux photographies strictement nécessaires… rapports d'intervention », « les photographies justificatives »
 // exigées dans le compte rendu).
-const RX_INTERDIT_PHOTOS = /(?:ne pas|interdiction de|interdit de|il est interdit de|aucune?)\s+(?:prendre|réaliser|capter|faire)?\s*(?:de |des )?(?:photos?|photographies?|clichés)(?![a-zà-ÿ])/i;
+/**
+ * Interdit des photos ou des vidéos (T1-GEN-6) : l'objet (photo, photographie, cliché, prise de vue, filmer, vidéo, appareil
+ * photo) et l'interdiction (interdit, interdiction, proscrit, prohibé, défendu, « ne … pas / jamais » autorisé ou permis,
+ * « aucune photo ») dans la même proposition, dans un sens ou dans l'autre, à 70 caractères au plus. La vidéosurveillance du
+ * site n'est pas une prise de vue.
+ */
+const OBJET_PHOTO = /(?<![\p{L}])(?:photos?|photographi\w*|clich[ée]s?|prises? de vues?|film(?:er|age|ée?s?)?|vid[ée]os?(?![-\s]?(?:surveillance|protection))|appareils? photo\w*)(?![\p{L}])/iu;
+const INTERDICTION = /(?<![\p{L}])(?:interdi(?:t|te|ts|tes|ction)|proscri(?:t|te|ts|tes)|prohib[ée]e?s?|d[ée]fendue?s?|en aucun cas|(?:n['’]est|ne sont|ne seront|ne sera|n['’]y est)\s+(?:pas|jamais|aucunement)\s+(?:autoris|permis|tol[ée]r)|(?:ne|n['’])\s*(?:(?:doi\w*|peu\w*|pourr\w*|devr\w*)\s+)?(?:en aucun cas\s+|jamais\s+|pas\s+|aucunement\s+)(?:prendre|r[ée]aliser|faire|filmer|photographier|utiliser|capter|enregistrer)|aucune?\s+(?:photo|prise|clich|vid[ée]o|image|film))/iu;
+function positionInterditPhoto(p: string): number {
+  // Prise de vue à titre personnel seulement (« La prise de photos, à titre personnel, est strictement interdite ») : les
+  // photos des rapports restent permises ; restriction éventuelle visant le public (« les prises de vues peuvent faire
+  // l'objet de restrictions ou d'interdictions… signalées à l'entrée des espaces ») : pas un interdit pour les agents.
+  for (const prop of String(p || '').split(/\s*;\s*|\s*:\s+(?=[A-ZÀ-Ý])|\s+[-•▪–]\s+(?=[A-ZÀ-Ýa-zà-ÿ])/)) {
+    if (/[àa] titre (?:personnel|priv[ée])|[àa] des fins (?:personnelles|priv[ée]es)|usage (?:personnel|priv[ée])|peu(?:ven)?t faire l.objet d(?:e |es |.)(?:restrictions?|interdictions?)|(?:des |aux )(?:visiteurs|spectateurs|usagers)|du public/i.test(prop)) continue;
+    for (const o of prop.matchAll(new RegExp(OBJET_PHOTO.source, 'giu'))) {
+      const autour = prop.slice(Math.max(0, o.index! - 70), o.index! + o[0].length + 70);
+      if (INTERDICTION.test(autour)) return p.indexOf(prop) + o.index!;
+    }
+  }
+  return -1;
+}
+const RX_INTERDIT_PHOTOS = { test: (p: string) => positionInterditPhoto(p) >= 0, exec: (p: string) => { const i = positionInterditPhoto(p); return i >= 0 ? { index: i } : null; } };
+
+/** Rondes imposées à pied (T1-GEN-6 : « se font exclusivement à pied », « Toutes les rondes sont pédestres »). */
+export const RX_RONDES_A_PIED = /rondes?[^.]{0,60}(?:se font|se feront|sont|seront|effectu[ée]es|r[ée]alis[ée]es|faites|assur[ée]es)\s+(?:(?:exclusivement|uniquement|obligatoirement|imp[ée]rativement|toujours)\s+)?(?:[àa] pied|p[ée]destres?)|rondes? p[ée]destres?/i;
 const RX_EXCEPTION_PHOTOS = /(?:ne s.applique pas|n.est pas applicable|ne concerne pas|à l.exception d|sauf\b|excepté)[^.]{0,80}(?:photos?|photographies?|clichés)(?![a-zà-ÿ])/i;
 const RX_PHOTOS_EXIGEES = /(?:photos?|photographies?|clichés)\s+(?:justificatives?|de constat)|(?:rapports?|comptes? rendus?)[^.;]{0,120}(?:illustrés?|accompagnés?|comportant|assortis?)[^.;]{0,80}(?:photos?|photographies?)(?![a-zà-ÿ])/i;
 const RX_VIDEO = /(?<![a-zà-ÿ])vidéos?(?![a-zà-ÿ])/i;
@@ -1663,7 +1687,7 @@ export function interditsDce(texte: string, dce: string): string {
   texte = vocabulaireDuCctp(sansContenuCovid(nomsComposesDce(qualificationsInconditionnelles(texte, dce), dce), dce), dce);
   const d = (dce || '').replace(/\s+/g, ' ');
   const contraires: RegExp[] = [];
-  if (/rondes?[^.]{0,60}(?:effectuées|réalisées|faites|assurées)\s+(?:exclusivement\s+)?à pied/i.test(d)) {
+  if (RX_RONDES_A_PIED.test(d)) {
     contraires.push(/vélo|trottinette|gyropode|rondes?[^.]{0,80}(?:en voiture|en véhicule|motoris)/i);
   }
   const photos = interditPhotosDce(dce);

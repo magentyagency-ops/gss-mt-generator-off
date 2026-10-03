@@ -27,7 +27,7 @@
 // comme une exigence du CCTP (T6C-10).
 
 import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, variableRenseignee, phraseDelaiDuDce, phrasesDelaisDuDce, sujetDelaiDePhrase, sujetsDelaisDuGabarit, phraseDuDceContenant, VARIABLES_IMPOSABLES, SUJET_VARIABLE_DELAI, type MemoireType, type ContexteMarche } from './memoire_type';
-import { sitesDuMarche, lieuDuMarche, communesParCodePostal, interditPhotosDce } from './base_memoires';
+import { sitesDuMarche, lieuDuMarche, communesParCodePostal, interditPhotosDce, RX_RONDES_A_PIED } from './base_memoires';
 
 export type StatutAdaptation = 'a_valider' | 'validee' | 'modifiee' | 'retablie';
 
@@ -305,8 +305,8 @@ export function exigenceDuFiltre(c: Changement, dce: string, horsNormandie: bool
   // Terme du CCTP à la place de celui de GSS (« chef de poste »), seul changement : phrase conservée, non signalée.
   if (a && cle(o.replace(/\b([Cc]hef|[Rr]esponsable)(s?) de site\b/g, (_m, _f: string, s: string) => `chef${s} de poste`)) === cle(a)) return '';
   const d = String(dce || '').replace(/\s+/g, ' ');
-  if (perdu(/vélo|trottinette|gyropode|en voiture|en véhicule|motoris/i) && /rondes?[^.]{0,60}(?:effectuées|réalisées|faites|assurées)\s+(?:exclusivement\s+)?à pied/i.test(d)) {
-    return citerDce(dce, /rondes?[^.]{0,60}(?:effectuées|réalisées|faites|assurées)\s+(?:exclusivement\s+)?à pied/i);
+  if (perdu(/vélo|trottinette|gyropode|en voiture|en véhicule|motoris/i) && RX_RONDES_A_PIED.test(d)) {
+    return citerDce(dce, RX_RONDES_A_PIED);
   }
   // Interdit des photos ou des vidéos : la phrase entière du DCE, exception comprise (T10C-1).
   const ph = interditPhotosDce(dce);
