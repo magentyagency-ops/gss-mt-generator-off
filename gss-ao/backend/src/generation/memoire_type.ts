@@ -1569,9 +1569,10 @@ const CALCULS: Record<string, Calculateur> = {
     if (dim?.profils.length) return { valeur: lignesEquipe(dim), source: 'dimensionnement calculé à partir des postes et des horaires du DCE', aConfirmer: questionDimensionnement(dim) };
     const ac = '[À COMPLÉTER]';
     const lignes = lignesEquipeParQualification(c).map(([categorie, qualif]) => `| ${categorie} | ${qualif} | ${ac} | |`);
-    // Rondes ponctuelles du DCE sans durée (cstb, T9N-1) : la question exacte sur la durée d'une ronde et les intervenants.
+    // Rondes ponctuelles du DCE sans durée (cstb, T9N-1) : la question exacte sur la durée d'une ronde et les intervenants,
+    // posée une fois à GSS en plus de l'effectif de chaque ligne.
     const rondes = questionRondes(dim);
-    return { valeur: lignes.join('\n'), question: rondes || "Combien d'agents de cette catégorie compte l'équipe dédiée au marché (tableau de l'adéquation des moyens humains) ?", source: 'qualifications exigées par le DCE' };
+    return { valeur: lignes.join('\n'), question: "Combien d'agents de cette catégorie compte l'équipe dédiée au marché (tableau de l'adéquation des moyens humains) ?", source: 'qualifications exigées par le DCE', ...(rondes ? { aConfirmer: rondes } : {}) };
   },
   EFFECTIF_AGENTS: (c) => (c.ctx.dimensionnement?.titulaires
     ? { valeur: String(c.ctx.dimensionnement.titulaires), source: 'dimensionnement calculé à partir des postes et des horaires du DCE', aConfirmer: questionDimensionnement(c.ctx.dimensionnement) }
