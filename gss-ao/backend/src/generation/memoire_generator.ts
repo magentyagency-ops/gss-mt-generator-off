@@ -2278,15 +2278,26 @@ export function alerteCadreAbsent(dce: string): string[] {
   // mobilisation des ») ; le plus précis des noms cités, avec la phrase du DCE qui le cite, entière.
   const occurrences = [...t.matchAll(/cadre\s+(?:de\s+)?(?:r[ée]ponse|du\s+m[ée]moire|de\s+m[ée]moire)(?:\s+technique)?(?:\s+et\s+RSE)?/gi)]
     .filter((x) => !/financi|prix|bordereau/i.test(t.slice(x.index || 0, (x.index || 0) + x[0].length + 20))
-      && !/bordereau|financi/i.test(t.slice(Math.max(0, (x.index || 0) - 80), x.index || 0)));
+      && !/bordereau|financi/i.test(t.slice(Math.max(0, (x.index || 0) - 80), x.index || 0))
+      // Locution « dans le cadre du mémoire technique » (« tout autre indicateur prévu dans le cadre du mémoire technique du
+      // Titulaire », citedia) : pas un document du DCE.
+      && !(/m[ée]moire/i.test(x[0]) && /\bdans\s+le\s*$/i.test(t.slice(Math.max(0, (x.index || 0) - 12), x.index || 0))));
   if (!occurrences.length) return [];
   const m = occurrences.reduce((a, b) => (b[0].replace(/\s+/g, ' ').length > a[0].replace(/\s+/g, ' ').length ? b : a));
-  const nom = m[0].replace(/\s+/g, ' ').trim().replace(/^C/, 'c');
+  // Nom écrit en capitales dans le DCE (« CADRE DE REPONSE TECHNIQUE ») : en minuscules, jamais « cADRE ».
+  const brutNom = m[0].replace(/\s+/g, ' ').trim();
+  const nom = brutNom === brutNom.toUpperCase() ? brutNom.toLowerCase().replace(/\brse\b/, 'RSE') : brutNom.replace(/^C/, 'c');
   const i = m.index || 0;
-  const debut = Math.max(t.lastIndexOf('.', i), t.lastIndexOf('\n\n', i), t.lastIndexOf('\n-', i), t.lastIndexOf('\n•', i)) + 1;
+  // Début de la phrase, ou de l'élément de liste en retrait qui la porte (« ⏎   -   Le cadre de réponse par lot », citedia).
+  const puces = [...t.slice(Math.max(0, i - 400), i).matchAll(/\n[ \t]*[-•▪●○◦][ \t]+/g)].map((x) => Math.max(0, i - 400) + (x.index || 0) + x[0].length - 1);
+  const debut = Math.max(t.lastIndexOf('.', i), t.lastIndexOf('\n\n', i), t.lastIndexOf('\n-', i), t.lastIndexOf('\n•', i), ...puces) + 1;
   const finPoint = t.indexOf('.', i + m[0].length);
   const finBloc = t.indexOf('\n\n', i + m[0].length);
-  const fin = [finPoint >= 0 ? finPoint + 1 : -1, finBloc].filter((x) => x >= 0).reduce((a, b) => Math.min(a, b), t.length);
+  // Élément de liste sans point final suivi d'un titre numéroté ou d'un autre élément (« … pour l'exécution du contrat ⏎ 3 -
+  // Intervenants ⏎ 3.1 - Sous-traitance », s2e, T8CS-5) : la phrase s'arrête à la fin de la ligne.
+  const suite = /\n[ \t]*(?:\d+(?:\.\d+)*[ \t]*[-–.)][ \t]|[-•▪●○◦][ \t])/.exec(t.slice(i + m[0].length));
+  const finLigne = suite ? i + m[0].length + suite.index : -1;
+  const fin = [finPoint >= 0 ? finPoint + 1 : -1, finBloc, finLigne].filter((x) => x >= 0).reduce((a, b) => Math.min(a, b), t.length);
   let phrase = t.slice(debut, fin).replace(/^[\s\-•]+/, '').replace(/\s+/g, ' ').trim();
   if (phrase.length > 260) phrase = `${phrase.slice(0, 260).replace(/\s+\S*$/, '')}…`;
   return [`Le DCE cite un « ${nom} »${phrase ? ` (« ${phrase.replace(/[«»]/g, '"')} »)` : ''} : ce document n'est pas parmi les pièces du dossier. Pouvez-vous l'ajouter au dossier, pour que le mémoire soit rédigé dans ce cadre imposé (sinon l'offre risque d'être jugée irrégulière) ?`];

@@ -17,3 +17,21 @@ describe('consultations du cadre sans consolidation (T8CS-4)', () => {
     expect(questionExacte('Réponse à relire : X')).toBe('Réponse à relire : X');
   });
 });
+
+import { alerteCadreAbsent } from '../src/generation/memoire_generator';
+describe('alerte « cadre du mémoire absent » (T8CS-5)', () => {
+  it('élément de liste sans point final : la citation s’arrête avant le titre numéroté suivant (s2e)', () => {
+    const dce = "les pièces contractuelles sont les suivantes :\n- Le cahier des clauses administratives générales (CCAG) applicables aux marchés publics de fournitures\ncourantes et de services, approuvé par l'arrêté du 30 mars 2021\n- Le cadre du mémoire technique et environnemental que l'entreprise se propose d'adopter pour l'exécution\ndu contrat\n3 - Intervenants\n3.1 - Sous-traitance\n3.1.1 - Généralités\nLe titulaire d'un marché public peut sous-traiter.";
+    const a = alerteCadreAbsent(dce)[0];
+    expect(a).toContain("(« Le cadre du mémoire technique et environnemental que l'entreprise se propose d'adopter pour l'exécution du contrat »)");
+    expect(a).not.toMatch(/Intervenants|3\./);
+  });
+});
+describe('alerte « cadre du mémoire absent » : locution et capitales', () => {
+  it('« dans le cadre du mémoire technique du Titulaire » n’est pas un document (citedia)', () => {
+    expect(alerteCadreAbsent('Ce bilan comportera : tout autre indicateur prévu dans le cadre du mémoire technique du Titulaire.')).toEqual([]);
+  });
+  it('nom en capitales écrit en minuscules, jamais « cADRE »', () => {
+    expect(alerteCadreAbsent('Les candidats remettent le CADRE DE REPONSE TECHNIQUE complété.')[0]).toMatch(/^Le DCE cite un « cadre de reponse technique »/);
+  });
+});
