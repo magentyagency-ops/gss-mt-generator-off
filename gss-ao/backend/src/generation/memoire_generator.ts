@@ -12,7 +12,7 @@ import {
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
   type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, harmoniserVariantesAcheteur, formeCourteApresPremiere, phrasesGeneralesProtegees, ajoutContraireAuxDelaisGss,
-  variablesDesSchemas, lotsDuMemoire, nomAcheteurAffiche,
+  variablesDesSchemas, lotsDuMemoire, nomAcheteurAffiche, rubriqueAdmetSujet, rechercherRubriques,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
@@ -9382,7 +9382,11 @@ Renvoie UNIQUEMENT un objet JSON : {"puces": [{"rubrique": "identifiant", "texte
         // Procédure et administratif du marché (consigne du prompt), contrôlés sans modèle : facturation et paiement
         // (« GSS s'engage à ce que la dernière facture puisse être différée », génération réelle ign 12).
         if (!ids.includes(id) || texte.length < 15 || motifRefusEngagement(texte) || /factur|paiement|imput[ée]e?s? [àa] GSS/i.test(texte)) continue;
-        (parRubrique.get(id) ?? parRubrique.set(id, []).get(id)!).push(texte);
+        // Rubrique de présentation pure hors de son sujet (« Nos valeurs », T1-CONS-7) : la rubrique du sujet de l'engagement.
+        const mtv2 = this.memoireTypeV2();
+        const cible = rubriqueAdmetSujet(id, texte) ? id : (mtv2 ? rechercherRubriques(mtv2, texte, 1, ids.filter((x) => x !== id && rubriqueAdmetSujet(x, texte)))[0]?.id || '' : '');
+        if (!cible) continue;
+        (parRubrique.get(cible) ?? parRubrique.set(cible, []).get(cible)!).push(texte);
       }
       for (const [id, puces] of parRubrique) {
         const liste = puces.map((x) => `- ${x}`).join('\n');

@@ -2711,7 +2711,24 @@ export function rechercherRubriques(mt: MemoireType, texte: string, n = 2, parmi
 /** Sujets d'une exigence que les rubriques de présentation de GSS (bloc « presentation » : catalogue, identité, valeurs,
  *  écologie, références) peuvent porter ; une exigence d'exécution (rondes, ouverture, remplacement…) n'y est jamais
  *  ajoutée (génération réelle cstb 221 : 7 engagements sur les rondes dans « Notre catalogue de prestations »). */
-const SUJET_PRESENTATION = /autoris|agr[ée]ment|cnaps|carte professionnelle|certifi|\biso\b|\brse\b|responsabilit[ée] soci|environnement|[ée]cologi|d[ée]veloppement durable|carbone|d[ée]chets|recycl|r[ée]f[ée]rences?\b|exp[ée]rience|chiffre d.affaires|assurance|responsabilit[ée] civile|implantation|agences?\b|si[èe]ge social|organigramme|valeurs|[ée]thique|d[ée]ontolog|insertion|handicap|[ée]galit[ée]|kbis|attestation/i;
+/**
+ * Rubriques de présentation pure du bloc 2 (T1-CONS-7 : « aucune personne non autorisée dans les locaux, trajet vers le
+ * réfectoire et les vestiaires, vestiaires jamais utilisés comme salle de pause » rangé sous « Nos valeurs ») : seules les
+ * exigences de leur sujet propre y sont rattachées.
+ */
+const SUJET_PRESENTATION_PURE: Array<[RegExp, RegExp]> = [
+  [/^b2_valeurs$/, /valeurs|[ée]thique|d[ée]ontolog|charte/i],
+  [/^b2_identite$/, /cnaps|agr[ée]ment|autorisation (?:d.exercer|pr[ée]fectorale|administrative)|carte professionnelle|assurance|responsabilit[ée] civile|kbis|attestation|chiffre d.affaires|certifi|\biso\b|statuts?|capital/i],
+  [/^b2_(?:references_intro|ref_[a-z_]+)$/, /r[ée]f[ée]rences?\b|exp[ée]rience|march[ée]s? similaires/i],
+  [/^b2_organigramme$/, /organigramme/i],
+  [/^b2_implantation$/, /implantation|agences?\b|si[èe]ge|proximit/i],
+];
+export function rubriqueAdmetSujet(id: string, texte: string): boolean {
+  const regle = SUJET_PRESENTATION_PURE.find(([rx]) => rx.test(id));
+  return !regle || regle[1].test(String(texte || ''));
+}
+
+const SUJET_PRESENTATION = /autorisation (?:d.exercer|pr[ée]fectorale|administrative)|agr[ée]ment|cnaps|carte professionnelle|certifi|\biso\b|\brse\b|responsabilit[ée] soci|environnement|[ée]cologi|d[ée]veloppement durable|carbone|d[ée]chets|recycl|r[ée]f[ée]rences?\b|exp[ée]rience|chiffre d.affaires|assurance|responsabilit[ée] civile|implantation|agences?\b|si[èe]ge social|organigramme|valeurs|[ée]thique|d[ée]ontolog|insertion|handicap|[ée]galit[ée]|kbis|attestation/i;
 
 /**
  * Durées d'intervention écrites dans un texte, en minutes : « immédiat » et « sans délai » = 0, « dans l'heure » = 60,
@@ -2794,7 +2811,7 @@ export function exigencesParRubrique(mt: MemoireType, plan: PlanMemoireType, mat
     const r = mt.rubriques.find((x) => x.id === id);
     if (!r) return true;
     if (!dansLeSujet(e.exigence, sujetDeRubrique(r))) return false;
-    return r.bloc !== 'presentation' || SUJET_PRESENTATION.test(e.exigence);
+    return r.bloc !== 'presentation' || (SUJET_PRESENTATION.test(e.exigence) && rubriqueAdmetSujet(id, e.exigence));
   };
   /** Rubrique admise la plus proche d'une exigence refusée par sa rubrique d'origine ; '' s'il n'y en a pas. */
   const autre = (e: ExigenceMatrice, refusee: string): string => {

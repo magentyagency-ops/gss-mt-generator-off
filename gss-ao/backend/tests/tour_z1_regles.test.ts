@@ -317,3 +317,17 @@ describe('format court : exigence couverte par une phrase adaptée D8 (T1F-12)',
     expect(exigenceTraitee(ex, citationD8) || exigenceTraitee(citationD8, ex)).toBe(true);
   });
 });
+
+import { exigencesParRubrique, rubriqueAdmetSujet } from '../src/generation/memoire_type';
+
+describe('engagements du CCTP jamais rangés dans une rubrique de présentation pure (T1-CONS-7)', () => {
+  it('locaux, vestiaires et pauses : jamais sous « Nos valeurs »', () => {
+    const mt = chargerMT();
+    const prep: any = preparerMemoireType({ analyse: {}, dce: 'Surveillance du château, 77300 Fontainebleau. Hygiène et sécurité des agents.', referents: '' } as any, { memoireType: mt });
+    const ex = "Ne laisser entrer dans les locaux aucune personne non autorisée ou extérieure à l'EPCF, tenir compte du trajet aller-retour de 10 à 15 minutes vers le réfectoire et les vestiaires, et ne pas utiliser les vestiaires comme salle de pause.";
+    const r = exigencesParRubrique(mt, prep.plan, [{ exigence: ex, rubrique: 'b2_valeurs', sujet: 'Locaux et pauses' } as any]);
+    expect(r.parRubrique.b2_valeurs).toBeUndefined();
+    expect(rubriqueAdmetSujet('b2_valeurs', ex)).toBe(false);
+    expect(rubriqueAdmetSujet('b2_valeurs', 'Respecter la charte de déontologie de la profession.')).toBe(true);
+  });
+});
