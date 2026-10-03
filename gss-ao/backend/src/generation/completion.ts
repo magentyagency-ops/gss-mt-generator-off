@@ -113,6 +113,9 @@ export interface EtatCompletion {
     titresSchemas?: Record<string, string>;
     /** Plan v2 : indicateurs vrais du mémoire type et leurs raisons (DCE, analyse, matrice), pour contrôle. */
     indicateurs?: Record<string, string[]>;
+    /** Plan v2 : valeurs écrites dans les schémas « spec » (EFFECTIF_AGENTS, NB_AGENTS_RENFORT…), pour redessiner un schéma
+     *  quand GSS change ces valeurs après la génération (T10N-2). */
+    variablesSchemas?: Record<string, string>;
   };
   /** Cadre imposé : réponses rédigées par GSS (signets GSS_CH_n), les seules que l'assistant peut modifier. */
   champs?: Array<{ cle: string; libelle: string }>;
@@ -664,11 +667,76 @@ export async function integrerDansRubrique(texteRubrique: string, repere: string
   return pos >= 0 ? texteRubrique.replace(repere, phrase) : `${texteRubrique.trim()}\n\n${phrase}`;
 }
 
+/**
+ * Effectifs de l'équipe dédiée écrits dans le texte (T10N-2) : « équipe de N agents titulaires » (la somme du tableau de
+ * l'équipe dédiée quand il est entièrement chiffré) et « équipe suppléante de N ».
+ */
+export function effectifsDuTexte(sections: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  const ids = Object.keys(sections);
+  const avecTableau = ids.find((id) => lignesTableauEquipe(sections[id]).length);
+  const lignes = avecTableau ? lignesTableauEquipe(sections[avecTableau]) : [];
+  const phrase = ids.map((id) => /équipe (?:dédiée )?de (\d+) agents? titulaires?/i.exec(sections[id].replace(REPERE_RE, ''))).find((m) => m);
+  if (lignes.length && lignes.every((l) => l.nombre !== null)) out.EFFECTIF_AGENTS = String(lignes.reduce((t, l) => t + (l.nombre || 0), 0));
+  else if (phrase) out.EFFECTIF_AGENTS = phrase[1];
+  const supp = ids.map((id) => /équipe suppléante de (\d+)/i.exec(sections[id])).find((m) => m);
+  if (supp) out.NB_AGENTS_RENFORT = supp[1];
+  return out;
+}
+
+/**
+ * Schémas « spec » accordés au texte avant chaque recomposition (T10N-2 : saisie « 8 » ou « Mets 7 agents SSIAP 2 », texte et
+ * tableau à jour, schéma « Une équipe dédiée… » resté à 9) : les valeurs gardées à la génération sont comparées aux
+ * effectifs du texte ; un schéma qui écrit une valeur changée est publié de nouveau avec la nouvelle valeur et redessiné,
+ * sans modèle. État écrit avant cette correction (valeurs non gardées) : le schéma dont le nombre ne figure plus dans le
+ * texte est retiré, et reconstruit au rendu d'après le texte (jamais un ancien chiffre). Renvoie les rubriques redessinées.
+ */
+export async function accorderSchemasEffectifs(etat: EtatCompletion): Promise<string[]> {
+  const lib = etat.libre;
+  if (!lib?.plan || lib.court) return [];
+  const { chargerMemoireType, variablesDuSchema, republierSchemaSpec } = await import('./memoire_type');
+  let mt: any;
+  try { mt = chargerMemoireType(); } catch { return []; }
+  const texte = effectifsDuTexte(lib.sections);
+  const avant = lib.variablesSchemas;
+  const changes = Object.keys(texte).filter((k) => !avant || avant[k] !== texte[k]);
+  if (!changes.length) return [];
+  const touches: string[] = [];
+  const valeurs = { ...(avant || {}), ...texte };
+  const aRedessiner = lib.plan.rubriques.filter((r) => r.schema?.source === 'spec' && lib.schemas?.[`${r.id}#schema`] && variablesDuSchema(mt, r.id).some((v) => changes.includes(v)));
+  if (!avant) {
+    // Valeurs non gardées : le schéma n'est retiré que s'il contredit le texte (nombre du texte absent du schéma).
+    for (const r of aRedessiner) {
+      const svg = String(lib.schemas[`${r.id}#schema`] || '').replace(/<[^>]+>/g, ' ');
+      if (Object.values(texte).every((n) => new RegExp(`(?<![\\d,.])${n}(?![\\d,.])`).test(svg))) continue;
+      delete lib.schemas[`${r.id}#schema`];
+      touches.push(r.id);
+    }
+    return touches;
+  }
+  const { dessinerSpecs } = await import('./schema_service');
+  const indicateurs: Record<string, boolean> = { ...(lib.plan.indicateurs || {}) };
+  for (const r of aRedessiner) {
+    const spec = republierSchemaSpec(mt, r.id, valeurs, indicateurs);
+    if (!spec?.gabarit || !spec.params) continue;
+    const d = (await dessinerSpecs([{ id: r.id, gabarit: spec.gabarit, params: spec.params, source: lib.sections[r.id] || '', titre_section: r.titre }], 'page', lib.theme || RETOUR_ARRIERE)).get(r.id);
+    if (d?.ok && d.svg) lib.schemas[`${r.id}#schema`] = d.svg;
+    // Moteur indisponible : le schéma qui écrit l'ancien nombre est retiré (reconstruit au rendu d'après le texte).
+    else delete lib.schemas[`${r.id}#schema`];
+    touches.push(r.id);
+  }
+  lib.variablesSchemas = valeurs;
+  if (touches.length) console.log(`[Completion] Schéma(s) accordé(s) aux effectifs du texte (${changes.map((k) => `${k} = ${texte[k]}`).join(', ')}) : ${touches.join(', ')}.`);
+  return touches;
+}
+
 /** Recompose le PDF d'une réponse libre depuis l'état (schémas déjà construits réutilisés). */
 export async function recomposerPdf(etat: EtatCompletion): Promise<string> {
   // Import différé : evite une dépendance circulaire avec le générateur.
   const { MemoireGenerator } = await import('./memoire_generator');
   const gen = new MemoireGenerator();
+  // Schémas qui écrivent les effectifs accordés au texte (T10N-2).
+  await accorderSchemasEffectifs(etat);
   const propres: Record<string, string> = {};
   for (const [id, t] of Object.entries(etat.libre!.sections)) propres[id] = t.replace(REPERE_RE, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   // Même thème que le rendu d'origine (schémas déjà construits réutilisés) ; état d'avant les thèmes : retour arrière.
@@ -765,13 +833,31 @@ export function estValidation(v: string): boolean {
   return DEBUT_VALIDATION.test(t) && !/\d/.test(t) && !/(?<![\p{L}])(?:mais|sauf|pas|ne|n['’]|non|plut[ôo]t|chang|modifi|remplac|retir|ajout|mets?|mettez|passe[rz]?|enl[èe]v|r[ée]dui|augment|diminu|corrig)/iu.test(t);
 }
 
+/** Profil de l'équipe dédiée nommé dans une saisie de GSS (« agents SSIAP 2 », « ADS », « maîtres-chiens », « chef d'équipe »). */
+const PROFIL = String.raw`(?:agents?\s+)?(?:SSIAP\s*(?:[123]|I{1,3})(?![\wÀ-ÿ])|ADS(?![\wÀ-ÿ])|CQP(?:\s*APS)?|cynophiles?|rondiers?(?:\s+intervenants?)?)|agents?\s+de\s+s[ée]curit[ée](?:\s+incendie)?|agents?\s+cynophiles?|ma[îi]tres?[- ]chiens?|encadrants?|chefs?\s+d['’][ée]quipe(?:\s+(?:SSIAP\s*\d|de\s+s[ée]curit[ée]\s+incendie))?|chefs?\s+de\s+(?:poste|site|service)`;
 /** Profil nommé après un effectif dans une saisie de GSS (« 7 agents SSIAP 2 », « 6 ADS », « 2 maîtres-chiens »). */
-const PROFIL_SAISI = /(?<![\d,.])(\d+)\s+((?:agents?\s+)?(?:SSIAP\s*(?:[123]|I{1,3})(?![\wÀ-ÿ])|ADS(?![\wÀ-ÿ])|CQP(?:\s*APS)?|cynophiles?|rondiers?(?:\s+intervenants?)?)|agents?\s+de\s+s[ée]curit[ée](?:\s+incendie)?|agents?\s+cynophiles?|ma[îi]tres?[- ]chiens?|encadrants?|chefs?\s+d['’][ée]quipe(?:\s+(?:SSIAP\s*\d|de\s+s[ée]curit[ée]\s+incendie))?|chefs?\s+de\s+(?:poste|site|service))/giu;
+const PROFIL_SAISI = new RegExp(String.raw`(?<![\d,.])(\d+)\s+(${PROFIL})`, 'giu');
+/** Profil nommé avant son effectif (T10N-3) : « SSIAP 1 : 4 », « SSIAP 1 = 4 », « passe les SSIAP 1 à 4 », « les SSIAP 1
+ *  passent à 4 » ; et « 4 pour les SSIAP 1 ». Jamais un horaire (« à 4 h ») ni une durée. */
+const PROFIL_AVANT = new RegExp(String.raw`(?:^|[^\p{L}\d])(${PROFIL})\s*(?::|=|→|(?:passe(?:nt)?\s+)?(?:[àa]|de\s+\d+\s+[àa]))\s*(\d+)(?![\d,.]|\s*(?:h(?![\p{L}])|heures?|min|%|€|ans?))`, 'giu');
+const PROFIL_POUR = new RegExp(String.raw`(?<![\d,.])(\d+)\s+pour\s+(?:les?\s+|l['’])?(${PROFIL})`, 'giu');
 
-/** Effectifs par profil donnés par GSS (« Mets 7 agents SSIAP 2 dans l'équipe dédiée » → [{nombre: 7, profil: « agents SSIAP 2 »}]). */
+/** Effectifs par profil donnés par GSS (« Mets 7 agents SSIAP 2 dans l'équipe dédiée » → [{nombre: 7, profil: « agents SSIAP 2 »}] ;
+ *  « Passe les SSIAP 1 à 4 », « SSIAP 1 : 4 » → [{nombre: 4, profil: « SSIAP 1 »}]), dans l'ordre du message. */
 export function lireEffectifsParProfil(v: string): Array<{ nombre: number; profil: string }> {
-  return [...String(v || '').matchAll(PROFIL_SAISI)].map((m) => ({ nombre: Number(m[1]), profil: m[2].replace(/\s+/g, ' ').trim() }));
+  const t = String(v || '');
+  const out: Array<{ i: number; nombre: number; profil: string }> = [];
+  const pris: Array<[number, number]> = [];
+  const libre = (a: number, b: number) => !pris.some(([x, y]) => a < y && b > x);
+  const ajouter = (i: number, fin: number, nombre: number, profil: string) => { if (!libre(i, fin)) return; pris.push([i, fin]); out.push({ i, nombre, profil: profil.replace(/\s+/g, ' ').trim() }); };
+  for (const m of t.matchAll(PROFIL_POUR)) ajouter(m.index!, m.index! + m[0].length, Number(m[1]), m[2]);
+  for (const m of t.matchAll(PROFIL_AVANT)) ajouter(m.index!, m.index! + m[0].length, Number(m[2]), m[1]);
+  for (const m of t.matchAll(PROFIL_SAISI)) ajouter(m.index!, m.index! + m[0].length, Number(m[1]), m[2]);
+  return out.sort((a, b) => a.i - b.i).map(({ nombre, profil }) => ({ nombre, profil }));
 }
+
+/** Le message nomme un profil de l'équipe dédiée (sans effectif lisible) : « les SSIAP 1 doivent être 4 ». */
+const NOMME_PROFIL = new RegExp(String.raw`(?:^|[^\p{L}\d])(?:${PROFIL})`, 'iu');
 
 /**
  * Effectifs par profil reportés sans modèle dans le tableau de l'équipe dédiée (T9N-3 : « Mets 7 agents SSIAP 2 dans
@@ -820,8 +906,9 @@ export function lireEffectifsSaisis(v: string): { titulaires?: number; suppleant
   const tit = /(\d+)\s*(?:agents?\s+)?titulaires?/i.exec(t);
   if (tit) { titulaires = Number(tit[1]); t = t.replace(tit[0], ' '); }
   const restes = (t.match(/\d+/g) || []).map(Number);
-  // « 7 agents SSIAP 2 » : un effectif par profil, jamais un total (T9N-3).
-  if (titulaires === undefined && restes.length === 1 && !lireEffectifsParProfil(v).length) return { titulaires: restes[0], suppleants, details: 0 };
+  // « 7 agents SSIAP 2 », « SSIAP 1 : 4 » : un effectif par profil, jamais un total (T9N-3, T10N-3) ; un profil nommé sans le
+  // mot « titulaires » non plus (« les SSIAP 1 doivent être 4 »).
+  if (titulaires === undefined && restes.length === 1 && !lireEffectifsParProfil(v).length && !NOMME_PROFIL.test(v)) return { titulaires: restes[0], suppleants, details: 0 };
   return { titulaires, suppleants, details: restes.length };
 }
 

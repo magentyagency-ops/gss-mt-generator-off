@@ -12,6 +12,7 @@ import {
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
   type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, harmoniserVariantesAcheteur, formeCourteApresPremiere, phrasesGeneralesProtegees, ajoutContraireAuxDelaisGss,
+  variablesDesSchemas,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
@@ -8310,7 +8311,8 @@ RÈGLES DE FORME (rendu Marp) :
     // ── 12. État v2 (assistant, complétion) ; premier message de l'assistant : les propositions à valider ──
     const etat: EtatCompletion = {
       dossierId, mode: 'libre', fichier: rendu.filePath, majLe: '', elements: elementsLibres, reponsesTraitees: [],
-      libre: { sections, schemas: Object.fromEntries(rendu.schemas), cover: rendu.cover, theme, version: 2, plan, titresSchemas, ajouts, indicateurs: indicateursVrais(prep.etatsIndicateurs) },
+      // Valeurs des schémas « spec » gardées : un schéma est redessiné quand GSS change ces valeurs (effectifs, T10N-2).
+      libre: { sections, schemas: Object.fromEntries(rendu.schemas), cover: rendu.cover, theme, version: 2, plan, titresSchemas, ajouts, indicateurs: indicateursVrais(prep.etatsIndicateurs), variablesSchemas: variablesDesSchemas(mt, prep.variables) },
       demande: this.demandeParticuliere?.demande || undefined,
       ...(this.dimensionnementEtat ? { dimensionnement: this.dimensionnementEtat } : {}),
     };

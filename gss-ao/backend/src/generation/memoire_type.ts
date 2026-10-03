@@ -2154,6 +2154,38 @@ export function publierSchema(spec: SchemaRubrique, variables: Variables, indica
   return { source: 'spec', gabarit: spec.gabarit, titre: titre === RETRAIT ? undefined : titre, params, origine: spec.origine };
 }
 
+/**
+ * Valeurs affichées des variables écrites dans les schémas « spec » du mémoire type (« {{EFFECTIF_AGENTS}} » → « 9 ») :
+ * gardées dans l'état du dossier pour redessiner un schéma quand GSS change ces valeurs après la génération (T10N-2 :
+ * effectifs de l'équipe dédiée changés par la saisie ou l'assistant, schéma resté à l'ancien nombre).
+ */
+export function variablesDesSchemas(mt: MemoireType, variables: Variables): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const r of mt.rubriques) {
+    if (r.schema?.source !== 'spec') continue;
+    for (const m of JSON.stringify(r.schema).matchAll(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g)) {
+      const v = variables[m[1]];
+      if (v && variableRenseignee(v)) out[m[1]] = valeurAffichee(m[1], v, mt.variables[m[1]]);
+    }
+  }
+  return out;
+}
+
+/** Variables écrites dans le schéma « spec » d'une rubrique (vide si la rubrique n'a pas de schéma « spec »). */
+export function variablesDuSchema(mt: MemoireType, id: string): string[] {
+  const r = mt.rubriques.find((x) => x.id === id);
+  if (r?.schema?.source !== 'spec') return [];
+  return [...new Set([...JSON.stringify(r.schema).matchAll(/\{\{\s*([A-Z0-9_]+)\s*\}\}|"si"\s*:\s*"!?([A-Z0-9_]+)"/g)].map((m) => m[1] || m[2]))];
+}
+
+/** Schéma « spec » d'une rubrique publié de nouveau avec les valeurs gardées dans l'état (T10N-2). */
+export function republierSchemaSpec(mt: MemoireType, id: string, valeurs: Record<string, string>, indicateurs: Record<string, boolean>): SchemaPublie | null {
+  const r = mt.rubriques.find((x) => x.id === id);
+  if (!r?.schema || r.schema.source !== 'spec') return null;
+  const variables: Variables = Object.fromEntries(Object.entries(valeurs).map(([k, v]) => [k, { valeur: v, source: 'état du dossier' }]));
+  return publierSchema(r.schema, variables, indicateurs, {});
+}
+
 /** Publie une rubrique : publipostage du texte, ordre des sous-parties, schéma. */
 const MOIS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 

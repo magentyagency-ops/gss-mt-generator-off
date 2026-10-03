@@ -20,6 +20,7 @@ import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import {
   lireEtat, ecrireEtat, EtatCompletion, ElementACompleter, elements, nouveauRun, nouveauT, json, openai,
   recomposerPdf, poserSignets, formulerQuestions, PLACEHOLDER, MARQUE_CHAMP, REPERE,
+  remplir, estValidation, lireEffectifsParProfil, lireEffectifsSaisis, PROPOSITION_DIMENSIONNEMENT,
 } from './completion';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION } from './base_memoires';
 import { reglagesIA } from '../core/modeles_ia';
@@ -638,10 +639,44 @@ export async function modifierRubriquesLibre(dossierId: string, actions: Array<{
   return { etat, reponse: r.reponse, modifies: r.modifies, page: r.page };
 }
 
+/**
+ * Message de l'assistant qui répond à la proposition de dimensionnement (T10N-1 : le premier message invite GSS à écrire
+ * « Je valide les effectifs proposés » ou « Mets 7 agents SSIAP 2 dans l'équipe dédiée » dans la conversation) : une
+ * validation qui parle des effectifs, ou des effectifs par profil, ou un nombre de titulaires ou de suppléants.
+ */
+export function reponseAuDimensionnement(texte: string): boolean {
+  const t = String(texte || '');
+  if (estValidation(t)) return /effectifs?|dimensionnement/i.test(t);
+  if (lireEffectifsParProfil(t).length) return true;
+  const s = lireEffectifsSaisis(t);
+  return (s.titulaires !== undefined || s.suppleants !== undefined) && /titulaires?|suppl[ée]ants?|effectifs?|[ée]quipe d[ée]di[ée]e/i.test(t);
+}
+
 export async function discuter(dossierId: string, message: string, pieces: PieceJointe[] = []): Promise<ResultatAssistant> {
   const etat = lireEtat(dossierId);
   if (!etat) throw new Error('Aucun document généré pour ce dossier.');
   const texte = message.trim() || (pieces.length ? 'Voici des pièces jointes.' : '');
+  // Réponse à la proposition de dimensionnement écrite dans la conversation (T10N-1) : même traitement que la saisie de
+  // l'élément (validation, effectifs par profil reportés sans modèle, schéma et tableau accordés), l'élément est fermé.
+  const dim = etat.mode === 'libre' && !pieces.length ? etat.elements.find((e) => e.statut === 'ouvert' && PROPOSITION_DIMENSIONNEMENT.test(e.question)) : undefined;
+  if (dim && reponseAuDimensionnement(texte)) {
+    const n = (etat.conversation || []).length;
+    const apres = await remplir(dossierId, [{ cle: dim.cle, valeur: texte }], 'saisie');
+    const date = new Date().toISOString();
+    const conv = (apres.conversation ||= []);
+    conv.splice(n, 0, { role: 'utilisateur', texte, date });
+    const fait = apres.elements.find((e) => e.cle === dim.cle)?.statut === 'complete';
+    const ajoutes = conv.slice(n + 1).filter((m) => m.role === 'assistant');
+    let reponse = ajoutes.length ? ajoutes[ajoutes.length - 1].texte : '';
+    if (!ajoutes.length) {
+      reponse = fait
+        ? (estValidation(texte) ? 'C\'est noté : les effectifs proposés sont validés tels quels.' : 'Vos effectifs sont reportés dans le mémoire.')
+        : `Je n'ai pas pu reporter « ${texte} » dans le mémoire de façon sûre : précisez les effectifs (par exemple « 8 agents titulaires, dont 6 agents de sécurité et 2 SSIAP 1, et 3 suppléants »).`;
+      conv.push({ role: 'assistant', texte: reponse, date: new Date().toISOString() });
+    }
+    ecrireEtat(apres);
+    return { etat: apres, reponse, modifies: ajoutes.flatMap((m) => m.modifies || []) };
+  }
   for (const p of pieces) if (p.type === 'image' && !p.description) p.description = await decrirePhoto(p.chemin);
   const r = etat.mode === 'cadre' ? await assistantCadre(etat, texte, pieces) : await assistantLibre(etat, texte, pieces);
   const date = new Date().toISOString();

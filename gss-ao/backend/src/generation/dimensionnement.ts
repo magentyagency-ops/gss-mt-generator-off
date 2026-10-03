@@ -744,8 +744,33 @@ export function messageDimensionnement(d: Dimensionnement, dce?: string): string
   // Couverture horaire incomplète du cas pratique : signalée à GSS (T5CP-5).
   const ecarts = dce === undefined ? [] : ecartsCouvertureCasPratique(d, dce);
   if (ecarts.length) l.push(`- attention, couverture du cas pratique : ${ecarts.join(' ; ')} ;`);
-  l.push('', 'Vous pouvez les valider (« Je valide les effectifs proposés ») ou les modifier (« Mets 7 agents SSIAP 2 dans l\'équipe dédiée »).');
+  l.push('', `Vous pouvez les valider (« Je valide les effectifs proposés ») ou les modifier (« ${exempleModification(d)} »).`);
   return l.join('\n');
+}
+
+/**
+ * Exemple de modification donné à GSS dans le premier message (T10N-1) : un profil du dispositif proposé pour ce marché,
+ * écrit comme l'assistant le lit (« Mets 6 agents de sécurité dans l'équipe dédiée », « Mets 3 maîtres-chiens en service sur la
+ * plage « Samedi, 21 h–6 h » »), jamais un profil absent du marché (etampes2 : aucun SSIAP 2).
+ */
+export function exempleModification(d: Dimensionnement): string {
+  const forme = (profil: string, qualification = ''): string => {
+    const t = `${profil} ${qualification}`;
+    const ssiap = /SSIAP\s*([123])/i.exec(t);
+    if (/chef d['’][ée]quipe/i.test(profil)) return "chefs d'équipe";
+    if (ssiap) return `agents SSIAP ${ssiap[1]}`;
+    if (/cynophile|ma[îi]tres?[- ]chiens?/i.test(t)) return 'maîtres-chiens';
+    if (/rondier/i.test(t)) return 'rondiers';
+    if (/encadr/i.test(t)) return 'encadrants';
+    return 'agents de sécurité';
+  };
+  const x = d.profils[0];
+  if (x) return `Mets ${x.titulaires + 1} ${forme(x.profil, x.qualification)} dans l'équipe dédiée`;
+  const c = d.casPratique.find((y) => y.enService > 0);
+  if (c) return `Mets ${c.enService + 1} ${forme(c.profil)} en service sur la plage « ${c.plage} »`;
+  const m = (d.misesEnSituation || []).find((y) => y.fonctions?.length);
+  if (m) return `Passe la fonction « ${m.fonctions[0].fonction} » à ${m.fonctions[0].nombre + 1} agents pour la ${m.libelle.split(/\s*:\s*/)[0].replace(/^./, (ch) => ch.toLowerCase())}`;
+  return "Mets 7 agents SSIAP 2 dans l'équipe dédiée";
 }
 
 /** Espace insécable entre un nombre et son unité (« 6 h », « 21 h », « 2 agents ») : le moteur de schémas ne coupe jamais
