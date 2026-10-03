@@ -53,3 +53,22 @@ describe('garde-fou des faits nouveaux du cadre (T5N-3)', () => {
     expect(r.questions.length).toBe(2);
   });
 });
+
+import { completerDelaisCadre } from '../src/generation/memoire_type_cadre';
+import { questionDelaiInapplicable } from '../src/generation/base_memoires';
+
+describe('critère du cadre qui demande les délais d’intervention (T5N-2, etampes1 592)', () => {
+  const Q = 'Délais d’interventions proposés par le candidat concernant : Une action d’intervention courante ; Une action d’urgence lié à un débordement';
+  const T = "Une action d’intervention courante\nÀ réception du bon de commande, GSS récapitule précisément le besoin, puis planifie les agents nécessaires.\n\nUne action d’urgence liée à un débordement\nLa permanence opérationnelle de GSS est organisée 24 h/24 et 7 j/7 afin de recevoir les demandes urgentes de la Mairie.";
+  it('sous-point sans durée : « Délai proposé … : [À COMPLÉTER]. » et sa question exacte à GSS', () => {
+    const r = completerDelaisCadre(T, Q, { client: "la Mairie d'Etampes", horsNormandie: true });
+    expect(r.texte).toContain('planifie les agents nécessaires.\nDélai proposé pour une action d’intervention courante : [À COMPLÉTER].');
+    expect(r.texte).toMatch(/demandes urgentes de la Mairie\.\nDélai proposé pour une action d’urgence liée à un débordement : \[À COMPLÉTER\]\.$/);
+    expect(r.ajouts[1].question).toBe("Pour le marché de la Mairie d'Etampes (hors Normandie, où GSS n'a annoncé aucun délai chiffré), quel délai GSS annonce-t-elle pour une action d’urgence liée à un débordement, entre l'appel de l'acheteur et l'arrivée des agents sur site ?");
+    expect(questionDelaiInapplicable(r.ajouts[0].question, '', true)).toBe(false);
+  });
+  it('durée ou emplacement déjà présents : rien n’est ajouté ; autre critère : rien', () => {
+    expect(completerDelaisCadre(T.replace('nécessaires.', 'nécessaires sous 48 heures.').replace('Mairie.', 'Mairie : [À COMPLÉTER].'), Q).ajouts).toEqual([]);
+    expect(completerDelaisCadre(T, 'Méthodologie de mise en place').ajouts).toEqual([]);
+  });
+});

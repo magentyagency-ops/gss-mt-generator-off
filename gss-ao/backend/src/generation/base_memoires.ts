@@ -579,6 +579,8 @@ export function questionDelaiInapplicable(question: string, dce: string, horsNor
   if (!/d[ée]lai|arriv|intervien|interven|remplac|astreinte/i.test(q)) return false;
   // Question des sites mixtes (le délai normand de GSS rappelé, le délai hors Normandie demandé) : toujours posée.
   if (/^Marché en partie hors Normandie\b/i.test(q)) return false;
+  // Délai demandé par un critère du cadre et laissé à compléter (T5N-2) : la question attend la réponse de GSS, toujours posée.
+  if (/quel délai GSS annonce-t-elle pour/i.test(q)) return false;
   const valeurs = [...q.matchAll(/(?<![\d,.])(\d+)\s*(minutes?|min\b|mn\b|heures?|h\b)/gi)].map((m) => ({ n: m[1], min: /^m/i.test(m[2]) }));
   if (!valeurs.length) return false;
   const d = normTxt(dce).replace(/\s+/g, ' ');

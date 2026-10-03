@@ -25,7 +25,7 @@ import {
   type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, phrasesThematiques, completerParThematiques, completerMailUnique, COLONNE_VALEUR, colonneCase, sansPseudoTableau, textesSchemaSvg, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
-  attribuerRubriques, blocRenvois, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
+  attribuerRubriques, blocRenvois, completerDelaisCadre, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, attendusDuChamp, attendusSansReponse,
 } from './memoire_type_cadre';
 import { SuiviAdaptations, adaptationsDuPubliposte, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, type PhraseAdaptee } from './adaptations_cctp';
@@ -5428,6 +5428,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     await harmoniserGrille();
     retirerConfirmations();
     const horsNormandieCadre = marcheHorsNormandie(analysisData, dceContext);
+    /** Délais d'intervention demandés par le cadre, laissés à compléter : ligne ajoutée → question exacte à GSS (T5N-2). */
+    const questionsDelaisCadre = new Map<string, string>();
     // Couverture des exigences du CCTP dans les réponses développées (comme en réponse libre).
     try {
       const developpeesCadre = replacements
@@ -5466,6 +5468,17 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       }
       // Cas pratique : cases « en service : [À COMPLÉTER] | rotation : [À COMPLÉTER] » remplies avec le dispositif proposé.
       if (dimensionnementCadre) r.value = remplirCasPratique(String(r.value), dimensionnementCadre).texte;
+      // Critère qui demande les délais d'intervention proposés : chaque sous-point porte une durée sourcée ou un « [À COMPLÉTER] »
+      // avec sa question exacte à GSS (etampes1 592 : deux paragraphes de procédure, sans délai ni emplacement, T5N-2).
+      if (d.kind !== 'table') {
+        const qChamp = (d.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '';
+        const dl = completerDelaisCadre(String(r.value), qChamp, { client: String(repriseMT?.prep.variables.CLIENT?.valeur || analysisData?.clientName || '').trim() || undefined, horsNormandie: horsNormandieCadre });
+        if (dl.ajouts.length) {
+          r.value = dl.texte;
+          dl.ajouts.forEach((a) => questionsDelaisCadre.set(a.ligne.replace(/\s*\[À COMPLÉTER\]\.?$/, '').trim(), a.question));
+          console.log(`[MemoireGenerator] Champ ${r.id} : ${dl.ajouts.length} délai(s) d'intervention demandé(s) par le cadre sans valeur, laissé(s) à compléter avec leur question à GSS.`);
+        }
+      }
       // Sujet que GSS traite dans le mémoire type, resté « [À COMPLÉTER] » après la rédaction (ca_normandie 241, 2.2 :
       // renfort urgent hors astreinte) : la phrase publipostée de GSS, sans question.
       if (repriseMT) {
@@ -6195,6 +6208,13 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     for (const el of elementsACompleter) {
       const q = questionDonneeGss(el.question);
       if (q !== el.question) { el.question = q; el.pourAcheteur = false; }
+    }
+    // Délai d'intervention demandé par le cadre et laissé à compléter : sa question exacte, posée à GSS (T5N-2).
+    for (const el of elementsACompleter) {
+      const k = [...questionsDelaisCadre.keys()].find((x) => el.contexte.replace(/\s+/g, ' ').includes(x));
+      if (!k) continue;
+      el.question = questionsDelaisCadre.get(k)!;
+      el.pourAcheteur = false;
     }
     // Grille de candidature : la question exacte de chaque donnée, posée à GSS (jamais à l'acheteur), une par emplacement.
     for (const el of elementsACompleter) {

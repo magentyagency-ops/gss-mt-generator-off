@@ -2110,3 +2110,69 @@ export function hauteurSchemaPt(svg: string, largeurPt: number): number {
   const largeur = Math.min(largeurPt, 5580000 / 12700);
   return Math.min(3960000 / 12700, largeur * h / w);
 }
+
+// ─── Cadre imposé : délais d'intervention demandés par le critère ─────────────────────────────────
+
+/** Le libellé du champ demande les délais d'intervention que propose le candidat (« Délais d'interventions proposés par le
+ *  candidat concernant : une action d'intervention courante ; une action d'urgence… »). */
+export const QUESTION_DELAIS_INTERVENTION = /d[ée]lais?\s+d['’]\s*interventions?[^.;]{0,80}?(?:propos[ée]s?|du candidat|par le candidat)|d[ée]lais?\s+(?:de mise en place|d['’]intervention)\s+propos/i;
+
+/** Une durée chiffrée (« 2 heures », « 30 minutes », « 48 h », « 1 jour ») ou un emplacement à compléter, hors « 24 h/24 ». */
+function dureeOuRepere(t: string): boolean {
+  const s = String(t || '').replace(/\d+\s*h\s*\/\s*24|\d+\s*j(?:ours)?\s*\/\s*7|\d+\s*h\s*(?:sur|\/)\s*\d+/gi, ' ');
+  return /\[À COMPLÉTER\]/.test(s) || /(?<![\d,.])\d+(?:[.,]\d+)?\s*(?:min(?:utes?)?|mn|h(?:eures?)?|jours?)(?![\p{L}])/iu.test(s);
+}
+
+/**
+ * Critère du cadre qui demande les délais d'intervention proposés (etampes1 592 : « Délais d'interventions proposés par le
+ * candidat concernant : une action d'intervention courante ; une action d'urgence liée à un débordement », rempli de deux
+ * paragraphes de procédure, sans délai ni emplacement à compléter) : chaque sous-point doit porter une durée chiffrée ou un
+ * « [À COMPLÉTER] » ; sinon « Délai proposé pour … : [À COMPLÉTER]. » est ajouté à la fin de sa partie, avec sa question
+ * exacte à GSS (hors Normandie, GSS n'a annoncé aucun délai chiffré : la valeur vient de GSS seul). Aucun délai n'est inventé.
+ */
+export function completerDelaisCadre(texte: string, question: string, o: { client?: string; horsNormandie?: boolean } = {}): { texte: string; ajouts: Array<{ ligne: string; question: string }> } {
+  const q = String(question || '').replace(/\s+/g, ' ').trim();
+  if (!QUESTION_DELAIS_INTERVENTION.test(q) || !String(texte || '').trim()) return { texte, ajouts: [] };
+  const apres = (/(?:concernant|pour|:)\s*:?\s*(.+)$/i.exec(q.replace(QUESTION_DELAIS_INTERVENTION, '')) || [])[1] || '';
+  const sousPoints = apres.split(/\s*;\s*|\s+\/\s+/).map((x) => x.replace(/[.:]+$/, '').trim()).filter((x) => /\p{L}{4}/u.test(x) && x.split(/\s+/).length <= 14);
+  const mots = (t: string) => normaliser(t).replace(/[^a-z ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 4 && !['action', 'pour', 'dans', 'avec'].includes(w)).map((w) => w.replace(/e?s$/, ''));
+  const precision = (sp: string) => (/urgen|d[ée]bordement/i.test(sp) ? ", entre l'appel de l'acheteur et l'arrivée des agents sur site"
+    : /courante|bon de commande|planifi/i.test(sp) ? ', entre la réception du bon de commande et la mise en place des agents' : '');
+  const pour = `${o.client ? `Pour le marché de ${o.client}` : 'Pour ce marché'}${o.horsNormandie ? ' (hors Normandie, où GSS n\'a annoncé aucun délai chiffré)' : ''}`;
+  const questionDe = (sp: string) => `${pour}, quel délai GSS annonce-t-elle pour ${sp ? sp.charAt(0).toLowerCase() + sp.slice(1) : 'une intervention'}${precision(sp)} ?`;
+  const lignes = String(texte).split('\n');
+  const ajouts: Array<{ ligne: string; question: string }> = [];
+  const titreDe = (l: string, sp: string) => {
+    const t = l.trim();
+    if (!t || t.split(/\s+/).length > 14 || /[.!?]$/.test(t)) return false;
+    const a = mots(sp), b = new Set(mots(t));
+    return a.length > 0 && a.filter((w) => b.has(w)).length / a.length >= 0.6;
+  };
+  const debuts = sousPoints.map((sp) => lignes.findIndex((l) => titreDe(l, sp)));
+  if (sousPoints.length && debuts.every((k) => k >= 0)) {
+    // Parties trouvées : un repère à la fin de chaque partie sans durée, de la dernière à la première (indices stables).
+    const ordre = sousPoints.map((sp, i) => ({ sp, debut: debuts[i] })).sort((a, b) => b.debut - a.debut);
+    let fin = lignes.length;
+    for (const p of ordre) {
+      const partie = lignes.slice(p.debut + 1, fin);
+      if (!dureeOuRepere(partie.join(' '))) {
+        let k = fin - 1;
+        while (k > p.debut && !lignes[k].trim()) k--;
+        // Intitulé de la partie tel que la réponse l'écrit (« liée à un débordement », l'accord corrigé).
+        const titre = lignes[p.debut].trim().replace(/[\s:]+$/, '');
+        const ligne = `Délai proposé pour ${titre.charAt(0).toLowerCase()}${titre.slice(1)} : [À COMPLÉTER].`;
+        lignes.splice(k + 1, 0, ligne);
+        ajouts.unshift({ ligne, question: questionDe(titre) });
+      }
+      fin = p.debut;
+    }
+    return { texte: lignes.join('\n'), ajouts };
+  }
+  if (dureeOuRepere(texte)) return { texte, ajouts: [] };
+  const points = sousPoints.length ? sousPoints : [''];
+  for (const sp of points) {
+    const ligne = sp ? `Délai proposé pour ${sp.charAt(0).toLowerCase()}${sp.slice(1)} : [À COMPLÉTER].` : 'Délai d\'intervention proposé : [À COMPLÉTER].';
+    ajouts.push({ ligne, question: questionDe(sp) });
+  }
+  return { texte: `${String(texte).trimEnd()}\n${ajouts.map((a) => a.ligne).join('\n')}`, ajouts };
+}
