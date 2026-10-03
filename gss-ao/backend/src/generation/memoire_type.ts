@@ -2317,6 +2317,8 @@ export interface DonneesBesoin {
   duree: string;
   sites: string[];
   villes: string[];
+  /** Commune de chaque site, lue dans le DCE (code postal écrit après le nom du site) : « Hôpital Nord » → « Marseille ». */
+  communesDesSites?: Record<string, string>;
   secteur: string;
   /** Horaires imposés par le CCTP (phrases citées). */
   horaires: string[];
@@ -2329,6 +2331,28 @@ export interface DonneesBesoin {
   horsNormandie: boolean;
   /** Première phrase du contexte, publipostée. */
   amorce: string;
+}
+
+/**
+ * Commune de chaque site (T10-COH-5) : la commune écrite avec son code postal juste après le nom du site dans le DCE
+ * (« l'Hôpital Nord, 15 chemin des Bourrely, 13015 Marseille »), au plus 160 caractères plus loin, avant le nom d'un autre site.
+ * Un site dont la commune n'est pas rattachée est absent du résultat.
+ */
+export function communesDesSites(dce: string, sites: string[], villes: string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  const plat = normaliser(String(dce || '')).replace(/\s+/g, ' ');
+  const cle = (x: string) => normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const nomsSites = sites.map((x) => ({ x, c: cle(x) })).filter((x) => x.c.length >= 4);
+  for (const site of nomsSites) {
+    for (const m of plat.matchAll(new RegExp(site.c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '[^a-z0-9]+'), 'g'))) {
+      let suite = plat.slice(m.index! + m[0].length, m.index! + m[0].length + 160);
+      // Jamais au-delà du nom d'un autre site.
+      for (const autre of nomsSites) if (autre !== site) { const k = suite.indexOf(autre.c.split(' ').slice(0, 2).join(' ')); if (k >= 0) suite = suite.slice(0, k); }
+      const ville = villes.find((v) => new RegExp(`\\b\\d{5}\\s*[-–]?\\s*${cle(v).replace(/ /g, '[^a-z0-9]+')}(?![a-z])`).test(suite));
+      if (ville) { out[site.x] = ville; break; }
+    }
+  }
+  return out;
 }
 
 export function donneesBesoin(prep: MemoirePrepare, ctx: ContexteMarche): DonneesBesoin {
@@ -2351,6 +2375,7 @@ export function donneesBesoin(prep: MemoirePrepare, ctx: ContexteMarche): Donnee
   return {
     client,
     objet: texte('OBJET_MARCHE'), lots: texte('LOTS'), duree: texte('DUREE_MARCHE'), sites: liste('SITE'), villes: liste('VILLE'),
+    communesDesSites: communesDesSites(ctx.dce || '', liste('SITE'), liste('VILLE')),
     secteur: texte('SECTEUR_CLIENT'),
     // Période de l'année gardée devant ses horaires (« Du 1er avril au 30 septembre : … », T8CS-1) ; 20 au plus, une
     // période dont la liste dépasse ce maximum n'est pas citée à moitié.

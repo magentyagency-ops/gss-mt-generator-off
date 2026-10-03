@@ -2408,7 +2408,7 @@ export function siteDansPhrase(nom: string, villes: string[] = []): string {
 }
 
 /** Phrase des sites du texte de secours : sans parenthèse de communes déjà écrites dans le site (T7CS-4, T7N-6). */
-export function phraseSites(sites: string[], villes: string[]): string {
+export function phraseSites(sites: string[], villes: string[], communes: Record<string, string> = {}): string {
   const liste = sites.map((x) => siteDansPhrase(x, villes)).filter(Boolean);
   if (!liste.length) return '';
   const ecrit = cleCommune(liste.join(' '));
@@ -2419,6 +2419,16 @@ export function phraseSites(sites: string[], villes: string[]): string {
     vues.add(c);
     return true;
   });
+  // Plusieurs sites (T10-COH-5) : chaque commune manquante est écrite après SON site (« l'Hôpital Nord (Marseille) et le
+  // Centre hospitalier de Gap »), jamais après la liste entière ; une commune qui ne se rattache à aucun site n'est pas écrite.
+  if (sites.length > 1) {
+    const avec = sites.map((x) => {
+      const t = siteDansPhrase(x, villes);
+      const v = communes[x];
+      return t && v && manquantes.includes(v) ? `${t} (${v})` : t;
+    }).filter(Boolean);
+    return `La prestation porte sur ${listeFr(avec)}.`;
+  }
   return `La prestation porte sur ${listeFr(liste)}${manquantes.length ? ` (${manquantes.join(', ')})` : ''}.`;
 }
 
@@ -2445,7 +2455,7 @@ export function perimetreSecours(perimetre: string): string {
 
 export function texteSecoursBesoin(d: DonneesBesoin, perimetre = ''): string {
   const parties: string[] = ['## Votre contexte et votre site', d.amorce || (d.client ? `${d.client.charAt(0).toUpperCase() + d.client.slice(1)} lance le marché ${d.objet ? `« ${d.objet} »` : 'de sécurité privée'}.` : `Vous nous consultez pour ${d.objet || 'une prestation de sécurité privée'}.`)];
-  const sites = phraseSites(d.sites, d.villes);
+  const sites = phraseSites(d.sites, d.villes, d.communesDesSites || {});
   if (sites) parties.push(sites);
   // Horaires et obligations du CCTP cités mot pour mot, entre guillemets : jamais passés à la voix de GSS (« au
   // titulaire » devenu « à GSS » au nettoyage final, caen 475, T8CS-1).
