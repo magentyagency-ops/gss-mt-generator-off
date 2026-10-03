@@ -3,7 +3,7 @@ import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema, dessinerSpecs, finaliserSvg } from './schema_service';
 import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce, phraseContraireAuDce } from './visuels_cadre';
-import { FormatImpose, PartieCourte, passagesLimitePages, limitePagesMemoire, phraseLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
+import { FormatImpose, PartieCourte, passagesLimitePages, passagesContenuOffre, limitePagesMemoire, phraseLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque, estRetourArriere } from './themes';
 import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, regrouperQuestions, completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, lireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements } from './completion';
@@ -31,7 +31,7 @@ import {
   questionsPubliposteParEmplacement, questionDeLEmplacement, completerFamilles, referencesDeSecours, ecartEquipeTableau, questionAvecLibelle, regrouperQuestionsTelesurveillance,
 } from './memoire_type_cadre';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
 import os from 'os';
@@ -9504,7 +9504,9 @@ Renvoie UNIQUEMENT un objet JSON : {"impose": true|false, "parties": [{"numero":
    * vise une autre pièce — CV, lettre, annexe — est écartée). null = pas de limite pour le mémoire.
    */
   private async detecterFormatImpose(dce: string): Promise<FormatImpose | null> {
-    const passages = passagesLimitePages(dce);
+    // Repérage sans modèle pour choisir les extraits, jamais pour décider seul qu'il n'y a pas de limite (T1-GEN-1).
+    let passages = passagesLimitePages(dce);
+    if (!passages.length) passages = passagesContenuOffre(dce);
     if (!passages.length) return null;
     const criteres: string[] = [];
     const reC = /crit[èe]res?\s+(de\s+jugement|d.attribution|de\s+choix|de\s+s[ée]lection|pond[ée]r)/gi;
@@ -9547,6 +9549,12 @@ Renvoie UNIQUEMENT un objet JSON : {"limite": true|false, "pagesMax": nombre, "c
     try {
       const pagesMax = Number(d.pagesMax);
       if (!d.limite || !Number.isFinite(pagesMax) || pagesMax < 2 || pagesMax > 40) return null;
+      // Nombre de pages absent des extraits du RC (en chiffres ou en lettres) : jamais une limite inventée (T1-GEN-1).
+      const nombresExtraits = new Set([...passages.join(' ').matchAll(new RegExp(`(?<![\\p{L}\\d])(\\d{1,3}|${RX_NOMBRE_LETTRES})(?![\\p{L}\\d])`, 'giu'))].map((x) => nombreFr(x[1])));
+      if (!nombresExtraits.has(pagesMax)) {
+        console.warn(`[MemoireGenerator] Format imposé par le RC : ${pagesMax} pages annoncées par le modèle, nombre absent des extraits du RC ; ignoré.`);
+        return null;
+      }
       let plan: PartieCourte[] = (Array.isArray(d.plan) ? d.plan : [])
         .map((p: any, i: number) => ({ id: `c${i + 1}`, title: String(p?.titre || '').trim().replace(/^./, (c) => c.toUpperCase()), attendu: String(p?.attendu || '').trim() }))
         .filter((p: PartieCourte) => p.title);

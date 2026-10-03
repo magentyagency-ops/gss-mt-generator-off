@@ -13,6 +13,18 @@ import os from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { themeActif, styleDuTheme, fontFaceTheme, familleTexte, policesDuTheme, contraste, LOGO_FOND_CLAIR, LOGO_BLANC } from './themes';
+import { RX_NOMBRE_LETTRES, nombreFr } from './base_memoires';
+
+/**
+ * Nombre de pages écrit en chiffres ou en lettres (T1-GEN-1 : « dix pages », « vingt (20) pages », « 10 p. », « 10 feuilles
+ * A4 », « 15 feuillets », « 10 faces ») ; groupe 1 : le nombre, groupe 2 : le chiffre entre parenthèses éventuel.
+ */
+const RX_PAGES = String.raw`\(?(?<![\p{L}\d])(\d{1,3}|${RX_NOMBRE_LETTRES})\)?\s*(?:\(\s*(\d{1,3})\s*\)\s*)?(?:pages?(?![\p{L}])|p\.(?=\s|$)|feuillets?(?![\p{L}])|feuilles?(?![\p{L}])|faces?(?![\p{L}]))`;
+/** « Le nombre de pages du mémoire technique est limité à 10 » : forme inverse ; groupe 1 : le nombre. */
+const RX_PAGES_INVERSE = String.raw`nombre\s+(?:maxim(?:al|um)\s+)?de\s+(?:pages|feuillets|feuilles|faces)[^.;]{0,90}?(?:limit[ée]e?|fix[ée]e?|plafonn[ée]e?|maxim\p{L}*|ne\s+(?:doit|peut|devra|pourra)\s+(?:pas\s+)?(?:d[ée]passer|exc[ée]der)|est\s+de)\s*(?:[àa]\s+)?(\d{1,3}|${RX_NOMBRE_LETTRES})(?![\p{L}\d])`;
+const valeurNombre = (a?: string, b?: string): number => (b && /^\d+$/.test(b) ? Number(b) : nombreFr(String(a || '')));
+/** Durée ou mention de forme qui n'est jamais une limite : « hors annexes », « annexes non comprises ». */
+const HORS_ANNEXES = /hors\s+annexes?|annexes?\s+(?:non\s+comprises?|exclues?|en\s+sus|non\s+compt[ée]es?)|sans\s+(?:les\s+)?annexes?|(?:non\s+compris|en\s+dehors\s+des?)\s+(?:les\s+)?annexes?/gi;
 
 export interface PartieCourte { id: string; title: string; attendu?: string }
 export interface FormatImpose { pagesMax: number; plan: PartieCourte[]; source: string }
@@ -25,14 +37,18 @@ const LEXEND = path.join(MOTEUR, 'polices', 'Lexend.ttf');
 export function passagesLimitePages(dce: string): string[] {
   // « 12 pages », « (12) pages », « vingt (20) pages », « 15 feuillets », « 10 faces » … accompagné, à
   // proximité, d'un terme de limite (maximum, limité, ne pas dépasser, au plus…).
-  const re = /\(?\b\d{1,3}\)?\s*(pages?|feuillets?|faces?)\b/gi;
-  const limite = /maxim|limit|d[ée]pass|exc[èé]d|au plus|plafon/i;
+  const re = new RegExp(`${RX_PAGES}|${RX_PAGES_INVERSE}`, 'giu');
+  const limite = /maxim|limit|d[ée]pass|exc[èé]d|au plus|plafon|n.exc[èé]d/i;
   const out: Array<{ pos: number; texte: string }> = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(dce)) && out.length < 8) {
-    // Pagination d'une pièce (« Le présent CCTP comporte 9 pages numérotées de 1 à 9 », ifits, T9CS-2) : pas une limite.
-    const avant = dce.slice(Math.max(0, m.index - 40), m.index);
-    if (/\bcomporte(?:nt)?\s*$/i.test(avant) || /^\s+num[ée]rot/i.test(dce.slice(m.index + m[0].length, m.index + m[0].length + 14))) continue;
+    // Pagination d'une pièce (« Le présent CCTP comporte 9 pages numérotées de 1 à 9 », ifits, T9CS-2) : pas une limite,
+    // sauf si la phrase dit une limite (« Le mémoire technique comporte 10 pages au maximum », T1-GEN-1).
+    const avant = dce.slice(Math.max(0, m.index - 60), m.index);
+    const phrase = dce.slice(Math.max(0, dce.lastIndexOf('.', m.index) + 1), (dce.indexOf('.', m.index + m[0].length) + 1 || dce.length));
+    const pagination = (/\bcomporte(?:nt)?\s*$/i.test(avant) && (/pr[ée]sente?\b|\bce\s+document|\bcette\s+pi[èe]ce/i.test(avant) || /^\s+num[ée]rot/i.test(dce.slice(m.index + m[0].length, m.index + m[0].length + 14))))
+      || /^\s+num[ée]rot/i.test(dce.slice(m.index + m[0].length, m.index + m[0].length + 14));
+    if (pagination && !limite.test(phrase)) continue;
     // « Date limite de réception des offres », « heure limite », « délai limite de remise » : pas une limite de pages.
     const autour = dce.slice(Math.max(0, m.index - 90), m.index + m[0].length + 90)
       .replace(/(?:dates?|heures?|d[ée]lais?)\s+limites?|limites?\s+(?:de\s+|d['’]\s*)?(?:r[ée]ception|remise|d[ée]p[ôo]t|validit[ée]|ex[ée]cution)/gi, ' ');
@@ -43,13 +59,31 @@ export function passagesLimitePages(dce: string): string[] {
 }
 
 /**
+ * Repli du repérage (T1-GEN-1) : aucun passage avec un nombre de pages lisible, mais le RC parle du contenu de l'offre
+ * technique avec des pages ou une limite (« … ne devra pas excéder… », « pages ») : ces paragraphes sont donnés au modèle,
+ * jamais « aucune limite » décidé sans lui.
+ */
+export function passagesContenuOffre(dce: string): string[] {
+  const out: string[] = [];
+  const t = String(dce || '');
+  for (const m of t.matchAll(/m[ée]moire\s+(?:technique|justificatif)|offre\s+technique|note\s+m[ée]thodologique/gi)) {
+    const zone = t.slice(Math.max(0, m.index! - 300), m.index! + 500);
+    if (!/pages?|feuillets?|feuilles?|limit|n.exc[èé]d|ne\s+(?:doit|devra|pourra)\s+pas\s+(?:d[ée]passer|exc[èé]der)/i.test(zone)) continue;
+    if (out.some((o) => o.includes(t.slice(m.index!, m.index! + 40)))) continue;
+    out.push(t.slice(Math.max(0, m.index! - 700), m.index! + 1300));
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+
+/**
  * Phrase d'un passage qui contient le nombre de pages et le terme de limite (« Maximum 7 pages recto »), pour la citer à
  * GSS (T9CS-2 : jamais le début du passage de 2 000 caractères, en-tête d'une autre pièce compris). '' si aucune.
  */
 export function phraseLimitePages(passage: string): string {
-  const LIMITE = /maxim|limit|d[ée]pass|exc[èé]d|au plus|plafon/i;
+  const LIMITE = /maxim|limit|d[ée]pass|exc[èé]d|au plus|plafon|n.exc[èé]d/i;
   const phrases = String(passage || '').replace(/\s+/g, ' ').split(/(?<=[.;!?])\s+(?=[A-ZÀ-Ý•–—-])|\s+[–—•|]\s+/);
-  const ph = phrases.find((x) => /\(?\b\d{1,3}\)?\s*(?:pages?|feuillets?|faces?)\b/i.test(x) && LIMITE.test(x.replace(/(?:dates?|heures?|d[ée]lais?)\s+limites?/gi, ' ')));
+  const ph = phrases.find((x) => new RegExp(`${RX_PAGES}|${RX_PAGES_INVERSE}`, 'iu').test(x) && LIMITE.test(x.replace(/(?:dates?|heures?|d[ée]lais?)\s+limites?/gi, ' ')));
   return ph ? ph.replace(/^\s*[–—•-]\s*/, '').trim() : '';
 }
 
@@ -60,21 +94,23 @@ export function phraseLimitePages(passage: string): string {
  * phrase ne le dit clairement, ou si la phrase porte aussi sur une autre pièce (CV, annexe, lettre).
  */
 export function limitePagesMemoire(passages: string[]): { pages: number; citation: string } | null {
-  const MEMOIRE = /m[ée]moire\s+(?:technique|justificatif)|offre\s+technique|note\s+m[ée]thodologique|r[ée]ponse\s+technique|proposition\s+technique/i;
-  const LIMITE = /maxim|limit|d[ée]pass|exc[èé]d|au plus|plafon/i;
+  const MEMOIRE = /m[ée]moire\s+(?:technique|justificatif|m[ée]thodologique)|offre\s+technique|note\s+m[ée]thodologique|r[ée]ponse\s+technique|proposition\s+technique/i;
+  const LIMITE = /maxim|limit|d[ée]pass|exc[èé]d|au plus|plafon|n.exc[èé]d/i;
   const AUTRE = /\bCV\b|curriculum|annexe|lettre|fiche|attestation|bordereau|DPGF|BPU/i;
   for (const passage of passages) {
     // Phrases et éléments de liste (« – un mémoire technique (douze (12) pages maximum) … ») : jamais un pied de page collé.
     const phrases = String(passage || '').replace(/\s+/g, ' ').split(/(?<=[.;])\s+(?=[A-ZÀ-Ý•–—-])|\s+[–—•]\s+/);
     for (const ph of phrases) {
       if (!MEMOIRE.test(ph) || !LIMITE.test(ph)) continue;
-      const m = /\(?\b(\d{1,3})\)?\s*(?:pages?|feuillets?|faces?)\b/i.exec(ph);
+      const m = new RegExp(RX_PAGES, 'iu').exec(ph) || new RegExp(RX_PAGES_INVERSE, 'iu').exec(ph);
       if (!m) continue;
-      const n = Number(m[1]);
+      const n = valeurNombre(m[1], m[2]);
       // Distance entre le mémoire et le nombre : même proposition (120 caractères au plus).
       const iMem = ph.search(MEMOIRE);
-      if (n < 2 || n > 40 || Math.abs(m.index - iMem) > 120) continue;
-      const voisinage = ph.slice(Math.min(iMem, m.index), Math.max(iMem, m.index) + m[0].length + 20);
+      if (!Number.isFinite(n) || n < 2 || n > 40 || Math.abs(m.index - iMem) > 120) continue;
+      // « hors annexes », « annexes non comprises » : la limite porte bien sur le mémoire (T1-GEN-1) ; « renvoyer à des annexes
+      // dans la limite de 10 pages » (rouen_univ) : la limite porte sur les annexes.
+      const voisinage = ph.slice(Math.max(0, Math.min(iMem, m.index) - 40), Math.max(iMem, m.index) + m[0].length + 20).replace(HORS_ANNEXES, ' ');
       if (AUTRE.test(voisinage)) continue;
       return { pages: n, citation: ph.replace(/^\s*[–—•-]\s*/, '').trim().slice(0, 300) };
     }

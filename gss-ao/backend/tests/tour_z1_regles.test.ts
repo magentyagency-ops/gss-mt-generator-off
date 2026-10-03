@@ -284,3 +284,26 @@ describe('propositions D5 : jamais un autre acheteur, jamais un emplacement sans
       .toBe("Les consignes de sécurité incendie sont appliquées suivant les procédures de l'EPCF.");
   });
 });
+
+import { passagesLimitePages, limitePagesMemoire, passagesContenuOffre } from '../src/generation/format_court';
+
+describe('limite de pages du RC écrite autrement (T1-GEN-1)', () => {
+  it('nombre en lettres, « comporte … au maximum », « p. », forme inverse, feuilles, « hors annexes »', () => {
+    for (const [ph, n] of [
+      ['Le mémoire technique ne devra pas excéder dix pages.', 10], ['Le mémoire technique comporte 10 pages au maximum.', 10],
+      ['Le mémoire technique est limité à 10 p. maximum.', 10], ['Le nombre de pages du mémoire technique est limité à 10.', 10],
+      ["Le mémoire technique n'excèdera pas 10 feuilles A4.", 10], ['Le mémoire technique ne doit pas dépasser 20 pages, hors annexes.', 20],
+      ['Le mémoire méthodologique dûment complété, dans la limite de 10 (dix) pages maximum recto-verso.', 10],
+    ] as Array<[string, number]>) {
+      const dce = `===== PIÈCE : RC.pdf =====\n\nARTICLE 4 - CONTENU DE L'OFFRE\n\nL'offre comprend l'acte d'engagement et un mémoire technique. ${ph}\n\nARTICLE 5 - JUGEMENT DES OFFRES\n\nValeur technique 60 %.`;
+      expect(limitePagesMemoire(passagesLimitePages(dce))?.pages).toBe(n);
+    }
+  });
+  it('pagination d’une pièce et limite des annexes : jamais une limite du mémoire', () => {
+    expect(passagesLimitePages('Le présent CCTP comporte 9 pages numérotées de 1 à 9.')).toEqual([]);
+    expect(limitePagesMemoire(passagesLimitePages("Il peut renvoyer à des annexes dans la limite de 10 pages recto-verso, sous réserve que les réponses minimales aient été renseignées sur le mémoire technique."))).toBeNull();
+  });
+  it('aucun nombre lisible : les paragraphes sur l’offre technique sont donnés au modèle', () => {
+    expect(passagesContenuOffre("Le mémoire technique ne devra pas excéder la limite fixée en annexe du présent règlement.").length).toBe(1);
+  });
+});
