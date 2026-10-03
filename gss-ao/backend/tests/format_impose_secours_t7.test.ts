@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+// Clé factice : new MemoireGenerator() exige une clé, aucun appel n'est fait (T9REG-3, comme les autres tests du générateur).
+process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || 'test-key-not-used';
 import { limitePagesMemoire, passagesLimitePages } from '../src/generation/format_court';
 import { MemoireGenerator, alerteRedactionIndisponible } from '../src/generation/memoire_generator';
 import { DCE, aCorpus } from './fixtures/corpus';
