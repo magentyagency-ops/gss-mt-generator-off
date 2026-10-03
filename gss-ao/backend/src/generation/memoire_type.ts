@@ -754,7 +754,9 @@ export function articleEtNom(brut: string, dce = ''): { article: string; nom: st
 }
 
 /** Forme juridique d'une société (« S.P.L. », « SAS », « SEM »…) : l'acheteur est une société, donc féminin. */
-const FORME_SOCIETE = /^(?:s\.?\s?p\.?\s?l\.?\s?a?\.?|s\.?\s?e\.?\s?m\.?\s?l?\.?|s\.?\s?a\.?\s?s?\.?\s?u?\.?|s\.?\s?a\.?\s?r\.?\s?l\.?|soci[ée]t[ée]\s+(?:publique|anonyme|d['’][ée]conomie)[^,]*?)(?=\s)/i;
+// Forme juridique écrite en entier, jamais coupée (T9-COH-1 : « Société publique locale Citédia Métropole » donnait
+// « locale Citédia Métropole »).
+const FORME_SOCIETE = /^(?:s\.?\s?p\.?\s?l\.?\s?a?\.?|s\.?\s?e\.?\s?m\.?\s?l?\.?|s\.?\s?a\.?\s?s?\.?\s?u?\.?|s\.?\s?a\.?\s?r\.?\s?l\.?|soci[ée]t[ée]\s+(?:publique\s+locale(?:\s+d['’]am[ée]nagement)?|d['’][ée]conomie\s+mixte(?:\s+locale)?|anonyme(?:\s+d['’]HLM)?|par\s+actions\s+simplifi[ée]e(?:\s+unipersonnelle)?))(?=\s)/i;
 
 /** Article d'un sigle : « l' » devant une voyelle, sinon celui de l'entité (« le CHU ») ; '' si inconnu. */
 function articleSigle(sigle: string, articleEntite: string): string {
@@ -965,6 +967,35 @@ export function teteNominale(nom: string): string {
 /** Forme juridique en tête du nom de l'acheteur, suivie de son nom d'usage (« Établissement public industriel et commercial … »). */
 const PREFIXE_JURIDIQUE = /^(?:[ée]tablissement\s+public(?:\s+(?:industriel\s+et\s+commercial|administratif|local|de\s+coop[ée]ration\s+(?:culturelle|intercommunale|environnementale)(?:\s+et\s+(?:environnementale|culturelle))?|[àa]\s+caract[èe]re\s+(?:industriel\s+et\s+commercial|administratif|scientifique,?\s+culturel\s+et\s+professionnel|scientifique\s+et\s+technologique)))?|syndicat\s+(?:mixte|intercommunal(?:\s+[àa]\s+vocation\s+(?:unique|multiple))?)|groupement\s+d['’]int[ée]r[êe]t\s+public|soci[ée]t[ée]\s+(?:publique\s+locale|d['’][ée]conomie\s+mixte)|association(?:\s+loi\s+1901)?|r[ée]gie(?:\s+autonome)?|office\s+public)\s+/i;
 
+/** Graphie usuelle des mots d'une forme juridique (PREFIXE_JURIDIQUE), pour un nom écrit en capitales. */
+const MOTS_FORME_JURIDIQUE: Record<string, string> = {
+  etablissement: 'établissement', public: 'public', publique: 'publique', industriel: 'industriel', commercial: 'commercial',
+  administratif: 'administratif', local: 'local', locale: 'locale', de: 'de', et: 'et', a: 'à', cooperation: 'coopération',
+  culturelle: 'culturelle', culturel: 'culturel', intercommunale: 'intercommunale', intercommunal: 'intercommunal',
+  environnementale: 'environnementale', caractere: 'caractère', scientifique: 'scientifique', professionnel: 'professionnel',
+  technologique: 'technologique', syndicat: 'syndicat', mixte: 'mixte', vocation: 'vocation', unique: 'unique', multiple: 'multiple',
+  groupement: 'groupement', d: 'd', interet: 'intérêt', societe: 'société', economie: 'économie', association: 'association',
+  loi: 'loi', regie: 'régie', autonome: 'autonome', office: 'office',
+};
+
+/**
+ * Nom en capitales qui commence par une forme juridique (« ÉTABLISSEMENT PUBLIC DE COOPÉRATION CULTURELLE OPÉRA DE ROUEN
+ * NORMANDIE », que le DCE nomme « l'Opéra de Rouen Normandie », T9-COH-2) : la forme juridique dans sa graphie usuelle
+ * (« Établissement public de coopération culturelle »), le nom d'usage dans la graphie du DCE (« Opéra de Rouen
+ * Normandie »), sinon tel que le DCE l'écrit. '' si le nom n'a pas cette forme.
+ */
+function casseFormeJuridique(nom: string, dce: string): string {
+  const lettres = nom.replace(/[^A-Za-zÀ-ÿ]/g, '');
+  if (!lettres || lettres.replace(/[^A-ZÀ-Ý]/g, '').length / lettres.length <= 0.7) return '';
+  const fj = PREFIXE_JURIDIQUE.exec(nom);
+  if (!fj) return '';
+  const forme = fj[0].trim().replace(/[A-Za-zÀ-ÿ]+/g, (w) => MOTS_FORME_JURIDIQUE[normaliser(w)] ?? '\u0000');
+  if (forme.includes('\u0000')) return '';
+  const reste = nom.slice(fj[0].length).trim();
+  const usage = casseDuDce(reste, dce) || reste;
+  return `${forme.charAt(0).toUpperCase()}${forme.slice(1)} ${usage}`;
+}
+
 /** Service d'un acheteur (direction, pôle, bureau, service des achats…), jamais l'acheteur lui-même. */
 const SERVICE_ACHETEUR = /^(?:sous[- ]direction|direction|p[ôo]le|bureau|mission|service\s+(?:des\s+|de\s+la\s+|du\s+|d['’]\s*)?(?:achats?|march[ée]s|commande|juridique|finances?|affaires)|d[ée]partement\s+(?:des\s+|de\s+la\s+|du\s+)(?:achats?|march[ée]s|commande))(?![a-zà-ÿ])/i;
 
@@ -1089,20 +1120,60 @@ export function formesClient(nom: string, dce = ''): { long: string; court?: { a
   // Normandie », que le DCE nomme « l'Opéra de Rouen Normandie » ; « Établissement public industriel et commercial Rouen
   // Normandie Tourisme & Congrès ») : c'est le nom d'usage, forme courte ; jamais la forme juridique seule
   // (« l'Établissement public »).
+  // Sigle que le DCE écrit entre parenthèses après le nom et emploie ensuite avec un article au moins 2 fois (T9-COH-2 :
+  // « … de l'Académie de Rouen (GIP FCIP) … Le GIP FCIP confie », « … et Seine-Maritime (CCI Rouen Métropole) … La CCI
+  // Rouen Métropole ») : forme courte, avant le nom d'usage et la tête nominale.
+  if (entites.length === 1 && mots > 6) {
+    const sigle = sigleParentheseDuDce(principal, dce);
+    const art = sigle ? articleEtNom(sigle, dce).article || articleSigle(sigle, '') : '';
+    if (sigle && art) return { long, court: { article: art, nom: sigle, genre: '' } };
+  }
   if (entites.length === 1 && mots > 6) {
     const fj = PREFIXE_JURIDIQUE.exec(principal);
     const reste = fj ? principal.slice(fj[0].length).trim() : '';
     if (reste && /^[A-ZÀ-Ý]/.test(reste) && !/^(?:De|Du|Des|D['’])\b/.test(reste) && normaliser(reste) !== normaliser(principal)) {
       const a = articleEtNom(reste, dce);
-      return { long, court: { article: a.article, nom: a.nom || reste, genre: a.article === 'la' ? 'f' : a.article === 'le' ? 'm' : '' } };
+      // Sans article, seul un nom propre s'emploie seul (« Rouen Normandie Tourisme & Congrès ») ; un nom commun
+      // (« Formation Continue et Insertion Professionnelle… », T9-COH-2) donnerait « Pour Formation Continue… » : refusé.
+      const nomCommun = !a.article && !!graphieMinusculeGss((reste.match(/^[A-Za-zÀ-ÿ]+/) || [''])[0]);
+      if (!nomCommun) return { long, court: { article: a.article, nom: a.nom || reste, genre: a.article === 'la' ? 'f' : a.article === 'le' ? 'm' : '' } };
     }
   }
   if (entites.length === 1 && mots > 8) {
     const tete = teteNominale(principal);
     const a = tete ? articleEtNom(tete, dce) : null;
-    if (tete && a?.article) return { long, court: { article: a.article, nom: a.nom || tete, genre: genreTete(tete) } };
+    // Jamais un seul nom commun (« la Chambre », « le Groupement », T9-COH-2) : le nom entier reste.
+    if (tete && a?.article && tete.split(/\s+/).length >= 2) return { long, court: { article: a.article, nom: a.nom || tete, genre: genreTete(tete) } };
   }
   return { long, pluriel };
+}
+
+/**
+ * Sigle d'usage écrit par le DCE entre parenthèses juste après le nom de l'acheteur (« … (GIP FCIP) », « … (CCI Rouen
+ * Métropole) ») et employé ensuite avec un article au moins 2 fois (« le GIP FCIP », « la CCI Rouen Métropole »), dans sa
+ * graphie du DCE ; jamais une forme juridique seule (« (GIP) »). '' sinon (jamais inventé).
+ */
+function sigleParentheseDuDce(nom: string, dce: string): string {
+  const mots = String(nom || '').match(/[A-Za-zÀ-ÿ0-9]+/g) || [];
+  if (mots.length < 2 || !dce) return '';
+  // Texte du DCE sans accents ni casse, caractère par caractère (positions conservées), comme graphieEntiereDuDce.
+  let plat = '';
+  const pos: number[] = [];
+  for (let i = 0; i < dce.length; i++) {
+    const c = dce[i].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    for (const x of c) { plat += x; pos.push(i); }
+  }
+  const rx = new RegExp(`(?<![a-z0-9])${mots.map((w) => normaliser(w).replace(/[^a-z0-9]/g, '')).join("[\\s'’&-]+")}\\s*\\(\\s*([^()\\n]{2,40}?)\\s*\\)`, 'g');
+  for (const m of plat.matchAll(rx)) {
+    const debut = m.index! + m[0].lastIndexOf(m[1]);
+    const brut = dce.slice(pos[debut], pos[debut + m[1].length - 1] + 1).replace(/\s+/g, ' ').trim();
+    // Sigle en capitales, suivi au plus de 3 mots du nom (« CCI Rouen Métropole », « SAR de Rouen »).
+    if (!/^[A-Z][A-Z0-9&]{1,7}(?: [A-Z][A-Z0-9&]{1,7})?(?: (?:(?:de|du|des|d['’]) ?)?[A-ZÀ-Ý][\wÀ-ÿ'’-]*){0,3}$/.test(brut)) continue;
+    if (FORME_JURIDIQUE.test(normaliser(brut).replace(/[’]/g, "'"))) continue;
+    const n = (normaliser(dce).match(new RegExp(`(?:^|[^a-z0-9])(?:l'|le |la |les |du |des |au |aux |de l'|a l')${echapper(normaliser(brut))}(?![a-z0-9])`, 'g')) || []).length;
+    if (n >= 2) return brut;
+  }
+  return '';
 }
 
 /** Genre de la tête nominale (« Syndicat mixte » : m ; « Communauté … » : f ; '' si inconnu). */
@@ -1417,8 +1488,9 @@ const CALCULS: Record<string, Calculateur> = {
     }
     if (FORME_SOCIETE.test(brut) && brut.replace(FORME_SOCIETE, '').trim()) brut = brut.replace(FORME_SOCIETE, '').trim();
     brut = sansFormeJuridiqueFinale(brut);
-    // Nom resté en capitales (page de garde et analyse en capitales) : graphie du DCE, mot par mot.
-    brut = casseDuDce(brut, c.ctx.dce || '') || brut;
+    // Nom resté en capitales (page de garde et analyse en capitales) : graphie du DCE, mot par mot ; à défaut, forme
+    // juridique écrite dans sa graphie usuelle et nom d'usage dans la graphie du DCE (T9-COH-2).
+    brut = casseDuDce(brut, c.ctx.dce || '') || casseFormeJuridique(brut, c.ctx.dce || '') || brut;
     const { article, nom } = articleEtNom(brut, c.ctx.dce || '');
     const formes = formesClient(nom, c.ctx.dce || '');
     // Société désignée ainsi dans le DCE (« S.P.L. CITEDIA METROPOLE », « société publique locale … ») : féminin.
