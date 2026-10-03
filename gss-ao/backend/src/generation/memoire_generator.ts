@@ -9409,11 +9409,9 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       sections[p.id] = texte.trim();
     }
     // Poste et horaires déjà repris par le dimensionnement : couverts par la partie (engagement), sans proposition à part.
-    for (const g of grouperNouvelles(nouvellesCourt.filter((e) => !exigenceDePosteDimensionne(`${e.sujet || ''} ${e.exigence}`, ctxBase.dimensionnement)), 6).groupes) {
-      const partie = partiePourTexte(plan, `${g.sujet} ${g.exigences.map((e) => e.exigence).join(' ')}`);
-      propositions.push(`Proposition de réponse à valider (question nouvelle du DCE, en engagement dans la partie « ${partie.title} ») : ${g.sujet}`);
-      propositionsCourt.push({ pid: partie.id, titres: [g.sujet], dansLeTexte: false });
-    }
+    // Annoncées « en engagement dans la partie X » seulement après vérification sur le texte final (étape 10, T6N-3).
+    const nouvellesEnEngagement = grouperNouvelles(nouvellesCourt.filter((e) => !exigenceDePosteDimensionne(`${e.sujet || ''} ${e.exigence}`, ctxBase.dimensionnement)), 6).groupes
+      .map((g) => ({ g, partie: partiePourTexte(plan, `${g.sujet} ${g.exigences.map((e) => e.exigence).join(' ')}`) }));
 
     // ── 7. Filtres, contrôles de cohérence avec le CCTP (inchangés), remarques ──
     const commentairesRetires = new Set<string>();
@@ -9606,6 +9604,25 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     // chaque partie) ; choix de GSS de la génération précédente appliqués, les autres signalées.
     const adaptations = this.finaliserAdaptations(suivi, sections, (id) => plan.find((x) => x.id === id)?.title || id, elements, rep.parPartie);
     rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
+    // Questions nouvelles du DCE (T6N-3) : « proposition en engagement dans la partie X » seulement si le texte final de la
+    // partie traite l'exigence (engagement écrit, gardé par le plafond et par la sélection au rendu) ; traitée dans une autre
+    // partie : cette partie est annoncée ; traitée nulle part : question exacte à GSS, jamais une proposition qui n'existe pas.
+    for (const { g, partie } of nouvellesEnEngagement) {
+      // Le bloc de la compréhension (contexte, périmètre, attentes, points de vigilance) cite l'exigence sans y répondre (imm :
+      // « Plan de continuité en cas de grève… remis au démarrage », point de vigilance sans réponse) : il ne compte pas.
+      const sansComprehension = (t: string) => t.replace(/^#{2,3}\s+(?:Votre contexte|Le p[ée]rim[èe]tre|Vos attentes|Les points de vigilance)[^\n]*\n[\s\S]*?(?=^#{1,3}\s|(?![\s\S]))/gm, '');
+      const traiteeDans = (pid: string) => g.exigences.some((e) => exigenceTraitee(e.exigence, sansComprehension(sections[pid] || '')));
+      const cible = traiteeDans(partie.id) ? partie : plan.find((p) => traiteeDans(p.id));
+      if (cible) {
+        propositions.push(`Proposition de réponse à valider (question nouvelle du DCE, en engagement dans la partie « ${cible.title} ») : ${g.sujet}`);
+        propositionsCourt.push({ pid: cible.id, titres: [g.sujet], dansLeTexte: false });
+        continue;
+      }
+      console.warn(`[MemoireGenerator] Format court : question nouvelle « ${g.sujet} » sans engagement dans le texte final ; posée à GSS.`);
+      for (const e of g.exigences) {
+        elements.push({ cle: `Q${elements.length + 1}`, question: `Quelle réponse GSS apporte-t-elle sur ce point du DCE, que le mémoire ne traite pas : « ${phraseLisible(e.exigence, 300).replace(/[.\s]+$/, '')} » ?`, contexte: partie.title, statut: 'ouvert', reperes: [], pourAcheteur: false });
+      }
+    }
     const consultationList = questionsUniques(elementsSansDoublon(elements));
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
     const alertePanneCourt = alerteRedactionIndisponible(this.appelsEchoues, nonAdapteesCourt);
