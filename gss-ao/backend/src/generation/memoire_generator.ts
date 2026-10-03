@@ -11,7 +11,7 @@ import {
   chargerMemoireType, preparerMemoireType, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
-  type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, formeCourteApresPremiere,
+  type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, formeCourteApresPremiere, phrasesGeneralesProtegees,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
@@ -1276,6 +1276,53 @@ export function alerteRedactionIndisponible(labels: string[], nonAdaptees: strin
   a(/^adaptation/i, 'adaptation des rubriques au CCTP');
   const n = labels.length;
   return `Rédaction automatique indisponible pendant la génération (${n} appel${n > 1 ? 's' : ''} au modèle sans réponse)${etapes.length ? ` : ${etapes.join(', ')}` : ''}${nonAdaptees.length ? ` ; rubrique${nonAdaptees.length > 1 ? 's' : ''} non adaptée${nonAdaptees.length > 1 ? 's' : ''} au CCTP : ${nonAdaptees.map((t) => `« ${t} »`).join(', ')}` : ''}. Le mémoire n'est pas complet : relancez la génération avant la remise.`;
+}
+
+/** Fréquences écrites dans les textes d'un schéma SVG (« Mensuelles ou trimestrielles ») et absentes d'un texte. */
+export function frequencesAbsentes(svg: string, texte: string): string[] {
+  const FREQ = /(?<![\p{L}])(?:quotidien|hebdomadaire|bimensuel|mensuel|bimestriel|trimestriel|semestriel|annuel)(?:le)?s?(?![\p{L}])/giu;
+  const mots = (String(svg || '').match(/>([^<>]+)</g) || []).map((x) => x.slice(1, -1)).join(' ');
+  const racine = (w: string) => w.toLowerCase().replace(/(?:le)?s?$/, '');
+  const dansTexte = new Set((String(texte || '').match(FREQ) || []).map(racine));
+  // Même fréquence écrite autrement (« une fois par mois », « chaque trimestre », « par an »).
+  const t = String(texte || '').toLowerCase();
+  const EQUIV: Array<[string, RegExp]> = [['quotidien', /par jour|chaque jour|tous les jours/], ['hebdomadaire', /par semaine|chaque semaine|toutes les semaines/],
+    ['mensuel', /par mois|chaque mois|tous les mois/], ['bimestriel', /tous les deux mois/], ['trimestriel', /par trimestre|chaque trimestre|tous les trois mois|dans le trimestre/],
+    ['semestriel', /par semestre|tous les six mois/], ['annuel', /par an\b|chaque année|tous les ans|par année/]];
+  for (const [w, rx] of EQUIV) if (rx.test(t)) dansTexte.add(w);
+  return [...new Set((mots.match(FREQ) || []).map(racine))].filter((w) => !dansTexte.has(w));
+}
+
+/** Familles de fréquence d'un texte (« une fois par trimestre », « trimestrielles », « dans le trimestre » → « trimestriel »). */
+export function familleFrequence(t: string): string[] {
+  const s = String(t || '').toLowerCase();
+  const out: string[] = [];
+  const f = (nom: string, rx: RegExp) => { if (rx.test(s)) out.push(nom); };
+  f('quotidien', /quotidien|par jour\b|chaque jour/);
+  f('hebdomadaire', /hebdomadaire|par semaine|chaque semaine/);
+  f('mensuel', /mensuel|par mois\b|chaque mois|tous les mois/);
+  f('trimestriel', /trimestr/);
+  f('semestriel', /semestr/);
+  f('annuel', /annuel|par an\b|chaque année|tous les ans/);
+  return out;
+}
+/** Familles de fréquence d'un extrait de GSS absentes de son remplacement (fréquence changée). */
+export function frequencesRetirees(extrait: string, remplacement: string): string[] {
+  const apres = familleFrequence(remplacement);
+  return familleFrequence(extrait).filter((x) => !apres.includes(x));
+}
+
+/**
+ * Question exacte à GSS quand une valeur de GSS n'est pas alignée sur le CCTP (T5N-6) : un montant (assurance) garde la question
+ * de garantie ; un délai, une fréquence ou un jalon demande si GSS s'engage sur l'exigence, ou quelle valeur écrire.
+ */
+export function questionAlignementRefuse(exigence: string, extrait: string, autres: string[] = []): string {
+  const e = exigence.replace(/[.\s]+$/, '').slice(0, 300);
+  const x = extrait.replace(/[*_#]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  if (/€|\beuros?\b|\bk€|\bM€/i.test(`${e} ${x}`) && !/minutes?|heures?|jours?|par (?:mois|an|trimestre|semaine)/i.test(e)) {
+    return `Le DCE exige : « ${e} ». Le mémoire indique la valeur de GSS : « ${x} ». Disposez-vous d'une garantie ou d'une valeur conforme à cette exigence (extension, attestation), et laquelle faut-il écrire ?`;
+  }
+  return `Le DCE exige : « ${e} ». Le mémoire indique la pratique de GSS : « ${x} »${autres.length ? ` (même valeur écrite aussi dans ${autres.map((t) => `« ${t} »`).join(', ')})` : ''}. Pouvez-vous vous engager sur l'exigence du DCE${autres.length ? ' dans toutes ces rubriques' : ''}, ou quelle valeur faut-il écrire ?`;
 }
 
 /** Ligne de consultation déjà formulée sans modèle (jamais envoyée à la fusion par le modèle, jamais reformulée). */
@@ -7692,7 +7739,12 @@ RÈGLES DE FORME (rendu Marp) :
       Object.fromEntries(publiees.filter((p) => p.mode === 'adapte' && p.texte).map((p) => [p.id, p.texte!])));
     progres(74, 'Cohérence avec les exigences chiffrées et les horaires du CCTP…');
     // Valeurs habituelles de GSS dont l'engagement renforcé n'est dû que si le DCE l'exige (indicateur faux) : protégées.
-    const proteges = Object.values(mt.variables).filter((v) => v.valeur_gss && v.valeur_si_exige && v.indicateur_exige && !prep.indicateurs[v.indicateur_exige]).map((v) => v.valeur_gss!);
+    const proteges = [
+      ...Object.values(mt.variables).filter((v) => v.valeur_gss && v.valeur_si_exige && v.indicateur_exige && !prep.indicateurs[v.indicateur_exige]).map((v) => v.valeur_gss!),
+      // Pratique générale de GSS suivie de la phrase propre au client (« Pour le CSTB, les réunions de suivi ont lieu une fois
+      // par an… ») : la phrase propre au client répond au CCTP, la phrase générale reste celle de GSS (T5CP-8).
+      ...plan.rubriques.flatMap((r) => phrasesGeneralesProtegees(mt.rubriques.find((x) => x.id === r.id)?.texte || '', sections[r.id] || '')),
+    ];
     const exigencesCoherence = [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))];
     await this.corrigerContradictions(sections, rubriquesDoc, exigencesCoherence, proteges, questionsCouverture, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, exigencesCoherence.map((x) => String(x.exigence || ''))));
     await this.verifierHoraires(sections, rubriquesDoc, dceContext, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, [], 'Horaires du CCTP'));
@@ -8148,6 +8200,11 @@ RÈGLES DE FORME (rendu Marp) :
       for (const b of biblio) {
         const svg = svgs.get(b.ref);
         if (!svg) continue;
+        // Fréquence écrite dans le schéma de la bibliothèque (IV-QUA-04 : « Mensuelles ou trimestrielles ») absente du texte
+        // final de la rubrique (fréquence du CCTP) : le schéma contredirait le texte ; il est construit d'après le texte au
+        // rendu (T5CP-8).
+        const ecart = frequencesAbsentes(svg, textes[b.id] || '');
+        if (ecart.length) { console.warn(`[MemoireGenerator] Schéma ${b.ref} de ${b.id} écarté : fréquence « ${ecart.join(', ')} » absente du texte de la rubrique ; schéma construit d'après le texte.`); continue; }
         schemas.set(CLE_SCHEMA(b.id), finaliserSvg(svg, `b${b.id}`));
         titres[b.id] ||= index.get(b.ref) || plan.rubriques.find((r) => r.id === b.id)?.titre || '';
       }
@@ -8428,6 +8485,24 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
         if (!ids.includes(id) || extrait.length < 12 || !remplacement || /⟦AC:|CONSULTATION REQUISE/i.test(extrait) || !sections[id].includes(extrait)) continue;
         // Pratique de GSS gardée quand le DCE n'exige rien (« une à trois fois par mois » : contrôles inopinés non exigés).
         if (proteges.some((x) => extrait.includes(x) && !remplacement.includes(x))) continue;
+        const exigenceC = String(c?.exigence || '').replace(/\s+/g, ' ').trim();
+        // Réunion exigée par le CCTP : c'est l'obligation des réunions de suivi, que leur rubrique traite (becquerel 591, T5N-4 :
+        // « au minimum une réunion par mois entre le Responsable sécurité et les représentants du prestataire » appliquée au
+        // contrôle global du responsable qualité) ; jamais alignée dans une autre rubrique.
+        if (/\br[ée]unions?\b/i.test(exigenceC) && id !== 'b5_reunions_indicateurs' && (sections.b5_reunions_indicateurs || '').trim()) {
+          console.warn(`[MemoireGenerator] Cohérence ${id} avec le CCTP : alignement refusé (réunion exigée, traitée par les réunions de suivi) : « ${extrait.slice(0, 100)} ».`);
+          continue;
+        }
+        // Fréquence de GSS écrite aussi dans d'autres rubriques (« une fois par trimestre », « trimestrielles ») : l'aligner ici
+        // seulement ferait se contredire le mémoire (T5N-4) ; refusée, la question est posée à GSS.
+        const autresRubriques = frequencesRetirees(extrait, remplacement).length
+          ? ids.filter((x) => x !== id && frequencesRetirees(extrait, remplacement).some((f) => familleFrequence(sections[x] || '').includes(f)))
+          : [];
+        if (autresRubriques.length) {
+          console.warn(`[MemoireGenerator] Cohérence ${id} avec le CCTP : alignement refusé (fréquence de GSS écrite aussi dans ${autresRubriques.join(', ')}) : « ${extrait.slice(0, 100)} ».`);
+          if (questions && exigenceC) questions.add(questionAlignementRefuse(exigenceC, extrait, autresRubriques.map((x) => rubriques.find((r) => r.id === x)?.title || x)));
+          continue;
+        }
         // Fait de GSS (montant d'assurance, numéro de contrat, valeur du registre) : jamais remplacé par le seuil du DCE ;
         // l'écart est demandé à GSS (parc_expo 202 : RC professionnelle Hiscox 300 000 € devenue « 10 000 000 € »).
         const motif = motifRefusAlignement(extrait, remplacement)
@@ -8440,7 +8515,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
             if (questions && exigence && !jalonsRefuses.has(id)) jalonsRefuses.set(id, exigence);
             continue;
           }
-          if (questions && exigence) questions.add(`Le DCE exige : « ${exigence.replace(/[.\s]+$/, '').slice(0, 300)} ». Le mémoire indique la valeur de GSS : « ${extrait.replace(/[*_#]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)} ». Disposez-vous d'une garantie ou d'une valeur conforme à cette exigence (extension, attestation), et laquelle faut-il écrire ?`);
+          if (questions && exigence) questions.add(questionAlignementRefuse(exigence, extrait));
           continue;
         }
         const texteAvant = sections[id], pos = texteAvant.indexOf(extrait);
@@ -9132,7 +9207,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     }
     progres(70, 'Cohérence avec les exigences chiffrées et les horaires du CCTP…');
     const exigencesCoherence = [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))];
-    await this.corrigerContradictions(sections, plan, exigencesCoherence, [], questionsCouverture, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, exigencesCoherence.map((x) => String(x.exigence || ''))));
+    await this.corrigerContradictions(sections, plan, exigencesCoherence, toutesRetenues.flatMap((id) => phrasesGeneralesProtegees(mtParId.get(id)?.texte || '', textes[id] || '')), questionsCouverture, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, exigencesCoherence.map((x) => String(x.exigence || ''))));
     await this.verifierHoraires(sections, plan, dceContext, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, [], 'Horaires du CCTP'));
     await this.engagementsChiffresManquants(sections, plan, dceContext);
     const remarquesCourt = await this.remarquesCahierDesCharges(dceContext);

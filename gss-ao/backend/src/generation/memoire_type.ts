@@ -1462,6 +1462,15 @@ export function variablesDuMarche(mt: MemoireType, ctx: ContexteMarche, indicate
       continue;
     }
     const imp = ctx.imposees?.[nom];
+    // Contrôle global du responsable qualité : le mémoire type de GSS le décrit trimestriel à plusieurs endroits (« Sur un
+    // trimestre type… dans le trimestre, le contrôle global », « lors des réunions trimestrielles… bilan du trimestre
+    // écoulé ») ; une autre fréquence imposée ne changerait qu'une phrase et ferait se contredire le mémoire (becquerel 591,
+    // T5N-4) : la pratique de GSS reste, l'exigence est posée à GSS.
+    if (nom === 'FREQ_CONTROLE_3' && imp && valeurPropre(imp.valeur) && !/trimestr/i.test(String(imp.valeur))) {
+      const gss = CALCULS[nom]?.(c) || { valeur: null };
+      out[nom] = { ...gss, aConfirmer: `Le cahier des charges impose pour le contrôle global « ${imp.valeur} » (« ${imp.citation.slice(0, 200)} ») ; le mémoire type de GSS décrit un contrôle global trimestriel du responsable qualité (réunions trimestrielles, bilan du trimestre). Pouvez-vous vous engager sur la fréquence du cahier des charges dans tout le mémoire, ou faut-il garder la pratique de GSS ?` };
+      continue;
+    }
     if (imp && valeurPropre(imp.valeur)) {
       out[nom] = { valeur: imp.valeur, source: `imposé par le DCE : « ${imp.citation.slice(0, 200)} »` };
       continue;
@@ -1471,7 +1480,31 @@ export function variablesDuMarche(mt: MemoireType, ctx: ContexteMarche, indicate
     const def = mt.variables[nom];
     if (!variableRenseignee(out[nom]) && def?.question && !out[nom].question) out[nom].question = def.question;
   }
+  // Fréquence des contrôles inopinés imposée par le CCTP (becquerel 591, T5N-4 : « au moins une fois par mois de nuit et au
+  // moins une fois par mois le week-end de jour ») : le calendrier type en découle, jamais la pratique de GSS « un à trois ».
+  if (!ctx.choix?.variables?.CONTROLES_INOPINES_MENSUELS && !ctx.imposees?.CONTROLES_INOPINES_MENSUELS && ctx.imposees?.FREQ_CONTROLE_2 && mt.variables.CONTROLES_INOPINES_MENSUELS) {
+    const imposee = String(ctx.imposees.FREQ_CONTROLE_2.valeur || '');
+    const derive = controlesInopinesDe(imposee);
+    out.CONTROLES_INOPINES_MENSUELS = derive
+      ? { valeur: derive, source: `déduit de la fréquence imposée par le DCE (« ${imposee} »)` }
+      : { valeur: null, question: `Le cahier des charges impose des contrôles inopinés « ${imposee} » : combien de contrôles inopinés par mois et par site faut-il indiquer dans le calendrier type du suivi qualité ?` };
+  }
   return out;
+}
+
+const NOMBRES_FOIS: Record<string, number> = { une: 1, un: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6 };
+const LETTRES_FOIS = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix'];
+/** Nombre mensuel de contrôles inopinés d'après une fréquence imposée (« au moins une fois par mois de nuit et au moins une
+ *  fois par mois le week-end » → « au moins deux contrôles inopinés ») ; '' si la fréquence ne se ramène pas au mois. */
+export function controlesInopinesDe(frequence: string): string {
+  const f = normaliser(frequence);
+  const parties = [...f.matchAll(/(?:(au moins|au minimum|minimum)\s+)?(une|un|deux|trois|quatre|cinq|six|\d+)\s+(?:fois|controles?|visites?|passages?)\s+(?:inopines?\s+)?par mois/g)];
+  if (!parties.length && /^(?:au moins |au minimum )?(?:tous les mois|chaque mois|mensuel(?:le)?s?)$/.test(f.trim())) return `${/au (?:moins|minimum)/.test(f) ? 'au moins ' : ''}un contrôle inopiné`;
+  if (!parties.length || /semaine|jour|trimestre|an\b|annee/.test(f.replace(/par mois[^,;]*/g, ''))) return '';
+  const n = parties.reduce((a, m) => a + (NOMBRES_FOIS[m[2]] ?? Number(m[2])), 0);
+  if (!n || n > 10) return '';
+  const auMoins = parties.some((m) => !!m[1]);
+  return `${auMoins ? 'au moins ' : ''}${LETTRES_FOIS[n]} contrôle${n > 1 ? 's' : ''} inopiné${n > 1 ? 's' : ''}`;
 }
 
 // ─── Publipostage ────────────────────────────────────────────────────────────────────────────────
@@ -2152,6 +2185,25 @@ export interface OptionsModifications {
   /** Sujets des délais de GSS publipostés dans la rubrique ({{DELAI_PTI}} → « pti » ; null : délai propre à GSS, sans
    *  sujet du DCE) : un délai de la rubrique n'est remplacé que par le délai que le DCE impose pour l'un de ces sujets. */
   sujetsDelais?: Array<string | null>;
+  /** Phrases de GSS jamais modifiées ni retirées (pratique générale de GSS suivie de la phrase propre au client). */
+  phrasesProtegees?: string[];
+}
+
+/**
+ * Phrase de pratique générale de GSS suivie, dans le mémoire type, d'une phrase propre au client publiée quand le DCE impose
+ * la valeur (« …les réunions de suivi sont mensuelles ou trimestrielles selon la nature et les besoins du site.{{#si
+ * FREQ_REUNIONS}} Pour {{CLIENT}}, les réunions de suivi ont lieu {{FREQ_REUNIONS}}.{{/si}} ») : quand la phrase propre au
+ * client est publiée, elle répond déjà au CCTP ; la phrase générale reste celle de GSS (cstb 551, T5CP-8 : phrase générale
+ * réécrite en « annuelles… », redite de la phrase suivante, et schéma « Mensuelles ou trimestrielles » contredit).
+ */
+export function phrasesGeneralesProtegees(gabarit: string, publie: string): string[] {
+  const out: string[] = [];
+  for (const m of String(gabarit || '').matchAll(/([^.\n{}]+\.)\{\{#si\s+[A-Z_]+\}\}\s*Pour \{\{CLIENT\}\}/g)) {
+    const phrase = m[1].trim();
+    const k = String(publie || '').indexOf(phrase);
+    if (k >= 0 && /^\s*Pour\s/.test(String(publie).slice(k + phrase.length))) out.push(phrase);
+  }
+  return out;
 }
 
 /** Sujet du DCE de chaque délai publiposté (delaiDuDce) ; null : délai propre à GSS que le DCE ne remplace jamais. */
@@ -2301,6 +2353,18 @@ export const RAISON_MISSION_NIEE = 'négation de la mission décrite par GSS (le
 /** Négation (« aucune ronde… », « n'est pas surveillé », « ne … pas », « jamais ») : une adaptation ne nie jamais la phrase de GSS. */
 const NEGATION_MISSION = /(?<![\p{L}])aucun(?:e|s|es)?\s+(?:ronde|contr[ôo]le|surveillance|filtrage|accueil|mission|agent|prestation|gardiennage|pr[ée]sence)|n['’]\s*(?:est|sont)\s+pas\s+(?:surveill|gard[ée]|assur|pr[ée]vu|effectu|r[ée]alis)|(?<![\p{L}])(?:non|pas de)\s+surveill|n['’]\s*(?:assure|effectue|r[ée]alise)(?:nt)?\s+(?:pas|aucun)/iu;
 
+/** Vrai si l'extrait (position dans le texte) chevauche une phrase protégée. */
+function touchePhraseProtegee(t: string, pos: { debut: number; fin: number }, phrases?: string[]): boolean {
+  for (const p of phrases || []) {
+    let k = t.indexOf(p);
+    while (k >= 0) {
+      if (pos.debut < k + p.length && pos.fin > k) return true;
+      k = t.indexOf(p, k + 1);
+    }
+  }
+  return false;
+}
+
 export function appliquerModifications(texte: string, mods: ModificationsProposees, options: OptionsModifications = {}): { texte: string; appliquees: ModificationTraitee[]; refusees: ModificationTraitee[] } {
   const o = { maxModifications: 12, maxAjouts: 3, motsParAjout: 60, ...options };
   const appliquees: ModificationTraitee[] = [];
@@ -2317,6 +2381,7 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     // valeur de l'adaptation (génération réelle ifits 171 : « Taux de reprise du personnel en place : 0 % »).
     const nRepere = (x: string) => (x.match(/\[À COMPLÉTER\]/g) || []).length;
     if (nRepere(m.extrait) > nRepere(m.par!)) { refusees.push({ ...m, raison: 'un repère à compléter ne se remplace pas' }); continue; }
+    if (touchePhraseProtegee(t, pos[0], o.phrasesProtegees)) { refusees.push({ ...m, raison: 'pratique générale de GSS suivie de la phrase propre au client (déjà conforme au CCTP)' }); continue; }
     m.par = sansCovidEnumere(m.par!);
     // Remplacement qui nie la phrase de GSS (cstb 551 : « Gestion des entrées : pendant l'ouverture du site, celui-ci n'est pas
     // surveillé ; … », « Contrôle intérieur : aucune ronde de contrôle… ») : jamais imprimé ; la rubrique décrit une mission
@@ -2352,6 +2417,7 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     const pos = positionsExtrait(t, m.extrait);
     if (pos.length !== 1) { refusees.push({ ...m, raison: pos.length ? 'extrait ambigu (plusieurs occurrences)' : 'extrait introuvable mot pour mot' }); continue; }
     if (/\[À COMPLÉTER\]/.test(m.extrait)) { refusees.push({ ...m, raison: 'un repère à compléter ne se retire pas' }); continue; }
+    if (touchePhraseProtegee(t, pos[0], o.phrasesProtegees)) { refusees.push({ ...m, raison: 'pratique générale de GSS suivie de la phrase propre au client (déjà conforme au CCTP)' }); continue; }
     const essai = t.slice(0, pos[0].debut) + t.slice(pos[0].fin);
     if (etapesRetirees(t, essai).length) { refusees.push({ ...m, raison: 'une étape de procédure ne se retire pas' }); continue; }
     if (debutDePhraseRetire(t, pos[0].debut, pos[0].fin, essai)) { refusees.push({ ...m, raison: 'début de phrase de GSS retiré seul (phrase gardée entière)' }); continue; }
@@ -2652,7 +2718,7 @@ export async function adapterRubrique(rubrique: RubriqueMemoireType, textePublip
     return sortie(reference, true, `appel au modèle impossible : ${e?.message || e}`);
   }
   if (!mods || typeof mods !== 'object') return sortie(reference, true, 'réponse du modèle illisible');
-  const opts: OptionsModifications = { ...options, dce: ctx.dce, reference, sujetAjouts: options.sujetAjouts ?? sujetDeRubrique(rubrique), sujetsDelais: options.sujetsDelais ?? sujetsDelaisDuGabarit(rubrique.texte || '') };
+  const opts: OptionsModifications = { ...options, dce: ctx.dce, reference, sujetAjouts: options.sujetAjouts ?? sujetDeRubrique(rubrique), sujetsDelais: options.sujetsDelais ?? sujetsDelaisDuGabarit(rubrique.texte || ''), phrasesProtegees: [...(options.phrasesProtegees || []), ...phrasesGeneralesProtegees(rubrique.texte || '', reference)] };
   const tout = appliquerModifications(reference, mods, opts);
   const niee = tout.refusees.find((m) => m.raison === RAISON_MISSION_NIEE);
   if (niee) return { ...sortie(reference, true, 'mission niée par le cahier des charges', [], tout.refusees), missionExclue: { extrait: niee.extrait, par: niee.par || '', motif: niee.motif } };
