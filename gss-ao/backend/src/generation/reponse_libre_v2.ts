@@ -2259,7 +2259,8 @@ const deCommune = (v: string) => (/^[aeiouyàâéèêëîïôöûüh]/i.test(v) 
 export function siteDansPhrase(nom: string, villes: string[] = []): string {
   const n = String(nom || '').replace(/\s+/g, ' ').trim();
   if (!n) return '';
-  if (/^(?:le|la|les)\s+\S|^l['’]\s*\S/i.test(n)) return n.charAt(0).toLowerCase() + n.slice(1);
+  // Article entier en minuscules, nom gardé tel quel (« LES LICES » → « les LICES », jamais « lES LICES », T9-COH-4).
+  if (/^(?:le|la|les)\s+\S|^l['’]\s*\S/i.test(n)) return n.replace(/^(?:les|le|la)(?=\s)|^l(?=['’])/i, (a) => a.toLowerCase());
   const [tete, ...reste] = n.split(/\s+[—–-]\s+/);
   const suite = reste.length ? ` — ${reste.join(' — ')}` : '';
   const premier = (/^[\p{L}]+/u.exec(n) || [''])[0];
