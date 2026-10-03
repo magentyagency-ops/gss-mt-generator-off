@@ -632,9 +632,11 @@ CONSIGNE PRIORITAIRE (elle prime sur toutes les consignes de rédaction ci-dessu
 
 /**
  * Textes de GSS repris dans une même réponse, dans l'ordre où la réponse du modèle les emploie (première phrase de chacun
- * retrouvée dans la réponse) ; un texte non employé garde sa place relative à la fin.
+ * retrouvée dans la réponse) ; un texte non employé suit la rubrique employée de la même famille (même préfixe
+ * d'identifiant : « b5_remplacement_imprevu » après « b5_remplacement_prevu », etampes1 594, T6C-4 : la procédure
+ * d'absence non prévue était remise après l'intrusion, sous son sous-titre), sinon il garde sa place relative à la fin.
  */
-export function ordonnerSelonReponse<T extends { texte: string }>(retenus: T[], reponse: string): T[] {
+export function ordonnerSelonReponse<T extends { texte: string; id?: string }>(retenus: T[], reponse: string): T[] {
   if (retenus.length <= 1) return retenus;
   const rep = normaliser(String(reponse || '')).replace(/[^a-z0-9]+/g, ' ');
   const position = (c: T): number => {
@@ -647,7 +649,14 @@ export function ordonnerSelonReponse<T extends { texte: string }>(retenus: T[], 
     }
     return min;
   };
-  return retenus.map((c, i) => ({ c, i, p: position(c) })).sort((a, b) => a.p - b.p || a.i - b.i).map((x) => x.c);
+  const places = retenus.map((c, i) => ({ c, i, p: position(c) }));
+  const famille = (id?: string) => String(id || '').replace(/_[^_]+$/, '');
+  for (const x of places) {
+    if (x.p !== Infinity || !x.c.id || famille(x.c.id) === x.c.id) continue;
+    const soeur = places.filter((y) => y !== x && y.p !== Infinity && y.c.id && famille(y.c.id) === famille(x.c.id)).sort((a, b) => b.p - a.p)[0];
+    if (soeur) x.p = soeur.p + 0.5;
+  }
+  return places.sort((a, b) => a.p - b.p || a.i - b.i).map((x) => x.c);
 }
 
 /**
@@ -1297,7 +1306,7 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
    */
   const recomposer = (ajoutsALaFin: boolean) => {
     // Ajouts regroupés par ligne de GSS d'ancrage (dernière phrase de GSS qui les précède dans la réponse).
-    type Morceau = { ancre: number; lignes: Item[][]; dansLaLigne: boolean; suivant?: number };
+    type Morceau = { ancre: number; lignes: Item[][]; dansLaLigne: boolean; suivant?: number; suivantEnTete?: boolean; titre?: boolean; deplace?: boolean };
     const morceaux: Morceau[] = [];
     let ancre = -1;
     let ligneAncre: Ligne | null = null;
@@ -1307,15 +1316,18 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
       for (const it of l.items) {
         if (it.ref !== undefined) {
           // Phrase de GSS qui suit l'ajout dans la réponse (amorce de tableau : l'ajout reste devant elle).
-          for (const m of sansSuivant) m.suivant = it.ref;
+          for (const m of sansSuivant) { m.suivant = it.ref; m.suivantEnTete = l.items[0] === it; }
           sansSuivant = [];
           ancre = it.ref; ligneAncre = l; courant = null; continue;
         }
         const dernier = morceaux[morceaux.length - 1];
         if (!courant) {
           courant = [];
-          if (dernier && dernier.ancre === ancre && ligneAncre !== l) dernier.lignes.push(courant);
-          else { morceaux.push({ ancre, lignes: [courant], dansLaLigne: ligneAncre === l }); sansSuivant.push(morceaux[morceaux.length - 1]); }
+          // Sous-titre du cadre écrit par le modèle (« Intrusion et dégradation de type vandalisme ») : il ouvre son propre
+          // morceau, qui suivra le texte de GSS que la réponse plaçait sous lui (T6C-4).
+          const titre = l.items.length === 1 && estSousTitreCadre(it.brut);
+          if (dernier && dernier.ancre === ancre && ligneAncre !== l && !titre) dernier.lignes.push(courant);
+          else { morceaux.push({ ancre, lignes: [courant], dansLaLigne: ligneAncre === l, titre }); sansSuivant.push(morceaux[morceaux.length - 1]); }
         }
         courant.push(it);
       }
@@ -1354,6 +1366,18 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
       // Ajout écrit juste avant une amorce de tableau (ou juste après elle) : devant l'amorce, jamais entre elle et son tableau.
       const amorce = amorceTableau(i) ? i : m.suivant !== undefined && amorceTableau(ref[m.suivant].ligne) && ref[m.suivant].ligne > i && finGroupe(i) >= ref[m.suivant].ligne ? ref[m.suivant].ligne : -1;
       if (amorce >= 0 && !dansLaLigne) { if (!avantLigne.has(amorce)) avantLigne.set(amorce, []); avantLigne.get(amorce)!.push({ ...m, dansLaLigne: false }); continue; }
+      // Sous-titre du cadre suivi, dans la réponse, d'un texte de GSS placé plus loin dans la référence : devant ce texte, jamais
+      // après le texte de GSS qui le précédait (etampes1 594, T6C-4 : « Intrusion et dégradation de type vandalisme » imprimé
+      // après la procédure d'intrusion, ou la procédure d'absence non prévue rangée sous ce sous-titre).
+      // Seulement si ce texte ouvre sa ligne dans la réponse et ouvre un bloc de GSS (jamais au milieu d'une liste : etampes1 594,
+      // champ 4, « Encadrement et moyens » finissait par la phrase de GSS sur la sous-traitance, dernière puce de l'identité).
+      const ouvreBloc = (x: number) => !(estPuce(x) && x > 0 && (estPuce(x - 1) || /:\s*$/.test((lignesRef[x - 1] || [])[(lignesRef[x - 1] || []).length - 1] || '')));
+      if (m.titre && m.suivant !== undefined && m.suivantEnTete && ref[m.suivant].ligne > i && ouvreBloc(ref[m.suivant].ligne) && !estTableauRef(ref[m.suivant].ligne)) {
+        const cibleTitre = ref[m.suivant].ligne;
+        if (!avantLigne.has(cibleTitre)) avantLigne.set(cibleTitre, []);
+        avantLigne.get(cibleTitre)!.push({ ...m, dansLaLigne: false, deplace: true });
+        continue;
+      }
       const cible = dansLaLigne ? i : finGroupe(i);
       if (!aPlacer.has(cible)) aPlacer.set(cible, []);
       aPlacer.get(cible)!.push({ ...m, dansLaLigne });
@@ -1376,6 +1400,8 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
         for (let j = i + 1; j < lignesRef.length && lignesRef[j].length && !ligneSousTitre(j); j++) if (presents(j).length) { repris = true; break; }
         const k = ref.findIndex((p) => p.ligne === i);
         if (repris && !exclus[k]) {
+          for (const m of avantLigne.get(i) || []) { poser(m); if (m.deplace) nouvelle.push({ items: [] }); vide = false; }
+          avantLigne.delete(i);
           const it = position.get(k)?.item || { brut: ref[k].brut, mots: ref[k].mots, ref: k };
           it.brut = ref[k].brut;
           ligne = { items: [it] };
@@ -1386,7 +1412,9 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
       } else {
         const ks = presents(i);
         if (ks.length) {
-          for (const m of avantLigne.get(i) || []) { poser(m); vide = false; }
+          // Sous-titre du cadre déplacé : séparé de son texte par une ligne vide, comme dans la réponse.
+          for (const m of avantLigne.get(i) || []) { poser(m); if (m.deplace) nouvelle.push({ items: [] }); vide = false; }
+          avantLigne.delete(i);
           const premier = ref.findIndex((p) => p.ligne === i);
           const puce = (PUCE.exec(ref[premier].brut) || [''])[0];
           const its = ks.map((k) => position.get(k)!.item);
@@ -1404,6 +1432,8 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
         vide = false;
       }
     }
+    // Morceau à placer devant une ligne qui n'a pas été imprimée : jamais perdu, à la fin.
+    for (const l of avantLigne.values()) aLaFin.push(...l);
     if (aLaFin.length) {
       if (nouvelle.length && !vide) nouvelle.push({ items: [] });
       for (const m of aLaFin) poser(m);
@@ -1524,6 +1554,8 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   const budget = o.maxMots !== undefined ? Math.max(o.maxMots, compter(texte)) : Infinity;
   let mots = compter(texte);
   let reinserees = lignesTableauRemises;
+  /** Phrases de GSS remises à cette étape (absentes de la réponse du modèle). */
+  const remises = new Set<number>();
   const inserer = (k: number, ligneEntiere: boolean): boolean => {
     const ks = ref.map((_, j) => j).filter((j) => ref[j].ligne === ref[k].ligne && !exclus[j]);
     const n = ligneEntiere ? ks.reduce((a, j) => a + compter(ref[j].brut), 0) : compter(ref[k].brut);
@@ -1560,6 +1592,7 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     }
     mots += n;
     reinserees++;
+    (ligneEntiere ? ref.map((_, j) => j).filter((j) => ref[j].ligne === ref[k].ligne && !exclus[j]) : [k]).forEach((j) => remises.add(j));
     return true;
   };
   const exclue = (k: number) => exclus[k];
@@ -1593,6 +1626,33 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
       const bribe = ref.some((p, k) => position.has(k) && ((p.mots.length >= it.mots.length
         && [...jeu].filter((w) => p.mots.includes(w)).length / jeu.size >= 0.7) || rediteDePhrase(p.brut, it.brut)));
       if (bribe) { l.items.splice(j, 1); bribesRetirees++; }
+    }
+  }
+  // Phrase du modèle qui résume une procédure de GSS remise ci-dessus (etampes1 594, T6C-4 : « Pour une absence imprévue, si la
+  // prise de service de l'agent n'est pas enregistrée 10 minutes avant…, nous appelons l'agent et mobilisons automatiquement
+  // l'agent d'astreinte », suivie de la procédure de GSS elle-même) : retirée. Bloc de GSS = ligne remise et sa liste ; 70 %
+  // au moins des mots de la phrase (racines de 5 lettres) dans ce bloc, et tous ses nombres.
+  if (remises.size) {
+    const racine = (w: string) => w.slice(0, 5);
+    const nombres = (t: string) => (t.match(/\d+(?:[.,]\d+)?/g) || []);
+    const blocs: Array<{ mots: Set<string>; nombres: Set<string> }> = [];
+    for (const i of new Set([...remises].map((k) => ref[k].ligne))) {
+      let j = i;
+      if (/:\s*$/.test((lignesRef[i] || [])[(lignesRef[i] || []).length - 1] || '')) while (j + 1 < lignesRef.length && estPuce(j + 1)) j++;
+      const ks = ref.map((_, x) => x).filter((x) => ref[x].ligne >= i && ref[x].ligne <= j);
+      blocs.push({ mots: new Set(ks.flatMap((x) => ref[x].mots).filter((w) => w.length >= 4).map(racine)), nombres: new Set(ks.flatMap((x) => nombres(ref[x].brut))) });
+    }
+    for (const l of sortie) {
+      for (let j = l.items.length - 1; j >= 0; j--) {
+        const it = l.items[j];
+        if (!it.ajout || estSousTitreCadre(it.brut)) continue;
+        // Suite d'une phrase coupée à « ; » ou « : », ligne « libellé : valeur » (exemple de rapport rempli) : jamais touchée.
+        if ((j > 0 && /[;:]\s*$/.test(l.items[j - 1].brut)) || /^\s*(?:[•\-*]\s+)?[^:.;]{2,40}\s:\s/.test(l.items[0].brut)) continue;
+        const p = [...new Set(it.mots.filter((w) => w.length >= 4).map(racine))];
+        if (p.length < 6) continue;
+        const redite = blocs.some((b) => p.filter((w) => b.mots.has(w)).length / p.length >= 0.7 && nombres(it.brut).every((x) => b.nombres.has(x)));
+        if (redite) { l.items.splice(j, 1); bribesRetirees++; }
+      }
     }
   }
   bribesRetirees += retirerPseudoTableau();
