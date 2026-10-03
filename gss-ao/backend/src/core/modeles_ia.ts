@@ -152,9 +152,11 @@ export function enAssistantInteractif(): boolean {
 }
 
 // ── Crédit OpenAI épuisé ─────────────────────────────────────────────────────────────────────
-/** Erreur « crédit OpenAI épuisé » (insufficient_quota, credit_balance_exhausted), quel que soit l'endroit où l'API l'écrit. */
+/** Erreur « crédit OpenAI épuisé » (insufficient_quota, credit_balance_exhausted), quel que soit l'endroit où l'API l'écrit.
+ *  Le message seul suffit (T7-COH-5) : le seul message de crédit épuisé observé sur ce compte, sans code conservé, est
+ *  « 429 You have no credits remaining. Add credits to continue using the API… » (_corpus_verif/_logs). */
 export function creditEpuise(e: any): boolean {
-  return /insufficient_quota|credit_balance/i.test(`${e?.code || ''} ${e?.error?.code || ''} ${e?.type || ''} ${e?.error?.type || ''} ${e?.message || ''}`);
+  return /insufficient_quota|credit_balance|no credits remaining|exceeded your current quota|add credits to continue/i.test(`${e?.code || ''} ${e?.error?.code || ''} ${e?.type || ''} ${e?.error?.type || ''} ${e?.message || ''} ${e?.error?.message || ''}`);
 }
 /** Génération interrompue : le crédit OpenAI est épuisé ; aucun mémoire n'est produit (message montré à l'utilisateur). */
 export class CreditOpenAIEpuise extends Error {
@@ -199,7 +201,7 @@ export function reprendreFlex(): void { flexSuspenduJusqua = 0; }
           return await appel;
         } catch (e: any) {
           const code = e?.code || e?.error?.code || '';
-          const quota = creditEpuise(e) || /insufficient_quota|credit_balance/i.test(String(code));
+          const quota = creditEpuise(e) || creditEpuise({ code });
           const statut = Number(e?.status) || 0;
           // Erreur passagère (en Flex, le SDK ne réessaie plus : maxRetries 0) : 429 hors crédit épuisé, délai dépassé,
           // erreur serveur (500, 502, 503…), 408, 409, connexion interrompue. L'appel est refait en niveau standard, avec

@@ -35,6 +35,11 @@ describe('repli Flex', () => {
     expect(r.ok).toBe(false);
     expect(r.tiers.length).toBe(1);
   });
+  it('T7-COH-5 : crédit épuisé annoncé par le seul message réel (sans code) : jamais réessayé', async () => {
+    const r = await essai({ status: 429, corps: { error: { message: 'You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.' } } });
+    expect(r.ok).toBe(false);
+    expect(r.tiers.length).toBe(1);
+  });
 });
 
 import { creditEpuise } from '../src/core/modeles_ia';
@@ -45,5 +50,13 @@ describe('creditEpuise', () => {
     expect(creditEpuise({ status: 429, error: { code: 'credit_balance_exhausted' } })).toBe(true);
     expect(creditEpuise({ status: 429, message: 'Your credit balance is exhausted (credit_balance_exhausted)' })).toBe(true);
     expect(creditEpuise({ status: 429, code: 'rate_limit_exceeded' })).toBe(false);
+  });
+  it('T7-COH-5 : reconnaît le message réel relevé dans _corpus_verif/_logs, sans code', () => {
+    const reel = '429 You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.';
+    expect(creditEpuise({ status: 429, message: reel })).toBe(true);
+    expect(creditEpuise({ status: 429, error: { message: 'You have no credits remaining.' } })).toBe(true);
+    expect(creditEpuise({ status: 429, message: 'You exceeded your current quota, please check your plan and billing details.' })).toBe(true);
+    expect(creditEpuise({ status: 429, message: 'Rate limit reached for gpt-6-luna in organization org-x on tokens per min (TPM).' })).toBe(false);
+    expect(creditEpuise({ status: 429, message: 'Resource unavailable (flex)' })).toBe(false);
   });
 });
