@@ -27,7 +27,7 @@
 // comme une exigence du CCTP (T6C-10).
 
 import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, variableRenseignee, phraseDelaiDuDce, phraseDuDceContenant, VARIABLES_IMPOSABLES, SUJET_VARIABLE_DELAI, type MemoireType, type ContexteMarche } from './memoire_type';
-import { sitesDuMarche, lieuDuMarche, communesParCodePostal } from './base_memoires';
+import { sitesDuMarche, lieuDuMarche, communesParCodePostal, interditPhotosDce } from './base_memoires';
 
 export type StatutAdaptation = 'a_valider' | 'validee' | 'modifiee' | 'retablie';
 
@@ -299,10 +299,9 @@ export function exigenceDuFiltre(c: Changement, dce: string, horsNormandie: bool
   if (perdu(/vélo|trottinette|gyropode|en voiture|en véhicule|motoris/i) && /rondes?[^.]{0,60}(?:effectuées|réalisées|faites|assurées)\s+(?:exclusivement\s+)?à pied/i.test(d)) {
     return citerDce(dce, /rondes?[^.]{0,60}(?:effectuées|réalisées|faites|assurées)\s+(?:exclusivement\s+)?à pied/i);
   }
-  if (perdu(/\bphotos?\b|photographi(?!e d.identité)|\bvidéos?\b/i)) {
-    const q = citerDce(dce, /(?:ne pas|interdiction de|interdit de|il est interdit de|aucune?)\s+(?:prendre|réaliser|capter|faire)?\s*(?:de |des )?(?:photos?|photographies?|clichés)\b/i);
-    if (q) return q;
-  }
+  // Interdit des photos ou des vidéos : la phrase entière du DCE, exception comprise (T10C-1).
+  const ph = interditPhotosDce(dce);
+  if (ph && perdu(ph.photos ? /\bphotos?\b|photographi(?!e d.identité)|\bvidéos?\b/i : /(?<![a-zà-ÿ])vidéos?(?![a-zà-ÿ])/i)) return ph.citation;
   if (perdu(/lorsqu['’](?:elle|il)s? (?:est|sont) (?:requise?s?|exigée?s?|nécessaires?)|lorsque (?:nécessaire|requis|cela est requis)|le cas échéant|si (?:nécessaire|requis|exigé|le poste l.exige)|selon (?:les |le )?(?:postes?|missions?(?: commandées)?|besoins?)|en fonction (?:des|du) (?:postes?|missions?)/i)) {
     const q = citerDce(dce, /(?:agents?|personnel|chaque prestation|chaque agent)[^.:]{0,140}?(?:doivent|devront|doit|devra)\s+(?:obligatoirement\s+)?(?:être\s+)?(?:détenteurs?|titulaires?|posséder|disposer)/i);
     if (q) return q;
@@ -531,6 +530,7 @@ export function adaptationsDuPubliposte(mt: MemoireType, ctx: ContexteMarche, id
     const sans = preparerMemoireType({ ...base, ...(k === 'HORS_NORMANDIE' ? { horsNormandie: false } : {}), choix: { ...(base.choix || {}), indicateurs: { ...(base.choix?.indicateurs || {}), [k]: false } } }, { memoireType: mt });
     const def = mt.indicateurs[k];
     const exigence = k === 'HORS_NORMANDIE' ? exigenceHorsNormandie(ctx.dce || '', ctx.analyse)
+      : k === 'PHOTOS_INTERDITES' ? interditPhotosDce(ctx.dce || '')?.citation || def.description
       : (def.dce ? citerDce(ctx.dce || '', new RegExp(def.dce, 'i')) : '') || (reel.etatsIndicateurs[k]?.raisons || []).find((r) => /^DCE/.test(r)) || def.description;
     for (const id of ids) {
       const r = mt.rubriques.find((x) => x.id === id);

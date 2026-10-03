@@ -185,8 +185,8 @@
    "dce": "informatique|(?<![\\wÀ-ÿ])(?:excel|word|ordinateurs?)(?![\\wÀ-ÿ])"
   },
   "PHOTOS_INTERDITES": {
-   "description": "Le DCE interdit les photos (main courante : pas de photos ni de vidéos).",
-   "dce": "(?:ne pas|interdiction de|interdit de|il est interdit de|aucune?)\\s+(?:prendre|r[ée]aliser|capter|faire)?\\s*(?:de |des )?(?:photos?|photographies?|clich[ée]s)(?![\\wÀ-ÿ])"
+   "description": "Le DCE interdit les photos (main courante : pas de photos ni de vidéos), sans l'exception qu'il peut lui donner (photographies nécessaires aux rapports ou photographies justificatives exigées).",
+   "calcul": "photos_interdites"
   },
   "RONDES_A_PIED": {
    "description": "Le DCE impose des rondes à pied (pas de vélo ni de trottinette).",

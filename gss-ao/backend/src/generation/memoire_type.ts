@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { lignesEquipe, questionDimensionnement, questionRondes, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss } from './base_memoires';
+import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -534,6 +534,11 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
       valeur = ctx.horsNormandie ?? marcheHorsNormandie(ctx.analyse || {}, ctx.dce || '');
       const lieu = ctx.horsNormandie === undefined ? lieuDuMarche(ctx.analyse || {}, ctx.dce || '') : null;
       raisons.push(lieu ? `${lieu.statut === 'inconnu' ? 'lieu du site introuvable dans le DCE' : lieu.statut === 'mixte' ? 'sites en Normandie et hors Normandie' : lieu.statut === 'hors' ? 'site hors Normandie' : 'site en Normandie'} (${lieu.source})` : valeur ? 'marché hors Normandie (choix)' : 'marché en Normandie (choix)');
+    } else if (def.calcul === 'photos_interdites') {
+      // Interdit des photos du DCE, sauf l'exception qu'il donne lui-même (photographies nécessaires aux rapports, T10C-1).
+      const ph = interditPhotosDce(ctx.dce || '');
+      valeur = !!ph?.photos;
+      if (ph) raisons.push(`DCE : « ${ph.citation.slice(0, 200)} »${ph.photos ? '' : ' (photos permises par le DCE, vidéos interdites)'}`);
     } else {
       if (def.dce) {
         const rx = new RegExp(def.dce, 'i');

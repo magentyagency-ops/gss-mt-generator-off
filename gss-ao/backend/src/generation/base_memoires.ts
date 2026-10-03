@@ -1433,6 +1433,44 @@ export function vocabulaireSchemas(dce: string): Array<[string, string]> {
     : [];
 }
 
+// Interdit des photos du DCE (« Aucune photographie ou vidéo des installations… ne peut être réalisée… », « il est
+// interdit de prendre des photos »), et exception que le DCE lui donne lui-même (citedia, T10C-1 : « Cette interdiction ne
+// s'applique pas aux photographies strictement nécessaires… rapports d'intervention », « les photographies justificatives »
+// exigées dans le compte rendu).
+const RX_INTERDIT_PHOTOS = /(?:ne pas|interdiction de|interdit de|il est interdit de|aucune?)\s+(?:prendre|réaliser|capter|faire)?\s*(?:de |des )?(?:photos?|photographies?|clichés)(?![a-zà-ÿ])/i;
+const RX_EXCEPTION_PHOTOS = /(?:ne s.applique pas|n.est pas applicable|ne concerne pas|à l.exception d|sauf\b|excepté)[^.]{0,80}(?:photos?|photographies?|clichés)(?![a-zà-ÿ])/i;
+const RX_PHOTOS_EXIGEES = /(?:photos?|photographies?|clichés)\s+(?:justificatives?|de constat)|(?:rapports?|comptes? rendus?)[^.;]{0,120}(?:illustrés?|accompagnés?|comportant|assortis?)[^.;]{0,80}(?:photos?|photographies?)(?![a-zà-ÿ])/i;
+const RX_VIDEO = /(?<![a-zà-ÿ])vidéos?(?![a-zà-ÿ])/i;
+
+/** Phrases du DCE (texte remis à plat), coupées aux fins de phrase. */
+function phrasesDuDce(dce: string): string[] {
+  return String(dce || '').replace(/\s+/g, ' ').split(/(?<=[.!?;])\s+(?=[A-ZÀ-Ý«•\-–])/).map((p) => p.trim()).filter(Boolean);
+}
+
+/**
+ * Interdit des photos ou des vidéos imposé par le DCE, avec l'exception que le DCE lui donne (photographies nécessaires
+ * aux rapports, photographies justificatives exigées ailleurs dans le DCE). `photos` : les photos restent interdites ;
+ * `videos` : les vidéos restent interdites ; `citation` : la phrase entière du DCE, exception comprise (D8). null quand le
+ * DCE n'interdit rien de ce que fait GSS.
+ */
+export function interditPhotosDce(dce: string): { photos: boolean; videos: boolean; citation: string } | null {
+  const phrases = phrasesDuDce(dce);
+  const k = phrases.findIndex((p) => RX_INTERDIT_PHOTOS.test(p));
+  if (k < 0) return null;
+  const interdit = phrases[k];
+  const apres = interdit.slice((RX_INTERDIT_PHOTOS.exec(interdit)?.index || 0) + 1);
+  // Exception dans la phrase de l'interdit ou dans les deux suivantes, sinon photos exigées ailleurs dans le DCE.
+  const j = RX_EXCEPTION_PHOTOS.test(apres) ? k : [k + 1, k + 2].find((x) => phrases[x] && RX_EXCEPTION_PHOTOS.test(phrases[x])) ?? -1;
+  const exigee = j < 0 ? phrases.find((p) => RX_PHOTOS_EXIGEES.test(p) && !RX_INTERDIT_PHOTOS.test(p) && !/interdi|\bne\b[^.]{0,40}\bpas\b/i.test(p)) || '' : '';
+  const exception = j >= 0 ? phrases[j] : exigee;
+  const photos = !exception;
+  // L'interdit vise aussi les vidéos quand sa phrase les nomme ; une exception qui ne parle que de photographies les laisse interdites.
+  const videos = photos || (RX_VIDEO.test(interdit) && !RX_VIDEO.test(exception.replace(/vidéo[- ]?(?:surveillance|protection)/gi, '')));
+  if (!photos && !videos) return null;
+  const citation = j > k ? phrases.slice(k, j + 1).join(' ') : exigee ? `${interdit} […] ${exigee}` : interdit;
+  return { photos, videos, citation };
+}
+
 export function interditsDce(texte: string, dce: string): string {
   texte = vocabulaireDuCctp(sansContenuCovid(nomsComposesDce(qualificationsInconditionnelles(texte, dce), dce), dce), dce);
   const d = (dce || '').replace(/\s+/g, ' ');
@@ -1440,23 +1478,40 @@ export function interditsDce(texte: string, dce: string): string {
   if (/rondes?[^.]{0,60}(?:effectuées|réalisées|faites|assurées)\s+(?:exclusivement\s+)?à pied/i.test(d)) {
     contraires.push(/vélo|trottinette|gyropode|rondes?[^.]{0,80}(?:en voiture|en véhicule|motoris)/i);
   }
-  if (/(?:ne pas|interdiction de|interdit de|il est interdit de|aucune?)\s+(?:prendre|réaliser|capter|faire)?\s*(?:de |des )?(?:photos?|photographies?|clichés)\b/i.test(d)) {
-    contraires.push(/\bphotos?\b|photographi(?!e d.identité)|\bvidéos?\b/i);
-  }
+  const photos = interditPhotosDce(dce);
+  if (photos) contraires.push(photos.photos ? /\bphotos?\b|photographi(?!e d.identité)|\bvidéos?\b/i : RX_VIDEO);
   if (!contraires.length) return texte;
   // Une phrase qui RAPPELLE l'interdit (« sans photographie », « interdiction de… ») est conforme ; le vélo
-  // pour les trajets domicile-travail (démarche RSE) n'est pas un moyen de ronde.
+  // pour les trajets domicile-travail (démarche RSE) n'est pas un moyen de ronde. L'utilisation du système de
+  // vidéosurveillance du site (formation, levée de doute vidéo) n'est pas une prise de vue par l'agent (T10C-1).
   const conforme = (ph: string) => /\bsans\b|\baucune?\b|\babsence de\b|\bpas de\b|interdi|\bne\b[^.]{0,40}\bpas\b|\bjamais\b|\bn[’']/i.test(ph)
-    || /transports? en commun|covoiturage|domicile|trajets?\b|mobilité douce|déplacements? (?:des salariés|domicile)/i.test(ph);
+    || /transports? en commun|covoiturage|domicile|trajets?\b|mobilité douce|déplacements? (?:des salariés|domicile)/i.test(ph)
+    || (/vidéo[- ]?(?:surveillance|protection)|caméras?|levée de doute vidéo|système (?:de vidéo|du site)/i.test(ph) && !/\bphotos?\b|photographi|\bfilm/i.test(ph));
   const contraire = (ph: string) => contraires.some((rx) => rx.test(ph)) && !conforme(ph) && !/⟦AC:|\[CONSULTATION REQUISE/.test(ph);
-  // Élément d'une énumération (« des lampes, des vélos ou trottinettes électriques et des contrôleurs ») :
-  // seul cet élément est retiré ; la phrase ou la puce part si elle reste contraire.
-  const allege = (ph: string) => ph.replace(/(?:,\s*(?:et |ou )?|\s+(?:et|ou)\s+)(?:des |de |du |les )?(?:vélos?|trottinettes?)(?:\s+(?:ou|et)\s+(?:des |de )?(?:vélos?|trottinettes?))?(?:\s+électriques?)?(?=[\s,.;]|$)/gi, '').replace(/\s+,/g, ',').replace(/,\s*et\s+/g, ' et ');
+  // Élément d'une énumération (« des lampes, des vélos ou trottinettes électriques et des contrôleurs », « de photos ou de
+  // vidéos ») : seul cet élément est retiré ; la phrase ou la puce part si elle reste contraire.
+  const allege = (ph: string) => {
+    let a = ph.replace(/(?:,\s*(?:et |ou )?|\s+(?:et|ou)\s+)(?:des |de |du |les )?(?:vélos?|trottinettes?)(?:\s+(?:ou|et)\s+(?:des |de )?(?:vélos?|trottinettes?))?(?:\s+électriques?)?(?=[\s,.;]|$)/gi, '').replace(/\s+,/g, ',').replace(/,\s*et\s+/g, ' et ');
+    if (photos && !photos.photos) a = a.replace(/\s+(?:ou|et)\s+(?:de |des |en )?vidéos?(?![a-zà-ÿ])/gi, '').replace(/(?<![a-zà-ÿ])vidéos?\s+(?:ou|et)\s+(?=(?:de |des )?photo)/gi, '');
+    return a;
+  };
   const traiter = (ph: string) => { if (!contraire(ph)) return ph; const a2 = allege(ph); return contraire(a2) ? null : a2; };
-  return texte.split('\n').map((ligne) => {
-    if (/^\s*(?:[-*•]\s|\|)/.test(ligne)) return traiter(ligne);
-    return ligne.split(/(?<=[.!?])\s+/).map(traiter).filter((ph): ph is string => ph !== null).join(' ');
-  }).filter((l): l is string => l !== null).join('\n');
+  const lignes = texte.split('\n');
+  const sortie: string[] = [];
+  lignes.forEach((ligne, i) => {
+    if (/^\s*(?:[-*•]\s|\|)/.test(ligne)) {
+      const r = traiter(ligne);
+      if (r !== null) { sortie.push(r); return; }
+      // Dernière puce d'une liste retirée : la puce restante qui la précédait termine la liste (« ; » → « . »).
+      const suivante = lignes.slice(i + 1).find((l) => l.trim());
+      const finDeListe = !suivante || !/^\s*[-*•]\s/.test(suivante) || lignes[i + 1]?.trim() === '';
+      const k = sortie.length - 1;
+      if (finDeListe && /[.!?]\s*$/.test(ligne) && k >= 0 && /^\s*[-*•]\s/.test(sortie[k])) sortie[k] = sortie[k].replace(/\s*[;,]\s*$/, '.');
+      return;
+    }
+    sortie.push(ligne.split(/(?<=[.!?])\s+/).map(traiter).filter((ph): ph is string => ph !== null).join(' '));
+  });
+  return sortie.join('\n');
 }
 
 /**
