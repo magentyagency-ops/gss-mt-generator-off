@@ -2059,6 +2059,34 @@ export function rechercherRubriques(mt: MemoireType, texte: string, n = 2, parmi
  *  ajoutée (génération réelle cstb 221 : 7 engagements sur les rondes dans « Notre catalogue de prestations »). */
 const SUJET_PRESENTATION = /autoris|agr[ée]ment|cnaps|carte professionnelle|certifi|\biso\b|\brse\b|responsabilit[ée] soci|environnement|[ée]cologi|d[ée]veloppement durable|carbone|d[ée]chets|recycl|r[ée]f[ée]rences?\b|exp[ée]rience|chiffre d.affaires|assurance|responsabilit[ée] civile|implantation|agences?\b|si[èe]ge social|organigramme|valeurs|[ée]thique|d[ée]ontolog|insertion|handicap|[ée]galit[ée]|kbis|attestation/i;
 
+/**
+ * Ajout de l'adaptation qui promet, sur un sujet de délai (remplacement d'un agent, intervention sur alarme, PTI, commande,
+ * SSI), autre chose que le délai de GSS écrit dans le mémoire (becquerel 591, T5N-5 : « remplacement immédiat d'un agent
+ * absent » ajouté alors que l'agent d'astreinte « est sur site en 60 minutes maximum ») : renvoie la phrase de GSS
+ * contredite, '' sinon.
+ */
+export function ajoutContraireAuxDelaisGss(ajout: string, texteGss: string): string {
+  const DELAI = /imm[ée]diat|sans d[ée]lai|dans l['’]heure|(?<![\d,.])\d+\s*(?:min(?:utes?)?|h(?:eures?)?)(?![\p{L}])/iu;
+  const VALEUR = /(?<![\d,.])\d+\s*(?:min(?:utes?)?|h(?:eures?)?)(?![\p{L}])/giu;
+  const a = String(ajout || '');
+  if (!DELAI.test(a)) return '';
+  const phrasesGss = String(texteGss || '').replace(/\*\*/g, '').split(/(?<=[.!?;])\s+|\n+/);
+  for (const [nom, def] of Object.entries(SUJETS_DELAI)) {
+    const dansSujet = (t: string) => def.sujet.test(t) && !def.exclure?.test(t) && !(def.objet?.test(t) && !def.personnel?.test(t));
+    if (!dansSujet(a)) continue;
+    const valeursA = (a.match(VALEUR) || []).map((x) => x.replace(/\s+/g, ''));
+    // Remplacement d'un agent : la phrase de GSS parle de l'agent d'astreinte mobilisé (« qui est sur site en 60 minutes »).
+    const sujetGss = (t: string) => dansSujet(t) || (nom === 'remplacement' && /agent d['’]astreinte/i.test(t));
+    for (const ph of phrasesGss) {
+      if (!sujetGss(ph) || ph.includes(a.trim())) continue;
+      const valeursG = (ph.match(VALEUR) || []).map((x) => x.replace(/\s+/g, ''));
+      if (!valeursG.length) continue;
+      if (!valeursA.length || !valeursA.every((v) => valeursG.includes(v))) return ph.trim();
+    }
+  }
+  return '';
+}
+
 /** Thèmes nets d'une exigence du CCTP et rubriques de GSS qui les traitent, par ordre de préférence (T5CP-7). */
 const THEMES_EXIGENCE: Array<{ sujet: RegExp; rubriques: string[] }> = [
   { sujet: /(?<![\p{L}])assurances?(?![\p{L}])|responsabilit[ée] civile|garantissant (?:la )?responsabilit/iu, rubriques: ['b2_identite'] },

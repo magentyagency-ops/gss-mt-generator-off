@@ -1346,6 +1346,39 @@ export function retirerParagrapheEtapes(texte: string, candidates: Array<{ texte
   return { texte: retire ? garder.join('\n\n') : texte, retire };
 }
 
+/**
+ * Puces « Vos attentes » du bloc 1 qui présentent comme engagement une exigence du CCTP que GSS n'a pas reprise (jalon,
+ * délai ou fréquence de GSS gardés, question posée à GSS ; becquerel 591, T5N-5 : « au moins 10 jours avant le début du
+ * mois considéré : transmettre les plannings… » alors que « La planification » donne J-3 ; « remplacement immédiat d'un
+ * agent absent » alors que l'astreinte est sur site en 60 minutes) : retirées jusqu'à la réponse de GSS. `marques` : les
+ * valeurs propres retirées (pour savoir si le schéma de process les reprenait).
+ */
+export function retirerEngagementsRefuses(texte: string, refusees: string[]): { texte: string; retirees: string[]; marques: string[] } {
+  const n = (x: string) => normaliser(String(x || '')).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const VALEUR = /\d+\s*(?:jours?|heures?|h|minutes?|min|mois)|imm[ée]diat\w*|sans d[ée]lai/gi;
+  const mots = (x: string) => new Set(n(x).split(' ').filter((w) => w.length >= 5).map((w) => w.replace(/s$/, '')));
+  const retirees: string[] = [];
+  const marques: string[] = [];
+  let partie = '';
+  const lignes = String(texte || '').split('\n').filter((l) => {
+    if (/^##\s/.test(l)) { partie = l; return true; }
+    if (!/^##\s+Vos attentes/i.test(partie) || !/^\s*[-*•]\s/.test(l)) return true;
+    const valeursL = (l.match(VALEUR) || []).map(n);
+    const motsL = mots(l);
+    const visee = refusees.find((e) => {
+      const valeursE = (String(e).match(VALEUR) || []).map(n);
+      const motsE = [...mots(e)];
+      const communs = motsE.filter((w) => motsL.has(w)).length;
+      return valeursE.length > 0 && valeursE.every((v) => valeursL.includes(v)) && communs >= Math.min(2, motsE.length);
+    });
+    if (!visee) return true;
+    retirees.push(l.trim());
+    marques.push(...(String(visee).match(VALEUR) || []));
+    return false;
+  });
+  return { texte: lignes.join('\n'), retirees, marques };
+}
+
 let titresRubriques: Set<string> | null = null;
 /** Texte qui n'est que le titre d'une rubrique du mémoire type (ou sa partie après « : », sans parenthèse finale). */
 export function titreDeRubriqueSeul(y: string): boolean {
@@ -1940,6 +1973,18 @@ export function messageEngagements(rubriques: Array<{ titre: string; n: number }
     ...rubriques.map((r) => `- « ${r.titre} » : ${r.n} engagement${r.n > 1 ? 's' : ''}`),
     '',
     'Pour chacun, vous pouvez le valider tel quel, le modifier (« Dans la rubrique …, remplace l\'engagement sur … par … ») ou le supprimer (« Dans la rubrique …, supprime l\'engagement sur … »).',
+  ].join('\n');
+}
+
+/** Premier message de l'assistant : phrases ajoutées au texte de GSS par l'adaptation au CCTP (rédigées par l'IA, T5N-5). */
+export function messageAjoutsAdaptation(ajouts: Array<{ titre: string; phrase: string }>): string {
+  if (!ajouts.length) return '';
+  const n = ajouts.length;
+  return [
+    `J'ai ajouté au texte de GSS ${n === 1 ? 'une phrase rédigée' : `${n} phrases rédigées`} d'après le cahier des charges, pour une exigence que le mémoire type ne couvrait pas. À relire avant la remise :`,
+    ...ajouts.map((a) => `- « ${a.titre} » : « ${a.phrase.replace(/\s+/g, ' ').trim()} »`),
+    '',
+    'Pour chacune, vous pouvez la valider telle quelle, la modifier (« Dans la rubrique …, remplace … par … ») ou la supprimer (« Dans la rubrique …, supprime la phrase … »).',
   ].join('\n');
 }
 

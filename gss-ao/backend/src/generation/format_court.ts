@@ -131,8 +131,13 @@ function voixDeGssHorsCitation(texte: string): string {
   return String(texte || '')
     .replace(new RegExp(String.raw`\b([Aa])u titulaire(?: du march[ée])?(?![\p{L}])${SAUF}`, 'gu'), (_m, a: string) => (a === 'A' ? 'À GSS' : 'à GSS'))
     .replace(new RegExp(String.raw`\b([Dd])u titulaire(?: du march[ée])?(?![\p{L}])${SAUF}`, 'gu'), (_m, d: string) => `${d}e GSS`)
-    .replace(new RegExp(String.raw`\b[Ll]e titulaire(?: du march[ée])?(?![\p{L}])${SAUF}`, 'gu'), 'GSS');
+    .replace(new RegExp(String.raw`\b[Ll]e titulaire(?: du march[ée])?(?![\p{L}])${SAUF}`, 'gu'), 'GSS')
+    // « Le candidat » du DCE recopié dans un ajout (becquerel 591, T5N-5 : « employé comme salarié du candidat ») : GSS ; jamais
+    // un autre candidat (retenu, évincé, attributaire, concurrent…).
+    .replace(new RegExp(String.raw`\b([AaDd])u candidat(?![\p{L}])${CAND}`, 'gu'), (_m, x: string) => (/[Aa]/.test(x) ? `${x === 'A' ? 'À' : 'à'} GSS` : `${x}e GSS`))
+    .replace(new RegExp(String.raw`\b[Ll]e candidat(?![\p{L}])${CAND}`, 'gu'), 'GSS');
 }
+const CAND = String.raw`(?!\s+(?:retenus?|[ée]vinc[ée]s?|attributaires?|concurrents?|sortants?|pressentis?|non\s+retenus?|suivants?|class[ée]s?)(?![\p{L}]))`;
 
 /**
  * Puces « Nos engagements » du format court : une puce dont les mots sont repris à 60 % au moins (3 mots ou plus) par

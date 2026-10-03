@@ -11,13 +11,13 @@ import {
   chargerMemoireType, preparerMemoireType, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
-  type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, formeCourteApresPremiere, phrasesGeneralesProtegees,
+  type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, formeCourteApresPremiere, phrasesGeneralesProtegees, ajoutContraireAuxDelaisGss,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, FORMALITES_OFFRE, questionFormalite,
-  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
+  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, type Dimensionnement } from './dimensionnement';
@@ -7685,6 +7685,11 @@ RÈGLES DE FORME (rendu Marp) :
     /** Rubriques dont le cahier des charges exclut la mission (T5CP-1) et rubriques non adaptées faute de modèle (T5-COH-2). */
     const rubriquesExclues: Array<{ id: string; titre: string; extrait: string; par: string }> = [];
     const rubriquesNonAdaptees: string[] = [];
+    /** Phrases ajoutées par l'adaptation (signalées à GSS) et questions des ajouts refusés (T5N-5). */
+    const ajoutsAdaptation: Array<{ id: string; titre: string; phrase: string }> = [];
+    const questionsAjoutsRefuses: string[] = [];
+    const ajoutsRefusesExigences: string[] = [];
+    const texteGssPublie = Object.values(sections).join('\n');
     let adaptees = 0;
     await enParallele(aAdapter, 4, async (rp) => {
       const r = mtParId.get(rp.id)!;
@@ -7704,6 +7709,19 @@ RÈGLES DE FORME (rendu Marp) :
       // du site, celui-ci n'est pas surveillé » proposé à la place du filtrage) : rubrique retirée, signalée à GSS (T5CP-1).
       if (res.missionExclue) rubriquesExclues.push({ id: rp.id, titre: r.titre, ...res.missionExclue });
       if (res.repli && /appel au modèle impossible|réponse du modèle illisible/.test(res.raison || '')) rubriquesNonAdaptees.push(r.titre);
+      // Phrases ajoutées au texte de GSS par l'adaptation (becquerel 591, T5N-5) : refusées quand elles promettent un autre délai
+      // que celui de GSS écrit dans le mémoire (question à GSS), sinon signalées à GSS comme les engagements rédigés par l'IA.
+      for (const m of res.appliquees.filter((x) => x.type === 'ajout' && x.par)) {
+        const contraire = ajoutContraireAuxDelaisGss(m.par!, texteGssPublie);
+        if (contraire && sections[rp.id].includes(m.par!)) {
+          sections[rp.id] = sections[rp.id].replace(m.par!, '').replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;])/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+          questionsAjoutsRefuses.push(questionAlignementRefuse(m.motif || m.par!, contraire));
+          ajoutsRefusesExigences.push(m.motif || m.par!);
+          console.warn(`[MemoireGenerator] Adaptation ${rp.id} : ajout refusé, contraire au délai de GSS (« ${m.par!.slice(0, 100)} »).`);
+          continue;
+        }
+        ajoutsAdaptation.push({ id: rp.id, titre: r.titre, phrase: m.par! });
+      }
       adaptees++;
       progres(18 + Math.round((30 * adaptees) / Math.max(1, aAdapter.length)), `Adaptation au CCTP : ${adaptees}/${aAdapter.length} rubrique(s)…`);
       console.log(`[MemoireGenerator] Adaptation ${rp.id} : ${res.appliquees.length} modification(s) appliquée(s), ${res.refusees.length} refusée(s), fidélité ${res.fidelite.toFixed(2)}${res.repli ? ` — texte de référence conservé (${res.raison})` : ''}.`);
@@ -7813,7 +7831,24 @@ RÈGLES DE FORME (rendu Marp) :
       ...plan.rubriques.flatMap((r) => phrasesGeneralesProtegees(mt.rubriques.find((x) => x.id === r.id)?.texte || '', sections[r.id] || '')),
     ];
     const exigencesCoherence = [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))];
-    await this.corrigerContradictions(sections, rubriquesDoc, exigencesCoherence, proteges, questionsCouverture, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, exigencesCoherence.map((x) => String(x.exigence || ''))));
+    const exigencesRefusees: string[] = [...ajoutsRefusesExigences];
+    await this.corrigerContradictions(sections, rubriquesDoc, exigencesCoherence, proteges, questionsCouverture, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, exigencesCoherence.map((x) => String(x.exigence || ''))), exigencesRefusees);
+    // Exigence du CCTP que GSS n'a pas pu reprendre (jalon, délai ou fréquence de GSS gardés, question posée) : le bloc 1 ne la
+    // présente plus comme un engagement, et son schéma de process ne la reprend plus (becquerel 591, T5N-5).
+    if (b1 && sections[b1.id] && exigencesRefusees.length) {
+      const r = retirerEngagementsRefuses(sections[b1.id], exigencesRefusees);
+      if (r.retirees.length) {
+        sections[b1.id] = r.texte;
+        console.log(`[MemoireGenerator] Compréhension du besoin : ${r.retirees.length} engagement(s) contraire(s) à une pratique de GSS gardée retiré(s) (${r.retirees.map((x) => x.slice(0, 60)).join(' ; ')}).`);
+        const svg = schemasGeneres.get(CLE_SCHEMA(b1.id));
+        if (svg && r.marques.some((m) => normaliser(svg.replace(/<[^>]+>/g, ' ')).includes(normaliser(m)))) {
+          const spec = specSecoursPuces(sections[b1.id]);
+          const d = spec ? (await dessinerSpecs([{ id: b1.id, gabarit: spec.gabarit, params: spec.params, source: sections[b1.id], titre_section: titresSchemas[b1.id] || b1.titre }], 'page')).get(b1.id) : undefined;
+          if (d?.ok && d.svg) schemasGeneres.set(CLE_SCHEMA(b1.id), d.svg);
+          else { schemasGeneres.delete(CLE_SCHEMA(b1.id)); avisSecours.push(`Rubrique « ${b1.titre} » : le schéma de process reprenait une exigence que GSS doit d'abord confirmer ; il est construit au rendu d'après le texte, à relire via l'assistant avant la remise.`); }
+        }
+      }
+    }
     await this.verifierHoraires(sections, rubriquesDoc, dceContext, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, [], 'Horaires du CCTP'));
     await this.engagementsChiffresManquants(sections, rubriquesDoc, dceContext);
     limiterRappelsSite(sections, rubriquesDoc.map((x) => x.id));
@@ -7828,6 +7863,7 @@ RÈGLES DE FORME (rendu Marp) :
       ...commentairesRetires,
       ...alertesAcheteurs,
       ...questionsCouverture,
+      ...questionsAjoutsRefuses,
       ...questionsRC,
       ...formalitesOffre.map(questionFormalite),
       ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie),
@@ -7925,6 +7961,9 @@ RÈGLES DE FORME (rendu Marp) :
       return { id, n: i < 0 ? 0 : (t.slice(i).match(/^\s*[-*•]\s+\S/gm) || []).length };
     }).filter((x) => x.n > 0);
     for (const x of engagementsIA) consultationList.push(`Engagements à valider (exigences du CCTP rédigées par l'IA) : « ${titreDe(x.id)} » — ${x.n} engagement${x.n > 1 ? 's' : ''}`);
+    // Phrases ajoutées au texte de GSS par l'adaptation au CCTP et restées dans le texte (T5N-5) : signalées à GSS.
+    const ajoutsRestes = ajoutsAdaptation.filter((a) => (sections[a.id] || '').includes(a.phrase.slice(0, 60)));
+    for (const a of ajoutsRestes) consultationList.push(`Phrase ajoutée au texte de GSS d'après le cahier des charges (rédigée par l'IA), à valider : « ${titreDe(a.id)} » — « ${a.phrase.replace(/\s+/g, ' ').trim().slice(0, 300)} »`);
     // Phrases de GSS adaptées au CCTP (D8) : une ligne par phrase à valider (aucune s'il n'y en a pas).
     consultationList.push(...consultationsAdaptations(adaptations));
     if (consultationList.length) {
@@ -7963,9 +8002,10 @@ RÈGLES DE FORME (rendu Marp) :
       if (etat.conversation?.length) etat.conversation[0].texte = `${alertePanne}\n\n${etat.conversation[0].texte}`;
       else etat.conversation = [{ role: 'assistant', texte: alertePanne, date: new Date().toISOString() }];
     }
-    // Engagements rédigés par l'IA (exigences du CCTP) : annoncés dans le premier message, à valider ou modifier (D5).
-    if (engagementsIA.length) {
-      const texteEng = messageEngagements(engagementsIA.map((x) => ({ titre: titreDe(x.id), n: x.n })));
+    // Engagements rédigés par l'IA (exigences du CCTP), y compris les phrases ajoutées par l'adaptation : annoncés dans le
+    // premier message, à valider ou modifier (D5, T5N-5).
+    if (engagementsIA.length || ajoutsRestes.length) {
+      const texteEng = [messageEngagements(engagementsIA.map((x) => ({ titre: titreDe(x.id), n: x.n }))), messageAjoutsAdaptation(ajoutsRestes.map((a) => ({ titre: titreDe(a.id), phrase: a.phrase })))].filter(Boolean).join('\n\n');
       if (etat.conversation?.length) etat.conversation[0].texte = `${etat.conversation[0].texte}\n\n${texteEng}`;
       else etat.conversation = [{ role: 'assistant', texte: texteEng, date: new Date().toISOString() }];
     }
@@ -8538,7 +8578,7 @@ Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "tex
    * inférieure au minimum imposé, délai plus long que le maximum…) est reformulée pour s'aligner sur
    * l'exigence. Seuls les remplacements retrouvés MOT POUR MOT sont appliqués. Étape non bloquante.
    */
-  private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>, proteges: string[] = [], questions?: Set<string>, adaptations?: AdaptationCctp[], noter?: (id: string, avant: string, apres: string, exigence: string) => void): Promise<void> {
+  private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>, proteges: string[] = [], questions?: Set<string>, adaptations?: AdaptationCctp[], noter?: (id: string, avant: string, apres: string, exigence: string) => void, refusees?: string[]): Promise<void> {
     const ids = rubriques.map((r) => r.id).filter((id) => (sections[id] || '').trim());
     // Une rubrique à la fois, avec les exigences chiffrées qui lui sont attribuées (contexte court : résultat stable).
     // Chaque rubrique est confrontée à TOUTES les exigences (une contradiction se trouve souvent hors de la
@@ -8582,6 +8622,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
         if (autresRubriques.length) {
           console.warn(`[MemoireGenerator] Cohérence ${id} avec le CCTP : alignement refusé (fréquence de GSS écrite aussi dans ${autresRubriques.join(', ')}) : « ${extrait.slice(0, 100)} ».`);
           if (questions && exigenceC) questions.add(questionAlignementRefuse(exigenceC, extrait, autresRubriques.map((x) => rubriques.find((r) => r.id === x)?.title || x)));
+          if (exigenceC) refusees?.push(exigenceC);
           continue;
         }
         // Fait de GSS (montant d'assurance, numéro de contrat, valeur du registre) : jamais remplacé par le seuil du DCE ;
@@ -8594,9 +8635,11 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
           // Calendrier de GSS (« J-10 », « J-3 ») : une seule question par rubrique, qui cite l'exigence et les jalons écrits.
           if (motif === 'jalon du calendrier de GSS') {
             if (questions && exigence && !jalonsRefuses.has(id)) jalonsRefuses.set(id, exigence);
+            if (exigence) refusees?.push(exigence);
             continue;
           }
           if (questions && exigence) questions.add(questionAlignementRefuse(exigence, extrait));
+          if (exigence) refusees?.push(exigence);
           continue;
         }
         const texteAvant = sections[id], pos = texteAvant.indexOf(extrait);
