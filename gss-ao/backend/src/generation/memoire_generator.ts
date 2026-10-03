@@ -16,7 +16,7 @@ import {
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
-  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
+  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   sansEngagementsEnDouble, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
@@ -8153,7 +8153,7 @@ RÈGLES DE FORME (rendu Marp) :
         console.log(`[MemoireGenerator] Compréhension du besoin : ${r.retirees.length} engagement(s) contraire(s) à une pratique de GSS gardée retiré(s) (${r.retirees.map((x) => x.slice(0, 60)).join(' ; ')}).`);
         const svg = schemasGeneres.get(CLE_SCHEMA(b1.id));
         if (svg && r.marques.some((m) => normaliser(svg.replace(/<[^>]+>/g, ' ')).includes(normaliser(m)))) {
-          const spec = specSecoursPuces(sections[b1.id]);
+          const spec = specSecoursPuces(sections[b1.id]) || specSecoursObligations(sections[b1.id]);
           const d = spec ? (await dessinerSpecs([{ id: b1.id, gabarit: spec.gabarit, params: spec.params, source: sections[b1.id], titre_section: titresSchemas[b1.id] || b1.titre }], 'page')).get(b1.id) : undefined;
           if (d?.ok && d.svg) schemasGeneres.set(CLE_SCHEMA(b1.id), d.svg);
           else { schemasGeneres.delete(CLE_SCHEMA(b1.id)); avisSecours.push(`Rubrique « ${b1.titre} » : le schéma de process reprenait une exigence que GSS doit d'abord confirmer ; il est construit au rendu d'après le texte, à relire via l'assistant avant la remise.`); }
@@ -8558,6 +8558,8 @@ RÈGLES DE FORME (rendu Marp) :
       titreFinal = titreDefaut;
       schema = await dessiner(specSecoursBesoin(texte));
       if (!schema.svg) schema = await dessiner(specSecoursPuces(texte));
+      // Dernier secours (T10C-4) : les obligations chiffrées citées dans « Vos attentes », sinon les prestations du périmètre.
+      if (!schema.svg) schema = await dessiner(specSecoursObligations(texte));
     }
     if (!schema.svg) console.warn(`[MemoireGenerator] Compréhension du besoin : schéma de process non dessiné (${schema.erreurs.slice(0, 3).join(' | ')}) ${o.format === 'paysage' ? '' : ' ; en réponse libre, construit au rendu d\'après le texte'}.`);
     return { texte, titre: titreFinal, svg: schema.svg, secours };

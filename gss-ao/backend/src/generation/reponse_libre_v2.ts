@@ -17,7 +17,7 @@ import {
   chargerMemoireType, normaliser, rechercherRubriques, similarite, motsDePhrase, faitsDePhrase, listeFr, cleCommune,
   type DonneesBesoin, type ExigenceMatrice, type MemoireType, type PlanMemoireType, type SchemaRubrique,
 } from './memoire_type';
-import { ZONE_GSS, vocabulaireDuCctp, periodeEnTete } from './base_memoires';
+import { ZONE_GSS, vocabulaireDuCctp, periodeEnTete, normaliserExpressionsDelai, minutesDe } from './base_memoires';
 import { insecablesNombres } from './dimensionnement';
 
 export const PLACEHOLDER_V2 = '[À COMPLÉTER]';
@@ -1937,6 +1937,107 @@ export function specSecoursBesoin(texte: string): { gabarit: string; params: any
   if (!resultat) return null;
   const spec = specProcessBesoin([...etapes.slice(0, 4), { titre: 'Votre résultat', texte: resultat, role: 'vert' }], 'flux');
   return spec && !anomaliesSchemaBloc1(spec).length ? spec : null;
+}
+
+/**
+ * Dernier secours du schéma de process du bloc 1 (T10C-4, citedia hors ligne : périmètre d'une seule phrase, attentes en
+ * citations « … » sans « → notre réponse ») : une étape par obligation chiffrée citée dans « Vos attentes et nos
+ * engagements », dans l'ordre du texte. Titre = l'action et son délai (« Intervention sur site en 15 minutes »), texte = la
+ * fin de la phrase du DCE à partir du délai, coupée à la fin d'une proposition (« Dans un délai de 15 minutes maximum à
+ * compter de la réception de l'alarme »). Puis l'étape « Votre résultat » (resultatBesoin, sinon le résultat du mémoire
+ * type). À défaut, la liste « Le marché comprend : … » en chevrons. null seulement si le texte n'a ni deux obligations
+ * chiffrées ni deux prestations listées.
+ */
+export function specSecoursObligations(texte: string): { gabarit: string; params: any } | null {
+  const t = String(texte || '');
+  const partie = (titre: RegExp) => t.split(/^(?=##\s)/m).find((p) => titre.test(p)) || '';
+  const etapes: Array<{ titre: string; texte: string; role?: string }> = [];
+  const ACTIONS: Array<[RegExp, string]> = [
+    [/(?:appliquer|applique|application)[^.]{0,40}consignes|traitement|contre[- ]appel|prise en compte/i, "Traitement de l'alarme"],
+    [/lev[ée]e de doute/i, 'Levée de doute'],
+    [/interven|se rend|arriv|d[ée]p[êe]ch/i, 'Intervention sur site'],
+    [/rempla/i, 'Remplacement'],
+    [/inform|pr[ée]ven|avert|alert(?:er|e le)|signal/i, 'Information du client'],
+    [/rapport|compte[- ]rendu|transmi/i, 'Compte rendu'],
+  ];
+  const vues = new Set<string>();
+  for (const l of partie(/^##\s+Vos attentes/i).split('\n')) {
+    if (etapes.length >= 4) break;
+    const q = /^\s*[-*•]\s+(?:\*\*[^*]*\*\*\s*:?\s*)?«\s*([^»]{10,600}?)\s*»/.exec(l);
+    if (!q || INTERNE.test(l)) continue;
+    const phrase = q[1].replace(/\s+/g, ' ').trim();
+    const lu = normaliserExpressionsDelai(phrase);
+    const d = /(?:(?:dans|sous)\s+(?:un\s+)?d[ée]lai\s+(?:maxim(?:al|um)\s+)?de|dans les|dans|sous|en moins de|au plus tard dans)\s+(\d{1,3})\s*(minutes?|mn|min|heures?|h)(?![a-zà-ÿ])(?:\s+maxim(?:um|al))?/i.exec(lu);
+    if (!d) continue;
+    // Action : celle nommée au plus près avant le délai (« doit être informé … des interventions dans les 3 minutes » :
+    // l'information, pas l'intervention), jamais la suite « à compter de… ».
+    const avant = lu.slice(Math.max(0, d.index - 200), d.index);
+    let action = '', pos = -1;
+    for (const [rx, libelle] of ACTIONS) {
+      for (const m of avant.matchAll(new RegExp(rx.source, 'gi'))) {
+        // Nom d'objet après une action (« informé des interventions ») : l'action est le verbe qui le précède.
+        const k = /^interven/i.test(m[0]) && /inform|pr[ée]ven|avert/i.test(avant.slice(Math.max(0, m.index! - 40), m.index)) ? -1 : m.index!;
+        if (k > pos) { pos = k; action = libelle; }
+      }
+    }
+    // Lieu seul (« … sur le site en alerte ») : une intervention, faute d'autre action nommée.
+    if (!action && /sur (?:le )?site|sur place/i.test(avant)) action = 'Intervention sur site';
+    const n = Number(d[1]);
+    const valeur = /^m/i.test(d[2]) ? `${n} minute${n > 1 ? 's' : ''}` : `${n} heure${n > 1 ? 's' : ''}`;
+    // « 15 minutes » ; « 15 min » si le titre dépasse la carte (34 caractères).
+    const titre = !action ? '' : `${action} en ${valeur}`.length <= 34 ? `${action} en ${valeur}` : `${action} en ${n} ${/^m/i.test(d[2]) ? 'min' : 'h'}`;
+    if (!titre || titre.length > 34 || vues.has(`${action}|${minutesDe(n, d[2])}`)) continue;
+    vues.add(`${action}|${minutesDe(n, d[2])}`);
+    // Texte de la carte, mots du DCE, 86 caractères au plus, coupé à la fin d'une proposition ou avant un complément, jamais sur
+    // un mot outil : d'abord la proposition qui porte l'action (« Les interventions seront effectuées sur le site en alerte par
+    // l'intervenant TLS »), avec son verbe ; sinon le point de départ du délai (« À compter de la réception de l'alarme au PC ») ;
+    // sinon le délai lui-même (« Dans les 3 minutes qui suivent l'alerte »). Jamais deux cartes qui disent la même chose.
+    const couper = (x: string, verbe: boolean): string => {
+      const v = x.replace(/\s+/g, ' ').replace(/[.;,:\s]+$/, '').trim();
+      if (!v) return '';
+      const cap = (y: string) => y.charAt(0).toUpperCase() + y.slice(1);
+      const okVerbe = (y: string) => !verbe || VERBE_CONJUGUE.test(y);
+      if (v.length <= 86 && okVerbe(v) && texteEtapeEntier(cap(v))) return cap(v);
+      const mots = v.split(' ');
+      for (let k = mots.length - 1; k >= 4; k--) {
+        const pre = mots.slice(0, k).join(' ');
+        const dernier = mots[k - 1].toLowerCase().replace(/^(?:l|d)['’]/, '').replace(/['’,;:]$/, '');
+        // Jamais fini sur un participe privé de son complément (« les consignes définies »).
+        if (pre.length > 86 || MOTS_OUTILS.has(dernier) || /['’]$/.test(mots[k - 1]) || !okVerbe(pre) || /^[a-zà-ÿ]{4,}(?:ée|ées|és|ies|is)$/.test(dernier)) continue;
+        if (!/^(?:de|du|des|d['’]\S*|au|aux|par|pour|à|sur|dans|en|qui|afin|lorsque|sauf|[a-zà-ÿ]{3,}(?:ée?s?|ie?s?))$/i.test(mots[k])) continue;
+        if ((pre.match(/\(/g) || []).length !== (pre.match(/\)/g) || []).length) continue;
+        return cap(pre);
+      }
+      return '';
+    };
+    const clause = avant.split(/[,;:]\s+/).pop() || '';
+    const depart = (/(?:à compter de|à partir de|après|suivant)\s.+$/i.exec(lu.slice(d.index + d[0].length)) || [''])[0];
+    const pleins = (x: string) => normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 3 && !MOTS_OUTILS.has(w));
+    const repete = (x: string) => etapes.some((e) => { const a = pleins(e.texte), b = pleins(x); return !!a.length && !!b.length && a.filter((w) => b.includes(w)).length / Math.min(a.length, b.length) >= 0.6; });
+    const corps = [couper(clause, true), couper(depart, false), couper(lu.slice(d.index), false)].find((x) => x && x.split(/\s+/).length >= 4 && !repete(x)) || '';
+    if (!corps) continue;
+    etapes.push({ titre, texte: corps, role: etapes.length < 2 ? 'rouge' : 'bleu' });
+  }
+  // Même écriture des durées dans tous les titres (« 3 min » partout dès qu'un titre l'abrège).
+  if (etapes.some((e) => /\d min$/.test(e.titre))) for (const e of etapes) e.titre = e.titre.replace(/(\d+) minutes?$/, '$1 min');
+  if (etapes.length >= 2) {
+    const resultat = resultatBesoin(t, etapes.map((e) => e.texte), RESULTAT_MEMOIRE_TYPE) || RESULTAT_MEMOIRE_TYPE;
+    const spec = specProcessBesoin([...etapes, { titre: 'Votre résultat', texte: resultat, role: 'vert' }], 'flux');
+    if (spec && !anomaliesSchemaBloc1(spec).length) return spec;
+  }
+  // À défaut : les prestations listées par le périmètre (« Le marché comprend : rondes, vacations de nuit, … »), en chevrons.
+  const liste = /Le marché comprend\s*:\s*([^\n]+)/i.exec(partie(/^##\s+Le périmètre/i));
+  if (liste) {
+    const items = liste[1].replace(/[.\s]+$/, '').split(/\s*,\s*|\s+et\s+(?=[a-zà-ÿ])/).map((x) => x.trim()).filter((x) => x && x.length <= 26 && !INTERNE.test(x));
+    const vus: string[] = [];
+    for (const x of items) if (!vus.some((v) => normaliser(v).split(' ')[0] === normaliser(x).split(' ')[0])) vus.push(x);
+    if (vus.length >= 2) {
+      const res = resultatBesoin(t, [], RESULTAT_MEMOIRE_TYPE) || RESULTAT_MEMOIRE_TYPE;
+      const spec = specProcessBesoin([...vus.slice(0, 3).map((x) => ({ titre: x.charAt(0).toUpperCase() + x.slice(1) })), { titre: 'Votre résultat', texte: res, role: 'vert' }], 'chevrons');
+      if (spec && !anomaliesSchemaBloc1(spec).length) return spec;
+    }
+  }
+  return null;
 }
 
 // ─── Consignes des deux rédactions du modèle ─────────────────────────────────────────────────────
