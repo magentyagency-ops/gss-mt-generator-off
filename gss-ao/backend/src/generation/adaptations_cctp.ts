@@ -26,7 +26,7 @@
 // viennent pas du CCTP. Un délai normand retiré hors Normandie est signalé avec son motif (règle de GSS), jamais présenté
 // comme une exigence du CCTP (T6C-10).
 
-import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, variableRenseignee, phraseDelaiDuDce, phraseDuDceContenant, VARIABLES_IMPOSABLES, SUJET_VARIABLE_DELAI, type MemoireType, type ContexteMarche } from './memoire_type';
+import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, variableRenseignee, phraseDelaiDuDce, phrasesDelaisDuDce, sujetDelaiDePhrase, sujetsDelaisDuGabarit, phraseDuDceContenant, VARIABLES_IMPOSABLES, SUJET_VARIABLE_DELAI, type MemoireType, type ContexteMarche } from './memoire_type';
 import { sitesDuMarche, lieuDuMarche, communesParCodePostal, interditPhotosDce } from './base_memoires';
 
 export type StatutAdaptation = 'a_valider' | 'validee' | 'modifiee' | 'retablie';
@@ -286,6 +286,15 @@ export function exigenceHorsNormandie(dce: string, analyse: any): string {
 }
 
 /**
+ * Phrases du CCTP qui imposent des délais pour un sujet (T10C-2 : citedia impose 15 et 30 minutes pour les alarmes) : quand
+ * un délai de GSS est retiré sur ce sujet, c'est l'exigence citée à GSS (D8), jamais « le DCE n'en impose aucun ». '' sinon.
+ */
+export function exigenceDelaisDuSujet(dce: string, sujet: string | null): string {
+  if (!sujet) return '';
+  return phrasesDelaisDuDce(dce, sujet as any).map((p) => (p.length > 300 ? `${p.slice(0, 300).replace(/\s+\S*$/, '')}…` : p)).join(' […] ');
+}
+
+/**
  * Exigence du DCE qui explique un changement fait par les filtres déterministes (délais hors Normandie, interdits du DCE).
  * '' quand le changement ne vient pas du CCTP (règles propres à GSS : Covid, article L. 1224-1, orthographe d'un nom,
  * terme du CCTP qui remplace celui de GSS) : il n'est pas signalé.
@@ -308,7 +317,7 @@ export function exigenceDuFiltre(c: Changement, dce: string, horsNormandie: bool
   }
   // Délai d'intervention retiré ou remplacé par les délais du marché (delaisHorsNormandie) : seul changement de ce filtre
   // sur une phrase qui promet une présence dans un délai chiffré.
-  if (horsNormandie && DUREE.test(o) && PRESENCE.test(o)) return exigenceHorsNormandie(dce, analyse);
+  if (horsNormandie && DUREE.test(o) && PRESENCE.test(o)) return exigenceDelaisDuSujet(dce, sujetDelaiDePhrase(o)) || exigenceHorsNormandie(dce, analyse);
   return '';
 }
 
@@ -529,7 +538,7 @@ export function adaptationsDuPubliposte(mt: MemoireType, ctx: ContexteMarche, id
   for (const k of actives) {
     const sans = preparerMemoireType({ ...base, ...(k === 'HORS_NORMANDIE' ? { horsNormandie: false } : {}), choix: { ...(base.choix || {}), indicateurs: { ...(base.choix?.indicateurs || {}), [k]: false } } }, { memoireType: mt });
     const def = mt.indicateurs[k];
-    const exigence = k === 'HORS_NORMANDIE' ? exigenceHorsNormandie(ctx.dce || '', ctx.analyse)
+    const exigenceCommune = k === 'HORS_NORMANDIE' ? exigenceHorsNormandie(ctx.dce || '', ctx.analyse)
       : k === 'PHOTOS_INTERDITES' ? interditPhotosDce(ctx.dce || '')?.citation || def.description
       : (def.dce ? citerDce(ctx.dce || '', new RegExp(def.dce, 'i')) : '') || (reel.etatsIndicateurs[k]?.raisons || []).find((r) => /^DCE/.test(r)) || def.description;
     for (const id of ids) {
@@ -537,6 +546,8 @@ export function adaptationsDuPubliposte(mt: MemoireType, ctx: ContexteMarche, id
       if (!r || r.mode === 'besoin' || !r.texte) continue;
       const a = publierRubrique(mt, r, sans.variables, sans.indicateurs, '', options).texte || '';
       const b = publierRubrique(mt, r, reel.variables, reel.indicateurs, '', options).texte || '';
+      // Délai de la rubrique que le CCTP fixe lui-même (plusieurs délais selon le cas, T10C-2) : ses phrases sont l'exigence.
+      const exigence = (k === 'HORS_NORMANDIE' && sujetsDelaisDuGabarit(r.texte).map((x) => exigenceDelaisDuSujet(ctx.dce || '', x)).filter(Boolean).join(' […] ')) || exigenceCommune;
       if (a !== b) out.push({ rubrique: id, avant: a, apres: b, exigence, etape: CONTRAINTES_CCTP[k], reference: a });
     }
   }
@@ -563,9 +574,12 @@ export function adaptationsDesValeursImposees(mt: MemoireType, ctx: ContexteMarc
   for (const nom of VARIABLES_IMPOSABLES) {
     const r = reel.variables[nom];
     const source = String(r?.source || '');
-    if (!/imposé par le DCE/.test(source)) continue;
+    // Plusieurs délais imposés par le CCTP (T10C-2) : la phrase de GSS est imprimée sans son délai, signalée avec les
+    // phrases du CCTP.
+    const plusieurs = /^Le CCTP impose plusieurs délais/.test(String(r?.question || ''));
+    if (!/imposé par le DCE/.test(source) && !plusieurs) continue;
     const g = gss.variables[nom];
-    if (!variableRenseignee(g) || !variableRenseignee(r)) continue;
+    if (!variableRenseignee(g) || (!variableRenseignee(r) && !plusieurs)) continue;
     // Valeur « de GSS » elle-même lue dans le DCE (fréquence des réunions, cstb 551 : « chaque année » puis « une fois par
     // an ; … ») : pas une phrase de GSS, rien à signaler.
     if (/^(?:DCE$|délai imposé par le DCE|imposé par le DCE|déduit de la fréquence imposée)/.test(String(g.source || '').trim())) continue;
@@ -577,7 +591,8 @@ export function adaptationsDesValeursImposees(mt: MemoireType, ctx: ContexteMarc
       if (dr.length && dg.length && Math.min(...dr) === Math.min(...dg) && Math.max(...dr) === Math.max(...dg)) continue;
     }
     const imposee = ctx.imposees?.[nom];
-    const exigence = imposee?.citation ? phraseDuDceContenant(ctx.dce || '', imposee.citation)
+    const exigence = plusieurs && sujet ? exigenceDelaisDuSujet(ctx.dce || '', sujet)
+      : imposee?.citation ? phraseDuDceContenant(ctx.dce || '', imposee.citation)
       : sujet ? phraseDelaiDuDce(ctx.dce || '', sujet as any) : '';
     if (!exigence) continue;
     const variables = { ...reel.variables, [nom]: g };

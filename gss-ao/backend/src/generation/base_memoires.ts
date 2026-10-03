@@ -1083,6 +1083,28 @@ export function fondementReprise(texte: string, dce: string): string {
 }
 
 /**
+ * Délais écrits sans chiffre ou avec une tournure de maximum (T10-COH-1) remis à la forme « délai de N unité » que lisent
+ * les lecteurs de délais : « dans un délai maximal d'une heure » → « dans un délai maximal de 1 heure », « dans l'heure » →
+ * « dans 1 heure », « d'une demi-heure » → « de 30 minutes », « n'excédant pas / inférieur à / ne dépassant pas 1 heure » →
+ * « de 1 heure », « au plus tard une heure après » → « au plus tard dans une heure après ». Le texte cité n'est pas changé :
+ * seule la copie lue l'est.
+ */
+export function normaliserExpressionsDelai(t: string): string {
+  return String(t || '')
+    .replace(/\bdans l['’]heure(?![a-zà-ÿ])/gi, 'dans 1 heure')
+    .replace(/(\bd['’]\s*|\bde\s+)?(?<![a-zà-ÿ])une?\s+demi-heure/gi, (_m, de) => `${de ? 'de ' : ''}30 minutes`)
+    .replace(/\bd['’]\s*une?\s+(?=(?:heures?|h)(?![a-zà-ÿ]))/gi, 'de 1 ')
+    .replace(/(d[ée]lai(?:\s+maxim(?:al|um))?)\s+(?:n['’]exc[ée]dant pas|ne d[ée]passant pas|ne pouvant (?:pas )?exc[ée]der|inf[ée]rieure?\s+(?:ou\s+[ée]gale?\s+)?[àa]|maximum de)\s+/gi, '$1 de ')
+    .replace(/\bau plus tard\s+(?=(?:\d|une?\s|deux|trois|quatre|cinq|six|dix|douze|quinze|vingt|trente)\S*\s*(?:\(\s*\d+\s*\)\s*)?(?:minutes?|mn|min|heures?|h)(?![a-zà-ÿ]))/gi, 'au plus tard dans ');
+}
+
+/** Durée en minutes (« 1 heure » → 60, « 45 minutes » → 45) ; NaN si illisible. */
+export function minutesDe(n: string | number, unite: string): number {
+  const v = typeof n === 'number' ? n : Number(String(n).replace(',', '.'));
+  return /^m/i.test(unite.trim()) ? v : v * 60;
+}
+
+/**
  * Marché HORS de Normandie (GSS est implantée à Rouen) : une phrase qui promet une présence physique
  * (intervention, remplacement, astreinte, renfort, arrivée sur place) dans un délai chiffré ABSENT du DCE
  * reprend un délai normand intenable. Elle est retirée et renvoyée comme point à confirmer par GSS. Les
@@ -1096,7 +1118,7 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
   // « remplaçant » (ç), prise de service et absence comprises : « l'agent remplaçant prend son service sous 60 minutes » ;
   // mise à disposition d'agents et délais contractuels (« sous 2 heures pour une demande urgente »).
   const PRESENCE = /interven|mobilis|rempla[cç]|astreinte|rondier|arriv|sur place|se rend|d[ée]plac|renfort|lev[ée]e de doute|(?:prise?|prenne|prend) (?:de |son )?service|absence|mise à disposition|mis à disposition|d[ée]lais? contractuels?|demandes? urgentes?|en urgence/i;
-  const dceNorm = (dce || '').replace(/\s+/g, ' ').toLowerCase();
+  const dceNorm = normaliserExpressionsDelai((dce || '').replace(/\s+/g, ' ')).toLowerCase();
   // Le DCE écrit parfois le délai en toutes lettres (« moins de cinq minutes »).
   const LETTRES: Record<string, string> = { '1': 'une?', '2': 'deux', '3': 'trois', '4': 'quatre', '5': 'cinq', '6': 'six', '8': 'huit', '10': 'dix', '12': 'douze', '15': 'quinze', '20': 'vingt', '24': 'vingt-quatre', '30': 'trente', '45': 'quarante-cinq', '48': 'quarante-huit', '60': 'soixante', '72': 'soixante-douze' };
   /** 'oui' : délai imposé par le DCE ; 'seuil' : seulement un seuil de pénalité (objet du délai) ; 'non' : absent. */
@@ -1105,17 +1127,23 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
   const PHRASE_DOCUMENT = (ph: string) => /\b(?:remis|remise|remettre|transmis|transmise|transmission|transmettre|fourni|fournis)\b/i.test(ph)
     && /\b(?:documents?|reportings?|rapports?|plannings?|bons? d.intervention|comptes?[- ]rendus?|habilitations?)\b/i.test(ph);
   const dansDce = (n: string, u: string, ph: string): { statut: 'oui' | 'seuil' | 'non'; objet?: string } => {
-    const unite = /^m/i.test(u) ? '(?:minutes?|min\\b|mn\\b)' : '(?:heures?|h\\b)';
-    const chiffre = `${n.replace('.', '[.,]').replace(',', '[.,]')}`;
-    // Chiffre et lettres dans les deux ordres : « trente (30) minutes » comme « 30 (trente) minutes » (IFITS).
-    const une = LETTRES[n] ? `(?:${chiffre}|${LETTRES[n]})` : chiffre;
-    const formes = `${une}(?:\\s*\\(${une}\\))?`;
+    // Même durée dans l'autre unité (« 60 minutes » de GSS, « une heure » du CCTP, T10-COH-1).
+    const min = minutesDe(n, u);
+    const autre = /^m/i.test(u) ? (min % 60 === 0 ? String(min / 60) : '') : (Number.isFinite(min) && Number.isInteger(min) ? String(min) : '');
+    const forme = (x: string) => {
+      const chiffre = `${x.replace('.', '[.,]').replace(',', '[.,]')}`;
+      // Chiffre et lettres dans les deux ordres : « trente (30) minutes » comme « 30 (trente) minutes » (IFITS).
+      const une = LETTRES[x] ? `(?:${chiffre}|${LETTRES[x]})` : chiffre;
+      return `${une}(?:\\s*\\(${une}\\))?`;
+    };
+    const uniteDe = (minutes: boolean) => (minutes ? '(?:minutes?|min\\b|mn\\b)' : '(?:heures?|h\\b)');
+    const formesUnite = `(?:${forme(n)}\\s*${uniteDe(/^m/i.test(u))}${autre ? `|${forme(autre)}\\s*${uniteDe(!/^m/i.test(u))}` : ''})`;
     // Un seuil de pénalité (« retard supérieur à 60 min … 300 € HT / manquement », « 200 € par agent demandé pour une
     // mise à disposition urgente attendue dans un délai de 2 heures ») n'est pas un délai d'intervention imposé : il
     // n'autorise pas GSS à promettre ce délai hors Normandie.
     let seuil = '';
     // « 24h/24 » est une amplitude, pas un délai.
-    for (const m of dceNorm.matchAll(new RegExp(`(?<![\\d,.])${formes}\\s*${unite}(?!\\s*/)`, 'gi'))) {
+    for (const m of dceNorm.matchAll(new RegExp(`(?<![\\d,.])${formesUnite}(?!\\s*/)`, 'gi'))) {
       const autour = dceNorm.slice(Math.max(0, (m.index || 0) - 70), (m.index || 0) + m[0].length + 50);
       // Durée qui n'est pas un délai (« 24 heures de stationnement au tarif horaire ») : ignorée.
       if (/stationnement|tarif|recharge|cons[ée]cuti/i.test(autour.slice(60, 140))) continue;
@@ -1542,12 +1570,22 @@ export function obligationsChiffrees(dce: string): Array<{ phrase: string; cle: 
       const rxEch = /avant le (\d{1,2})(?:er)?\s+(?:du mois|de chaque mois)/gi;
       while ((m = rxEch.exec(ph))) motifs.push(`(?:avant (?:le )?|le )${m[1]}(?:er)?\\b[^.\\n]{0,25}mois|\\b${m[1]}(?:er)? (?:du|de chaque) mois`);
       const LETTRES: Record<string, string> = { un: '1', une: '1', deux: '2', trois: '3', quatre: '4', cinq: '5', six: '6', sept: '7', huit: '8', dix: '10', quinze: '15', trente: '30', 'quarante-huit': '48' };
-      const rxDelai = /(?:au (?:moins|minimum|plus tard)|dans un d[ée]lai(?: maxim(?:um|al))?(?: de)?|sous|en moins de|dans les|d[ée]lai de|pr[ée]avis de)\s+(\d{1,3}|une?|deux|trois|quatre|cinq|six|sept|huit|dix|quinze|trente|quarante-huit)\s*(?:\(\d+\)\s*)?(jours?\s+ouvr[ée]s?|jours?\s+ouvrables?|jours?|heures?|h\b|minutes?|min\b|mn\b|semaines?|mois\b)/gi;
-      while ((m = rxDelai.exec(ph))) {
+      const rxDelai = /(?:au (?:moins|minimum|plus tard)(?: dans)?|dans un d[ée]lai(?: maxim(?:um|al))?(?: de)?|sous|en moins de|dans les|dans|d[ée]lai de|pr[ée]avis de)\s+(\d{1,3}|une?|deux|trois|quatre|cinq|six|sept|huit|dix|quinze|trente|quarante-huit)\s*(?:\(\d+\)\s*)?(jours?\s+ouvr[ée]s?|jours?\s+ouvrables?|jours?|heures?|h\b|minutes?|min\b|mn\b|semaines?|mois\b)/gi;
+      // Délai écrit sans chiffre (« d'une heure », « dans l'heure », « d'une demi-heure », T10-COH-1) : lu sur une copie remise
+      // à la forme chiffrée ; la phrase citée reste celle du DCE.
+      const phDelai = normaliserExpressionsDelai(ph);
+      while ((m = rxDelai.exec(phDelai))) {
         const u = unite(m[2]);
         const n = LETTRES[m[1].toLowerCase()] || m[1];
         const lettres = Object.keys(LETTRES).filter((k) => LETTRES[k] === n).join('|');
-        if (u) motifs.push(`\\b(?:${n}${lettres ? `|${lettres}` : ''})\\s*${u}`);
+        if (!u) continue;
+        // La même durée dans l'autre unité est aussi une reprise (« 60 minutes » pour « une heure », « demi-heure »).
+        const min = /minutes/.test(u) ? Number(n) : /heures/.test(u) ? Number(n) * 60 : NaN;
+        const equivalents = Number.isFinite(min) ? [
+          ...(/heures/.test(u) ? [`\\b${min}\\s*(?:minutes?|min|mn)\\b`] : min % 60 === 0 ? [`\\b(?:${min / 60}${min === 60 ? '|une?' : ''})\\s*(?:heures?|h)\\b`] : []),
+          ...(min === 30 ? ['demi-heure'] : []), ...(min === 60 ? ["dans l['’]heure"] : []),
+        ] : [];
+        motifs.push([`\\b(?:${n}${lettres ? `|${lettres}` : ''})\\s*${u}`, ...equivalents].join('|'));
       }
       const rxFreq = /\b(\d{1,2}|une|deux|trois|quatre)\s*(?:fois|passages?|rondes?|contr[ôo]les?|visites?|r[ée]unions?)\s+(?:au minimum\s+|minimum\s+)?par\s+(jour|nuit|semaine|mois|trimestre|semestre|an|vacation|poste)\b/gi;
       while ((m = rxFreq.exec(ph))) {

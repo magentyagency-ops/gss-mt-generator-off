@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { lignesEquipe, questionDimensionnement, questionRondes, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce } from './base_memoires';
+import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -1222,36 +1222,61 @@ const SUJETS_DELAI: Record<string, { sujet: RegExp; exclure?: RegExp; objet?: Re
 };
 
 /**
- * Délai imposé par le DCE pour un sujet (« le personnel de remplacement dans les UNE (1) heure » → « 1 heure »).
- * Plusieurs valeurs différentes pour le même sujet : ambigu → '' (l'adaptation et les contrôles s'en chargent).
+ * Délais imposés par le DCE pour un sujet, avec la phrase de chacun (« le personnel de remplacement dans les UNE (1) heure »
+ * → « 1 heure »). Délais écrits sans chiffre lus aussi (« d'une heure », « dans l'heure », « d'une demi-heure »,
+ * « n'excédant pas 1 heure », T10-COH-1). Pour une alarme, le délai de traitement au PC (application des consignes,
+ * information du client, contre-appel) n'est pas un délai d'arrivée sur site (citedia, T10C-2).
  */
-export function delaiDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): string {
+export function delaisDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): Array<{ valeur: string; minutes: number; phrase: string }> {
   const def = SUJETS_DELAI[sujet];
-  const valeurs = new Set<string>();
+  const out: Array<{ valeur: string; minutes: number; phrase: string }> = [];
   for (const ph of phrasesDuDce(dce)) {
     if (!def.sujet.test(ph) || def.exclure?.test(ph)) continue;
     if (def.objet?.test(ph) && !def.personnel?.test(ph)) continue;
     if (sujet === 'ssi' && !/d[ée]faillan|hors service|d[ée]rangement/i.test(ph)) continue;
-    for (const m of ph.matchAll(RX_DELAI)) {
+    const lu = normaliserExpressionsDelai(ph);
+    for (const m of lu.matchAll(RX_DELAI)) {
+      // Alarme : délai d'une action au PC (« appliquer les consignes… sous un délai de 3 minutes », « être informé… dans
+      // les 3 minutes ») écrite avant le délai, pas un délai d'arrivée sur site.
+      if (sujet === 'alarme' && /consignes|inform[ée]|informer|traitement|contre[- ]appel/i.test(lu.slice(Math.max(0, (m.index || 0) - 160), m.index || 0))) continue;
       // « UNE (1) heure » : le chiffre entre parenthèses ; « 30 (trente) minutes » (ifits, T9CS-1) : le chiffre écrit avant.
       const n = m[2] && /^\d+$/.test(m[2]) ? Number(m[2]) : (/^\d+$/.test(m[1]) ? Number(m[1]) : NOMBRES_LETTRES[m[1].toLowerCase()]);
       if (!n) continue;
-      valeurs.add(normaliserDelai(`${n} ${m[3]}`));
+      const valeur = normaliserDelai(`${n} ${m[3]}`);
+      out.push({ valeur, minutes: minutesDe(n, m[3]), phrase: ph });
     }
   }
-  return valeurs.size === 1 ? [...valeurs][0] : '';
+  return out;
+}
+
+/**
+ * Délai imposé par le DCE pour un sujet (« le personnel de remplacement dans les UNE (1) heure » → « 1 heure »).
+ * Plusieurs durées différentes pour le même sujet : '' (delai() cite alors les phrases du CCTP à GSS, T10C-2).
+ */
+export function delaiDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): string {
+  const minutes = new Map<number, string>();
+  for (const d of delaisDuDce(dce, sujet)) if (!minutes.has(d.minutes)) minutes.set(d.minutes, d.valeur);
+  return minutes.size === 1 ? [...minutes.values()][0] : '';
 }
 
 /** Phrase du DCE d'où delaiDuDce tire le délai imposé d'un sujet ('' si aucune) : citée à GSS comme exigence du CCTP (D8). */
 export function phraseDelaiDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): string {
-  const def = SUJETS_DELAI[sujet];
-  for (const ph of phrasesDuDce(dce)) {
-    if (!def.sujet.test(ph) || def.exclure?.test(ph)) continue;
-    if (def.objet?.test(ph) && !def.personnel?.test(ph)) continue;
-    if (sujet === 'ssi' && !/d[ée]faillan|hors service|d[ée]rangement/i.test(ph)) continue;
-    if ([...ph.matchAll(RX_DELAI)].length) return ph;
+  return delaisDuDce(dce, sujet)[0]?.phrase || '';
+}
+
+/** Phrases du DCE qui imposent un délai pour un sujet (sans doublon), citées à GSS quand le CCTP en impose plusieurs. */
+export function phrasesDelaisDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): string[] {
+  return [...new Set(delaisDuDce(dce, sujet).map((d) => d.phrase))];
+}
+
+/** Sujet de délai d'une phrase (« Le rondier arrive sur site en 45 minutes après l'appel de la télésurveillance » → alarme). */
+export function sujetDelaiDePhrase(ph: string): keyof typeof SUJETS_DELAI | null {
+  for (const s of ['pti', 'alarme', 'ssi', 'commande', 'remplacement'] as Array<keyof typeof SUJETS_DELAI>) {
+    const def = SUJETS_DELAI[s];
+    if (def.sujet.test(ph) && !def.exclure?.test(ph)) return s;
   }
-  return '';
+  if (/astreinte|absen/i.test(ph)) return 'remplacement';
+  return null;
 }
 
 /** Phrase entière du DCE qui contient une citation (une citation peut n'en être qu'un fragment) ; sinon la citation. */
@@ -1441,8 +1466,24 @@ function delai(c: CalculVariables, nom: string, sujet: keyof typeof SUJETS_DELAI
   const def = c.mt.variables[nom];
   const duDce = sujet && c.ctx.delaisDuDce !== false ? delaiDuDce(c.ctx.dce || '', sujet) : '';
   if (duDce) return { valeur: duDce, source: 'délai imposé par le DCE' };
+  const objetDe = () => `${(def?.description || nom).charAt(0).toLowerCase()}${(def?.description || nom).slice(1).replace(/[.\s]+$/, '')}`;
+  // Plusieurs délais imposés par le CCTP pour ce point (citedia : 15 minutes pour une alarme incendie ou un bouton
+  // anti-agression, 30 minutes pour une alarme technique ou intrusion, T10C-2) : le délai de GSS reste s'il les respecte
+  // tous (Normandie) ; sinon la phrase est imprimée sans délai et la question cite les phrases du CCTP (jamais « le DCE n'en
+  // impose aucun », jamais un délai normand hors Normandie).
+  const imposes = sujet && c.ctx.delaisDuDce !== false ? delaisDuDce(c.ctx.dce || '', sujet) : [];
+  if (new Set(imposes.map((d) => d.minutes)).size > 1) {
+    const plusCourt = Math.min(...imposes.map((d) => d.minutes));
+    if (!(c.horsNormandie && def?.normandie_seulement)) {
+      const g = def?.registre ? depuisRegistre(c, def.registre, normaliserDelai) : def?.valeur_gss ? { valeur: def.valeur_gss, source: def.origine, aConfirmer: questionParGeneration(def) } as ValeurVariable : { valeur: null };
+      const durees = variableRenseignee(g) ? dureesIntervention(`en ${g.valeur}`) : [];
+      if (durees.length && Math.max(...durees) <= plusCourt) return g;
+    }
+    const citations = phrasesDelaisDuDce(c.ctx.dce || '', sujet!).map((p) => `« ${p.length > 260 ? `${p.slice(0, 260).replace(/\s+\S*$/, '')}…` : p} »`).join(' ; ');
+    return { valeur: null, question: `Le CCTP impose plusieurs délais pour ce point (${objetDe()}) : ${citations}. La phrase de GSS est imprimée sans délai : quel délai GSS y écrit-elle ?` };
+  }
   if (c.horsNormandie && def?.normandie_seulement) {
-    const objet = `${def.description.charAt(0).toLowerCase()}${def.description.slice(1).replace(/[.\s]+$/, '')}`;
+    const objet = objetDe();
     // Sites mixtes (T4-COH-3) : la question nomme les sites hors Normandie et rappelle le délai normand de GSS.
     const sites = sitesDuMarche(c.ctx.analyse || {}, c.ctx.dce || '');
     if (sites.mixte) {
