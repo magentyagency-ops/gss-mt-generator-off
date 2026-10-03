@@ -2343,57 +2343,12 @@ export function texteSecoursBesoin(d: DonneesBesoin, perimetre = ''): string {
  */
 // ─── Phrases du texte de GSS adaptées au CCTP (D8) ──────────────────────────────────────────────
 
-/** Phrase de GSS adaptée à une exigence du CCTP par une passe de cohérence (chiffres, horaires) : signalée à GSS (D8). */
+/**
+ * Phrase de GSS adaptée à une exigence du CCTP par une passe de cohérence (chiffres, horaires) : signalée à GSS (D8). Le
+ * signalement (consultations, premier message de l'assistant) est fait par adaptations_cctp.ts (SuiviAdaptations,
+ * consultationsAdaptations, messageAdaptations).
+ */
 export interface AdaptationCctp { id: string; avant: string; apres: string; exigence: string }
-
-/** Mots porteurs (4 lettres ou plus, en minuscules) d'un texte. */
-const motsPorteurs = (x: string) => (x.toLowerCase().replace(/[’‘]/g, "'").match(/[a-zà-ÿ0-9]{4,}/g) || []);
-
-/**
- * L'adaptation figure-t-elle encore dans le texte remis (après condensation et nettoyages) ? Comparaison par mots
- * porteurs (le nettoyage final peut changer la voix ou le nom de l'acheteur) : 80 % des mots de la phrase adaptée.
- */
-export function adaptationPresente(a: AdaptationCctp, texte: string): boolean {
-  const mots = motsPorteurs(a.apres);
-  if (!mots.length || !texte) return false;
-  const dispo = new Set(motsPorteurs(texte));
-  return mots.filter((m) => dispo.has(m)).length / mots.length >= 0.8;
-}
-
-/**
- * Adaptations à signaler : deux corrections successives de la même phrase n'en font qu'une (phrase d'origine de la
- * première, phrase adaptée de la dernière), sans doublon, et seulement si la phrase adaptée figure encore dans le texte.
- */
-export function adaptationsRetenuesDe(adaptations: AdaptationCctp[], sections: Record<string, string>): AdaptationCctp[] {
-  const res: AdaptationCctp[] = [];
-  for (const a of adaptations) {
-    if (!a.avant || !a.apres || a.avant === a.apres) continue;
-    const prec = res.find((x) => x.id === a.id && x.apres === a.avant);
-    if (prec) { prec.apres = a.apres; if (a.exigence && !prec.exigence.includes(a.exigence)) prec.exigence = [prec.exigence, a.exigence].filter(Boolean).join(' ; '); continue; }
-    if (!res.some((x) => x.id === a.id && x.avant === a.avant && x.apres === a.apres)) res.push({ ...a });
-  }
-  return res.filter((a) => a.avant !== a.apres && adaptationPresente(a, sections[a.id] || ''));
-}
-
-/** Ligne de consultation d'une phrase de GSS adaptée au CCTP (D8) : phrase d'origine, phrase adaptée, exigence. */
-export function consultationAdaptation(a: AdaptationCctp, titre: string): string {
-  // Coupé à la fin d'un mot, avec « … » (becquerel 591, T5N-7 : « … dans son ensem »).
-  const c = (x: string, n: number) => { const t = x.replace(/\s+/g, ' ').trim().replace(/[.;:,\s]+$/, ''); return t.length <= n ? t : `${t.slice(0, n + 1).replace(/\s+\S*$/, '').replace(/[\s,;:]+$/, '')}…`; };
-  return `Phrase du texte de GSS adaptée au cahier des charges, à valider : « ${titre} » — phrase d'origine : « ${c(a.avant, 300)} » ; phrase adaptée : « ${c(a.apres, 300)} »${a.exigence ? ` ; exigence du CCTP : « ${c(a.exigence, 300)} »` : ''}`;
-}
-
-/** Premier message de l'assistant : phrases du texte de GSS adaptées au CCTP, à valider, modifier ou rétablir (D8). */
-export function messageAdaptations(adaptations: Array<AdaptationCctp & { titre: string }>): string {
-  if (!adaptations.length) return '';
-  const c = (x: string) => x.replace(/\s+/g, ' ').trim().replace(/[.;:\s]+$/, '');
-  const n = adaptations.length;
-  return [
-    `J'ai adapté ${n === 1 ? 'une phrase' : `${n} phrases`} du texte de GSS que le cahier des charges contredisait (le cahier des charges prime). À valider avant la remise :`,
-    ...adaptations.map((a) => `- « ${a.titre} » : « ${c(a.avant)} » devient « ${c(a.apres)} »${a.exigence ? ` (exigence du CCTP : « ${((t) => (t.length <= 300 ? t : `${t.slice(0, 301).replace(/\s+\S*$/, '').replace(/[\s,;:]+$/, '')}…`))(c(a.exigence))} »)` : ''}`),
-    '',
-    'Pour chacune, vous pouvez garder la phrase adaptée, la modifier (« Dans la rubrique …, remplace … par … ») ou rétablir la phrase d\'origine (« Dans la rubrique …, remplace la phrase adaptée par la phrase d\'origine : … »).',
-  ].join('\n');
-}
 
 /** Premier message de l'assistant (réponse libre) : engagements rédigés par l'IA d'après le CCTP, par rubrique (D5, T4C-10). */
 export function messageEngagements(rubriques: Array<{ titre: string; n: number }>): string {

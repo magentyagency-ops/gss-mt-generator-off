@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { MemoireGenerator } from '../src/generation/memoire_generator';
-import { adaptationsRetenuesDe, consultationAdaptation, messageAdaptations, type AdaptationCctp } from '../src/generation/reponse_libre_v2';
+import { type AdaptationCctp } from '../src/generation/reponse_libre_v2';
+import { SuiviAdaptations, consultationsAdaptations, messageAdaptations } from '../src/generation/adaptations_cctp';
 
 /** Tour 4 (T4C-13, D8) : une phrase du texte de GSS adaptée au CCTP n'est jamais réécrite en silence. */
 describe('phrases de GSS adaptées au CCTP signalées à GSS (T4C-13, D8)', () => {
@@ -20,16 +21,19 @@ describe('phrases de GSS adaptées au CCTP signalées à GSS (T4C-13, D8)', () =
     expect(adaptations[0].avant).toMatch(/^Nous nous rapprochons autant que possible du zéro papier : .* et n'imprimons plus de documents\.$/);
     expect(adaptations[0].apres).toMatch(/et imprimons les rapports d'intervention requis au format papier\.$/);
     expect(adaptations[0].exigence).toBe(EXIGENCE);
-    const retenues = adaptationsRetenuesDe(adaptations, sections);
+    // Signalement par le code appelé en production (adaptations_cctp.ts, T8-COH-5) : suivi, consultation, premier message.
+    const suivi = new SuiviAdaptations();
+    suivi.noterCoherence('b2_ecologie_mobilite_numerique', ECOLOGIE, sections.b2_ecologie_mobilite_numerique, EXIGENCE, []);
+    const retenues = suivi.finaliser(sections, () => 'Écologie, mobilité et numérique');
     expect(retenues).toHaveLength(1);
-    const ligne = consultationAdaptation(retenues[0], 'Écologie, mobilité et numérique');
-    expect(ligne).toContain("phrase d'origine : « Nous nous rapprochons");
-    expect(ligne).toContain("n'imprimons plus de documents »");
+    const ligne = consultationsAdaptations(retenues)[0];
+    expect(ligne).toContain("phrase d'origine de GSS : « Nous nous rapprochons");
+    expect(ligne).toContain("n'imprimons plus de documents. »");
     expect(ligne).toContain("phrase adaptée : « Nous nous rapprochons");
-    expect(ligne).toContain(`exigence du CCTP : « ${EXIGENCE.replace(/\.$/, '')} »`);
-    const msg = messageAdaptations(retenues.map((a) => ({ ...a, titre: 'Écologie, mobilité et numérique' })));
-    expect(msg).toMatch(/^J'ai adapté une phrase du texte de GSS que le cahier des charges contredisait/);
-    expect(msg).toContain('rétablir la phrase d\'origine');
+    expect(ligne).toContain(EXIGENCE.replace(/\.$/, ''));
+    const msg = messageAdaptations(retenues);
+    expect(msg).toMatch(/le cahier des charges prime sur votre texte/);
+    expect(msg).toContain('Écologie, mobilité et numérique');
   });
 
   it('verifierHoraires relève aussi la phrase adaptée', async () => {
@@ -46,15 +50,14 @@ describe('phrases de GSS adaptées au CCTP signalées à GSS (T4C-13, D8)', () =
   });
 
   it('deux corrections successives de la même phrase : un seul signalement ; phrase retirée ensuite : aucun', () => {
-    const a: AdaptationCctp[] = [
-      { id: 'r', avant: 'Contrôles de 1 à 3 fois par mois.', apres: 'Contrôles de 3 fois par mois.', exigence: 'au moins 3 visites' },
-      { id: 'r', avant: 'Contrôles de 3 fois par mois.', apres: 'Contrôles inopinés de 3 fois par mois.', exigence: 'inopinés' },
-      { id: 's', avant: 'Phrase disparue de GSS.', apres: 'Phrase adaptée retirée ensuite par la condensation.', exigence: 'x' },
-    ];
-    const r = adaptationsRetenuesDe(a, { r: 'Nos contrôles inopinés de 3 fois par mois.', s: 'Autre texte.' });
+    const suivi = new SuiviAdaptations();
+    suivi.noterCoherence('r', 'Nos contrôles sont réalisés de 1 à 3 fois par mois.', 'Nos contrôles sont réalisés 3 fois par mois.', 'au moins 3 visites', []);
+    suivi.noterCoherence('r', 'Nos contrôles sont réalisés 3 fois par mois.', 'Nos contrôles inopinés sont réalisés 3 fois par mois.', 'inopinés', []);
+    suivi.noterCoherence('s', 'Cette phrase de GSS a disparu du texte.', 'Cette phrase adaptée est retirée ensuite par la condensation.', 'x', []);
+    const r = suivi.finaliser({ r: 'Nos contrôles inopinés sont réalisés 3 fois par mois.', s: 'Autre texte.' }, (id) => id);
     expect(r).toHaveLength(1);
-    expect(r[0].avant).toBe('Contrôles de 1 à 3 fois par mois.');
-    expect(r[0].apres).toBe('Contrôles inopinés de 3 fois par mois.');
+    expect(r[0].origine).toBe('Nos contrôles sont réalisés de 1 à 3 fois par mois.');
+    expect(r[0].adaptee).toBe('Nos contrôles inopinés sont réalisés 3 fois par mois.');
     expect(r[0].exigence).toBe('au moins 3 visites ; inopinés');
   });
 });
