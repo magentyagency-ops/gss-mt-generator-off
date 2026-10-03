@@ -10176,7 +10176,11 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       // Le bloc de la compréhension (contexte, périmètre, attentes, points de vigilance) cite l'exigence sans y répondre (imm :
       // « Plan de continuité en cas de grève… remis au démarrage », point de vigilance sans réponse) : il ne compte pas.
       const sansComprehension = (t: string) => t.replace(/^#{2,3}\s+(?:Votre contexte|Le p[ée]rim[èe]tre|Vos attentes|Les points de vigilance)[^\n]*\n[\s\S]*?(?=^#{1,3}\s|(?![\s\S]))/gm, '');
-      const traiteeDans = (pid: string) => g.exigences.some((e) => exigenceTraitee(e.exigence, sansComprehension(sections[pid] || '')));
+      // Exigence déjà prise en compte par une phrase de GSS adaptée au CCTP (D8, T1F-12 : « au minimum 2 vacations en supplément
+      // de l'équipe opérationnelle » pour l'exigence des 2 vacations de formation) : traitée dans la partie de cette phrase.
+      const parAdaptation = (pid: string) => g.exigences.some((e) => adaptations.some((a) => a.rubrique === pid && !!a.adaptee
+        && (exigenceTraitee(e.exigence, a.exigence) || exigenceTraitee(a.exigence, e.exigence) || exigenceTraitee(e.exigence, a.adaptee))));
+      const traiteeDans = (pid: string) => g.exigences.some((e) => exigenceTraitee(e.exigence, sansComprehension(sections[pid] || ''))) || parAdaptation(pid);
       const cible = traiteeDans(partie.id) ? partie : plan.find((p) => traiteeDans(p.id));
       if (cible) {
         propositions.push(`Proposition de réponse à valider (question nouvelle du DCE, en engagement dans la partie « ${cible.title} ») : ${g.sujet}`);

@@ -307,3 +307,13 @@ describe('limite de pages du RC écrite autrement (T1-GEN-1)', () => {
     expect(passagesContenuOffre("Le mémoire technique ne devra pas excéder la limite fixée en annexe du présent règlement.").length).toBe(1);
   });
 });
+
+import { exigenceTraitee } from '../src/generation/reponse_libre_v2';
+
+describe('format court : exigence couverte par une phrase adaptée D8 (T1F-12)', () => {
+  it('l’exigence des 2 vacations de formation est reconnue dans la citation de l’adaptation', () => {
+    const ex = "Avant déploiement complet, tout nouveau personnel doit recevoir au minimum 2 vacations de formation en supplément de l’équipe opérationnelle ; les chefs d’équipe doivent recevoir 3 vacations de formation. Ces vacations doivent représenter des périodes de jour et de nuit";
+    const citationD8 = "Avant déploiement complet, tout nouveau personnel doit recevoir au minimum 2 vacations de formation en supplément de l’équipe opérationnelle ; les chefs d’équipe doivent recevoir 3 vacations. Ces vacations doivent représenter des périodes de jour et de nuit.";
+    expect(exigenceTraitee(ex, citationD8) || exigenceTraitee(citationD8, ex)).toBe(true);
+  });
+});
