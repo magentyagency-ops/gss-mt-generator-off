@@ -25,7 +25,7 @@ import {
   type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, phrasesThematiques, completerParThematiques, completerMailUnique, COLONNE_VALEUR, colonneCase, sansPseudoTableau, textesSchemaSvg, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
-  attribuerRubriques, blocRenvois, completerDelaisCadre, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
+  attribuerRubriques, blocRenvois, completerDelaisCadre, ordonnerSelonReponse, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, attendusDuChamp, attendusSansReponse,
 } from './memoire_type_cadre';
 import { SuiviAdaptations, adaptationsDuPubliposte, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, type PhraseAdaptee } from './adaptations_cctp';
@@ -1523,6 +1523,8 @@ export function cleDonnee(question: string): string[] {
   if (delai && /urgen/i.test(q)) out.push('delai_urgence');
   if (delai && /\bSSI\b/.test(q)) out.push('delai_ssi');
   if (/\b(?:heure|horaire)s?\b/i.test(q) && /ronde d['’]ouverture|ouverture effective|d[ée]part (?:de la ronde|permettant)/i.test(q)) out.push('horaire_ronde_ouverture');
+  // Couverture horaire du cas pratique (etampes2 553 : « 48 heures annoncées / 39 heures détaillées », « 9 heures non décrites »).
+  if (/cas pratique|plages?|intitul|non d[ée]crites/i.test(q) && /\d+\s*h(?:eures)?\b[^?]{0,160}\d+\s*h(?:eures)?\b/i.test(q) && /couvr|couverture|intitul|non d[ée]crites|clarifi/i.test(q)) out.push('couverture_cas_pratique');
   return out.sort();
 }
 
@@ -3341,7 +3343,11 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     // même dans une question fusionnée (havre2 341, T3C-8).
     // Donnée de GSS (référence, chiffre d'affaires, effectif) : posée à GSS, jamais « À demander à l'acheteur » (vitry 351).
     const connues = (l: Array<{ question: string; sources: number[] }>) => l.map((q) => ({ ...q, question: questionDonneeGss(sansDonneesCnapsConnues(q.question) || '') })).filter((q) => q.question);
-    return connues(await this.consoliderAvecSourcesFusion(liste));
+    // Question rédigée par le modèle qui redemande une donnée déjà posée par une ligne formulée sans modèle (couverture du cas
+    // pratique, délais…) : retirée, la ligne déterministe reste (T5CP-11, etampes2 553).
+    const l = connues(await this.consoliderAvecSourcesFusion(liste));
+    const couvertes = new Set(l.filter((q) => LIGNE_DETERMINISTE.test(q.question)).flatMap((q) => cleDonnee(q.question)));
+    return l.filter((q) => { const k = cleDonnee(q.question); return LIGNE_DETERMINISTE.test(q.question) || !k.length || !k.every((c) => couvertes.has(c)); });
   }
 
   private async consoliderAvecSourcesFusion(liste: string[]): Promise<Array<{ question: string; sources: number[] }>> {
@@ -5263,7 +5269,10 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
         // Réponse développée : texte du mémoire type repris (fidélité contrôlée), sinon proposition de l'IA à valider.
         if (developpee && value !== undefined && value !== null && String(value).trim()) {
           // Une rubrique principale (et au plus une seconde de score voisin) : jamais trois rubriques mêlées (havre1, 3.4).
-          const retenus = referencesPrincipales(referencesRetenues(candidats, data.reference));
+          // Plusieurs textes de GSS repris (une rubrique par composante) : dans l'ordre où la réponse les emploie, pour que chaque
+          // texte reste sous l'intitulé de sa composante au recalage (etampes2 553, T5CP-2 : « Absence de 2 agents… » suivi du
+          // texte de l'intrusion, sous-titre « Intrusion… » resté vide).
+          const retenus = ordonnerSelonReponse(referencesPrincipales(referencesRetenues(candidats, data.reference)), String(value));
           // Intitulé de la rubrique du cadre (titre de section) quand la « question » n'est qu'un paragraphe de consigne
           // (havre1 : « Le renvoi vers un rapport général… est à proscrire » au lieu de « Mesures et initiatives sociétales »).
           const sectionChamp = ((f.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '').replace(/\[CHAMP_\d+\]/gi, '').replace(/\s+/g, ' ').trim();
@@ -5615,7 +5624,10 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       // avec sa question exacte à GSS (etampes1 592 : deux paragraphes de procédure, sans délai ni emplacement, T5N-2).
       if (d.kind !== 'table') {
         const qChamp = (d.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '';
-        const dl = completerDelaisCadre(String(r.value), qChamp, { client: String(repriseMT?.prep.variables.CLIENT?.valeur || analysisData?.clientName || '').trim() || undefined, horsNormandie: horsNormandieCadre });
+        const clientV = repriseMT?.prep.variables.CLIENT;
+        const art = String(clientV?.article || '').trim();
+        const nomClient = clientV?.valeur ? `${art ? (/['’]$/.test(art) ? art : `${art} `) : ''}${clientV.valeur}` : String(analysisData?.clientName || '');
+        const dl = completerDelaisCadre(String(r.value), qChamp, { client: nomClient.trim() || undefined, horsNormandie: horsNormandieCadre });
         if (dl.ajouts.length) {
           r.value = dl.texte;
           dl.ajouts.forEach((a) => questionsDelaisCadre.set(a.ligne.replace(/\s*\[À COMPLÉTER\]\.?$/, '').trim(), a.question));

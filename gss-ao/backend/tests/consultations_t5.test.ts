@@ -104,3 +104,15 @@ describe('même donnée demandée deux fois (T5CP-11, cstb 551)', () => {
     expect(cleDonnee('Combien d’agents faut-il ?')).toEqual([]);
   });
 });
+
+describe('délais du cadre : « 24 heures sur 24 » n’est pas un délai (T5N-2, etampes2 553)', () => {
+  it('permanence 24 heures sur 24 sans délai : emplacement à compléter', () => {
+    const r = completerDelaisCadre('À réception du bon de commande, GSS planifie les agents.\nLa permanence de GSS est organisée 24 heures sur 24 et 7 jours sur 7.', 'Délais d’interventions proposés par le candidat', { client: "la Mairie d'Etampes", horsNormandie: true });
+    expect(r.texte).toMatch(/Délai proposé pour une intervention courante : \[À COMPLÉTER\]\.\nDélai proposé pour une action d'urgence : \[À COMPLÉTER\]\.$/);
+    expect(r.ajouts[0].question).toMatch(/quel délai GSS annonce-t-elle pour une intervention courante, entre la réception du bon de commande/);
+    expect(r.ajouts[1].question).toMatch(/pour une action d'urgence, entre l'appel de l'acheteur/);
+  });
+  it('questions du modèle sur la couverture du cas pratique : une seule clé', () => {
+    expect(cleDonnee('Quelle réponse GSS apporte-t-elle sur ce point : « Clarifier avec la Ville la couverture des 9 heures non décrites entre les 48 heures annoncées et les 39 heures détaillées » ?')).toEqual(['couverture_cas_pratique']);
+  });
+});

@@ -627,6 +627,26 @@ CONSIGNE PRIORITAIRE (elle prime sur toutes les consignes de rédaction ci-dessu
 }
 
 /**
+ * Textes de GSS repris dans une même réponse, dans l'ordre où la réponse du modèle les emploie (première phrase de chacun
+ * retrouvée dans la réponse) ; un texte non employé garde sa place relative à la fin.
+ */
+export function ordonnerSelonReponse<T extends { texte: string }>(retenus: T[], reponse: string): T[] {
+  if (retenus.length <= 1) return retenus;
+  const rep = normaliser(String(reponse || '')).replace(/[^a-z0-9]+/g, ' ');
+  const position = (c: T): number => {
+    let min = Infinity;
+    for (const ph of String(c.texte || '').split(/(?<=[.!?;:])\s+|\n+/)) {
+      const n = normaliser(ph).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').slice(0, 8).join(' ');
+      if (n.split(' ').length < 5) continue;
+      const k = rep.indexOf(n);
+      if (k >= 0 && k < min) min = k;
+    }
+    return min;
+  };
+  return retenus.map((c, i) => ({ c, i, p: position(c) })).sort((a, b) => a.p - b.p || a.i - b.i).map((x) => x.c);
+}
+
+/**
  * Rubriques du mémoire type reprises dans une même réponse du cadre : la principale (meilleur score pour la question) et,
  * au plus, une seconde de score voisin. Plus de rubriques mêlées en un seul texte (havre1 21, réponse 3.4 : identité,
  * adéquation des moyens et formation ADS collées, tableau des effectifs nationaux pour une question sur les formations).
@@ -1437,15 +1457,36 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     }
     return n;
   };
+  // Fragment d'une liste à « ; » écrit par le modèle, resté seul en tête de ligne après le recalage (etampes2 553, champ 5 :
+  // « le contrôle technique porte notamment sur la tenue, la main courante et les locaux ; Pour chaque manifestation… ») :
+  // retiré s'il redit une phrase de GSS reprise, sinon commencé par une majuscule.
+  const retirerFragments = (finale: boolean): number => {
+    let n = 0;
+    for (const l of sortie) {
+      const it = l.items[0];
+      if (!it || !it.ajout || !/^[a-zà-ÿ]/.test(it.brut.trim())) continue;
+      const jeu = new Set(it.mots);
+      const redite = ref.some((p, k) => position.has(k) && [...jeu].filter((w) => p.mots.includes(w)).length / Math.max(1, jeu.size) >= 0.6);
+      if (redite) { l.items.shift(); n++; continue; }
+      // (majuscule seulement à la fin : une phrase de GSS remise ensuite peut encore la rendre redite)
+      if (!finale) continue;
+      const b = it.brut.trim();
+      it.brut = b.charAt(0).toUpperCase() + b.slice(1);
+    }
+    return n;
+  };
   recomposer(ajoutsALaFin);
   const pseudoTableau = retirerPseudoTableau();
   retirerOrphelines();
+  retirerFragments(false);
   let texte = rendre();
   // Amorce de GSS d'une liste reprise (« Nous suivons pour cela un rétroplanning : » devant « 1. Sélection du profil… »,
   // etampes2 552, T5CP-10) : jamais omise ; si elle manque, les phrases omises sont remises (étape 2).
   const amorceManquante = ref.some((p, k) => !position.has(k) && !exclus[k] && /:\s*$/.test(p.brut) && !sousTitre(k)
     && estPuce(p.ligne + 1) && ref.some((q, j) => q.ligne === p.ligne + 1 && position.has(j)));
   if (o.limite && mesure(texte) >= seuil && !amorceManquante) {
+    retirerFragments(true);
+    texte = rendre();
     return { texte, fideliteAvant, fidelite: mesure(texte), reformulees, reinserees: lignesTableauRemises, ajoutsRetires: 0, bribesRetirees: pseudoTableau };
   }
   // 2. Phrases de GSS omises remises à leur place (dans la limite de mots s'il y en a une).
@@ -1561,7 +1602,9 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
       }
     }
   }
-  if (retirerOrphelines()) texte = rendre();
+  retirerOrphelines();
+  retirerFragments(true);
+  texte = rendre();
   return { texte, fideliteAvant, fidelite: mesure(texte), reformulees, reinserees, ajoutsRetires, bribesRetirees };
 }
 
@@ -2219,7 +2262,7 @@ export const QUESTION_DELAIS_INTERVENTION = /d[ée]lais?\s+d['’]\s*interventio
 
 /** Une durée chiffrée (« 2 heures », « 30 minutes », « 48 h », « 1 jour ») ou un emplacement à compléter, hors « 24 h/24 ». */
 function dureeOuRepere(t: string): boolean {
-  const s = String(t || '').replace(/\d+\s*h\s*\/\s*24|\d+\s*j(?:ours)?\s*\/\s*7|\d+\s*h\s*(?:sur|\/)\s*\d+/gi, ' ');
+  const s = String(t || '').replace(/\d+\s*(?:h|heures?)\s*(?:sur|\/)\s*\d+|\d+\s*j(?:ours?)?\s*(?:sur|\/)\s*\d+/gi, ' ');
   return /\[À COMPLÉTER\]/.test(s) || /(?<![\d,.])\d+(?:[.,]\d+)?\s*(?:min(?:utes?)?|mn|h(?:eures?)?|jours?)(?![\p{L}])/iu.test(s);
 }
 
@@ -2269,9 +2312,10 @@ export function completerDelaisCadre(texte: string, question: string, o: { clien
     return { texte: lignes.join('\n'), ajouts };
   }
   if (dureeOuRepere(texte)) return { texte, ajouts: [] };
-  const points = sousPoints.length ? sousPoints : [''];
+  // Sans sous-points nommés : les deux délais d'un accord-cadre à bons de commande (intervention courante, urgence).
+  const points = sousPoints.length ? sousPoints : ['une intervention courante', 'une action d\'urgence'];
   for (const sp of points) {
-    const ligne = sp ? `Délai proposé pour ${sp.charAt(0).toLowerCase()}${sp.slice(1)} : [À COMPLÉTER].` : 'Délai d\'intervention proposé : [À COMPLÉTER].';
+    const ligne = `Délai proposé pour ${sp.charAt(0).toLowerCase()}${sp.slice(1)} : [À COMPLÉTER].`;
     ajouts.push({ ligne, question: questionDe(sp) });
   }
   return { texte: `${String(texte).trimEnd()}\n${ajouts.map((a) => a.ligne).join('\n')}`, ajouts };
