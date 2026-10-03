@@ -16,7 +16,7 @@ import {
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
-  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, FORMALITES_OFFRE, questionFormalite,
+  sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
@@ -1640,10 +1640,36 @@ export function questionDEngagement(x: string): string {
   }
   // Objet annoncé (« s'engage à préciser les moyens matériels envisagés…, notamment le nombre de véhicules… ») : la donnée
   // attendue est demandée telle que le DCE la formule.
-  const o = /\b(?:s.engage(?:ra)? [àa] (?:lui )?)?(?:pr[ée]cis|indiqu|d[ée]taill|communiqu|fourni|transmet|mentionn|pr[ée]sent|renseign|d[ée]termin|d[ée]fini)[a-zé]*\s+(.+)$/i.exec(t);
-  const objet = sansMemoire(o ? o[1] : t).replace(/\s+ult[ée]rieurement\b/i, '');
+  const o = /\b(?:s.engage(?:ra)? [àa] (?:lui )?)?(pr[ée]cis|indiqu|d[ée]taill|communiqu|fourni|transmet|mentionn|pr[ée]sent|renseign|d[ée]termin|d[ée]fini)[a-zé]*\s+(.+)$/i.exec(t);
+  const objet = sansMemoire(o ? o[2] : t).replace(/\s+ult[ée]rieurement\b/i, '');
+  // Objet qui commence par une préposition (« GSS fournira aux agents des tenues propres… », cstb 551, T7CS-7) : le verbe reste
+  // dans la question (« Que prévoyez-vous pour fournir aux agents des tenues propres… ? »), jamais une phrase sans verbe.
+  if (o && /^(?:aux?|à|en|par|dans|pour|sur)\s/i.test(objet)) {
+    const INFINITIFS: Record<string, string> = { precis: 'préciser', 'précis': 'préciser', indiqu: 'indiquer', detaill: 'détailler', 'détaill': 'détailler', communiqu: 'communiquer', fourni: 'fournir', transmet: 'transmettre', mentionn: 'mentionner', present: 'présenter', 'présent': 'présenter', renseign: 'renseigner', determin: 'déterminer', 'détermin': 'déterminer', defini: 'définir', 'défini': 'définir' };
+    const verbe = INFINITIFS[o[1].toLowerCase()];
+    if (verbe) return `Que prévoyez-vous pour ${verbe} ${objet} ?`;
+  }
   return `Que prévoyez-vous pour répondre à cette exigence du CCTP : ${objet} ?`;
 }
+/**
+ * Questions du contrôle de couverture dont l'exigence est déjà traitée (T7CS-7, cstb 551 : « GSS fournira aux agents des tenues
+ * propres permettant d'identifier le nom de la société titulaire », source de la phrase adaptée « un insigne reproduisant le nom
+ * de la société titulaire ») : par une phrase de GSS adaptée au CCTP (D8, mêmes mots que son exigence à 70 %), ou par le texte
+ * remis (exigenceTraitee). Elles sont retirées de `questions`.
+ */
+export function retirerQuestionsCouvertes(questions: Set<string>, sources: Map<string, string>, exigencesAdaptees: string[], texte: string): number {
+  const racines = (x: string) => [...new Set(normaliser(String(x || '')).replace(/^(?:gss|le titulaire|nous)\s+/, '').split(/[^a-z0-9]+/).filter((w) => w.length >= 4).map((w) => w.slice(0, 5)))];
+  const adaptees = exigencesAdaptees.flatMap((e) => String(e || '').split(/\s*;\s*/)).map((e) => new Set(racines(e)));
+  let n = 0;
+  for (const [q, puce] of sources) {
+    if (!questions.has(q)) continue;
+    const r = racines(puce);
+    const parAdaptation = r.length >= 3 && adaptees.some((a) => r.filter((w) => a.has(w)).length / r.length >= 0.7);
+    if (parAdaptation || exigenceTraitee(puce, texte)) { questions.delete(q); n++; }
+  }
+  return n;
+}
+
 /** Rubriques et chapitres de la réponse libre (lecture seule, pour l'assistant de modification). */
 export { AI_SECTIONS_B as SECTIONS_REPONSE_LIBRE, CHAPTER_TITLES_B as CHAPITRES_REPONSE_LIBRE };
 
@@ -7855,7 +7881,7 @@ RÈGLES DE FORME (rendu Marp) :
         const bloc = plan.blocs.find((b) => b.cle === cle)!;
         const p = await this.proposerReponse(g, {
           client: besoin.client, bloc: `${bloc.numero}. ${bloc.titre}`, perimetre, horsNormandie, analyse: analyseResumee,
-          registre: registreGss, gssDocs, availableCategories,
+          registre: registreGss, gssDocs, availableCategories, dce: dceContext,
           demande: await demandeMT.consigne(undefined, `${g.sujet}. ${g.exigences.map((e) => e.exigence).join(' ')}`),
         });
         if (!p) { ecartees.push(...g.exigences); return; }
@@ -7874,7 +7900,8 @@ RÈGLES DE FORME (rendu Marp) :
     progres(62, 'Contrôle de couverture des exigences du CCTP…');
     const aCouvrir = plan.rubriques.filter((r) => r.mode !== 'besoin' && sections[r.id] && parRubrique[r.id]?.length).map((r) => r.id);
     const questionsCouverture = new Set<string>();
-    await enParallele(aCouvrir, 4, async (id) => { sections[id] = await this.completerCouverture(sections[id], parRubrique[id], id, false, questionsCouverture); });
+    const sourcesCouverture = new Map<string, string>();
+    await enParallele(aCouvrir, 4, async (id) => { sections[id] = await this.completerCouverture(sections[id], parRubrique[id], id, false, questionsCouverture, sourcesCouverture); });
     // Postes du CCTP déjà présentés dans le tableau du périmètre du bloc 1 : leurs puces de couverture ne sont pas redites
     // ailleurs (génération réelle ign 15 : 5 pages de texte pour « L'adéquation de nos moyens humains », consignes 3 et 6).
     if (b1 && sections[b1.id]) {
@@ -7937,6 +7964,8 @@ RÈGLES DE FORME (rendu Marp) :
     if (refsRetirees) console.log(`[MemoireGenerator] Références clients : citées dans deux rubriques au plus (${refsRetirees} rubrique(s) allégée(s)).`);
 
     // ── 10. Consultations et repères des données à compléter ──
+    // Exigence déjà traitée par une phrase de GSS adaptée au CCTP (D8) ou par le texte remis : pas de question (T7CS-7).
+    retirerQuestionsCouvertes(questionsCouverture, sourcesCouverture, suivi.exigencesNotees(), Object.values(sections).join('\n\n'));
     progres(80, 'Données à compléter et questions à GSS…');
     const titreDe = (id: string) => rubriquesDoc.find((r) => r.id === id)?.title || id;
     const consultations = new Set<string>([
@@ -8329,7 +8358,7 @@ RÈGLES DE FORME (rendu Marp) :
    */
   private async proposerReponse(
     g: GroupeNouveau,
-    o: { client?: string; bloc?: string; perimetre?: string; horsNormandie?: boolean; analyse?: string; registre?: string; gssDocs: Record<string, string>; availableCategories: string[]; demande?: string },
+    o: { client?: string; bloc?: string; perimetre?: string; horsNormandie?: boolean; analyse?: string; registre?: string; gssDocs: Record<string, string>; availableCategories: string[]; demande?: string; dce?: string },
   ): Promise<{ titre: string; texte: string; acheteurs: string[]; questions: string[] } | null> {
     const requete = `${g.sujet}. ${g.exigences.map((e) => e.exigence).join(' ')}`.slice(0, 2000);
     let memoires = '';
@@ -8374,6 +8403,12 @@ RÈGLES DE FORME (rendu Marp) :
     const ctrl = controlerProposition(texte, montantsRegistre());
     if (ctrl.retirees.length) console.log(`[MemoireGenerator] Proposition « ${g.sujet} » : ${ctrl.retirees.length} phrase(s) retirée(s) (sous-traitance, amorce sans objet ou garantie qui n'est pas celle de GSS).`);
     texte = ctrl.texte;
+    // Donnée demandée à GSS alors que le DCE l'écrit (T7CS-6) : la référence du DCE à sa place, sinon question à l'acheteur.
+    if (o.dce) {
+      const d = consultationsDuDce(texte, o.dce);
+      if (d.remplacees.length) console.log(`[MemoireGenerator] Proposition « ${g.sujet} » : ${d.remplacees.length} donnée(s) du DCE écrite(s) à la place d'une question à GSS.`);
+      texte = d.texte;
+    }
     if (texte.split(/\s+/).length < 60) {
       console.warn(`[MemoireGenerator] Proposition « ${g.sujet} » non retenue (trop courte après contrôle).`);
       return null;
@@ -8533,7 +8568,7 @@ RÈGLES DE FORME (rendu Marp) :
    * Contrôle de couverture d'une rubrique : chaque exigence du CCTP qui lui est attribuée et qu'elle ne traite pas
    * explicitement devient une puce d'engagement (chiffre exact du CCTP), en fin de rubrique. Étape non bloquante.
    */
-  private async completerCouverture(text: string, chapterReqs: any[], sectionId: string, horsNormandie = false, questions?: Set<string>): Promise<string> {
+  private async completerCouverture(text: string, chapterReqs: any[], sectionId: string, horsNormandie = false, questions?: Set<string>, sources?: Map<string, string>): Promise<string> {
     // Hors Normandie, GSS n'annonce aucun délai qui ne vient pas du CCTP (même règle que le registre, base_memoires.ts).
     const regleDelais = horsNormandie ? ` CE MARCHÉ EST HORS DE NORMANDIE : n'écris AUCUN délai chiffré (astreinte, intervention, remplacement, mobilisation) qui ne figure pas mot pour mot dans l'exigence du CCTP ; jamais un délai repris d'un ancien marché normand (ex. 60 minutes).` : '';
     try {
@@ -8544,7 +8579,7 @@ RÈGLES DE FORME (rendu Marp) :
       // « GSS indiquera / précise dans le mémoire… », sous-traitance, pièces de l'offre : jamais remis (motifRefusEngagement).
       // Une puce qui parle du mémoire au lieu de répondre (« GSS précise le nombre de contrôleurs ») devient une question à GSS.
       const brutes = (JSON.parse(verif || '{}').puces || []).map((x: any) => String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, '')).filter(Boolean);
-      for (const x of brutes) if (questions && /sans réponse/.test(motifRefusEngagement(x))) questions.add(questionDEngagement(x));
+      for (const x of brutes) if (questions && /sans réponse/.test(motifRefusEngagement(x))) { const q = questionDEngagement(x); questions.add(q); sources?.set(q, x); }
       const puces = brutes.filter((x: string) => !motifRefusEngagement(x));
       if (puces.length) {
         text = `${text.trim()}\n\n## Nos engagements sur les exigences du cahier des charges\n\n${puces.map((x: string) => `- ${x.replace(/^[-•]\s*/, '')}`).join('\n')}`;
@@ -9310,6 +9345,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const nouvellesCourt = tri.nouvelles.filter((e) => e?.exigence && !PIECES_OFFRE.test(e.exigence) && !PIECES_ADMINISTRATIVES.test(`${e.sujet || ''} ${e.exigence}`) && !formalitesCourt.includes(e));
     for (const e of nouvellesCourt) exigencesDe[partiePourTexte(plan, `${e.sujet || ''} ${e.exigence}`).id].push(e);
     const questionsCouverture = new Set<string>();
+    const sourcesCouverture = new Map<string, string>();
     const reqsCouverture = (pid: string) => {
       const rang = (e: any) => (/bloquant/i.test(e.criticite || '') ? 0 : /\d/.test(e.exigence) ? 1 : 2);
       return exigencesDe[pid].filter((e: any) => e?.exigence && !PIECES_OFFRE.test(e.exigence) && !PIECES_ADMINISTRATIVES.test(e.exigence))
@@ -9424,7 +9460,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       }
       // Contrôle de couverture conservé : une exigence du CCTP que la partie ne traite pas devient un engagement.
       const reqs = reqsCouverture(p.id);
-      if (texte && reqs.length) texte = plafonnerEngagements(nettoyerEngagements(await this.completerCouverture(texte, reqs, p.id, horsNormandie, questionsCouverture)), 6);
+      if (texte && reqs.length) texte = plafonnerEngagements(nettoyerEngagements(await this.completerCouverture(texte, reqs, p.id, horsNormandie, questionsCouverture, sourcesCouverture)), 6);
       sections[p.id] = texte.trim();
     }
     // Poste et horaires déjà repris par le dimensionnement : couverts par la partie (engagement), sans proposition à part.
@@ -9457,6 +9493,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     limiterRappelsSite(sections, plan.map((p) => p.id));
 
     // ── 8. Points à compléter (même logique que le format court d'avant) ──
+    retirerQuestionsCouvertes(questionsCouverture, sourcesCouverture, suivi.exigencesNotees(), Object.values(sections).join('\n\n'));
     const confirmationsAvantSelection = confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie);
     const consultations = new Set<string>([
       ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext), ...commentairesRetires, ...questionsCouverture, ...formalitesCourt.map(questionFormalite), ...confirmationsAvantSelection,

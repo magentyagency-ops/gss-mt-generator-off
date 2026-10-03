@@ -2050,6 +2050,55 @@ export function controlerProposition(texte: string, montantsGss: string[] = []):
   return { texte: out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/(^|\n)(#{2,4} [^\n]+)\n+(?=#{2,4} |$)/g, '$1').trim(), retirees, questions };
 }
 
+/**
+ * Consultation d'une proposition qui demande à GSS une donnée écrite dans le DCE (cstb 551, T7CS-6 : « [CONSULTATION REQUISE :
+ * Obtenir la liste exhaustive des pièces et attestations réglementaires de vigilance prévue au CCP] » sous « La liste détaillée
+ * des pièces à transmettre est la suivante : [À COMPLÉTER] ») : la référence du DCE remplace l'emplacement (« les pièces et
+ * attestations sur l'honneur prévues à l'article D8222-5 … du code du travail ») et la consultation disparaît ; introuvable
+ * dans le DCE, la question est posée à l'acheteur, jamais à GSS (faits_gss.md : pas de [À COMPLÉTER] pour une donnée du DCE).
+ */
+export function consultationsDuDce(texte: string, dce: string): { texte: string; remplacees: string[] } {
+  const remplacees: string[] = [];
+  const VIDES = new Set(['obtenir', 'recuperer', 'consulter', 'demander', 'liste', 'exhaustive', 'complete', 'detaillee', 'prevue', 'prevues', 'prevu', 'prevus', 'mentionnee', 'mentionnees', 'citee', 'citees', 'ccp', 'cctp', 'ccap', 'dce', 'marche', 'cahier', 'charges', 'reglement', 'consultation', 'aupres', 'acheteur']);
+  const pleins = (x: string) => [...new Set(normaliser(x).split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !VIDES.has(w) && !MOTS_OUTILS.has(w)))];
+  const phrasesDce = String(dce || '').replace(/\r/g, '').replace(/-\n/g, '-').replace(/\s+/g, ' ').split(/(?<=[.;])\s+(?=[A-ZÀ-Ý])/);
+  const lignes = String(texte || '').split('\n');
+  for (let i = 0; i < lignes.length; i++) {
+    const m = /^\s*\[CONSULTATION REQUISE\s*:\s*((?:obtenir|r[ée]cup[ée]rer|consulter|demander|se procurer)\b[^\]]*?(?:pr[ée]vue?s?|mentionn[ée]e?s?|cit[ée]e?s?|fix[ée]e?s?|d[ée]finie?s?)\s+(?:au|à l['’]|à la|aux|dans le|dans la|par le|par la)\s*(?:CCP|CCTP|CCAP|RC|DCE|march[ée]|cahier des charges|r[èe]glement de (?:la )?consultation)[^\]]*?)\.?\s*\]\s*$/i.exec(lignes[i]);
+    if (!m) continue;
+    const cles = pleins(m[1]);
+    if (cles.length < 2) continue;
+    // Phrase du DCE qui contient au moins 3 mots sur 4 de la donnée demandée.
+    const phrase = phrasesDce.find((p) => { const n = normaliser(p); return cles.filter((w) => n.includes(w)).length / cles.length >= 0.75; });
+    // Emplacement de la ligne précédente : « … est la suivante : [À COMPLÉTER]. ».
+    const k = i - 1;
+    if (phrase && k >= 0 && /\[À COMPLÉTER\]/.test(lignes[k]) && (lignes[k].match(/\[À COMPLÉTER\]/g) || []).length === 1) {
+      // Objet de la phrase du DCE : depuis l'article du premier mot de la donnée, jusqu'à la fin de la phrase ou avant
+      // « conformément », « sous peine », « afin de ».
+      const nP = normaliser(phrase);
+      // Début de l'objet : l'occurrence d'un mot de la donnée suivie du plus grand nombre des autres (« les pièces et
+      // attestations … », jamais « des pièces à fournir au stade de l'attribution » qui précède).
+      let pos = -1, meilleur = 0;
+      for (const w of cles) for (let x = nP.indexOf(w); x >= 0; x = nP.indexOf(w, x + 1)) {
+        const score = cles.filter((v) => nP.slice(x, x + 80).includes(v)).length;
+        if (score > meilleur || (score === meilleur && x < pos)) { meilleur = score; pos = x; }
+      }
+      const debut = phrase.slice(0, pos).search(/(?:\b(?:les|la|le|des|du)\s+|\bl['’])$/i);
+      const objet = phrase.slice(debut >= 0 ? debut : pos).replace(/\s*,?\s*(?:conform[ée]ment|sous peine|afin de|dans les conditions)\b.*$/i, '').replace(/[.;\s]+$/, '').trim();
+      if (objet.split(/\s+/).length >= 4 && objet.length <= 300) {
+        lignes[k] = lignes[k].replace(/\[À COMPLÉTER\]/, objet);
+        remplacees.push(lignes[i].trim());
+        lignes.splice(i, 1);
+        i--;
+        continue;
+      }
+    }
+    // Introuvable : question à l'acheteur.
+    lignes[i] = `[CONSULTATION REQUISE : À demander à l'acheteur : ${m[1].replace(/^(?:obtenir|r[ée]cup[ée]rer|consulter|demander|se procurer)\s+/i, '').trim()}]`;
+  }
+  return { texte: lignes.join('\n'), remplacees };
+}
+
 /** Messages de la rédaction d'une proposition de réponse à une question nouvelle (consigne fixe en premier). */
 export function consigneProposition(groupe: GroupeNouveau, o: { client?: string; bloc?: string; sources?: string; regles?: string; perimetre?: string; horsNormandie?: boolean; analyse?: string }): Array<{ role: 'system' | 'user'; content: string }> {
   const user = [

@@ -400,6 +400,9 @@ export class SuiviAdaptations {
 
   get nombreNotes(): number { return this.notes.length; }
 
+  /** Exigences du CCTP citées par les phrases de GSS adaptées jusqu'ici (T7CS-7 : pas de question sur une exigence déjà traitée). */
+  exigencesNotees(): string[] { return this.notes.map((x) => x.exigence).filter(Boolean); }
+
   /**
    * Fin de génération : chaque phrase adaptée est retrouvée dans le texte final (texte exact, pour que l'assistant la
    * remplace) ; celles dont le passage a disparu sont oubliées. Les choix de GSS de la génération précédente sont
