@@ -954,11 +954,16 @@ export function sansFormeJuridiqueFinale(nom: string): string {
  * première préposition. '' si le nom n'a pas cette forme. Un nom en capitales est ramené à « Syndicat mixte ».
  */
 export function teteNominale(nom: string): string {
-  const m = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’-]+(?:\s+(?!(?:de|du|des|et|en|pour|sur)\b)[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ-]+){0,2})\s+(?:de|du|des|d['’])(?![A-Za-zÀ-ÿ])/i.exec(String(nom || '').trim());
+  // Adjectifs coordonnés et compléments de la forme (« Syndicat intercommunal à vocation multiple de la région d'Yvetot » →
+  // « Syndicat intercommunal à vocation multiple », T8-COH-4) : « et » ou « à » suivis d'un mot, jusqu'au premier « de ».
+  const m = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’-]+(?:\s+(?:(?:et|à)\s+)?(?!(?:de|du|des|et|à|en|pour|sur)(?![A-Za-zÀ-ÿ]))[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ-]+){0,4})\s+(?:de|du|des|d['’])(?![A-Za-zÀ-ÿ])/i.exec(String(nom || '').trim());
   if (!m || m[1].split(/\s+/).length >= String(nom).trim().split(/\s+/).length) return '';
   const t = m[1];
   return t === t.toUpperCase() ? t.charAt(0) + t.slice(1).toLowerCase() : t;
 }
+
+/** Forme juridique en tête du nom de l'acheteur, suivie de son nom d'usage (« Établissement public industriel et commercial … »). */
+const PREFIXE_JURIDIQUE = /^(?:[ée]tablissement\s+public(?:\s+(?:industriel\s+et\s+commercial|administratif|local|de\s+coop[ée]ration\s+(?:culturelle|intercommunale|environnementale)(?:\s+et\s+(?:environnementale|culturelle))?|[àa]\s+caract[èe]re\s+(?:industriel\s+et\s+commercial|administratif|scientifique,?\s+culturel\s+et\s+professionnel|scientifique\s+et\s+technologique)))?|syndicat\s+(?:mixte|intercommunal(?:\s+[àa]\s+vocation\s+(?:unique|multiple))?)|groupement\s+d['’]int[ée]r[êe]t\s+public|soci[ée]t[ée]\s+(?:publique\s+locale|d['’][ée]conomie\s+mixte)|association(?:\s+loi\s+1901)?|r[ée]gie(?:\s+autonome)?|office\s+public)\s+/i;
 
 /** Service d'un acheteur (direction, pôle, bureau, service des achats…), jamais l'acheteur lui-même. */
 const SERVICE_ACHETEUR = /^(?:sous[- ]direction|direction|p[ôo]le|bureau|mission|service\s+(?:des\s+|de\s+la\s+|du\s+|d['’]\s*)?(?:achats?|march[ée]s|commande|juridique|finances?|affaires)|d[ée]partement\s+(?:des\s+|de\s+la\s+|du\s+)(?:achats?|march[ée]s|commande))(?![a-zà-ÿ])/i;
@@ -1080,6 +1085,18 @@ export function formesClient(nom: string, dce = ''): { long: string; court?: { a
   // Nom de plus de 8 mots sans sigle ni forme courte (T4-COH-4 : « Syndicat mixte de gestion des déchets ménagers et
   // assimilés de la région elbeuvienne et du plateau du Neubourg ») : tête nominale avec son article après la première
   // mention (« le Syndicat mixte »), jamais le nom entier à chaque mention.
+  // Nom propre écrit après la forme juridique (T8-COH-4 : « Établissement public de coopération culturelle Opéra de Rouen
+  // Normandie », que le DCE nomme « l'Opéra de Rouen Normandie » ; « Établissement public industriel et commercial Rouen
+  // Normandie Tourisme & Congrès ») : c'est le nom d'usage, forme courte ; jamais la forme juridique seule
+  // (« l'Établissement public »).
+  if (entites.length === 1 && mots > 6) {
+    const fj = PREFIXE_JURIDIQUE.exec(principal);
+    const reste = fj ? principal.slice(fj[0].length).trim() : '';
+    if (reste && /^[A-ZÀ-Ý]/.test(reste) && !/^(?:De|Du|Des|D['’])\b/.test(reste) && normaliser(reste) !== normaliser(principal)) {
+      const a = articleEtNom(reste, dce);
+      return { long, court: { article: a.article, nom: a.nom || reste, genre: a.article === 'la' ? 'f' : a.article === 'le' ? 'm' : '' } };
+    }
+  }
   if (entites.length === 1 && mots > 8) {
     const tete = teteNominale(principal);
     const a = tete ? articleEtNom(tete, dce) : null;
