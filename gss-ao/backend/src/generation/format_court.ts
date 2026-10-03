@@ -103,7 +103,12 @@ export function renvoisVersParties(
       return `${virgule || ''}${idx.length === 1 ? `partie ${idx[0] + 1} : ` : ''}${liste}`;
     }
     const numeros = [Number(n1), ...[...(suite || '').matchAll(/\d/g)].map((x) => Number(x[0]))];
-    const idx = [...new Set(numeros.flatMap(partiesDuBloc))].sort((a, b) => a - b);
+    // Rubrique citée juste AVANT le renvoi (« → notre réponse : « Le contrôleur de rondes », développée au bloc 4 », forme
+    // du bloc 1, imm, T8N-3) : les parties qui reprennent CETTE rubrique, jamais toutes celles du bloc ; rubrique reprise
+    // nulle part : le renvoi est retiré.
+    const citeeAvant = /«\s*([^«»]{1,160}?)\s*»\s*$/.exec(tout.slice(0, pos));
+    const estRubrique = !!citeeAvant && Object.values(titres).some((t) => norm(t) === norm(citeeAvant[1]));
+    const idx = estRubrique ? partiesDesTitres([citeeAvant![1]]).sort((a, b) => a - b) : [...new Set(numeros.flatMap(partiesDuBloc))].sort((a, b) => a - b);
     if (!idx.length || idx.length > 2) {
       // Participe attribut après un auxiliaire (« le processus de reprise est détaillé au bloc 3 ») : retirer seulement
       // le renvoi laisserait « le processus de reprise est. » ; toute la proposition est retirée (marquée ici).

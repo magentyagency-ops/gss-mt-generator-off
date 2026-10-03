@@ -35,3 +35,19 @@ describe('alerte « cadre du mémoire absent » : locution et capitales', () => 
     expect(alerteCadreAbsent('Les candidats remettent le CADRE DE REPONSE TECHNIQUE complété.')[0]).toMatch(/^Le DCE cite un « cadre de reponse technique »/);
   });
 });
+
+import { renvoisVersParties } from '../src/generation/format_court';
+describe('format court : renvoi d’une rubrique citée avant « développée au bloc N » (T8N-3)', () => {
+  const blocs = [{ numero: 4, rubriques: ['b4_rondes', 'b4_proc_alarme', 'b4_tenues'] }];
+  const parties = [{ id: 'c1', title: 'Organisation et moyens humains' }, { id: 'c2', title: 'Continuité de service' }, { id: 'c3', title: 'Moyens matériels' }];
+  const titres = { b4_rondes: 'Le contrôleur de rondes', b4_proc_alarme: "Notre socle de procédures : l'intervention sur alarme et la télésurveillance", b4_tenues: 'Les tenues' };
+  const texte = "- **La nuit, les rondes s'effectuent entre 20h30 et 6h00 du matin** → notre réponse : « Le contrôleur de rondes », développée au bloc 4.";
+  it('la partie qui reprend la rubrique citée, jamais toutes celles du bloc (imm)', () => {
+    expect(renvoisVersParties(texte, blocs, parties, { c1: [], c2: ['b4_proc_alarme'], c3: ['b4_rondes', 'b4_tenues'] }, titres))
+      .toBe("- **La nuit, les rondes s'effectuent entre 20h30 et 6h00 du matin** → notre réponse : « Le contrôleur de rondes », développée dans la partie 3 « Moyens matériels ».");
+  });
+  it('rubrique citée reprise nulle part : renvoi retiré', () => {
+    expect(renvoisVersParties(texte, blocs, parties, { c1: [], c2: ['b4_proc_alarme'], c3: ['b4_tenues'] }, titres))
+      .toBe("- **La nuit, les rondes s'effectuent entre 20h30 et 6h00 du matin** → notre réponse : « Le contrôleur de rondes ».");
+  });
+});
