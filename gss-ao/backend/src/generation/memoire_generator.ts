@@ -17,10 +17,10 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, analyseCompacte,
   sommaireProcess, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, FORMALITES_OFFRE, questionFormalite,
-  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition,
+  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin,
   type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
-import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, type Dimensionnement } from './dimensionnement';
+import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, type Dimensionnement } from './dimensionnement';
 import {
   type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, fideliteReponse, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, phrasesThematiques, completerParThematiques, completerMailUnique, COLONNE_VALEUR, colonneCase, sansPseudoTableau, textesSchemaSvg, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
@@ -5460,7 +5460,11 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         const intitule = intitulePrincipal(((d?.context || '').match(/Question:\s*"([^"]*)"/) || [])[1] || '');
         if (d && d.kind !== 'checkbox' && /mises? en situation/i.test(intitule) && !/barri[eè]rage|sch[ée]ma|plan/i.test(intitule) && String(r.value ?? '').length >= 200) {
           if (dimensionnementCadre?.misesEnSituation?.length) {
-            const c = completerMisesEnSituation(String(r.value), dimensionnementCadre);
+            // Seulement le dispositif de la mise en situation que décrit CE champ (sa question et son contexte proche, sans le
+            // critère parent) : etampes2 552, la fête communale du cas pratique n'est pas la mise en situation « absence de 2
+            // agents et d'1 chien ; intrusion et vandalisme ».
+            const champ = `${((d.context || '').match(/Question:\s*"([^"]*)"/) || [])[1] || ''} ${((d.context || '').match(/Contexte(?: proche)?:\s*"([^"]*)"/) || [])[1] || ''}`;
+            const c = completerMisesEnSituation(String(r.value), dimensionnementCadre, champ);
             if (c.n) console.log(`[MemoireGenerator] Champ ${r.id} : dispositif proposé de ${c.n} mise(s) en situation ajouté (nombre d'agents absent de la réponse).`);
             r.value = c.texte;
           } else if (!dimensionnementCadre?.casPratique.length && !/\d+\s+agents?\b/.test(String(r.value))) {
@@ -5489,6 +5493,13 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     confirmationsRegistreUtilisees(replacements.map((r) => String(r.value ?? '')).join('\n'), marcheHorsNormandie(analysisData, dceContext)).forEach((c) => confirmationsGss.add(c));
     // Dimensionnement proposé et repris dans le document : une seule question à GSS (proposition à valider).
     if (dimensionnementCadre && (dimensionnementCadre.profils.length || dimensionnementCadre.casPratique.length) && replacements.some((r) => dimensionnementCadre.casPratique.some((x) => String(r.value ?? '').includes(`en service : ${x.enService}`)) || (dimensionnementCadre.titulaires && new RegExp(`\\b${dimensionnementCadre.titulaires} agents? titulaires`).test(String(r.value ?? ''))))) confirmationsGss.add(questionDimensionnement(dimensionnementCadre));
+    // Couverture horaire du cas pratique contrôlée sans modèle (durée demandée, heures d'ouverture au public) : un écart est
+    // posé à GSS, jamais présenté comme couvert (T5CP-5).
+    {
+      // (le cas pratique est souvent décrit dans le cadre de réponse lui-même : etampes2, heures d'ouverture au public)
+      const q = questionCouvertureCasPratique(dimensionnementCadre, `${dceContext}\n${texteDuCadre}`);
+      if (q) { confirmationsGss.add(q); console.log(`[MemoireGenerator] Cas pratique : couverture horaire incomplète, question posée à GSS.`); }
+    }
     // Mises en situation : une question par dispositif proposé et repris dans une réponse (proposition à valider, D5).
     if (dimensionnementCadre?.misesEnSituation?.length) {
       const textes = replacements.map((r) => String(r.value ?? '')).join('\n');
@@ -6189,12 +6200,15 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       const contexteChamp = (id: number) => descriptors.find((x) => x.id === id)?.context || '';
       const demandes = champsRediges
         .filter((id) => /sch[ée]ma/i.test(contexteChamp(id)) && !svgComprehension.has(id) && !dessins.get(`champ_${id}`)?.ok)
-        .map((id) => ({ id, spec: specProcessBesoin(etapesSchemaDemande(texteChamp(id), dimensionnementCadre) || [], 'flux') }))
-        .filter((x) => x.spec);
-      const dessinsDemandes = demandes.length
-        ? await dessinerSpecs(demandes.map((x) => ({ id: `demande_${x.id}`, gabarit: x.spec!.gabarit, params: x.spec!.params, source: `${texteChamp(x.id)}\n${texteDuCadre}`, titre_section: libelleChamp(x.id).slice(0, 120) })), 'paysage', themeActif())
+        // Étape de résultat tirée du texte réel de la réponse (jamais une phrase fixe « en continu », T5CP-5).
+        .map((id) => ({ id, spec: specProcessBesoin(etapesSchemaDemande(texteChamp(id), dimensionnementCadre, resultatBesoin(texteChamp(id))) || [], 'flux') }));
+      // Schéma demandé par l'acheteur qui ne peut pas être construit sans couper un texte : signalé à GSS (D7).
+      for (const x of demandes.filter((y) => !y.spec)) confirmationsGss.add(`Réponse « ${libelleQuestionCadre(libelleChamp(x.id))} » : le schéma demandé par l'acheteur n'a pas pu être construit automatiquement ; à demander via l'assistant avant la remise.`);
+      const demandesSpec = demandes.filter((x) => x.spec);
+      const dessinsDemandes = demandesSpec.length
+        ? await dessinerSpecs(demandesSpec.map((x) => ({ id: `demande_${x.id}`, gabarit: x.spec!.gabarit, params: x.spec!.params, source: `${texteChamp(x.id)}\n${texteDuCadre}`, titre_section: libelleChamp(x.id).slice(0, 120) })), 'paysage', themeActif())
         : new Map<string, { ok: boolean; svg?: string; erreurs?: string[] }>();
-      for (const x of demandes) {
+      for (const x of demandesSpec) {
         const r = dessinsDemandes.get(`demande_${x.id}`);
         console.log(`[MemoireGenerator] Schéma demandé par le champ ${x.id} : ${r?.ok ? 'dessiné' : `refusé (${(r?.erreurs || ['moteur indisponible']).slice(0, 2).join(' | ')})`}.`);
       }
@@ -6273,7 +6287,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
           '- la modifier : « Dans la réponse sur …, précise que … ».',
         ] : []),
         // Effectifs proposés à partir du DCE (D5) : à valider ou modifier avant la remise.
-        ...(dimRepris ? [...(aRelire.length ? [''] : []), messageDimensionnement(dimensionnementCadre!)] : []),
+        ...(dimRepris ? [...(aRelire.length ? [''] : []), messageDimensionnement(dimensionnementCadre!, `${dceContext}\n${texteDuCadre}`)] : []),
       ].join('\n') }] : undefined;
       // Phrases de GSS adaptées au CCTP (D8) : seulement dans les réponses que l'assistant peut modifier ; annoncées dans le
       // premier message, à valider, modifier ou rétablir.

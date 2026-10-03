@@ -1642,7 +1642,9 @@ export function controlerFaitsNouveauxCadre(valeur: string, contexte: string, s:
   const net = (x: string) => String(x || '').replace(/\[CHAMP_\d+\]/gi, '').replace(/(?:[_.…]\s*){3,}/g, ' ').replace(/\s+/g, ' ').replace(/^[\s:;,.–—-]+|[\s:;,.–—-]+$/g, '').trim();
   const libQ = net(((contexte || '').match(/Question:\s*"([^"]*)"/) || [])[1] || '');
   const libS = net(((contexte || '').match(/Section:\s*"([^"]*)"/) || [])[1] || '');
-  const libelle = (/\p{L}{3}/u.test(libQ) ? libQ : /\p{L}{3}/u.test(libS) ? libS : '').slice(0, 120);
+  // Coupé à un mot entier (etampes2 552 : « … l'absence de 2 agents et d'1 chi » dans la question posée).
+  const libBrut = /\p{L}{3}/u.test(libQ) ? libQ : /\p{L}{3}/u.test(libS) ? libS : '';
+  const libelle = libBrut.length <= 120 ? libBrut : `${libBrut.slice(0, 121).replace(/\s+\S*$/, '').replace(/[\s,;:(–—-]+$/, '')}…`;
   // Apostrophe, trait d'union ou espace indifférents entre les parties d'un mot (« Crit’Air » = « CRIT AIR » du DCE).
   const dansSources = (mot: string, src: string) => new RegExp(`(?<![a-z0-9])${normaliser(mot).split(/['‘´\s-]+/).filter(Boolean).map(echapperRx).join("[\\s'-]?")}(?![a-z0-9])`).test(src);
 

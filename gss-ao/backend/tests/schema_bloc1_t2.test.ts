@@ -120,7 +120,8 @@ describe('secours du bloc 1 sur les attentes citées (ca_normandie 241)', () => 
     expect(s).not.toBeNull();
     expect(anomaliesSchemaBloc1(s)).toEqual([]);
     const etapes = s.params.etapes as Array<{ titre: string; texte: string }>;
-    expect(etapes.map((e) => e.titre)).toContain('Délai maximum de 20 minutes');
+    // (espace insécable entre le nombre et l'unité depuis le tour 5, T5N-10)
+    expect(etapes.map((e) => e.titre.replace(/\u00a0/g, ' '))).toContain('Délai maximum de 20 minutes');
     expect(etapes.every((e) => e.texte && e.texte.length > 10)).toBe(true);
     expect(etapes[etapes.length - 1].titre).toBe('Votre résultat');
   });

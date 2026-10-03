@@ -38,7 +38,7 @@ export interface ProfilDimensionne {
   observation?: string;
 }
 
-export interface LigneCasPratique { plage: string; profil: string; enService: number; rotation: number; dureeH: number; justification: string }
+export interface LigneCasPratique { plage: string; profil: string; enService: number; rotation: number; dureeH: number; justification: string; debut?: string; fin?: string }
 
 /** Fonction d'un dispositif événementiel proposé (chef de site, agents au filtrage, agents de comptage…). */
 export interface FonctionEvenement { fonction: string; nombre: number; justification: string }
@@ -48,7 +48,7 @@ export interface FonctionEvenement { fonction: string; nombre: number; justifica
  * PROPOSE (D5, proposition à valider), fonction par fonction, avec les postes d'inspection filtrage (PIF) et les
  * détecteurs de métaux quand le DCE les demande.
  */
-export interface MiseEnSituation { libelle: string; capacite: number | null; fonctions: FonctionEvenement[]; total: number; pif: number | null; detecteurs: number | null }
+export interface MiseEnSituation { libelle: string; capacite: number | null; fonctions: FonctionEvenement[]; total: number; pif: number | null; detecteurs: number | null; citation?: string }
 
 export interface Dimensionnement {
   profils: ProfilDimensionne[];
@@ -211,10 +211,11 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
   // Cas pratique : effectif en service proposé par le modèle (entier de 0 à 10), rotation calculée ici.
   const casPratique: LigneCasPratique[] = [];
   const plagesCas = new Map<string, number>();
+  const bornesCas = new Map<string, { debut: string; fin: string }>();
   for (const pl of Array.isArray(rep?.cas_pratique?.plages) ? rep.cas_pratique.plages : []) {
     const libelle = String(pl?.libelle || '').trim();
     const d = dureePlage(String(pl?.debut || ''), String(pl?.fin || ''));
-    if (libelle && d > 0) plagesCas.set(libelle, d);
+    if (libelle && d > 0) { plagesCas.set(libelle, d); bornesCas.set(libelle, { debut: String(pl?.debut || ''), fin: String(pl?.fin || '') }); }
   }
   for (const l of Array.isArray(rep?.cas_pratique?.dispositif) ? rep.cas_pratique.dispositif : []) {
     const plage = String(l?.plage || '').trim();
@@ -222,7 +223,7 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     const n = Number(l?.en_service);
     const d = plagesCas.get(plage);
     if (!plage || !profil || !d || !Number.isInteger(n) || n < 0 || n > 10) continue;
-    casPratique.push({ plage, profil, enService: n, rotation: n * Math.ceil(d / VACATION_MAX_H), dureeH: d, justification: String(l?.justification || '').trim() });
+    casPratique.push({ plage, profil, enService: n, rotation: n * Math.ceil(d / VACATION_MAX_H), dureeH: d, justification: String(l?.justification || '').trim(), ...bornesCas.get(plage) });
   }
   const misesEnSituation = lireMisesEnSituation(rep?.mises_en_situation, dce, dceMots);
   // Accord-cadre sans poste permanent, avec un cas pratique : l'équipe proposée est celle du cas pratique (pour chaque
@@ -265,15 +266,45 @@ export function lireMisesEnSituation(brut: unknown, dce: string, dceMots = ` ${n
     }
     const total = fonctions.reduce((a, f) => a + f.nombre, 0);
     if (!total) continue;
-    out.push({ libelle, capacite, fonctions, total, pif: entier(m?.pif, 100), detecteurs: entier(m?.detecteurs, 100) });
+    // 0 PIF ou 0 détecteur de métaux (etampes2 552 : « ; 0 détecteur de métaux » imprimé alors que le DCE n'en parle pas) :
+    // valeur non demandée (null), sauf si le DCE cite ce moyen ; dans ce cas, « aucun » est écrit en toutes lettres.
+    const pif = entier(m?.pif, 100);
+    const detecteurs = entier(m?.detecteurs, 100);
+    out.push({
+      libelle, capacite, fonctions, total,
+      pif: pif === 0 && !PIF_DANS_DCE.test(dce) ? null : pif,
+      detecteurs: detecteurs === 0 && !DETECTEURS_DANS_DCE.test(dce) ? null : detecteurs,
+      citation: String(m?.citation || '').replace(/\s+/g, ' ').trim(),
+    });
   }
   return out;
 }
 
+/** Le DCE cite des postes d'inspection filtrage, ou des détecteurs de métaux (sinon « 0 » n'est jamais écrit). */
+const PIF_DANS_DCE = /(?<![\p{L}])PIF(?![\p{L}])|inspection[- ]filtrage/iu;
+const DETECTEURS_DANS_DCE = /d[ée]tecteurs? de m[ée]taux|magn[ée]tom[èe]tres?|portiques? de d[ée]tection/i;
+
 /** « 24 agents, dont 2 chefs de site et 14 agents au filtrage ; 6 PIF ; 6 détecteurs de métaux » (dispositif d'une mise en situation). */
 export function dispositifMiseEnSituation(m: MiseEnSituation): string {
   const fonctions = m.fonctions.map((f) => effectifProfil(f.nombre, f.fonction));
-  return `${pluriel(m.total, 'agent')} en service (${fonctions.join(', ')})${m.pif !== null ? ` ; ${pluriel(m.pif, 'poste d\'inspection filtrage (PIF)', 'postes d\'inspection filtrage (PIF)')}` : ''}${m.detecteurs !== null ? ` ; ${pluriel(m.detecteurs, 'détecteur de métaux', 'détecteurs de métaux')}` : ''}`;
+  // Valeur non demandée (null, ou 0 enregistré par une génération antérieure) : rien n'est écrit ; 0 demandé : « aucun ».
+  const moyen = (n: number | null | undefined, s: string, p: string) => (n === null || n === undefined ? '' : ` ; ${n === 0 ? `aucun ${s}` : pluriel(n, s, p)}`);
+  return `${pluriel(m.total, 'agent')} en service (${fonctions.join(', ')})${moyen(m.pif, 'poste d\'inspection filtrage (PIF)', 'postes d\'inspection filtrage (PIF)')}${moyen(m.detecteurs, 'détecteur de métaux', 'détecteurs de métaux')}`;
+}
+
+/**
+ * La mise en situation `m` est-elle celle que décrit ce champ du cadre (sa question et son contexte proche, sans le critère
+ * parent) ? Deux mots porteurs au moins de son libellé ou de sa citation s'y retrouvent (vitry 202 : « forum des
+ * associations »). Génération réelle etampes2 552 : le dispositif de la fête communale (cas pratique, présenté au champ 8)
+ * était ajouté au champ « Mise en situation appliquée : absence de 2 agents et d'1 chien… », qui porte sur un autre sujet.
+ */
+export function miseEnSituationDuChamp(texteChamp: string, m: MiseEnSituation): boolean {
+  const VIDES = new Set(['mise', 'mises', 'situation', 'situations', 'securite', 'securisation', 'assurer', 'agents', 'agent', 'heures', 'pendant', 'journee', 'public', 'publique', 'personnes', 'dont', 'voici', 'caracteristiques', 'principales', 'candidat', 'solution', 'descriptif', 'appliquee', 'perimetre', 'defini']);
+  const OUTILS = new Set(['pour', 'dans', 'avec', 'sans', 'sous', 'vers', 'chez', 'leur', 'leurs', 'cette', 'tout', 'tous', 'toute', 'toutes', 'type', 'cours', 'lors', 'ainsi', 'sein', 'plus', 'moins', 'selon', 'entre', 'aux', 'des', 'les', 'une']);
+  const mots = (t: string) => new Set(normaliser(t).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 4 && !VIDES.has(w) && !OUTILS.has(w)).map((w) => w.replace(/s$/, '')));
+  const champ = mots(texteChamp);
+  const propres = [...mots(`${m.libelle} ${m.citation || ''}`)];
+  return propres.filter((w) => champ.has(w)).length >= 2;
 }
 
 /** Question exacte posée à GSS pour chaque mise en situation (proposition à valider, D5). */
@@ -286,8 +317,9 @@ export function questionsMisesEnSituation(d: Dimensionnement | null | undefined)
  * partir du plan… », sans aucun nombre) : le dispositif proposé de chaque mise en situation est ajouté, en lignes
  * entières, après le texte. Rien n'est ajouté si chaque total figure déjà dans la réponse.
  */
-export function completerMisesEnSituation(texte: string, d: Dimensionnement | null | undefined): { texte: string; n: number } {
-  const ms = d?.misesEnSituation || [];
+export function completerMisesEnSituation(texte: string, d: Dimensionnement | null | undefined, champ?: string): { texte: string; n: number } {
+  // Champ du cadre donné : seulement les mises en situation qu'il décrit (miseEnSituationDuChamp).
+  const ms = (d?.misesEnSituation || []).filter((m) => champ === undefined || miseEnSituationDuChamp(champ, m));
   const manque = ms.filter((m) => !new RegExp(`(?<![\\d])${m.total}\\s+agents?\\b`).test(texte));
   if (!manque.length) return { texte, n: 0 };
   return { texte: `${String(texte || '').trimEnd()}\n\nDispositif proposé :\n${manque.map((m) => `• ${m.libelle} : ${dispositifMiseEnSituation(m)}.`).join('\n')}`, n: manque.length };
@@ -369,7 +401,13 @@ export function reprendreMisesEnSituation(nouvelles: MiseEnSituation[], preceden
   const cle = (m: MiseEnSituation) => `${normaliser(String(m?.libelle || '')).replace(/[^a-z0-9]+/g, ' ').trim()}|${m?.capacite ?? ''}`;
   const memes = !!precedent && precedent.empreinte === empreinte && anciennes.length === nouvelles.length && anciennes.length > 0
     && anciennes.every((a) => Array.isArray(a?.fonctions) && a.fonctions.length > 0 && nouvelles.some((n) => cle(n) === cle(a)));
-  return memes ? { misesEnSituation: nouvelles.map((n) => anciennes.find((a) => cle(a) === cle(n))!), reprises: true } : { misesEnSituation: nouvelles, reprises: false };
+  // Proposition reprise telle quelle, sauf un « 0 » PIF ou détecteur enregistré avant le tour 5 que la lecture du DCE tient
+  // désormais pour non demandé (null) : il n'est jamais imprimé (T5CP-3).
+  const reprise = (n: MiseEnSituation): MiseEnSituation => {
+    const a = anciennes.find((x) => cle(x) === cle(n))!;
+    return { ...a, pif: a.pif === 0 && n.pif === null ? null : a.pif, detecteurs: a.detecteurs === 0 && n.detecteurs === null ? null : a.detecteurs, citation: a.citation || n.citation };
+  };
+  return memes ? { misesEnSituation: nouvelles.map(reprise), reprises: true } : { misesEnSituation: nouvelles, reprises: false };
 }
 
 /** Phrase de synthèse du dispositif d'un cas pratique, plage par plage. */
@@ -379,6 +417,59 @@ export function syntheseCasPratique(d: Dimensionnement): string {
     const l = d.casPratique.filter((x) => x.plage === p && x.enService > 0);
     return `${p} : ${l.length ? l.map((x) => `${effectifProfil(x.enService, x.profil)}${x.rotation > x.enService ? ` (${x.rotation} pour la rotation)` : ''}`).join(', ') : 'aucun agent'}`;
   }).join(' ; ');
+}
+
+/** « 6 h », « 22 h 30 » (heures décimales → écriture du mémoire). */
+const ecrireHeure = (h: number) => { const x = ((h % 24) + 24) % 24; const hh = Math.floor(x + 1e-9); const mn = Math.round((x - hh) * 60); return `${hh} h${mn ? ` ${String(mn).padStart(2, '0')}` : ''}`; };
+
+/**
+ * Couverture horaire du cas pratique, contrôlée sans modèle contre le DCE (consignes 1 et 4, D7) : durée demandée (« pour
+ * 48 heures ») et heures d'ouverture au public (« de 8h à 22h30 ») comparées aux plages du dispositif proposé. Génération
+ * réelle etampes2 552 : plages du DQE dimanche 6 h–21 h, nuit 21 h–6 h et lundi 6 h–21 h (39 h sur 48), public présent
+ * jusqu'à 22 h 30 avec le seul effectif de nuit. Renvoie les écarts (phrases), [] si la couverture est complète ou si le
+ * DCE ne donne ni durée ni heures d'ouverture.
+ */
+export function ecartsCouvertureCasPratique(d: Dimensionnement | null | undefined, dce: string): string[] {
+  const lignes = d?.casPratique || [];
+  if (!lignes.length) return [];
+  const plages = new Map<string, { debut: number; fin: number; duree: number }>();
+  for (const l of lignes) {
+    if (plages.has(l.plage)) continue;
+    const debut = heureDe(String(l.debut || '').replace(':', 'h')), fin = heureDe(String(l.fin || '').replace(':', 'h'));
+    plages.set(l.plage, { debut, fin, duree: l.dureeH });
+  }
+  const t = String(dce || '').replace(/\s+/g, ' ');
+  const ecarts: string[] = [];
+  // Durée demandée par le cas pratique (dans le passage « cas pratique » du DCE).
+  let duree = 0;
+  for (const m of t.matchAll(/cas pratique/gi)) {
+    const x = /\bpour\s+(\d{1,3})\s*heures\b/i.exec(t.slice(m.index || 0, (m.index || 0) + 300));
+    if (x) { duree = Number(x[1]); break; }
+  }
+  const couvert = Math.round([...plages.values()].reduce((a, p) => a + p.duree, 0) * 100) / 100;
+  const liste = [...plages.keys()].map((x) => `« ${x} »`).join(', ');
+  if (duree && couvert + 0.01 < duree) ecarts.push(`les plages du dispositif (${liste}) couvrent ${String(couvert).replace('.', ',')} h sur les ${duree} heures du cas pratique`);
+  // Heures d'ouverture au public : chaque plage de jour qui finit avant la fermeture (ou commence après l'ouverture).
+  const o = /heures?\s+d.ouverture[^:]{0,80}:\s*de\s*(\d{1,2})\s*h\s*(\d{2})?\s*(?:à|a|-)\s*(\d{1,2})\s*h\s*(\d{2})?/i.exec(t);
+  if (o) {
+    const ouverture = Number(o[1]) + Number(o[2] || 0) / 60, fermeture = Number(o[3]) + Number(o[4] || 0) / 60;
+    const jour = [...plages.entries()].filter(([, p]) => !Number.isNaN(p.debut) && !Number.isNaN(p.fin) && p.fin > p.debut);
+    const finJour = jour.filter(([, p]) => p.fin < fermeture - 0.01 && p.fin > ouverture);
+    if (finJour.length) {
+      const fin = Math.max(...finJour.map(([, p]) => p.fin));
+      ecarts.push(`le public reste présent jusqu'à ${ecrireHeure(fermeture)} alors que ${finJour.length > 1 ? 'les plages de jour finissent' : 'la plage de jour finit'} à ${ecrireHeure(fin)} (${finJour.map(([n]) => `« ${n} »`).join(', ')}) : de ${ecrireHeure(fin)} à ${ecrireHeure(fermeture)}, l'effectif de jour n'est plus en service`);
+    }
+    const debutJour = jour.filter(([, p]) => p.debut > ouverture + 0.01 && p.debut < fermeture);
+    if (debutJour.length) ecarts.push(`le public est accueilli dès ${ecrireHeure(ouverture)} alors que ${debutJour.map(([n]) => `« ${n} »`).join(', ')} commence${debutJour.length > 1 ? 'nt' : ''} à ${ecrireHeure(Math.min(...debutJour.map(([, p]) => p.debut)))}`);
+  }
+  return ecarts;
+}
+
+/** Question exacte posée à GSS sur la couverture horaire du cas pratique (proposition à valider, D5). '' sans écart. */
+export function questionCouvertureCasPratique(d: Dimensionnement | null | undefined, dce: string): string {
+  const e = ecartsCouvertureCasPratique(d, dce);
+  if (!e.length) return '';
+  return `Proposition à valider : couverture horaire du cas pratique — ${e.join(' ; ')}. Faut-il renforcer le dispositif sur ces heures (avec quel effectif, sur quelles heures), ou le dispositif proposé convient-il tel quel ?`;
 }
 
 /** Question consolidée posée à GSS (proposition à valider). */
@@ -498,43 +589,67 @@ export const CONSIGNE_DIMENSIONNEMENT = `Tu lis le DCE d'un marché de sécurit�
 Réponds UNIQUEMENT par un objet JSON : {"postes": [...], "cas_pratique": {...} ou null, "mises_en_situation": [...]}`;
 
 /** Paragraphe du premier message de l'assistant : le dimensionnement proposé, à valider ou à modifier avant la remise. */
-export function messageDimensionnement(d: Dimensionnement): string {
+export function messageDimensionnement(d: Dimensionnement, dce?: string): string {
   const l: string[] = ['J\'ai aussi proposé les effectifs, calculés à partir des postes et des horaires du cahier des charges (à relire avant la remise) :'];
   for (const x of d.profils) l.push(x.observation ? `- ${x.profil} : ${pluriel(x.titulaires, 'titulaire')} (${x.observation}) ;` : `- ${x.profil} : ${fr(x.heuresSemaine)} h par semaine, soit ${fr(x.etp)} ETP → ${pluriel(x.titulaires, 'titulaire')}${simultanesTexte(x)} ;`);
   if (d.profils.length) l.push(`- équipe dédiée de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} et équipe suppléante de ${pluriel(d.suppleants, 'agent formé', 'agents formés')} au site ;`);
   for (const m of d.misesEnSituation || []) l.push(`- ${m.libelle.charAt(0).toLowerCase()}${m.libelle.slice(1)} : ${dispositifMiseEnSituation(m)} ;`);
   for (const p of [...new Set(d.casPratique.map((x) => x.plage))]) l.push(`- cas pratique, ${p} : ${d.casPratique.filter((x) => x.plage === p && x.enService > 0).map((x) => `${effectifProfil(x.enService, x.profil)} (rotation ${x.rotation})`).join(', ') || 'aucun agent'} ;`);
+  // Couverture horaire incomplète du cas pratique : signalée à GSS (T5CP-5).
+  const ecarts = dce === undefined ? [] : ecartsCouvertureCasPratique(d, dce);
+  if (ecarts.length) l.push(`- attention, couverture du cas pratique : ${ecarts.join(' ; ')} ;`);
   l.push('', 'Vous pouvez les valider (« Je valide les effectifs proposés ») ou les modifier (« Mets 7 agents SSIAP 2 dans l\'équipe dédiée »).');
   return l.join('\n');
+}
+
+/** Espace insécable entre un nombre et son unité (« 6 h », « 21 h », « 2 agents ») : le moteur de schémas ne coupe jamais
+ *  la ligne entre les deux (génération réelle etampes2 552 : titre « Dimanche et lundi, 6 / h–21 h »). */
+export function insecablesNombres(t: string): string {
+  return String(t || '').replace(/(\d)[ \t]+(?=(?:h|min|minutes?|heures?|jours?|km|%|€|agents?|ma[îi]tres?-chiens?|encadrants?|PIF)(?![\p{L}]))/gu, '$1\u00a0');
+}
+
+/** Textes possibles d'une carte du schéma du cas pratique (86 caractères au plus, jamais coupés) : le dispositif en service
+ *  de la plage, du plus complet au plus court. */
+function formesDispositifPlage(l: LigneCasPratique[]): string[] {
+  if (!l.length) return ['Aucun agent en service', 'Aucun agent en service', 'Aucun agent en service'];
+  const profils = l.map((x) => effectifProfil(x.enService, x.profil));
+  const liste = profils.length > 1 ? `${profils.slice(0, -1).join(', ')} et ${profils[profils.length - 1]}` : profils[0];
+  return [`${profils.join(' + ')} en service ; rotation : ${l.map((x) => x.rotation).join(' + ')}`, `${liste} en service`, liste];
 }
 
 /**
  * Étapes du schéma demandé par l'intitulé d'un champ (« Schéma opérationnel (comprenant la répartition des effectifs) ») :
  * la répartition du cas pratique plage par plage, puis l'étape de résultat ; sans cas pratique, les sous-titres de la
  * réponse en phases successives. Mots et chiffres repris de la réponse (contrôle du moteur de schémas). null si moins de
- * trois étapes.
+ * trois étapes, ou si le dispositif d'une plage ne tient pas entier dans sa carte.
+ * L'étape de résultat vient du texte réel (`resultat` : une phrase de la réponse), sinon du fait établi par construction
+ * (chaque plage du cas pratique a son dispositif) ; jamais une phrase fixe « en continu » (etampes2 552 : « Site sécurisé
+ * en continu » alors que le dispositif couvre 39 h sur les 48 heures du cas pratique).
  */
-export function etapesSchemaDemande(texte: string, d?: Dimensionnement | null): Array<{ titre: string; texte?: string; role?: string }> | null {
+export function etapesSchemaDemande(texte: string, d?: Dimensionnement | null, resultat = ''): Array<{ titre: string; texte?: string; role?: string }> | null {
   if (d?.casPratique.length) {
     const plages = [...new Set(d.casPratique.map((x) => x.plage))];
-    const dispositif = (p: string) => {
-      const l = d.casPratique.filter((x) => x.plage === p && x.enService > 0);
-      return l.length ? `${l.map((x) => effectifProfil(x.enService, x.profil)).join(' + ')} en service ; rotation : ${l.map((x) => x.rotation).join(' + ')}` : 'Aucun agent en service';
-    };
+    const enService = (p: string) => d.casPratique.filter((x) => x.plage === p && x.enService > 0);
+    const cle = (p: string) => enService(p).map((x) => `${x.profil}|${x.enService}|${x.rotation}`).join(';');
     // Plages au même dispositif (dimanche et lundi fériés de 6 h à 21 h) : une seule étape (« Dimanche et lundi, 6 h–21 h »).
-    const groupes: Array<{ plages: string[]; texte: string }> = [];
+    const groupes: Array<{ plages: string[]; cle: string }> = [];
     for (const p of plages) {
-      const t = dispositif(p);
-      const g = groupes.find((x) => x.texte === t && x.plages[0].split(',').slice(1).join(',').trim() === p.split(',').slice(1).join(',').trim());
-      if (g) g.plages.push(p); else groupes.push({ plages: [p], texte: t });
+      const c = cle(p);
+      const g = groupes.find((x) => x.cle === c && x.plages[0].split(',').slice(1).join(',').trim() === p.split(',').slice(1).join(',').trim());
+      if (g) g.plages.push(p); else groupes.push({ plages: [p], cle: c });
     }
     const titre = (l: string[]) => {
       if (l.length === 1) return l[0];
       const jours = l.map((p) => p.split(/[\s,]/)[0]);
       return `${jours.map((j, i) => (i ? j.toLowerCase() : j)).join(' et ')}, ${l[0].split(',').slice(1).join(',').trim()}`;
     };
-    const etapes = groupes.slice(0, 4).map((g) => ({ titre: titre(g.plages), texte: g.texte }));
-    return [...etapes, { titre: 'Site sécurisé en continu', texte: 'Gardiennage du site en présence permanente', role: 'vert' }];
+    // Même forme pour toutes les cartes : la plus complète qui tient entière dans chaque carte.
+    const formes = groupes.slice(0, 4).map((g) => formesDispositifPlage(enService(g.plages[0])));
+    const k = [0, 1, 2].find((i) => formes.every((f) => f[i].length <= 86));
+    if (k === undefined) return null;
+    const etapes = groupes.slice(0, 4).map((g, i) => ({ titre: titre(g.plages), texte: formes[i][k] }));
+    const res = String(resultat || '').trim() || 'Effectifs répartis sur chaque plage du cas pratique';
+    return [...etapes, { titre: 'Votre résultat', texte: res, role: 'vert' }];
   }
   // Sous-titres : lignes courtes sans ponctuation finale, suivies d'un paragraphe.
   const lignes = String(texte || '').split('\n').map((l) => l.trim());

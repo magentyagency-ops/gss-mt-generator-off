@@ -164,7 +164,9 @@ describe('Réponse libre v2 : bloc « compréhension »', () => {
     expect(s.params.etapes).toHaveLength(5);
     expect(s.params.etapes[0].role).toBe('rouge');
     expect(s.params.etapes[4].role).toBe('vert');
-    expect(s.params.etapes[2].texte.length).toBeLessThanOrEqual(86);
+    // Tour 5 (T5CP-4) : un texte trop long n'est plus jamais coupé au milieu d'une phrase ; sans proposition entière de
+    // 86 caractères au plus, l'étape n'a pas de texte et le schéma est refusé (anomaliesSchemaBloc1 : « étape vide »).
+    expect(s.params.etapes[2].texte).toBeUndefined();
     expect(specProcessBesoin([{ titre: 'Seule' }])).toBeNull();
     // Tour 3 (T3C-3, imm 341 et citedia 341) : plus jamais de schéma « Votre contexte → Le périmètre → Vos attentes → Votre
     // résultat » réduit aux intitulés ; sans contenu exploitable, aucun schéma (le défaut est signalé à GSS).

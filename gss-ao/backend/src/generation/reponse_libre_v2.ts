@@ -18,6 +18,7 @@ import {
   type DonneesBesoin, type ExigenceMatrice, type MemoireType, type PlanMemoireType, type SchemaRubrique,
 } from './memoire_type';
 import { ZONE_GSS, vocabulaireDuCctp } from './base_memoires';
+import { insecablesNombres } from './dimensionnement';
 
 export const PLACEHOLDER_V2 = '[À COMPLÉTER]';
 
@@ -612,11 +613,32 @@ export const court = (t: unknown, max: number): string => {
  * par le modèle : gabarit « flux » (2 à 5 étapes) ou « chevrons » (3 ou 4 phases) ; la dernière étape est verte
  * (issue). Le moteur contrôle ensuite que chaque mot et chaque chiffre figurent dans le texte de la rubrique.
  */
+/** Texte d'une carte : tel quel s'il tient (86 caractères), sinon une phrase ou une proposition entière, sinon ''. */
+const texteCarte = (t: unknown): string => {
+  const brut = court(t, 1000);
+  if (brut.length <= 86) return brut;
+  const entier = texteEtapeEntier(brut, 86);
+  if (entier) return entier;
+  // Proposition entière qui précède une citation ou une parenthèse (« Nous coordonnons l'alerte et l'intervention via
+  // « Notre socle… » » → « Nous coordonnons l'alerte et l'intervention ») : gardée sans la préposition qui l'introduisait.
+  const k = brut.search(/\s(?:via|avec|par|selon|dans|sur|pour|grâce à)?\s*[«(“]/);
+  if (k >= 25 && k <= 86) {
+    const avant = brut.slice(0, k).replace(/[\s,;:]+$/, '');
+    const dernier = (avant.split(/\s+/).pop() || '').toLowerCase().replace(/^(?:l|d)['’]/, '').replace(/['’]$/, '');
+    if (avant.length >= 25 && !MOTS_OUTILS.has(dernier)) return avant;
+  }
+  return '';
+};
+
 export function specProcessBesoin(etapes: Array<{ titre?: string; texte?: string; role?: string }>, gabarit: 'flux' | 'chevrons' = 'flux'): { gabarit: string; params: any } | null {
   const max = gabarit === 'chevrons' ? 4 : 5;
   const propres = (Array.isArray(etapes) ? etapes : [])
     // Limites du moteur (rendu_schemas.py) : titre 36 (flux) ou 26 (chevrons) caractères ; coupe sur un mot plein.
-    .map((e) => ({ titre: titreEtape(e?.titre, gabarit === 'chevrons' ? 26 : 34), texte: court(e?.texte, 86), role: String(e?.role || '').toLowerCase().split(/[^a-zé]+/)[0] }))
+    // Texte d'étape jamais coupé au milieu d'une phrase (cstb 551 : « … tout en respectant les séquences » pour « … les séquences
+    // contractuelles. ») : une phrase ou une proposition entière de 86 caractères au plus, sinon aucun texte (l'étape vide est
+    // alors refusée par anomaliesSchemaBloc1 et le schéma passe à la correction ou au secours). Espace insécable entre un
+    // nombre et son unité (« 6 h », jamais « 6 / h » coupé par le moteur).
+    .map((e) => ({ titre: insecablesNombres(titreEtape(e?.titre, gabarit === 'chevrons' ? 26 : 34)), texte: insecablesNombres(texteCarte(e?.texte)), role: String(e?.role || '').toLowerCase().split(/[^a-zé]+/)[0] }))
     .filter((e) => e.titre)
     .slice(0, max);
   if (propres.length < (gabarit === 'chevrons' ? 3 : 2)) return null;
@@ -649,6 +671,9 @@ export function defautsEtapesBesoin(etapes: Array<{ titre?: string; texte?: stri
     const n = `étape ${i + 1}`;
     if (GENERIQUE.test(titre)) defauts.push(`${n} : titre « ${titre} » réduit au nom de l'étape ; donne un titre nominal qui nomme le contenu propre à ce marché (enjeu, exigence ou moyen du DCE).`);
     if (FORMULE.test(texte)) defauts.push(`${n} : phrase générale « ${texte} » ; écris un fait concret du DCE ou un moyen de GSS.`);
+    // Texte trop long pour la carte sans pouvoir garder une phrase ou une proposition entière (cstb 551 : « … tout en
+    // respectant les séquences » imprimé, coupé à 86 caractères) : refusé, jamais tronqué.
+    if (texte.length > 86 && !texteEtapeEntier(texte, 86)) defauts.push(`${n} : texte de ${texte.length} caractères, trop long pour la carte du schéma (86 au plus) ; écris une phrase entière plus courte.`);
     const t = norm(titre);
     if (t.length >= 4 && norm(texte).startsWith(t)) defauts.push(`${n} : la phrase reprend le titre de l'étape ; elle doit apporter une information nouvelle.`);
     if (POSTE_ACTEUR.test(texte)) defauts.push(`${n} : « ${texte} » présente un poste comme acteur ; le sujet est l'agent qui l'occupe, avec sa qualification, et son action respecte le CCTP.`);
