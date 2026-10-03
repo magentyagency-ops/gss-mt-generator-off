@@ -6426,7 +6426,12 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
           const deja = new Set([...(motsSection.get(section) || [])].map(racine));
           const propres = [...ws].map(racine);
           const neufs = propres.filter((w) => !deja.has(w)).length;
-          if (continuationAvecPrincipale(d) && section && propres.length >= 3 && neufs / propres.length <= 0.35) {
+          // Ligne qui parle du sujet de sa propre question (« Plan qualité interne – responsable qualité » : « Responsable
+          // qualité : VATTIER Marie… ») : jamais vidée ; seule une redite hors sujet l'est (sous « Certification… »).
+          const libelleQ = ((d.context.match(/Contexte(?: proche)?:\s*"([^"]*)"/) || [])[1] || '').split('/').map((x) => x.trim()).filter(Boolean).pop() || '';
+          const motsQ = new Set([...sigWords(libelleQ)].map(racine));
+          const dansLeSujet = propres.some((w) => motsQ.has(w));
+          if (continuationAvecPrincipale(d) && section && !dansLeSujet && propres.length >= 3 && neufs / propres.length <= 0.35) {
             valById.set(d.id, '');
             console.log(`[MemoireGenerator] Ligne de continuation vidée : CHAMP_${d.id} (redite de la section)`);
             continue;
