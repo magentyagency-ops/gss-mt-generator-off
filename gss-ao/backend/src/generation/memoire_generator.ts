@@ -3386,7 +3386,10 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     liste.forEach((c, i) => {
       const t = c.replace(/\*\*/g, '').trim();
       if (!t) return;
-      if (sansSousTraitance && /sous[- ]?trait/i.test(t)) return;
+      // Question sur la sous-traitance (GSS n'en fait pas) : retirée ; jamais une ligne déjà formulée sans modèle dont seul le
+      // libellé de la réponse cite la sous-traitance (etampes1 594 : « Réponse « Engagement… sous-traitance… » : le schéma n'a
+      // pas pu être inséré… », T6-COH-3).
+      if (sansSousTraitance && /sous[- ]?trait/i.test(t) && !LIGNE_DETERMINISTE.test(t)) return;
       const u = uniques.find((x) => norm(x.texte) === norm(t));
       if (u) u.origines.push(i); else uniques.push({ texte: t, origines: [i] });
     });
@@ -6413,6 +6416,16 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     }
 
     // 7 quater. Schémas GSS validés sous les réponses développées (retour GSS : visuels non réutilisés).
+    // Schéma choisi mais non inséré (Chrome indisponible ou bloqué, T6-COH-3) : signalé à GSS, réponse par réponse.
+    const alertesSchemasCadre: string[] = [];
+    let reponsesAvecSchema: Array<{ cle: string; question: string; svgId?: string }> = [];
+    const alerterSchemas = (cles: string[]) => {
+      const rang = (x: { svgId?: string }) => (x.svgId === 'comprehension' ? 0 : x.svgId?.startsWith('demande_') ? 1 : 2);
+      for (const x of reponsesAvecSchema.filter((y) => cles.includes(y.cle)).sort((a, b) => rang(a) - rang(b))) {
+        const q = `Réponse « ${libelleQuestionCadre(x.question)} » : le schéma${x.svgId === 'comprehension' ? ' de process de la compréhension du besoin' : x.svgId?.startsWith('demande_') ? ' demandé par l\'acheteur' : ''} n'a pas pu être inséré (rendu des schémas indisponible) ; relancez la génération, ou demandez-le via l'assistant, avant la remise.`;
+        if (!alertesSchemasCadre.includes(q)) alertesSchemasCadre.push(q);
+      }
+    };
     try {
       const libelleChamp = (id: number) => ((descriptors.find((x) => x.id === id)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '');
       const texteChamp = (id: number) => String(replacements.find((r) => r.id === id)?.value ?? '');
@@ -6453,11 +6466,17 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         // Champ de valeur (« Effectif … (transmis pour information) ») : jamais de schéma dessous.
         .filter((x) => (x.texte.length >= 600 && !champValeur(x.question)) || x.svgId === 'comprehension' || !!x.svgId?.startsWith('demande_'));
       await schemasSelonDce(developpees, dceContext);
-      const nSchemas = await insererSchemasReponses(zip, xmlDoc, developpees, { seulementReprise: !!repriseMT, vocabulaire: vocabulaireSchemas(dceContext), hauteurMax: hauteurSchemaMax, places: placeSchemas });
+      reponsesAvecSchema = developpees.filter((x) => x.svg || x.prefere);
+      const nonInseres: string[] = [];
+      const nSchemas = await insererSchemasReponses(zip, xmlDoc, developpees, { seulementReprise: !!repriseMT, vocabulaire: vocabulaireSchemas(dceContext), hauteurMax: hauteurSchemaMax, places: placeSchemas, nonInseres });
       if (nSchemas) console.log(`[MemoireGenerator] ${nSchemas} schéma(s) GSS inséré(s) sous les réponses.`);
+      alerterSchemas(nonInseres);
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Schémas GSS non insérés (non bloquant) : ${e?.message || e}`);
+      alerterSchemas(reponsesAvecSchema.map((x) => x.cle));
+      if (!reponsesAvecSchema.length) alertesSchemasCadre.push(`Schémas GSS du cadre non insérés (rendu des schémas indisponible : ${String(e?.message || e).slice(0, 120)}) ; relancez la génération avant la remise.`);
     }
+    for (const q of alertesSchemasCadre) confirmationsGss.add(q);
 
     // Contrôle final des parties limitées en pages, sur le document complet (réponses et schémas insérés).
     try {
@@ -6523,9 +6542,14 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       adaptationsCadre = adaptationsCadre.filter((a) => champsEtat.some((c) => c.cle === a.rubrique));
       adaptationsCadre.forEach((a, i) => { a.n = i + 1; });
       const texteAdaptations = messageAdaptations(adaptationsCadre);
-      const conversationFinale = texteAdaptations
+      let conversationFinale = texteAdaptations
         ? (conversation?.length ? [{ ...conversation[0], texte: `${conversation[0].texte}\n\n${texteAdaptations}` }] : [{ role: 'assistant' as const, date: new Date().toISOString(), texte: texteAdaptations }])
         : conversation;
+      // Schémas non insérés (T6-COH-3) : en tête du premier message de l'assistant.
+      if (alertesSchemasCadre.length) {
+        const texteSchemas = `Schémas manquants dans le cadre de réponse (${alertesSchemasCadre.length}) :\n${alertesSchemasCadre.map((x) => `- ${x}`).join('\n')}`;
+        conversationFinale = conversationFinale?.length ? [{ ...conversationFinale[0], texte: `${texteSchemas}\n\n${conversationFinale[0].texte}` }] : [{ role: 'assistant' as const, date: new Date().toISOString(), texte: texteSchemas }];
+      }
       ecrireEtat({
         dossierId, mode: 'cadre', fichier: outputPath, majLe: '', elements: elementsSansDoublon(elementsACompleter), reponsesTraitees: [],
         champs: champsEtat, demande: this.demandeParticuliere?.demande || undefined, conversation: conversationFinale,

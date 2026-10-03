@@ -166,15 +166,32 @@ export async function insererSchemasReponses(zip: PizZip, xmlDoc: any, reponses:
   hauteurMax?: Map<string, number>;
   /** Place restante (EMU), partagée entre les réponses d'une partie limitée en pages : un schéma plus haut n'est pas inséré. */
   places?: Map<string, { resteEmu: number }>;
+  /** Sortie : réponses dont le schéma choisi n'a pas pu être rendu en image (Chrome indisponible ou bloqué, T6-COH-3). */
+  nonInseres?: string[];
 } = {}): Promise<number> {
   const theme = themeActif();
   const choix = choisir(reponses, theme, options);
   if (!choix.length) return 0;
-  const pngs = await rendrePng(choix.map((c) => c.svg), theme);
+  // Chrome indisponible ou bloqué : un second essai, puis les schémas choisis sont déclarés non insérés (l'appelant le
+  // signale à GSS), au lieu de disparaître en silence.
+  let pngs: string[];
+  try {
+    pngs = await rendrePng(choix.map((c) => c.svg), theme);
+  } catch (e: any) {
+    console.warn(`[MemoireGenerator] Rendu des schémas du cadre impossible (${e?.message || e}) : nouvel essai.`);
+    try {
+      pngs = await rendrePng(choix.map((c) => c.svg), theme);
+    } catch (e2: any) {
+      console.warn(`[MemoireGenerator] Rendu des schémas du cadre impossible au second essai (${e2?.message || e2}) : ${choix.length} schéma(s) non inséré(s).`);
+      options.nonInseres?.push(...choix.map((c) => c.cle));
+      return 0;
+    }
+  }
   let n = 0;
   choix.forEach((c, i) => {
     const png = pngs[i];
     const para = png ? paragrapheDuChamp(xmlDoc, c.cle) : null;
+    if (!png) options.nonInseres?.push(c.cle);
     if (!png || !para) return;
     try {
       const place = options.places?.get(c.cle);
