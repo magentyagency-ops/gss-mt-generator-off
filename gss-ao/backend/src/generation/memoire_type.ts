@@ -1197,7 +1197,7 @@ const NOMBRES_LETTRES: Record<string, number> = {
   vingt: 20, trente: 30, quarante: 40, 'quarante-cinq': 45, cinquante: 50, soixante: 60,
 };
 
-const RX_DELAI = /(?:dans|sous|en moins de|d[ée]lai(?:\s+maxim(?:al|um))?\s+de|au plus tard (?:dans|en))\s+(?:les\s+|un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?de\s+)?(\d{1,3}|une?|deux|trois|quatre|cinq|six|sept|huit|dix|douze|quinze|vingt|trente|quarante-cinq|quarante|soixante)\s*(?:\(\s*(\d{1,3})\s*\)\s*)?(minutes?|mn|min|heures?|h)(?![\wÀ-ÿ])/gi;
+const RX_DELAI = /(?:dans|sous|en moins de|d[ée]lai(?:\s+maxim(?:al|um))?\s+de|au plus tard (?:dans|en))\s+(?:les\s+|un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?de\s+)?(\d{1,3}|une?|deux|trois|quatre|cinq|six|sept|huit|dix|douze|quinze|vingt|trente|quarante-cinq|quarante|soixante)\s*(?:\(\s*(\d{1,3}|[a-zà-ÿ]+(?:-[a-zà-ÿ]+)?)\s*\)\s*)?(minutes?|mn|min|heures?|h)(?![\wÀ-ÿ])/gi;
 
 /** Sujets des délais que le CCTP peut imposer. */
 const SUJETS_DELAI: Record<string, { sujet: RegExp; exclure?: RegExp; objet?: RegExp; personnel?: RegExp }> = {
@@ -1228,7 +1228,8 @@ export function delaiDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): strin
     if (def.objet?.test(ph) && !def.personnel?.test(ph)) continue;
     if (sujet === 'ssi' && !/d[ée]faillan|hors service|d[ée]rangement/i.test(ph)) continue;
     for (const m of ph.matchAll(RX_DELAI)) {
-      const n = m[2] ? Number(m[2]) : (/^\d+$/.test(m[1]) ? Number(m[1]) : NOMBRES_LETTRES[m[1].toLowerCase()]);
+      // « UNE (1) heure » : le chiffre entre parenthèses ; « 30 (trente) minutes » (ifits, T9CS-1) : le chiffre écrit avant.
+      const n = m[2] && /^\d+$/.test(m[2]) ? Number(m[2]) : (/^\d+$/.test(m[1]) ? Number(m[1]) : NOMBRES_LETTRES[m[1].toLowerCase()]);
       if (!n) continue;
       valeurs.add(normaliserDelai(`${n} ${m[3]}`));
     }

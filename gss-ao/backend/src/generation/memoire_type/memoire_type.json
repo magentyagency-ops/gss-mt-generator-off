@@ -81,8 +81,8 @@
   },
   "CYNOPHILE": {
    "description": "Le marché prévoit des agents cynophiles (maîtres-chiens).",
-   "dce": "cynophile|ma[îi]tres?[- ]chiens?",
-   "analyse": "cynophile|ma[îi]tres?[- ]chiens?",
+   "dce": "cynophile|ma[îi]tres?[- ]chiens?|conducteurs?\\s+(?:de\\s+|d['’]\\s*)chiens?",
+   "analyse": "cynophile|ma[îi]tres?[- ]chiens?|conducteurs?\\s+(?:de\\s+|d['’]\\s*)chiens?",
    "matrice": [
     "b3_formation_cynophile"
    ]
@@ -127,8 +127,8 @@
    "motif_dce": "inopin"
   },
   "TELESURVEILLANCE": {
-   "description": "Le marché prévoit de la télésurveillance ou de la télésécurité (intervention d'un rondier sur alarme).",
-   "dce": "t[ée]l[ée]\\s?-?surveillance|t[ée]l[ée]\\s?-?s[ée]curit[ée]|station de surveillance",
+   "description": "Le marché prévoit de la télésurveillance ou de la télésécurité (intervention d'un rondier sur alarme), ou la surveillance à distance de l'alarme ou des caméras (ifits : « contrôle de surveillance à distance des locaux »).",
+   "dce": "t[ée]l[ée]\\s?-?surveillance|t[ée]l[ée]\\s?-?s[ée]curit[ée]|station de surveillance|(?<!activit[ée]s\\s+de\\s+)surveillance\\s+[àa]\\s+distance|(?:contr[ôo]le|gestion)\\s+[àa]\\s+distance\\s+(?:de\\s+l['’]\\s*|des?\\s+)?(?:alarmes?|cam[ée]ras?)",
    "matrice": [
     "b4_proc_alarme"
    ]
