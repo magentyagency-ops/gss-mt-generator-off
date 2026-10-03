@@ -6630,6 +6630,24 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         const r = dessinsDemandes.get(`demande_${x.id}`);
         console.log(`[MemoireGenerator] Schéma demandé par le champ ${x.id} : ${r?.ok ? 'dessiné' : `refusé (${(r?.erreurs || ['moteur indisponible']).slice(0, 2).join(' | ')})`}.`);
       }
+      // Schéma demandé refusé par le moteur (etampes1, T8N-2 : chiffres du dimensionnement absents du texte rédigé pour ce
+      // champ) : second essai avec le process des sous-titres de la réponse seule (chaque mot et chaque chiffre du schéma
+      // restent dans la page) ; encore refusé, ou impossible à construire : signalé à GSS, jamais perdu en silence.
+      const refuses = demandesSpec.filter((x) => !dessinsDemandes.get(`demande_${x.id}`)?.ok && !!dimensionnementCadre?.casPratique.length);
+      const secours = refuses.map((x) => ({ id: x.id, spec: specProcessBesoin(etapesSchemaDemande(texteChamp(x.id), null, resultatBesoin(texteChamp(x.id))) || [], 'flux') })).filter((x) => x.spec);
+      if (secours.length) {
+        const d2 = await dessinerSpecs(secours.map((x) => ({ id: `demande_${x.id}`, gabarit: x.spec!.gabarit, params: x.spec!.params, source: `${texteChamp(x.id)}\n${texteDuCadre}`, titre_section: libelleChamp(x.id).slice(0, 120) })), 'paysage', themeActif());
+        for (const x of secours) {
+          const r = d2.get(`demande_${x.id}`);
+          console.log(`[MemoireGenerator] Schéma demandé par le champ ${x.id} (process des sous-titres de la réponse) : ${r?.ok ? 'dessiné' : `refusé (${(r?.erreurs || ['moteur indisponible']).slice(0, 2).join(' | ')})`}.`);
+          if (r?.ok) dessinsDemandes.set(`demande_${x.id}`, r);
+        }
+      }
+      for (const x of demandesSpec.filter((y) => !dessinsDemandes.get(`demande_${y.id}`)?.ok)) {
+        // (consultations et premier message de l'assistant, comme un schéma non inséré)
+        const q = `Réponse « ${libelleQuestionCadre(libelleChamp(x.id))} » : le schéma demandé par l'acheteur n'a pas pu être construit automatiquement ; à demander via l'assistant avant la remise.`;
+        if (!alertesSchemasCadre.includes(q)) alertesSchemasCadre.push(q);
+      }
       const developpees = champsRediges
         .map((id) => {
           const s = schemasMT.get(id);
