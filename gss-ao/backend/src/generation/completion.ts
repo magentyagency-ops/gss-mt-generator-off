@@ -875,11 +875,14 @@ export function appliquerEffectifsParProfil(sections: Record<string, string>, sa
   if (lignes.some((l) => l.nombre === null)) return null;
   const brut = sections[id].split('\n');
   const touchees: string[] = [];
+  // Singulier et pluriel confondus, apostrophes ' ou ’ (T1F-11 : « Mets 9 chefs d'équipe » face à la ligne « Chef d’équipe »).
+  const singulier = (t: string) => norm(t).split(' ').map((w) => (w.length > 3 ? w.replace(/(?<=[a-z]{3})[sx]$/, '') : w)).join(' ');
   for (const s of saisies) {
     const profil = s.profil.replace(/^agents?\s+(?=SSIAP|ADS|CQP|cynophile|rondier)/i, '');
-    const cat = norm(categorieDe(profil));
-    const q = norm(profil);
-    const ok = lignes.filter((l) => norm(l.categorie) === cat || norm(l.qualification) === q);
+    const profilSingulier = profil.split(/\s+/).map((w) => (w.length > 3 ? w.replace(/(?<=[A-Za-zÀ-ÿ]{3})[sx]$/, '') : w)).join(' ');
+    const cat = singulier(categorieDe(profilSingulier));
+    const q = singulier(profil);
+    const ok = lignes.filter((l) => singulier(l.categorie) === cat || singulier(l.qualification) === q || singulier(l.categorie) === q);
     if (ok.length !== 1) return null;
     const c = brut[ok[0].index].split('|');
     c[3] = ` ${s.nombre} `;
@@ -994,6 +997,9 @@ async function appliquerEffectifs(dossierId: string, effectifs: Array<{ el: Elem
     const ids = Object.keys(sections).filter((id) => PORTE.test(sections[id] || ''));
     if (!ids.length) continue;
     const consigne = `Réponse de GSS à la proposition de dimensionnement : « ${v} ». Remplace les effectifs proposés de l'équipe dédiée (nombre d'agents titulaires${ancien ? `, aujourd'hui ${ancien}` : ''}, effectifs par profil du tableau de l'équipe dédiée, équipe suppléante) par ceux que donne GSS. Le total des lignes du tableau égale le nombre de titulaires. Si GSS ne donne qu'un total et que le tableau a plusieurs profils, écris [À COMPLÉTER] dans les cellules d'effectif par profil. Ne change rien d'autre : aucun autre mot, aucune autre phrase.`;
+    // État avant la réécriture : remis tel quel si le report n'est pas sûr (T1F-10), pour que le document corresponde
+    // toujours au message envoyé à GSS (« Je n'ai pas pu reporter… »).
+    const avant = JSON.parse(JSON.stringify({ libre: etat.libre, elements: etat.elements, conversation: etat.conversation || [] }));
     const r = await modifierRubriquesLibre(dossierId, ids.map((id) => ({ id, consigne })), `Effectifs de l'équipe dédiée : ${v}`, `Effectifs de l'équipe dédiée mis à jour d'après votre réponse (« ${v} »).`);
     etat = r.etat;
     const nombres: string[] = v.match(/\d+/g) || [];
@@ -1034,7 +1040,13 @@ async function appliquerEffectifs(dossierId: string, effectifs: Array<{ el: Elem
       e.source = source;
       e.completeLe = new Date().toISOString();
     } else {
-      (etat.conversation ||= []).push({ role: 'assistant', texte: `Je n'ai pas pu reporter les effectifs « ${v} » dans le mémoire de façon sûre : précisez-les dans l'assistant (par exemple « 8 agents titulaires, dont 6 agents de sécurité et 2 SSIAP 1, et 3 suppléants »).`, date: new Date().toISOString() });
+      // Réécriture annulée : sections, schémas, éléments et conversation remis comme avant, document recomposé.
+      const modifie = r.modifies.length > 0;
+      etat.libre = avant.libre;
+      etat.elements = avant.elements;
+      etat.conversation = avant.conversation;
+      if (modifie) etat.fichier = await recomposerPdf(etat);
+      (etat.conversation ||= []).push({ role: 'assistant', texte: `Je n'ai pas pu reporter les effectifs « ${v} » dans le mémoire de façon sûre : le mémoire est resté tel qu'il était. Précisez-les dans l'assistant (par exemple « 8 agents titulaires, dont 6 agents de sécurité et 2 SSIAP 1, et 3 suppléants »).`, date: new Date().toISOString() });
     }
     ecrireEtat(etat);
   }

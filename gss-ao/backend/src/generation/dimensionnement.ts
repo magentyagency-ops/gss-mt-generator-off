@@ -19,7 +19,13 @@ export const PART_SUPPLEANTS = 0.3;
 
 const JOURS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
 
-export interface PlageHoraire { jours: string[]; debut: string; fin: string }
+export interface PlageHoraire {
+  jours: string[]; debut: string; fin: string;
+  /** Période de l'année écrite dans le DCE (« Du 1er mai au 30 septembre »), relevée par le modèle. */
+  periode?: string;
+  /** Jours de l'année couverts par la période (364 sans période, soit 52 semaines). */
+  joursAn?: number;
+}
 
 export interface ProfilDimensionne {
   profil: string;
@@ -90,6 +96,67 @@ export function dureePlage(debut: string, fin: string): number {
 function joursDe(jours: unknown): string[] {
   const l = (Array.isArray(jours) ? jours : String(jours || '').split(/[,;]/)).map((j) => normaliser(String(j)).trim());
   return [...new Set(l.map((j) => JOURS.find((x) => x.startsWith(j.slice(0, 3)) && j.length >= 3)).filter((x): x is string => !!x))];
+}
+
+const MOIS_DIM = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin', 'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre'];
+const JOURS_MOIS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const RX_MOIS_DIM = '(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)';
+/** Jour de l'année (1 à 365) d'une borne de période (« 1er mai », « fin février », « dernier week-end de mars »). */
+function jourDeLAnnee(qualif: string, mois: number, fin: boolean): number {
+  const q = String(qualif || '').trim();
+  let j: number;
+  if (/^\d{1,2}$/.test(q)) j = Number(q);
+  else if (/^(?:1er|premier)$/.test(q)) j = 1;
+  else if (/debut/.test(q)) j = 1;
+  else if (/^mi/.test(q)) j = 15;
+  else if (/week.?end/.test(q)) j = /dernier/.test(q) ? JOURS_MOIS[mois] - 3 : 4;
+  else if (/fin/.test(q)) j = JOURS_MOIS[mois];
+  else j = fin ? JOURS_MOIS[mois] : 1;
+  j = Math.min(Math.max(1, j), JOURS_MOIS[mois]);
+  return JOURS_MOIS.slice(0, mois).reduce((a, b) => a + b, 0) + j;
+}
+/**
+ * Nombre de jours de l'année couverts par une période écrite dans le DCE (T1F-2) : « Du 1er mai au 30 septembre » (153),
+ * « Les mois d'octobre, mars et avril » (92), « Du 1er novembre à la fin février » (120), « la saison démarre le dernier
+ * week-end de mars et s'achève le dernier week-end de septembre » (184). La DERNIÈRE période du texte (la plus proche des
+ * horaires) ; null si aucune n'est lisible. Les jours fériés cités (« les 1er mai, 25 décembre et 1er janvier ») ne sont
+ * pas une période.
+ */
+export function joursDePeriode(texte: string): number | null {
+  const t = normaliser(String(texte || '')).replace(/\s+/g, ' ');
+  const BORNE = String.raw`(?:(\d{1,2}|1er|premier|debut|mi|fin|la fin|(?:le )?(?:dernier|premier) week-?end)\s*(?:-\s*)?(?:de |d'|du mois de |du mois d')?\s*)?${RX_MOIS_DIM}`;
+  const LIEN = String.raw`(?:[^.;:]{0,50}?)(?:\s(?:au|a|jusqu'au|jusqu'a|et s'acheve(?: le)?|et se termine(?: le)?)\s+|\s?[-–]\s?)(?:la |le )?`;
+  const intervalles: Array<{ pos: number; jours: number }> = [];
+  for (const m of t.matchAll(new RegExp(`${BORNE}${LIEN}${BORNE}`, 'g'))) {
+    const m1 = MOIS_DIM.indexOf(m[2]), m2 = MOIS_DIM.indexOf(m[4]);
+    if (m1 < 0 || m2 < 0) continue;
+    const a = jourDeLAnnee(m[1] || '', m1, false), b = jourDeLAnnee(m[3] || '', m2, true);
+    const jours = b >= a ? b - a + 1 : 365 - a + 1 + b;
+    if (jours >= 7 && jours <= 366) intervalles.push({ pos: m.index || 0, jours });
+  }
+  // Liste de mois sans jour (« les mois d'octobre, mars et avril », « en juillet et août », « en octobre »).
+  for (const m of t.matchAll(new RegExp(String.raw`(?:mois (?:de |d')|(?<![a-z])en |: |; )${RX_MOIS_DIM}((?:\s*,\s*${RX_MOIS_DIM})*(?:\s+et\s+${RX_MOIS_DIM})?)(?![a-z0-9])`, 'g'))) {
+    const mois = [m[1], ...[...(m[2] || '').matchAll(new RegExp(RX_MOIS_DIM, 'g'))].map((x) => x[1])];
+    intervalles.push({ pos: m.index || 0, jours: [...new Set(mois)].reduce((a, x) => a + JOURS_MOIS[MOIS_DIM.indexOf(x)], 0) });
+  }
+  if (!intervalles.length) return null;
+  return intervalles.sort((x, y) => x.pos - y.pos)[intervalles.length - 1].jours;
+}
+
+/** Le poste semble saisonnier (mois, saison, période estivale ou hivernale) : sa période doit être lue. */
+const SAISONNIER = /(?<![\p{L}])(?:saisons?|saisonni\p{L}*|estivale?s?|hivernale?s?|janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre)(?![\p{L}])/iu;
+
+/**
+ * Période de la saison écrite ailleurs dans le DCE (havre1 : « la saison démarre le dernier week-end de mars et s'achève
+ * le dernier week-end de septembre ») : jours couverts, null si aucune phrase de saison n'est lisible.
+ */
+export function joursDeLaSaison(dce: string): number | null {
+  for (const ph of String(dce || '').replace(/\s+/g, ' ').split(/(?<=[.;])\s+/)) {
+    if (!/saison|p[ée]riode (?:estivale|d.ouverture)/i.test(ph)) continue;
+    const j = joursDePeriode(ph);
+    if (j) return j;
+  }
+  return null;
 }
 
 /** Heures par semaine d'un ensemble de plages. */
@@ -172,7 +239,22 @@ export function questionRondes(d: Dimensionnement | null | undefined): string {
 }
 
 /** Poste qui n'est pas permanent : option, tranche optionnelle, agent supplémentaire, prestation à la demande ou ponctuelle. */
-const POSTE_OPTIONNEL = /\boptions?\b|\boptionnel(?:le)?s?\b|agents? suppl[ée]mentaires?|\bà la demande\b|bons? de commande|\bponctuel(?:le)?s?\b|\brenforts? ponctuels?\b/i;
+const POSTE_OPTIONNEL = /(?<![\p{L}])(?:options?|optionnel(?:le)?s?|agents? suppl[ée]mentaires?|[àa] la demande|bons? de commande|ponctuel(?:le)?s?|renforts? ponctuels?)(?![\p{L}])/iu;
+
+/**
+ * Le poste lui-même est-il optionnel (T1-GEN-7) ? Le test porte sur la proposition qui décrit le poste (celle qui porte les
+ * horaires), jamais sur un complément de la citation (« ; ce dispositif pourra être complété par des agents supplémentaires
+ * sur bon de commande », « (le candidat pourra proposer en option un maître-chien) », « , avec un renfort ponctuel lors des
+ * événements ») : sinon un poste permanent disparaissait en silence.
+ */
+export function posteOptionnel(citation: string, profil: string): boolean {
+  if (POSTE_OPTIONNEL.test(profil)) return true;
+  const c = String(citation || '').replace(/\s+/g, ' ');
+  const propositions = c.split(/\s*;\s*|\s*\([^()]*\)\s*|,\s+(?=avec\s)|(?<=[.!?])\s+|\s+(?=(?:ce|le) dispositif pourra|il pourra [êe]tre compl[ée]t[ée])/i).filter((x) => x.trim());
+  const HORAIRE = /\d{1,2}\s*(?:h|:)\s*\d{0,2}|24\s*h|7\s*j|jours?|nuits?|semaine|permanent|en continu|vacations?/i;
+  const principale = propositions.find((x) => HORAIRE.test(x)) || propositions[0] || c;
+  return POSTE_OPTIONNEL.test(principale);
+}
 
 /**
  * Profil d'agent de sécurité (ADS, agent de sécurité, de surveillance ou de sûreté, qualification CQP APS ou carte
@@ -213,6 +295,12 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
   /** Profil dont toutes les heures viennent des volumes hebdomadaires du DQE. */
   const dqeParProfil = new Map<string, boolean>();
   const rondes: string[] = [];
+  /** Postes écartés comme optionnels (signalés à GSS, T1-GEN-7). */
+  const optionnels: string[] = [];
+  /** Postes saisonniers dont la période n'a pas pu être lue (T1F-2) : comptés sur l'année, question posée à GSS. */
+  const sansPeriode: string[] = [];
+  const saisonDuDce = joursDeLaSaison(dce);
+  const occupations = new Map<string, Array<{ periode: string; plages: PlageHoraire[]; simultanes: number }>>();
   for (const p of Array.isArray(rep?.postes) ? rep.postes : []) {
     // Intitulé en capitales (« AGENT DE SECURITE ») : écrit en minuscules, initiale en majuscule.
     // Nombre recopié dans l'intitulé (ca_normandie 241 : « 2 agents », « 1 agente », « 1 ADS », « 1 SSIAP 1 », « SSIAP1 ») :
@@ -223,7 +311,10 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     if (!profil || !citationDansDce(String(p?.citation || ''), dceMots)) continue;
     // Poste optionnel ou ponctuel (« l'option 1 : 1 SSIAP 1 7j/7 24h/24… », génération réelle imm 16 : trois options
     // comptées comme postes permanents, 36 titulaires au lieu de 18) : jamais dans l'équipe dédiée.
-    if (POSTE_OPTIONNEL.test(`${p?.citation || ''} ${brut}`)) continue;
+    if (posteOptionnel(String(p?.citation || ''), brut)) {
+      optionnels.push(String(p?.citation || '').replace(/\s+/g, ' ').trim());
+      continue;
+    }
     // Rondes ponctuelles (« 3 rondes, entre 21h30 et 06h30 ») : jamais des heures de poste (T9N-1) ; posées à GSS.
     // (un volume horaire du DQE pour ce poste reste, lui, un volume de poste)
     if (citationDeRondes(String(p?.citation || '')) && !nombre(p?.heures_hebdo) && !nombre(p?.heures_an)) {
@@ -231,8 +322,23 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
       continue;
     }
     const plages: PlageHoraire[] = (Array.isArray(p?.plages) ? p.plages : [])
-      .map((x: any) => ({ jours: joursDe(x?.jours), debut: String(x?.debut || ''), fin: String(x?.fin || '') }))
+      .map((x: any) => ({ jours: joursDe(x?.jours), debut: String(x?.debut || ''), fin: String(x?.fin || ''), periode: String(x?.periode || p?.periode || '') }))
       .filter((x: PlageHoraire) => x.jours.length && dureePlage(x.debut, x.fin) > 0);
+    // Période de l'année de chaque plage (T1F-2 : Fontainebleau, un poste par saison ; Le Havre lot 1, service de la seule
+    // saison estivale) : celle relevée par le modèle si elle est écrite dans le DCE, sinon celle de la citation, sinon la
+    // saison décrite ailleurs dans le DCE pour un poste saisonnier ; jamais deux périodes additionnées comme si elles se
+    // cumulaient. Lisible nulle part pour un poste qui semble saisonnier : compté sur l'année et question posée à GSS.
+    const citation = String(p?.citation || '');
+    const motsDe = (x: string) => normaliser(x).replace(/[^a-z0-9]+/g, ' ').trim();
+    const periodeDce = (x: string) => motsDe(x).length >= 6 && dceMots.includes(` ${motsDe(x)} `);
+    let periodeIllisible = false;
+    for (const x of plages) {
+      const jours = (periodeDce(x.periode || '') ? joursDePeriode(x.periode || '') : null) ?? joursDePeriode(citation)
+        ?? (/(?<![\p{L}])(?:saisons?|saisonni\p{L}*|estivale?s?|hivernale?s?)(?![\p{L}])/iu.test(citation) ? saisonDuDce : null);
+      if (jours) x.joursAn = jours;
+      else if (SAISONNIER.test(`${citation} ${x.periode || ''}`)) periodeIllisible = true;
+    }
+    if (periodeIllisible) sansPeriode.push(citation.replace(/\s+/g, ' ').trim());
     // Volume du DQE (« TOTAL HEBDOMADAIRE | 84 ») : prioritaire sur les plages (un bordereau liste toutes les plages
     // facturables, le DQE les heures réellement estimées), pris seulement si ce nombre figure dans le DCE.
     const hh = nombre(p?.heures_hebdo);
@@ -240,11 +346,14 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     // Agents présents en même temps (« 2 agents de sécurité (ADS) sur une heure ») : les plages sont celles du poste,
     // les heures à couvrir sont multipliées par ce nombre ; le volume du DQE est déjà le total du poste.
     const simultanes = agentsSimultanes(p?.agents_simultanes, String(p?.citation || ''));
-    let hs = hebdoDuDce ? hh : plages.length ? Math.round(heuresSemaine(plages) * simultanes * 100) / 100 : 0;
+    // Heures de l'année : chaque plage sur les jours réellement couverts par sa période (52 semaines sans période) ; les
+    // heures par semaine affichées sont la moyenne sur l'année.
+    const heuresPlagesAn = plages.reduce((a, x) => a + dureePlage(x.debut, x.fin) * joursDe(x.jours).length * ((x.joursAn ?? 364) / 7), 0) * simultanes;
+    let hs = hebdoDuDce ? hh : plages.length ? Math.round((heuresPlagesAn / 52) * 100) / 100 : 0;
     if (!hs || hs > 24 * 7 * 6) continue;
     const ha = nombre(p?.heures_an);
     const anDuDce = !!ha && new RegExp(`(?<![\\d,.])${ha}(?![\\d,.])`).test(dce.replace(/(\d)[\s  ](?=\d{3}\b)/g, '$1'));
-    const heuresAn = anDuDce ? ha : Math.round(hs * 52);
+    const heuresAn = anDuDce ? ha : hebdoDuDce || !plages.length ? Math.round(hs * 52) : Math.round(heuresPlagesAn);
     // Volume annuel du DCE : les heures par semaine affichées en découlent (ifits 171 : « 84 h par semaine » tirées des
     // plages alors que le DCE prévoit 1 751 h par an, environ 34 h par semaine) ; jamais deux chiffres contradictoires.
     // Le volume hebdomadaire du DQE (saison de 47 semaines, Citédia) reste celui du DCE.
@@ -261,14 +370,27 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     if (categorieDe(profil) === 'Agent cynophile' && !/cqp|aps|cynophil|carte|ssiap|dipl|certific/i.test(normaliser(qualification))) qualification = 'CQP APS – qualification cynophile';
     const equivalentAds = profilAgentSecurite(profil, qualification);
     if (equivalentAds) qualification = equivalentAds;
-    const cle = equivalentAds ? 'agent de securite|ads' : normaliser(`${profil}|${qualification}`);
+    // Postes d'agent de sécurité distincts (T1F-3 : « contrôle d'accès et Vigipirate », « accueil … circuit de visite »,
+    // « cours et jardins ») : jamais fusionnés ; « ADS » et « Agent de sécurité » au même lieu restent un seul poste.
+    const posteDistinct = normaliser(profil).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length > 2 && !/^(?:agents?|securite|ads|surveillance|surete|des|les|aux|pour)$/.test(w)).join(' ');
+    const cle = equivalentAds ? `agent de securite|ads|${posteDistinct}` : normaliser(`${profil}|${qualification}`);
     const x = profils.get(cle) || { profil, qualification, lieux: [], heuresSemaine: 0, heuresAn: 0, etp: 0, titulaires: 0 };
     if (hebdoDuDce) dqeParProfil.set(cle, (dqeParProfil.get(cle) ?? true) && true); else dqeParProfil.set(cle, false);
     x.heuresSemaine = Math.round((x.heuresSemaine + hs) * 100) / 100;
     x.heuresAn += heuresAn;
     const lieu = String(p?.lieu || '').trim();
     if (lieu && !x.lieux.includes(lieu)) x.lieux.push(lieu);
-    if (simultanes > 1) x.simultanes = Math.max(x.simultanes || 1, simultanes);
+    // Agents présents en même temps (T1F-3) : sur une même période, les plages qui se chevauchent s'additionnent
+    // (Fontainebleau, circuit de visite : « deux agents de 9h20 à 17h40 » et « deux agents de 9h20 à 18h10 » = 4 agents à
+    // l'instant T) ; d'une période à l'autre, le plus grand nombre.
+    // Même lieu seulement : deux sites ne forment jamais un poste à plusieurs agents.
+    const periodeCle = `${plages[0]?.joursAn ?? 'an'}|${normaliser(String(p?.lieu || ''))}`;
+    const deja = occupations.get(cle) || [];
+    const chevauche = (a: PlageHoraire, b: PlageHoraire) => a.jours.some((j) => b.jours.includes(j)) && Math.max(heureDe(a.debut), heureDe(b.debut)) < Math.min(heureDe(a.fin) <= heureDe(a.debut) ? heureDe(a.fin) + 24 : heureDe(a.fin), heureDe(b.fin) <= heureDe(b.debut) ? heureDe(b.fin) + 24 : heureDe(b.fin));
+    const ensemble = simultanes + deja.filter((o) => o.periode === periodeCle && o.plages.some((a) => plages.some((b) => chevauche(a, b)))).reduce((a, o) => a + o.simultanes, 0);
+    deja.push({ periode: periodeCle, plages, simultanes });
+    occupations.set(cle, deja);
+    if (ensemble > 1) x.simultanes = Math.max(x.simultanes || 1, ensemble);
     profils.set(cle, x);
   }
   // Total du DQE (« TOTAL HEBDOMADAIRE | 84 », « ESTIMATION ANNUELLE (… 47 semaines) | 3948 ») : la somme des postes retenus
@@ -354,6 +476,9 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     const t = [...profils.values()].reduce((s2, x) => s2 + x.titulaires, 0);
     return { profils: [...profils.values()], titulaires: t, suppleants: t ? Math.max(2, Math.ceil(t * PART_SUPPLEANTS)) : 0, casPratique, ...(misesEnSituation.length ? { misesEnSituation } : {}) };
   }
+  // Postes optionnels écartés et postes saisonniers sans période lisible : signalés à GSS, jamais en silence.
+  if (optionnels.length) alertes.push(`${optionnels.length > 1 ? `${optionnels.length} postes ont été écartés` : 'un poste a été écarté'} de l'équipe dédiée comme optionnels ou ponctuels (${optionnels.slice(0, 3).map((c) => `« ${c.slice(0, 120)} »`).join(', ')}) : ${optionnels.length > 1 ? 'sont-ils' : 'est-il'} bien hors de l'équipe permanente ?`);
+  if (sansPeriode.length) alertes.push(`la période de l'année de ${sansPeriode.length > 1 ? 'ces postes saisonniers' : 'ce poste saisonnier'} n'a pas pu être lue (${sansPeriode.slice(0, 3).map((c) => `« ${c.slice(0, 120)} »`).join(', ')}) : ${sansPeriode.length > 1 ? 'ils sont comptés' : 'il est compté'} sur toute l'année ; sur combien de semaines par an faut-il ${sansPeriode.length > 1 ? 'les' : 'le'} compter ?`);
   // Rondes ponctuelles écartées : posées à GSS (durée d'une ronde, nombre d'intervenants), jamais converties en heures.
   if (rondes.length) {
     const q = questionRondes({ profils: [], titulaires: 0, suppleants: 0, casPratique: [], rondesSansDuree: rondes });
@@ -476,23 +601,34 @@ export function categorieDe(profil: string): string {
   return profil;
 }
 
-/** Lignes du tableau « L'équipe dédiée » (catégorie, qualification, nombre, observations). */
-export function lignesEquipe(d: Dimensionnement): string {
-  // Une ligne par catégorie et qualification (génération réelle imm 16 : « Agent de sécurité | SSIAP 1, SST, carte CNAPS »
-  // deux fois, pour les postes N2 et N3) : effectifs, heures et ETP additionnés.
-  const lignes = new Map<string, ProfilDimensionne & { categorie: string }>();
+/**
+ * Lignes du tableau « L'équipe dédiée », une par catégorie et qualification (génération réelle imm 16 : « Agent de sécurité |
+ * SSIAP 1, SST, carte CNAPS » deux fois, pour les postes N2 et N3) : effectifs, heures et ETP additionnés. La même
+ * regroupement sert à la question posée à GSS et au premier message de l'assistant (T1F-3 : jamais un chiffre montré à GSS
+ * différent du tableau imprimé). Plusieurs postes distincts réunis dans une ligne : aucun « N agents en même temps sur le
+ * poste » (ce nombre vaut pour un poste, pas pour la ligne).
+ */
+export function lignesEquipeGroupees(d: Dimensionnement): Array<ProfilDimensionne & { categorie: string; postes: number }> {
+  const lignes = new Map<string, ProfilDimensionne & { categorie: string; postes: number }>();
   for (const x of d.profils) {
     const categorie = categorieDe(x.profil);
     const cle = x.observation ? `${normaliser(x.profil)}|obs` : `${normaliser(categorie)}|${normaliser(x.qualification)}`;
     const y = lignes.get(cle);
-    if (!y) { lignes.set(cle, { ...x, lieux: [...x.lieux], categorie }); continue; }
+    if (!y) { lignes.set(cle, { ...x, lieux: [...x.lieux], categorie, postes: 1 }); continue; }
+    y.postes += 1;
     y.titulaires += x.titulaires;
-    if (x.simultanes) y.simultanes = Math.max(y.simultanes || 1, x.simultanes);
+    y.simultanes = undefined;
     y.heuresSemaine = Math.round((y.heuresSemaine + x.heuresSemaine) * 100) / 100;
+    y.heuresAn += x.heuresAn;
     y.etp = Math.round((y.etp + x.etp) * 100) / 100;
     for (const l of x.lieux) if (!y.lieux.includes(l)) y.lieux.push(l);
   }
-  return [...lignes.values()].map((x) => `| ${x.categorie} | ${x.qualification} | ${x.titulaires} | ${x.observation || `${fr(x.heuresSemaine)} h par semaine${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}, soit ${fr(x.etp)} ETP${simultanesTexte(x)}`} |`).join('\n');
+  return [...lignes.values()];
+}
+
+/** Lignes du tableau « L'équipe dédiée » (catégorie, qualification, nombre, observations). */
+export function lignesEquipe(d: Dimensionnement): string {
+  return lignesEquipeGroupees(d).map((x) => `| ${x.categorie} | ${x.qualification} | ${x.titulaires} | ${x.observation || `${fr(x.heuresSemaine)} h par semaine${x.lieux.length ? ` (${x.lieux.join(', ')})` : ''}, soit ${fr(x.etp)} ETP${simultanesTexte(x)}`} |`).join('\n');
 }
 
 /**
@@ -602,7 +738,8 @@ export function questionCouvertureCasPratique(d: Dimensionnement | null | undefi
 export function questionDimensionnement(d: Dimensionnement): string {
   const parts: string[] = [];
   if (d.profils.length && !d.profils.some((x) => x.observation)) {
-    parts.push(`équipe dédiée de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} (${d.profils.map((x) => `${normaliser(categorieDe(x.profil)) === normaliser(x.profil) ? categorieDe(x.profil) : `${x.profil} (${categorieDe(x.profil).toLowerCase()})`} : ${pluriel(x.titulaires, 'titulaire')} pour ${fr(x.heuresSemaine)} h par semaine${simultanesTexte(x)}`).join(' ; ')}, base de 1 607 heures par an et par ETP) et équipe suppléante de ${pluriel(d.suppleants, 'agent formé', 'agents formés')} au site`);
+    // Lignes du tableau imprimé (T1F-3) : la question dit exactement ce que le mémoire imprime.
+    parts.push(`équipe dédiée de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} (${lignesEquipeGroupees(d).map((x, _i, t) => `${x.categorie}${t.filter((y) => y.categorie === x.categorie).length > 1 ? ` (${x.qualification})` : ''} : ${pluriel(x.titulaires, 'titulaire')} pour ${fr(x.heuresSemaine)} h par semaine${x.postes > 1 ? ` (${x.postes} postes)` : ''}${simultanesTexte(x)}`).join(' ; ')}, base de 1 607 heures par an et par ETP) et équipe suppléante de ${pluriel(d.suppleants, 'agent formé', 'agents formés')} au site`);
   }
   if (d.casPratique.length) parts.push(`dispositif du cas pratique (${syntheseCasPratique(d)} ; vacations de ${VACATION_MAX_H} heures au plus)${d.titulaires ? `, d'où une équipe de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} (${d.profils.map((x) => effectifProfil(x.titulaires, x.profil)).join(', ')}) et une équipe suppléante de ${pluriel(d.suppleants, 'agent', 'agents')}` : ''}`);
   return `Proposition à valider : dimensionnement calculé à partir des postes et des horaires du DCE — ${parts.join(' ; ')}. GSS valide ces effectifs ou les modifie dans l'assistant.${(d.alertes || []).length ? ` Attention : ${d.alertes!.join(' ; ')}` : ''}`;
@@ -726,7 +863,7 @@ export const CONSIGNE_DIMENSIONNEMENT = `Tu lis le DCE d'un marché de sécurit�
    - "qualification" : qualification exigée (ex. « SSIAP 2 », « CQP APS – SSIAP 1 ») ;
    - "lieu" : bâtiment ou site, si le DCE le précise ;
    - "agents_simultanes" : le nombre d'agents présents EN MÊME TEMPS sur ce poste, tel qu'il est écrit dans la citation (« le déploiement de 2 agents de sécurité (ADS) sur une heure » → 2 ; « 1 SSIAP 1 » → 1) ; 1 si le DCE ne le précise pas ;
-   - "plages" : chaque plage horaire hebdomadaire DU POSTE, {"jours": ["lundi", …], "debut": "07:00", "fin": "19:00"} (une plage de nuit finit le lendemain : "debut": "19:00", "fin": "07:00") ; ignore les jours fériés ; ne répète pas une plage pour chaque agent (leur nombre est dans "agents_simultanes") ;
+   - "plages" : chaque plage horaire hebdomadaire DU POSTE, {"jours": ["lundi", …], "debut": "07:00", "fin": "19:00", "periode": "…"} (une plage de nuit finit le lendemain : "debut": "19:00", "fin": "07:00") ; ignore les jours fériés ; ne répète pas une plage pour chaque agent (leur nombre est dans "agents_simultanes") ; "periode" : la période de l'année où la plage s'applique, recopiée mot pour mot du DCE (« Du 1er mai au 30 septembre », « Les mois d'octobre, mars et avril », « la saison démarre le dernier week-end de mars et s'achève le dernier week-end de septembre »), "" si la plage vaut toute l'année ; une plage par période, jamais deux périodes dans la même plage ;
    - "heures_hebdo" : le volume hebdomadaire total si le DCE (DQE, BPU) le donne en heures pour ce poste, sinon null ;
    - "heures_an" : le volume annuel en heures si le DCE le donne, sinon null ;
    - "citation" : la phrase ou la ligne du DCE d'où vient le poste, recopiée mot pour mot.
@@ -746,7 +883,8 @@ Réponds UNIQUEMENT par un objet JSON : {"postes": [...], "cas_pratique": {...} 
 /** Paragraphe du premier message de l'assistant : le dimensionnement proposé, à valider ou à modifier avant la remise. */
 export function messageDimensionnement(d: Dimensionnement, dce?: string): string {
   const l: string[] = ['J\'ai aussi proposé les effectifs, calculés à partir des postes et des horaires du cahier des charges (à relire avant la remise) :'];
-  for (const x of d.profils) l.push(x.observation ? `- ${x.profil} : ${pluriel(x.titulaires, 'titulaire')} (${x.observation}) ;` : `- ${x.profil} : ${fr(x.heuresSemaine)} h par semaine, soit ${fr(x.etp)} ETP → ${pluriel(x.titulaires, 'titulaire')}${simultanesTexte(x)} ;`);
+  // Lignes du tableau imprimé (T1F-3).
+  for (const x of lignesEquipeGroupees(d)) l.push(x.observation ? `- ${x.profil} : ${pluriel(x.titulaires, 'titulaire')} (${x.observation}) ;` : `- ${x.categorie} : ${fr(x.heuresSemaine)} h par semaine${x.postes > 1 ? ` sur ${x.postes} postes` : ''}, soit ${fr(x.etp)} ETP → ${pluriel(x.titulaires, 'titulaire')}${simultanesTexte(x)} ;`);
   if (d.profils.length) l.push(`- équipe dédiée de ${pluriel(d.titulaires, 'agent titulaire', 'agents titulaires')} et équipe suppléante de ${pluriel(d.suppleants, 'agent formé', 'agents formés')} au site ;`);
   for (const m of d.misesEnSituation || []) l.push(`- ${m.libelle.charAt(0).toLowerCase()}${m.libelle.slice(1)} : ${dispositifMiseEnSituation(m)} ;`);
   for (const p of [...new Set(d.casPratique.map((x) => x.plage))]) l.push(`- cas pratique, ${p} : ${d.casPratique.filter((x) => x.plage === p && x.enService > 0).map((x) => `${effectifProfil(x.enService, x.profil)} (rotation ${x.rotation})`).join(', ') || 'aucun agent'} ;`);

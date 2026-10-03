@@ -3090,6 +3090,11 @@ const NEGATION_MISSION = /(?<![\p{L}])aucun(?:e|s|es)?\s+(?:ronde|contr[ôo]le|s
 
 /** Vrai si l'extrait (position dans le texte) chevauche une phrase protégée. */
 function touchePhraseProtegee(t: string, pos: { debut: number; fin: number }, phrases?: string[]): boolean {
+  // Ligne de tableau (« | Agent de sécurité | CQP APS | 7 | … | ») : tableau calculé ou chiffré de GSS, jamais réécrit par
+  // l'adaptation (T1F-3 : « Adaptation b3_adequation : 2 modification(s) » avait réécrit le tableau de l'équipe dédiée).
+  const debutLigne = t.lastIndexOf('\n', Math.max(0, pos.debut - 1)) + 1;
+  const finLigne = t.indexOf('\n', pos.fin) < 0 ? t.length : t.indexOf('\n', pos.fin);
+  if (t.slice(debutLigne, finLigne).split('\n').some((l) => /^\s*\|/.test(l))) return true;
   for (const p of phrases || []) {
     let k = t.indexOf(p);
     while (k >= 0) {
@@ -3181,6 +3186,7 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     if (m.extrait) {
       const pos = positionsExtrait(t, m.extrait);
       if (pos.length !== 1) { refusees.push({ ...m, raison: pos.length ? 'point d\'insertion ambigu' : 'point d\'insertion introuvable mot pour mot' }); continue; }
+      if (touchePhraseProtegee(t, pos[0], [])) { refusees.push({ ...m, raison: 'point d\'insertion dans un tableau (jamais modifié par l\'adaptation)' }); continue; }
       const debutLigne = t.lastIndexOf('\n', pos[0].debut - 1) + 1;
       const finLigne = t.indexOf('\n', pos[0].fin) < 0 ? t.length : t.indexOf('\n', pos[0].fin);
       const LISTE = /^\s*(?:\d+[.)]|[-•*])\s+/;
@@ -3496,7 +3502,11 @@ export async function adapterRubrique(rubrique: RubriqueMemoireType, textePublip
     return sortie(reference, true, `appel au modèle impossible : ${e?.message || e}`);
   }
   if (!mods || typeof mods !== 'object') return sortie(reference, true, 'réponse du modèle illisible');
-  const opts: OptionsModifications = { ...options, dce: ctx.dce, reference, sujetAjouts: options.sujetAjouts ?? sujetDeRubrique(rubrique), sujetsDelais: options.sujetsDelais ?? sujetsDelaisDuGabarit(rubrique.texte || ''), phrasesProtegees: [...(options.phrasesProtegees || []), ...phrasesGeneralesProtegees(rubrique.texte || '', reference)] };
+  // Effectifs calculés (équipe dédiée, équipe suppléante) : jamais réécrits par l'adaptation (T1F-3) ; seul l'assistant les
+  // change, à la demande de GSS.
+  const effectifs = /\{\{\s*(?:LIGNES_EQUIPE_DEDIEE|EFFECTIF_AGENTS|NB_AGENTS_RENFORT)\s*\}\}/.test(rubrique.texte || '')
+    ? reference.split(/(?<=[.!?])\s+|\n+/).filter((ph) => /agents? titulaires?|[ée]quipe suppl[ée]ante de/i.test(ph) && /\d/.test(ph)) : [];
+  const opts: OptionsModifications = { ...options, dce: ctx.dce, reference, sujetAjouts: options.sujetAjouts ?? sujetDeRubrique(rubrique), sujetsDelais: options.sujetsDelais ?? sujetsDelaisDuGabarit(rubrique.texte || ''), phrasesProtegees: [...(options.phrasesProtegees || []), ...phrasesGeneralesProtegees(rubrique.texte || '', reference), ...effectifs] };
   const tout = appliquerModifications(reference, mods, opts);
   const niee = tout.refusees.find((m) => m.raison === RAISON_MISSION_NIEE);
   if (niee) return { ...sortie(reference, true, 'mission niée par le cahier des charges', [], tout.refusees), missionExclue: { extrait: niee.extrait, par: niee.par || '', motif: niee.motif } };
