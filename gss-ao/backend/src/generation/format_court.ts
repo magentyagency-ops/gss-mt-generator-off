@@ -48,7 +48,8 @@ export function limitePagesMemoire(passages: string[]): { pages: number; citatio
   const LIMITE = /maxim|limit|d[ée]pass|exc[èé]d|au plus|plafon/i;
   const AUTRE = /\bCV\b|curriculum|annexe|lettre|fiche|attestation|bordereau|DPGF|BPU/i;
   for (const passage of passages) {
-    const phrases = String(passage || '').replace(/\s+/g, ' ').split(/(?<=[.;])\s+(?=[A-ZÀ-Ý•-])/);
+    // Phrases et éléments de liste (« – un mémoire technique (douze (12) pages maximum) … ») : jamais un pied de page collé.
+    const phrases = String(passage || '').replace(/\s+/g, ' ').split(/(?<=[.;])\s+(?=[A-ZÀ-Ý•–—-])|\s+[–—•]\s+/);
     for (const ph of phrases) {
       if (!MEMOIRE.test(ph) || !LIMITE.test(ph)) continue;
       const m = /\(?\b(\d{1,3})\)?\s*(?:pages?|feuillets?|faces?)\b/i.exec(ph);
@@ -59,7 +60,7 @@ export function limitePagesMemoire(passages: string[]): { pages: number; citatio
       if (n < 2 || n > 40 || Math.abs(m.index - iMem) > 120) continue;
       const voisinage = ph.slice(Math.min(iMem, m.index), Math.max(iMem, m.index) + m[0].length + 20);
       if (AUTRE.test(voisinage)) continue;
-      return { pages: n, citation: ph.trim().slice(0, 300) };
+      return { pages: n, citation: ph.replace(/^\s*[–—•-]\s*/, '').trim().slice(0, 300) };
     }
   }
   return null;

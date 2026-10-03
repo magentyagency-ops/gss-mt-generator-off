@@ -11,6 +11,11 @@ Le dossier de l'offre comprendra :
 – les CV des intervenants (2 pages maximum par CV).`;
 
 describe('format imposé par le RC sans réponse du modèle (T7CS-1)', () => {
+  it('pied de page collé à la liste (extraction PDF réelle d’imm) : la citation commence à l’élément de liste', () => {
+    const l = limitePagesMemoire(["Règlement de la consultation – Marché privé n° 2026-01 Page 5 / 6 En cas de sous-traitance, chaque sous-traitant transmet les pièces ; – un mémoire technique (douze (12) pages maximum) structuré comme suit : organisation et moyens humains ; continuité de service."]);
+    expect(l).toMatchObject({ pages: 12 });
+    expect(l!.citation).toMatch(/^un mémoire technique \(douze \(12\) pages maximum\) structuré comme suit/);
+  });
   it('limite lue sans modèle dans la phrase du mémoire technique ; jamais celle des CV', () => {
     expect(limitePagesMemoire(passagesLimitePages(RC))).toMatchObject({ pages: 12 });
     expect(limitePagesMemoire(passagesLimitePages('Les CV des intervenants ne dépasseront pas 2 pages maximum chacun.'))).toBeNull();
@@ -42,6 +47,8 @@ describe('format imposé par le RC sans réponse du modèle (T7CS-1)', () => {
     expect(alerteRedactionIndisponible(['Format imposé par le RC', 'Format imposé par le RC (essai 2)'])).toMatch(/lecture du format imposé par le RC/);
   });
   it.skipIf(!aCorpus('imm'))('RC complet d’imm : 12 pages', () => {
-    expect(limitePagesMemoire(passagesLimitePages(DCE('imm')))?.pages).toBe(12);
+    const l = limitePagesMemoire(passagesLimitePages(DCE('imm')));
+    expect(l?.pages).toBe(12);
+    expect(l?.citation).toMatch(/^un mémoire technique \(douze \(12\) pages maximum\) structuré comme suit/);
   });
 });
