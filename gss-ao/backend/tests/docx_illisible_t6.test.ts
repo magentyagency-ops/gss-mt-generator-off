@@ -9,7 +9,9 @@ const F = path.join(__dirname, '../../_corpus_verif/rouen_univ/Annexe 3 CCTP - P
 describe('Annexe .docx illisible par le parseur XML (rouen_univ, pointeaux)', () => {
   it.skipIf(!fs.existsSync(F))('texte brut lu par mammoth : pointeaux site par site', async () => {
     expect(() => loadDocxText(F)).toThrow();
-    const t = await extractText(F);
+    const t = await extractText(F, { texteBrutSiIllisible: true });
+    // Sans l'option (base de connaissances, pièces jointes) : l'erreur remonte comme avant e29c554 (Z1-REG-1).
+    await expect(extractText(F)).rejects.toThrow();
     expect(t.length).toBeGreaterThan(500);
     expect(t).toMatch(/E1/);
   });

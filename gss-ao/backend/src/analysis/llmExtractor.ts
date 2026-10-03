@@ -255,7 +255,7 @@ export async function extractRcWithLLM(filePath: string): Promise<RCDocument> {
   const warnings: string[] = [];
   let text: string;
   try {
-    text = await extractText(filePath);
+    text = await extractText(filePath, { texteBrutSiIllisible: true });
   } catch (e: any) {
     // Pas de texte exploitable → on tente le parser legacy (gère .doc/.docx).
     return parseRc(filePath);
@@ -373,7 +373,7 @@ export async function extractCctpWithLLM(filePath: string): Promise<CCTPDocument
   const warnings: string[] = [];
   let text: string;
   try {
-    text = await extractText(filePath);
+    text = await extractText(filePath, { texteBrutSiIllisible: true });
   } catch (e: any) {
     return parseCctp(filePath);
   }

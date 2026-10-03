@@ -2945,7 +2945,7 @@ export class MemoireGenerator {
         let text = '';
         try {
           // Tableur (ex. DQE du cas pratique : créneaux horaires, profils attendus) : lu ligne par ligne.
-          text = ext === '.xlsx' ? lireTableur(fullPath) : await extractText(fullPath);
+          text = ext === '.xlsx' ? lireTableur(fullPath) : await extractText(fullPath, { texteBrutSiIllisible: true });
         } catch (e: any) {
           console.warn(`[MemoireGenerator] Impossible de lire: ${entry.name} — ${e.message}`);
           continue;
