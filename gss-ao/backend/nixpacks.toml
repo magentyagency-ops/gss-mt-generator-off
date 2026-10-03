@@ -20,5 +20,6 @@ aptPkgs = [
   "python3",
   "python3-pip",
   "python3-pil",
-  "poppler-utils"
+  "poppler-utils",
+  "libreoffice-writer-nogui"
 ]

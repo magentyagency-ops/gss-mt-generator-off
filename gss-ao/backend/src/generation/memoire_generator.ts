@@ -2765,7 +2765,11 @@ export class MemoireGenerator {
    * remplissage sait traiter. Sans conversion possible, le cadre est ignoré (génération sans cadre)
    * plutôt que de faire échouer toute la génération.
    */
+  /** Cadre .doc converti par textutil (tableaux aplatis) pour la génération en cours : signalé à GSS (T1-CONS-1). */
+  private cadreAplati: string | null = null;
+
   private cadreEnDocx(fichier: string): string | null {
+    this.cadreAplati = null;
     if (!/\.doc$/i.test(fichier)) return fichier;
     try {
       const sortie = convertDocToDocx(fichier, fs.mkdtempSync(path.join(os.tmpdir(), 'gss-cadre-')));
@@ -2791,6 +2795,7 @@ export class MemoireGenerator {
             if (xml) { zip.file('word/document.xml', xml.replace(/<w:color w:val="(?:FFFFFF|ffffff)"\/>/g, '')); fs.writeFileSync(sortie, zip.generate({ type: 'nodebuffer' })); }
           } catch { /* conversion gardée telle quelle */ }
           console.log(`[MemoireGenerator] Cadre imposé .doc converti en .docx (textutil) : ${path.basename(fichier)}.`);
+          this.cadreAplati = path.basename(fichier);
           return sortie;
         }
       }
@@ -4854,10 +4859,15 @@ Renvoie un JSON valide :
         .filter((i, k, tous) => !(k > 0 && cleCritere(textes[i]) && cleCritere(textes[i]) === cleCritere(textes[tous[k - 1]])));
       // Titre de section en capitales hors tableau (« MOYENS TECHNIQUES », « MOYENS HUMAINS ») : fin de la rubrique qui le
       // précède (havre1 : la réponse « 3.4 » était écrite sous le titre « MOYENS TECHNIQUES », avant « 4.1 »).
+      // Jamais un intitulé du cadre lui-même (« DESCRIPTION DES ATTENTES DE L'ACHETEUR », « PROPOSITION DU SOUMISSIONNAIRE »,
+      // « ÉLÉMENTS DE RÉPONSE ») : quand le cadre a perdu ses tableaux (conversion textutil, T1-CONS-1), ces bandeaux sont
+      // des paragraphes en capitales hors tableau, et la rubrique notée se réduisait à son titre.
+      const INTITULE_CADRE = /^(?:description\s+des\s+attentes|attentes\s+de\s+l.acheteur|[ée]l[ée]ments?\s+(?:de\s+r[ée]ponse|attendus)|crit[eè]res?\s+d.[ée]valuation|bar[eè]me)/i;
       const titreSection = (i: number) => {
         const t = textes[i];
         return !!t && t.length <= 80 && /[A-ZÀ-Ý]{3}/.test(t) && !/[a-zà-ÿ]/.test(t.replace(/\[CHAMP_\d+\]/g, '')) && !/\[CHAMP_/.test(t)
-          && !getParentWithLocalName(paras[i], 'tc') && t.replace(/[^A-Za-zÀ-ÿ]/g, '').length >= 6;
+          && !getParentWithLocalName(paras[i], 'tc') && t.replace(/[^A-Za-zÀ-ÿ]/g, '').length >= 6
+          && !EMPLACEMENT.test(t) && !INTITULE_CADRE.test(t);
       };
       const BAREME = /\(\s*(?:not[ée]e?\s+sur\s+)?\d+\s*points?\s*\)|\bsur\s+\d+\s*points?\b|[-–—:]\s*\d+\s*points?\s*$/i;
       // « 1. » puis « 1.1 » (ou « Critère 1 » puis « Sous-critère 1 ») : la seconde est une sous-rubrique de la première.
@@ -4869,7 +4879,15 @@ Renvoie un JSON valide :
       for (let k = 0; k < debuts.length; k++) {
         const deb = debuts[k];
         let fin = k + 1 < debuts.length ? debuts[k + 1] : paras.length;
-        for (let i = deb + 1; i < fin; i++) if (titreSection(i)) { fin = i; break; }
+        // Un titre en capitales ne termine la rubrique que si son emplacement de réponse (« PROPOSITION DU SOUMISSIONNAIRE »)
+        // n'est pas encore passé (T1-CONS-1).
+        const finRubrique = fin;
+        for (let i = deb + 1; i < fin; i++) {
+          if (!titreSection(i)) continue;
+          if (textes.slice(i + 1, finRubrique).some((t) => EMPLACEMENT.test(t)) && !textes.slice(deb, i).some((t) => EMPLACEMENT.test(t))) continue;
+          fin = i;
+          break;
+        }
         const zone = textes.slice(deb, fin);
         if (zone.some((t) => /\[CHAMP_\d+\]/.test(t) && developpe(t))) continue;
         const contenu = zone.slice(1).filter((t) => t && !FORME_RUBRIQUE.test(t));
@@ -4897,8 +4915,12 @@ Renvoie un JSON valide :
           if (!aSousRubriques && !zone.some((t) => /\[CHAMP_/.test(t)) && (BAREME.test(textes[deb]) || /^\d+(?:\.\d+)*\s*[-–—.)]\s*\S/.test(textes[deb]))) rubriquesSansZone.push(textes[deb].replace(/\s+/g, ' ').trim().slice(0, 160));
           continue;  // simple titre de chapitre (ses sous-rubriques suivent)
         }
-        // Rubrique qui ne contient que des titres de sous-rubriques numérotées : rien à écrire à ce niveau.
-        if (emplacement < 0 && (aSousRubriques || (fin < paras.length && !contenu.length && !titreSeul))) continue;
+        // Rubrique qui ne contient que des titres de sous-rubriques numérotées : rien à écrire à ce niveau. Une rubrique notée ou
+        // numérotée sans sous-rubrique ni zone n'est jamais abandonnée en silence (T1-CONS-1, T10-COH-2) : signalée à GSS.
+        if (emplacement < 0 && (aSousRubriques || (fin < paras.length && !contenu.length && !titreSeul))) {
+          if (!aSousRubriques && !zone.some((t) => /\[CHAMP_/.test(t)) && (BAREME.test(textes[deb]) || /^\d+(?:\.\d+)*\s*[-–—.)]\s*\S/.test(textes[deb]))) rubriquesSansZone.push(textes[deb].replace(/\s+/g, ' ').trim().slice(0, 160));
+          continue;
+        }
         const question = zone.slice(0, emplacement >= 0 ? emplacement : zone.length).filter((t) => t && !/\[CHAMP_/.test(t)).join(' ; ').replace(/"/g, "'").slice(0, 1800);
         if (!question) continue;
         // Emplacement de la réponse : juste après « PROPOSITION DU SOUMISSIONNAIRE », sinon après le
@@ -4935,8 +4957,13 @@ Renvoie un JSON valide :
     if (!descriptors.some((d) => d.grille || (d.kind === 'answer' && (d.lineCount || 1) >= 3))) {
       throw new Error(`Cadre de réponse « ${path.basename(templatePath)} » : aucune zone de réponse aux questions techniques n'a été trouvée${rubriquesSansZone.length ? ` (rubriques sans zone : ${rubriquesSansZone.map((x) => `« ${x} »`).join(', ')})` : ''}. Aucun document n'est remis : vérifiez que ce fichier est bien le cadre du mémoire technique, puis relancez la génération.`);
     }
-    const alertesRubriquesCadre = rubriquesSansZone.map((x) => `La rubrique « ${x} » du cadre de réponse n'a reçu aucune réponse (aucune zone de réponse reconnue sous ce titre) : à rédiger directement dans le document avant la remise.`);
-    if (alertesRubriquesCadre.length) console.warn(`[MemoireGenerator] ${alertesRubriquesCadre.length} rubrique(s) du cadre sans zone de réponse : ${rubriquesSansZone.join(' ; ')}.`);
+    const alertesRubriquesCadre = [
+      // Cadre .doc converti sans ses tableaux (textutil, faute de LibreOffice et de Word, T1-CONS-1) : signalé en tête.
+      ...(this.cadreAplati ? [`Le cadre de réponse « ${this.cadreAplati} » (Word 97-2003) n'a pu être converti qu'en aplatissant ses tableaux (LibreOffice et Microsoft Word indisponibles) : vérifiez chaque zone de réponse et la mise en forme du document avant la remise.`] : []),
+      ...rubriquesSansZone.map((x) => `La rubrique « ${x} » du cadre de réponse n'a reçu aucune réponse (aucune zone de réponse reconnue sous ce titre) : à rédiger directement dans le document avant la remise.`),
+    ];
+    if (rubriquesSansZone.length) console.warn(`[MemoireGenerator] ${rubriquesSansZone.length} rubrique(s) du cadre sans zone de réponse : ${rubriquesSansZone.join(' ; ')}.`);
+    if (this.cadreAplati) console.warn(`[MemoireGenerator] Cadre ${this.cadreAplati} converti sans ses tableaux (textutil) : signalé à GSS.`);
     // Construit le libellé de prompt de chaque champ (hint de format + contexte)
     const buildPrompt = (f: FieldDesc): string => {
       // Les mots-codes de champs de formulaire Word ne doivent pas polluer l'inférence ni le prompt
