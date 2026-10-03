@@ -5223,6 +5223,20 @@ INTERDITS : recopier la valeur d'une AUTRE colonne/site ; inventer une donnée f
         if (/^(?:n° de )?(?:telephone|tel)\b/.test(nq) && !/agent|site|astreinte|permanence/.test(nq) && valeurRegistre('telephone_contact')) { replacements.push({ id: f.id, value: valeurRegistre('telephone_contact') }); return; }
         if (/^(?:courriel|e-?mail|mail|adresse electronique)\b/.test(nq) && valeurRegistre('email_contact')) { replacements.push({ id: f.id, value: valeurRegistre('email_contact') }); return; }
         if (/^adresse\s*:?$/.test(nq.trim()) && GSS_IDENTITE.adresse) { replacements.push({ id: f.id, value: GSS_IDENTITE.adresse }); return; }
+        // « NOM : » seul dans la présentation du prestataire ou du candidat (etampes1, T8N-4) : la raison sociale du registre,
+        // comme l'adresse ; jamais le nom d'un contact (« Contact pour la facturation : Nom : », personne à indiquer).
+        if (/^nom\s*:?$/.test(nq.trim()) && GSS_IDENTITE.denomination) {
+          const section = normCtx((f.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '');
+          const voisinage = normCtx((f.context.match(/Contexte:\s*"([^"]*)"/) || [])[1] || '');
+          // Présentation reconnue par sa section, ou par les champs voisins de l'identité de l'entreprise (« ADRESSE : »,
+          // « SIRET : », etampes1 et etampes2 où la section lue est la ligne « NOM : … » elle-même).
+          const k = descriptors.findIndex((x) => x.id === f.id);
+          const identiteVoisine = descriptors.slice(Math.max(0, k - 3), k + 4).filter((x) => x.id !== f.id)
+            .some((x) => /^(?:adresse|siret|siren|raison sociale|forme juridique|code (?:naf|ape)|n° (?:siret|tva))\b/.test(normCtx((x.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').trim()));
+          if ((/prestataire|candidat|soumissionnaire|entreprise|societe|titulaire|attributaire/.test(section) || identiteVoisine) && !/contact|interlocuteur|responsable|referent|correspondant|signataire|representant|dirigeant|gerant/.test(`${section} ${voisinage}`)) {
+            replacements.push({ id: f.id, value: GSS_IDENTITE.denomination }); return;
+          }
+        }
       }
       // IDENTITÉ CANDIDAT connue → valeur DÉTERMINISTE : dénomination, N° CNAPS, date d'autorisation
       // sont des données stables de GSS (cf. GSS_IDENTITE) ; on les place sans appel IA ni risque
