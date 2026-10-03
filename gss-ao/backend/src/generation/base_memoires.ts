@@ -947,16 +947,21 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
   const proteger = (t: string) => t.replace(/\b((?:[A-Z]\.){2,})/g, (m) => m.replace(/\./g, '\u0002'));
   const retablir = (t: string) => t.replace(/\u0002/g, '.');
   const lignesSource = proteger(texte).split('\n');
-  // Ligne de tableau (dimensionnement : « | Intervenant rondier | … | 96 h par semaine | ») : un volume horaire, jamais un
-  // délai ; une ligne retirée couperait en plus le tableau (cstb 551, T6N-1).
-  const lignes = lignesSource.map((ligne) => (/^\s*\|/.test(ligne) ? [ligne] : ligne.split(/(?<=[.!?;])\s+/)).map((ph) => {
-    if (/^\s*\|/.test(ph)) return ph;
+  // Ligne de tableau : jugée en entier, sans découpe en phrases (un point dans une cellule ne la coupe pas), et retirée en
+  // entier quand elle promet un délai normand (« | Intervention sur alarme | 30 minutes | », REG7-1, comme en 697d1ab) ;
+  // un volume horaire (« | Intervenant rondier | … | 96 h par semaine | », T6N-1) ou une plage horaire (« Nuit, 21 h–6 h »)
+  // n'est jamais un délai : la ligne reste.
+  const estLigneTableau = (l: string) => /^\s*\|/.test(l);
+  const lignes = lignesSource.map((ligne) => (estLigneTableau(ligne) ? [ligne] : ligne.split(/(?<=[.!?;])\s+/)).map((ph) => {
+    const tableau = estLigneTableau(ph);
     if (!PRESENCE.test(ph) || /⟦AC:|\[CONSULTATION REQUISE/.test(ph)) return ph;
     const hors: string[] = [];
     const seuilsPhrase: Array<{ duree: string; objet: string }> = [];
     for (const m of ph.matchAll(DUREE)) {
       const apres = ph.slice((m.index || 0) + m[0].length, (m.index || 0) + m[0].length + 12);
       if (/^\s*avant\b/i.test(apres)) continue;               // « prise de service 15 minutes avant »
+      // Plage horaire d'une ligne de tableau (« Dimanche férié, 6 h–21 h ») : une heure de la journée, pas un délai.
+      if (tableau && /^h/i.test(m[2]) && (/^\s*(?:[–-]|à)\s*\d/.test(apres) || /\d\s*h(?:\s*\d{2})?\s*(?:[–-]|à)\s*$/i.test(ph.slice(Math.max(0, (m.index || 0) - 12), m.index || 0)))) continue;
       // Volume horaire (« 96 h par semaine », « 40 h/mois », « 1 607 h par an ») : pas un délai (T6N-1).
       if (/^\s*(?:par|\/)\s*(?:semaine|mois|an|ann[ée]e|jour|nuit)\b|^\s*(?:hebdomadaires?|mensuel(?:le)?s?|annuel(?:le)?s?)\b/i.test(apres)) continue;
       const r = dansDce(m[1], m[2]);
@@ -965,6 +970,11 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
       if (r.statut === 'seuil') seuilsPhrase.push({ duree: m[0].replace(/\s+/g, ' '), objet: r.objet || 'intervention' });
     }
     if (!hors.length) return ph;
+    if (tableau) {
+      // Ligne entière retirée ; la question part vers GSS avec le contenu des cellules (« Intervention sur alarme — 30 minutes »).
+      retires.push(retablir(ph).split('|').map((c) => c.replace(/[*#]/g, '').trim()).filter(Boolean).join(' — '));
+      return '';
+    }
     retires.push(retablir(ph).replace(/[*#]/g, '').trim());
     if (seuilsPhrase.length === hors.length) {
       const premier = !seuils.length;
@@ -988,7 +998,25 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
     }
     return out.join(' ');
   });
-  let sortie = retablir(lignes.filter((l, k, t) => !(l.trim() === '' && /^\s*[-*•]\s*$/.test(l))).join('\n').replace(/^\s*[-*•]\s*$/gm, '').replace(/\n{3,}/g, '\n\n'));
+  // Lignes de tableau retirées : supprimées sans laisser de ligne vide dans le tableau ; un tableau dont toutes les lignes de
+  // données sont retirées disparaît avec son en-tête.
+  const gardees: Array<{ l: string; src: number }> = [];
+  for (let i = 0; i < lignes.length; i++) {
+    if (estLigneTableau(lignesSource[i]) && lignes[i] === '') continue;
+    gardees.push({ l: lignes[i], src: i });
+  }
+  for (let i = 0; i < gardees.length; i++) {
+    if (!estLigneTableau(gardees[i].l) || (i > 0 && estLigneTableau(gardees[i - 1].l))) continue;
+    let j = i;
+    while (j < gardees.length && estLigneTableau(gardees[j].l)) j++;
+    // En-tête et séparateur seuls, alors qu'une ligne de données les suivait dans le texte d'origine : tableau retiré.
+    const sep = gardees[i + 1];
+    if (j - i === 2 && /^\s*\|[\s:|-]+\|\s*$/.test(sep.l) && /-{2,}/.test(sep.l) && estLigneTableau(lignesSource[sep.src + 1] || '')) {
+      gardees.splice(i, 2); i--;
+    }
+  }
+  const lignesGardees = gardees.map((x) => x.l);
+  let sortie = retablir(lignesGardees.filter((l) => !(l.trim() === '' && /^\s*[-*•]\s*$/.test(l))).join('\n').replace(/^\s*[-*•]\s*$/gm, '').replace(/\n{3,}/g, '\n\n'));
   if (seuils.length) {
     // Préposition élidée devant une voyelle (« délais d'intervention », « d'arrivée »).
     const de = (x: string) => (/^[aeiouyéèêàâîïôûh]/i.test(x) ? `d’${x}` : `de ${x}`);
