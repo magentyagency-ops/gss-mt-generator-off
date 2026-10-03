@@ -1334,6 +1334,21 @@ export function questionAjoutRefuse(phraseIA: string, extrait: string): string {
   return `Phrase proposée par l'IA d'après le cahier des charges : « ${phraseLisible(phraseIA, 420).replace(/[.\s]+$/, '')} ». Le mémoire indique la pratique de GSS : « ${phraseLisible(extrait.replace(/[*_#]/g, ''), 420)} ». Pouvez-vous vous engager sur cette phrase, ou quelle valeur faut-il écrire ?`;
 }
 
+/**
+ * Rubriques du plan (et propositions de l'IA) dont la page de schéma est prévue mais absente du document rendu (T6-COH-4,
+ * T6N-6) : schéma prévu par le mémoire type, rubrique « besoin » (schéma de process, consigne 3) ou proposition ; la
+ * compréhension du besoin en tête. Une rubrique sans schéma prévu (introduction des références) n'est pas comptée.
+ */
+export function rubriquesSansSchema(plan: PlanMemoireType, ajouts: Array<{ id: string; title: string }>, textes: Record<string, string>, schemas: Map<string, string>): Array<{ id: string; titre: string; besoin: boolean }> {
+  const out: Array<{ id: string; titre: string; besoin: boolean }> = [];
+  for (const r of plan.rubriques) {
+    if (!(textes[r.id] || '').trim() || schemas.has(CLE_SCHEMA(r.id))) continue;
+    if (r.mode === 'besoin' || r.schema) out.push({ id: r.id, titre: r.titre, besoin: r.mode === 'besoin' });
+  }
+  for (const a of ajouts) if ((textes[a.id] || '').trim() && !schemas.has(CLE_SCHEMA(a.id))) out.push({ id: a.id, titre: a.title, besoin: false });
+  return out.sort((a, b) => Number(b.besoin) - Number(a.besoin));
+}
+
 /** Ligne de consultation déjà formulée sans modèle (jamais envoyée à la fusion par le modèle, jamais reformulée). */
 export const LIGNE_DETERMINISTE = /^(?:Proposition à valider|Proposition de réponse à valider|Réponse à relire|Réponse «|Réponse du cadre\s*:|Phrases adaptées au cahier des charges|Partie «|Rubrique «|Rédaction automatique indisponible|Phrase proposée par l'IA d'après le cahier des charges|Phrase ajoutée au texte de GSS)/;
 
@@ -8010,6 +8025,15 @@ RÈGLES DE FORME (rendu Marp) :
     await this.schemasMemoireType(plan, mt, publiees, propres, schemasGeneres, titresSchemas, theme);
     progres(90, 'Assemblage final du mémoire…');
     const rendu = await this.rendreDepuisSections(propres, dossierId, { onProgress, cover, schemas: schemasGeneres, ajouts, theme, plan, titresSchemas });
+    // Page de schéma prévue et absente du document rendu (moteur de schémas indisponible ou hors délai, schéma refusé :
+    // T6-COH-4, T6N-6) : signalée à GSS, compréhension du besoin en tête (consigne 3, D4). Rien n'est imprimé dans le mémoire.
+    const alertesSchemas = rubriquesSansSchema(plan, ajouts, propres, rendu.schemas).map((r) => `Rubrique « ${r.titre} » : le schéma${r.besoin ? ' de process' : ''} n'a pas pu être dessiné (moteur de schémas indisponible ou schéma refusé) ; la page de schéma manque dans le mémoire. Relancez la génération, ou demandez le schéma via l'assistant, avant la remise.`);
+    if (alertesSchemas.length) {
+      console.warn(`[MemoireGenerator] ${alertesSchemas.length} rubrique(s) sans page de schéma dans le document rendu.`);
+      // L'avis « schéma construit au rendu d'après le texte » du bloc 1 est faux si le rendu n'a rien construit : remplacé.
+      if (b1 && !rendu.schemas.has(CLE_SCHEMA(b1.id))) for (let i = consultationList.length - 1; i >= 0; i--) if (consultationList[i].startsWith(`Rubrique « ${b1.titre} » : le schéma de process n'a pas pu être construit`)) consultationList.splice(i, 1);
+      consultationList.unshift(...alertesSchemas);
+    }
 
     // ── 12. État v2 (assistant, complétion) ; premier message de l'assistant : les propositions à valider ──
     const etat: EtatCompletion = {
@@ -8031,6 +8055,12 @@ RÈGLES DE FORME (rendu Marp) :
     if (alertePanne) {
       if (etat.conversation?.length) etat.conversation[0].texte = `${alertePanne}\n\n${etat.conversation[0].texte}`;
       else etat.conversation = [{ role: 'assistant', texte: alertePanne, date: new Date().toISOString() }];
+    }
+    // Pages de schéma manquantes (T6-COH-4, T6N-6) : en tête du premier message de l'assistant.
+    if (alertesSchemas.length) {
+      const texteSchemas = `Schémas manquants dans le mémoire (${alertesSchemas.length}) :\n${alertesSchemas.map((x) => `- ${x}`).join('\n')}`;
+      if (etat.conversation?.length) etat.conversation[0].texte = `${texteSchemas}\n\n${etat.conversation[0].texte}`;
+      else etat.conversation = [{ role: 'assistant', texte: texteSchemas, date: new Date().toISOString() }];
     }
     // Engagements rédigés par l'IA (exigences du CCTP), y compris les phrases ajoutées par l'adaptation : annoncés dans le
     // premier message, à valider ou modifier (D5, T5N-5).
@@ -8338,7 +8368,7 @@ RÈGLES DE FORME (rendu Marp) :
         continue;
       }
       const alt = mt.rubriques.find((x) => x.id === r.id)?.schema?.alternative;
-      console.warn(`[MemoireGenerator] Schéma de ${r.id} refusé par le moteur (${(d?.erreurs || ['moteur indisponible']).slice(0, 2).join(' | ')})${alt?.ref ? ` : schéma ${alt.ref} de la bibliothèque` : ' : construit au rendu d\'après le texte'}.`);
+      console.warn(`[MemoireGenerator] Schéma de ${r.id} refusé par le moteur (${(d?.erreurs || ['moteur indisponible']).slice(0, 2).join(' | ')})${alt?.ref ? ` : schéma ${alt.ref} de la bibliothèque` : ' : construction d\'après le texte tentée au rendu'}.`);
       if (alt?.source === 'bibliotheque' && alt.ref) remplacements.push({ id: r.id, ref: alt.ref });
     }
     // Bibliothèque GSS (et schémas de remplacement) redessinée au thème, format page.

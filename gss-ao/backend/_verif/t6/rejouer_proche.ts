@@ -116,7 +116,8 @@ DB.saveDossier = async () => null;
 DB.getDossier = async () => ({ id, dce_files: [] });
 tempStorage.uploadTempDocx = async () => null;
 MemoireGenerator.prototype.materializeDceFromStorage = async () => null;
-if (process.env.GEN_RENDU !== '1') MemoireGenerator.prototype.rendreDepuisSections = async () => ({ filePath: '', schemas: new Map(), cover: {} });
+// Sans rendu : chaque section est réputée avoir sa page de schéma (pas d'alerte « schéma manquant » propre au rejeu).
+if (process.env.GEN_RENDU !== '1') MemoireGenerator.prototype.rendreDepuisSections = async (sections: Record<string, string>) => ({ filePath: '', schemas: new Map(Object.keys(sections || {}).map((id) => [`${id}#schema`, '<svg/>'])), cover: {} });
 const texteDocx = (f: string) => {
   const x = new PizZip(fs.readFileSync(f)).file('word/document.xml')!.asText();
   return x.split(/<w:p[ >]/).slice(1).map((p) => (p.match(/<w:t[^>]*>([^<]*)<\/w:t>|<w:br\/>|<w:tab\/>/g) || []).map((m) => (m === '<w:br/>' ? '\n' : m === '<w:tab/>' ? ' ' : m.replace(/<[^>]+>/g, ''))).join(''))
