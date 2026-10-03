@@ -194,7 +194,8 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
       console.log(`[Dimensionnement] ${profil} : ${hs} h/sem d'après les plages, ${ha} h/an dans le DCE → ${Math.round((ha / 52) * 100) / 100} h/sem retenues.`);
       hs = Math.round((ha / 52) * 100) / 100;
     }
-    let qualification = String(p?.qualification || profil).replace(/\s+/g, ' ').trim();
+    // Sigle du CNAPS mal écrit par le DCE (cstb 551 : « Agrément préfectoral CNPAS ») : le tableau est à la voix de GSS (T6N-7).
+    let qualification = String(p?.qualification || profil).replace(/\s+/g, ' ').trim().replace(/(?<![A-Za-z])CNPAS(?![A-Za-z])/g, 'CNAPS');
     // Profils équivalents (« ADS », « Agent de sécurité », « agent de sûreté » : le même agent de sécurité CQP APS) :
     // une seule catégorie, heures additionnées (ca_normandie 221 : « Agent de sécurité » 22 et « ADS » 20 sur deux lignes).
     const equivalentAds = profilAgentSecurite(profil, qualification);

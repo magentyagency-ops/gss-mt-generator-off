@@ -135,7 +135,9 @@ function voixDeGssHorsCitation(texte: string): string {
     // « Le candidat » du DCE recopié dans un ajout (becquerel 591, T5N-5 : « employé comme salarié du candidat ») : GSS ; jamais
     // un autre candidat (retenu, évincé, attributaire, concurrent…).
     .replace(new RegExp(String.raw`\b([AaDd])u candidat(?![\p{L}])${CAND}`, 'gu'), (_m, x: string) => (/[Aa]/.test(x) ? `${x === 'A' ? 'À' : 'à'} GSS` : `${x}e GSS`))
-    .replace(new RegExp(String.raw`\b[Ll]e candidat(?![\p{L}])${CAND}`, 'gu'), 'GSS');
+    .replace(new RegExp(String.raw`\b[Ll]e candidat(?![\p{L}])${CAND}`, 'gu'), 'GSS')
+    // Coquille du DCE sur le sigle de l'autorité de GSS (cstb 551 : « agrément préfectoral CNPAS ») : CNAPS hors citation (T6N-7).
+    .replace(/(?<![A-Za-z])CNPAS(?![A-Za-z])/g, 'CNAPS');
 }
 const CAND = String.raw`(?!\s+(?:retenus?|[ée]vinc[ée]s?|attributaires?|concurrents?|sortants?|pressentis?|non\s+retenus?|suivants?|class[ée]s?)(?![\p{L}]))`;
 
