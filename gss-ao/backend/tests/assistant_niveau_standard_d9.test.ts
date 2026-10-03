@@ -41,6 +41,11 @@ vi.mock('../src/generation/completion', async (importOriginal) => {
     ...orig,
     vueEtat: () => ({}),
     capitaliser: async () => undefined,
+    integrerReponse: async () => {
+      await orig.json('simulation', 'réponse d\'équipe simulée');
+      vus.simulation = corps[corps.length - 1];
+      return { etat: { elements: [] }, cles: [] };
+    },
     remplirSaisie: async () => {
       await orig.json('saisie', 'information de GSS');
       vus.saisie = corps[corps.length - 1];
@@ -122,7 +127,7 @@ describe('D9 : niveau de service de l\'assistant interactif', () => {
     expect(corps[1].reasoning_effort).toBe(corps[0].reasoning_effort);
   });
 
-  it('routes de l\'assistant (POST /dossiers/:id/assistant et /dossiers/:id/completion) : standard', async () => {
+  it('routes de l\'assistant (POST /dossiers/:id/assistant et /dossiers/:id/completion) et d\'avant la génération (detect-missing, simuler-reponse) : standard', async () => {
     const router: any = (await import('../src/api/routes')).default;
     const route = (p: string) => router.stack.find((l: any) => l.route?.path === p && l.route.methods.post).route;
     const appeler = async (p: string, req: any) => {
@@ -141,6 +146,20 @@ describe('D9 : niveau de service de l\'assistant interactif', () => {
     const r2 = await appeler('/dossiers/:id/completion', { params: { id: 'd9-route' }, body: { cle: 'GSS_AC_1', valeur: '12 agents' } });
     expect(r2.statusCode).toBe(200);
     expect(vus.saisie.service_tier).toBeUndefined();
+    // Échanges d'avant la génération (T5-REG-1) : détection des informations manquantes et réponse simulée de la démonstration.
+    const { MemoireGenerator } = await import('../src/generation/memoire_generator');
+    const espion = vi.spyOn(MemoireGenerator.prototype as any, 'detectMissingInfo').mockImplementation(async () => {
+      await json('detection', 'informations manquantes');
+      vus.detection = corps[corps.length - 1];
+      return { missingFields: [], completude: null, contradictions: [], cached: false };
+    });
+    const r3 = await appeler('/dossiers/:id/detect-missing', { params: { id: 'd9-route' }, query: { force: '1' }, body: {} });
+    expect(r3.statusCode).toBe(200);
+    expect(vus.detection.service_tier).toBeUndefined();
+    espion.mockRestore();
+    const r4 = await appeler('/dossiers/:id/completion/simuler-reponse', { params: { id: 'demo-d9' }, body: { question: 'q', reponse: 'r' } });
+    expect(r4.statusCode).toBe(200);
+    expect(vus.simulation.service_tier).toBeUndefined();
     // Hors de ces routes, la même fonction part en Flex.
     await json('g', 'generation');
     expect(corps[corps.length - 1].service_tier).toBe('flex');

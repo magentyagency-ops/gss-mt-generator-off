@@ -129,8 +129,10 @@ function niveauService(model: string): string {
 // ── Assistant interactif : niveau standard (décision D9 du 3 octobre 2026) ──────────────────
 // Les échanges avec GSS dans l'assistant (validation ou modification des propositions de l'IA, demandes de
 // modification, information saisie dans l'aperçu) et la recomposition du mémoire qu'ils déclenchent ne doivent jamais
-// faire attendre GSS dans la file Flex d'OpenAI. (Les échanges d'avant la génération, evaluateMissingInfoChat et
-// fill-missing, n'utilisent pas ce module : le premier appelle OpenAI sans service_tier, le second n'appelle pas OpenAI.) Les routes concernées (api/routes.ts) exécutent leur traitement dans
+// faire attendre GSS dans la file Flex d'OpenAI. Il en va de même des échanges d'avant la génération : la détection des
+// informations manquantes (route detect-missing, qui passe par ce module) et la réponse d'équipe simulée de la démonstration
+// (completion/simuler-reponse) ; evaluateMissingInfoChat appelle OpenAI sans service_tier et fill-missing n'appelle pas
+// OpenAI. Les routes concernées (api/routes.ts) exécutent leur traitement dans
 // assistantInteractif(…) : tous les appels faits pendant ce traitement, quel que soit le module (completion.ts,
 // assistant_memoire.ts, memoire_generator.ts, schema_service.ts), partent au niveau ci-dessous, sans service_tier.
 // Même modèle, même effort ; seul le niveau de service change. La génération des mémoires reste en Flex (repli standard).

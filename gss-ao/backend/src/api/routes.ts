@@ -400,7 +400,9 @@ router.post('/dossiers/:id/detect-missing', async (req: Request, res: Response) 
   try {
     const force = req.query.force === '1' || req.query.force === 'true';
     const generator = new MemoireGenerator();
-    const { missingFields, completude, contradictions, cached } = await generator.detectMissingInfo(dossierId, { force });
+    // Échange d'avant la génération : GSS attend le panneau des informations manquantes, ses appels OpenAI partent au niveau
+    // standard comme ceux de l'assistant (décision D9 ; le comportement de 697d1ab, sans file Flex, est rétabli).
+    const { missingFields, completude, contradictions, cached } = await assistantInteractif(() => generator.detectMissingInfo(dossierId, { force }));
     res.json({ status: 'ok', count: missingFields.length, cached: !!cached, missingFields, completude, contradictions });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -777,7 +779,7 @@ router.post('/dossiers/:id/completion/simuler-reponse', async (req: Request, res
   if (!dossierId.startsWith('demo-')) return res.status(403).json({ error: 'Réservé à la démonstration.' });
   try {
     const demandes = Array.isArray(req.body?.cles) ? req.body.cles.flatMap((c: any) => String(c).split('+')) : undefined;
-    const { etat, cles } = await verrouiller(dossierId, () => integrerReponse(dossierId, String(req.body?.question ?? ''), String(req.body?.reponse ?? ''), demandes));
+    const { etat, cles } = await verrouiller(dossierId, () => assistantInteractif(() => integrerReponse(dossierId, String(req.body?.question ?? ''), String(req.body?.reponse ?? ''), demandes)));
     res.json({ ...vueEtat(etat), integres: cles });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
