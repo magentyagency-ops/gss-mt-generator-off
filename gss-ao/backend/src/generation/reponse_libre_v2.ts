@@ -1431,7 +1431,7 @@ export function titreExigence(x: string, max = 34): string {
     const dernier = mots[i - 1];
     if (MOTS_OUTILS.has(dernier.toLowerCase().replace(/['’]$/, '')) || /['’]$/.test(dernier) || !/[\p{L}\d)]$/u.test(dernier)) continue;
     // Locution coupée (génération réelle caen 703 : « Assurer la continuité en cas » pour « … en cas de défaillance »).
-    if (/(?:^|\s)(?:en\s+cas|lors|afin|faute|en\s+raison|en\s+vue|au\s+cours|au\s+moyen|en\s+matière|en\s+termes|à\s+compter|en\s+fonction|au\s+titre|à\s+partir|en\s+dehors|au\s+sein|à\s+l['’]issue)$/i.test(pre)) continue;
+    if (/(?:^|\s)(?:en\s+cas|lors|afin|faute|en\s+raison|en\s+vue|au\s+cours|au\s+moyen|en\s+matière|en\s+termes|à\s+compter|en\s+fonction|au\s+titre|à\s+partir|en\s+dehors|au\s+sein|à\s+l['’]issue|mise|mise\s+en|prise|prise\s+en|avant|après|dès|selon|pendant)$/i.test(pre)) continue;
     // Coupe permise devant une préposition, une coordination ou un participe, ou quand le reste n'est qu'une suite
     // d'adjectifs (« interventions successives | habituelles ») ; jamais devant un complément (« … ou agent | N1 au PCS »).
     const reste = mots.slice(i);

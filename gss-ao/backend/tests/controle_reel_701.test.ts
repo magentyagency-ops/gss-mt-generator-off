@@ -223,3 +223,9 @@ describe('Contrôle réel 704 : sous-titre du cadre écrit avec deux-points', ()
     expect(l[l.indexOf("Écogestes et économies d'énergie :") + 1]).toBe("Les économies d'énergie :");
   });
 });
+
+describe('Contrôle réel 705 : titre d’étape', () => {
+  it('jamais coupé sur « avant mise » (caen 705 : « Effectuer les tests avant mise »)', () => {
+    expect(titreExigence('Effectuer les tests avant mise en service de la télésurveillance')).toBe('Effectuer les tests');
+  });
+});
