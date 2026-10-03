@@ -2965,6 +2965,49 @@ export function nombresAutorisesDe(t: string): Set<string> {
   return new Set(faitsDePhrase(String(t || '')).filter((f) => f.startsWith('N:')));
 }
 
+/** Famille d'unité écrite juste après un nombre (texte normalisé) : « 24 agents » → agents, « 24h/24 » → amplitude. */
+function uniteApresNombre(t: string): string {
+  const a = t.replace(/^\s+/, '');
+  if (/^(?:h|heures?)\s*(?:\/|sur)\s*24\b|^\/\s*\d/.test(a)) return 'amplitude';
+  const UNITES: Array<[RegExp, string]> = [
+    [/^(?:minutes?|mn|min)(?![a-z])/, 'min'], [/^(?:heures?|h)(?![a-z])/, 'h'], [/^jours?(?![a-z])/, 'jour'], [/^semaines?(?![a-z])/, 'semaine'],
+    [/^mois(?![a-z])/, 'mois'], [/^(?:ans?|annees?)(?![a-z])/, 'an'], [/^(?:%|pour ?cent)/, '%'], [/^(?:euros?|€)/, '€'], [/^(?:km|kilometres?)(?![a-z])/, 'km'],
+    [/^(?:agents?|personnes?|salaries?|titulaires?|intervenants?|rondiers?|collaborateurs?|maitres?-chiens?|ssiap|ads|encadrants?)(?![a-z])/, 'agents'],
+    [/^(?:fois|rondes?|passages?|visites?|controles?|tournees?)(?![a-z])/, 'occurrences'], [/^(?:sites?|batiments?|parcs?|postes?)(?![a-z])/, 'lieux'],
+    [/^(?:vehicules?|voitures?)(?![a-z])/, 'vehicules'],
+  ];
+  return UNITES.find(([rx]) => rx.test(a))?.[1] || '';
+}
+
+/**
+ * Nombres du DCE qui peuvent remplacer un nombre de GSS dans une phrase reprise (T10N-4) : seulement un nombre que le DCE
+ * écrit avec la même unité que la phrase (« 30 minutes » pour « 30 minutes », jamais « 24 agents » tiré de « 24h/24 » ou
+ * de la ligne 24 du BPU) ; sans unité, un nombre que le DCE écrit près d'un mot plein de la phrase de GSS. Phrase protégée
+ * (effectif calculé par le programme : « équipe de N agents titulaires », équipe suppléante) : aucun.
+ */
+export function nombresDceCompatibles(ref: string, cand: string, dce: string, protege = false): Set<string> {
+  const out = new Set<string>();
+  if (!dce || protege) return out;
+  const norm = (x: string) => normaliser(String(x || '')).replace(/\s+/g, ' ');
+  const nCand = norm(cand), nDce = norm(dce);
+  const refNums = new Set(faitsDePhrase(ref).filter((f) => f.startsWith('N:')));
+  const pleins = new Set(norm(ref).replace(/[^a-z0-9 ]+/g, ' ').split(' ').filter((w) => w.length >= 5));
+  const MOTS = Object.entries(NOMBRES_MOTS);
+  for (const m of nCand.matchAll(new RegExp(`(?<![a-z0-9.,])${NB}(?![a-z0-9])`, 'g'))) {
+    const v = nombre(m[1]);
+    const cle = `N:${v}`;
+    if (refNums.has(cle) || out.has(cle)) continue;
+    const unite = uniteApresNombre(nCand.slice(m.index! + m[0].length, m.index! + m[0].length + 20));
+    const formes = [v.replace('.', '[.,]'), ...MOTS.filter(([, x]) => x === v).map(([w]) => w)].join('|');
+    for (const d of nDce.matchAll(new RegExp(`(?<![a-z0-9.,])(?:${formes})(?![a-z0-9]|[.,]\\d)`, 'g'))) {
+      const fin = d.index! + d[0].length;
+      const u = uniteApresNombre(nDce.slice(fin, fin + 20));
+      if (unite ? u === unite : (!u && nDce.slice(Math.max(0, d.index! - 60), fin + 60).replace(/[^a-z0-9 ]+/g, ' ').split(' ').some((w) => pleins.has(w)))) { out.add(cle); break; }
+    }
+  }
+  return out;
+}
+
 /**
  * Vrai si les faits d'une phrase reprise sont ceux de la phrase de GSS. Seule exception : un nombre que le DCE impose
  * (présent dans autorises) peut remplacer celui de GSS (« le chiffre du DCE remplace celui de GSS : jamais les deux »).

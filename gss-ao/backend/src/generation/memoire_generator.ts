@@ -28,7 +28,7 @@ import {
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, completerDelaisCadre, ordonnerSelonReponse, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, attendusDuChamp, attendusSansReponse,
-  questionsPubliposteParEmplacement, questionDeLEmplacement, completerFamilles, referencesDeSecours,
+  questionsPubliposteParEmplacement, questionDeLEmplacement, completerFamilles, referencesDeSecours, ecartEquipeTableau,
 } from './memoire_type_cadre';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche } from './base_memoires';
@@ -5926,6 +5926,15 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     // Échéance dépassée dans un texte de GSS repris (validité de l'assurance, ISO) : question exacte à GSS (T6-COH-6).
     for (const r of repriseParChamp.values()) for (const id of r.ids) for (const q of repriseMT?.echeances?.[id] || []) confirmationsGss.add(q);
     if (repriseMT) console.log(`[MemoireGenerator] Mémoire type : ${repriseParChamp.size} réponse(s) développée(s) reprise(s) (${[...repriseParChamp.entries()].map(([id, r]) => `champ ${id} ← ${r.ids.join('+')} ${r.fidelite.toFixed(2)}`).join(' ; ') || 'aucune'}), ${[...propositionsCadre.values()].filter((c) => /^Proposition/.test(c)).length} proposition(s) hors mémoire type.`);
+    // Contrôle final (T10N-4) : « équipe de N agents titulaires » égale la somme du tableau de l'équipe dédiée de la même réponse ;
+    // sinon l'écart est signalé à GSS (jamais remis en silence).
+    for (const r of replacements) {
+      const e = ecartEquipeTableau(String(r.value ?? ''));
+      if (!e) continue;
+      const lib = libelleQuestionCadre((descriptors.find((d) => d.id === r.id)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || `Réponse ${r.id}`);
+      console.warn(`[MemoireGenerator] Champ ${r.id} : équipe annoncée à ${e.annonce} agents titulaires, tableau de l'équipe dédiée à ${e.somme}.`);
+      confirmationsGss.add(`Réponse « ${lib} » : l'équipe dédiée est annoncée à ${e.annonce} agents titulaires, mais le tableau de l'équipe dédiée en compte ${e.somme} ; quel effectif faut-il retenir ? À corriger via l'assistant avant la remise.`);
+    }
     setProgress(dossierId, { phase: 'finalisation', pct: 94, label: 'Application des réponses au cadre…' });
     if (onProgress) onProgress(94, 'Application des réponses au cadre…');
 

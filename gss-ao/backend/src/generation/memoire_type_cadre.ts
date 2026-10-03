@@ -15,7 +15,7 @@
  */
 import {
   normaliser, fidelite, decouperSousParties, rechercherRubriques, lireJson, SEUIL_FIDELITE, motsDePhrase, similarite,
-  faitsDePhrase, faitsCompatibles, nombresAutorisesDe,
+  faitsDePhrase, faitsCompatibles, nombresAutorisesDe, nombresDceCompatibles,
   type MemoireType, type RubriqueMemoireType, type PlanMemoireType, type SousPartie,
 } from './memoire_type';
 
@@ -1230,6 +1230,33 @@ export function attendusSansReponse(texte: string, attendus: string[]): string[]
   return attendus.filter((a) => !lignes.some((l) => correspondAttendu(l, a)));
 }
 
+/** Phrase de GSS qui porte un effectif calculé par le programme (dimensionnement, EFFECTIF_AGENTS, NB_AGENTS_RENFORT) : aucun
+ *  nombre du DCE ne le remplace au recalage (T10N-4). */
+const EFFECTIF_PROTEGE = /[ée]quipe (?:d[ée]di[ée]e )?de \d+ agents? titulaires?|[ée]quipe suppl[ée]ante de \d+|\d+ agents? (?:titulaires?|form[ée]s au site)/i;
+/** Ligne d'un tableau de GSS remis en texte (« Agent de sécurité : CQP APS : 20 : 1 607 h par an ») : ses nombres sont ceux du
+ *  publipostage (dimensionnement, valeurs imposées), jamais remplacés au recalage. */
+const LIGNE_TABLEAU_GSS = /^(?![•\-*]\s)[^:\n]{2,}(?:\s:\s[^:\n]+){2,}$/;
+
+/**
+ * Contrôle final d'une réponse du cadre (T10N-4) : le nombre de « équipe de N agents titulaires » égale la somme de la
+ * colonne « Nombre » du tableau de l'équipe dédiée remis dans la même réponse (« Catégorie de personnel : Qualification :
+ * Nombre : Observations »). Renvoie l'écart, ou null (cohérent, ou pas de tableau entièrement chiffré).
+ */
+export function ecartEquipeTableau(texte: string): { annonce: number; somme: number } | null {
+  const lignes = String(texte || '').split('\n').map((l) => l.trim());
+  const k = lignes.findIndex((l) => /^Cat[ée]gorie de personnel\s:\s.*\sNombre\s:/i.test(l));
+  const m = /[ée]quipe (?:d[ée]di[ée]e )?de (\d+) agents? titulaires?/i.exec(String(texte || ''));
+  if (k < 0 || !m) return null;
+  const col = lignes[k].split(/\s:\s/).findIndex((c) => /^Nombre$/i.test(c.trim()));
+  let somme = 0, n = 0;
+  for (let i = k + 1; i < lignes.length && LIGNE_TABLEAU_GSS.test(lignes[i]); i++) {
+    const v = (lignes[i].split(/\s:\s/)[col] || '').trim();
+    if (!/^\d+$/.test(v)) return null;
+    somme += Number(v); n++;
+  }
+  return n && somme !== Number(m[1]) ? { annonce: Number(m[1]), somme } : null;
+}
+
 /**
  * Recalage d'une réponse développée du cadre sur le texte de GSS qu'elle reprend (consigne 5 : « l'IA reprend exactement
  * le mémoire de base » ; décision D7 : 90 % au moins), sans nouvel appel au modèle :
@@ -1274,7 +1301,6 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   const applicable = exclus.some(Boolean)
     ? lignesRef.map((_, i) => ref.filter((p, k) => p.ligne === i && !exclus[k]).map((p) => p.brut).join(' ')).join('\n') : reference;
   const mesure = (t: string) => fideliteReponse(applicable, t, !!o.limite, o.dce || '');
-  const autorises = nombresAutorisesDe(o.dce || '');
   const fideliteAvant = mesure(reponse);
   // Réponse du modèle.
   // Phrase du modèle collée après l'amorce d'une liste de GSS (havre2 341 : « …les recycle selon trois filières : Ces
@@ -1314,13 +1340,17 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     // (« 45 minutes maximum » → « 20 minutes ») ou un nom propre a changé, ou qui reçoit un mot interdit (« notre agent
     // sous-traitant »), est rétablie telle que GSS l'a écrite (havre1 21 : « trois fois par mois » au lieu de « une à
     // trois fois par mois »). Seul un nombre imposé par le DCE peut remplacer celui de GSS.
-    const faitsChanges = !faitsCompatibles(faitsDePhrase(r.brut), faitsDePhrase(p.i.brut), autorises)
+    // Nombre du DCE accepté seulement avec la même unité que la phrase de GSS ; jamais à la place d'un effectif calculé par le
+    // programme (« équipe de 26 agents titulaires » sous un tableau qui totalise 26, etampes2 553, T10N-4).
+    const protege = EFFECTIF_PROTEGE.test(r.brut) || LIGNE_TABLEAU_GSS.test(r.brut.trim());
+    const autorisesPaire = nombresDceCompatibles(r.brut, p.i.brut, o.dce || '', protege);
+    const faitsChanges = !faitsCompatibles(faitsDePhrase(r.brut), faitsDePhrase(p.i.brut), autorisesPaire)
       || nomsPropresAjoutes(r.brut, p.i.brut, o.dce || '').length > 0;
     // Élément d'une liste à « ; » de GSS (« … ; posture rassurante… ; en cas d'incivilité, l'agent… ; appel aux forces de l'ordre…
     // ; prise en charge des malaises… ») réécrit par le modèle, même à 80 % (citedia2 474, T5-COH-3 : préfixe « Sur un site qui
     // accueille du public, » ajouté, « . » à la place de « ; » puis « prise en charge… » en minuscule après un point) : l'élément
     // de GSS est rétabli tel quel, sauf un nombre imposé par le DCE.
-    const nouveauxDce = chiffres(p.i.brut).filter((c) => !chiffres(r.brut).includes(c));
+    const nouveauxDce = chiffres(p.i.brut).filter((c) => !chiffres(r.brut).includes(c) && autorisesPaire.has(`N:${c.replace(',', '.')}`));
     const segments = lignesRef[r.ligne] || [];
     const elementListe = segments.length >= 2 && segments.some((x) => /;\s*$/.test(x));
     const memeTexte = normaliser(p.i.brut.replace(PUCE, '')).replace(/[^a-z0-9]+/g, ' ').trim() === normaliser(r.brut.replace(PUCE, '')).replace(/[^a-z0-9]+/g, ' ').trim()
