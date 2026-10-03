@@ -1352,7 +1352,7 @@ export function rubriquesSansSchema(plan: PlanMemoireType, ajouts: Array<{ id: s
 }
 
 /** Ligne de consultation déjà formulée sans modèle (jamais envoyée à la fusion par le modèle, jamais reformulée). */
-export const LIGNE_DETERMINISTE = /^(?:Proposition à valider|Proposition de réponse à valider|Réponse à relire|Réponse «|Réponse du cadre\s*:|Phrases adaptées au cahier des charges|Partie «|Rubrique «|Rédaction automatique indisponible|Phrase proposée par l'IA d'après le cahier des charges|Phrase ajoutée au texte de GSS)/;
+export const LIGNE_DETERMINISTE = /^(?:Proposition à valider|Le cahier des charges prévoit des rondes ponctuelles|Proposition de réponse à valider|Réponse à relire|Réponse «|Réponse du cadre\s*:|Phrases adaptées au cahier des charges|Partie «|Rubrique «|Rédaction automatique indisponible|Phrase proposée par l'IA d'après le cahier des charges|Phrase ajoutée au texte de GSS)/;
 
 /** Question en clair sur une case de tableau du cadre (même forme que les cartes de l'assistant, T8CS-4). */
 export function questionCaseTableau(ligne: string, colonne: string): string {
@@ -3468,7 +3468,9 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
   private async consoliderAvecSources(liste: string[], contexte?: { dce: string; horsNormandie: boolean }): Promise<Array<{ question: string; sources: number[] }>> {
     const brutes = await this.consoliderAvecSourcesBrut(liste);
     if (!contexte) return brutes;
-    const gardees = brutes.filter((q) => !questionDelaiInapplicable(q.question, contexte.dce, contexte.horsNormandie));
+    // Ligne déjà formulée sans modèle (proposition de dimensionnement : « 96 h par semaine », « 1 607 heures par an »,
+    // T9N-2) : jamais retirée par ce filtre, qui ne vise que les questions de délai rédigées par le modèle.
+    const gardees = brutes.filter((q) => LIGNE_DETERMINISTE.test(q.question) || !questionDelaiInapplicable(q.question, contexte.dce, contexte.horsNormandie));
     if (gardees.length < brutes.length) console.log(`[MemoireGenerator] Consultations : ${brutes.length - gardees.length} question(s) sur un délai chiffré absent du DCE retirée(s) (${contexte.horsNormandie ? 'marché hors Normandie' : 'délai déjà au registre'}).`);
     return gardees;
   }

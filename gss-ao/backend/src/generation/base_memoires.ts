@@ -579,11 +579,15 @@ export function confirmationsRegistreUtilisees(texte: string, horsNormandie = fa
 export function questionDelaiInapplicable(question: string, dce: string, horsNormandie: boolean): boolean {
   const q = String(question || '');
   if (!/d[ée]lai|arriv|intervien|interven|remplac|astreinte/i.test(q)) return false;
+  // Proposition calculée sans modèle (dimensionnement : « Intervenant rondier : 4 titulaires pour 96 h par semaine, base de
+  // 1 607 heures par an », T9N-2) : jamais une question de délai.
+  if (/^Proposition à valider\b|^Le cahier des charges prévoit des rondes ponctuelles/i.test(q)) return false;
   // Question des sites mixtes (le délai normand de GSS rappelé, le délai hors Normandie demandé) : toujours posée.
   if (/^Marché en partie hors Normandie\b/i.test(q)) return false;
   // Délai demandé par un critère du cadre et laissé à compléter (T5N-2) : la question attend la réponse de GSS, toujours posée.
   if (/quel délai GSS annonce-t-elle pour/i.test(q)) return false;
-  const valeurs = [...q.matchAll(/(?<![\d,.])(\d+)\s*(minutes?|min\b|mn\b|heures?|h\b)/gi)].map((m) => ({ n: m[1], min: /^m/i.test(m[2]) }));
+  // Un volume horaire (« 96 h par semaine », « 1 607 heures par an ») n'est pas un délai.
+  const valeurs = [...q.matchAll(/(?<![\d,.])(\d+)\s*(minutes?|min\b|mn\b|heures?|h\b)(?!\s*(?:par\s+(?:semaine|an|mois|jour|ETP)|\/\s*(?:sem|an|mois|j)))/gi)].map((m) => ({ n: m[1], min: /^m/i.test(m[2]) }));
   if (!valeurs.length) return false;
   const d = normTxt(dce).replace(/\s+/g, ' ');
   const dansDce = (v: { n: string; min: boolean }) => new RegExp(`(?<![\\d,.])${v.n}\\s*(?:${v.min ? 'minutes?|min|mn' : 'heures?|h'})\\b`).test(d);
