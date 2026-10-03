@@ -2625,6 +2625,33 @@ export function perimetreSecours(perimetre: string): string {
   }).join('\n');
 }
 
+/**
+ * Horaires du texte de secours regroupés par période (T1F-8 : 16 horaires de Fontainebleau cités un par ligne, page du bloc 1
+ * débordante) : « - **Mars, avril et octobre** : « Jardin Anglais : une fermeture à 17h30 » ; « Jardin de Diane : … » ». Chaque
+ * citation reste mot pour mot ; un horaire sans période garde sa ligne.
+ */
+export function horairesParPeriode(horaires: string[], cite: (x: string) => string): string[] {
+  const groupes = new Map<string, string[]>();
+  const ordre: Array<string | { seul: string }> = [];
+  for (const h of horaires) {
+    const t = h.replace(/\s+/g, ' ').trim();
+    const periode = periodeEnTete(t);
+    const reste = periode ? t.replace(/^[^:]+:\s*/, '').trim() : '';
+    if (!periode || !reste) { ordre.push({ seul: t }); continue; }
+    const cle = normaliser(periode);
+    if (!groupes.has(cle)) { groupes.set(cle, []); ordre.push(cle); }
+    groupes.get(cle)!.push(reste);
+  }
+  const libelle = (cle: string) => { const p = periodeEnTete(`${horaires.find((h) => normaliser(periodeEnTete(h.replace(/\s+/g, ' ').trim())) === cle) || ''}`); return p; };
+  return ordre.map((x) => {
+    if (typeof x !== 'string') return cite(x.seul);
+    const l = groupes.get(x)!;
+    if (l.length === 1) return cite(`${libelle(x)} : ${l[0]}`);
+    const p = libelle(x);
+    return `- **${p.charAt(0).toUpperCase()}${p.slice(1).toLowerCase().replace(/\b(avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre|janvier|f[ée]vrier|mars)\b/gi, (m) => m.toLowerCase())}** : ${l.map((r) => cite(r).replace(/^-\s*/, '')).join(' ; ')}`;
+  });
+}
+
 export function texteSecoursBesoin(d: DonneesBesoin, perimetre = ''): string {
   const parties: string[] = ['## Votre contexte et votre site', d.amorce || (d.client ? `${d.client.charAt(0).toUpperCase() + d.client.slice(1)} lance le marché ${d.objet ? `« ${d.objet} »` : 'de sécurité privée'}.` : `Vous nous consultez pour ${d.objet || 'une prestation de sécurité privée'}.`)];
   const sites = phraseSites(d.sites, d.villes, d.communesDesSites || {});
@@ -2638,7 +2665,7 @@ export function texteSecoursBesoin(d: DonneesBesoin, perimetre = ''): string {
   // Sous-titre imprimé seulement s'il a un contenu (jamais suivi directement d'un autre titre, T8-COH-1).
   if (perimetreEcrit || horaires.length) parties.push('## Le périmètre de la prestation demandée');
   if (perimetreEcrit) parties.push(perimetreEcrit);
-  if (horaires.length) parties.push(`Horaires imposés par le cahier des charges :\n${horaires.map(cite).join('\n')}`);
+  if (horaires.length) parties.push(`Horaires imposés par le cahier des charges :\n${horairesParPeriode(horaires, cite).join('\n')}`);
   // Une obligation qui annonce une liste (« Au minimum 72 heures avant la prise de service d'un agent, le titulaire
   // doit : ») n'est jamais imprimée seule, sans sa liste (ifsem, T7CS-4).
   const obligations = obligationsLisibles(d.obligations).filter((o) => !CLAUSE_CONTRACTUELLE.test(o));

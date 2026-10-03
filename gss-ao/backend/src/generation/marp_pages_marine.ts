@@ -36,7 +36,10 @@ export function typoV3(texte: string): string {
 export function intertitresV3(texte: string): string {
   return texte
     .replace(/^[ \t]*\*\*([^*\n]+?)\*\*[ \t]*$/gm, '### $1')
-    .replace(/^(#{2,4} [^\n]+)\n(?=[^\n])/gm, '$1\n\n');
+    .replace(/^(#{2,4} [^\n]+)\n(?=[^\n])/gm, '$1\n\n')
+    // Intertitre collé à la fin du paragraphe qui le précède (fin d'un tableau, T1-CONS-6 : « Vos attentes et nos
+    // engagements » compté avec le tableau du périmètre et resté seul en bas de page) : paragraphe à part.
+    .replace(/([^\n])\n(#{2,4} [^\n]+)/g, '$1\n\n$2');
 }
 
 /** Surtitre et titre d'une page de texte : « Notre engagement écologique : des déplacements… » → surtitre « Notre

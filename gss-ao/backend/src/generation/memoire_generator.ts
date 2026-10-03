@@ -30,6 +30,7 @@ import {
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, retablirLignesLibelle, attendusDuChamp, attendusSansReponse,
   questionsPubliposteParEmplacement, questionDeLEmplacement, completerFamilles, referencesDeSecours, ecartEquipeTableau, questionAvecLibelle, regrouperQuestionsTelesurveillance,
 } from './memoire_type_cadre';
+import { articlesBloc1 } from './bloc1_marine';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr } from './base_memoires';
 import fs from 'fs';
@@ -8546,7 +8547,9 @@ RÈGLES DE FORME (rendu Marp) :
     progres(90, 'Assemblage final du mémoire…');
     // Nom de l'acheteur affiché (couverture, sommaire, ouvertures, pieds de page) : forme corrigée de CLIENT (T1-COH-6).
     cover.client = nomAcheteurAffiche(prep.variables.CLIENT, cover.client);
-    const rendu = await this.rendreDepuisSections(propres, dossierId, { onProgress, cover, schemas: schemasGeneres, ajouts, theme, plan, titresSchemas });
+    // Articles du CCTP des chiffres du bloc 1 (style « marine » v3 : bandeau des chiffres clés et lignes de source, T1-CONS-5).
+    const articlesB1 = articlesBloc1(propres.b1_comprehension || '', dceContext);
+    const rendu = await this.rendreDepuisSections(propres, dossierId, { onProgress, cover, schemas: schemasGeneres, ajouts, theme, plan, titresSchemas, articlesBloc1: articlesB1 });
     // Page de schéma prévue et absente du document rendu (moteur de schémas indisponible ou hors délai, schéma refusé :
     // T6-COH-4, T6N-6) : signalée à GSS, compréhension du besoin en tête (consigne 3, D4). Rien n'est imprimé dans le mémoire.
     const alertesSchemas = rubriquesSansSchema(plan, ajouts, propres, rendu.schemas).map((r) => `Rubrique « ${r.titre} » : le schéma${r.besoin ? ' de process' : ''} n'a pas pu être dessiné (moteur de schémas indisponible ou schéma refusé) ; la page de schéma manque dans le mémoire. Relancez la génération, ou demandez le schéma via l'assistant, avant la remise.`);
@@ -8561,7 +8564,7 @@ RÈGLES DE FORME (rendu Marp) :
     const etat: EtatCompletion = {
       dossierId, mode: 'libre', fichier: rendu.filePath, majLe: '', elements: elementsLibres, reponsesTraitees: [],
       // Valeurs des schémas « spec » gardées : un schéma est redessiné quand GSS change ces valeurs (effectifs, T10N-2).
-      libre: { sections, schemas: Object.fromEntries(rendu.schemas), cover: rendu.cover, theme, version: 2, plan, titresSchemas, ajouts, indicateurs: indicateursVrais(prep.etatsIndicateurs), variablesSchemas: variablesDesSchemas(mt, prep.variables) },
+      libre: { sections, schemas: Object.fromEntries(rendu.schemas), cover: rendu.cover, theme, version: 2, plan, titresSchemas, articlesBloc1: articlesB1, ajouts, indicateurs: indicateursVrais(prep.etatsIndicateurs), variablesSchemas: variablesDesSchemas(mt, prep.variables) },
       demande: this.demandeParticuliere?.demande || undefined,
       ...(this.dimensionnementEtat ? { dimensionnement: this.dimensionnementEtat } : {}),
     };
@@ -8974,7 +8977,7 @@ RÈGLES DE FORME (rendu Marp) :
     sectionsMap: Record<string, string>,
     dossierId: string,
     plan: PlanMemoireType,
-    opts: { onProgress?: (progress: number, message: string) => void; schemas?: Map<string, string>; cover?: any; ajouts?: AjoutLibre[]; photos?: Record<string, Array<{ chemin: string; legende?: string }>>; titresSchemas?: Record<string, string> },
+    opts: { onProgress?: (progress: number, message: string) => void; schemas?: Map<string, string>; cover?: any; ajouts?: AjoutLibre[]; photos?: Record<string, Array<{ chemin: string; legende?: string }>>; titresSchemas?: Record<string, string>; articlesBloc1?: Record<string, string> },
     theme: string,
   ): Promise<{ filePath: string; schemas: Map<string, string>; cover: any }> {
     this.verifierCredit();
@@ -9031,6 +9034,7 @@ RÈGLES DE FORME (rendu Marp) :
           text: sectionsMap[r.id],
           id: r.id,
           photos: opts.photos?.[r.id],
+          ...(r.id === 'b1_comprehension' && opts.articlesBloc1 ? { articlesBloc1: opts.articlesBloc1 } : {}),
           ...(svg ? { schemaPleinePage: { titre: titreSchema(r), svg } } : { texteSeul: true }),
         };
       }),
@@ -10560,6 +10564,8 @@ FORME : sous-titres « ## » courts (un par élément), paragraphes courts et li
       plan?: PlanMemoireType;
       /** Réponse libre v2 : titre-message de la page de schéma de chaque rubrique. */
       titresSchemas?: Record<string, string>;
+      /** Style « marine » v3 : articles du CCTP des chiffres du bloc 1 (bandeau des chiffres clés, sources), T1-CONS-5. */
+      articlesBloc1?: Record<string, string>;
     } = {},
   ): Promise<{ filePath: string; schemas: Map<string, string>; cover: any }> {
     this.verifierCredit();

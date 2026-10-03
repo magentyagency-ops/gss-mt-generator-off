@@ -185,3 +185,19 @@ section.intercalaire footer { display: none; }
 /* Pages de références du modèle (« Ils nous font confiance ») et pages de photos : mise en page neutre. */
 section.references p, section.references ul, section.references ol, section.photo p { margin-left: 0; }
 section.references h2, section.references h3, section.references h4 { float: none; width: auto; display: block; }
+
+/* Bloc 1 (maquette validée, feuilles 27 et 28 de planche_marine.pdf, T1-CONS-5) : bandeau des chiffres clés du marché en
+   orange (légende et article du CCTP), ligne de source sous le contexte et le périmètre, renvoi « → BLOC n » des tableaux
+   des attentes et des points de vigilance. */
+.gss-chiffres { clear: both; display: flex; gap: 0; margin: 0 0 4.4mm 0; border-top: .7mm solid var(--gss-structure); border-bottom: .3mm solid var(--gss-filet); }
+.gss-chiffres > div { flex: 1 1 0; padding: 2.2mm 3mm 2.2mm 0; display: flex; flex-direction: column; gap: .6mm; }
+.gss-chiffres > div + div { padding-left: 3mm; border-left: .3mm solid var(--gss-filet); }
+.gss-chiffres b { font: 700 18pt/1.05 var(--gss-police-titre); color: var(--gss-accent); letter-spacing: -.01em; }
+.gss-chiffres span { font: 400 8.6pt/1.3 var(--gss-police-texte); color: var(--gss-encre-2); }
+.gss-chiffres i { font: 500 7.4pt/1.2 var(--gss-police-numero); font-style: normal; color: var(--gss-encre-3); letter-spacing: .02em; }
+section p.gss-source { margin: -1mm 0 3mm 44mm; font: 400 8pt/1.3 var(--gss-police-numero); color: var(--gss-encre-3); letter-spacing: .02em; }
+.gss-bloc { white-space: nowrap; font: 600 7.6pt/1.2 var(--gss-police-numero); color: var(--gss-accent); letter-spacing: .06em; }
+/* Tableaux du bloc 1 (périmètre, attentes, points de vigilance) : cellules un peu moins hautes, pour tenir en 2 pages
+   avec le bandeau des chiffres clés (consigne 3). */
+section.bloc-1 table td { padding: 1.5mm 2.2mm; }
+section.bloc-1 table th { padding: 1.7mm 2.2mm; }

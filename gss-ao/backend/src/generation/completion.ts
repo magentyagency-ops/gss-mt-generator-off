@@ -111,6 +111,8 @@ export interface EtatCompletion {
     plan?: PlanMemoireType;
     /** Plan v2 : titre-message de la page de schéma de chaque rubrique. */
     titresSchemas?: Record<string, string>;
+    /** Style « marine » v3 : articles du CCTP des chiffres du bloc 1 (bandeau des chiffres clés, sources). */
+    articlesBloc1?: Record<string, string>;
     /** Plan v2 : indicateurs vrais du mémoire type et leurs raisons (DCE, analyse, matrice), pour contrôle. */
     indicateurs?: Record<string, string[]>;
     /** Plan v2 : valeurs écrites dans les schémas « spec » (EFFECTIF_AGENTS, NB_AGENTS_RENFORT…), pour redessiner un schéma
@@ -755,6 +757,7 @@ export async function recomposerPdf(etat: EtatCompletion): Promise<string> {
     // Réponse libre v2 (mémoire type) : même plan, mêmes pages de schéma ; état v1 : rendu v1 inchangé.
     plan: etat.libre!.plan,
     titresSchemas: etat.libre!.titresSchemas,
+    articlesBloc1: etat.libre!.articlesBloc1,
   });
   etat.libre!.schemas = Object.fromEntries(res.schemas);
   return res.filePath;

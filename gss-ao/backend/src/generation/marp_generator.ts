@@ -9,6 +9,10 @@ import {
   LIMITES_MARINE_V3, SEUIL_TEXTE_COURT, intertitresV3, surEtTitre, memesTitres, surtitre, enteteBloc, styleParcours, couvertureV3,
   legendeRoles, sommaireV3, ouvertureV3, essentielV3, signes, repereRubrique, typoV3, type CouleursV3,
 } from './marp_pages_marine';
+import { pageBloc1Marine, sousPartiesBloc1 } from './bloc1_marine';
+
+/** Rubrique de la compréhension du besoin (bloc 1 du mémoire type). */
+const estBloc1 = (section: { id?: string }): boolean => section.id === 'b1_comprehension';
 
 /** Illustrations attribuées, indexées par clé de slide (unicité globale garantie amont). */
 export type SlideAssignments = Map<string, PooledIllustration>;
@@ -153,11 +157,28 @@ function cleanTextForMarp(raw: string): string {
 function lignesParagraphe(p: string, limites: LimitesPage): number {
   // Style « marine » v3 : un intertitre seul est posé dans la colonne de titrage, en regard du texte qui le suit.
   if (limites.titresEnMarge && /^#{1,6}\s/.test(p) && !p.includes('\n')) return 0.6;
+  // Bloc 1 du style v3 : bandeau des chiffres clés (hauteur mesurée : 4,4 lignes et son intervalle) et ligne de source.
+  if (/^<div class="gss-chiffres">/.test(p)) return 5.2;
+  if (/^<p class="gss-source">/.test(p)) return 1.1;
   const caracteres = limites.caracteres ?? CHARS_PER_LINE;
   const ligneTableau = limites.ligneTableau;
   // Mise en page v2 de la refonte : seule la ligne de sous-titre pèse 1,5 ligne. Un sous-titre suivi de son texte sans
   // ligne vide (« ## Votre contexte et votre site\nL'École… ») multipliait tout le paragraphe par 1,5 (tableau compris) :
   // la compréhension du besoin de l'IGN (génération réelle ign 15) occupait 4 pages de texte au lieu de 2 (consigne 3).
+  // Style « marine » v3 (pleine largeur de 180 mm) : hauteur d'un tableau d'après ses colonnes (largeur répartie selon la
+  // longueur du contenu de chaque colonne, comme le navigateur ; ligne la plus repliée de chaque rang), calée sur les pages
+  // rendues par Chromium (T1-CONS-5 : tableau du périmètre de Fontainebleau, 147 mm mesurés, 112 estimés auparavant).
+  if (limites.titresEnMarge && /^\s*\|/m.test(p)) {
+    const lignes = p.split('\n');
+    const rangs = lignes.filter((l) => /^\s*\|/.test(l) && !/^\s*\|[\s:|-]+\|\s*$/.test(l)).map((l) => l.split(/(?<!\\)\|/).slice(1, -1).map((c) => c.replace(/<[^>]+>/g, '').replace(/\\(.)/g, '$1').trim()));
+    const autres = lignes.filter((l) => !/^\s*\|/.test(l)).join('\n');
+    const n = Math.max(1, ...rangs.map((r) => r.length));
+    const L = Array.from({ length: n }, (_, j) => Math.max(1, ...rangs.map((r) => (r[j] || '').length)));
+    const somme = L.reduce((a, x) => a + Math.sqrt(x), 0);
+    const largeur = L.map((x) => Math.max(16, (180 * Math.sqrt(x)) / somme));
+    const hauteur = rangs.reduce((h, r) => h + 0.75 + 0.82 * Math.max(...r.map((c, j) => Math.max(1, Math.ceil(c.length / ((largeur[j] - 4.4) * 0.56))))), 0);
+    return hauteur + (autres.trim() ? lignesParagraphe(autres, limites) : 0.7);
+  }
   if (ligneTableau !== undefined) {
     return p.split('\n').reduce((n, l) => {
       if (/^\s*\|[\s:|-]+\|\s*$/.test(l)) return n;
@@ -169,6 +190,16 @@ function lignesParagraphe(p: string, limites: LimitesPage): number {
     }, 0) + 0.7;
   }
   return p.split('\n').reduce((n, l) => n + Math.max(1, Math.ceil(l.length / caracteres)), 0) * (/^#{1,6}\s/.test(p) ? 1.5 : 1) + 0.7;
+}
+
+/** Tableau Markdown seul dans son paragraphe, d'au moins 3 rangs : il peut continuer sur la page suivante. */
+function tableauSecable(p: string): boolean {
+  const l = p.split('\n');
+  return l.length >= 5 && l.every((x) => /^\s*\|/.test(x)) && /^\s*\|[\s:|-]+\|\s*$/.test(l[1]);
+}
+/** En-tête et deux premiers rangs d'un tableau (place minimale à lui laisser en bas de page). */
+function debutTableau(p: string): string {
+  return p.split('\n').slice(0, 4).join('\n');
 }
 
 /** Lignes estimées d'un texte (somme de ses paragraphes). */
@@ -202,6 +233,20 @@ export function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots
   const isHeading = (p: string) => /^#{1,6}\s/.test(p);
   const wordCount = (p: string) => p.split(/\s+/).length;
   const lineCount = (p: string) => lignesParagraphe(p, limites);
+  // Style v3 : un intertitre suivi d'un tableau (pleine largeur) n'est plus en regard du texte : il occupe sa propre hauteur
+  // dans la colonne de titrage (38 mm, environ 22 signes par ligne), T1-CONS-5.
+  // Intertitre suivi d'un texte plus court que lui (une ligne en regard d'un intertitre de 2 lignes, texte de secours du bloc 1,
+  // T1F-8 : 22 mm de débordement) : la différence de hauteur compte aussi.
+  const lineCountH = (k: number): number => {
+    const p = paragraphs[k];
+    if (limites.titresEnMarge && isHeading(p) && !p.includes('\n')) {
+      const hauteurTitre = 0.4 + 0.95 * Math.max(1, Math.ceil(p.replace(/^#+\s*/, '').length / 22));
+      const suivant = paragraphs[k + 1] || '';
+      if (/^\s*\|/.test(suivant)) return hauteurTitre;
+      if (suivant && !isHeading(suivant)) return Math.max(lineCount(p), hauteurTitre - (lineCount(suivant) - 0.7) + 0.1);
+    }
+    return lineCount(p);
+  };
 
   // Un bloc plus haut qu'une slide (longue liste sans ligne vide) est scindé par groupes de lignes.
   for (let i = 0; i < paragraphs.length; i++) {
@@ -251,16 +296,32 @@ export function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots
       // on coupe AVANT le titre pour qu'il ouvre la slide suivante avec son contenu.
       // Mise en page v2 de la refonte : un sous-titre suivi de son texte dans le même paragraphe (« ## Le périmètre…\n| … »)
       // a déjà son contenu ; le paragraphe suivant n'a pas à tenir avec lui sur la même page.
-      const next = limites.ligneTableau !== undefined && para.includes('\n') ? undefined : paragraphs[i + 1];
+      const next0 = limites.ligneTableau !== undefined && para.includes('\n') ? undefined : paragraphs[i + 1];
+      // Style v3 : un tableau qui peut continuer sur la page suivante ne compte, avec son intertitre, que pour son en-tête et
+      // ses deux premiers rangs (T1-CONS-5).
+      const next = next0 && limites.titresEnMarge && tableauSecable(next0) ? debutTableau(next0) : next0;
       const blockWords = paraWords + (next && !isHeading(next) ? wordCount(next) : 0);
-      const blockLines = lineCount(para) + (next && !isHeading(next) ? lineCount(next) : 0);
+      const blockLines = lineCountH(i) + (next && !isHeading(next) ? lineCount(next) : 0);
       if (currentWords + blockWords > limites.mots || currentLines + blockLines > limites.lignes) {
         flush();
       }
-    } else if ((currentWords + paraWords > limites.mots || currentLines + lineCount(para) > limites.lignes) && current.trim()) {
+    } else if ((currentWords + paraWords > limites.mots || currentLines + lineCountH(i) > limites.lignes) && current.trim()) {
       // Style « marine » v3 : une liste qui ne tient pas sous un court début de page (introduction de 2 lignes, générations
       // réelles caen et citedia 701 : « L'agent de sécurité (CQP APS) », page presque vide puis la liste seule) continue sur la
       // page suivante : la page en cours reçoit autant de puces qu'elle peut (2 au moins de chaque côté).
+      // Style « marine » v3 : un tableau qui ne tient pas en entier continue sur la page suivante, coupé entre deux rangs,
+      // son en-tête répété (T1-CONS-5 : périmètre de Fontainebleau, bloc 1 tenu en 2 pages comme le demande la consigne 3).
+      if (limites.titresEnMarge && tableauSecable(para)) {
+        const [tete, sep, ...rangs] = para.split('\n');
+        let k = 0;
+        while (k < rangs.length && currentLines + lineCount([tete, sep, ...rangs.slice(0, k + 1)].join('\n')) <= limites.lignes) k++;
+        if (k >= 2 && rangs.length - k >= 1) {
+          current += `\n\n${[tete, sep, ...rangs.slice(0, k)].join('\n')}`;
+          flush();
+          paragraphs.splice(i + 1, 0, [tete, sep, ...rangs.slice(k)].join('\n'));
+          continue;
+        }
+      }
       const puces = para.split('\n');
       if (limites.reserve && currentLines < limites.lignes * 0.5 && puces.length >= 4 && puces.every((l) => /^\s*(?:[-*•]|\d+[.)])\s/.test(l))) {
         let k = 0;
@@ -278,7 +339,7 @@ export function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots
 
     current += (current ? '\n\n' : '') + para;
     currentWords += paraWords;
-    currentLines += lineCount(para);
+    currentLines += lineCountH(i);
   }
   flush();
 
@@ -306,17 +367,41 @@ export function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots
     }
     if (meilleur) chunks.splice(0, chunks.length, texteDe(unites.slice(0, meilleur.k)), texteDe(unites.slice(meilleur.k)));
   }
+  // Style « marine » v3 : jamais une page qui finit par un intertitre (T1-CONS-6) : il ouvre la page suivante avec son texte.
+  for (let k = 0; limites.titresEnMarge && k + 1 < chunks.length; k++) {
+    const paras = chunks[k].split(/\n{2,}/);
+    let j = paras.length;
+    while (j > 1 && isHeading(paras[j - 1].trim()) && !paras[j - 1].trim().includes('\n')) j--;
+    if (j < paras.length) {
+      chunks[k + 1] = `${paras.slice(j).join('\n\n')}\n\n${chunks[k + 1]}`;
+      chunks[k] = paras.slice(0, j).join('\n\n');
+    }
+  }
   const n = chunks.length;
   if ((limites.ligneTableau !== undefined || limites.regrouper) && n >= 2) {
     const derniere = lignesTexte(chunks[n - 1], limites);
     const ensemble = lignesTexte(chunks[n - 2], limites) + derniere;
     const mots = wordCount(chunks[n - 2]) + wordCount(chunks[n - 1]);
-    const marge = limites.serre === false ? 1 : MARGE_PAGE_SERREE;
+    // La page resserrée ne réduit que les paragraphes et les puces : avec un tableau, aucune marge (T1-CONS-5).
+    const marge = limites.serre === false || (limites.titresEnMarge && /^\s*\|/m.test(`${chunks[n - 2]}\n${chunks[n - 1]}`)) ? 1 : MARGE_PAGE_SERREE;
     if (derniere < limites.lignes * SEUIL_PAGE_ORPHELINE && ensemble <= limites.lignes * marge && mots <= limites.mots * marge) {
       chunks.splice(n - 2, 2, `${chunks[n - 2]}\n\n${chunks[n - 1]}`);
     }
   }
 
+  // Tableau coupé puis réuni sur une même page (dernière page regroupée) : un seul tableau, sans en-tête répété.
+  for (let k = 0; k < chunks.length; k++) {
+    const ps = chunks[k].split(/\n{2,}/);
+    for (let j = ps.length - 1; j > 0; j--) {
+      const a = ps[j - 1].split('\n'), b = ps[j].split('\n');
+      if (tableauSecable(ps[j - 1]) || (a.length >= 3 && a.every((x) => /^\s*\|/.test(x)))) {
+        if (b.length >= 3 && b.every((x) => /^\s*\|/.test(x)) && a[0].trim() === b[0].trim() && /^\s*\|[\s:|-]+\|\s*$/.test(b[1])) {
+          ps.splice(j - 1, 2, [...a, ...b.slice(2)].join('\n'));
+        }
+      }
+    }
+    chunks[k] = ps.join('\n\n');
+  }
   return chunks.length > 0 ? chunks : [''];
 }
 
@@ -335,9 +420,17 @@ function sectionsAPaginer(chapter: AssembleChapter, theme: string): Array<{ sect
   const sortie: Array<{ section: AssembleSection; si: number; texte: string; sansPageTexte?: boolean }> = [];
   let chapeau = '';
   chapter.sections.forEach((section, si) => {
+    // Bloc 1 du style « marine » v3 : mis en page comme la maquette validée (chiffres clés, sources, tableaux des attentes et
+    // des points de vigilance), T1-CONS-5. Aucun autre style ne change.
     let texte = cleanTextForMarp(section.text);
     // Style « marine » v3 : intertitres en gras devenus intertitres de la colonne de titrage (aucun mot changé).
     if (pagesMarineV3(theme)) texte = intertitresV3(texte);
+    // Bloc 1 en 2 pages au plus (consigne 3) : sans les lignes de source, puis sans le bandeau, si la maquette complète ne
+    // tient pas (citedia 703 : 3 pages avec le bandeau et les sources).
+    if (pagesMarineV3(theme) && estBloc1(section)) {
+      const variantes = [{}, { sources: false }, { sources: false, bandeau: false }].map((o) => intertitresV3(cleanTextForMarp(pageBloc1Marine(section.text, section.articlesBloc1, o))));
+      texte = variantes.find((v) => splitIntoSlideChunks(v, LIMITES_MARINE_V3 as LimitesPage).length <= 2) || variantes[0];
+    }
     if (chapeau) { texte = `${chapeau}\n\n${texte}`; chapeau = ''; }
     const limites = limitesSection(section, theme);
     const suivante = chapter.sections[si + 1];
@@ -403,6 +496,9 @@ export interface AssembleSection {
    * pages de texte pleines, aucun schéma sous le texte.
    */
   texteSeul?: boolean;
+  /** Bloc 1 du style « marine » v3 : articles du CCTP de ses chiffres (relevés à la génération), pour la mise en page de
+   *  la maquette (bandeau des chiffres clés, lignes de source). */
+  articlesBloc1?: Record<string, string>;
 }
 
 export interface AssembleChapter {
@@ -890,7 +986,10 @@ export class MarpGenerator {
       lines.push('');
       if (v3 && ctx.couleurs) {
         // Style « marine » v3 : grand numéro orange, titre du bloc, rubriques, parcours du mémoire.
-        const titresBloc = [...chapter.sections.map((sec) => sec.title), ...(avecPagesReferences(chapter) && this.getReferencesSlides().length ? ['Ils nous font confiance'] : [])];
+        // Bloc 1 (une seule rubrique, la compréhension du besoin) : ses sous-parties, comme la maquette (T1-CONS-5).
+        const titresBloc = chapter.sections.length === 1 && estBloc1(chapter.sections[0])
+          ? sousPartiesBloc1(chapter.sections[0].text, !!chapter.sections[0].schemaPleinePage)
+          : [...chapter.sections.map((sec) => sec.title), ...(avecPagesReferences(chapter) && this.getReferencesSlides().length ? ['Ils nous font confiance'] : [])];
         lines.push(ouvertureV3(this.romanToNumber(chapter.key), chapter.title, titresBloc, ctx.visibles.map((c) => c.title), ctx.client, ctx.couleurs));
         lines.push('');
       } else if (refonte) {
@@ -934,7 +1033,12 @@ export class MarpGenerator {
               if (!memesTitres(sur, titre)) lines.push(surtitre(sur), '');
               lines.push(`# ${typoV3(titre.replace(/[<>]/g, ''))}`, '');
             } else {
-              lines.push(surtitre(`${section.title} (suite)`), '');
+              // Surtitre des pages suivantes sur une seule ligne (citedia 703 p. 50 : titre de 101 signes et « (suite) » sur
+              // deux lignes, texte débordant de 1,8 mm sous la zone utile) : la partie avant « : », sinon le titre coupé à un mot.
+              const suite = `${section.title} (suite)`.length <= 90 ? section.title
+                : section.title.includes(' : ') ? section.title.slice(0, section.title.indexOf(' : '))
+                  : `${section.title.slice(0, 80).replace(/\s+\S*$/, '')}…`;
+              lines.push(surtitre(`${suite} (suite)`), '');
             }
             lines.push(typoV3(chunk));
             lines.push('');
