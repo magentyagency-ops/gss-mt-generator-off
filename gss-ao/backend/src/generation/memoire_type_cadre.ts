@@ -862,50 +862,68 @@ export function completerParThematiques(texte: string, thematiques: PhraseThemat
  * garde toujours au moins une ligne. Aucun mot n'est changé.
  */
 export function remonterSousTitreFinal(lignesEntree: string[], racines: (t: string) => Set<string>): string[] {
-  const lignes = [...lignesEntree];
-  const pleines = lignes.map((l, k) => ({ l, k })).filter((x) => x.l.trim());
-  if (pleines.length < 3) return lignes;
-  let dernier = pleines[pleines.length - 1];
-  let repere = -1;
-  if (/^\s*\[À COMPLÉTER\][.;]?\s*$/.test(dernier.l) && pleines.length >= 2) { repere = dernier.k; dernier = pleines[pleines.length - 2]; }
-  if (!estSousTitreCadre(dernier.l)) return lignes;
-  const i = dernier.k;
-  const cible = racines(lignes[i].replace(/[#*]/g, ''));
-  if (!cible.size) return lignes;
-  let precedent = -1;
-  // Sous-titre du cadre (jamais une amorce de liste de GSS terminée par « : », « Pour l'absence prévue, notre procédure … : »).
-  for (let k = i - 1; k >= 0; k--) if (estSousTitreCadre(lignes[k]) && !/:\s*$/.test(lignes[k].trim())) { precedent = k; break; }
-  if (precedent < 0) return lignes;
-  // Première ligne qui traite le sujet du sous-titre, après au moins une ligne laissée au sous-titre précédent.
+  let lignes = [...lignesEntree];
+  const REPERE = /^\s*\[À COMPLÉTER\][.;]?\s*$/;
+  const titreCadre = (l: string) => estSousTitreCadre(l) && !/:\s*$/.test(l.trim());
   // Mots porteurs comparés sur 6 lettres (« recyclage » et « recycler »).
   const commun = (a: Set<string>, b: Set<string>) => [...a].some((w) => [...b].some((c) => c.slice(0, 6) === w.slice(0, 6)));
-  let premiere = -1, gardees = 0;
-  for (let k = precedent + 1; k < i; k++) {
-    if (!lignes[k].trim()) continue;
-    // Une ligne de texte, ou un intertitre de GSS terminé par « : » (« Les économies d'énergie : »).
-    const candidate = !estSousTitreCadre(lignes[k]) || /:\s*$/.test(lignes[k].trim());
-    if (gardees >= 1 && candidate && commun(racines(lignes[k]), cible)) { premiere = k; break; }
-    gardees++;
+  // Sous-titre du cadre vide : suivi d'un seul « [À COMPLÉTER] » puis de la fin ou d'un autre sous-titre du cadre, ou suivi
+  // directement de la fin ou d'un autre sous-titre du cadre (génération réelle etampes2 702 : « Écogestes et économies
+  // d'énergie » entre « Un réel engagement » et « Sensibilisation environnementale »).
+  const vide = (i: number): { vide: boolean; repere: number } => {
+    let j = i + 1;
+    while (j < lignes.length && !lignes[j].trim()) j++;
+    let repere = -1;
+    if (j < lignes.length && REPERE.test(lignes[j])) { repere = j; j++; while (j < lignes.length && !lignes[j].trim()) j++; }
+    return { vide: j >= lignes.length || titreCadre(lignes[j]), repere };
+  };
+  for (let tour = 0; tour < 6; tour++) {
+    let bouge = false;
+    for (let i = 1; i < lignes.length && !bouge; i++) {
+      if (!titreCadre(lignes[i])) continue;
+      const v = vide(i);
+      if (!v.vide) continue;
+      const cible = racines(lignes[i].replace(/[#*]/g, ''));
+      if (!cible.size) continue;
+      let precedent = -1;
+      // Sous-titre du cadre (jamais une amorce de liste de GSS terminée par « : », « Pour l'absence prévue, notre procédure … : »).
+      for (let k = i - 1; k >= 0; k--) if (titreCadre(lignes[k])) { precedent = k; break; }
+      if (precedent < 0) continue;
+      // Première ligne qui traite le sujet du sous-titre, après au moins une ligne laissée au sous-titre précédent.
+      let premiere = -1, gardees = 0;
+      for (let k = precedent + 1; k < i; k++) {
+        if (!lignes[k].trim()) continue;
+        // Une ligne de texte, ou un intertitre de GSS terminé par « : » (« Les économies d'énergie : »).
+        const candidate = !estSousTitreCadre(lignes[k]) || /:\s*$/.test(lignes[k].trim());
+        if (gardees >= 1 && candidate && commun(racines(lignes[k]), cible)) { premiere = k; break; }
+        gardees++;
+      }
+      if (premiere < 0) continue;
+      const titre = lignes[i];
+      const anciens = racines(lignes[precedent].replace(/[#*]/g, ''));
+      const sousLeTitre: string[] = [];
+      const remontees: string[] = [];
+      for (let k = premiere; k < i; k++) {
+        const r = racines(lignes[k]);
+        const duPrecedent = commun(r, anciens) && !commun(r, cible);
+        (duPrecedent && lignes[k].trim() ? remontees : sousLeTitre).push(lignes[k]);
+      }
+      const apres = lignes.slice(i + 1).filter((_l, n) => i + 1 + n !== v.repere);
+      lignes = [...lignes.slice(0, premiere), ...remontees, ...(remontees.length ? [''] : []), titre, ...sousLeTitre, ...(apres.length && apres[0].trim() ? [''] : []), ...apres];
+      bouge = true;
+    }
+    if (!bouge) break;
   }
-  if (premiere < 0) return lignes;
-  const titre = lignes[i];
-  const anciens = racines(lignes[precedent].replace(/[#*]/g, ''));
-  const sousLeTitre: string[] = [];
-  const remontees: string[] = [];
-  for (let k = premiere; k < i; k++) {
-    const r = racines(lignes[k]);
-    const duPrecedent = commun(r, anciens) && !commun(r, cible);
-    (duPrecedent && lignes[k].trim() ? remontees : sousLeTitre).push(lignes[k]);
-  }
-  const apres = lignes.slice(i + 1).filter((_l, n) => i + 1 + n !== repere);
-  return [...lignes.slice(0, premiere), ...remontees, ...(remontees.length ? [''] : []), titre, ...sousLeTitre, ...apres];
+  return lignes;
 }
 
 export function completerSousTitresVides(texte: string, sources: Array<{ texte?: string }>, thematiques: PhraseThematique[] = [], question = ''): { texte: string; completes: string[] } {
   const VIDES_ST = new Set(['besoin', 'moyen', 'moyens', 'mise', 'oeuvre', 'description', 'gestion', 'organisation', 'politique', 'personnel', 'service', 'prestation', 'mesure', 'mesures', 'agent', 'agents']);
   const racines = (t: string) => new Set(normaliser(t).replace(/[^a-z ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 5 && !VIDES_ST.has(w)).map((w) => w.replace(/s$/, '').slice(0, 7)));
   const phrases = sources.flatMap((s) => String(s.texte || '').split('\n')).filter((l) => l.trim() && !estSousTitreCadre(l) && !/\[À COMPLÉTER\]|\{\{/.test(l))
-    .flatMap((l) => l.replace(/^\s*(?:[•\-*]|\d+[.)])\s+/, '').split(/(?<=[.!?])\s+/)).map((p) => p.trim()).filter((p) => p.split(/\s+/).length >= 6);
+    .flatMap((l) => l.replace(/^\s*(?:[•\-*]|\d+[.)])\s+/, '').split(/(?<=[.!?])\s+/)).map((p) => p.trim())
+    // Élément de liste de GSS (« le combustible : les matières… », etampes2 702) : jamais seul sous un sous-titre.
+    .filter((p) => p.split(/\s+/).length >= 6 && !/^[a-zà-ÿ]/.test(p));
   const theme = completerParThematiques(texte, thematiques, question);
   const lignes = remonterSousTitreFinal(theme.texte.split('\n'), racines);
   const completes: string[] = [...theme.completes];

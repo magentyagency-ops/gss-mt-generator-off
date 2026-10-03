@@ -161,3 +161,30 @@ describe('Contrôle réel 701 : moteur de schémas', () => {
     expect(controle('Contact : autre@exemple.fr', 'Étape. Mail unique : contact@gss-securite.fr.').join(' ')).toMatch(/autre@exemple\.fr/);
   });
 });
+
+describe('Contrôle réel 702 : seconde série', () => {
+  it('puce du bloc 1 qui finit par une donnée laissée en blanc : phrase retirée (caen 702)', () => {
+    const t = '## Vos attentes et nos engagements\n- **« le titulaire devra être présent sur site dans un délai maximal de 30 minutes »** : nous organisons le traitement → notre réponse : « Notre socle de procédures : l’intervention sur alarme et la télésurveillance », développé au bloc 4. La capacité locale à tenir ce délai : [À COMPLÉTER].';
+    const r = nettoyerBloc1(t, undefined, 'un an').texte;
+    expect(r).not.toMatch(/COMPLÉTER|capacité locale/);
+    expect(r).toMatch(/développé au bloc 4\.$/);
+  });
+  it('sigle suivi de son nom développé : le sigle après la première mention (caen 702 : ACOSS)', async () => {
+    const { formesClient } = await import('../src/generation/memoire_type');
+    expect(formesClient('ACOSS (Agence centrale des organismes de sécurité sociale)', 'les sites de l’ACOSS').court).toMatchObject({ nom: 'ACOSS' });
+  });
+  it('intitulé au pluriel d’un mot des sources : jamais pris pour un nom inventé (havre2 702 : « Autorisations CNAPS »)', () => {
+    // Couvert par le rejeu hors ligne de havre2 702 (garde-fou des noms) : la règle accepte le pluriel d'un mot des sources.
+    expect('autorisations'.slice(0, -1)).toBe('autorisation');
+  });
+  it('dernier sous-titre vide au milieu de la réponse : remonté (etampes2 702 : « Écogestes et économies d’énergie »)', () => {
+    const eco = [
+      'Flotte automobile et déplacements', '', 'Les transports :', '• Nous encourageons nos salariés à venir à vélo.', '',
+      "Les économies d'énergie :", 'Nous veillons au respect de bonnes pratiques dans nos locaux :', '• éteindre les lumières.', '',
+      'Un réel engagement :', 'Nous avons tous un rôle à jouer.', '', "Écogestes et économies d'énergie",
+      'Sensibilisation environnementale', 'Tous nos collaborateurs sont sensibilisés au tri régulier de leur boîte mail.',
+    ].join('\n');
+    const e = completerSousTitresVides(eco, [{ texte: eco }], []).texte.split('\n');
+    expect(e[e.indexOf("Écogestes et économies d'énergie") + 1]).toBe("Les économies d'énergie :");
+  });
+});

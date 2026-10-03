@@ -2198,6 +2198,18 @@ export function nettoyerBloc1(texte: string, plan: PlanMemoireType | undefined, 
       return distincts.sort((a, b) => a - b).map((b, i) => `${i === 0 ? prep : 'au'} bloc ${b}${sep || ','} ${liste(titres.filter((_, k) => nums[k] === b))}`).join(', et ');
     });
   }
+  // 3 ter. Puce d'une attente ou d'un point de vigilance qui finit par une donnée laissée en blanc (génération réelle caen 702 :
+  //    « … → notre réponse : « … », développé au bloc 4. La capacité locale à tenir ce délai : [À COMPLÉTER]. ») : le bloc 1
+  //    présente ce que GSS a compris et ce qu'il répond, jamais un doute ; la phrase est retirée, la question reste posée à GSS
+  //    (sa ligne [CONSULTATION REQUISE] est gardée).
+  {
+    let partie = '';
+    t = t.split('\n').map((l) => {
+      if (/^##\s/.test(l)) { partie = l; return l; }
+      if (!/^##\s+(?:Vos attentes|Les points de vigilance)/i.test(partie) || !/^\s*[-*•]\s/.test(l)) return l;
+      return l.replace(/\s+[A-ZÀ-Ý][^.:;!?\n]{2,140}\s:\s*\[À COMPLÉTER\](?:⟦AC:\d+⟧)?\s*\.?(?=\s*$)/, (m) => { retirees.push(m.trim()); return ''; });
+    }).join('\n');
+  }
   // 3 bis. Rythme recopié deux fois du DCE (imm 701 : « 7j/7 7j/7 24h/24 », coquille du CCTP) : écrit une fois.
   t = t.replace(/(\d+\s?[a-zA-Z]{1,2}\s?\/\s?\d+)(?:\s+\1)+(?![\w/])/g, '$1');
   // 4. Ligne vide du tableau du périmètre (génération réelle caen 701 : « CAEN | Aucun poste fixe permanent prévu au CCTP |

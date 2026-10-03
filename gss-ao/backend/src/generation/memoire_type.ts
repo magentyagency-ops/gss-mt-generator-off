@@ -1066,6 +1066,15 @@ export function formesClient(nom: string, dce = ''): { long: string; court?: { a
     ? ((/\(([^()]{2,40})\)\s*$/.exec(principal) || [])[1] || ((principal.match(/\(/g) || []).length === 1 ? (/\(([^()]{2,40})\)/.exec(principal) || [])[1] : undefined))?.trim()
     : undefined;
   const juridique = !!parenthese && FORME_JURIDIQUE.test(normaliser(parenthese).replace(/[’]/g, "'"));
+  // Sigle suivi de son nom développé entre parenthèses (génération réelle caen 702 : « ACOSS (Agence centrale des organismes de
+  // sécurité sociale) », écrit en entier une cinquantaine de fois) : le sigle sert après la première mention.
+  {
+    const sp = /^([A-Z][A-Z0-9&.\-]{1,11})\s*\(([^()]{8,})\)\s*$/.exec(principal.trim());
+    if (sp && entites.length === 1 && !suite) {
+      const art = articleEtNom(sp[1], dce).article || articleSigle(sp[1], '');
+      if (art) return { long, court: { article: art, nom: sp[1], genre: '' } };
+    }
+  }
   if (entites.length === 1 && !suite && (juridique || (mots >= 5 && mots <= 6 && !parenthese))) {
     const sigle = sigleDuDce(juridique ? principal.replace(/\s*\([^()]*\)\s*$/, '') : principal, dce);
     const art = sigle ? articleEtNom(sigle, dce).article || articleSigle(sigle, '') : '';

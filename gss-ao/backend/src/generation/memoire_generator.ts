@@ -6199,7 +6199,9 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     const nameInSources = (name: string): boolean => {
       const tokens = normCtx(name).split(/[\s,’'-]+/).filter((t) => t.length >= 3 && !NAME_STOPLIST.has(t));
       if (tokens.length === 0) return true;                       // que des sigles/initiales → on laisse
-      return tokens.every((t) => sourceNamesNorm.includes(t));
+      // Mot au pluriel d'un mot des sources (havre2 702 : intitulé « Autorisations CNAPS » pris pour « Prénom NOM » et remplacé
+      // par « [À COMPLÉTER] », alors que « Autorisation CNAPS » figure dans le cadre).
+      return tokens.every((t) => sourceNamesNorm.includes(t) || (/[sx]$/.test(t) && t.length > 5 && sourceNamesNorm.includes(t.slice(0, -1))));
     };
     const guardNames = (val: string): string =>
       val.replace(PERSON_NAME_RE, (full, cued, nomFirst, nomLast) => {

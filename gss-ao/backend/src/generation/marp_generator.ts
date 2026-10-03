@@ -186,7 +186,11 @@ const MARGE_PAGE_SERREE = 1.1;
 
 /** Découpage d'un texte de rubrique en pages de texte seules (mise en page v2 de la refonte), pour les contrôles. */
 export function decouperPagesTexte(texte: string, retourArriere = false): string[] {
-  return splitIntoSlideChunks(texte, retourArriere ? LIMITES_TEXTE_SEUL.origine : LIMITES_TEXTE_SEUL.refonte);
+  if (retourArriere) return splitIntoSlideChunks(texte, LIMITES_TEXTE_SEUL.origine);
+  // Style « marine » v3 : les mêmes limites et les mêmes intertitres que le rendu (génération réelle ifits 702 : bloc 1 mesuré
+  // en 2 pages avec les limites des autres styles, imprimé sur 3 pages de texte ; consigne 3 : 1 à 2 pages).
+  if (pagesMarineV3(themeActif())) return splitIntoSlideChunks(intertitresV3(texte), LIMITES_MARINE_V3 as LimitesPage);
+  return splitIntoSlideChunks(texte, LIMITES_TEXTE_SEUL.refonte);
 }
 
 export function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots: MAX_WORDS_PER_SLIDE, lignes: MAX_LINES_PER_SLIDE }): string[] {
