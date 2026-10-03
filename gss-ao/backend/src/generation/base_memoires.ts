@@ -619,15 +619,20 @@ const VILLES_HORS_NORMANDIE = ['Paris', 'Marseille', 'Lyon', 'Toulouse', 'Nice',
   'Thiais', 'Saint-Mandé', 'Neuilly-sur-Marne', 'Neuilly-sur-Seine', "Saint-Martin-d'Hères", 'Montrouge', 'Vincennes', 'Issy-les-Moulineaux', 'Puteaux',
   'Massy', 'Palaiseau', 'Saclay'];
 const ADMIN_LIEU = /cedex|\bB\.?P\.?\s*\d|bo[îi]te postale|si[èe]ge|DREETS|DIRECCTE|DDETS|DRFIP|DGFIP|finances publiques|tribunal|cour administrative|cour d.appel|pr[ée]fecture|CNAPS|inspection du travail|URSSAF|tr[ée]sor|paierie|comptable|greffe|minist[èe]re/i;
-/** Expression d'une commune : accents et tirets libres, jamais le début d'un nom composé (« Saint-Étienne-du-Rouvray »). */
-function rxCommune(nom: string): RegExp {
+/**
+ * Expression d'une commune : accents et tirets libres, jamais le début d'un nom composé (« Saint-Étienne-du-Rouvray »).
+ * `elision` : la commune peut suivre « d' » ou « l' » (« médiathèque d'Évreux », T9-COH-3), pour le lieu du marché seulement.
+ */
+function rxCommune(nom: string, elision = false): RegExp {
   const corps = nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     .replace(/[aeiouc]/gi, (c) => ({ a: '[aàâä]', e: '[eéèêë]', i: '[iîï]', o: '[oôö]', u: '[uùûü]', c: '[cç]' } as Record<string, string>)[c.toLowerCase()] || c)
     .replace(/[- ]/g, "[-\u2011 ]+").replace(/'/g, "['’]");
-  return new RegExp(`(?<![\\wÀ-ÿ'’-])${corps}(?![\\wÀ-ÿ]|[-\u2011'’][A-Za-zÀ-ÿ]|[-\u2011 ]+(?:du|de|des|sur|sous|lès|les|lez|en)[- ][A-ZÀ-Ýa-zà-ÿ])`, 'gi');
+  // Élision (« d'Évreux ») jamais lue dans le reste d'un nom composé (« Gonfreville-l'Orcher »).
+  const avant = elision ? "(?<![\\wÀ-ÿ-])(?<!(?<!(?:^|[^\\wÀ-ÿ'’-])[dDlL])['’])" : "(?<![\\wÀ-ÿ'’-])";
+  return new RegExp(`${avant}${corps}(?![\\wÀ-ÿ]|[-\u2011'’][A-Za-zÀ-ÿ]|[-\u2011 ]+(?:du|de|des|sur|sous|lès|les|lez|en)[- ][A-ZÀ-Ýa-zà-ÿ])`, 'gi');
 }
-const RX_NORMANDES = COMMUNES_NORMANDES.map((n) => ({ nom: n, rx: rxCommune(n) }));
-const RX_HORS = VILLES_HORS_NORMANDIE.map((n) => ({ nom: n, rx: rxCommune(n) }));
+const RX_NORMANDES = COMMUNES_NORMANDES.map((n) => ({ nom: n, rx: rxCommune(n, true) }));
+const RX_HORS = VILLES_HORS_NORMANDIE.map((n) => ({ nom: n, rx: rxCommune(n, true) }));
 /** Communes nommées hors adresse postale et hors adresse administrative (tribunal, préfecture…), avec leur nombre de citations. */
 function communesNommees(texte: string): { normands: Map<string, number>; hors: Map<string, number> } {
   const compter = (liste: Array<{ nom: string; rx: RegExp }>) => {
@@ -641,6 +646,10 @@ function communesNommees(texte: string): { normands: Map<string, number>; hors: 
         // Nom de voie (« 12 rue de Paris », « route de Lyon ») : pas une commune.
         if (/\b(?:rue|avenue|av\.|boulevard|bd|route|chemin|place|quai|all[ée]e|cours|impasse|porte|gare|pont|square|esplanade)\s+(?:de\s+(?:la\s+)?|d['’]|du\s+|des\s+)?$/i.test(avant)) continue;
         if (ADMIN_LIEU.test(avant.slice(-60)) || ADMIN_LIEU.test(texte.slice(debut + m[0].length, debut + m[0].length + 14))) continue;
+        // Heure légale ou fuseau horaire (T9REG-2, T9-COH-3 : « heure de Paris », « (GMT+01:00) Paris, Bruxelles, Copenhague,
+        // Madrid » des plateformes de dématérialisation) : pas le lieu du marché.
+        if (/\b(?:heures?|fuseau(?:\s+horaire)?)(?:\s+(?:l[ée]gale|locale|officielle|de\s+r[ée]f[ée]rence))?\s+(?:de\s+)?$/i.test(avant)
+          || /\(\s*(?:GMT|UTC)\s*(?:[+\u2212-]\s*\d{1,2}(?::\d{2})?)?\s*\)\s*$|\bEurope\s*\/\s*$/i.test(avant)) continue;
         out.set(nom, (out.get(nom) || 0) + 1);
       }
     }
@@ -771,7 +780,8 @@ export function communesParCodePostal(texte: string, dce = texte): Array<{ code:
   const out: Array<{ code: string; commune: string; debut: number; fin: number }> = [];
   const SUITE = String.raw`[A-Za-zÀ-ÿ'’]*(?:[ \t]*[-\u2011][ \t]*[A-Za-zÀ-ÿ'’]+)*`;
   const MOT = String.raw`[A-Za-zÀ-ÿ'’]${SUITE}`;
-  const rx = new RegExp(String.raw`(?<![=/?&#.\d])\b(\d{5})\b(?![\d])[ \t]*(?:[–—,-][ \t]*)?([A-ZÉÈÀÂÎÔÛ]${SUITE}(?:[ \t]+(?!cedex|CEDEX|Cedex)${MOT}){0,4})?`, 'g');
+  // Jamais le numéro d'un tri postal (« CS 31402 », « BP 21 », « TSA 70011 », « SP 51000 », T9REG-1) : ce n'est pas un code postal.
+  const rx = new RegExp(String.raw`(?<![=/?&#.\d])(?<!(?<![A-Za-zÀ-ÿ])(?:CS|C\.S\.|BP|B\.P\.?|TSA|SP|cs|bp|tsa)[ \t]*(?:n°[ \t]*)?)\b(\d{5})\b(?![\d])[ \t]*(?:[–—,-][ \t]*)?([A-ZÉÈÀÂÎÔÛ]${SUITE}(?:[ \t]+(?!cedex|CEDEX|Cedex)${MOT}){0,4})?`, 'g');
   for (const m of String(texte || '').matchAll(rx)) {
     const debut = m.index || 0;
     let commune = m[2] && !UNITE_CP.test(m[2].split(/\s/)[0]) ? communeLisible(m[2], dce) : '';
@@ -789,7 +799,14 @@ export function communesParCodePostal(texte: string, dce = texte): Array<{ code:
         while (k > 0 && (/^[A-ZÀ-Ý]/.test(mots[k - 1]) || PARTICULE.test(mots[k - 1])) && !LIEU.test(mots[k - 1])) k--;
         mots = mots.slice(k);
         while (mots.length && PARTICULE.test(mots[0])) mots.shift();
-        commune = communeLisible(mots.join(' '), dce);
+        // Nom de voie écrit juste avant le code (T9REG-2, T9-COH-3 : « 42 boulevard Jourdan, 75014 ⏎ Paris » → jamais
+        // « Jourdan ») : les mots retenus suivent un type de voie (« boulevard », « rue de la », « place du »), ou finissent
+        // par une mention postale (« … CS », « … BP ») : ce n'est pas une commune.
+        const tous = av[1].split(/[ \t]+/);
+        const avantMots = `${ligne.slice(0, av.index)}${tous.slice(0, tous.length - mots.length).join(' ')} `;
+        const VOIE = /(?:^|[^A-Za-zÀ-ÿ])(?:rue|ruelle|avenue|av\.?|boulevard|bd|bld|place|pl\.|chemin|ch\.|route|rte|all[ée]e|quai|impasse|imp\.|cours|square|esplanade|parvis|passage|sentier|voie|cit[ée]|r[ée]sidence|lotissement|zone|za|zi|zac|rond-point|carrefour|mail|promenade|faubourg|hameau|lieu-dit)\s+(?:(?:de|du|des|la|le|les|d['’]|l['’])\s*)*$/i;
+        if (mots.length && (VOIE.test(avantMots) || /^(?:CS|BP|B\.P\.?|TSA|SP)$/i.test(mots[mots.length - 1]))) mots = [];
+        commune = mots.length ? communeLisible(mots.join(' '), dce) : '';
       }
     }
     if (commune) out.push({ code: m[1], commune, debut, fin: debut + m[0].length });

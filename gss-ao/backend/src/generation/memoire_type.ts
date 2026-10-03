@@ -1255,8 +1255,13 @@ export function cleCommune(v: string): string {
 function villesDuMarche(dce: string, analyse: any): string[] {
   const out: string[] = [];
   const prefixe = (a: string, b: string) => `${cleCommune(b)} `.startsWith(`${cleCommune(a)} `);
-  for (const { commune } of communesParCodePostal(String(dce || '').slice(0, 30000), String(dce || ''))) {
+  const debutDce = String(dce || '').slice(0, 30000);
+  for (const { commune, debut } of communesParCodePostal(debutDce, String(dce || ''))) {
     if (commune.length < 3 || out.some((x) => prefixe(commune, x))) continue;
+    // Adresse du siège ou d'identification de l'acheteur (« dont le siège est situé … 75014 Paris », « Pouvoir
+    // adjudicateur : … ») : pas la commune d'un site (T9REG-2).
+    const avant = debutDce.slice(Math.max(0, debut - 200), debut).split('\n').slice(-3).join(' ').slice(-140);
+    if (/si[èe]ge|(?:pouvoir adjudicateur|acheteur|ma[îi]tre d.ouvrage|entit[ée] adjudicatrice)\s*:/i.test(avant)) continue;
     const k = out.findIndex((x) => prefixe(x, commune));
     if (k >= 0) out[k] = commune; else out.push(commune);
     if (out.length >= 3) break;
