@@ -418,15 +418,28 @@ export function pageDe(fichier: string, titre: string, derniere = false): number
   const r = spawnSync('pdftotext', ['-layout', fichier, '-'], { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
   if (r.status !== 0 || !r.stdout) return undefined;
   const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const colle = (t: string) => norm(t).replace(/\s+/g, '');
+  const titreComplet = colle(titre);
   const cible = norm(titre).slice(0, 40);
   const pages = r.stdout.split('\f');
-  // En-tête de page : 1re ligne non vide « GLOBAL SECURITY SERVICES … <TITRE DE LA RUBRIQUE> ».
-  const entete = (p: string) => norm(p.split('\n').find((l) => l.trim()) || '');
-  const candidates = pages.map((p, i) => ({ p: norm(p), e: entete(p), i })).filter(({ p, i }) => i > 0 && !/^\s*sommaire\b/.test(p) && !p.includes(' sommaire '));
-  // Priorité aux pages dont l'en-tête porte le titre (pages de la rubrique elle-même) ; à défaut, le texte de la page,
-  // hors pages d'ouverture de bloc (« 04 nos moyens… »), qui listent les titres de toutes leurs rubriques.
-  const parEntete = candidates.filter(({ e }) => e.startsWith('global security services') && e.includes(cible));
-  const trouvees = parEntete.length ? parEntete : candidates.filter(({ p }) => !/^\d{2} /.test(p) && p.includes(cible));
+  // En-tête de page : 1re ligne non vide « GLOBAL SECURITY SERVICES … <TITRE> » (titre du bloc dans le style Marine v3).
+  const lignes = (p: string) => p.split('\n').filter((l) => l.trim());
+  const entete = (p: string) => norm(lignes(p)[0] || '');
+  // Page d'ouverture de bloc (style Marine v3 : « M É M O I R E T E C H N I Q U E · … », numéro « 04 », liste des rubriques
+  // du bloc et parcours des 5 blocs) ou ancienne ouverture (« 04 nos moyens… ») : jamais la page d'une rubrique (T1-CONS-4).
+  const ouverture = (p: string) => colle(lignes(p).slice(0, 3).join(' ')).startsWith('memoiretechnique') || /^\d{2} /.test(norm(p));
+  // Tête d'une page de texte : les lignes qui suivent l'en-tête (surtitre, titre de la rubrique), sans espaces.
+  // Le titre commence une ligne de la tête (seul ou suivi de la colonne de texte), éventuellement sur deux lignes.
+  const tete = (p: string) => {
+    const l = lignes(p).slice(1, 9).map(colle);
+    return l.flatMap((x, k) => [x, `${x}${l[k + 1] || ''}`]);
+  };
+  const candidates = pages.map((p, i) => ({ p: norm(p), e: entete(p), t: tete(p), o: ouverture(p), i })).filter(({ p, i }) => i > 0 && !/^\s*sommaire\b/.test(p) && !p.includes(' sommaire '));
+  // Priorité : page dont la tête porte le titre complet de la rubrique (son début) ; puis l'en-tête (ancien style, titre de la
+  // rubrique dans l'en-tête) ; à défaut, le texte de la page, hors pages d'ouverture de bloc.
+  const parTete = titreComplet.length >= 6 ? candidates.filter(({ t, o }) => !o && t.some((x) => x.startsWith(titreComplet))) : [];
+  const parEntete = candidates.filter(({ e, o }) => !o && e.startsWith('global security services') && e.includes(cible));
+  const trouvees = parTete.length ? parTete : parEntete.length ? parEntete : candidates.filter(({ p, o }) => !o && p.includes(cible));
   const t = derniere ? trouvees[trouvees.length - 1] : trouvees[0];
   return t ? t.i + 1 : undefined;
 }
