@@ -1217,7 +1217,8 @@ const SUJETS_DELAI: Record<string, { sujet: RegExp; exclure?: RegExp; objet?: Re
   },
   alarme: { sujet: /alarme|t[ée]l[ée]\s?-?surveillance|lev[ée]e de doute|d[ée]clenchement/i, exclure: /(?<![\wÀ-ÿ])(?:PTI|DATI)(?![\wÀ-ÿ])|travailleur isol/i },
   pti: { sujet: /(?<![\wÀ-ÿ])(?:PTI|DATI)(?![\wÀ-ÿ])|travailleur isol/i },
-  commande: { sujet: /bons? de commande|commandes? (?:compl[ée]mentaires?|suppl[ée]mentaires?)|prestations? (?:ponctuelles?|exceptionnelles?|suppl[ée]mentaires?)/i, exclure: /pr[ée]venance/i },
+  // « mise à disposition urgente attendue dans un délai de 2 heures » (citedia2, pénalités du CCAP) : délai d'une commande.
+  commande: { sujet: /bons? de commande|commandes? (?:compl[ée]mentaires?|suppl[ée]mentaires?)|prestations? (?:ponctuelles?|exceptionnelles?|suppl[ée]mentaires?)|mises? [àa] disposition (?:urgentes? )?(?:attendue|d.agents?|de personnel)/i, exclure: /pr[ée]venance/i },
   ssi: { sujet: /(?<![\wÀ-ÿ])SSI(?![\wÀ-ÿ])|s[ée]curit[ée] incendie/i },
 };
 
@@ -1476,8 +1477,11 @@ function delai(c: CalculVariables, nom: string, sujet: keyof typeof SUJETS_DELAI
     const plusCourt = Math.min(...imposes.map((d) => d.minutes));
     if (!(c.horsNormandie && def?.normandie_seulement)) {
       const g = def?.registre ? depuisRegistre(c, def.registre, normaliserDelai) : def?.valeur_gss ? { valeur: def.valeur_gss, source: def.origine, aConfirmer: questionParGeneration(def) } as ValeurVariable : { valeur: null };
+      // Délai de GSS conforme : jamais plus long que le délai le plus court du CCTP, ou, pour une fourchette (« 1 h à 24 h »
+      // selon l'urgence), bornes au plus égales à celles du CCTP (2 heures en urgence, 24 heures sinon).
       const durees = variableRenseignee(g) ? dureesIntervention(`en ${g.valeur}`) : [];
-      if (durees.length && Math.max(...durees) <= plusCourt) return g;
+      const plusLong = Math.max(...imposes.map((d) => d.minutes));
+      if (durees.length && (Math.max(...durees) <= plusCourt || (durees.length > 1 && Math.min(...durees) <= plusCourt && Math.max(...durees) <= plusLong))) return g;
     }
     const citations = phrasesDelaisDuDce(c.ctx.dce || '', sujet!).map((p) => `« ${p.length > 260 ? `${p.slice(0, 260).replace(/\s+\S*$/, '')}…` : p} »`).join(' ; ');
     return { valeur: null, question: `Le CCTP impose plusieurs délais pour ce point (${objetDe()}) : ${citations}. La phrase de GSS est imprimée sans délai : quel délai GSS y écrit-elle ?` };

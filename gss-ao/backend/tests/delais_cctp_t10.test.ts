@@ -74,7 +74,7 @@ describe('plusieurs délais du CCTP pour un même sujet (T10C-2)', () => {
     const o = 'Le rondier arrive sur site en 45 minutes au maximum après l’appel de la télésurveillance.';
     const ex = exigenceDuFiltre({ origine: o, adaptee: 'Le rondier arrive sur site après l’appel de la télésurveillance.' } as any, ALARMES, true, {});
     expect(ex).toMatch(/15 minutes maximum/);
-    expect(ex).not.toMatch(/n'en impose aucun/);
+    expect(ex).not.toMatch(/n'en impose aucun|ne les impose pas/);
     const ad = adaptationsDesValeursImposees(chargerMemoireType(), { dce: ALARMES, analyse: {} } as any, ['b4_proc_alarme']);
     expect(ad.length).toBe(1);
     expect(ad[0].avant).toMatch(/en 45 minutes au maximum/);
