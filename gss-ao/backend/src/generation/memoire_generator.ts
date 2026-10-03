@@ -6137,6 +6137,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       toutes: normaliser(`${identiteText}${effectifText} ${analysisJson} ${dceContext} ${gssDocContext} ${referentsContext} ${texteSourcesMemoires()} ${this.texteDemande()} ${textesMT} ${LIBELLES_IDENTITE_DETERMINISTES}`),
       gss: normaliser(`${gssDocContext} ${texteSourcesMemoires()} ${this.texteDemande()} ${textesMT}`),
       telephoneUnique: valeurRegistre('telephone_contact') || undefined,
+      telephoneFixe: valeurRegistre('telephone_fixe') || undefined,
       interlocuteurUnique: (valeurRegistre('dirigeant') || '').trim().split(/\s+/)[0] || undefined,
       interlocuteurNom: (valeurRegistre('dirigeant') || '').trim().split(/\s+/).map((m, i) => (i === 0 ? m.toUpperCase() : m.charAt(0).toUpperCase() + m.slice(1).toLowerCase())).join(' ') || undefined,
       questionPartenaire: valeurRegistre('partenaire_telesurveillance') ? undefined

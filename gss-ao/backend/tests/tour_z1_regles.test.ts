@@ -212,3 +212,22 @@ describe('D8 : phrase remplacée sans mot commun (T1F-4)', () => {
     expect(r.texte).toBe(avant);
   });
 });
+
+import { controlerFaitsNouveauxCadre } from '../src/generation/memoire_type_cadre';
+import { normaliser as norm } from '../src/generation/memoire_type';
+
+describe('cadre imposé : faits de GSS (T1F-5, T1-CONS-2)', () => {
+  it('« DATI-PTI » de la réponse retrouvé dans « DATI – PTI » du CCTP', () => {
+    const s: any = { toutes: norm('le titulaire devra mettre en place une solution de « protection pour travailleur isolé » DATI – PTI'), gss: '' };
+    const v = "Les tenues sont fournies à chaque agent. Pour les agents travaillant seuls ou de nuit, le dispositif comprend une solution DATI-PTI, conformément au CCTP. Les tablettes sont remplacées sous 48 heures.";
+    const r = controlerFaitsNouveauxCadre(v, 'Section: "5.1 – Moyens matériels"', s);
+    expect(r.texte).toBe(v);
+    expect(r.questions).toEqual([]);
+  });
+  it('contact de GSS : l’interlocuteur unique et un numéro confirmé, jamais l’ancien contact d’un autre mémoire', () => {
+    const s: any = { toutes: norm('MARCHANI Adil VATTIER Marie'), gss: '', telephoneUnique: '06 58 06 32 25', telephoneFixe: '09 62 21 24 75', interlocuteurUnique: 'MARCHANI', interlocuteurNom: 'MARCHANI Adil' };
+    const r = controlerFaitsNouveauxCadre('VATTIER Marie, interlocutrice unique — tél. : 06 25 73 94 58 — e-mail : contact@gss-securite.fr', 'Question: "Coordonnées de la personne à contacter pour obtenir des renseignements complémentaires"', s);
+    expect(r.texte).toBe('MARCHANI Adil, interlocuteur unique — tél. : 06 58 06 32 25 — e-mail : contact@gss-securite.fr');
+    expect(controlerFaitsNouveauxCadre('Interlocuteur principal : MARCHANI Adil — 06 58 06 32 25 / 09 62 21 24 75', 'Question: "Interlocuteur"', s).texte).toBe('Interlocuteur principal : MARCHANI Adil — 06 58 06 32 25 / 09 62 21 24 75');
+  });
+});

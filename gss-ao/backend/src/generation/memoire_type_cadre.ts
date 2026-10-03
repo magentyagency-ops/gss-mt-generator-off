@@ -2074,6 +2074,8 @@ export interface SourcesFaitsCadre {
   interlocuteurUnique?: string;
   /** Nom complet de l'interlocuteur unique (« MARCHANI Adil »), pour un champ de contact attribué à une autre personne. */
   interlocuteurNom?: string;
+  /** Numéro fixe de GSS confirmé (registre telephone_fixe) : seul autre numéro admis avec le numéro unique. */
+  telephoneFixe?: string;
   /** Question à poser quand la réponse nomme un partenaire de télésurveillance (ERYMA ou Delta) non confirmé par GSS. */
   questionPartenaire?: string;
 }
@@ -2112,7 +2114,26 @@ export function controlerFaitsNouveauxCadre(valeur: string, contexte: string, s:
   const libBrut = /\p{L}{3}/u.test(libQ) ? libQ : /\p{L}{3}/u.test(libS) ? libS : '';
   const libelle = libBrut.length <= 120 ? libBrut : `${libBrut.slice(0, 121).replace(/\s+\S*$/, '').replace(/[\s,;:(–—-]+$/, '')}…`;
   // Apostrophe, trait d'union ou espace indifférents entre les parties d'un mot (« Crit’Air » = « CRIT AIR » du DCE).
-  const dansSources = (mot: string, src: string) => new RegExp(`(?<![a-z0-9])${normaliser(mot).split(/['‘´\s-]+/).filter(Boolean).map(echapperRx).join("[\\s'-]?")}(?![a-z0-9])`).test(src);
+  // Tirets de toute sorte et espaces entre les parties d'un mot composé (T1F-5 : « DATI-PTI » = « DATI – PTI » du CCTP).
+  const dansSources = (mot: string, src: string) => new RegExp(`(?<![a-z0-9])${normaliser(mot).split(/['‘´\s\u2010-\u2015-]+/).filter(Boolean).map(echapperRx).join("[\\s'’\u2010-\u2015-]{0,3}")}(?![a-z0-9])`).test(src);
+
+  // 0. Contact de GSS (T1-CONS-2 : « VATTIER Marie, interlocutrice unique — tél. : 06 25 73 94 58 », repris d'un ancien
+  //    mémoire) : dans un champ de contact, ou dès qu'une personne est présentée comme interlocuteur unique, la personne est
+  //    l'interlocuteur unique (faits de référence) et le numéro est l'un des deux numéros confirmés par GSS.
+  if (s.interlocuteurNom && s.telephoneUnique) {
+    const champContact = /personne (?:a|à) contacter|interlocut|correspondant|contact (?:du|pour le) (?:titulaire|candidat|march)/.test(ctxN);
+    const admis = [s.telephoneUnique, s.telephoneFixe].filter(Boolean).map((t) => String(t).replace(/\D/g, ''));
+    v = v.split('\n').map((ligne) => ligne.split(/(?<=;)/).map((seg) => {
+      if (!champContact && !/interlocut(?:eur|rice) unique/i.test(seg)) return seg;
+      let x = seg;
+      for (const m of [...x.matchAll(/(?:\b(?:M(?:me|lle)?\.?|Madame|Monsieur)\s+)?\b([A-ZÀ-ÖØ-Þ]{2,}(?:[ -][A-ZÀ-ÖØ-Þ]{2,})*)\s+([A-ZÀ-ÖØ-Þ][a-zà-ÿ][\wà-ÿ'’-]*)/g)]) {
+        if (SIGLES_ADMIS.has(normaliser(m[1].split(/[ -]/)[0])) || normaliser(m[0]).includes(normaliser(s.interlocuteurUnique || '§'))) continue;
+        x = x.replace(m[0], s.interlocuteurNom!);
+      }
+      x = x.replace(/(?<!\d)0[1-9](?:[\s.\-]?\d{2}){4}(?!\d)/g, (num) => (admis.includes(num.replace(/\D/g, '')) ? num : s.telephoneUnique!));
+      return x.replace(/\binterlocutrice unique\b/gi, 'interlocuteur unique');
+    }).join('')).join('\n');
+  }
 
   // 1. Numéro unique associé à une autre personne que l'interlocuteur unique.
   if (s.telephoneUnique && s.interlocuteurUnique) {
