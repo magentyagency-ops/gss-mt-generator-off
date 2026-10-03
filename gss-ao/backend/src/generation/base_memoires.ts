@@ -824,6 +824,12 @@ export function communesParCodePostal(texte: string, dce = texte): Array<{ code:
  * la Loire … 44042 Nantes Cedex 1 »). `mixte` : au moins un site normand et au moins un site hors Normandie.
  */
 export function sitesDuMarche(analyse: any, dce: string): { normands: string[]; horsNormandie: string[]; mixte: boolean } {
+  const r = sitesParCodePostal(analyse, dce);
+  return { normands: r.normands, horsNormandie: r.horsNormandie, mixte: r.mixte };
+}
+
+/** Sites du marché (sitesDuMarche) avec le code postal de chaque site hors Normandie. */
+function sitesParCodePostal(analyse: any, dce: string): { normands: string[]; horsNormandie: string[]; mixte: boolean; codesHors: Array<{ code: string; commune: string }> } {
   const texte = `${JSON.stringify(analyse || {})} ${String(dce || '').slice(0, 40000)}`.replace(/\\n/g, '\n');
   const ADMIN = /cedex|\bB\.?P\.?\s*\d|bo[îi]te postale|si[èe]ge|DREETS|DIRECCTE|DDETS|tribunal|pr[ée]fecture|CNAPS|inspection du travail|URSSAF|tr[ée]sor|paierie|comptable public|greffe|minist[èe]re/i;
   const normands = new Map<string, string>();
@@ -849,7 +855,32 @@ export function sitesDuMarche(analyse: any, dce: string): { normands: string[]; 
     ajouter(m[2], m[1].split(/\s+(?:à|a|de|du|des)\s+/).pop() || m[1], m.index || 0, (m.index || 0) + m[0].length);
   }
   const fmt = (x: Map<string, string>) => [...new Set([...x.values()].map((c) => communeLisible(c, String(dce || '')) || c))];
-  return { normands: fmt(normands), horsNormandie: fmt(hors), mixte: normands.size > 0 && hors.size > 0 };
+  return { normands: fmt(normands), horsNormandie: fmt(hors), mixte: normands.size > 0 && hors.size > 0, codesHors: [...hors.entries()].map(([code, commune]) => ({ code, commune: communeLisible(commune, String(dce || '')) || commune })) };
+}
+
+/**
+ * Départements certainement hors de la zone où GSS a ses équipes et son astreinte (réponse de GSS du 1er octobre 2026 : « toute
+ * la moitié nord, de Nantes à Lille et jusqu'à Reims ») : Auvergne-Rhône-Alpes, Occitanie, Provence-Alpes-Côte d'Azur, Corse
+ * et le sud de la Nouvelle-Aquitaine. Les départements de la frontière (Centre-Val de Loire, Bourgogne-Franche-Comté, Grand
+ * Est hors Marne, Poitou, Vendée) ne sont pas classés tant que GSS n'a pas donné sa liste : aucune alerte pour eux.
+ */
+const DEPARTEMENTS_HORS_ZONE_GSS = new Set([
+  '01', '03', '07', '15', '26', '38', '42', '43', '63', '69', '73', '74',
+  '09', '11', '12', '30', '31', '32', '34', '46', '48', '65', '66', '81', '82',
+  '04', '05', '06', '13', '83', '84', '20',
+  '16', '17', '19', '23', '24', '33', '40', '47', '64', '87',
+]);
+
+/**
+ * Marché dont des sites sont certainement hors de la zone de GSS (T10-COH-6) : question exacte en tête des consultations et
+ * du premier message ; les procédures d'astreinte de GSS (PTI, alarme, remplacement) reprises telles quelles sont signalées
+ * à confirmer, rien n'est inventé à leur place.
+ */
+export function alerteHorsZone(analyse: any, dce: string): string[] {
+  const sites = sitesParCodePostal(analyse, dce).codesHors.filter((x) => DEPARTEMENTS_HORS_ZONE_GSS.has(x.code.slice(0, 2)));
+  if (!sites.length) return [];
+  const communes = [...new Set(sites.map((x) => x.commune))];
+  return [`${communes.length > 1 ? 'Les sites du marché' : 'Le site du marché'} (${communes.length > 1 ? `${communes.slice(0, -1).join(", ")} et ${communes[communes.length - 1]}` : communes[0]}) ${communes.length > 1 ? 'sont' : 'est'} hors de la zone où GSS a ses équipes et son astreinte (moitié nord, de Nantes à Lille et jusqu'à Reims) : GSS répond-elle à ce marché, et avec quelle organisation d'astreinte et de remplacement sur place ? Le mémoire reprend telles quelles vos procédures d'astreinte (protection du travailleur isolé, intervention sur alarme, remplacement d'un agent absent) : à confirmer ou à modifier via l'assistant avant la remise.`];
 }
 
 /**
