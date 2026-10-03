@@ -393,7 +393,9 @@ export function questionDonneeGss(question: string): string {
     return 'Pouvez-vous fournir les fiches techniques de vos équipements à insérer dans le cadre de réponse (moyens de communication, système de contrôle de rondes, main courante électronique Trackforce) ?';
   }
   // Calendrier de GSS (« J-10, J-7 et J-3 », ifsem 361) : ses échéances sont celles de GSS, jamais celles de l'acheteur.
-  if (!/chiffre d['’]affaires|d[ée]nomination sociale|montant annuel(?: HT)?|part de l['’]encadrement|effectifs? moyens?|nombre de cadres|r[ée]f[ée]rences? (?:professionnelles|clients?|de GSS|de l['’]ann[ée]e)|[ée]tablissement client|calendrier (?:de )?GSS|\bJ\s?[-−–]\s?\d+\b/i.test(reste)) return q;
+  // Contenu d'une réponse du cadre (« quelles informations faut-il inscrire dans la réponse à la rubrique « Clauses
+  // environnementales… » », etampes1 594) : c'est la réponse de GSS, jamais une question pour l'acheteur.
+  if (!/faut-il (?:inscrire|[ée]crire|indiquer|mettre) dans la r[ée]ponse|clauses? environnementales|[ée]cogestes|d[ée]marche (?:RSE|environnementale)|chiffre d['’]affaires|d[ée]nomination sociale|montant annuel(?: HT)?|part de l['’]encadrement|effectifs? moyens?|nombre de cadres|r[ée]f[ée]rences? (?:professionnelles|clients?|de GSS|de l['’]ann[ée]e)|[ée]tablissement client|calendrier (?:de )?GSS|\bJ\s?[-−–]\s?\d+\b/i.test(reste)) return q;
   return reste.charAt(0).toUpperCase() + reste.slice(1);
 }
 

@@ -1375,7 +1375,7 @@ export function questionExacte(q: string): string {
   // Consigne à l'infinitif (« Préciser les mesures… », « Confirmer auprès de GSS et de son assureur… ») : question à GSS.
   const verbe = /^(Préciser|Confirmer|Indiquer|Fournir|Transmettre|Joindre|Détailler|Décrire|Compléter|Valider|Vérifier|Lister|Donner|Communiquer|Justifier|Expliquer)\s+(.+)$/i.exec(t);
   if (verbe) {
-    const reste = sansFin(verbe[2]).replace(/\bauprès de GSS et de son assureur\b/i, 'auprès de votre assureur').replace(/\bauprès de GSS\b/i, '').replace(/\s{2,}/g, ' ').trim();
+    const reste = sansFin(verbe[2]).replace(/\bauprès de GSS et de son assureur\b/i, 'auprès de votre assureur').replace(/\bauprès de GSS\b/i, '').replace(/^à GSS\s+/i, '').replace(/\s{2,}/g, ' ').trim();
     return `Pouvez-vous ${verbe[1].toLowerCase()} ${reste} ?`;
   }
   // Libellé nominal d'une donnée (« Nombre d'agents… », « Délai d'envoi des plannings… », « Diplômes détenus… »).
@@ -1523,6 +1523,9 @@ export function cleDonnee(question: string): string[] {
   if (delai && /urgen/i.test(q)) out.push('delai_urgence');
   if (delai && /\bSSI\b/.test(q)) out.push('delai_ssi');
   if (/\b(?:heure|horaire)s?\b/i.test(q) && /ronde d['’]ouverture|ouverture effective|d[ée]part (?:de la ronde|permettant)/i.test(q)) out.push('horaire_ronde_ouverture');
+  // Validation du dimensionnement proposé (etampes1 594 : « GSS valide-t-elle le dimensionnement proposé… » à côté de la
+  // proposition à valider formulée sans modèle).
+  if (/dimensionnement/i.test(q) && /valid/i.test(q)) out.push('validation_dimensionnement');
   // Couverture horaire du cas pratique (etampes2 553 : « 48 heures annoncées / 39 heures détaillées », « 9 heures non décrites »).
   if (/cas pratique|plages?|intitul|non d[ée]crites/i.test(q) && /\d+\s*h(?:eures)?\b[^?]{0,160}\d+\s*h(?:eures)?\b/i.test(q) && /couvr|couverture|intitul|non d[ée]crites|clarifi/i.test(q)) out.push('couverture_cas_pratique');
   return out.sort();

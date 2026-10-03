@@ -479,6 +479,10 @@ export const THEMES_CADRE: Array<{ sujet: RegExp; rubriques: string[]; situation
   { sujet: /m[ée]thodologie de (?:s[ée]curisation|gardiennage|surveillance|mise en place)/i, rubriques: ['b5_mise_en_place'] },
   { sujet: /m[ée]thodologie de s[ée]curisation|s[ée]curisation des (?:manifestations|[ée]v[ée]nements)|dispositif [ée]v[ée]nementiel/i, rubriques: ['b5_evenementiel'], evenementiel: true },
   { sujet: /d[ée]lais? d['’]\s*interventions?|bons? de commande/i, rubriques: ['b5_commande_supplementaire'] },
+  // Clauses environnementales (etampes1 594 : « Flotte automobile, écogestes » ; sous-titre « Écogestes » resté à compléter
+  // alors que GSS décrit ses économies d'énergie) : les deux volets de l'engagement écologique de GSS.
+  { sujet: /flotte|v[ée]hicules? (?:propres|[ée]lectriques|hybrides)|d[ée]placements|mobilit[ée]|covoiturage|num[ée]rique responsable|empreinte carbone/i, rubriques: ['b2_ecologie_mobilite_numerique'] },
+  { sujet: /[ée]co-?gestes?|[ée]conomies? d['’][ée]nergie|sobri[ée]t[ée] [ée]nerg|recyclage|d[ée]chets|tri s[ée]lectif/i, rubriques: ['b2_ecologie_energie_recyclage'] },
 ];
 
 /** Rubriques des composantes nommées par la question (THEMES_CADRE), parmi celles publiées pour ce marché. */
@@ -2302,7 +2306,9 @@ export function completerDelaisCadre(texte: string, question: string, o: { clien
         let k = fin - 1;
         while (k > p.debut && !lignes[k].trim()) k--;
         // Intitulé de la partie tel que la réponse l'écrit (« liée à un débordement », l'accord corrigé).
-        const titre = lignes[p.debut].trim().replace(/[\s:]+$/, '');
+        const brutT = lignes[p.debut].trim().replace(/[\s:]+$/, '');
+        // (« Action d'intervention courante » → « une action d'intervention courante »)
+        const titre = /^(?:une?|la|le|les|des|du|l['’])\s*/i.test(brutT) ? brutT : `une ${brutT.charAt(0).toLowerCase()}${brutT.slice(1)}`;
         const ligne = `Délai proposé pour ${titre.charAt(0).toLowerCase()}${titre.slice(1)} : [À COMPLÉTER].`;
         lignes.splice(k + 1, 0, ligne);
         ajouts.unshift({ ligne, question: questionDe(titre) });

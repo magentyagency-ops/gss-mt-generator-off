@@ -42,3 +42,9 @@ describe('composantes du cadre traitées par le mémoire type (T5CP-2)', () => {
       .toEqual(['b3_interlocuteur_unique', 'b2_identite', 'b3_adequation']);
   });
 });
+
+describe('clauses environnementales (etampes1 594)', () => {
+  it('flotte et écogestes : les deux volets de l’engagement écologique de GSS', () => {
+    expect(rubriquesThematiques('Clauses environnementales (Flotte automobile, écogestes…)', ids)).toEqual(['b2_ecologie_mobilite_numerique', 'b2_ecologie_energie_recyclage']);
+  });
+});

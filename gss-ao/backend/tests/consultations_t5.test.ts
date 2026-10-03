@@ -116,3 +116,11 @@ describe('délais du cadre : « 24 heures sur 24 » n’est pas un délai (T5N-2
     expect(cleDonnee('Quelle réponse GSS apporte-t-elle sur ce point : « Clarifier avec la Ville la couverture des 9 heures non décrites entre les 48 heures annoncées et les 39 heures détaillées » ?')).toEqual(['couverture_cas_pratique']);
   });
 });
+
+describe('etampes1 594 : questions à GSS', () => {
+  it('« Préciser à GSS … » devient une question directe ; validation du dimensionnement : une seule clé', () => {
+    expect(questionExacte('Préciser à GSS le délai proposé pour une intervention courante à Étampes')).toBe('Pouvez-vous préciser le délai proposé pour une intervention courante à Étampes ?');
+    expect(cleDonnee('GSS valide-t-elle le dimensionnement proposé, soit une équipe dédiée de 6 titulaires ?')).toEqual(['validation_dimensionnement']);
+    expect(completerDelaisCadre('Action d’intervention courante\nÀ réception du bon de commande, GSS planifie.\n\nAction d’urgence liée à un débordement\nLa permanence est joignable.', 'Délais d’interventions proposés par le candidat concernant : Une action d’intervention courante ; Une action d’urgence lié à un débordement').ajouts[0].ligne).toBe('Délai proposé pour une action d’intervention courante : [À COMPLÉTER].');
+  });
+});
