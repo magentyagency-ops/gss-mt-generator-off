@@ -27,6 +27,7 @@ import {
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, completerDelaisCadre, ordonnerSelonReponse, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, attendusDuChamp, attendusSansReponse,
+  questionsPubliposteParEmplacement, questionDeLEmplacement,
 } from './memoire_type_cadre';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche } from './base_memoires';
@@ -4927,6 +4928,8 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     /** Champs dont la rédaction automatique a échoué (OpenAI en panne, réponse illisible) : intitulé, et si le texte du
      *  mémoire type de GSS a été repris tel quel (T4-COH-1). */
     const echecsRedaction = new Map<number, { libelle: string; reference: boolean; developpee: boolean }>();
+    /** Texte du mémoire type repris tel quel (rédaction indisponible) : questions exactes de ses emplacements (T7CS-3). */
+    const questionsReprise = new Map<number, Array<{ contexte: string; question: string }>>();
     /** Puces d'engagement ajoutées par la couverture du CCTP, par champ (parties limitées en pages). */
     const ajoutsCouvertureCadre = new Map<number, string[]>();
     /** Hauteur maximale (EMU) des schémas par réponse, et place partagée des parties limitées en pages. */
@@ -5316,6 +5319,7 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
         const ref = developpee && candidats.length ? texteBrut(String(candidats[0].texte || '')).trim() : '';
         if (ref) {
           replacements.push({ id: f.id, value: ref });
+          questionsReprise.set(f.id, repriseMT?.emplacements?.[candidats[0].id] || []);
           propositionsCadre.set(f.id, `Réponse à relire (rédaction automatique indisponible : texte du mémoire type de GSS repris tel quel) : ${lib}`);
         }
         echecsRedaction.set(f.id, { libelle: lib, reference: !!ref, developpee });
@@ -5991,6 +5995,10 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       // Si, une fois retirés les placeholders et les séparateurs, il ne reste RIEN d'utile → un seul.
       const meaningful = v.replace(/\[À COMPLÉTER\]/g, '').replace(/[\s,;:/|.\-—–()]+/g, '');
       if (!meaningful) return '[À COMPLÉTER]';
+      // Réponse développée (texte du mémoire type repris tel quel, paragraphe de plus de 40 mots ou sur plusieurs lignes,
+      // T7CS-3) : chaque « [À COMPLÉTER] » reste à sa place, avec sa question ; la fusion ci-dessous ne vaut que pour une
+      // cellule ou une réponse courte (« une équipe de agents titulaires », colonne Nombre vidée, sinon).
+      if (/\n/.test(v) || v.split(/\s+/).length > 40) return v;
       // Fusionne les séquences de placeholders séparés par de la simple ponctuation.
       v = v.replace(/\[À COMPLÉTER\](?:\s*[,;/|—–-]+\s*\[À COMPLÉTER\])+/g, '[À COMPLÉTER]');
       // Il reste ≥2 placeholders → le modèle a recopié la STRUCTURE de la question avec des libellés
@@ -6424,6 +6432,13 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       }
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Formulation des questions par emplacement indisponible : ${e?.message || e}`);
+    }
+    // Texte du mémoire type repris tel quel (rédaction indisponible, T7CS-3) : chaque emplacement reçoit la question exacte du
+    // publipostage (effectif titulaire, effectif suppléant, nombre par ligne du tableau), jamais l'intitulé du critère.
+    for (const el of elementsACompleter) {
+      const liste = questionsReprise.get(signets.find((x) => x.cle === el.cle)?.champ ?? -1);
+      const q = liste?.length ? questionDeLEmplacement(el.contexte, liste) : '';
+      if (q) { el.question = q; el.groupe = undefined; el.pourAcheteur = false; }
     }
     // Contacts : libellé du bloc du cadre dans la question ; cases d'un tableau : une question ; doublons : un groupe.
     try {
@@ -8178,6 +8193,8 @@ RÈGLES DE FORME (rendu Marp) :
   ): Promise<{
     mt: MemoireType; textes: Record<string, string>; scores: Map<number, Record<string, number>>; prep: MemoirePrepare; ctx: ContexteMarche;
     echeances?: Record<string, string[]>;
+    /** Question exacte de chaque « [À COMPLÉTER] » des textes publipostés, par rubrique (T7CS-3). */
+    emplacements?: Record<string, Array<{ contexte: string; question: string }>>;
     schemaDe: (ids: string[]) => { id: string; ref?: string; spec?: { gabarit: string; params: any; titre: string }; alternative?: string } | undefined;
   } | null> {
     const mt = this.memoireTypeV2();
@@ -8224,7 +8241,9 @@ RÈGLES DE FORME (rendu Marp) :
       // Échéances dépassées du texte de GSS (assurance, ISO) : questions posées si la rubrique est reprise (T6-COH-6).
       const echeances: Record<string, string[]> = {};
       for (const p of publiees) { const q = p.aConfirmer.filter((x) => x.variable.startsWith('echeance:')).map((x) => x.question); if (q.length) echeances[p.id] = q; }
-      return { mt, textes, scores, schemaDe, prep, ctx, echeances };
+      const emplacements: Record<string, Array<{ contexte: string; question: string }>> = {};
+      for (const p of publiees) if (p.texte && /\[À COMPLÉTER\]/.test(p.texte)) emplacements[p.id] = questionsPubliposteParEmplacement(p.texte, p.manquantes);
+      return { mt, textes, scores, schemaDe, prep, ctx, echeances, emplacements };
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Mémoire type (cadre) indisponible (${e?.message || e}) : cadre rempli sans texte de référence.`);
       return null;

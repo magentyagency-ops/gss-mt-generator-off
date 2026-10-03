@@ -339,6 +339,53 @@ export function texteBrut(markdown: string): string {
 }
 
 /**
+ * Question exacte de chaque « [À COMPLÉTER] » d'un texte publiposté (T7CS-3 : texte du mémoire type repris tel quel quand la
+ * rédaction est indisponible) : les questions du publipostage (`manquantes` avec emplacement, dans l'ordre du texte) ; les
+ * lignes d'un même tableau partagent la question de leur variable, précisée par le libellé de la ligne (comme en réponse
+ * libre). `contexte` : la ligne de l'emplacement telle que le cadre l'écrit (texteBrut), pour le retrouver dans le document.
+ */
+export function questionsPubliposteParEmplacement(markdown: string, manquantes: Array<{ question: string; repere?: boolean }>): Array<{ contexte: string; question: string }> {
+  const qs = manquantes.filter((m) => m.repere && m.question).map((m) => m.question);
+  const out: Array<{ contexte: string; question: string }> = [];
+  let k = 0;
+  let tableau = false;
+  let questionTableau = '';
+  for (const ligne of String(markdown || '').split('\n')) {
+    const n = (ligne.match(/\[À COMPLÉTER\]/g) || []).length;
+    const estTableau = /^\s*\|.*\|\s*$/.test(ligne);
+    if (!estTableau) tableau = false;
+    if (!n) continue;
+    const brut = texteBrut(ligne);
+    if (estTableau) {
+      if (!tableau) { questionTableau = qs[k++] || ''; tableau = true; }
+      const libelle = ligne.trim().replace(/^\||\|$/g, '').split('|')[0].trim();
+      for (let i = 0; i < n; i++) if (questionTableau) out.push({ contexte: brut, question: libelle ? `${questionTableau.replace(/\s*\?\s*$/, '')} — ligne « ${libelle} » ?` : questionTableau });
+      continue;
+    }
+    // Phrases de la ligne : chaque emplacement reçoit la phrase qui le contient.
+    for (const ph of brut.split(/(?<=[.!?])\s+/)) {
+      for (let i = 0; i < (ph.match(/\[À COMPLÉTER\]/g) || []).length; i++) { const q = qs[k++]; if (q) out.push({ contexte: ph, question: q }); }
+    }
+  }
+  return out;
+}
+
+/** Question du publipostage d'un emplacement du cadre, retrouvée par la phrase qui l'entoure (mots en commun, 60 % au moins). */
+export function questionDeLEmplacement(contexte: string, emplacements: Array<{ contexte: string; question: string }>): string {
+  const mots = (x: string) => new Set(normaliser(String(x || '').replace(/\[À COMPLÉTER\]/g, ' ')).split(/[^a-z0-9]+/).filter((w) => w.length >= 3));
+  const c = mots(contexte);
+  let meilleur = '', score = 0;
+  for (const e of emplacements) {
+    const m = mots(e.contexte);
+    if (!m.size || !c.size) continue;
+    const communs = [...m].filter((w) => c.has(w)).length;
+    const s = communs / Math.max(m.size, Math.min(c.size, m.size * 2));
+    if (s > score) { score = s; meilleur = e.question; }
+  }
+  return score >= 0.6 ? meilleur : '';
+}
+
+/**
  * Intitulé principal d'une question du cadre : son premier segment qui dit de quoi elle parle, sans la numérotation
  * seule (« SOUS-CRITERE 1 »), la limite de pages, la consigne de forme ni la liste des éléments attendus qui suivent
  * (« Description argumentée ; Maximum 7 pages ; Éléments de réponse attendus : … »).
