@@ -85,3 +85,22 @@ describe('phrase adaptée citée dans les consultations (T5N-7)', () => {
     expect(c).not.toMatch(/\bensem »/);
   });
 });
+
+import { elementsSansDoublon, questionsUniques, cleDonnee } from '../src/generation/memoire_generator';
+describe('même donnée demandée deux fois (T5CP-11, cstb 551)', () => {
+  it('question sans emplacement retirée ; deux emplacements groupés ; une question par groupe', () => {
+    const el = (cle: string, question: string, reperes: number[]) => ({ cle, question, contexte: '', statut: 'ouvert' as const, reperes });
+    const e = elementsSansDoublon([
+      el('Q1', 'Quel est le délai moyen maximum d’intervention sur site pour une levée de doute après appel de la télésurveillance ?', [1]),
+      el('Q4', 'À quelle heure l’agent doit-il commencer la ronde d’ouverture du site pour terminer les opérations avant 07 h 20 ?', [4]),
+      el('Q9', 'Quel délai GSS annonce-t-elle pour l’arrivée sur place après une alarme PTI sans réponse ?', []),
+      el('Q10', 'Quel délai GSS annonce-t-elle pour l’arrivée du rondier après l’appel de la télésurveillance ?', []),
+      el('Q13', 'GSS confirme-t-elle l’horaire de départ permettant l’ouverture effective à 07 h 20 ?', [5]),
+    ]);
+    expect(e.map((x) => x.cle)).toEqual(['Q1', 'Q4', 'Q9', 'Q13']);
+    expect(e.find((x) => x.cle === 'Q4')!.groupe).toBe(e.find((x) => x.cle === 'Q13')!.groupe);
+    expect(questionsUniques(e)).toHaveLength(3);
+    expect(cleDonnee('Quels sont les délais de mise en place d’une commande et de mobilisation en urgence ?')).toEqual(['delai_mise_en_place', 'delai_urgence']);
+    expect(cleDonnee('Combien d’agents faut-il ?')).toEqual([]);
+  });
+});

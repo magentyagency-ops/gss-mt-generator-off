@@ -1470,8 +1470,60 @@ export function elementsSansDoublon(elements: ElementACompleter[]): ElementAComp
     out.push(e);
   }
   // Question sans emplacement posée AVANT la même demande portée par un emplacement : retirée aussi.
-  return out.filter((e, i) => !(e.statut === 'ouvert' && !e.reperes?.length && !/^GSS_AC/.test(e.cle)
+  const filtres = out.filter((e, i) => !(e.statut === 'ouvert' && !e.reperes?.length && !/^GSS_AC/.test(e.cle)
     && out.some((x, j) => j > i && x.statut === 'ouvert' && (x.reperes?.length || /^GSS_AC/.test(x.cle)) && !!x.pourAcheteur === !!e.pourAcheteur && memeDemande(x.question, e.question))));
+  // Même donnée demandée deux fois en d'autres termes (cstb 551, T5CP-11 : « délai moyen maximum d'intervention … après appel de
+  // la télésurveillance » et « délai … pour l'arrivée du rondier après l'appel de la télésurveillance » ; « heure de début de
+  // la ronde d'ouverture » et « horaire de départ permettant l'ouverture effective ») : une question sans emplacement est
+  // retirée ; deux emplacements forment un groupe (une seule question, une seule réponse).
+  const aEmplacement = (x: ElementACompleter) => !!x.reperes?.length || /^GSS_AC/.test(x.cle);
+  const cles = new Map(filtres.map((x) => [x, cleDonnee(x.question)]));
+  return filtres.filter((e) => {
+    const k = cles.get(e)!;
+    if (e.statut !== 'ouvert' || !k.length) return true;
+    const memes = filtres.filter((x) => x !== e && x.statut === 'ouvert' && !!x.pourAcheteur === !!e.pourAcheteur && cles.get(x)!.length);
+    if (!aEmplacement(e)) {
+      const couvertes = new Set(memes.filter(aEmplacement).flatMap((x) => cles.get(x)!));
+      if (k.every((c) => couvertes.has(c))) return false;
+      const autre = memes.find((x) => !aEmplacement(x) && cles.get(x)!.join('|') === k.join('|'));
+      return !autre || filtres.indexOf(autre) > filtres.indexOf(e);
+    }
+    const jumeau = memes.find((x) => aEmplacement(x) && cles.get(x)!.join('|') === k.join('|'));
+    if (jumeau) { const g = jumeau.groupe || e.groupe || `donnee ${k.join('+')}`; jumeau.groupe = g; e.groupe = g; }
+    return true;
+  });
+}
+
+/** Questions ouvertes d'une liste d'éléments, une par groupe (emplacements qui attendent la même donnée) et sans doublon. */
+export function questionsUniques(elements: ElementACompleter[]): string[] {
+  const vus = new Set<string>();
+  const out: string[] = [];
+  for (const e of elements) {
+    if (e.statut !== 'ouvert') continue;
+    const k = e.groupe ? `g:${e.groupe}` : `q:${e.question}`;
+    if (vus.has(k) || out.includes(e.question)) continue;
+    vus.add(k);
+    out.push(e.question);
+  }
+  return out;
+}
+
+/**
+ * Donnée précise demandée par une question à GSS (« même objet, même grandeur ») : délai d'intervention sur alarme ou levée
+ * de doute, délai PTI, délai de mise en place d'une commande, délai d'urgence, délai sur SSI défaillant, horaire de la ronde
+ * d'ouverture. [] si la question ne porte sur aucune de ces données.
+ */
+export function cleDonnee(question: string): string[] {
+  const q = String(question || '').normalize('NFC');
+  const out: string[] = [];
+  const delai = /d[ée]lais?\b/i.test(q);
+  if (delai && /PTI|DATI|travailleur isol/i.test(q)) out.push('delai_pti');
+  else if (delai && /t[ée]l[ée]surveillance|lev[ée]e de doute|rondier|sur alarme|apr[èe]s (?:une |l['’])?alarme/i.test(q)) out.push('delai_alarme');
+  if (delai && /mise en place (?:d['’]une |de la |des )?(?:commande|demande|prestation)|intervention courante|commande suppl[ée]mentaire|r[ée]ception du bon de commande/i.test(q)) out.push('delai_mise_en_place');
+  if (delai && /urgen/i.test(q)) out.push('delai_urgence');
+  if (delai && /\bSSI\b/.test(q)) out.push('delai_ssi');
+  if (/\b(?:heure|horaire)s?\b/i.test(q) && /ronde d['’]ouverture|ouverture effective|d[ée]part (?:de la ronde|permettant)/i.test(q)) out.push('horaire_ronde_ouverture');
+  return out.sort();
 }
 
 /**
@@ -7859,7 +7911,7 @@ RÈGLES DE FORME (rendu Marp) :
     // appliqués (texte remis), les autres signalées à GSS. Aucun signalement dans le mémoire remis.
     const adaptations = this.finaliserAdaptations(suivi, sections, titreDe, elementsLibres);
     // Questions à GSS mises en forme (vraies questions, sans doublon) comme dans l'état de l'assistant.
-    const consultationList = [...new Set(elementsSansDoublon(elementsLibres).filter((e) => e.statut === 'ouvert').map((e) => e.question))];
+    const consultationList = questionsUniques(elementsSansDoublon(elementsLibres));
     // OpenAI en panne pendant la génération (T5-COH-2) : jamais un publipostage non adapté présenté comme complet.
     const alertePanne = alerteRedactionIndisponible(this.appelsEchoues, rubriquesNonAdaptees);
     if (alertePanne) { consultationList.unshift(alertePanne); console.warn(`[MemoireGenerator] ${alertePanne}`); }
@@ -8988,7 +9040,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     for (const id of Object.keys(sections)) sections[id] = nettoyerStructure(interditsDce(delaisHorsNormandie(fondementReprise(retirerCommentairesInternes(sections[id]).texte, dceContext), dceContext, horsNormandie).texte, dceContext));
     // Complétions reprises des mémoires : le PDF est recomposé si un repère a été rempli.
     rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
-    const consultationList = [...new Set(elementsSansDoublon(elements).filter((e) => e.statut === 'ouvert').map((e) => e.question))];
+    const consultationList = questionsUniques(elementsSansDoublon(elements));
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
     console.log(`[MemoireGenerator] Format court : ${rendu.pages} page(s) / ${format.pagesMax} autorisée(s).`);
 
@@ -9415,7 +9467,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     // chaque partie) ; choix de GSS de la génération précédente appliqués, les autres signalées.
     const adaptations = this.finaliserAdaptations(suivi, sections, (id) => plan.find((x) => x.id === id)?.title || id, elements, rep.parPartie);
     rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
-    const consultationList = [...new Set(elementsSansDoublon(elements).filter((e) => e.statut === 'ouvert').map((e) => e.question))];
+    const consultationList = questionsUniques(elementsSansDoublon(elements));
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
     const alertePanneCourt = alerteRedactionIndisponible(this.appelsEchoues, nonAdapteesCourt);
     if (alertePanneCourt) { consultationList.unshift(alertePanneCourt); console.warn(`[MemoireGenerator] ${alertePanneCourt}`); }
