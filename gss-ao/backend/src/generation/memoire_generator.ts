@@ -1264,6 +1264,22 @@ const CHAPTER_ORDER_B = ['I', 'II', 'III', 'IV'];
 // exceptionnels commandés sur la base du BPU avec un délai de prévenance de 48 heures ouvrées »).
 /** Montants de l'attestation d'assurance de GSS (Hiscox, contrat HA RCP0242762, réponse de GSS du 1er octobre 2026), en euros. */
 export const MONTANTS_ATTESTATION_GSS = new Set(['300000', '50000', '8000000', '1500000', '500000', '800000', '30000']);
+/**
+ * Réponse du cadre : lignes de tableau écrites avec des « | » (avec ou sans « | » aux bords) écrites comme les tableaux de GSS
+ * dans le cadre (texteBrut) : cellules séparées par « : » ; une cellule qui porte déjà « libellé : valeur » (« en service : 10 »)
+ * fait séparer les cellules par « ; » après la première (« Dimanche férié, 6 h–21 h — Agent de sécurité ; en service : 10 ;
+ * rotation : 20 »). Ligne de séparation « ---|--- » retirée. Aucun mot n'est changé.
+ */
+export function sansBarresTableau(texte: string): string {
+  return String(texte || '').split('\n').map((l) => {
+    if (/^\s*\|?\s*:?-{3,}[\s|:-]*$/.test(l)) return null;
+    if ((l.match(/\s\|\s|^\s*\||\|\s*$/g) || []).length < 2) return l;
+    const cellules = l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim()).filter(Boolean);
+    if (cellules.length < 2) return l;
+    if (cellules.some((c) => /\s:\s/.test(c))) return `${cellules[0]} — ${cellules.slice(1).join(' ; ')}`;
+    return cellules.join(' : ');
+  }).filter((l): l is string => l !== null).join('\n');
+}
 export const PIECES_OFFRE = /acte d.engagement|bordereau de prix|\b(?:compl[èée]t|rempli|renseign|chiffr|fourni)[a-zé]*\s+(?:aussi\s+|également\s+)?(?:les |le |des )?prix\b|(?:compl[ée]t|rempli|renseign|chiffr|joindr|fourni)[^.]{0,40}(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)|(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)[^.]{0,30}(?:compl[ée]t|rempli|renseign)|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?/i;
 /**
  * Forme de comparaison d'un texte (cadre : garde-fous et libellés) : minuscules, sans accents, apostrophes typographiques
@@ -6531,6 +6547,10 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
           if (lines.length > 1) { value = lines[0]; console.log(`[MemoireGenerator] Contact singulier: liste réduite à 1 personne (CHAMP_${rep.id}).`); }
         }
       }
+      // Lignes de tableau écrites avec des « | » (dispositif du cas pratique, générations réelles etampes2 701 et 702 : « Dimanche
+      // férié, 6 h–21 h | Agent de sécurité | en service : 10 | rotation : 20 ») : jamais de « | » imprimé dans le cadre ; même
+      // forme que les tableaux de GSS (texteBrut, « A : B : C »).
+      if (desc.kind !== 'checkbox') value = sansBarresTableau(value);
       // Pour une CASE À COCHER : on ne coche QUE si le modèle a explicitement renvoyé ☑/☒ — jamais
       // parce qu'il a recopié un libellé « Oui » (sinon une option « Oui » serait cochée à tort).
       const isChecked = desc.kind === 'checkbox'

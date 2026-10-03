@@ -476,11 +476,12 @@ export function preciserQuestionsCadre(
   const cases = new Map<number, ElementACompleter[]>();
   for (const el of elements) {
     const s = signet.get(el.cle);
-    if (s && (s.contexte.match(/\|/g) || []).length >= 2) (cases.get(s.champ) ?? cases.set(s.champ, []).get(s.champ)!).push(el);
+    // Lignes à « | », ou écrites sans « | » dans le cadre (sansBarresTableau : « plage — profil ; en service : … ; rotation : … »).
+    if (s && ((s.contexte.match(/\|/g) || []).length >= 2 || /\s—\s[^;\n]*;[^;\n]*;/.test(s.contexte))) (cases.get(s.champ) ?? cases.set(s.champ, []).get(s.champ)!).push(el);
   }
   for (const [champ, l] of cases) {
     if (l.length < 2) continue;
-    const lignes = l.map((el) => signet.get(el.cle)!.contexte.split('|').map((x) => x.trim()));
+    const lignes = l.map((el) => signet.get(el.cle)!.contexte.split(/\s*\|\s*|\s+—\s+|\s*;\s+/).map((x) => x.trim()));
     const premieres = [...new Set(lignes.map((c) => c[0]).filter(Boolean))];
     const secondes = [...new Set(lignes.map((c) => (c.length > 3 ? c[1] : '')).filter(Boolean))];
     const colonnes = [...new Set(lignes.flatMap((c) => c.filter((x) => /\[(?:À COMPLÉTER|…)\]/.test(x)).map((x) => x.replace(/\s*:?\s*\[(?:À COMPLÉTER|…)\]\s*/g, '').trim()).filter(Boolean)))];

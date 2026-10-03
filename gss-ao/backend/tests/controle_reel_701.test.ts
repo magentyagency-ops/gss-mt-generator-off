@@ -188,3 +188,12 @@ describe('Contrôle réel 702 : seconde série', () => {
     expect(e[e.indexOf("Écogestes et économies d'énergie") + 1]).toBe("Les économies d'énergie :");
   });
 });
+
+describe('Contrôle réel 702 : cadre sans barres verticales', () => {
+  it('lignes « plage | profil | en service : N | rotation : M » écrites sans « | » (etampes2 701 et 702)', async () => {
+    const { sansBarresTableau } = await import('../src/generation/memoire_generator');
+    expect(sansBarresTableau('Dimanche férié, 6 h–21 h | Agent de sécurité | en service : 10 | rotation : 20')).toBe('Dimanche férié, 6 h–21 h — Agent de sécurité ; en service : 10 ; rotation : 20');
+    expect(sansBarresTableau('Bloc | Profil | Effectif en service | Effectif pour la rotation\n---|---|---|---\nNuit | Agent | 4 | 4')).toBe('Bloc : Profil : Effectif en service : Effectif pour la rotation\nNuit : Agent : 4 : 4');
+    expect(sansBarresTableau('Un texte avec un | seul.')).toBe('Un texte avec un | seul.');
+  });
+});
