@@ -451,6 +451,11 @@ export interface ContexteMarche {
   imposees?: Record<string, { valeur: string; citation: string }>;
   /** Marché hors Normandie (sinon calculé par marcheHorsNormandie). */
   horsNormandie?: boolean;
+  /**
+   * false : les délais lus dans le texte du DCE (delaiDuDce) ne remplacent pas ceux de GSS. Sert seulement à retrouver la
+   * phrase de GSS d'origine d'un délai imposé par le CCTP, pour la signaler à GSS (D8, T6C-3).
+   */
+  delaisDuDce?: boolean;
   /** Registre (tests) : sinon registre_informations.json. */
   registre?: EntreeRegistre[];
   /** Dimensionnement proposé à partir des postes et des horaires du DCE (dimensionnement.ts), à valider par GSS. */
@@ -1101,6 +1106,25 @@ export function delaiDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): strin
   return valeurs.size === 1 ? [...valeurs][0] : '';
 }
 
+/** Phrase du DCE d'où delaiDuDce tire le délai imposé d'un sujet ('' si aucune) : citée à GSS comme exigence du CCTP (D8). */
+export function phraseDelaiDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): string {
+  const def = SUJETS_DELAI[sujet];
+  for (const ph of phrasesDuDce(dce)) {
+    if (!def.sujet.test(ph) || def.exclure?.test(ph)) continue;
+    if (def.objet?.test(ph) && !def.personnel?.test(ph)) continue;
+    if (sujet === 'ssi' && !/d[ée]faillan|hors service|d[ée]rangement/i.test(ph)) continue;
+    if ([...ph.matchAll(RX_DELAI)].length) return ph;
+  }
+  return '';
+}
+
+/** Phrase entière du DCE qui contient une citation (une citation peut n'en être qu'un fragment) ; sinon la citation. */
+export function phraseDuDceContenant(dce: string, citation: string): string {
+  const cit = normaliser(citation).replace(/[^a-z0-9']+/g, ' ').trim();
+  if (!cit) return citation;
+  return phrasesDuDce(dce).find((ph) => normaliser(ph).replace(/[^a-z0-9']+/g, ' ').includes(cit)) || citation;
+}
+
 const FREQUENCES: Array<[RegExp, string]> = [
   [/bimestriel(?:le)?s?|tous les deux mois/i, 'tous les deux mois'],
   [/semestriel(?:le)?s?|tous les six mois|chaque semestre/i, 'chaque semestre'],
@@ -1262,7 +1286,7 @@ function depuisRegistre(c: CalculVariables, cle: string, transformer: (v: string
 /** Délai : DCE (imposé) d'abord ; sinon valeur GSS (registre ou valeur_gss), seulement en Normandie. */
 function delai(c: CalculVariables, nom: string, sujet: keyof typeof SUJETS_DELAI | null): ValeurVariable {
   const def = c.mt.variables[nom];
-  const duDce = sujet ? delaiDuDce(c.ctx.dce || '', sujet) : '';
+  const duDce = sujet && c.ctx.delaisDuDce !== false ? delaiDuDce(c.ctx.dce || '', sujet) : '';
   if (duDce) return { valeur: duDce, source: 'délai imposé par le DCE' };
   if (c.horsNormandie && def?.normandie_seulement) {
     const objet = `${def.description.charAt(0).toLowerCase()}${def.description.slice(1).replace(/[.\s]+$/, '')}`;

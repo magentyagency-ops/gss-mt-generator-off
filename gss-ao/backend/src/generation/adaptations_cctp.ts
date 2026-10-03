@@ -17,11 +17,16 @@
 //    interdites, télésurveillance hors marché) ;
 //  • interdits explicites du DCE (interditsDce) : rondes « à pied », photographies interdites, qualifications exigées
 //    de tous les agents (condition retirée).
-// Ne sont PAS signalés : les variables du publipostage (nom de l'acheteur, valeurs imposées par le CCTP prévues par le
-// mémoire type), le terme du CCTP (« chef de poste ») qui remplace celui de GSS (phrase conservée au sens de D7), et
-// les règles propres à GSS (Covid, article L. 1224-1, orthographe des noms du DCE), qui ne viennent pas du CCTP.
+//  • délais et fréquences imposés par le CCTP qui remplacent, au publipostage, la valeur de GSS (registre, réponses de GSS) :
+//    « le rondier arrive sur site en 45 minutes » devient « en 30 minutes » (caen 475, T6C-3) ; la phrase d'origine est
+//    celle de GSS avec sa valeur (en Normandie), l'exigence est la phrase du CCTP.
+// Ne sont PAS signalés : les autres variables du publipostage (nom de l'acheteur, effectifs…), une valeur du CCTP égale à
+// celle de GSS (« 1 heure » pour « 60 minutes »), le terme du CCTP (« chef de poste ») qui remplace celui de GSS (phrase
+// conservée au sens de D7), et les règles propres à GSS (Covid, article L. 1224-1, orthographe des noms du DCE), qui ne
+// viennent pas du CCTP. Un délai normand retiré hors Normandie est signalé avec son motif (règle de GSS), jamais présenté
+// comme une exigence du CCTP (T6C-10).
 
-import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, type MemoireType, type ContexteMarche } from './memoire_type';
+import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, variableRenseignee, phraseDelaiDuDce, phraseDuDceContenant, VARIABLES_IMPOSABLES, SUJET_VARIABLE_DELAI, type MemoireType, type ContexteMarche } from './memoire_type';
 import { sitesDuMarche } from './base_memoires';
 
 export type StatutAdaptation = 'a_valider' | 'validee' | 'modifiee' | 'retablie';
@@ -83,10 +88,10 @@ export function unites(texte: string): string[] {
 const cle = (u: string) => normaliser(String(u || '').replace(MARQUES, '').replace(/\*\*|__/g, '')).replace(/\s+/g, ' ').trim();
 const mots = (u: string) => motsDePhrase(String(u || '').replace(MARQUES, ''));
 
-/** Phrase lisible pour GSS : sans repère interne, sans Markdown, sans puce. */
+/** Phrase lisible pour GSS : sans repère interne, sans Markdown, sans puce (ni puce de police Word, U+F0D8 : caen 475). */
 export function phraseLisible(t: string, max = 420): string {
   const p = String(t || '').replace(/\[À COMPLÉTER\]⟦AC:\d+⟧/g, '[À COMPLÉTER]').replace(MARQUES, '').replace(/\[CONSULTATION REQUISE[^\]]*\]/g, '')
-    .replace(/\*\*|__/g, '').replace(/^\s*(?:#{1,6}\s+|[-*•]\s+|\d+[.)]\s+)/, '').replace(/\s+/g, ' ').trim();
+    .replace(/\*\*|__/g, '').replace(/[\uE000-\uF8FF]/g, ' ').replace(/^\s*(?:#{1,6}\s+|[-*•]\s+|\d+[.)]\s+)/, '').replace(/\s+/g, ' ').trim();
   return p.length > max ? `${p.slice(0, max).replace(/\s+\S*$/, '')}…` : p;
 }
 
@@ -242,7 +247,19 @@ export function exigenceHorsNormandie(dce: string, analyse: any): string {
     citation = l.length > 160 ? (citerDce(l, rx) || l.slice(Math.max(0, m.index - 80), m.index + m[0].length + 20)) : `${prec}${l}`;
     break;
   }
-  const lieu = hors.length ? `${hors.length > 1 ? 'sites' : 'site'} de ${listeFr(hors)}` : 'site du marché';
+  // Aucun site hors Normandie reconnu (etampes1 : seule l'adresse de la mairie, « BP 109 / 91152 ETAMPES CEDEX ») : la
+  // commune hors Normandie écrite avec son code postal dans le DCE, même dans une adresse postale (T6C-10).
+  const commune = hors.length ? '' : (() => {
+    for (const m of String(dce || '').matchAll(/\b(\d{2})\d{3}\s*(?:[–—,-]\s*)?([A-ZÉÈÀÂÎÔÛ][A-Za-zÀ-ÿ'’-]+(?:[ -](?!cedex|CEDEX|Cedex)[A-Za-zÀ-ÿ'’-]+){0,3})/g)) {
+      const dep = Number(m[1]);
+      if (dep < 1 || dep > 95 || [14, 27, 50, 61, 76].includes(dep) || /^(?:m[²³23]?|km|ha|h|heures?|€|euros?|ht|ttc|personnes?|agents?)$/i.test(m[2])) continue;
+      const c = m[2].replace(/\s+(?:cedex|t[ée]l|tel|fax)\b.*$/i, '').trim();
+      return c === c.toUpperCase() ? c.charAt(0) + c.slice(1).toLowerCase() : c;
+    }
+    return '';
+  })();
+  const de = (x: string) => (/^[aeiouyàâéèêëîïôöûüh]/i.test(x) ? `d'${x}` : `de ${x}`);
+  const lieu = hors.length ? `${hors.length > 1 ? 'sites' : 'site'} ${de(listeFr(hors))}` : commune ? `marché ${de(commune)}` : 'site du marché';
   const motif = `${sites.mixte ? 'Marché en partie hors Normandie' : 'Marché hors Normandie'} (${lieu}) : les délais et les moyens de mobilisation que GSS annonce en Normandie ne sont pas promis ici, et le DCE n'en impose aucun pour ce point`;
   return citation ? `${motif}. Lieu d'exécution cité par le DCE : « ${citation.length > 220 ? `${citation.slice(0, 220).replace(/\s+\S*$/, '')}…` : citation} »` : `${motif}.`;
 }
@@ -500,6 +517,54 @@ export function adaptationsDuPubliposte(mt: MemoireType, ctx: ContexteMarche, id
   return out;
 }
 
+/** Étape des délais et fréquences imposés par le CCTP au publipostage (D8, T6C-3). */
+export const ETAPE_VALEUR_IMPOSEE = 'Délai ou fréquence imposé par le CCTP';
+
+/**
+ * Délais et fréquences du CCTP qui remplacent, au publipostage, la valeur de GSS (caen 475, T6C-3 : « Le rondier arrive sur
+ * site en 45 minutes au maximum », délai confirmé par GSS le 1er octobre 2026, imprimé « en 30 minutes ») : chaque rubrique
+ * est publipostée avec la valeur de GSS (registre, réponses de GSS ; en Normandie) à la place de celle du CCTP, une
+ * variable à la fois, puis comparée au texte publiposté pour ce marché. L'exigence est la phrase du CCTP. Une valeur du
+ * CCTP de même durée que celle de GSS (« 1 heure » pour « 60 minutes ») n'est pas une adaptation. Sur un marché hors
+ * Normandie, la phrase d'origine est celle que GSS écrit en Normandie (GSS n'a annoncé aucun délai hors Normandie) : la
+ * valeur du CCTP reste, mais elle est signalée. Aucun appel au modèle ; rien n'est imprimé de plus dans le mémoire.
+ */
+export function adaptationsDesValeursImposees(mt: MemoireType, ctx: ContexteMarche, ids: string[], options: { marquerConsultations?: boolean } = {}): Array<{ rubrique: string; avant: string; apres: string; exigence: string; etape: string; reference: string }> {
+  const reel = preparerMemoireType(ctx, { memoireType: mt });
+  const gss = preparerMemoireType({ ...ctx, imposees: undefined, delaisDuDce: false, horsNormandie: false, choix: { ...(ctx.choix || {}), indicateurs: { ...(ctx.choix?.indicateurs || {}), HORS_NORMANDIE: false } } }, { memoireType: mt });
+  const out: Array<{ rubrique: string; avant: string; apres: string; exigence: string; etape: string; reference: string }> = [];
+  const texte = (v: unknown) => (Array.isArray(v) ? v.join(' ; ') : String(v ?? ''));
+  for (const nom of VARIABLES_IMPOSABLES) {
+    const r = reel.variables[nom];
+    const source = String(r?.source || '');
+    if (!/imposé par le DCE/.test(source)) continue;
+    const g = gss.variables[nom];
+    if (!variableRenseignee(g) || !variableRenseignee(r)) continue;
+    const vr = texte(r.valeur), vg = texte(g.valeur);
+    if (normaliser(vr) === normaliser(vg)) continue;
+    const sujet = SUJET_VARIABLE_DELAI[nom];
+    if (sujet !== undefined) {
+      const dr = dureesIntervention(`en ${vr}`), dg = dureesIntervention(`en ${vg}`);
+      if (dr.length && dg.length && Math.min(...dr) === Math.min(...dg) && Math.max(...dr) === Math.max(...dg)) continue;
+    }
+    const imposee = ctx.imposees?.[nom];
+    const exigence = imposee?.citation ? phraseDuDceContenant(ctx.dce || '', imposee.citation)
+      : sujet ? phraseDelaiDuDce(ctx.dce || '', sujet as any) : '';
+    if (!exigence) continue;
+    const variables = { ...reel.variables, [nom]: g };
+    // Contrôles inopinés déduits de la fréquence imposée du contrôle 2 : la valeur de GSS revient avec elle.
+    if (nom === 'FREQ_CONTROLE_2' && /fréquence imposée/.test(String(reel.variables.CONTROLES_INOPINES_MENSUELS?.source || '')) && gss.variables.CONTROLES_INOPINES_MENSUELS) variables.CONTROLES_INOPINES_MENSUELS = gss.variables.CONTROLES_INOPINES_MENSUELS;
+    for (const id of ids) {
+      const rub = mt.rubriques.find((x) => x.id === id);
+      if (!rub || rub.mode === 'besoin' || !rub.texte) continue;
+      const a = publierRubrique(mt, rub, variables, reel.indicateurs, '', options).texte || '';
+      const b = publierRubrique(mt, rub, reel.variables, reel.indicateurs, '', options).texte || '';
+      if (a !== b) out.push({ rubrique: id, avant: a, apres: b, exigence, etape: ETAPE_VALEUR_IMPOSEE, reference: a });
+    }
+  }
+  return out;
+}
+
 // ─── Messages à GSS ─────────────────────────────────────────────────────────────────────────
 
 export const TITRE_ADAPTATIONS = 'Phrases adaptées au cahier des charges du client';
@@ -507,10 +572,20 @@ export const TITRE_ADAPTATIONS = 'Phrases adaptées au cahier des charges du cli
 /** Phrases encore à valider par GSS. */
 export const aValider = (liste: PhraseAdaptee[] | undefined) => (liste || []).filter((a) => a.statut === 'a_valider');
 
+/**
+ * Motif qui n'est pas une exigence du CCTP mais une règle de GSS (délais normands non promis hors Normandie,
+ * exigenceHorsNormandie) : montré à GSS comme « Motif (règle de GSS) », jamais comme une citation du CCTP (T6C-10).
+ */
+export const estRegleGss = (exigence: string) => /^Marché (?:en partie )?hors Normandie \(/.test(String(exigence || '').trim());
+/** Exigence d'une phrase adaptée, avec son libellé : « exigence du CCTP : « … » » ou « motif (règle de GSS) : … ». */
+const libelleExigence = (a: PhraseAdaptee, max: number, majuscule = false) => (estRegleGss(a.exigence)
+  ? `${majuscule ? 'M' : 'm'}otif (règle de GSS, pas une exigence du CCTP) : ${phraseLisible(a.exigence, max).replace(/[.\s]+$/, '')}`
+  : `${majuscule ? 'E' : 'e'}xigence du CCTP : « ${phraseLisible(a.exigence, max)} »`);
+
 /** Lignes des consultations (une par phrase adaptée à valider) ; aucune s'il n'y en a pas. */
 export function consultationsAdaptations(liste: PhraseAdaptee[] | undefined): string[] {
   const l = aValider(liste);
-  return l.map((a) => `${TITRE_ADAPTATIONS} (${l.length}) — n° ${a.n}, « ${a.titre} » : phrase d'origine de GSS : « ${phraseLisible(a.origine)} » ; phrase adaptée : ${a.adaptee ? `« ${phraseLisible(a.adaptee)} »` : '(phrase retirée)'} ; exigence du CCTP : « ${phraseLisible(a.exigence, 500)} ». À valider, modifier ou rétablir via l'assistant avant la remise.`);
+  return l.map((a) => `${TITRE_ADAPTATIONS} (${l.length}) — n° ${a.n}, « ${a.titre} » : phrase d'origine de GSS : « ${phraseLisible(a.origine)} » ; phrase adaptée : ${a.adaptee ? `« ${phraseLisible(a.adaptee)} »` : '(phrase retirée)'} ; ${libelleExigence(a, 500)}. À valider, modifier ou rétablir via l'assistant avant la remise.`);
 }
 
 /** Paragraphe du premier message de l'assistant ; '' s'il n'y a aucune phrase adaptée à valider. */
@@ -523,7 +598,7 @@ export function messageAdaptations(liste: PhraseAdaptee[] | undefined): string {
       `${a.n}. « ${a.titre} »`,
       `   - Phrase d'origine de GSS : « ${phraseLisible(a.origine)} »`,
       `   - Phrase adaptée : ${a.adaptee ? `« ${phraseLisible(a.adaptee)} »` : '(phrase retirée du mémoire)'}`,
-      `   - Exigence du CCTP : « ${phraseLisible(a.exigence, 500)} »`,
+      `   - ${libelleExigence(a, 500, true)}`,
     ]),
     '',
     l.length === 1 ? 'Pour cette phrase, vous pouvez :' : 'Pour chacune, vous pouvez :',
@@ -538,7 +613,7 @@ export function blocAdaptationsAssistant(liste: PhraseAdaptee[] | undefined): st
   const l = liste || [];
   if (!l.length) return '';
   const statut = (a: PhraseAdaptee) => ({ a_valider: 'à valider', validee: 'validée', modifiee: 'modifiée par GSS', retablie: 'phrase d\'origine rétablie' }[a.statut]);
-  return `\n\n${TITRE_ADAPTATIONS.toUpperCase()} (adaptées par le générateur ; le cahier des charges prime, GSS valide, modifie ou rétablit) :\n${l.map((a) => `- n° ${a.n} | ${a.titre} | ${statut(a)} | origine : « ${phraseLisible(a.origine, 300)} » | adaptée : ${a.adaptee ? `« ${phraseLisible(a.adaptee, 300)} »` : '(retirée)'}${a.statut === 'modifiee' ? ` | texte de GSS : « ${phraseLisible(a.texteGss || '', 300)} »` : ''} | exigence : « ${phraseLisible(a.exigence, 200)} »`).join('\n')}`;
+  return `\n\n${TITRE_ADAPTATIONS.toUpperCase()} (adaptées par le générateur ; le cahier des charges prime, GSS valide, modifie ou rétablit) :\n${l.map((a) => `- n° ${a.n} | ${a.titre} | ${statut(a)} | origine : « ${phraseLisible(a.origine, 300)} » | adaptée : ${a.adaptee ? `« ${phraseLisible(a.adaptee, 300)} »` : '(retirée)'}${a.statut === 'modifiee' ? ` | texte de GSS : « ${phraseLisible(a.texteGss || '', 300)} »` : ''} | ${estRegleGss(a.exigence) ? `motif (règle de GSS) : ${phraseLisible(a.exigence, 200)}` : `exigence : « ${phraseLisible(a.exigence, 200)} »`}`).join('\n')}`;
 }
 
 /** Consigne de l'action « adaptation » pour l'assistant (ajoutée quand des phrases adaptées existent). */

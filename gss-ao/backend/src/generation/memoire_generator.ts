@@ -28,7 +28,7 @@ import {
   attribuerRubriques, blocRenvois, completerDelaisCadre, ordonnerSelonReponse, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, attendusDuChamp, attendusSansReponse,
 } from './memoire_type_cadre';
-import { SuiviAdaptations, adaptationsDuPubliposte, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
+import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -7677,7 +7677,7 @@ RÈGLES DE FORME (rendu Marp) :
     for (const p of publiees) if (p.texte) sections[p.id] = p.texte;
     // Phrases de GSS adaptées au CCTP (D8) : délais normands retirés au publipostage, puis étapes qui alignent le texte de
     // GSS sur le CCTP ; signalées à GSS en fin de génération.
-    const suivi = this.suiviAdaptations(dossierId, mt, { ...ctxBase, matrice }, publiees.filter((p) => p.texte).map((p) => p.id), publiees.map((p) => p.texte || ''), { marquerConsultations: true });
+    const suivi = this.suiviAdaptations(dossierId, mt, { ...ctxBase, matrice, imposees: imposees.valides }, publiees.filter((p) => p.texte).map((p) => p.id), publiees.map((p) => p.texte || ''), { marquerConsultations: true });
     const { parRubrique, nouvelles: nouvellesMatrice } = exigencesParRubrique(mt, plan, matrice);
     const tri = trierNouvelles(mt, plan, nouvellesMatrice);
     for (const [id, l] of Object.entries(tri.rattachees)) (parRubrique[id] ||= []).push(...l);
@@ -8575,9 +8575,17 @@ Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "tex
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Délais normands retirés au publipostage : comparaison indisponible (${e?.message || e}).`);
     }
+    // Délais et fréquences imposés par le CCTP à la place de ceux de GSS (caen 475 : 45 → 30 minutes, T6C-3).
+    let imposees: ReturnType<typeof adaptationsDesValeursImposees> = [];
+    try {
+      imposees = adaptationsDesValeursImposees(mt, ctx, ids, options);
+    } catch (e: any) {
+      console.warn(`[MemoireGenerator] Valeurs imposées par le CCTP au publipostage : comparaison indisponible (${e?.message || e}).`);
+    }
     const decisions = dossierId ? (lireEtat(dossierId)?.adaptations || []) : [];
-    const suivi = new SuiviAdaptations({ reference: [...textes, ...horsNormandie.map((x) => x.reference)], decisions });
+    const suivi = new SuiviAdaptations({ reference: [...textes, ...horsNormandie.map((x) => x.reference), ...imposees.map((x) => x.reference)], decisions });
     suivi.noterPubliposte(horsNormandie);
+    suivi.noterPubliposte(imposees);
     return suivi;
   }
 
@@ -9185,7 +9193,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const textes: Record<string, string> = {};
     for (const p of publiees) if (p.texte) textes[p.id] = p.texte;
     // Phrases de GSS adaptées au CCTP (D8), comme en réponse libre.
-    const suivi = this.suiviAdaptations(dossierId, mt, { ...ctxBase, matrice }, publiees.filter((p) => p.texte).map((p) => p.id), publiees.map((p) => p.texte || ''), { marquerConsultations: true });
+    const suivi = this.suiviAdaptations(dossierId, mt, { ...ctxBase, matrice, imposees: imposees.valides }, publiees.filter((p) => p.texte).map((p) => p.id), publiees.map((p) => p.texte || ''), { marquerConsultations: true });
     const { parRubrique, nouvelles: nouvellesMatrice } = exigencesParRubrique(mt, planMT, matrice);
     const tri = trierNouvelles(mt, planMT, nouvellesMatrice);
     for (const [id, l] of Object.entries(tri.rattachees)) (parRubrique[id] ||= []).push(...l);
