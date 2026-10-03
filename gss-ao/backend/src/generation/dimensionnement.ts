@@ -275,6 +275,25 @@ export function profilAgentSecurite(profil: string, qualification: string): stri
 }
 
 /**
+ * Qualification d'un poste dont le DCE (ou sa lecture) ne donne que l'intitulé : le niveau SSIAP porté par l'intitulé
+ * (« Chef d'équipe SSIAP 2 » → « SSIAP 2 »), le CQP APS pour un agent de sécurité (obligatoire) et pour un autre poste de
+ * sécurité (chef d'équipe, chef de poste, rondier) quand le DCE exige le CQP APS ou la carte professionnelle, « [À COMPLÉTER] »
+ * sinon (rien d'inventé).
+ */
+export function qualificationParDefaut(profil: string, dceMots: string): string {
+  const p = normaliser(profil);
+  const ssiap = /ssiap\s*([123])/.exec(p);
+  if (ssiap) return `SSIAP ${ssiap[1]}`;
+  if (categorieDe(profil) === 'Agent cynophile') return 'CQP APS – qualification cynophile';
+  // Agent de sécurité (« ADS », « Agent de sécurité ») : le CQP APS, obligatoire pour ce poste (T1F-13).
+  if (profilAgentSecurite(profil, '')) return 'CQP APS';
+  const securite = !/incendie|accueil|hotesse|standard|operateur|technicien|nettoy|menage/.test(p)
+    && /\bads\b|\bcqp\b|\baps\b|agent|chef|encadr|rondier|superviseur|surveillan|securite|surete|garde|vigile|vigipirate/.test(p);
+  if (securite && /(?:^| )(?:cqp|carte professionnelle|tfp aps|c q p)(?= |$)/.test(dceMots)) return 'CQP APS';
+  return '[À COMPLÉTER]';
+}
+
+/**
  * Intitulé de poste relevé par le modèle, sans le nombre d'agents recopié du DCE (« 2 agents » → « Agent de sécurité »,
  * « 1 agente » → « Agent de sécurité », « 1 ADS » → « ADS », « 1 SSIAP 1 » → « SSIAP 1 », « SSIAP1 » → « SSIAP 1 »).
  * Un « agent » sans autre précision, dans un relevé de gardiennage, est un agent de sécurité (CQP APS).
@@ -362,7 +381,11 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
       hs = Math.round((ha / 52) * 100) / 100;
     }
     // Sigle du CNAPS mal écrit par le DCE (cstb 551 : « Agrément préfectoral CNPAS ») : le tableau est à la voix de GSS (T6N-7).
-    let qualification = String(p?.qualification || profil).replace(/\s+/g, ' ').trim().replace(/(?<![A-Za-z])CNPAS(?![A-Za-z])/g, 'CNAPS');
+    let qualification = String(p?.qualification || '').replace(/\s+/g, ' ').trim().replace(/(?<![A-Za-z])CNPAS(?![A-Za-z])/g, 'CNAPS');
+    // Qualification non relevée, ou réduite à l'intitulé du poste (génération réelle fontainebleau 901 : « Chef d'équipe »
+    // imprimé dans la colonne « Qualification ») : celle que le poste porte (« SSIAP 2 »), sinon le CQP APS exigé par le DCE
+    // pour un poste de sécurité, sinon à compléter par GSS ; jamais l'intitulé du poste.
+    if (!qualification || normaliser(qualification) === normaliser(profil)) qualification = qualificationParDefaut(profil, dceMots);
     // Profils équivalents (« ADS », « Agent de sécurité », « agent de sûreté » : le même agent de sécurité CQP APS) :
     // une seule catégorie, heures additionnées (ca_normandie 221 : « Agent de sécurité » 22 et « ADS » 20 sur deux lignes).
     // Qualification réduite à l'intitulé d'un poste cynophile (ifits 701 : « Agent conducteur de chien » imprimé dans la colonne

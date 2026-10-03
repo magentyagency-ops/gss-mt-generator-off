@@ -94,3 +94,20 @@ describe('poste permanent dont la citation mentionne une option (T1-GEN-7)', () 
     expect((d.alertes || []).join(' ')).toMatch(/écarté de l'équipe dédiée comme optionnels ou ponctuels/);
   });
 });
+
+describe('qualification jamais réduite à l’intitulé du poste (génération réelle fontainebleau 901)', () => {
+  const chef = (qualification: string | null) => ({ profil: "Chef d'équipe", qualification, lieu: 'Château', agents_simultanes: 1, plages: [{ jours: TOUS, debut: '08:30', fin: '20:00' }], citation: "Du 1er mai au 30 septembre : prévoir un chef d'équipe de 8h30 à 20h00 ;" });
+  it('qualification non relevée : le CQP APS exigé par le DCE, jamais « Chef d’équipe »', () => {
+    const dce = `${FB}\nTous les agents sont titulaires du CQP APS et de la carte professionnelle délivrée par le CNAPS.`;
+    for (const q of [null, "Chef d'équipe"]) {
+      const d = calculerDimensionnement({ postes: [chef(q)] }, dce)!;
+      expect(d.profils[0].qualification).toBe('CQP APS');
+      expect(lignesEquipe(d)).toMatch(/^\| Chef d'équipe \| CQP APS \|/);
+    }
+  });
+  it('DCE muet sur la qualification : à compléter par GSS (rien d’inventé) ; niveau SSIAP de l’intitulé repris', () => {
+    expect(calculerDimensionnement({ postes: [chef(null)] }, FB)!.profils[0].qualification).toBe('[À COMPLÉTER]');
+    const ssiap = { ...chef(null), profil: "Chef d'équipe SSIAP 2" };
+    expect(calculerDimensionnement({ postes: [ssiap] }, FB)!.profils[0].qualification).toBe('SSIAP 2');
+  });
+});
