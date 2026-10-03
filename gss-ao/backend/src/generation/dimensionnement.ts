@@ -376,6 +376,8 @@ export function categorieDe(profil: string): string {
   if (/ssiap\s*2/.test(p)) return 'Chef d\'équipe de sécurité incendie';
   if (/ssiap\s*1/.test(p) && !/\bads\b|cqp|agent de securite(?! incendie)/.test(p)) return 'Agent de sécurité incendie';
   if (/encadr|chef de poste|chef d.equipe/.test(p)) return profil;
+  // T7N-7 : le libellé du DQE « Agent de sécurité incendie » (sans « SSIAP 1 ») n'est pas un agent de sécurité générique.
+  if (/(?:agent|securite) (?:de )?(?:securite )?incendie/.test(p) && !/\bads\b|cqp/.test(p)) return 'Agent de sécurité incendie';
   if (/\bads\b|cqp|agent de (?:securite|surveillance|surete)|agent de prevention/.test(p)) return 'Agent de sécurité';
   return profil;
 }
