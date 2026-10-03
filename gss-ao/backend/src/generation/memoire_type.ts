@@ -1204,13 +1204,19 @@ export function qualificationsDuDce(dce: string, analyse?: any): string[] {
   return out;
 }
 
-/** Communes des sites (codes postaux du début du DCE, sinon noms des sites). */
+/** Clé d'une commune : « St Martin d'Hères », « Saint-Martin-d’Hères » et « SAINT MARTIN D'HERES » sont la même commune (T7N-6). */
+export function cleCommune(v: string): string {
+  return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/['’`\u2011-]/g, ' ')
+    .replace(/\bste\b/g, 'sainte').replace(/\bst\b/g, 'saint').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Communes des sites (codes postaux du début du DCE, sinon noms des sites), sans variante d'écriture en double. */
 function villesDuMarche(dce: string, analyse: any): string[] {
   const out: string[] = [];
   for (const m of String(dce || '').slice(0, 30000).matchAll(/(?<!\d)(\d{5})\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ'’-]+(?:[ -][A-Za-zÀ-ÿ'’]+){0,4})/g)) {
     const ville = m[2].replace(/\s+(?:cedex|CEDEX|Cedex).*$/, '').replace(/\s+(?:t[ée]l|tel|fax|courriel|mail)\b.*$/i, '').trim();
     const propre = ville === ville.toUpperCase() ? ville.charAt(0) + ville.slice(1).toLowerCase() : ville;
-    if (propre.length >= 3 && !out.includes(propre)) out.push(propre);
+    if (propre.length >= 3 && !out.some((x) => cleCommune(x) === cleCommune(propre))) out.push(propre);
     if (out.length >= 3) break;
   }
   if (out.length) return out;

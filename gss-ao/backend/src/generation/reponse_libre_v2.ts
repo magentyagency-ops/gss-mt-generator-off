@@ -14,7 +14,7 @@
 import fs from 'fs';
 import path from 'path';
 import {
-  chargerMemoireType, normaliser, rechercherRubriques, similarite, motsDePhrase, faitsDePhrase,
+  chargerMemoireType, normaliser, rechercherRubriques, similarite, motsDePhrase, faitsDePhrase, listeFr, cleCommune,
   type DonneesBesoin, type ExigenceMatrice, type MemoireType, type PlanMemoireType, type SchemaRubrique,
 } from './memoire_type';
 import { ZONE_GSS, vocabulaireDuCctp } from './base_memoires';
@@ -868,9 +868,41 @@ export const CLAUSE_CONTRACTUELLE = /confidentialit|divulgation|diff[ée]rend|li
  * ponctuation finale), jamais un fragment de tableau ou une phrase coupée (« … (Cf. », « (Note 3) », « X] »).
  */
 export function horairesLisibles(horaires: string[]): string[] {
-  return horaires
-    .map((h) => String(h || '').replace(/^\s*\[[^\]]*\]\s*/, '').replace(/\s+/g, ' ').trim())
-    .filter((h) => /^[A-ZÀ-Ý]/.test(h) && /[.!?]$/.test(h) && !/\(\s*Cf\.?\s*$|\(Note\s*\d|\bNote\s*\d+\s*:|\bX\]|\[|\]/i.test(h) && h.split(' ').length >= 5);
+  // Le repère « [section] » est retiré sans être écrit devant l'horaire : le titre de partie qui précède une phrase n'est pas
+  // toujours son site (ign l. 194 : phrase générale rangée sous « Bâtiment Coriolis : »). Les doublons sont fusionnés plus bas.
+  const lisibles = horaires.map((h) => {
+    let t = String(h || '').replace(/^\s*\[[^\]]*\]\s*/, '').replace(/\s+/g, ' ').trim();
+    // Ligne de tableau à deux cellules (« Horaires d'ouverture au public | Lundi au vendredi de 8h30 à 12h00. ») : « libellé :
+    // valeur » ; plus de deux cellules : un tableau aplati, refusé plus bas.
+    if ((t.match(/\|/g) || []).length === 1) t = t.replace(/\s*\|\s*/, ' : ');
+    // Puces « o » et numéros de liste après un deux-points (« : 1- Pour les jardins suspendus : o Du 1 er avril… », havre),
+    // ordinal coupé (« 1 er » → « 1er »).
+    return t.replace(/(:\s*)(?:\d+\s*[-–)]\s*)?o\s+(?=[A-ZÀ-Ý0-9])/g, '$1').replace(/(:\s*)\d+\s*[-–)]\s+(?=[A-ZÀ-Ý])/g, '$1').replace(/\b(\d) er\b/g, '$1er');
+  }).filter((h) => /^[A-ZÀ-Ý]/.test(h) && /[.!?]$/.test(h) && h.split(' ').length >= 5
+    && !/\(\s*Cf\.?\s*$|\(Note\s*\d|\bNote\s*\d+\s*:|\bX\]|\[|\]|\||<br\s*\/?>/i.test(h)
+    // En-têtes d'un tableau aplati (« SITE Adresse Surface Utile Brute Horaires d'ouverture CAEN 20 rue… », caen 475, T7-COH-3).
+    && (h.match(/\b(?:SITE|Site|Adresse|Surface|Superficie|Horaires|Effectifs?|B[âa]timent|D[ée]signation|Nombre|Qualification)\b/g) || []).length < 3
+    // Numéro de partie suivi de son titre (« 1.2 DEBUT D'EXECUTION »), pied de page (« CCTP- Gardiennage-consultation
+    // 202617 »), renvoi à une annexe au milieu de la phrase (« Cf Annexe-CCTP-Plannings Permanence… »), puce « o » restante.
+    && !/(?:^|\s)\d+(?:\.\d+)+\s+[A-ZÀ-Ý]{3,}|\bCCTP\s*-|\bconsultation\s+\d{4,}|\bpage\s+\d+\s*(?:\/|sur)\s*\d+|\bCf\.?\s+Annexe\b(?!.{0,3}$)|(?:^|[:;]\s*)o\s+[A-ZÀ-Ýa-zà-ÿ0-9]/i.test(h));
+  // Doublons (CCTP commun et CCTP d'un campus, ifsem, T7CS-4) : même phrase à la ponctuation près, presque mot pour mot
+  // (« Les rondes à réaliser / à effectuer sont les suivantes »), ou phrase contenue dans une autre : la première est gardée,
+  // sauf si l'autre la contient.
+  const coeur = (x: string) => normaliser(x).replace(/[^a-z0-9]+/g, ' ').trim();
+  const mots = (x: string) => new Set(coeur(x).split(' ').filter((w) => w.length > 2));
+  const proches = (a: string, b: string) => {
+    const ca = coeur(a), cb = coeur(b);
+    if (ca === cb || ca.includes(cb) || cb.includes(ca)) return true;
+    const ma = mots(a), mb = mots(b);
+    return [...ma].filter((w) => mb.has(w)).length / Math.max(1, ma.size, mb.size) >= 0.9;
+  };
+  const out: string[] = [];
+  for (const h of lisibles) {
+    const k = out.findIndex((x) => proches(x, h));
+    if (k < 0) out.push(h);
+    else if (coeur(h) !== coeur(out[k]) && coeur(h).includes(coeur(out[k]))) out[k] = h;   // la phrase qui contient l'autre
+  }
+  return out;
 }
 
 export function completerBesoinMinimum(
@@ -1941,15 +1973,79 @@ export function consigneProposition(groupe: GroupeNouveau, o: { client?: string;
  * Texte de secours du bloc « compréhension » (modèle indisponible) : faits du DCE calculés sans modèle (amorce,
  * périmètre, horaires et obligations chiffrées cités mot pour mot). Signalé à GSS comme texte à relire.
  */
+const ARTICLE_NOM_COMMUN: Record<string, string> = { site: 'le', sites: 'les', batiment: 'le', batiments: 'les', campus: 'le', siege: 'le', locaux: 'les', parking: 'le', parkings: 'les', immeuble: "l'", residence: 'la', etablissement: "l'", etablissements: 'les', ensemble: "l'", parc: 'le', parcs: 'les', equipement: "l'", equipements: 'les', bureaux: 'les', entrepot: "l'", entrepots: 'les' };
+const ARTICLE_NOM_PROPRE: Record<string, string> = { centre: 'le', hotel: "l'", universite: "l'", mairie: 'la', hopital: "l'", musee: 'le', institut: "l'", theatre: 'le', stade: 'le', palais: 'le', maison: 'la', cite: 'la', domaine: 'le', chateau: 'le', gare: 'la', port: 'le', mediatheque: 'la', bibliotheque: 'la', ecole: "l'", college: 'le', lycee: 'le', piscine: 'la', salle: 'la', agence: "l'", direction: 'la', prefecture: 'la', tribunal: 'le', archives: 'les', campus: 'le', complexe: 'le', espace: "l'", pole: 'le', base: 'la', caserne: 'la', jardin: 'le', jardins: 'les' };
+const deCommune = (v: string) => (/^[aeiouyàâéèêëîïôöûüh]/i.test(v) ? `d’${v}` : `de ${v}`);
+/**
+ * Site du marché écrit dans une phrase (« La prestation porte sur le site du CSTB Grenoble — 24 rue… », T7CS-4, T7N-6) :
+ * article et minuscule pour un nom commun (« Site du CSTB » → « le site du CSTB »), article pour un nom propre (« le
+ * Centre Henri Becquerel »), commune seule écrite comme une commune (« CAEN — 20 rue… » → « le site de Caen — 20 rue… »).
+ */
+export function siteDansPhrase(nom: string, villes: string[] = []): string {
+  const n = String(nom || '').replace(/\s+/g, ' ').trim();
+  if (!n) return '';
+  if (/^(?:le|la|les)\s+\S|^l['’]\s*\S/i.test(n)) return n.charAt(0).toLowerCase() + n.slice(1);
+  const [tete, ...reste] = n.split(/\s+[—–-]\s+/);
+  const suite = reste.length ? ` — ${reste.join(' — ')}` : '';
+  const ville = villes.find((v) => cleCommune(v) === cleCommune(tete));
+  if (ville) return `le site ${deCommune(ville)}${suite}`;
+  const premier = (/^[\p{L}]+/u.exec(n) || [''])[0];
+  const k = premier.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const lier = (a: string, x: string) => (a.endsWith("'") ? `${a.replace("'", '’')}${x}` : `${a} ${x}`);
+  if (ARTICLE_NOM_COMMUN[k] && premier !== premier.toUpperCase()) return lier(ARTICLE_NOM_COMMUN[k], `${premier.toLowerCase()}${n.slice(premier.length)}`);
+  if (ARTICLE_NOM_COMMUN[k]) return lier(ARTICLE_NOM_COMMUN[k], `${premier.toLowerCase()}${n.slice(premier.length)}`);
+  if (ARTICLE_NOM_PROPRE[k]) return lier(ARTICLE_NOM_PROPRE[k], n);
+  return `le site ${n}`;
+}
+
+/** Phrase des sites du texte de secours : sans parenthèse de communes déjà écrites dans le site (T7CS-4, T7N-6). */
+export function phraseSites(sites: string[], villes: string[]): string {
+  const liste = sites.map((x) => siteDansPhrase(x, villes)).filter(Boolean);
+  if (!liste.length) return '';
+  const ecrit = cleCommune(liste.join(' '));
+  const vues = new Set<string>();
+  const manquantes = villes.filter((v) => {
+    const c = cleCommune(v);
+    if (!c || vues.has(c) || ` ${ecrit} `.includes(` ${c} `)) return false;
+    vues.add(c);
+    return true;
+  });
+  return `La prestation porte sur ${listeFr(liste)}${manquantes.length ? ` (${manquantes.join(', ')})` : ''}.`;
+}
+
+/**
+ * Périmètre (rédigé par le modèle pour cadrer la rédaction) imprimé dans le texte de secours : une donnée laissée à GSS
+ * (« le délai d'intervention doit être précisé par GSS ») devient un emplacement « [À COMPLÉTER] » avec sa question
+ * exacte, jamais un commentaire interne imprimé (T7CS-4).
+ */
+export function perimetreSecours(perimetre: string): string {
+  const FEMININ = /^(?:dur[ée]e|fr[ée]quence|p[ée]riodicit[ée]|modalit[ée]|organisation|proc[ée]dure|m[ée]thode|composition|qualification|date|heure|r[ée]ponse|capacit[ée]|liste)s?\b/i;
+  return String(perimetre || '').split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+    const libelle = (/^[-*•]?\s*([^:;.]{3,60}?)\s*:/.exec(l) || [])[1]?.trim() || '';
+    const ligne = l.replace(/([,;]\s*|\.\s+|\s)(?:(?:le|la|les|l['’])\s*)?([^,;.:]{3,80}?)\s+(?:doit|doivent|devra|devront|reste|restent)\s+(?:être\s+)?(?:à\s+)?(?:précisée?s?|préciser|indiquée?s?|indiquer|fixée?s?|fixer|définie?s?|définir|proposée?s?|proposer)\s+par\s+(?:GSS|le titulaire|le candidat|le prestataire|l['’]entreprise)(?=\s*[.;]|\s*$)/i,
+      (_m: string, sep: string, objet: string) => {
+        const o = objet.trim().replace(/^(?:le|la|les|l['’])\s*/i, '');
+        const pluriel = /^\S+s\b/.test(o) && !/^(?:d[ée]lais|temps|prix|poids)\b/i.test(o);
+        const quel = FEMININ.test(o) ? (pluriel ? 'quelles' : 'quelle') : (pluriel ? 'quels' : 'quel');
+        const question = libelle && !normaliser(o).includes(normaliser(libelle)) ? `${libelle} : ${quel} ${o} GSS annonce-t-elle ?` : `${quel.charAt(0).toUpperCase()}${quel.slice(1)} ${o} GSS annonce-t-elle ?`;
+        return `${sep}${o} : [À COMPLÉTER : ${question}]`;
+      });
+    return /^[-*•]/.test(ligne) ? ligne : `- ${ligne}`;
+  }).join('\n');
+}
+
 export function texteSecoursBesoin(d: DonneesBesoin, perimetre = ''): string {
   const parties: string[] = ['## Votre contexte et votre site', d.amorce || (d.client ? `${d.client.charAt(0).toUpperCase() + d.client.slice(1)} lance le marché ${d.objet ? `« ${d.objet} »` : 'de sécurité privée'}.` : `Vous nous consultez pour ${d.objet || 'une prestation de sécurité privée'}.`)];
-  if (d.sites.length) parties.push(`La prestation porte sur ${d.sites.join(', ')}${d.villes.length ? ` (${d.villes.join(', ')})` : ''}.`);
+  const sites = phraseSites(d.sites, d.villes);
+  if (sites) parties.push(sites);
   parties.push('## Le périmètre de la prestation demandée');
-  if (perimetre) parties.push(perimetre.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => (/^[-*•]/.test(l) ? l : `- ${l}`)).join('\n'));
+  if (perimetre) parties.push(perimetreSecours(perimetre));
   else if (d.prestations.length) parties.push(`Le marché comprend : ${d.prestations.join(', ')}.`);
   const horaires = horairesLisibles(d.horaires);
   if (horaires.length) parties.push(`Horaires imposés par le cahier des charges :\n${horaires.map((h) => `- ${h}`).join('\n')}`);
-  const obligations = d.obligations.filter((o) => !CLAUSE_CONTRACTUELLE.test(o));
+  // Une obligation qui annonce une liste (« Au minimum 72 heures avant la prise de service d'un agent, le titulaire
+  // doit : ») n'est jamais imprimée seule, sans sa liste (ifsem, T7CS-4).
+  const obligations = d.obligations.filter((o) => !CLAUSE_CONTRACTUELLE.test(o) && !/:\s*$/.test(o.trim()));
   if (obligations.length) {
     parties.push('## Vos attentes et nos engagements');
     parties.push(`Nous nous engageons sur chacune des obligations chiffrées du cahier des charges :\n${obligations.slice(0, 8).map((o) => `- ${o.trim()}`).join('\n')}`);
