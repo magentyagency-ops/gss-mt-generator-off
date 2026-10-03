@@ -2318,10 +2318,16 @@ export function alerteCctpAbsent(dce: string): string[] {
   const NOM_CCTP = /cctp|\bccp\b|cahier\s*des\s*(?:clauses\s*(?:techniques|particuli)|charges)|clauses?\s*techniques|programme\s*fonctionnel/i;
   const AUTRE = /\bRC\b|r[èe]glement\s*(?:de\s*(?:la\s*)?)?consultation|acte\s*d.engagement|\bAE\b|DPGF|BPU|DQE|bordereau|\bDC\s?\d|attestation|cadre|m[ée]moire|candidature|lettre|avis|ccap|clauses\s*administratives/i;
   const DEBUT_CCTP = /cahier\s+des\s+(?:clauses\s+techniques|clauses\s+particuli[eè]res|charges)|\bC\.?\s?C\.?\s?T\.?\s?P\b|\bC\.C\.P\.|clauses\s+techniques\s+particuli/i;
+  // DCE remis en un seul fichier (RC puis CCTP, T9-COH-5) : le CCTP commence plus loin que les 3 000 premiers caractères ;
+  // il est présent quand la pièce porte, n'importe où, son titre en capitales seul sur sa ligne (« CAHIER DES CLAUSES
+  // TECHNIQUES PARTICULIERES »), ou l'en-tête « CCTP » répété en haut de ses pages (au moins 3 fois).
+  const TITRE_CCTP = /^[ \t]*(?:CAHIER DES CLAUSES TECHNIQUES PARTICULI[EÈ]RES|CAHIER DES CLAUSES PARTICULI[EÈ]RES|CAHIER DES CHARGES(?: TECHNIQUES?)?(?: PARTICULI[EÈ]RES)?)[ \t]*(?:\(\s*C\.?\s?C\.?\s?T?\.?\s?P\.?\s*\)[ \t]*)?\.?[ \t]*$/m;
+  const ENTETE_CCTP = /^[ \t]*(?:CCTP|C\.C\.T\.P\.?)[ \t]*$/gm;
   const present = pieces.some((p) => {
     const nom = `${p.nom} ${p.nom.replace(/[_.\s-]+/g, '')}`;
     if (NOM_CCTP.test(nom) && !/ccap|clauses\s*administratives/i.test(nom)) return true;
-    return !AUTRE.test(nom) && DEBUT_CCTP.test(p.corps.slice(0, 3000));
+    if (AUTRE.test(nom)) return false;
+    return DEBUT_CCTP.test(p.corps.slice(0, 3000)) || TITRE_CCTP.test(p.corps) || (p.corps.match(ENTETE_CCTP) || []).length >= 3;
   });
   if (present) return [];
   // Phrase du DCE (RC, AE…) qui cite le CCTP : citée telle quelle, entière.
