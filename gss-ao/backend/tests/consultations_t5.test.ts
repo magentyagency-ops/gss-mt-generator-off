@@ -72,3 +72,16 @@ describe('critère du cadre qui demande les délais d’intervention (T5N-2, eta
     expect(completerDelaisCadre(T, 'Méthodologie de mise en place').ajouts).toEqual([]);
   });
 });
+
+import { consultationAdaptation } from '../src/generation/reponse_libre_v2';
+import { consultationsAdaptations } from '../src/generation/adaptations_cctp';
+describe('phrase adaptée citée dans les consultations (T5N-7)', () => {
+  it('jamais coupée au milieu d’un mot', () => {
+    const avant = `Le troisième niveau de contrôle est assuré par le responsable qualité, ${'qui se rend sur site et contrôle l’équipe en place, '.repeat(6)}y font le point sur la prestation dans son ensemble, à partir d’un dossier produit par GSS.`;
+    const l = consultationAdaptation({ id: 'x', avant, apres: avant.replace('trimestre', 'mois'), exigence: 'réunion mensuelle' }, 'Contrôle 3');
+    expect(l).not.toMatch(/ensem\b/);
+    expect(l).toMatch(/… » ; phrase adaptée/);
+    const c = consultationsAdaptations([{ n: 1, titre: 'Contrôle 3', origine: avant, adaptee: avant, exigence: 'x', statut: 'a_valider' } as any])[0];
+    expect(c).not.toMatch(/\bensem »/);
+  });
+});

@@ -1842,7 +1842,8 @@ export function adaptationsRetenuesDe(adaptations: AdaptationCctp[], sections: R
 
 /** Ligne de consultation d'une phrase de GSS adaptée au CCTP (D8) : phrase d'origine, phrase adaptée, exigence. */
 export function consultationAdaptation(a: AdaptationCctp, titre: string): string {
-  const c = (x: string, n: number) => x.replace(/\s+/g, ' ').trim().replace(/[.;:\s]+$/, '').slice(0, n);
+  // Coupé à la fin d'un mot, avec « … » (becquerel 591, T5N-7 : « … dans son ensem »).
+  const c = (x: string, n: number) => { const t = x.replace(/\s+/g, ' ').trim().replace(/[.;:,\s]+$/, ''); return t.length <= n ? t : `${t.slice(0, n + 1).replace(/\s+\S*$/, '').replace(/[\s,;:]+$/, '')}…`; };
   return `Phrase du texte de GSS adaptée au cahier des charges, à valider : « ${titre} » — phrase d'origine : « ${c(a.avant, 300)} » ; phrase adaptée : « ${c(a.apres, 300)} »${a.exigence ? ` ; exigence du CCTP : « ${c(a.exigence, 300)} »` : ''}`;
 }
 
