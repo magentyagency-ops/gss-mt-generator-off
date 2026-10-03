@@ -737,7 +737,34 @@ export function phrasesThematiques(textes: Record<string, string>): PhraseThemat
  * GSS : ligne « libellé : [À COMPLÉTER] » (ca_normandie 241, 2.2 : « Moyens mis en œuvre pour remédier à un besoin urgent
  * de renfort hors astreinte : [À COMPLÉTER]. ») ou sous-titre resté sans texte (« Besoin urgent de renfort hors astreinte »).
  */
-export function completerParThematiques(texte: string, thematiques: PhraseThematique[]): { texte: string; completes: string[] } {
+/**
+ * Ligne « [CONSULTATION REQUISE : …] » seule : extraite vers les consultations après le contrôle des sous-titres, elle ne
+ * compte pas comme le texte d'un sous-titre (etampes1 594, T6N-2 : « CV détaillés, agréments, certificats et cartes
+ * professionnelles » restait imprimé sans texte) ; l'emplacement est inséré avant elle, la question reste posée.
+ */
+const CONSULTATION_SEULE = /^\s*\[CONSULTATION REQUISE\s*:[^\]]*\][.;]?\s*$/i;
+
+/**
+ * Sous-titre « parent » : la question du cadre détaille sa composante entre parenthèses et le sous-titre suivant en est un
+ * élément (etampes1 594 : « La composition des équipes (interlocuteur unique à la ville, encadrants, CV détaillés…) » →
+ * « Composition des équipes » puis « Interlocuteur unique à la ville ») ; il n'est pas vide, ses éléments ont leur texte.
+ */
+export function sousTitreParent(sousTitre: string, suivant: string, question = ''): boolean {
+  if (!question) return false;
+  const net = (t: string) => normaliser(t).replace(/[^a-z0-9();:.]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const q = net(question), s = net(sousTitre.replace(/[#*:]/g, ' '));
+  if (!s) return false;
+  const mots = net(suivant).replace(/[();:.]/g, ' ').split(' ').filter((w) => w.length >= 5);
+  // Chaque occurrence de la composante dans la question (« Composition des équipes mises à disposition comprenant… ; La
+  // composition des équipes (… ) ») : celle qui est suivie de sa parenthèse.
+  for (let i = q.indexOf(s); i >= 0; i = q.indexOf(s, i + 1)) {
+    const m = /^[^();:.]{0,40}\(([^)]*)\)/.exec(q.slice(i + s.length));
+    if (m && mots.some((w) => m[1].includes(w))) return true;
+  }
+  return false;
+}
+
+export function completerParThematiques(texte: string, thematiques: PhraseThematique[], question = ''): { texte: string; completes: string[] } {
   const lignes = String(texte || '').split('\n');
   const completes: string[] = [];
   if (!thematiques.length) return { texte: lignes.join('\n'), completes };
@@ -751,9 +778,9 @@ export function completerParThematiques(texte: string, thematiques: PhraseThemat
   for (let i = 0; i < lignes.length; i++) {
     if (!estSousTitreCadre(lignes[i])) continue;
     let j = i + 1;
-    while (j < lignes.length && !lignes[j].trim()) j++;
+    while (j < lignes.length && (!lignes[j].trim() || CONSULTATION_SEULE.test(lignes[j]))) j++;
     const repere = j < lignes.length && /^\s*\[À COMPLÉTER\][.;]?\s*$/.test(lignes[j]);
-    if (!(j >= lignes.length || repere || estSousTitreCadre(lignes[j]))) continue;
+    if (!(j >= lignes.length || repere || (estSousTitreCadre(lignes[j]) && !sousTitreParent(lignes[i], lignes[j], question)))) continue;
     const phrase = thematique(lignes[i]);
     if (!phrase) continue;
     completes.push(lignes[i].trim());
@@ -769,18 +796,18 @@ export function completerParThematiques(texte: string, thematiques: PhraseThemat
  * urgent de renfort hors astreinte » ← « Pour les renforts ponctuels, nous disposons d'un vivier de 500 agents… »). Sans
  * phrase de GSS, le sous-titre reçoit « [À COMPLÉTER] » (donnée demandée à GSS) : jamais un sous-titre seul.
  */
-export function completerSousTitresVides(texte: string, sources: Array<{ texte?: string }>, thematiques: PhraseThematique[] = []): { texte: string; completes: string[] } {
+export function completerSousTitresVides(texte: string, sources: Array<{ texte?: string }>, thematiques: PhraseThematique[] = [], question = ''): { texte: string; completes: string[] } {
   const VIDES_ST = new Set(['besoin', 'moyen', 'moyens', 'mise', 'oeuvre', 'description', 'gestion', 'organisation', 'politique', 'personnel', 'service', 'prestation', 'mesure', 'mesures']);
   const racines = (t: string) => new Set(normaliser(t).replace(/[^a-z ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 5 && !VIDES_ST.has(w)).map((w) => w.replace(/s$/, '').slice(0, 7)));
   const phrases = sources.flatMap((s) => String(s.texte || '').split('\n')).filter((l) => l.trim() && !estSousTitreCadre(l) && !/\[À COMPLÉTER\]|\{\{/.test(l))
     .flatMap((l) => l.replace(/^\s*(?:[•\-*]|\d+[.)])\s+/, '').split(/(?<=[.!?])\s+/)).map((p) => p.trim()).filter((p) => p.split(/\s+/).length >= 6);
-  const theme = completerParThematiques(texte, thematiques);
+  const theme = completerParThematiques(texte, thematiques, question);
   const lignes = theme.texte.split('\n');
   const completes: string[] = [...theme.completes];
   for (let i = 0; i < lignes.length; i++) {
     if (!estSousTitreCadre(lignes[i])) continue;
     let j = i + 1;
-    while (j < lignes.length && !lignes[j].trim()) j++;
+    while (j < lignes.length && (!lignes[j].trim() || CONSULTATION_SEULE.test(lignes[j]))) j++;
     const repere = j < lignes.length && /^\s*\[À COMPLÉTER\][.;]?\s*$/.test(lignes[j]);
     // Ligne suivante qui amorce une liste (« Nous veillons au respect de bonnes pratiques dans nos locaux : » puis ses
     // puces), ou qui suit ce sous-titre dans le texte de GSS (havre2 341 : « Les économies d'énergie : » complété par une
@@ -797,7 +824,7 @@ export function completerSousTitresVides(texte: string, sources: Array<{ texte?:
     while (k2 < lignes.length && !lignes[k2].trim()) k2++;
     const blocDeGss = j < lignes.length && estSousTitreCadre(lignes[j]) && k2 < lignes.length && !estSousTitreCadre(lignes[k2]) && !/^\s*\[À COMPLÉTER\][.;]?\s*$/.test(lignes[k2])
       && sources.some((src) => String(src.texte || '').split('\n').some((l) => n(l) === n(lignes[j])));
-    const vide = j >= lignes.length || repere || (estSousTitreCadre(lignes[j]) && !amorce && !suiteDeGss && !blocDeGss);
+    const vide = j >= lignes.length || repere || (estSousTitreCadre(lignes[j]) && !amorce && !suiteDeGss && !blocDeGss && !sousTitreParent(lignes[i], lignes[j], question));
     if (!vide) continue;
     const cible = racines(lignes[i].replace(/[#*]/g, ''));
     let meilleure = '', score = 0, exaequo = 0;

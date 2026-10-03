@@ -1,0 +1,21 @@
+// Suit le texte d'un champ du cadre (recalage capturé) à travers les nettoyages du générateur, pour voir où un repère disparaît.
+import fs from 'fs';
+const c = require('../../src/generation/memoire_type_cadre');
+const b = require('../../src/generation/base_memoires');
+const { voixDeGss } = require('../../src/generation/format_court');
+const [f, code, motif] = process.argv.slice(2);
+const dce = fs.readFileSync(`${__dirname}/../../../_corpus_verif/_dce_textes/${code}.txt`, 'utf-8');
+const j = JSON.parse(fs.readFileSync(f, 'utf-8'));
+const rx = new RegExp(motif);
+let t = j.resultat.texte;
+const voir = (n: string) => { const i = t.search(rx); console.log(`== ${n} :`, JSON.stringify(i < 0 ? '(absent)' : t.slice(i, i + 160))); };
+voir('recalage');
+t = c.nettoyerReponseCadre(t); voir('nettoyerReponseCadre');
+t = c.completerSousTitresVides(t, []).texte; voir('completerSousTitresVides');
+t = b.retirerCommentairesInternes(t).texte; voir('retirerCommentairesInternes');
+t = b.sansRecopieCctp(t, dce).texte; voir('sansRecopieCctp');
+t = b.fondementReprise(voixDeGss(t), dce); voir('voixDeGss/fondementReprise');
+t = b.delaisHorsNormandie(b.interditsDce(t, dce), dce, true).texte; voir('interdits/delais');
+t = b.nettoyerChampCadre(t).trim(); voir('nettoyerChampCadre');
+t = c.sansPseudoTableau(t).texte; voir('sansPseudoTableau');
+t = b.extraireConfirmations(t).texte; voir('extraireConfirmations');

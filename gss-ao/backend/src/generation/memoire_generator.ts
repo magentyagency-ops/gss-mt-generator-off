@@ -5320,7 +5320,9 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
                 const second = repriseParChamp.get(f.id);
                 if (!second || (second.brute ?? 0) < rec.fideliteAvant) {
                   const k = replacements.map((x) => x.id).lastIndexOf(f.id);
-                  if (k >= 0) replacements[k].value = rec.texte;
+                  // Première réponse gardée : mêmes nettoyages que ci-dessous (etampes1 594, T6N-2 : sans eux, « CV détaillés,
+                  // agréments, certificats et cartes professionnelles » restait un intitulé sans texte).
+                  if (k >= 0) replacements[k].value = completerSousTitresVides(nettoyerReponseCadre(rec.texte), [...retenus, ...renvois], phrasesThematiques(repriseMT!.textes), `${questionMT || ''}\n${f.context}`).texte;
                   repriseParChamp.set(f.id, { ids: retenus.map((c) => c.id), fidelite: rec.fidelite, brute: rec.fideliteAvant });
                   if (rec.fidelite < SEUIL_FIDELITE_CADRE) propositionsCadre.set(f.id, `Réponse à relire (mémoire type de GSS repris en partie, fidélité ${Math.round(rec.fidelite * 100)} %) : ${libelle}`);
                   else propositionsCadre.delete(f.id);
@@ -5331,7 +5333,7 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
             rec.texte = nettoyerReponseCadre(rec.texte);
             // Sous-titre resté sans texte (ca_normandie 221, 2.2 « Besoin urgent de renfort hors astreinte ») : la phrase de GSS
             // qui traite ce sujet (rubriques reprises ici ou dans une autre réponse), sinon « [À COMPLÉTER] » demandé à GSS.
-            const sousTitres = completerSousTitresVides(rec.texte, [...retenus, ...renvois], phrasesThematiques(repriseMT!.textes));
+            const sousTitres = completerSousTitresVides(rec.texte, [...retenus, ...renvois], phrasesThematiques(repriseMT!.textes), `${questionMT || ''}\n${f.context}`);
             if (sousTitres.completes.length) console.log(`[MemoireGenerator] ${label} : sous-titre(s) sans texte complété(s) par le mémoire type (${sousTitres.completes.join(' ; ')}).`);
             rec.texte = sousTitres.texte;
             if (rec.texte !== String(value)) {
