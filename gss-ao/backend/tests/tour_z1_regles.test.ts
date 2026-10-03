@@ -244,3 +244,27 @@ describe('cadre imposé : compréhension sans renvoi à une rubrique absente du 
     expect(renvoisHorsCadreRetires('Matériel → notre réponse : « Moyens matériels » détaille les équipements.', cadre)).toBe('Matériel → notre réponse : « Moyens matériels » détaille les équipements.');
   });
 });
+
+import { questionAvecLibelle, regrouperQuestionsTelesurveillance } from '../src/generation/memoire_type_cadre';
+
+describe('questions à GSS du cadre (T1-COH-8)', () => {
+  it('question sans objet : précédée de l’intitulé du champ', () => {
+    expect(questionAvecLibelle('Quel est le numéro de certification et quelle est sa date de validité ?', 'IV – Télésurveillance (lot 3) — N° de certification de la station APSAD R31 et date de validité'))
+      .toBe('« IV – Télésurveillance (lot 3) — N° de certification de la station APSAD R31 et date de validité » : Quel est le numéro de certification et quelle est sa date de validité ?');
+    expect(questionAvecLibelle('Quel est le taux de reprise du personnel en place, exprimé en pourcentage ?', 'Taux de reprise du personnel')).toBe('Quel est le taux de reprise du personnel en place, exprimé en pourcentage ?');
+  });
+  it('partenaire de télésurveillance, sa station et sa certification : une seule question', () => {
+    const l = [
+      'Quel est le taux de reprise du personnel en place, exprimé en pourcentage ?',
+      'Où est située la station de télésurveillance ?',
+      'Quel est le nom de votre partenaire en télésurveillance ?',
+      "Réponse « (UFR DESP) » : la valeur « Partenaire télésurveillance ERYMA : deux stations APSAD P5 » n'a pas été écrite (ERYMA, APSAD P5 : absents du DCE). Quel partenaire de télésurveillance retenez-vous pour ce marché, ERYMA ou Delta ?",
+      "Réponse « Localisation de la station de télésurveillance » : la valeur « Bordeaux et Paris » n'a pas été écrite (Bordeaux : absent du DCE). Faut-il l'indiquer, et avec quelle information exacte ?",
+      'Confirmez-vous ce point : « Reprise obligatoire » ?',
+    ];
+    const r = regrouperQuestionsTelesurveillance(l);
+    expect(r).toHaveLength(3);
+    expect(r[1]).toMatch(/^Télésurveillance : quel partenaire/);
+    expect(r[1]).toMatch(/« \(UFR DESP\) », « Localisation de la station de télésurveillance »/);
+  });
+});

@@ -2685,3 +2685,42 @@ export function retablirLignesLibelle(texte: string, reference: string): string 
     return `${(PUCE.exec(l) || [''])[0]}${r.replace(PUCE, '').trim()}`;
   }).join('\n');
 }
+
+
+/**
+ * Question d'un emplacement du cadre qui ne dit pas de quoi elle parle (T1-COH-8, rouen_univ 709 : « Quel est le numéro de
+ * certification et quelle est sa date de validité ? », champ « N° de certification et date de validité » de la partie
+ * télésurveillance) : précédée de l'intitulé du champ (et de sa section) quand aucun mot porteur de l'intitulé n'y figure.
+ */
+export function questionAvecLibelle(question: string, libelle: string): string {
+  const q = String(question || '').trim();
+  const l = String(libelle || '').replace(/\s+/g, ' ').trim();
+  if (!q || !l || /^(?:R[ée]ponse|Proposition|Le |La |Les |Le DCE)/.test(q)) return q;
+  const VIDES = new Set(['quel', 'quelle', 'quels', 'quelles', 'votre', 'notre', 'reponse', 'question', 'indiquer', 'preciser', 'faut', 'date', 'nombre', 'numero']);
+  const mots = (t: string) => normaliser(t).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 5 && !VIDES.has(w)).map((w) => w.replace(/s$/, ''));
+  const ql = new Set(mots(q));
+  const porteurs = mots(l);
+  if (!porteurs.length || porteurs.some((w) => ql.has(w))) {
+    // Mot porteur présent, mais seulement un mot générique (« certification ») : la section précise l'objet.
+    const generiques = new Set(['certification', 'validite', 'reponse', 'information', 'donnee']);
+    if (!porteurs.some((w) => ql.has(w) && !generiques.has(w))) return `« ${l} » : ${q}`;
+    return q;
+  }
+  return `« ${l} » : ${q}`;
+}
+
+/**
+ * Questions qui portent sur la même donnée inconnue de GSS, le partenaire de télésurveillance (son nom, sa station, sa
+ * certification) : une seule question, qui cite les réponses du cadre concernées (T1-COH-8 : six questions sur ce point
+ * dans rouen_univ 709). Les autres questions restent telles quelles, dans leur ordre.
+ */
+export function regrouperQuestionsTelesurveillance(questions: string[]): string[] {
+  const SUJET = /(?<![\p{L}])(?:ERYMA|Delta)(?![\p{L}])|partenaire (?:en |de )?t[ée]l[ée]surveillance|station (?:de )?t[ée]l[ée]surveillance|station.{0,20}APSAD|APSAD|t[ée]l[ée]surveillance/iu;
+  const lies = questions.filter((q) => SUJET.test(q) && /\?/.test(q));
+  if (lies.length < 2) return questions;
+  const reponses = [...new Set(lies.flatMap((q) => [...q.matchAll(/R[ée]ponse « ([^«»]{2,90}) »/g)].map((m) => m[1].trim())))];
+  const libres = lies.filter((q) => !/R[ée]ponse « /.test(q)).map((q) => q.replace(/^« [^«»]+ » : /, '')).filter((q) => !/ERYMA ou Delta/.test(q));
+  const fusion = `Télésurveillance : quel partenaire de télésurveillance retenez-vous pour ce marché, ERYMA ou Delta ? Où se trouve sa station de télésurveillance, et quelle certification (référentiel, numéro et date de validité) faut-il indiquer ?${reponses.length ? ` Réponses du cadre concernées : ${reponses.map((r) => `« ${r} »`).join(', ')}.` : ''}${libres.length ? ` (Questions regroupées : ${libres.join(' ')})` : ''}`;
+  const premier = questions.findIndex((q) => lies.includes(q));
+  return questions.flatMap((q, i) => (i === premier ? [fusion] : lies.includes(q) ? [] : [q]));
+}

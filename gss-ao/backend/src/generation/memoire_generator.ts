@@ -28,7 +28,7 @@ import {
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, completerDelaisCadre, ordonnerSelonReponse, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, retablirLignesLibelle, attendusDuChamp, attendusSansReponse,
-  questionsPubliposteParEmplacement, questionDeLEmplacement, completerFamilles, referencesDeSecours, ecartEquipeTableau,
+  questionsPubliposteParEmplacement, questionDeLEmplacement, completerFamilles, referencesDeSecours, ecartEquipeTableau, questionAvecLibelle, regrouperQuestionsTelesurveillance,
 } from './memoire_type_cadre';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord } from './base_memoires';
@@ -7033,14 +7033,15 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         // DCE sans CCTP (T8-COH-2), rubriques du cadre sans réponse (T10-COH-2) : en tête des consultations.
         ...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext),
         ...alertesRubriquesCadre,
-        ...new Set([
+        // Même donnée inconnue (partenaire de télésurveillance, sa station, sa certification) : une seule question (T1-COH-8).
+        ...regrouperQuestionsTelesurveillance([...new Set([
           ...(descriptors.some((d) => d.grille)
             ? await this.consoliderConsultations([...aCompleter.flatMap((q) => {
               // Question générique d'un critère : les questions précises de ses emplacements, une fois chacune. Champ hors
               // critère : les questions précises de ses emplacements aussi (celles des cartes de l'assistant, T8CS-4).
               const champ = questionsVaguesGrille.get(q) ?? champDuLibelle.get(q);
               if (champ === undefined) return [q];
-              const precises = [...new Set(elementsACompleter.filter((el) => (questionsVaguesGrille.has(q) || el.statut === 'ouvert') && signets.find((x) => x.cle === el.cle)?.champ === champ).map((el) => el.question).filter((x) => x && !questionsVaguesGrille.has(x)))];
+              const precises = [...new Set(elementsACompleter.filter((el) => (questionsVaguesGrille.has(q) || el.statut === 'ouvert') && signets.find((x) => x.cle === el.cle)?.champ === champ).map((el) => el.question).filter((x) => x && !questionsVaguesGrille.has(x)).map((x) => questionAvecLibelle(x, champsEtatLibelle(champ))))];
               return precises.length ? precises : [q];
             }), ...confirmationsGss], { dce: dceContext, horsNormandie: marcheHorsNormandie(analysisData, dceContext) })
             // Champ hors grille : la question précise de chacun de ses emplacements (« En complément du téléphone, utilisez-
@@ -7048,10 +7049,10 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
             : [...aCompleter.flatMap((q) => {
               const champ = champDuLibelle.get(q);
               if (champ === undefined) return [q];
-              const precises = [...new Set(elementsACompleter.filter((el) => el.statut === 'ouvert' && signets.find((x) => x.cle === el.cle)?.champ === champ).map((el) => el.question).filter(Boolean))];
+              const precises = [...new Set(elementsACompleter.filter((el) => el.statut === 'ouvert' && signets.find((x) => x.cle === el.cle)?.champ === champ).map((el) => el.question).filter(Boolean).map((x) => questionAvecLibelle(x, champsEtatLibelle(champ))))];
               return precises.length ? precises : [q];
             }), ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))]),
-        ].map((c) => (!LIGNE_DETERMINISTE.test(c) && /p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(c) ? 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».' : c).replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean).map(questionDonneeGss).map(questionExacte)),
+        ].map((c) => (!LIGNE_DETERMINISTE.test(c) && /p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(c) ? 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».' : c).replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean).map(questionDonneeGss).map(questionExacte))]),
         // Lieu du site introuvable dans le DCE (T7-COH-2) : une seule question, aucun délai normand promis en attendant.
         ...questionLieuInconnu(analysisData, dceContext),
         // Grille de candidature : une question exacte par donnée de GSS (effectif, cadres, chiffre d'affaires, référence).
