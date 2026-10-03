@@ -139,6 +139,14 @@ export const contraste = (a: string, b: string): number => {
 /** Logo sur fond clair (arc et point à l'encre) : variante préparée par l'agent design, utilisée seulement par les
  *  styles dont l'en-tête ou la couverture est clair (« logo »: « encre »). */
 export const LOGO_FOND_CLAIR = 'logogss_fond_clair.png';
+/** Logo monochrome blanc vectoriel (style « marine » v3, planche validée) : en-tête, couverture et ouvertures de bloc
+ *  marine, format court. */
+export const LOGO_BLANC = 'logogss_blanc.svg';
+
+/** Vrai pour un style dont les pages suivent les gabarits de la planche « Marine & signal » v3 (feuille_pages dédiée). */
+export function pagesMarineV3(theme: string): boolean {
+  return styleDuTheme(theme)?.feuille_pages === 'gss-theme-pages-marine.css';
+}
 
 /** Variables CSS --gss-… du thème (bloc « pages » de themes.json + valeurs dérivées). */
 export function variablesPages(theme: string): Record<string, string> {
@@ -163,16 +171,20 @@ export function feuilleMarp(theme: string, base: string): string {
   if (estRetourArriere(theme)) return base;
   const sansReseau = base.replace(/^@import url\('https:\/\/fonts\.googleapis\.com[^\n]*\n/m, '');
   const vars = Object.entries(variablesPages(theme)).map(([k, val]) => `  ${k}: ${val};`).join('\n');
+  // Mise en page du style : gss-theme-pages.css (styles de la planche v1), ou la feuille propre au style (« marine » v3).
+  const feuille = styleDuTheme(theme)?.feuille_pages || 'gss-theme-pages.css';
   let pages = '';
-  try { pages = fs.readFileSync(path.join(MARP, 'gss-theme-pages.css'), 'utf-8'); } catch (e: any) {
-    console.warn(`[Thèmes] gss-theme-pages.css illisible : ${e?.message || e}`);
+  try { pages = fs.readFileSync(path.join(MARP, feuille), 'utf-8'); } catch (e: any) {
+    console.warn(`[Thèmes] ${feuille} illisible : ${e?.message || e}`);
   }
   return `${sansReseau}\n\n/* ── Thème « ${theme} » (themes.json) ── */\n${fontFaceTheme(theme)}\nsection {\n${vars}\n}\n\n${pages}`;
 }
 
 /** Fichiers d'images que la feuille du thème référence (copiés à côté de la feuille Marp). */
 export function imagesTheme(theme: string): string[] {
-  return styleDuTheme(theme)?.logo === 'encre' ? [path.join(MARP, LOGO_FOND_CLAIR)] : [];
+  const logo = styleDuTheme(theme)?.logo;
+  if (logo === 'monochrome_blanc_sur_marine') return [path.join(MARP, LOGO_BLANC)];
+  return logo === 'encre' ? [path.join(MARP, LOGO_FOND_CLAIR)] : [];
 }
 
 // ─── Schémas de la bibliothèque dans le thème ────────────────────────────────────────────────

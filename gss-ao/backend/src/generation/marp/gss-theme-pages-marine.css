@@ -1,0 +1,187 @@
+/* Mise en page du style « Marine & signal », version 3 validée par le patron de GSS (décision D11 : planche_finale.pdf,
+   pages Marine, et planche_marine.pdf) — reprise des gabarits de pages de la planche (outils/pages_marine.py v3) :
+   en-tête marine (logo monochrome blanc, marque, numéro et titre du bloc en cours), parcours des blocs sous l'en-tête
+   (bloc en cours en orange « signal »), surtitre et titre, page de texte à colonne de titrage, page de texte court,
+   page de schéma (le schéma toujours au même endroit, au-dessus du pied de page), couverture, sommaire à légende des
+   schémas, ouverture de bloc à grand numéro orange et parcours du mémoire.
+   Ajoutée par src/generation/themes.ts APRÈS gss-theme.css et les variables --gss-… du style (feuille_pages de
+   themes.json) ; aucun autre style ne la reçoit. Forme seulement : aucun texte n'est ajouté ni modifié. */
+
+section {
+  background: #FFFFFF;
+  color: var(--gss-encre-2);
+  font-family: var(--gss-police-texte);
+  font-size: var(--gss-texte-taille);
+  line-height: var(--gss-texte-interligne);
+  padding: 23mm 15mm 19mm 15mm;
+  align-content: start;
+  display: block;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+section sup { font-size: .62em; line-height: 0; vertical-align: .42em; }
+
+/* En-tête : bande marine, logo blanc, marque, bloc en cours (numéro orange, titre clair). */
+header {
+  position: absolute; left: 0; right: 0; top: 0; height: 14mm; padding: 0 15mm;
+  background: var(--gss-entete-fond); color: var(--gss-clair-sur-structure);
+  display: flex; align-items: center; justify-content: flex-end; text-align: right;
+  font: 500 var(--gss-entete-taille)/1 var(--gss-police-texte); letter-spacing: .1em; text-transform: uppercase;
+}
+header strong { color: var(--gss-accent); font: 600 8.4pt/1 var(--gss-police-numero); letter-spacing: 0; margin-right: 2.4mm; }
+header::after {
+  content: ""; position: absolute; left: 15mm; top: 2.4mm; width: 12.5mm; height: 9.2mm;
+  background: url('logogss_blanc.svg') left center / contain no-repeat;
+}
+header::before {
+  content: "GLOBAL SECURITY SERVICES"; position: absolute; left: 30.5mm; top: 0; height: 14mm; display: flex;
+  align-items: center; font: 600 var(--gss-entete-taille)/1 var(--gss-police-texte); letter-spacing: .22em; color: #FFFFFF;
+}
+/* Parcours des blocs sous l'en-tête (segments définis par le mémoire : classes bloc-N, voir marp_generator.ts). */
+section::before {
+  display: block; content: ""; position: absolute; left: 0; right: 0; top: 14mm; height: 1.4mm;
+  background: var(--gss-parcours, var(--gss-structure-2));
+}
+
+/* Pied de page : filet, « Mémoire technique · acheteur », numéro de page. */
+footer {
+  position: absolute; left: 15mm; right: 15mm; bottom: 8mm; top: auto; height: auto; padding: 2.2mm 0 0 0;
+  border-top: .3mm solid var(--gss-filet); text-align: left;
+  font: 400 var(--gss-pied-taille)/1 var(--gss-police-texte); color: var(--gss-encre-3); letter-spacing: 0;
+}
+section::after {
+  content: attr(data-marpit-pagination); position: absolute; right: 15mm; bottom: 8mm; padding: 0;
+  font: 600 8.4pt/1 var(--gss-police-numero); color: var(--gss-structure);
+}
+
+/* Surtitre et titre. */
+.gss-sur {
+  font: 600 var(--gss-surtitre-taille)/1.25 var(--gss-police-texte); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--gss-encre-3); margin: 0 0 2.4mm;
+}
+section h1 {
+  font: 700 var(--gss-titre-taille)/1.08 var(--gss-police-titre); color: var(--gss-titre); margin: 0 0 6.5mm;
+  letter-spacing: -.003em; border: none; padding: 0; text-wrap: balance;
+}
+section h1::after { display: none; }
+
+/* Page de texte : chapeau pleine largeur, puis colonne de titrage (intertitres) et colonne de lecture. */
+section p, section li { font: 400 var(--gss-texte-taille)/var(--gss-texte-interligne) var(--gss-police-texte); color: var(--gss-encre-2); }
+section p { margin: 0 0 2.4mm 44mm; }
+section ul, section ol { margin: 0 0 2.4mm 44mm; padding: 0; }
+section ul { list-style: none; }
+section ul li { position: relative; padding-left: 4.6mm; margin: 0 0 2.4mm; }
+section ul li::before { content: ""; position: absolute; left: 0; top: 2.15mm; width: 1.7mm; height: 1.7mm; background: var(--gss-structure); }
+section ol { padding-left: 5mm; }
+section ol li { margin: 0 0 2.4mm; }
+section ol li::marker { color: var(--gss-structure); font-weight: 600; }
+section li > ul, section li > ol { margin: 1.2mm 0 0 0; }
+section strong { color: var(--gss-encre); font-weight: 600; }
+section h1 + p {
+  margin: 0 0 6mm 0; font: 400 var(--gss-chapeau-taille)/1.5 var(--gss-police-texte); color: var(--gss-encre);
+}
+section h2, section h3, section h4 {
+  float: left; clear: both; width: 38mm; margin: 0 0 2mm 0; padding-top: 1.6mm; border-top: .7mm solid var(--gss-structure);
+  font: 700 var(--gss-intertitre-taille)/1.2 var(--gss-police-titre); color: var(--gss-titre); text-wrap: balance;
+}
+section table {
+  display: table; width: 100%; border-collapse: collapse; margin: 0 0 2.4mm 0; clear: both;
+  font: 400 var(--gss-tableau-taille)/1.42 var(--gss-police-texte);
+}
+section table th {
+  background: var(--gss-tableau-tete); color: var(--gss-tableau-tete-texte); border: none; text-align: left;
+  font: 600 var(--gss-tableau-tete-taille)/1.2 var(--gss-police-texte); letter-spacing: .08em; text-transform: uppercase;
+  padding: 2.1mm 2.2mm;
+}
+section table td {
+  background: #FFFFFF; color: var(--gss-encre-2); border: none; border-bottom: .3mm solid var(--gss-filet);
+  padding: 2.2mm 2.2mm; vertical-align: top;
+}
+section table tr:nth-child(even) td { background: #FFFFFF; }
+section table td:first-child { font: 700 10pt/1.2 var(--gss-police-titre); color: var(--gss-titre); }
+.box { margin: 0 0 2.4mm 44mm; background: var(--gss-encadre-fond); border-left: 1.6mm solid var(--gss-structure); border-radius: 0; padding: 4mm 5mm; }
+
+/* Page resserrée (fin de rubrique regroupée, marp_generator.ts) : espacements légèrement réduits, corps inchangé. */
+section.texte-serre p, section.texte-serre li { line-height: 1.42; }
+section.texte-serre p, section.texte-serre ul li, section.texte-serre ol li { margin-bottom: 1.6mm; }
+
+/* Page de texte court (moins de 1 300 signes) : corps plus grand, mesure élargie, bloc centré, « l'essentiel ». */
+section.court { display: flex; flex-direction: column; justify-content: center; padding-bottom: 35mm; }
+section.court p, section.court li { font-size: var(--gss-texte-court-taille); line-height: var(--gss-texte-court-interligne); max-width: 168mm; }
+section.court p, section.court ul, section.court ol, section.court .box { margin-left: 0; }
+section.court h1 + p { color: var(--gss-encre-2); margin: 0 0 3.4mm; font-size: var(--gss-texte-court-taille); line-height: var(--gss-texte-court-interligne); }
+section.court h2, section.court h3, section.court h4 { float: none; width: auto; display: inline-block; margin: 5mm 0 2.4mm 0; }
+.gss-essentiel { margin: 9mm 0 0; background: var(--gss-encadre-fond); border-left: 1.6mm solid var(--gss-structure); padding: 5mm 6mm 5.4mm; }
+.gss-essentiel .lab { font: 600 var(--gss-surtitre-taille)/1 var(--gss-police-texte); letter-spacing: .16em; text-transform: uppercase; color: var(--gss-encre-3); margin: 0 0 3mm; }
+.gss-essentiel blockquote { margin: 0; padding: 0; border: none; font: 600 14pt/1.42 var(--gss-police-titre); color: var(--gss-structure); text-wrap: balance; }
+
+/* Page de schéma : surtitre (rubrique), titre-message, puis le schéma (toile 180 × 228,6 mm) toujours au même endroit,
+   au-dessus du pied de page ; le dessin occupe au moins 85 % de la hauteur utile (décision D7). */
+section.schema { display: flex; flex-direction: column; padding: 23mm 15mm 17mm 15mm; }
+section.schema h2 {
+  flex: none; float: none; width: auto; border: none; padding: 0; margin: 0;
+  font: 700 var(--gss-titre-schema-taille)/1.08 var(--gss-police-titre); color: var(--gss-titre); letter-spacing: -.003em; text-wrap: balance;
+}
+section.schema h2::after { display: none; }
+section.schema .gss-sur { flex: none; }
+section.schema .gss-sur-vide { min-height: calc(var(--gss-surtitre-taille) * 1.25); }
+section.schema .schema-page { flex: 1 1 0; min-height: 0; display: flex; align-items: flex-end; justify-content: center; }
+section.schema .schema-page svg { display: block; width: 100%; height: 100%; max-height: 228.6mm; }
+
+/* Couverture : haut marine (arc de veille du logo, logo blanc, « mémoire technique », objet, acheteur, référence),
+   puis la fiche de la consultation et la marque. */
+section.lead { padding: 0; display: block; background: #FFFFFF; color: var(--gss-encre); text-align: left; }
+section.lead::before, section.lead::after { display: none; }
+section.lead footer { display: none; }
+.gss-couv .haut { position: absolute; left: 0; right: 0; top: 0; height: 184mm; background: var(--gss-couverture-fond); overflow: hidden; }
+.gss-couv .arc { position: absolute; left: 0; top: 0; width: 210mm; height: 184mm; }
+.gss-couv .logo { position: absolute; left: 15mm; top: 16mm; width: 30mm; height: 22mm; background: url('logogss_blanc.svg') left center / contain no-repeat; }
+.gss-couv .lab { position: absolute; left: 15mm; top: 92mm; font: 600 8.6pt/1 var(--gss-police-texte); letter-spacing: .32em; color: var(--gss-clair-sur-structure); }
+.gss-couv .obj { position: absolute; left: 15mm; right: 28mm; top: 100mm; font: 700 36pt/1.02 var(--gss-police-titre); color: #FFFFFF; letter-spacing: -.006em; text-wrap: balance; }
+.gss-couv .cli { position: absolute; left: 15mm; right: 30mm; bottom: 23mm; font: 600 17pt/1.15 var(--gss-police-titre); color: #FFFFFF; }
+.gss-couv .ref { position: absolute; left: 15mm; bottom: 14mm; font: 500 9pt/1 var(--gss-police-numero); color: var(--gss-clair-sur-structure); }
+.gss-couv .infos { padding: 0; position: absolute; left: 15mm; right: 15mm; top: 198mm; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0 10mm; }
+.gss-couv .infos div { border-top: .3mm solid var(--gss-filet); padding: 2.6mm 0 3.4mm; }
+.gss-couv .infos dt { padding: 0; font-style: normal; font: 600 7.4pt/1 var(--gss-police-texte); letter-spacing: .14em; text-transform: uppercase; color: var(--gss-encre-3); margin: 0 0 1.6mm; }
+.gss-couv .infos dd { margin: 0; padding: 0; font: 600 10.5pt/1.3 var(--gss-police-texte); color: var(--gss-structure); }
+.gss-couv .bas { position: absolute; left: 15mm; right: 15mm; bottom: 12mm; display: flex; justify-content: space-between; align-items: center; font: 500 7.6pt/1 var(--gss-police-texte); color: var(--gss-encre-3); border-top: .6mm solid var(--gss-structure); padding-top: 3mm; }
+.gss-couv .bas span { color: var(--gss-encre-3) !important; } /* gss-theme.css : section.lead span en blanc */
+.gss-couv .bas b { font: 600 7.6pt/1 var(--gss-police-texte); letter-spacing: .2em; color: var(--gss-structure); }
+
+/* Sommaire : une entrée par bloc (numéro, titre, rubriques sur deux colonnes), légende des schémas une seule fois. */
+section.sommaire .entree { display: grid; grid-template-columns: 20mm 1fr; gap: 0 3mm; padding: 3.6mm 0 3.8mm; border-top: .3mm solid var(--gss-filet); }
+section.sommaire .entree:last-of-type { border-bottom: .3mm solid var(--gss-filet); }
+section.sommaire .n { font: 600 24pt/1 var(--gss-police-numero); color: var(--gss-structure); letter-spacing: -.02em; }
+section.sommaire .t { font: 700 15pt/1.12 var(--gss-police-titre); color: var(--gss-titre); margin: 0 0 2.2mm; }
+section.sommaire ul { list-style: none; padding: 0; margin: 0; columns: 2; column-gap: 7mm; }
+section.sommaire ul li { font: 400 8.8pt/1.4 var(--gss-police-texte); color: var(--gss-encre-2); padding: 0 0 1.1mm 3.4mm; margin: 0; position: relative; break-inside: avoid; }
+section.sommaire ul li::before { content: ""; position: absolute; left: 0; top: 1.6mm; width: 1.3mm; height: 1.3mm; background: var(--gss-structure-2); }
+section.sommaire.compact .entree { padding: 2.4mm 0 2.6mm; }
+section.sommaire.compact ul li { font-size: 8.2pt; padding-bottom: .6mm; }
+.legende-roles { margin-top: 6mm; padding: 4mm 0 0; border-top: .6mm solid var(--gss-structure); }
+.legende-roles .lt { font: 600 var(--gss-surtitre-taille)/1 var(--gss-police-texte); letter-spacing: .14em; text-transform: uppercase; color: var(--gss-encre-3); margin: 0 0 3mm; }
+.legende-roles .lg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.6mm 6mm; }
+.legende-roles .li { display: flex; align-items: center; gap: 2.6mm; font: 400 8.6pt/1.3 var(--gss-police-texte); color: var(--gss-encre-2); }
+.legende-roles .li svg { flex: none; width: 9mm; height: 9mm; }
+.legende-roles .li b { color: var(--gss-encre); font-weight: 600; }
+
+/* Ouverture de bloc : fond marine, arc, logo blanc, grand numéro orange, titre, rubriques, parcours du mémoire. */
+section.intercalaire { background: var(--gss-intercalaire-fond); color: #FFFFFF; padding: 0; display: block; text-align: left; }
+section.intercalaire::before, section.intercalaire::after { display: none; }
+section.intercalaire footer { display: none; }
+.gss-ouv .arc { position: absolute; left: 0; top: 0; width: 210mm; height: 297mm; }
+.gss-ouv .logo { position: absolute; left: 15mm; top: 15mm; width: 21mm; height: 15.5mm; background: url('logogss_blanc.svg') left center / contain no-repeat; }
+.gss-ouv .lab { position: absolute; right: 15mm; top: 21mm; font: 500 7.6pt/1 var(--gss-police-texte); letter-spacing: .16em; text-transform: uppercase; color: var(--gss-clair-sur-structure); }
+.gss-ouv .num { position: absolute; left: 12.4mm; top: 52mm; font: 700 168pt/.8 var(--gss-police-titre); color: var(--gss-intercalaire-numero); letter-spacing: -.04em; }
+.gss-ouv .titre { position: absolute; left: 15mm; right: 24mm; top: 112mm; font: 700 31pt/1.06 var(--gss-police-titre); color: #FFFFFF; text-wrap: balance; }
+.gss-ouv ul { position: absolute; left: 15mm; right: 40mm; top: 160mm; list-style: none; padding: 0; margin: 0; }
+.gss-ouv ul li { font: 400 11pt/1.3 var(--gss-police-texte); color: var(--gss-clair-sur-structure); padding: 2.3mm 0 2.3mm 6.4mm; margin: 0; border-top: .3mm solid rgba(255, 255, 255, .16); position: relative; }
+.gss-ouv ul li::before { content: ""; position: absolute; left: 0; top: 4mm; width: 2mm; height: 2mm; background: var(--gss-clair-sur-structure); }
+.gss-ouv ul.compacte { top: 148mm; right: 15mm; columns: 2; column-gap: 8mm; }
+.gss-ouv ul.compacte li { font-size: 8.6pt; padding: 1.3mm 0 1.3mm 4.6mm; break-inside: avoid; }
+.gss-ouv ul.compacte li::before { top: 2.6mm; width: 1.6mm; height: 1.6mm; }
+.gss-ouv .route { position: absolute; left: 15mm; right: 15mm; bottom: 14mm; height: 30mm; width: 180mm; }
+
+/* Pages de références du modèle (« Ils nous font confiance ») et pages de photos : mise en page neutre. */
+section.references p, section.references ul, section.references ol, section.photo p { margin-left: 0; }
+section.references h2, section.references h3, section.references h4 { float: none; width: auto; display: block; }

@@ -1,0 +1,117 @@
+{
+ "_note": "Schémas des pages 26 et 27 du mémoire envoyé au dirigeant de GSS (Mémoire_Technique_GSS_Template_1790625877807.pdf, état 80b9dcd5…) : spécifications reconstituées à partir des SVG d'origine (reference/p26_original.svg, p27_original.svg) — mêmes textes, mêmes pictogrammes, mêmes rôles.",
+ "schemas": [
+  {
+   "id": "P26",
+   "titre": "Une politique RSE appliquée aux réalités d’un marché public",
+   "gabarit": "etoile",
+   "reference_svg": "reference/p26_original.svg",
+   "params": {
+    "args": [
+     {
+      "__tuple__": [
+       "Démarche RSE",
+       "Exécution des prestations de sécurité privée"
+      ]
+     },
+     [
+      {
+       "titre": "Actions",
+       "texte": "Fonctionnement quotidien.",
+       "icone": "recycle",
+       "role": "orange"
+      },
+      {
+       "titre": "Agents",
+       "texte": "Présence d’agents sur site.",
+       "icone": "personne",
+       "role": "sable"
+      },
+      {
+       "titre": "Vacations",
+       "texte": "Vacations de nuit et de week-end.",
+       "icone": "horloge",
+       "role": "sable"
+      },
+      {
+       "titre": "Rondes",
+       "texte": "Rondes mobiles.",
+       "icone": "voiture",
+       "role": "sable"
+      },
+      {
+       "titre": "Consignes",
+       "texte": "Transmission des consignes.",
+       "icone": "talkie",
+       "role": "sable"
+      },
+      {
+       "titre": "Déplacements",
+       "texte": "Limiter les déplacements non indispensables.",
+       "icone": "feuille",
+       "role": "vert"
+      }
+     ]
+    ],
+    "kwargs": {
+     "role_centre": "or"
+    }
+   }
+  },
+  {
+   "id": "P27",
+   "titre": "Engagement RSE et écologique",
+   "gabarit": "grille",
+   "reference_svg": "reference/p27_original.svg",
+   "params": {
+    "args": [
+     [
+      {
+       "titre": "Transports en commun",
+       "texte": "GSS favorise les transports en commun lorsque la nature de la vacation le permet.",
+       "icone": "route",
+       "role": "vert"
+      },
+      {
+       "titre": "Vélo",
+       "texte": "GSS favorise le vélo lorsque la nature de la vacation le permet.",
+       "icone": "velo",
+       "role": "vert"
+      },
+      {
+       "titre": "Covoiturage",
+       "texte": "Des départs en covoiturage depuis les bureaux sont organisés.",
+       "icone": "voiture",
+       "role": "vert"
+      },
+      {
+       "titre": "Visioconférence",
+       "texte": "Les réunions internes et les échanges avec les clients sont réalisés en visioconférence.",
+       "icone": "ordinateur",
+       "role": "vert"
+      },
+      {
+       "titre": "Télétravail",
+       "texte": "Le télétravail est favorisé pour les collaborateurs sédentaires afin de réduire leurs trajets.",
+       "icone": "ordinateur",
+       "role": "vert"
+      },
+      {
+       "titre": "Flotte électrique",
+       "texte": "GSS budgétise une transition progressive de ses véhicules de fonction vers une flotte 100 % électrique.",
+       "icone": "voiture",
+       "role": "vert"
+      },
+      {
+       "titre": "Présence cynophile",
+       "texte": "Les moyens humains et les déplacements sont concentrés sur les périodes effectivement prévues au marché.",
+       "icone": "chien",
+       "role": "vert"
+      }
+     ]
+    ],
+    "kwargs": {}
+   }
+  }
+ ]
+}

@@ -12,7 +12,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';
-import { themeActif, styleDuTheme, fontFaceTheme, familleTexte, policesDuTheme, contraste, LOGO_FOND_CLAIR } from './themes';
+import { themeActif, styleDuTheme, fontFaceTheme, familleTexte, policesDuTheme, contraste, LOGO_FOND_CLAIR, LOGO_BLANC } from './themes';
 
 export interface PartieCourte { id: string; title: string; attendu?: string }
 export interface FormatImpose { pagesMax: number; plan: PartieCourte[]; source: string }
@@ -266,8 +266,8 @@ header.tete .t1 { color: ${contraste(accentCouv, enteteFond) >= 4.5 ? accentCouv
 header.tete .t2 { color: ${enteteTexte}; }
 header.tete .t3 { color: ${enteteTexte}; opacity: .8; }
 h1 { font-weight: ${v('--gss-titre-graisse', '600')}; padding: 4px 9px; }
-li::marker { color: ${v('--gss-accent', accentCouv)}; }
-`;
+li::marker { color: ${v('--gss-puce', v('--gss-accent', accentCouv))}; }
+${styleDuTheme(theme)?.logo === 'monochrome_blanc_sur_marine' ? 'header.tete img { width: 56px; height: 41px; object-fit: contain; }\n' : ''}`;
   return {
     police: familleTexte(theme) || 'Arial, Helvetica, sans-serif', encre: v('--gss-encre', '#1f2937'), accent: v('--gss-accent', '#dc2626'),
     fort: v('--gss-titre', '#111827'), gris: v('--gss-encre-2', '#4b5563'), bandeau, bandeauTexte,
@@ -278,7 +278,7 @@ li::marker { color: ${v('--gss-accent', accentCouv)}; }
     // Pied de page dans la police du texte du thème : le modèle de pied de page de Chromium ne voit pas les @font-face
     // de la page, la police (graisse normale) y est donc embarquée.
     piedPolice: familleTexte(theme) || 'Arial', piedStyle: fontFacePied(theme),
-    logo: styleDuTheme(theme)?.logo === 'encre' ? LOGO_FOND_CLAIR : 'logogss.png', extra,
+    logo: styleDuTheme(theme)?.logo === 'encre' ? LOGO_FOND_CLAIR : styleDuTheme(theme)?.logo === 'monochrome_blanc_sur_marine' ? LOGO_BLANC : 'logogss.png', extra,
   };
 }
 

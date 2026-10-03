@@ -4,7 +4,11 @@ import { spawnSync } from 'child_process';
 import type { PooledIllustration, SlideContext } from './image_service';
 import { D2Service } from './d2_service';
 import { organigrammeSvg } from './organigramme';
-import { themeActif, estRetourArriere, feuilleMarp, imagesTheme } from './themes';
+import { themeActif, estRetourArriere, feuilleMarp, imagesTheme, pagesMarineV3, styleDuTheme } from './themes';
+import {
+  LIMITES_MARINE_V3, SEUIL_TEXTE_COURT, intertitresV3, surEtTitre, memesTitres, surtitre, enteteBloc, styleParcours, couvertureV3,
+  legendeRoles, sommaireV3, ouvertureV3, essentielV3, signes, repereRubrique, typoV3, type CouleursV3,
+} from './marp_pages_marine';
 
 /** Illustrations attribuées, indexées par clé de slide (unicité globale garantie amont). */
 export type SlideAssignments = Map<string, PooledIllustration>;
@@ -15,6 +19,22 @@ export type SlideSchemas = Map<string, string>;
 /** Police Lexend des schémas GSS, embarquée une fois dans le document (mesure du texte identique). */
 const LEXEND_PATH = path.resolve(__dirname, '../../python/schemas_gss/polices/Lexend.ttf');
 const ORGANIGRAMME_GSS_PATH = path.resolve(__dirname, '../../python/schemas_gss/organigramme_gss.svg');
+
+/** Dessins Phosphor (graisse bold) des pictogrammes de la légende des schémas du style « marine » v3 (contenu du SVG). */
+function pictosLegende(): Record<string, string> {
+  const dossier = path.resolve(__dirname, '../../python/schemas_gss/moteur_marine/pictos');
+  const out: Record<string, string> = {};
+  try {
+    const corresp = JSON.parse(fs.readFileSync(path.join(dossier, 'correspondance.json'), 'utf-8'));
+    for (const nom of ['check', 'alerte', 'loupe', 'main']) {
+      const svg = fs.readFileSync(path.join(dossier, 'bold', `${corresp[nom]}.svg`), 'utf-8');
+      out[nom] = (/<svg[^>]*>([\s\S]*)<\/svg>/.exec(svg)?.[1] || '').trim();
+    }
+  } catch (e: any) {
+    console.warn(`[MarpGenerator] Pictogrammes de la légende illisibles : ${e?.message || e}`);
+  }
+  return out;
+}
 
 /** Organigramme GSS en SVG sur une ligne, identifiants préfixés (null si absent). Thème de la refonte : organigramme
  *  au format page (1 schéma = 1 page A4 portrait) ; retour arrière : organigramme d'origine. */
@@ -72,7 +92,7 @@ const LIMITES_TEXTE_SEUL = {
 
 /** Limites de découpage d'une page de texte : mots, lignes estimées et, pour la mise en page v2 de la refonte, longueur
  *  d'une ligne et poids d'une ligne de tableau (absents : estimation d'origine, lignes de 90 caractères). */
-interface LimitesPage { mots: number; lignes: number; caracteres?: number; ligneTableau?: number; /** false : jamais de page resserrée. */ serre?: boolean; /** Regroupement des pages d'une rubrique (dernière page courte, 2 pages au lieu de 3). */ regrouper?: boolean }
+interface LimitesPage { mots: number; lignes: number; caracteres?: number; ligneTableau?: number; /** false : jamais de page resserrée. */ serre?: boolean; /** Regroupement des pages d'une rubrique (dernière page courte, 2 pages au lieu de 3). */ regrouper?: boolean; /** Lignes réservées en tête de la première page (surtitre et titre du style « marine » v3). */ reserve?: number; /** Intertitres dans la colonne de titrage, à côté du texte (style « marine » v3) : ils ne prennent presque aucune hauteur. */ titresEnMarge?: boolean }
 /** Path to Marp assets (CSS + logo) bundled with the backend. */
 const MARP_ASSETS_DIR = path.resolve(__dirname, 'marp');
 
@@ -131,6 +151,8 @@ function cleanTextForMarp(raw: string): string {
 /** Lignes estimées occupées par un paragraphe (chaque retour à la ligne interne compte) + intervalle. Mise en page v2
  *  de la refonte : une ligne de tableau pèse davantage (cellules repliées), sa ligne de séparation ne pèse rien. */
 function lignesParagraphe(p: string, limites: LimitesPage): number {
+  // Style « marine » v3 : un intertitre seul est posé dans la colonne de titrage, en regard du texte qui le suit.
+  if (limites.titresEnMarge && /^#{1,6}\s/.test(p) && !p.includes('\n')) return 0.6;
   const caracteres = limites.caracteres ?? CHARS_PER_LINE;
   const ligneTableau = limites.ligneTableau;
   // Mise en page v2 de la refonte : seule la ligne de sous-titre pèse 1,5 ligne. Un sous-titre suivi de son texte sans
@@ -205,7 +227,8 @@ function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots: MAX_W
   const chunks: string[] = [];
   let current = '';
   let currentWords = 0;
-  let currentLines = 0;
+  // Style « marine » v3 : la première page de la rubrique porte le surtitre et le titre (lignes réservées).
+  let currentLines = limites.reserve || 0;
 
   const flush = () => {
     if (current.trim()) chunks.push(current.trim());
@@ -294,6 +317,8 @@ function sectionsAPaginer(chapter: AssembleChapter, theme: string): Array<{ sect
   let chapeau = '';
   chapter.sections.forEach((section, si) => {
     let texte = cleanTextForMarp(section.text);
+    // Style « marine » v3 : intertitres en gras devenus intertitres de la colonne de titrage (aucun mot changé).
+    if (pagesMarineV3(theme)) texte = intertitresV3(texte);
     if (chapeau) { texte = `${chapeau}\n\n${texte}`; chapeau = ''; }
     const limites = limitesSection(section, theme);
     const suivante = chapter.sections[si + 1];
@@ -321,6 +346,7 @@ function slideKeyOf(chapterIdx: number, sectionIdx: number, chunkIdx: number): s
  *  dans la mise en page « 1 à 2 pages de texte, puis 1 page de schéma »). */
 function limitesSection(section: AssembleSection, theme: string): LimitesPage | undefined {
   if (!section.schemaPleinePage && !section.texteSeul) return undefined;
+  if (pagesMarineV3(theme)) return LIMITES_MARINE_V3;
   return estRetourArriere(theme) ? LIMITES_TEXTE_SEUL.ancienThemeV2 : LIMITES_TEXTE_SEUL.refonte;
 }
 
@@ -688,6 +714,14 @@ export class MarpGenerator {
     // Thèmes de la refonte : ouverture de bloc numérotée avec ses rubriques, organigramme et schémas en pleine page.
     // Retour arrière (« gss-2026-09 ») : Markdown identique à celui d'avant les thèmes.
     const refonte = !estRetourArriere(theme);
+    // Style « marine » v3 (planche validée, décision D11) : gabarits de pages de la planche (marp_pages_marine.ts).
+    const v3 = pagesMarineV3(theme);
+    const st = v3 ? styleDuTheme(theme) : null;
+    const couleurs: CouleursV3 | null = st ? { marine: st.couleurs.structure, accent: st.couleurs.accent,
+      clair: st.couleurs.clair_sur_structure, structure2: st.couleurs.structure_2 } : null;
+    const visibles = chapters.filter((c) => c.sections && c.sections.length > 0);
+    const rangBloc = (c: AssembleChapter) => visibles.indexOf(c) + 1;
+    const enteteDe = (c: AssembleChapter) => enteteBloc(this.romanToNumber(c.key), c.title);
 
     // ── Frontmatter ──
     lines.push('---');
@@ -696,8 +730,14 @@ export class MarpGenerator {
     lines.push('size: a4');
     lines.push('paginate: true');
     lines.push("header: 'GLOBAL SECURITY SERVICES'");
+    // Style « marine » v3 : pied de page « Mémoire technique · acheteur ».
+    if (v3) lines.push(`footer: '${`Mémoire technique${cover.client ? ` · ${cover.client}` : ''}`.replace(/[\r\n]+/g, ' ').replace(/'/g, "''")}'`);
     lines.push('---');
     lines.push('');
+    if (v3 && couleurs) {
+      lines.push(styleParcours(visibles.length, couleurs.structure2, couleurs.accent));
+      lines.push('');
+    }
     if (fs.existsSync(LEXEND_PATH)) {
       // Police des schémas GSS : embarquée une seule fois pour tout le document.
       const b64 = fs.readFileSync(LEXEND_PATH).toString('base64');
@@ -708,6 +748,22 @@ export class MarpGenerator {
     // ── Cover page (lead) ──
     lines.push('<!-- _class: lead -->');
     lines.push('');
+    if (v3 && couleurs) {
+      // Style « marine » v3 : couverture, puis sommaire (une entrée par bloc, légende des schémas), comme la planche.
+      lines.push(couvertureV3(cover, couleurs));
+      lines.push('');
+      const blocsSommaire = visibles.map((chapter) => ({
+        numero: this.romanToNumber(chapter.key), titre: chapter.title,
+        rubriques: [...chapter.sections.map((sec) => sec.title), ...(avecPagesReferences(chapter) && this.getReferencesSlides().length ? ['Ils nous font confiance'] : [])],
+      }));
+      const legende = legendeRoles(Object.fromEntries(Object.entries(st.roles).map(([k, v]: [string, any]) => [k, v.fonce])), pictosLegende(),
+        couleurs, st.couleurs.filet_fort);
+      for (const page of sommaireV3(blocsSommaire, cover.client || '', legende)) {
+        lines.push('---');
+        lines.push(page);
+      }
+      return this.buildChapitres(lines, chapters, assignments, schemas, theme, { v3, refonte, couleurs, visibles, rangBloc, enteteDe, client: cover.client || '' });
+    }
     lines.push('# GLOBAL SECURITY SERVICES');
     lines.push('## VOTRE PARTENAIRE SÉCURITÉ');
     lines.push('### MÉMOIRE TECHNIQUE');
@@ -786,6 +842,24 @@ export class MarpGenerator {
 
     lines.push('');
 
+    return this.buildChapitres(lines, chapters, assignments, schemas, theme, { v3, refonte, couleurs, visibles, rangBloc, enteteDe, client: cover.client || '' });
+  }
+
+  /**
+   * Pages des chapitres (ouvertures de bloc, pages de texte, pages de schéma, photos, organigramme, références), à la suite
+   * du Markdown déjà écrit (page de garde et sommaire). Style « marine » v3 (ctx.v3) : gabarits de la planche validée ;
+   * autres thèmes : Markdown inchangé.
+   */
+  private buildChapitres(
+    lines: string[],
+    chapters: AssembleChapter[],
+    assignments: SlideAssignments,
+    schemas: SlideSchemas,
+    theme: string,
+    ctx: { v3: boolean; refonte: boolean; couleurs: CouleursV3 | null; visibles: AssembleChapter[]; rangBloc: (c: AssembleChapter) => number;
+      enteteDe: (c: AssembleChapter) => string; client: string },
+  ): string {
+    const { v3, refonte } = ctx;
     // ── Chapters & sections ──
     chapters.forEach((chapter, ci) => {
       if (!chapter.sections || chapter.sections.length === 0) return;
@@ -795,14 +869,19 @@ export class MarpGenerator {
       lines.push('<!-- _class: intercalaire -->');
       lines.push(`<!-- _header: "" -->`);
       lines.push('');
-      if (refonte) {
+      if (v3 && ctx.couleurs) {
+        // Style « marine » v3 : grand numéro orange, titre du bloc, rubriques, parcours du mémoire.
+        const titresBloc = [...chapter.sections.map((sec) => sec.title), ...(avecPagesReferences(chapter) && this.getReferencesSlides().length ? ['Ils nous font confiance'] : [])];
+        lines.push(ouvertureV3(this.romanToNumber(chapter.key), chapter.title, titresBloc, ctx.visibles.map((c) => c.title), ctx.client, ctx.couleurs));
+        lines.push('');
+      } else if (refonte) {
         // Ouverture de bloc (planche de l'agent design) : numéro du bloc en grand, comme au sommaire.
         lines.push(`<div class="gss-bloc-numero">${String(this.romanToNumber(chapter.key)).padStart(2, '0')}</div>`);
         lines.push('');
       }
-      lines.push(`# ${chapter.title.toUpperCase()}`);
-      lines.push('');
-      if (refonte) {
+      if (!v3) lines.push(`# ${chapter.title.toUpperCase()}`);
+      if (!v3) lines.push('');
+      if (refonte && !v3) {
         // … puis les rubriques du bloc, dans l'ordre et avec les titres du sommaire.
         const echapper = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const titresBloc = [...chapter.sections.map((sec) => sec.title), ...(avecPagesReferences(chapter) && this.getReferencesSlides().length ? ['Ils nous font confiance'] : [])];
@@ -822,11 +901,33 @@ export class MarpGenerator {
         for (let i = 0; i < chunks.length; i++) {
           const chunk = chunks[i];
           lines.push('---');
+          if (v3) {
+            // Style « marine » v3 : en-tête du bloc, parcours, surtitre et titre en tête de la rubrique, colonne de titrage ;
+            // texte court (une seule page, sous 1 300 signes, suivie de son schéma) : corps plus grand et « l'essentiel ».
+            const court = chunks.length === 1 && !!section.schemaPleinePage && signes(chunk) < SEUIL_TEXTE_COURT;
+            const classes = ['texte', court ? 'court' : '', !court && pageSerree(chunk, limites) ? 'texte-serre' : '', `bloc-${ctx.rangBloc(chapter)}`];
+            lines.push(`<!-- _class: ${classes.filter(Boolean).join(' ')} -->`);
+            lines.push(ctx.enteteDe(chapter));
+            lines.push(repereRubrique(section.title));
+            lines.push('');
+            const [sur, titre] = surEtTitre(section.title, chapter.title);
+            if (i === 0) {
+              if (!memesTitres(sur, titre)) lines.push(surtitre(sur), '');
+              lines.push(`# ${typoV3(titre.replace(/[<>]/g, ''))}`, '');
+            } else {
+              lines.push(surtitre(`${section.title} (suite)`), '');
+            }
+            lines.push(typoV3(chunk));
+            lines.push('');
+            const essentiel = court ? essentielV3(chunk) : null;
+            if (essentiel) lines.push(essentiel, '');
+          } else {
           if (pageSerree(chunk, limites)) lines.push('<!-- _class: texte-serre -->');
           lines.push(`<!-- header: "${headerTitle}" -->`);
           lines.push('');
           lines.push(chunk);
           lines.push('');
+          }
 
           // Rubrique dont le schéma a sa propre page (ou rubrique v2 sans schéma) : aucun schéma sous le texte.
           if (section.schemaPleinePage || section.texteSeul) continue;
@@ -866,12 +967,16 @@ export class MarpGenerator {
         // en grand, sans autre texte (toile portrait du moteur de schémas : dessin sur au moins 85 % de la hauteur utile).
         if (section.schemaPleinePage?.svg) {
           lines.push('---');
-          lines.push('<!-- _class: schema -->');
-          lines.push(`<!-- header: "${headerTitle}" -->`);
+          lines.push(v3 ? `<!-- _class: schema bloc-${ctx.rangBloc(chapter)} -->` : '<!-- _class: schema -->');
+          lines.push(v3 ? ctx.enteteDe(chapter) : `<!-- header: "${headerTitle}" -->`);
+          if (v3) lines.push(repereRubrique(section.title));
           lines.push('');
           const titre = titreSchema(section.schemaPleinePage.titre);
+          // Style « marine » v3 : la rubrique en surtitre, masquée si elle répète le titre du schéma.
+          // Surtitre masqué : sa place est gardée (titre et schéma au même endroit sur toutes les pages de schéma).
+          if (v3) lines.push(memesTitres(section.title, titre) ? '<div class="gss-sur gss-sur-vide"></div>' : surtitre(section.title), '');
           if (titre) {
-            lines.push(`## ${titre}`);
+            lines.push(`## ${v3 ? typoV3(titre) : titre}`);
             lines.push('');
           }
           lines.push('<div class="schema-page">');
@@ -890,7 +995,8 @@ export class MarpGenerator {
           } catch { continue; }
           const legende = (photo.legende || '').replace(/[<>]/g, '');
           lines.push('---');
-          lines.push(`<!-- header: "${headerTitle}" -->`);
+          if (v3) lines.push(`<!-- _class: photo bloc-${ctx.rangBloc(chapter)} -->`);
+          lines.push(v3 ? ctx.enteteDe(chapter) : `<!-- header: "${headerTitle}" -->`);
           lines.push('');
           lines.push(`<div class="photo-gss" style="width: 100%; margin: 20px auto 0; text-align: center;">`);
           lines.push(`<img src="${src}" alt="${legende.replace(/"/g, '&quot;')}" style="display: block; max-width: 100%; max-height: 470px; height: auto; margin: 0 auto; border-radius: 4px;" />`);
@@ -906,8 +1012,8 @@ export class MarpGenerator {
         if (organigramme && refonte) {
           // Thème de la refonte : l'organigramme est une page de schéma (format page, en grand).
           lines.push('---');
-          lines.push('<!-- _class: schema -->');
-          lines.push(`<!-- header: "${headerTitle}" -->`);
+          lines.push(v3 ? `<!-- _class: schema bloc-${ctx.rangBloc(chapter)} -->` : '<!-- _class: schema -->');
+          lines.push(v3 ? ctx.enteteDe(chapter) : `<!-- header: "${headerTitle}" -->`);
           lines.push('');
           lines.push('<div class="schema-page">');
           lines.push(organigramme);
@@ -943,7 +1049,13 @@ export class MarpGenerator {
         const refSlides = this.getReferencesSlides();
         for (const slide of refSlides) {
           lines.push('---');
+          if (v3) {
+            // Style « marine » v3 : en-tête du bloc et mise en page neutre (pas de colonne de titrage).
+            lines.push(`<!-- _class: references bloc-${ctx.rangBloc(chapter)} -->`);
+            lines.push(slide.replace(/<!--\s*header:\s*"[^"]*"\s*-->/g, ctx.enteteDe(chapter)));
+          } else {
           lines.push(slide);
+          }
           lines.push('');
         }
       }

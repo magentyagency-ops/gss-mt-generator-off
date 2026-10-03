@@ -109,6 +109,9 @@ function diapos(md: string): Diapo[] {
     const h = /<!-- header: "([^"]*)" -->/.exec(c);
     if (h) entete = h[1];
     const hl = /<!-- _header: "([^"]*)" -->/.exec(c);
+    // Style « marine » v3 : l'en-tête porte le bloc ; la rubrique de la page est dans son repère.
+    const rub = /<!-- rubrique: "([^"]*)" -->/.exec(c);
+    if (rub) return { index: i + 1, classe: (/<!-- _class: (\w+)/.exec(c) || [])[1] || 'texte', entete: rub[1], contenu: c };
     const classe = (/<!-- _class: (\w+) -->/.exec(c) || [])[1] || 'texte';
     return { index: i + 1, classe, entete: hl ? hl[1] : entete, contenu: c };
   });
@@ -189,8 +192,10 @@ function structure(md: string, etat: EtatCompletion): any {
   const plan = etat.libre!.plan!;
   const res: any = { diapos: d.length, blocs: [], rubriques: [], anomalies: [] as string[] };
   // Sommaire : les 5 blocs, dans l'ordre du plan.
-  const sommaire = d.filter((x) => /## SOMMAIRE/.test(x.contenu)).map((x) => x.contenu).join('\n');
-  const blocsSommaire = [...sommaire.matchAll(/^(\d+)\. __(.+?)__$/gm)].map((m) => `${m[1]}. ${m[2]}`);
+  const sommaire = d.filter((x) => /## SOMMAIRE|_class: sommaire/.test(x.contenu)).map((x) => x.contenu).join('\n');
+  // Style « marine » v3 : sommaire en entrées HTML (numéro, titre du bloc), comparé en capitales.
+  const blocsSommaire = [...sommaire.matchAll(/^(\d+)\. __(.+?)__$/gm)].map((m) => `${m[1]}. ${m[2]}`)
+    .concat([...sommaire.matchAll(/<div class="n">0*(\d+)<\/div><div><div class="t">([^<]+)<\/div>/g)].map((m) => `${m[1]}. ${m[2].replace(/’/g, "'").toUpperCase()}`));
   res.sommaire_blocs = [...new Set(blocsSommaire)];
   const attendu = plan.blocs.map((b, i) => `${i + 1}. ${b.titre.toUpperCase()}`);
   if (JSON.stringify(res.sommaire_blocs) !== JSON.stringify(attendu)) res.anomalies.push(`sommaire : ${JSON.stringify(res.sommaire_blocs)} ≠ ${JSON.stringify(attendu)}`);

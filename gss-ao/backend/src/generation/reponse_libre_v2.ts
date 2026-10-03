@@ -653,7 +653,9 @@ export function specProcessBesoin(etapes: Array<{ titre?: string; texte?: string
     const role = i === propres.length - 1 ? 'vert' : (ROLES.includes(e.role) && e.role !== 'vert' ? e.role : (i < 2 ? 'rouge' : i === propres.length - 2 ? 'bleu' : 'orange'));
     return { titre: e.titre.charAt(0).toUpperCase() + e.titre.slice(1), ...(e.texte ? { texte: e.texte.charAt(0).toUpperCase() + e.texte.slice(1) } : {}), role };
   });
-  return { gabarit, params: { etapes: etapesSpec } };
+  // Cinq étapes (besoin, enjeu, dispositif, pilotage, résultat) : process du bloc 1, dessiné en miroir « vous → nous →
+  // résultat » par le style « marine » v3 (rendu_schemas.py) ; en flux par les autres styles.
+  return { gabarit, params: { etapes: etapesSpec, ...(gabarit === 'flux' && etapesSpec.length === 5 ? { forme: 'process_besoin' } : {}) } };
 }
 
 /**

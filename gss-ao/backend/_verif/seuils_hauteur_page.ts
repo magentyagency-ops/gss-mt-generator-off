@@ -10,7 +10,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
-import { feuilleMarp, imagesTheme, schemasBibliotheque, themeActif } from '../src/generation/themes';
+import { feuilleMarp, imagesTheme, schemasBibliotheque, themeActif, pagesMarineV3 } from '../src/generation/themes';
 import { dessinerSpecs } from '../src/generation/schema_service';
 import { chargerMemoireType, preparerMemoireType, publierMemoire, type ContexteMarche } from '../src/generation/memoire_type';
 
@@ -41,7 +41,9 @@ async function main() {
   // 3. Document Marp (en-tête du mémoire fourni : thème, polices), une page de schéma par schéma.
   const md = fs.readFileSync(prefixeMd, 'utf-8');
   const entete = md.slice(0, md.indexOf('<!-- _class: lead -->')).replace(/\n---\s*$/, '');
-  const corps = pages.map((p) => ['---', '<!-- _class: schema -->', `<!-- header: "${p.id}" -->`, '', `## ${p.titre.replace(/[<>\r\n]+/g, ' ')}`, '',
+  // Style « marine » v3 : page de schéma comme dans le générateur (surtitre ou sa place gardée, puis le titre).
+  const v3 = pagesMarineV3(theme);
+  const corps = pages.map((p) => ['---', '<!-- _class: schema -->', `<!-- header: "${p.id}" -->`, '', ...(v3 ? ['<div class="gss-sur gss-sur-vide"></div>', ''] : []), `## ${p.titre.replace(/[<>\r\n]+/g, ' ')}`, '',
     '<div class="schema-page">', p.svg.replace(/\s*\n\s*/g, ' ').trim(), '</div>', ''].join('\n'));
   const travail = path.join(SORTIE, 'html');
   fs.mkdirSync(travail, { recursive: true });
