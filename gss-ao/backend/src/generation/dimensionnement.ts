@@ -638,6 +638,20 @@ export function remplirCasPratique(texte: string, d: Dimensionnement): { texte: 
   };
   const lignes = texte.split('\n').map((ligne) => {
     const c = ligne.split('|').map((x) => x.trim());
+    // Ligne « plage | profil | en service | rotation » déjà chiffrée par la rédaction mais différente du dispositif
+    // proposé (T9N-5, etampes2 553 : « Dimanche férié, 6 h–21 h | Encadrant | 0 | 0 » alors que la proposition compte 1
+    // encadrant en service, 2 pour la rotation) : les chiffres de la proposition, que GSS valide, sont repris.
+    if (c.length === 4 && /^\d+$/.test(c[2]) && /^\d+$/.test(c[3])) {
+      const x = trouver(c[0], c[1]);
+      if (x && (Number(c[2]) !== x.enService || Number(c[3]) !== x.rotation)) {
+        n++;
+        const cellules = ligne.split('|');
+        cellules[2] = cellules[2].replace(/\d+/, String(x.enService));
+        cellules[3] = cellules[3].replace(/\d+/, String(x.rotation));
+        return cellules.join('|');
+      }
+      return ligne;
+    }
     if (c.length >= 4 && /\[À COMPLÉTER\]/.test(ligne)) {
       const x = trouver(c[0], c[1]);
       if (!x) return ligne;
@@ -651,6 +665,18 @@ export function remplirCasPratique(texte: string, d: Dimensionnement): { texte: 
     return ligne;
   });
   return { texte: lignes.join('\n'), n };
+}
+
+/**
+ * Le dispositif du cas pratique est-il repris dans le texte (« plage | profil | en service | rotation » aux chiffres de la
+ * proposition, ou « en service : N ») ? Sert à poser la proposition à valider à GSS dans le cadre (T9N-5).
+ */
+export function casPratiqueRepris(texte: string, d: Dimensionnement | null | undefined): boolean {
+  if (!d?.casPratique.length) return false;
+  const t = String(texte || '');
+  if (d.casPratique.some((x) => t.includes(`en service : ${x.enService}`))) return true;
+  const lignes = t.split('\n').filter((l) => { const c = l.split('|').map((x) => x.trim()); return c.length === 4 && /^\d+$/.test(c[2]) && /^\d+$/.test(c[3]); });
+  return lignes.length > 0 && remplirCasPratique(lignes.join('\n'), d).n === 0 && lignes.some((l) => d.casPratique.some((x) => l.split('|')[1].trim().toLowerCase() === x.profil.toLowerCase()));
 }
 
 /** Pièces du DCE utiles au dimensionnement : CCTP, annexes (plannings), DQE et BPU, cadre de réponse (cas pratique). */

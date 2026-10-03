@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculerDimensionnement, questionDimensionnement, questionRondes, texteDimensionnement, citationDeRondes } from '../src/generation/dimensionnement';
+import { calculerDimensionnement, questionDimensionnement, questionRondes, texteDimensionnement, citationDeRondes, remplirCasPratique, casPratiqueRepris } from '../src/generation/dimensionnement';
 import { preparerMemoireType, questionsDuPubliposte, publierMemoire } from '../src/generation/memoire_type';
 
 /** Tour 9 : rondes ponctuelles jamais comptées en heures de poste (T9N-1) ; 1 responsable pour 10 agents (T9N-5). */
@@ -59,6 +59,15 @@ describe('encadrement du cas pratique (T9N-5)', () => {
     expect(enc.map((l) => [l.plage, l.enService, l.rotation])).toEqual([[plages[0].libelle, 1, 2], [plages[1].libelle, 0, 0]]);
     expect(enc[0].justification).toMatch(/1 responsable pour 10 agents/);
     expect(d.profils.find((p) => p.profil === 'Encadrant')?.titulaires).toBe(2);
+  });
+  it('cadre : ligne du cas pratique déjà chiffrée autrement par la rédaction alignée sur la proposition, proposition posée à GSS', () => {
+    const rep = { postes: [], cas_pratique: { plages, dispositif: [ligne(plages[0].libelle, 'Agent de sécurité', 10), ligne(plages[0].libelle, 'Maître-chien', 1), ligne(plages[0].libelle, 'Agent de sécurité incendie', 1), ligne(plages[0].libelle, 'Encadrant', 0)] } };
+    const d = calculerDimensionnement(rep, 'Cas pratique : fête communale.')!;
+    const texte = `${plages[0].libelle} | Agent de sécurité | 10 | 20\n${plages[0].libelle} | Encadrant | 0 | 0`;
+    const r = remplirCasPratique(texte, d);
+    expect(r.texte).toBe(`${plages[0].libelle} | Agent de sécurité | 10 | 20\n${plages[0].libelle} | Encadrant | 1 | 2`);
+    expect(casPratiqueRepris(r.texte, d)).toBe(true);
+    expect(casPratiqueRepris('Aucun tableau.', d)).toBe(false);
   });
   it('aucun encadrant demandé : rien n’est ajouté', () => {
     const rep = { postes: [], cas_pratique: { plages, dispositif: [ligne(plages[0].libelle, 'Agent de sécurité', 10), ligne(plages[0].libelle, 'Maître-chien', 2)] } };
