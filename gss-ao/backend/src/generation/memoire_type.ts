@@ -182,6 +182,38 @@ const CHEMINS_MEMOIRE_TYPE = [
 
 let cacheMemoireType: { chemin: string; mt: MemoireType } | null = null;
 
+/**
+ * Lot(s) auxquels répond le mémoire (T10-COH-3) : marché non alloti ou un seul lot → ce lot ; plusieurs lots → le lot des
+ * pièces propres à un seul lot (« CADRE DE REPONSE LOT N°2 », « AE - LOT 2 », « BPU lot n°1 »), ou les lots du cadre de réponse
+ * commun (« Mémoire Technique - lots 1-2-3 ») ; sinon question exacte à GSS (« pour quel lot ce mémoire est-il remis ? »), avec
+ * les lots du DCE et l'exigence d'une offre distincte par lot quand le RC l'impose.
+ */
+export function lotsDuMemoire(analyse: any, dce: string): { lots: string[]; question?: string } {
+  const plat = String(dce || '').replace(/\s+/g, ' ');
+  // « (en cas de non allotissement) » des formulaires DC1/ATTRI1 n'est pas un marché non alloti.
+  if (/\bnon[- ]allotie?s?\b|(?<!en cas de )\bnon[- ]allotissement\b|\blot unique\b|\bmarch[ée] unique\b|n.est pas allotie?\b|ne fait pas l.objet d.un allotissement|pas d.allotissement|sans allotissement/i.test(plat)) return { lots: [] };
+  const lots: Array<{ num: string; perimetre: string }> = [];
+  for (const l of Array.isArray(analyse?.lots) ? analyse.lots : []) {
+    const m = /^(?:lot\s*(?:n\s*[°o.]?\s*)?)?(\d{1,3}|[A-Z])(?![\wÀ-ÿ])/i.exec(valeurPropre(typeof l === 'object' ? l?.num : l));
+    if (m && !lots.some((x) => x.num === m[1].toUpperCase())) lots.push({ num: m[1].toUpperCase(), perimetre: valeurPropre(typeof l === 'object' ? l?.perimetre : '') });
+  }
+  if (lots.length <= 1) return { lots: lots.map((x) => x.num) };
+  // Pièces du DCE : numéros de lot écrits dans leur nom.
+  const noms = [...String(dce || '').matchAll(/\n\n--- (.+?) ---\n|===== PIÈCE : (.+?) =====/g)].map((m) => m[1] || m[2] || '');
+  const numeros = (nom: string): string[] => {
+    // Numéro de lot, jamais une référence de contrat (« lots 54.6.09 et 54.6.10 »).
+    const m = /\blots?\s*(?:n\s*[°o.]?\s*)?(\d{1,3})(?!\d|[.,]\d)((?:\s*(?:,|et|&|-|à)\s*(?:(?:lot\s*)?n\s*[°o.]?\s*)?\d{1,3}(?!\d|[.,]\d))*)/i.exec(nom.replace(/_/g, ' '));
+    return m ? [...`${m[1]}${m[2] || ''}`.matchAll(/\d{1,3}/g)].map((x) => x[0]) : [];
+  };
+  const memoireCommun = noms.find((n) => /cadre|m[ée]moire/i.test(n) && numeros(n).length > 1);
+  if (memoireCommun) return { lots: numeros(memoireCommun) };
+  const seuls = [...new Set(noms.map(numeros).filter((x) => x.length === 1).map((x) => x[0]))];
+  if (seuls.length === 1) return { lots: seuls };
+  const parLot = /offre distincte pour chaque lot|offres? s[ée]par[ée]es? pour chacun des lots|m[ée]moire technique distinct[^.]{0,40}chaque lot|cadre de r[ée]ponse par lot|un m[ée]moire (?:technique )?par lot/i.test(plat);
+  const liste = lots.map((x) => `${x.num}${x.perimetre ? ` : ${x.perimetre.length > 90 ? `${x.perimetre.slice(0, 90).replace(/\s+\S*$/, '')}…` : x.perimetre}` : ''}`).join(' ; ');
+  return { lots: lots.map((x) => x.num), question: `Le DCE comporte ${lots.length} lots (${liste})${parLot ? ' et le RC demande une offre distincte par lot' : ''} : pour quel lot ce mémoire est-il remis ?` };
+}
+
 /** Variables que ce module sait calculer (une variable déclarée dans le JSON sans calcul est signalée). */
 export const VARIABLES_CALCULEES = new Set<string>([
   'CLIENT', 'OBJET_MARCHE', 'REF_MARCHE', 'LOTS', 'DUREE_MARCHE', 'DATE_DEBUT_MARCHE', 'SITE', 'VILLE', 'SECTEUR_CLIENT',
@@ -1563,13 +1595,10 @@ const CALCULS: Record<string, Calculateur> = {
   LOTS: (c) => {
     // Numéros de lot seulement (T7-COH-1) : « Lot 2 » → « 2 » ; « Unique », « Marché unique », « Non alloti », « N/A » ne
     // sont pas des lots. Marché non alloti, ou intitulé qui nomme déjà le lot (« … — Lot 5, site de Caen ») : rien.
-    const dce = String(c.ctx.dce || '').replace(/\s+/g, ' ');
-    if (/\bnon[- ]allotie?s?\b|\bnon[- ]allotissement\b|\blot unique\b|\bmarch[ée] unique\b|n.est pas allotie?\b|ne fait pas l.objet d.un allotissement|pas d.allotissement|sans allotissement/i.test(dce)) return { valeur: null };
-    const lots: string[] = [];
-    for (const l of Array.isArray(c.ctx.analyse?.lots) ? c.ctx.analyse.lots : []) {
-      const m = /^(?:lot\s*(?:n\s*[°o.]?\s*)?)?(\d{1,3}|[A-Z])(?![\wÀ-ÿ])/i.exec(valeurPropre(typeof l === 'object' ? l?.num : l));
-      if (m && !lots.includes(m[1].toUpperCase())) lots.push(m[1].toUpperCase());
-    }
+    // Plusieurs lots sans pièce propre au lot du mémoire (T10-COH-3) : rien n'est imprimé, la question est posée à GSS.
+    const ld = lotsDuMemoire(c.ctx.analyse, c.ctx.dce || '');
+    if (ld.question) return { valeur: null };
+    const lots = ld.lots;
     if (!lots.length) return { valeur: null };
     const objet = normaliser(`${valeurPropre(c.ctx.cover?.title)} ${valeurPropre(c.ctx.analyse?.projectTitle)}`);
     if (lots.every((n) => new RegExp(`\\blots?\\s*(?:n\\s*[°o.]?\\s*)?${n.toLowerCase()}\\b`).test(objet))) return { valeur: null };

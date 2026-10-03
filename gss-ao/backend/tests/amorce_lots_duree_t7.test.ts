@@ -19,7 +19,9 @@ describe('amorce du bloc 1 : lot et durée (T7-COH-1)', () => {
   });
   it('« Lot 2 » → « (lot 2) » ; plusieurs lots ; lot déjà dans l’intitulé (caen 475) : pas répété', () => {
     expect(amorce({ clientName: 'la Ville', projectTitle: 'Gardiennage', lots: [{ num: 'Lot 2' }] })).toBe('La Ville lance le marché « Gardiennage » (lot 2).');
-    expect(amorce({ clientName: 'la Ville', projectTitle: 'Gardiennage', lots: [{ num: 1 }, { num: '2' }] })).toBe('La Ville lance le marché « Gardiennage » (lots 1 et 2).');
+    // Plusieurs lots sans pièce propre au lot du mémoire (T10-COH-3) : aucun lot imprimé, la question est posée à GSS.
+    expect(amorce({ clientName: 'la Ville', projectTitle: 'Gardiennage', lots: [{ num: 1 }, { num: '2' }] })).toBe('La Ville lance le marché « Gardiennage ».');
+    expect(amorce({ clientName: 'la Ville', projectTitle: 'Gardiennage', lots: [{ num: 1 }, { num: '2' }] }, 'Gardiennage du site de Rouen (76000).\n\n--- CADRE DE REPONSE LOT N°2.docx ---\nx')).toBe('La Ville lance le marché « Gardiennage » (lot 2).');
     expect(amorce({ clientName: "l'ACOSS", projectTitle: "Prestation de gardiennage des sites de l’ACOSS — Lot 5, site de Caen", lots: [{ num: '5' }], duration: '3 ans' }))
       .toBe("L'ACOSS lance le marché « Prestation de gardiennage des sites de l’ACOSS — Lot 5, site de Caen », d'une durée de 3 ans.");
   });
