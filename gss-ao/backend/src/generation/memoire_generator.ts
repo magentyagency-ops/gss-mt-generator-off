@@ -6,7 +6,7 @@ import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce, 
 import { FormatImpose, PartieCourte, passagesLimitePages, limitePagesMemoire, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque, estRetourArriere } from './themes';
-import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, lireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements } from './completion';
+import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, regrouperQuestions, completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, lireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements } from './completion';
 import {
   chargerMemoireType, preparerMemoireType, reinitialiserJournalIndicateurs, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
@@ -6467,6 +6467,9 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       el.groupe = `grille candidature ${champ}`;
       el.pourAcheteur = false;
     }
+    // Questions réécrites après preciserQuestionsCadre (délais, grille) : groupes refaits, jamais deux questions différentes
+    // dans un même groupe (T7N-3 : intervention courante et action d'urgence d'etampes2 réunies en une seule carte).
+    regrouperQuestions(elementsACompleter);
 
     // 7 quater. Schémas GSS validés sous les réponses développées (retour GSS : visuels non réutilisés).
     // Schéma choisi mais non inséré (Chrome indisponible ou bloqué, T6-COH-3) : signalé à GSS, réponse par réponse.

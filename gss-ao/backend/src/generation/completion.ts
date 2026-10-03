@@ -416,6 +416,28 @@ Renvoie {"questions": [{"cle": "...", "question": "...", "groupe": "..."}]} avec
 }
 
 /**
+ * Groupes des emplacements (une carte et une saisie par groupe) : des questions identiques forment un seul groupe ; un
+ * groupe ne réunit jamais deux questions différentes (sauf les cases d'un même tableau, une question pour toutes), sinon la
+ * réponse saisie pour l'une serait écrite à la place de l'autre. À rejouer après toute réécriture d'une question (T7N-3 :
+ * questions de délai du cadre réécrites après preciserQuestionsCadre, intervention courante et urgence dans un même groupe).
+ */
+export function regrouperQuestions(elements: ElementACompleter[]): void {
+  const norm = (t: string) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const parQuestion = new Map<string, string>();
+  for (const el of elements) {
+    const k = norm(el.question);
+    if (!k) continue;
+    if (parQuestion.has(k)) el.groupe = parQuestion.get(k)!;
+    else { el.groupe = el.groupe || k; parQuestion.set(k, el.groupe); }
+  }
+  const questionsDuGroupe = new Map<string, Set<string>>();
+  for (const el of elements) if (el.groupe) (questionsDuGroupe.get(el.groupe) ?? questionsDuGroupe.set(el.groupe, new Set()).get(el.groupe)!).add(norm(el.question));
+  for (const el of elements) {
+    if (el.groupe && !el.groupe.startsWith('tableau du champ') && (questionsDuGroupe.get(el.groupe)?.size || 0) > 1) el.groupe = norm(el.question) || el.cle;
+  }
+}
+
+/**
  * Questions des emplacements du cadre, précisées sans modèle :
  * - champ d'un bloc de coordonnées (« Prénom, Nom », « Adresse électronique »…) : la question reprend le libellé du
  *   bloc du cadre (« Contact comptable »), sinon trois blocs de contacts posent des questions identiques et ambiguës ;
@@ -503,21 +525,7 @@ export function preciserQuestionsCadre(
     el.groupe = norm(el.question);
     for (const c of liees) { c.question = el.question; c.groupe = el.groupe; }
   }
-  // Questions identiques : un seul groupe.
-  const parQuestion = new Map<string, string>();
-  for (const el of elements) {
-    const k = norm(el.question);
-    if (!k) continue;
-    if (parQuestion.has(k)) el.groupe = parQuestion.get(k)!;
-    else { el.groupe = el.groupe || k; parQuestion.set(k, el.groupe); }
-  }
-  // Un groupe ne réunit jamais deux questions différentes (sauf les cases d'un même tableau, une question pour toutes) :
-  // la réponse saisie pour l'une serait écrite à la place de l'autre.
-  const questionsDuGroupe = new Map<string, Set<string>>();
-  for (const el of elements) if (el.groupe) (questionsDuGroupe.get(el.groupe) ?? questionsDuGroupe.set(el.groupe, new Set()).get(el.groupe)!).add(norm(el.question));
-  for (const el of elements) {
-    if (el.groupe && !el.groupe.startsWith('tableau du champ') && (questionsDuGroupe.get(el.groupe)?.size || 0) > 1) el.groupe = norm(el.question) || el.cle;
-  }
+  regrouperQuestions(elements);
 }
 
 /**
