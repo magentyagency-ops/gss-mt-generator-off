@@ -4702,6 +4702,10 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const repriseMT = await this.textesMemoireTypeCadre(dossierId, analysisData, dceContext, referentsContext, descriptors, buildPrompt, dimensionnementCadre);
     // Phrases de GSS adaptées au CCTP (D8) : délais normands retirés au publipostage, puis filtres du CCTP ; signalées à GSS.
     const suiviCadre = repriseMT ? this.suiviAdaptations(dossierId, repriseMT.mt, repriseMT.ctx, Object.keys(repriseMT.textes), Object.values(repriseMT.textes)) : null;
+    /** Lot événementiel (« LOT 2 : SECURISATION DES MANIFESTATIONS ») : la méthodologie de sécurisation des sites visés est le
+     *  dispositif événementiel de GSS (THEMES_CADRE, T5CP-2). */
+    const objetLot = texteDuCadre.split('\n').find((l) => /^\s*LOT\s*n?°?\s*\d+\s*[:–-]/i.test(l)) || String(analysisData?.projectTitle || '');
+    const lotEvenementiel = !!repriseMT?.prep.indicateurs.EVENEMENTIEL && /manifestations?|[ée]v[ée]nement|festivals?|spectacles?|concerts?/i.test(objetLot);
     /** Questions développées rédigées hors mémoire type (propositions) et reprises à relire, pour GSS. */
     const propositionsCadre = new Map<number, string>();
     const repriseParChamp = new Map<number, { ids: string[]; fidelite: number; brute?: number }>();
@@ -4819,6 +4823,8 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
         questionMT: questionUtileChamp(f.context) || `${q || demande} ${critere}`.trim(),
         sujetReconstruit: !!questionUtileChamp(f.context) && questionUtileChamp(f.context) !== `${q || demande} ${critere}`.trim(),
         hors: questionHorsMemoireType(q || demande, critere),
+        // Question du champ seule (sans le critère parent) : composantes nommées (interlocuteur unique, agréments, absence…).
+        questionSeule: `${q || demande}`.trim(),
         comprehension: developpee && questionComprehension(q || demande),
         libelle: intitulePrincipal(q || demande),
       };
@@ -5069,7 +5075,7 @@ En cas de doute → "[À COMPLÉTER]".`;
       const comprehension = reprise.comprehension ? await comprehensionCadre() : null;
       const candidats: CandidatReference[] = !developpee ? []
         : comprehension ? [{ cle: 'R1', id: comprehension.id, titre: comprehension.titre, texte: comprehension.texte, score: 1 }]
-          : attribution?.candidats.get(f.id) ?? candidatsReference(repriseMT!.mt, repriseMT!.textes, questionMT, { scores: repriseMT!.scores.get(f.id), hors: reprise.hors, secondeLexicale: reprise.sujetReconstruit });
+          : attribution?.candidats.get(f.id) ?? candidatsReference(repriseMT!.mt, repriseMT!.textes, questionMT, { scores: repriseMT!.scores.get(f.id), hors: reprise.hors, secondeLexicale: reprise.sujetReconstruit, questionSeule: reprise.questionSeule, evenementiel: lotEvenementiel });
       const renvois = developpee && !comprehension ? attribution?.renvois.get(f.id) || [] : [];
       const userPrompt = `Analyse du marché (contexte de rédaction) :
 ${analysisJson}
@@ -5279,7 +5285,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     if (repriseMT) {
       const individuels = [...zones.filter(z => z.fields.length === 1).map(z => z.fields[0]), ...others].sort((a, b) => a.id - b.id);
       attribution = attribuerRubriques(individuels.map((f) => ({ f, r: infosReprise(f) })).filter(({ r }) => r.developpee && !r.comprehension)
-        .map(({ f, r }) => ({ id: f.id, libelle: r.libelle, candidats: candidatsReference(repriseMT.mt, repriseMT.textes, r.questionMT, { scores: repriseMT.scores.get(f.id), hors: r.hors, secondeLexicale: r.sujetReconstruit }) })));
+        .map(({ f, r }) => ({ id: f.id, libelle: r.libelle, candidats: candidatsReference(repriseMT.mt, repriseMT.textes, r.questionMT, { scores: repriseMT.scores.get(f.id), hors: r.hors, secondeLexicale: r.sujetReconstruit, questionSeule: r.questionSeule, evenementiel: lotEvenementiel }) })));
       const partages = [...attribution.renvois.entries()].map(([id, l]) => `champ ${id} → ${l.map((x) => x.titre).join(', ')}`);
       if (partages.length) console.log(`[MemoireGenerator] Mémoire type (cadre) : rubrique(s) déjà reprise(s) dans une autre réponse, renvoi : ${partages.join(' ; ')}.`);
     }

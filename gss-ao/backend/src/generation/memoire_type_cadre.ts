@@ -458,6 +458,40 @@ export function cosinus(a: number[], b: number[]): number {
   return na && nb ? p / Math.sqrt(na * nb) : 0;
 }
 
+/**
+ * Composantes des cadres que le mémoire type de GSS traite toujours de la même façon (« si c'est toujours le même process, on
+ * remet la même réponse ») : la rubrique est reprise pour la composante qui la nomme, même quand la recherche sémantique sur
+ * toute la question ne la voit pas (génération réelle etampes2 552 : « interlocuteur unique à la ville, agréments » rédigé
+ * par l'IA sans le numéro unique ni l'agrément dirigeant ; mise en situation « absence de 2 agents et d'1 chien ; intrusion »
+ * signalée comme « question que le mémoire type ne traite pas » ; contrôles des agents sans les trois niveaux de contrôle).
+ * D'après la correspondance du cadre de la CAF 2025, où GSS a lui-même rangé son contenu habituel (memoire_type.json,
+ * cadre_impose.exemple_gss). `situation` : procédure reprise aussi dans une mise en situation ou un cas pratique ;
+ * `evenementiel` : seulement quand l'objet du lot est l'événementiel (sécurisation de manifestations).
+ */
+export const THEMES_CADRE: Array<{ sujet: RegExp; rubriques: string[]; situation?: boolean; evenementiel?: boolean }> = [
+  { sujet: /interlocut(?:eur|rice) unique|r[ée]f[ée]rent unique|contact unique|num[ée]ro unique/i, rubriques: ['b3_interlocuteur_unique'] },
+  { sujet: /(?<![\p{L}])agr[ée]ments?(?![\p{L}])|autorisations? (?:d['’]exercer|cnaps|administrative|pr[ée]fectorale)/iu, rubriques: ['b2_identite'] },
+  { sujet: /(?<![\p{L}])absen(?:ce|ts?|tes?)(?![\p{L}])|remplacement (?:d['’]un |des |du )?(?:agents?|personnels?|salari)|mode de remplacement|agents? indisponibles?/iu, rubriques: ['b5_remplacement_prevu', 'b5_remplacement_imprevu'], situation: true },
+  { sujet: /intrusions?|effractions?/i, rubriques: ['b4_proc_intrusion'], situation: true },
+  { sujet: /individus? suspects?|colis suspects?/i, rubriques: ['b4_proc_individu_suspect'], situation: true },
+  { sujet: /(?<![\p{L}])malaises?(?![\p{L}])|victimes?|secours [àa] (?:la )?personne/iu, rubriques: ['b4_proc_victime'], situation: true },
+  { sujet: /modalit[ée]s de contr[ôo]le|contr[ôo]les? (?:des|de la|du) (?:agents?|prestations?|personnels?|salari[ée]s)|suivi (?:de la )?qualit[ée]|contr[ôo]les? inopin[ée]s?/i, rubriques: ['b5_controle_trois_niveaux'] },
+  { sujet: /m[ée]thodologie de (?:s[ée]curisation|gardiennage|surveillance|mise en place)/i, rubriques: ['b5_mise_en_place'] },
+  { sujet: /m[ée]thodologie de s[ée]curisation|s[ée]curisation des (?:manifestations|[ée]v[ée]nements)|dispositif [ée]v[ée]nementiel/i, rubriques: ['b5_evenementiel'], evenementiel: true },
+  { sujet: /d[ée]lais? d['’]\s*interventions?|bons? de commande/i, rubriques: ['b5_commande_supplementaire'] },
+];
+
+/** Rubriques des composantes nommées par la question (THEMES_CADRE), parmi celles publiées pour ce marché. */
+export function rubriquesThematiques(question: string, parmi: string[], o: { hors?: boolean; evenementiel?: boolean } = {}): string[] {
+  const q = String(question || '');
+  const out: string[] = [];
+  for (const t of THEMES_CADRE) {
+    if ((o.hors && !t.situation) || (t.evenementiel && !o.evenementiel) || !t.sujet.test(q)) continue;
+    for (const id of t.rubriques) if (parmi.includes(id) && !out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
 export interface CandidatReference {
   /** Repère donné au modèle (« R1 », « R2 »…). */
   cle: string;
@@ -468,6 +502,8 @@ export interface CandidatReference {
   score: number;
   /** Score lexical (mots-clés) de la rubrique pour la question : départage les scores sémantiques égaux. */
   lexical?: number;
+  /** Rubrique d'une composante nommée par la question (THEMES_CADRE) : reprise même à côté de la rubrique principale. */
+  theme?: boolean;
 }
 
 /**
@@ -476,15 +512,22 @@ export interface CandidatReference {
  * la meilleure rubrique lexicale (mots-clés) si elle atteint 2,5. Le modèle dit ensuite lesquelles traitent vraiment
  * la question. Aucune candidate pour une question propre au marché (cas pratique, compréhension du site…).
  */
-export function candidatsReference(mt: MemoireType, textes: Record<string, string>, question: string, options: { scores?: Record<string, number>; seuil?: number; ecart?: number; maxMots?: number; hors?: boolean; secondeLexicale?: boolean } = {}): CandidatReference[] {
-  if (!question.trim() || (options.hors ?? questionHorsMemoireType(question))) return [];
+export function candidatsReference(mt: MemoireType, textes: Record<string, string>, question: string, options: { scores?: Record<string, number>; seuil?: number; ecart?: number; maxMots?: number; hors?: boolean; secondeLexicale?: boolean; questionSeule?: string; evenementiel?: boolean } = {}): CandidatReference[] {
+  if (!question.trim()) return [];
   const parmi = Object.keys(textes).filter((id) => (textes[id] || '').trim() && mt.rubriques.find((r) => r.id === id)?.mode !== 'besoin');
+  const scores = options.scores || {};
+  const hors = options.hors ?? questionHorsMemoireType(question);
+  // Composantes nommées par la question elle-même (sans le critère parent) : leurs rubriques d'abord (THEMES_CADRE), avec un
+  // score au-dessus de toute similarité sémantique (attribution au champ qui les nomme), dans l'ordre sémantique entre elles.
+  const themes = rubriquesThematiques(options.questionSeule ?? question, parmi, { hors, evenementiel: options.evenementiel })
+    .map((id) => ({ id, score: 0.9 + (scores[id] ?? 0) / 10, theme: true })).sort((a, b) => b.score - a.score);
+  // Cas pratique ou mise en situation propre au site : seulement les procédures de GSS qu'elle nomme (absence, intrusion…).
+  if (hors) return assemblerCandidats(mt, textes, themes, question, parmi, options.maxMots);
   const seuil = options.seuil ?? SEUIL_SEMANTIQUE;
   const ecart = options.ecart ?? 0.04;
-  const scores = options.scores || {};
-  const choix: Array<{ id: string; score: number }> = [];
+  const choix: Array<{ id: string; score: number; theme?: boolean }> = [...themes];
   const sem = parmi.map((id) => ({ id, score: scores[id] ?? 0 })).sort((a, b) => b.score - a.score);
-  if (sem[0] && sem[0].score >= seuil) choix.push(...sem.slice(0, 3).filter((x) => x.score >= Math.max(seuil, sem[0].score - ecart)));
+  if (sem[0] && sem[0].score >= seuil) choix.push(...sem.slice(0, 3).filter((x) => x.score >= Math.max(seuil, sem[0].score - ecart) && !choix.some((c) => c.id === x.id)));
   const lex = rechercherRubriques(mt, question, 1, parmi)[0];
   if (lex && lex.score >= 2.5 && !choix.some((x) => x.id === lex.id)) choix.push({ id: lex.id, score: scores[lex.id] ?? 0 });
   // Question reconstruite depuis le titre et la liste « Cela peut concerner A, B, C » (consigne de forme seule, havre2 :
@@ -494,8 +537,13 @@ export function candidatsReference(mt: MemoireType, textes: Record<string, strin
     const lex2 = rechercherRubriques(mt, question, 2, parmi)[1];
     if (lex && lex2 && lex2.score >= 4 && lex2.score >= 0.8 * lex.score && !choix.some((x) => x.id === lex2.id)) choix.push({ id: lex2.id, score: scores[lex2.id] ?? 0 });
   }
+  return assemblerCandidats(mt, textes, choix, question, parmi, options.maxMots);
+}
+
+/** Candidats retenus, dans l'ordre donné, tant qu'ils tiennent dans la limite de mots (1 200 par défaut). */
+function assemblerCandidats(mt: MemoireType, textes: Record<string, string>, choix: Array<{ id: string; score: number; theme?: boolean }>, question: string, parmi: string[], maxMotsOpt?: number): CandidatReference[] {
   const lexicaux = new Map(rechercherRubriques(mt, question, 50, parmi).map((x) => [x.id, x.score]));
-  const maxMots = options.maxMots ?? 1200;
+  const maxMots = maxMotsOpt ?? 1200;
   const out: CandidatReference[] = [];
   let mots = 0;
   for (const c of choix) {
@@ -503,7 +551,7 @@ export function candidatsReference(mt: MemoireType, textes: Record<string, strin
     const n = compterMots(texte);
     if (out.length && mots + n > maxMots) continue;
     mots += n;
-    out.push({ cle: `R${out.length + 1}`, id: c.id, titre: mt.rubriques.find((r) => r.id === c.id)?.titre || c.id, texte, score: c.score, lexical: lexicaux.get(c.id) ?? 0 });
+    out.push({ cle: `R${out.length + 1}`, id: c.id, titre: mt.rubriques.find((r) => r.id === c.id)?.titre || c.id, texte, score: c.score, lexical: lexicaux.get(c.id) ?? 0, ...(c.theme ? { theme: true } : {}) });
   }
   return out;
 }
@@ -585,8 +633,11 @@ CONSIGNE PRIORITAIRE (elle prime sur toutes les consignes de rédaction ci-dessu
  */
 export function referencesPrincipales(retenus: CandidatReference[]): CandidatReference[] {
   if (retenus.length <= 1) return retenus;
-  const tries = retenus.slice().sort((a, b) => b.score - a.score || (b.lexical ?? 0) - (a.lexical ?? 0));
-  return tries.filter((c, i) => i === 0 || (i === 1 && c.score >= tries[0].score - 0.05));
+  // Rubriques des composantes nommées par la question (THEMES_CADRE) : chacune reprise pour sa composante (T5CP-2) ; parmi les
+  // autres, la principale et au plus une seconde de score voisin.
+  const tries = retenus.filter((c) => !c.theme).sort((a, b) => b.score - a.score || (b.lexical ?? 0) - (a.lexical ?? 0));
+  const autres = tries.filter((c, i) => i === 0 || (i === 1 && c.score >= tries[0].score - 0.05));
+  return [...retenus.filter((c) => c.theme), ...autres];
 }
 
 /**
