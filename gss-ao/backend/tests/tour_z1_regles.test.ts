@@ -331,3 +331,20 @@ describe('engagements du CCTP jamais rangés dans une rubrique de présentation 
     expect(rubriqueAdmetSujet('b2_valeurs', 'Respecter la charte de déontologie de la profession.')).toBe(true);
   });
 });
+
+import { texteEtapeEntier, typoSchema, specProcessBesoin } from '../src/generation/reponse_libre_v2';
+
+describe('texte des schémas du bloc 1 (T1F-9, T1-CONS-8)', () => {
+  it('horaires coupés sur des périodes entières, jamais dans une énumération', () => {
+    expect(texteEtapeEntier('Tous les jours ; 8h30–19h45 du 1er mai au 30 septembre ; 8h30–18h45 en octobre, mars et avril ; 8h30–17h45 du 1er novembre à la fin février'))
+      .toBe('Tous les jours ; 8h30–19h45 du 1er mai au 30 septembre');
+    expect(texteEtapeEntier('Les agents assurent la surveillance du site du lundi au vendredi en octobre, mars et avril, avec une ronde de nuit à chaque fermeture')).toBe('');
+  });
+  it('« dans les UNE (1) heure » → « dans l’heure » ; espace insécable avant « ; »', () => {
+    expect(typoSchema('Le remplacement intervient dans les UNE (1) heure suivant la constatation.')).toBe("Le remplacement intervient dans l'heure suivant la constatation.");
+    expect(typoSchema('sous DEUX (2) heures')).toBe('sous 2 heures');
+    expect(typoSchema('Tous les jours ; 8h30')).toBe('Tous les jours ; 8h30');
+    const spec = specProcessBesoin([{ titre: 'Agents', texte: 'Tous les jours ; 8h30–19h45 du 1er mai au 30 septembre' }, { titre: 'Votre résultat', texte: 'Continuité de service' }]);
+    expect(spec?.params.etapes[0].texte).toBe('Tous les jours ; 8h30–19h45 du 1er mai au 30 septembre');
+  });
+});

@@ -17,7 +17,7 @@ import {
   chargerMemoireType, normaliser, rechercherRubriques, similarite, motsDePhrase, faitsDePhrase, listeFr, cleCommune,
   type DonneesBesoin, type ExigenceMatrice, type MemoireType, type PlanMemoireType, type SchemaRubrique,
 } from './memoire_type';
-import { ZONE_GSS, vocabulaireDuCctp, periodeEnTete, normaliserExpressionsDelai, minutesDe } from './base_memoires';
+import { ZONE_GSS, vocabulaireDuCctp, periodeEnTete, normaliserExpressionsDelai, minutesDe, RX_NOMBRE_LETTRES as RX_NOMBRE_LETTRES_V2 } from './base_memoires';
 import { insecablesNombres } from './dimensionnement';
 
 export const PLACEHOLDER_V2 = '[À COMPLÉTER]';
@@ -643,7 +643,7 @@ export function specProcessBesoin(etapes: Array<{ titre?: string; texte?: string
     // contractuelles. ») : une phrase ou une proposition entière de 86 caractères au plus, sinon aucun texte (l'étape vide est
     // alors refusée par anomaliesSchemaBloc1 et le schéma passe à la correction ou au secours). Espace insécable entre un
     // nombre et son unité (« 6 h », jamais « 6 / h » coupé par le moteur).
-    .map((e) => ({ titre: insecablesNombres(titreEtape(e?.titre, gabarit === 'chevrons' ? 26 : 34)), texte: insecablesNombres(texteCarte(e?.texte)), role: String(e?.role || '').toLowerCase().split(/[^a-zé]+/)[0] }))
+    .map((e) => ({ titre: typoSchema(insecablesNombres(titreEtape(e?.titre, gabarit === 'chevrons' ? 26 : 34))), texte: typoSchema(insecablesNombres(texteCarte(typoSchema(String(e?.texte ?? ''))))), role: String(e?.role || '').toLowerCase().split(/[^a-zé]+/)[0] }))
     .filter((e) => e.titre)
     .slice(0, max);
   if (propres.length < (gabarit === 'chevrons' ? 3 : 2)) return null;
@@ -1240,15 +1240,42 @@ export function texteEtapeEntier(y: string, max = 86): string {
 function texteEtapeCoupe(y: string, max: number): string {
   const t = String(y || '').replace(/\s+/g, ' ').replace(/[.;,:\s]+$/, '').trim();
   if (t.length <= max) return t;
-  const phrase = t.split(/(?<=[.;!?])\s+/)[0].replace(/[.;!?\s]+$/, '');
-  if (phrase.length <= max && phrase.length >= 25) return phrase;
+  // Segments séparés par « ; » (périodes d'horaires, T1F-9) : le plus long début fait de segments ENTIERS qui tient ; jamais
+  // une période coupée au milieu (« 8h30–18h45 en octobre » pour « … en octobre, mars et avril »).
+  const segments = t.split(/\s*;\s*/);
+  if (segments.length > 1) {
+    let acc = '';
+    for (const sg of segments) {
+      const essai = acc ? `${acc} ; ${sg}` : sg;
+      if (essai.length > max) break;
+      acc = essai;
+    }
+    if (acc.length >= 25) return acc;
+  }
+  const phrase = t.split(/(?<=[.!?])\s+/)[0].replace(/[.;!?\s]+$/, '');
+  if (phrase.length <= max && phrase.length >= 25 && !phrase.includes(';')) return phrase;
   const k = t.lastIndexOf(', ', max);
   if (k >= 30) {
     const f = t.slice(0, k).trim();
     const dernier = (f.split(' ').pop() || '').toLowerCase().replace(/['’]$/, '');
-    if (!MOTS_OUTILS.has(dernier)) return f;
+    // Jamais à l'intérieur d'une énumération « X, Y et Z » (« en octobre, mars et avril »).
+    const reste = t.slice(k + 2).split(/\s*[;.]\s*/)[0];
+    const enumeration = /^[^,]{1,40}?\s(?:et|ou)\s/i.test(reste) && !/\s(?:et|ou)\s/i.test(f.split(/[;,]/).pop() || '') && !/[A-ZÀ-Ý]/.test(reste.charAt(0));
+    if (!MOTS_OUTILS.has(dernier) && !enumeration && !f.includes(';')) return f;
   }
   return '';
+}
+
+/**
+ * Typographie du texte d'un schéma (T1-CONS-8) : délai du CCTP écrit en lettres et en chiffres remis en chiffres (« dans les
+ * UNE (1) heure » → « dans l'heure », « DEUX (2) heures » → « 2 heures ») ; espace insécable avant « ; », « : », « ? » et
+ * « ! » (le moteur ne commence jamais une ligne par un point-virgule).
+ */
+export function typoSchema(t: string): string {
+  return String(t || '')
+    .replace(new RegExp(`(?<![\\p{L}])(?:${RX_NOMBRE_LETTRES_V2})\\s*\\(\\s*(\\d{1,3})\\s*\\)\\s*(?=(?:heures?|minutes?|jours?|semaines?|mois|ans?)(?![\\p{L}]))`, 'giu'), '$1 ')
+    .replace(/\bles\s+1\s+heure\b/gi, "l'heure")
+    .replace(/(\S)[ \t]+([;:?!])/g, '$1\u00a0$2');
 }
 
 /**
