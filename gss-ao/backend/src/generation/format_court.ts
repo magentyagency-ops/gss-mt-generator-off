@@ -183,12 +183,17 @@ function voixDeGssHorsCitation(texte: string): string {
     .replace(new RegExp(String.raw`\b([Dd])u titulaire(?: du march[ée])?(?![\p{L}])${SAUF}`, 'gu'), (_m, d: string) => `${d}e GSS`)
     .replace(new RegExp(String.raw`\b[Ll]e titulaire(?: du march[ée])?(?![\p{L}])${SAUF}`, 'gu'), 'GSS')
     // « Le candidat » du DCE recopié dans un ajout (becquerel 591, T5N-5 : « employé comme salarié du candidat ») : GSS ; jamais
-    // un autre candidat (retenu, évincé, attributaire, concurrent…).
-    .replace(new RegExp(String.raw`\b([AaDd])u candidat(?![\p{L}])${CAND}`, 'gu'), (_m, x: string) => (/[Aa]/.test(x) ? `${x === 'A' ? 'À' : 'à'} GSS` : `${x}e GSS`))
-    .replace(new RegExp(String.raw`\b[Ll]e candidat(?![\p{L}])${CAND}`, 'gu'), 'GSS')
+    // un autre candidat (retenu, évincé, attributaire, concurrent…), ni le candidat à l'embauche d'un texte de recrutement
+    // (T1F-1 : « jauger la compatibilité du candidat avec la mission », « évalue les connaissances du candidat par un
+    // entretien » ne deviennent jamais « de GSS ») : la phrase qui parle de recrutement garde « candidat ».
+    .replace(/[^.!?;\n]+[.!?;]?/g, (ph) => (RECRUTEMENT.test(ph) ? ph : ph
+      .replace(new RegExp(String.raw`\b([AaDd])u candidat(?![\p{L}])${CAND}`, 'gu'), (_m, x: string) => (/[Aa]/.test(x) ? `${x === 'A' ? 'À' : 'à'} GSS` : `${x}e GSS`))
+      .replace(new RegExp(String.raw`\b[Ll]e candidat(?![\p{L}])${CAND}`, 'gu'), 'GSS')))
     // Coquille du DCE sur le sigle de l'autorité de GSS (cstb 551 : « agrément préfectoral CNPAS ») : CNAPS hors citation (T6N-7).
     .replace(/(?<![A-Za-z])CNPAS(?![A-Za-z])/g, 'CNAPS');
 }
+/** Phrase de recrutement : le « candidat » est le candidat à l'embauche (entretien, CV, affectation, connaissances…). */
+const RECRUTEMENT = /(?<![\p{L}])(?:entretiens?|CV|curriculum|embauch\p{L}*|recrut\p{L}*|connaissances|r[ée]f[ée]rences mises en avant|compatibilit[ée]|aptitudes?|motivations?|savoir-[êe]tre|mises? en situation|pr[ée]s[ée]lection\p{L}*|s[ée]lection\p{L}*|jauger|parcours|exp[ée]riences? professionnelles?|test\p{L}*|candidature)(?![\p{L}])/iu;
 const CAND = String.raw`(?!\s+(?:retenus?|[ée]vinc[ée]s?|attributaires?|concurrents?|sortants?|pressentis?|non\s+retenus?|suivants?|class[ée]s?)(?![\p{L}]))`;
 
 /**

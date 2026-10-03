@@ -185,3 +185,16 @@ describe('horaires et pièces techniques (T1-GEN-13, T1-GEN-14, T1-COH-3)', () =
     expect(obligationsChiffrees(autre).length).toBeGreaterThan(0);
   });
 });
+
+import { voixDeGss } from '../src/generation/format_court';
+import { chargerMemoireType as chargerMT } from '../src/generation/memoire_type';
+
+describe('voix de GSS : jamais le candidat à l’embauche (T1F-1)', () => {
+  it('b3_recrutement et la phrase de havre1 gardent « candidat »', () => {
+    const r = chargerMT().rubriques.find((x: any) => x.id === 'b3_recrutement')!;
+    expect(voixDeGss(r.texte)).toBe(r.texte);
+    expect(voixDeGss('Avant affectation, GSS vérifie la carte professionnelle, puis évalue les connaissances du candidat par un entretien et des mises en situation.')).toMatch(/connaissances du candidat/);
+    // Soumissionnaire du DCE recopié : à la voix de GSS.
+    expect(voixDeGss('Le candidat assure la surveillance du site. Le titulaire gère les clés.')).toBe('GSS assure la surveillance du site. GSS gère les clés.');
+  });
+});
