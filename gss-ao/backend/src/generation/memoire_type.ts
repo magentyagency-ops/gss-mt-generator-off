@@ -1927,7 +1927,37 @@ export function publierSchema(spec: SchemaRubrique, variables: Variables, indica
 }
 
 /** Publie une rubrique : publipostage du texte, ordre des sous-parties, schéma. */
-export function publierRubrique(mt: MemoireType, rubrique: RubriqueMemoireType, variables: Variables, indicateurs: Record<string, boolean>, cle = '', options: { marquerConsultations?: boolean } = {}): RubriquePubliee {
+const MOIS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+
+/**
+ * Échéances écrites en dur dans le texte de GSS et dépassées à la date de génération (T6-COH-6) : la validité de
+ * l'attestation d'assurance (« (attestation valable du 21 septembre 2026 au 16 mars 2027) ») n'est plus imprimée après
+ * sa fin, et l'échéance de la certification (« ISO 9001 en cours, prévue fin 2026 ») après l'année annoncée ; chaque fois,
+ * une question exacte est posée à GSS. Avant l'échéance, le texte est inchangé.
+ */
+export function echeancesDepassees(texte: string, date: Date = new Date()): { texte: string; questions: string[] } {
+  const questions: string[] = [];
+  let t = String(texte || '');
+  t = t.replace(/\s*\(attestation valable du \d{1,2}(?:er)? [a-zéû]+ \d{4} au (\d{1,2})(?:er)? ([a-zéû]+) (\d{4})\)/giu, (m, j: string, mois: string, an: string) => {
+    const k = MOIS_FR.indexOf(mois.toLowerCase());
+    if (k < 0) return m;
+    const fin = new Date(Number(an), k, Number(j), 23, 59, 59);
+    if (date <= fin) return m;
+    const contrat = (/contrat ([A-Z]{2,}[\s-]?[A-Z0-9]+)/.exec(t) || [])[1];
+    const assureur = (/responsabilit[ée] civile\s*:\s*([A-Z][\p{L}-]+)/u.exec(t) || [])[1];
+    questions.push(`L'attestation d'assurance responsabilité civile${assureur ? ` ${assureur}` : ''}${contrat ? ` (contrat ${contrat})` : ''} a expiré le ${j} ${mois} ${an} : pouvez-vous joindre la nouvelle attestation (dates de validité et montants) ?`);
+    return '';
+  });
+  t = t.replace(/(certification ISO 9001[^.;\n]{0,40}?en cours)\s*(?:,|;)\s*(?:la certification est )?prévue (?:pour )?fin (\d{4})/gi, (m, debut: string, an: string) => {
+    if (date.getFullYear() <= Number(an)) return m;
+    const q = `La certification ISO 9001 était prévue fin ${an} : est-elle obtenue (date de certification) ou toujours en cours (nouvelle échéance) ?`;
+    if (!questions.includes(q)) questions.push(q);
+    return debut;
+  });
+  return { texte: t, questions };
+}
+
+export function publierRubrique(mt: MemoireType, rubrique: RubriqueMemoireType, variables: Variables, indicateurs: Record<string, boolean>, cle = '', options: { marquerConsultations?: boolean; date?: Date } = {}): RubriquePubliee {
   const base = {
     id: rubrique.id, bloc: rubrique.bloc, cle, titre: rubrique.titre, mode: rubrique.mode, priorite: rubrique.priorite,
     ancienne_rubrique: rubrique.ancienne_rubrique,
@@ -1944,6 +1974,8 @@ export function publierRubrique(mt: MemoireType, rubrique: RubriqueMemoireType, 
   const r = publiposter(rubrique.texte, variables, { definitions: mt.variables, indicateurs, marquerConsultations: options.marquerConsultations });
   let texte = r.texte;
   if (rubrique.ordre_sous_parties === 'indicateurs') texte = reordonnerSousParties(texte, rubrique.sous_parties, indicateurs, rubrique.ordre_indicateurs);
+  const echeances = echeancesDepassees(texte, options.date);
+  texte = echeances.texte;
   let schema: SchemaPublie | null = null;
   if (rubrique.schema) {
     schema = rubrique.schema.source === 'spec'
@@ -1954,7 +1986,7 @@ export function publierRubrique(mt: MemoireType, rubrique: RubriqueMemoireType, 
   // Points « à confirmer » de la rubrique (choix de reprise, valeurs anciennes ou divergentes entre sources) : posés
   // à GSS avec ceux des variables (consultations, premier message de l'assistant).
   const titreRubrique = rubrique.titre.replace(/\{\{[^}]*\}\}/g, '').replace(/\s*:\s*$/, '').trim();
-  const aConfirmer = [...r.aConfirmer];
+  const aConfirmer = [...r.aConfirmer, ...echeances.questions.map((question) => ({ variable: `echeance:${rubrique.id}`, valeur: '', question }))];
   for (const q of rubrique.a_confirmer || []) {
     if (q && q.trim()) aConfirmer.push({ variable: `rubrique:${rubrique.id}`, valeur: '', question: `« ${titreRubrique} » : ${/\?/.test(q) ? q.trim() : `confirmez-vous ce point : « ${q.trim().replace(/[.\s]+$/, '')} » ?`}` });
   }
@@ -1980,7 +2012,7 @@ export function preparerMemoireType(ctx: ContexteMarche, options: OptionsPlan & 
 }
 
 /** Publie toutes les rubriques retenues, dans l'ordre du plan. */
-export function publierMemoire(prep: MemoirePrepare, options: { marquerConsultations?: boolean } = {}): RubriquePubliee[] {
+export function publierMemoire(prep: MemoirePrepare, options: { marquerConsultations?: boolean; date?: Date } = {}): RubriquePubliee[] {
   return prep.plan.rubriques.map((rp) => {
     const r = prep.mt.rubriques.find((x) => x.id === rp.id)!;
     return publierRubrique(prep.mt, r, prep.variables, prep.indicateurs, rp.cle, options);

@@ -5711,6 +5711,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       questionsMisesEnSituation(dimensionnementCadre).forEach((q, i) => { if (new RegExp(`(?<![\\d])${dimensionnementCadre.misesEnSituation![i].total}\\s+agents?\\b`).test(textes)) confirmationsGss.add(q); });
     }
     console.log(`[MemoireGenerator] GPT a renvoyé ${replacements.length} valeurs au total.`);
+    // Échéance dépassée dans un texte de GSS repris (validité de l'assurance, ISO) : question exacte à GSS (T6-COH-6).
+    for (const r of repriseParChamp.values()) for (const id of r.ids) for (const q of repriseMT?.echeances?.[id] || []) confirmationsGss.add(q);
     if (repriseMT) console.log(`[MemoireGenerator] Mémoire type : ${repriseParChamp.size} réponse(s) développée(s) reprise(s) (${[...repriseParChamp.entries()].map(([id, r]) => `champ ${id} ← ${r.ids.join('+')} ${r.fidelite.toFixed(2)}`).join(' ; ') || 'aucune'}), ${[...propositionsCadre.values()].filter((c) => /^Proposition/.test(c)).length} proposition(s) hors mémoire type.`);
     setProgress(dossierId, { phase: 'finalisation', pct: 94, label: 'Application des réponses au cadre…' });
     if (onProgress) onProgress(94, 'Application des réponses au cadre…');
@@ -8077,6 +8079,7 @@ RÈGLES DE FORME (rendu Marp) :
     dimensionnement?: Dimensionnement | null,
   ): Promise<{
     mt: MemoireType; textes: Record<string, string>; scores: Map<number, Record<string, number>>; prep: MemoirePrepare; ctx: ContexteMarche;
+    echeances?: Record<string, string[]>;
     schemaDe: (ids: string[]) => { id: string; ref?: string; spec?: { gabarit: string; params: any; titre: string }; alternative?: string } | undefined;
   } | null> {
     const mt = this.memoireTypeV2();
@@ -8120,7 +8123,10 @@ RÈGLES DE FORME (rendu Marp) :
         return undefined;
       };
       console.log(`[MemoireGenerator] Mémoire type (cadre) : ${Object.keys(textes).length} rubrique(s) publipostée(s) pour ${developpees.length} réponse(s) développée(s).`);
-      return { mt, textes, scores, schemaDe, prep, ctx };
+      // Échéances dépassées du texte de GSS (assurance, ISO) : questions posées si la rubrique est reprise (T6-COH-6).
+      const echeances: Record<string, string[]> = {};
+      for (const p of publiees) { const q = p.aConfirmer.filter((x) => x.variable.startsWith('echeance:')).map((x) => x.question); if (q.length) echeances[p.id] = q; }
+      return { mt, textes, scores, schemaDe, prep, ctx, echeances };
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Mémoire type (cadre) indisponible (${e?.message || e}) : cadre rempli sans texte de référence.`);
       return null;
