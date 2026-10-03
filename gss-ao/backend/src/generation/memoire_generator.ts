@@ -31,7 +31,7 @@ import {
   questionsPubliposteParEmplacement, questionDeLEmplacement, completerFamilles, referencesDeSecours, ecartEquipeTableau, questionAvecLibelle, regrouperQuestionsTelesurveillance,
 } from './memoire_type_cadre';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
 import os from 'os';
@@ -8325,7 +8325,7 @@ RÈGLES DE FORME (rendu Marp) :
         const id = idProposition(g.sujet, idsPris);
         sections[id] = p.texte;
         alertesAcheteurs.push(...p.questions);
-        if (p.acheteurs.length) alertesAcheteurs.push(`Proposition de réponse « ${p.titre} » : elle cite ${p.acheteurs.join(', ')}, acheteur(s) d'un ancien mémoire de GSS. Vérifiez qu'il s'agit bien d'une référence et non du destinataire (à corriger via l'assistant avant la remise).`);
+        if (p.acheteurs.length) alertesAcheteurs.push(`Proposition de réponse « ${p.titre} » : la rédaction citait ${p.acheteurs.join(', ')}, acheteur(s) d'un ancien mémoire de GSS qui ne figure(nt) pas parmi vos références validées ; ${p.acheteurs.length > 1 ? 'ces phrases ont été retirées' : 'cette phrase a été retirée'} du mémoire. GSS souhaite-t-elle citer ce marché comme référence (avec quelles caractéristiques) ?`);
         g.exigences.forEach((e) => enProposition.add(e));
         propositions[i] = { id, chapter: cle, title: p.titre, apres: bloc.rubriques[bloc.rubriques.length - 1], proposition: true, sujet: g.sujet };
       });
@@ -8858,7 +8858,9 @@ RÈGLES DE FORME (rendu Marp) :
       const corrige = lireJson((await this.callOpenAI([
         ...messages,
         { role: 'assistant', content: brut },
-        { role: 'user', content: `Ta réponse cite ${acheteurs.map((a) => `« ${a} »`).join(', ')}, acheteur(s) d'anciens marchés de GSS. Elle s'adresse à ${o.client || 'ce nouveau client'} : remplace ce nom par le nouveau client quand il désigne le destinataire, ou formule-le explicitement comme une RÉFÉRENCE de GSS (« sur le marché de … ») seulement si c'en est une ; ne change rien d'autre. Renvoie le même objet JSON.` },
+        // « sur le marché de … » réservé aux références validées de GSS (T1F-14) : un ancien acheteur n'est jamais présenté
+        // comme une référence.
+        { role: 'user', content: `Ta réponse cite ${acheteurs.map((a) => `« ${a} »`).join(', ')}, acheteur(s) d'anciens mémoires de GSS, qui ne sont pas des références validées de GSS. Elle s'adresse à ${o.client || 'ce nouveau client'} : remplace ce nom par le nouveau client quand il désigne le destinataire, sinon retire la phrase qui le cite. N'écris « sur le marché de … » que pour une de ces références de GSS : ${motifsReferences().map((r) => r.nom).join(', ') || 'aucune'}. Ne change rien d'autre. Renvoie le même objet JSON.` },
       ], 0.2, `Proposition de réponse : ${g.sujet} (ancien acheteur)`, true, 'analyse', 0)) || '');
       const texte2 = String(corrige?.texte || '').replace(/^#\s+.*\n+/, '').trim();
       if (texte2.split(/\s+/).length >= 80) {
@@ -8866,7 +8868,13 @@ RÈGLES DE FORME (rendu Marp) :
         texte = texte2;
         acheteurs = acheteursCites(texte, o.client);
       }
-      if (acheteurs.length) console.warn(`[MemoireGenerator] Proposition « ${g.sujet} » : ancien(s) acheteur(s) cité(s) (${acheteurs.join(', ')}), signalé à GSS.`);
+      // Ancien acheteur toujours cité (T1-CONS-3, T1F-14 : « Sur le marché de la CAF du Val-de-Marne, les équipes GSS
+      // vérifient déjà… » imprimé au mémoire de l'EPCF) : ses phrases sont retirées, jamais imprimées ; GSS est prévenu.
+      if (acheteurs.length) {
+        const avant = texte;
+        texte = sansAnciensAcheteurs(texte, o.client);
+        console.warn(`[MemoireGenerator] Proposition « ${g.sujet} » : ancien(s) acheteur(s) cité(s) (${acheteurs.join(', ')}) : ${avant === texte ? 'aucune phrase retirée' : 'phrase(s) retirée(s)'}, signalé à GSS.`);
+      }
     }
     // Contrôle sans modèle : sous-traitance ou intérim (même au conditionnel), amorce « … si : [À COMPLÉTER] », montant
     // de garantie qui n'est pas celui du registre de GSS (parc_expo 202) : phrases retirées, écart demandé à GSS.

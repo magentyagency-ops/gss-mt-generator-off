@@ -2412,7 +2412,10 @@ export function controlerProposition(texte: string, montantsGss: string[] = []):
     const puce = (/^\s*(?:[-*•]|\d+[.)])\s+/.exec(l) || [''])[0];
     const corps = l.slice(puce.length);
     let retireAvecQuestion = false;
-    const gardees = corps.split(/(?<=[.!?])\s+/).filter((ph) => {
+    const gardees = corps.split(/(?<=[.!?])\s+/).map((ph) => ph
+      // Procédures ou consignes de l'acheteur laissées en blanc (T1-CONS-3 : « … sont appliquées suivant les procédures de
+      // l'EPCF : [À COMPLÉTER]. ») : la phrase est vraie sans l'emplacement, qui n'appelle aucune donnée de GSS.
+      .replace(/((?:suivant|selon|conform[ée]ment\s+aux?)\s+(?:les\s+)?(?:proc[ée]dures|consignes|r[èe]gles|modalit[ée]s|instructions)\s+(?:d[eu]\s+|de\s+la\s+|de\s+l['’]\s*|des\s+)[^:.;]{2,80}?)\s*:\s*\[À COMPLÉTER\](?:⟦AC:\d+⟧)?\s*(?=[.;]?\s*$)/i, '$1')).filter((ph) => {
       if (INTERDIT.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion ||= /\[À COMPLÉTER\]/.test(ph); return false; }
       if (/\b(?:si|lorsque|quand|dont|notamment)\s*:?\s*\[À COMPLÉTER\]\s*[.;]?\s*$/i.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion = true; return false; }
       // Engagement réduit à un oui ou non laissé en blanc (ifsem 335 : « Engagement de GSS sur la couverture permanente de ce

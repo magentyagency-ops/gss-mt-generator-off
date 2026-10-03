@@ -353,6 +353,20 @@ export function acheteursCites(texte: string, client = ''): string[] {
 }
 
 /**
+ * Phrases qui citent un ancien acheteur de GSS qui n'est ni le client ni une référence validée (T1-CONS-3, T1F-14 : « Sur le
+ * marché de la CAF du Val-de-Marne, les équipes GSS vérifient déjà… » dans le mémoire de l'EPCF) : retirées, puce et lignes
+ * gardées pour le reste.
+ */
+export function sansAnciensAcheteurs(texte: string, client = ''): string {
+  return String(texte || '').split('\n').map((l) => {
+    const puce = (/^\s*(?:[-*•]|\d+[.)])\s+/.exec(l) || [''])[0];
+    const phrases = l.slice(puce.length).split(/(?<=[.!?])\s+/);
+    const gardees = phrases.filter((ph) => !acheteursCites(ph, client).length);
+    return gardees.length === phrases.length ? l : gardees.length ? `${puce}${gardees.join(' ')}` : null;
+  }).filter((l): l is string => l !== null).join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
+/**
  * Graphies en minuscules des mots des textes de GSS (passages des mémoires), par mot sans accent ni casse : sert à écrire en
  * minuscules, avec ses accents, un mot que le DCE n'écrit qu'en capitales (« CENTRE » → « centre »).
  */

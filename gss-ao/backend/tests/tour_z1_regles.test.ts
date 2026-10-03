@@ -268,3 +268,19 @@ describe('questions à GSS du cadre (T1-COH-8)', () => {
     expect(r[1]).toMatch(/« \(UFR DESP\) », « Localisation de la station de télésurveillance »/);
   });
 });
+
+import { sansAnciensAcheteurs } from '../src/generation/base_memoires';
+import { controlerProposition } from '../src/generation/reponse_libre_v2';
+
+describe('propositions D5 : jamais un autre acheteur, jamais un emplacement sans objet (T1-CONS-3, T1F-14)', () => {
+  it('phrase citant un ancien acheteur non référencé : retirée', () => {
+    const t = "Sur le marché de la CAF du Val-de-Marne, les équipes GSS vérifient déjà les abords et orientent le public. Nos agents surveillent les accès extérieurs.\n- Ronde des abords à l'ouverture.";
+    expect(sansAnciensAcheteurs(t, 'Établissement public du château de Fontainebleau')).toBe("Nos agents surveillent les accès extérieurs.\n- Ronde des abords à l'ouverture.");
+    // Référence validée de GSS : gardée.
+    expect(sansAnciensAcheteurs('Sur le marché de la Région Normandie, nos agents filtrent les accès.', 'EPCF')).toBe('Sur le marché de la Région Normandie, nos agents filtrent les accès.');
+  });
+  it('« suivant les procédures de l’EPCF : [À COMPLÉTER] » : la phrase sans l’emplacement', () => {
+    expect(controlerProposition("Les consignes de sécurité incendie sont appliquées suivant les procédures de l'EPCF : [À COMPLÉTER].").texte)
+      .toBe("Les consignes de sécurité incendie sont appliquées suivant les procédures de l'EPCF.");
+  });
+});
