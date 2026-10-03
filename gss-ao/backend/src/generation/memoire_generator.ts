@@ -5901,6 +5901,23 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         .map((r) => ({ id: r.id, question: ((descriptors.find((x) => x.id === r.id)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').slice(0, 300), value: String(r.value ?? '') }));
       const avantCouverture = new Map(developpeesCadre.map((x) => [x.id, x.value] as const));
       await this.couvertureCadre(developpeesCadre, dceContext, analysisData, horsNormandieCadre);
+      // Même engagement ajouté dans deux réponses du cadre (génération réelle rouen_univ 703 : « GSS mobilise 8 agents APS et/ou
+      // SSIAP 1 supplémentaires dans un délai de 12 heures… » sous les absences et sous le contrôle des prestations) : gardé
+      // dans la première réponse seulement, dans l'ordre du cadre.
+      {
+        const vus = new Set<string>();
+        const cle = (l: string) => normaliser(l.replace(/^\s*[•\-*]\s*/, '')).replace(/[^a-z0-9]+/g, ' ').trim();
+        for (const x of [...developpeesCadre].sort((a, b) => a.id - b.id)) {
+          const avant = new Set(String(avantCouverture.get(x.id) || '').split('\n').map((l) => cle(l)));
+          x.value = x.value.split('\n').filter((l) => {
+            const k = cle(l);
+            if (!k || avant.has(k) || k.split(' ').length < 6) return true;
+            if (vus.has(k)) return false;
+            vus.add(k);
+            return true;
+          }).join('\n').replace(/\n{3,}/g, '\n\n');
+        }
+      }
       for (const x of developpeesCadre) {
         const r = replacements.find((y) => y.id === x.id);
         if (r) r.value = x.value;

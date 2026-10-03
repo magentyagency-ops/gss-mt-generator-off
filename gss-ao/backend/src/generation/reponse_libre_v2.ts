@@ -1430,6 +1430,8 @@ export function titreExigence(x: string, max = 34): string {
     if (pre.length > max) continue;
     const dernier = mots[i - 1];
     if (MOTS_OUTILS.has(dernier.toLowerCase().replace(/['’]$/, '')) || /['’]$/.test(dernier) || !/[\p{L}\d)]$/u.test(dernier)) continue;
+    // Locution coupée (génération réelle caen 703 : « Assurer la continuité en cas » pour « … en cas de défaillance »).
+    if (/(?:^|\s)(?:en\s+cas|lors|afin|faute|en\s+raison|en\s+vue|au\s+cours|au\s+moyen|en\s+matière|en\s+termes|à\s+compter|en\s+fonction|au\s+titre|à\s+partir|en\s+dehors|au\s+sein|à\s+l['’]issue)$/i.test(pre)) continue;
     // Coupe permise devant une préposition, une coordination ou un participe, ou quand le reste n'est qu'une suite
     // d'adjectifs (« interventions successives | habituelles ») ; jamais devant un complément (« … ou agent | N1 au PCS »).
     const reste = mots.slice(i);
@@ -2223,6 +2225,10 @@ export function nettoyerBloc1(texte: string, plan: PlanMemoireType | undefined, 
   return { texte: t.trim(), retirees, renvois };
 }
 
+/** Cellule du tableau du périmètre qui commente l'absence d'une donnée (génération réelle caen 703 : « Qualification de poste non
+ *  imposée au CCTP ») : un commentaire interne, jamais imprimé. */
+const CELLULE_COMMENTAIRE = /\bnon\s+(?:impos[ée]e?s?|pr[ée]cis[ée]e?s?|indiqu[ée]e?s?|sp[ée]cifi[ée]e?s?|d[ée]fini(?:e|s|es)?|mentionn[ée]e?s?|exig[ée]e?s?|renseign[ée]e?s?)\b|\bsans\s+objet\b/i;
+
 /** Cellule du tableau du périmètre qui ne dit rien (« Sans objet », « Aucun poste fixe… », « Non précisé », « — »). */
 const CELLULE_VIDE = /^(?:sans objet|n\/?a|néant|aucun(?:e)?\b.*|non (?:précisé|prévu|applicable|concerné)e?s?|[—–-]*)$/i;
 
@@ -2250,8 +2256,23 @@ export function sansLigneVideDuPerimetre(texte: string): { texte: string; retire
     const vides = c.filter((x) => CELLULE_VIDE.test(x)).length;
     if (c.length && vides * 2 >= c.length) retirees.push(l.trim()); else donnees.push(l);
   }
-  if (!retirees.length) return { texte, retirees };
-  const tableau = donnees.length ? lignes.slice(debut, fin).filter((l) => !retirees.includes(l.trim())) : [];
+  // Colonne dont toutes les cellules gardées commentent l'absence de la donnée (« Qualification de poste non imposée au CCTP ») :
+  // colonne retirée du tableau.
+  const gardees = lignes.slice(debut, fin).filter((l) => !retirees.includes(l.trim()));
+  const entete = gardees[0] ? cellules(gardees[0]) : [];
+  const lignesDonnees = gardees.slice(1).filter((l) => !separateur(l));
+  const colonnesCommentaire = entete.map((_, k) => k).filter((k) => k > 0 && lignesDonnees.length > 0 && lignesDonnees.every((l) => {
+    const c = cellules(l)[k] || '';
+    return CELLULE_COMMENTAIRE.test(c) || CELLULE_VIDE.test(c);
+  }));
+  if (!retirees.length && !colonnesCommentaire.length) return { texte, retirees };
+  for (const k of colonnesCommentaire) retirees.push(`colonne « ${entete[k]} »`);
+  const sansColonnes = (l: string) => {
+    if (!colonnesCommentaire.length) return l;
+    const c = l.trim().replace(/^\||\|$/g, '').split('|');
+    return `|${c.filter((_, k) => !colonnesCommentaire.includes(k)).join('|')}|`;
+  };
+  const tableau = donnees.length ? gardees.map(sansColonnes) : [];
   const out = [...lignes.slice(0, debut), ...tableau, ...lignes.slice(fin)];
   return { texte: out.join('\n').replace(/\n{3,}/g, '\n\n'), retirees };
 }

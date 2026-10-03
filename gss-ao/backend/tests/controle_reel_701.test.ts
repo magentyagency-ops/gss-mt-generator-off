@@ -197,3 +197,15 @@ describe('Contrôle réel 702 : cadre sans barres verticales', () => {
     expect(sansBarresTableau('Un texte avec un | seul.')).toBe('Un texte avec un | seul.');
   });
 });
+
+describe('Contrôle réel 703 : dernière série', () => {
+  it('titre d’étape jamais coupé sur une locution (caen 703 : « Assurer la continuité en cas »)', () => {
+    expect(titreExigence('assurer la continuité en cas de défaillance de l’effectif prévu')).not.toMatch(/en cas$/);
+  });
+  it('colonne du périmètre faite de commentaires (« Qualification de poste non imposée au CCTP ») retirée (caen 703)', () => {
+    const t = '## Le périmètre de la prestation demandée\n\n| Site | Poste | Jours et horaires | Qualification | Missions principales |\n|---|---|---|---|---|\n| CAEN | Rondes | Du lundi au vendredi à 05H30 | Qualification de poste non imposée au CCTP | Rondes |\n| CAEN | Télésurveillance | Périodes définies | Qualification de poste non imposée au CCTP | Alarmes |';
+    const r = sansLigneVideDuPerimetre(t).texte;
+    expect(r).not.toMatch(/Qualification|non imposée/);
+    expect(r).toMatch(/\| Site \| Poste \| Jours et horaires \| Missions principales \|/);
+  });
+});
