@@ -46,7 +46,11 @@ export interface IndicateurMemoireType {
   dce_exclure?: string;
   /** Motif cherché dans le secteur d'activité du client (analyse.clientSector). */
   secteur?: string;
-  /** Rubriques : une exigence de la matrice rattachée à l'une d'elles rend l'indicateur vrai. */
+  /**
+   * Rubriques : une exigence de la matrice rattachée à l'une d'elles rend l'indicateur vrai, à condition que son texte
+   * contienne le motif « dce » de l'indicateur (le rattachement du modèle seul ne suffit pas : caen 475, « mobiliser les
+   * équipes … en cas de sinistre » rattaché à l'événementiel ; cstb 551, une levée de doute rattachée à la défaillance SSI).
+   */
   matrice?: string[];
   /**
    * Mot du DCE sans lequel une exigence de la matrice (extraite par le modèle) ne suffit pas à rendre l'indicateur
@@ -519,8 +523,11 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
       }
       if (def.secteur && secteur && new RegExp(def.secteur, 'i').test(secteur)) raisons.push(`secteur du client : ${secteur}`);
       if (def.matrice?.length && (!engageants.has(nom) || (def.motif_dce ? dceNorm.includes(normaliser(def.motif_dce)) : raisons.some((r) => r.startsWith('DCE'))))) {
-        const e = matrice.find((x) => x.rubrique && def.matrice!.includes(x.rubrique));
+        const rxDce = def.dce ? new RegExp(def.dce, 'i') : null;
+        const rattachees = matrice.filter((x) => x.rubrique && def.matrice!.includes(x.rubrique));
+        const e = rattachees.find((x) => !rxDce || rxDce.test(x.exigence.replace(/[’`]/g, "'")));
         if (e) raisons.push(`exigence rattachée à ${e.rubrique} : « ${e.exigence.slice(0, 120)} »`);
+        else if (rattachees.length && !raisons.length) console.log(`[MemoireType] Indicateur ${nom} : exigence rattachée à ${rattachees[0].rubrique} écartée, motif de l'indicateur absent de son texte (« ${rattachees[0].exigence.slice(0, 120)} »).`);
       }
       // Preuve exigée dans le DCE lisible : l'analyse, le secteur ou la matrice seuls ne suffisent pas (T4N-3).
       if (def.preuve_dce && dce.length >= 2000 && raisons.length && !raisons.some((r) => r.startsWith('DCE'))) {
@@ -2144,6 +2151,14 @@ export function exigencesParRubrique(mt: MemoireType, plan: PlanMemoireType, mat
       }
       placer(e.rubrique, e);
       continue;
+    }
+    // Rubrique du mémoire type écartée du plan par sa condition, sans lien lexical avec l'exigence (caen 475, T6C-1 : la
+    // mobilisation sur sinistre rattachée à « Le dispositif événementiel », marché sans événementiel) : même règle que
+    // ci-dessus, la rubrique du plan du thème de l'exigence.
+    const rHors = e.rubrique ? mt.rubriques.find((x) => x.id === e.rubrique) : undefined;
+    if (rHors && scoreRubrique(rHors, `${e.sujet || ''} ${e.exigence}`) === 0) {
+      const meilleur = rechercherRubriques(mt, `${e.sujet || ''} ${e.exigence}`, 1, ids.filter((id) => admise(id, e)))[0];
+      if (meilleur && meilleur.score >= 1) { ajouter(meilleur.id, e); continue; }
     }
     const candidates = e.rubrique && mt.correspondance_v1[e.rubrique] ? mt.correspondance_v1[e.rubrique].filter((x) => ids.includes(x)) : [];
     if (candidates.length) {
