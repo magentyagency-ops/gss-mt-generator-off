@@ -26,6 +26,7 @@ import { reglagesIA } from '../core/modeles_ia';
 import { SECTIONS_REPONSE_LIBRE, CHAPITRES_REPONSE_LIBRE } from './memoire_generator';
 import { dimensions, insererPhotoDocx, paragrapheDuChamp } from './docx_images';
 import { estPlanV2, type PlanMemoireType } from './memoire_type';
+import { texteBrut } from './memoire_type_cadre';
 import { sectionsV2, chapitresV2, schemaFixe } from './reponse_libre_v2';
 import { nombrePages } from './format_court';
 import { deciderAdaptation, blocAdaptationsAssistant, ACTION_ADAPTATION, aValider, type PhraseAdaptee } from './adaptations_cctp';
@@ -277,6 +278,9 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       const champ = ad && champs.find((c) => c.cle === ad.rubrique);
       if (!ad || !champ) { messagesAdaptations.push(`Je n'ai pas trouvé la phrase adaptée n° ${a.n}.`); continue; }
       const sauvegarde = { ...ad };
+      // État d'une génération antérieure à T7N-2 : phrase d'origine encore en Markdown (« - **Préparation** : … »), écrite
+      // dans la forme du cadre avant d'être rétablie.
+      if (/\*\*|__|^\s*[-*]\s|^\s*#/.test(ad.origine || '')) ad.origine = texteBrut(ad.origine);
       const r = deciderAdaptation(champ.texte, ad, String(a.choix || ''), String(a.texte || ''));
       if (r.ok && r.change && !remplacerDansChamp(xmlDoc, champ.cle, champ.texte, r.texte)) {
         Object.assign(ad, sauvegarde);

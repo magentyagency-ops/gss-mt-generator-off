@@ -409,7 +409,7 @@ export class SuiviAdaptations {
    * appliqués au texte (`sections` est modifié) et reportés. `correspondance` : rubriques du mémoire type reprises par
    * chaque texte final (format court : parties du RC ; cadre : réponses GSS_CH_n).
    */
-  finaliser(sections: Record<string, string>, titreDe: (id: string) => string, correspondance: Record<string, string[]> = {}): PhraseAdaptee[] {
+  finaliser(sections: Record<string, string>, titreDe: (id: string) => string, correspondance: Record<string, string[]> = {}, formeOrigine: (t: string) => string = (t) => t): PhraseAdaptee[] {
     const ordre = Object.keys(sections);
     const cibles = (r: string) => [...new Set([...(sections[r] !== undefined ? [r] : []), ...ordre.filter((k) => (correspondance[k] || []).includes(r))])];
     const liste: PhraseAdaptee[] = [];
@@ -444,7 +444,9 @@ export class SuiviAdaptations {
           if (!note.avant && !note.apres && note.publipostage && k !== note.rubrique) continue;
         }
         vus.add(id);
-        liste.push({ n: 0, rubrique: k, titre: titreDe(k) || k, origine: note.origine, adaptee, exigence: note.exigence, etape: note.etape, ...(avant ? { avant } : {}), ...(apres ? { apres } : {}), statut: 'a_valider' });
+        // Phrase d'origine dans la forme du texte remis (cadre .docx : « • Préparation : … », jamais « - **Préparation** : »,
+        // T7N-2) : c'est elle que « Rétablis ma phrase d'origine » écrit.
+        liste.push({ n: 0, rubrique: k, titre: titreDe(k) || k, origine: formeOrigine(note.origine), adaptee, exigence: note.exigence, etape: note.etape, ...(avant ? { avant } : {}), ...(apres ? { apres } : {}), statut: 'a_valider' });
       }
     }
     // Choix de GSS de la génération précédente : appliqués au texte, la phrase n'est plus à valider.

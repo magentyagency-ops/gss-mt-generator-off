@@ -6243,7 +6243,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       const textesChamps: Record<string, string> = {};
       for (const r of [...replacements].sort((a, b) => a.id - b.id)) if (descriptors.find((d) => d.id === r.id)?.kind !== 'checkbox' && String(r.value ?? '').trim()) textesChamps[`GSS_CH_${r.id}`] = String(r.value);
       const libelle = (k: string) => { const id = Number(k.replace('GSS_CH_', '')); return libelleQuestionCadre((descriptors.find((d) => d.id === id)?.context.match(/Question:\s*"([^"]*)"/) || [])[1] || `Réponse ${id}`); };
-      adaptationsCadre = this.finaliserAdaptations(suiviCadre, textesChamps, libelle, [], Object.fromEntries([...repriseParChamp.entries()].map(([id, x]) => [`GSS_CH_${id}`, x.ids])));
+      // Phrase d'origine écrite dans la forme du cadre (texte brut, puces « • »), jamais en Markdown (T7N-2).
+      adaptationsCadre = this.finaliserAdaptations(suiviCadre, textesChamps, libelle, [], Object.fromEntries([...repriseParChamp.entries()].map(([id, x]) => [`GSS_CH_${id}`, x.ids])), texteBrut);
       for (const r of replacements) { const t = textesChamps[`GSS_CH_${r.id}`]; if (t !== undefined && t !== String(r.value)) r.value = t; }
     }
 
@@ -8734,9 +8735,9 @@ Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "tex
    * Fin de génération (D8) : phrases adaptées retrouvées dans le texte final, choix de GSS de la génération précédente
    * appliqués ; un emplacement « [À COMPLÉTER] » disparu avec une phrase rétablie n'est plus demandé.
    */
-  private finaliserAdaptations(suivi: SuiviAdaptations, sections: Record<string, string>, titreDe: (id: string) => string, elements: ElementACompleter[] = [], correspondance: Record<string, string[]> = {}): PhraseAdaptee[] {
+  private finaliserAdaptations(suivi: SuiviAdaptations, sections: Record<string, string>, titreDe: (id: string) => string, elements: ElementACompleter[] = [], correspondance: Record<string, string[]> = {}, formeOrigine?: (t: string) => string): PhraseAdaptee[] {
     const avant = Object.values(sections).join('\n');
-    const liste = suivi.finaliser(sections, titreDe, correspondance);
+    const liste = suivi.finaliser(sections, titreDe, correspondance, formeOrigine);
     const apres = Object.values(sections).join('\n');
     if (apres !== avant) {
       for (let i = elements.length - 1; i >= 0; i--) {
