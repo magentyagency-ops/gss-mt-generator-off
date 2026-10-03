@@ -1354,6 +1354,13 @@ export function rubriquesSansSchema(plan: PlanMemoireType, ajouts: Array<{ id: s
 /** Ligne de consultation déjà formulée sans modèle (jamais envoyée à la fusion par le modèle, jamais reformulée). */
 export const LIGNE_DETERMINISTE = /^(?:Proposition à valider|Proposition de réponse à valider|Réponse à relire|Réponse «|Réponse du cadre\s*:|Phrases adaptées au cahier des charges|Partie «|Rubrique «|Rédaction automatique indisponible|Phrase proposée par l'IA d'après le cahier des charges|Phrase ajoutée au texte de GSS)/;
 
+/** Question en clair sur une case de tableau du cadre (même forme que les cartes de l'assistant, T8CS-4). */
+export function questionCaseTableau(ligne: string, colonne: string): string {
+  const l = String(ligne || '').split('|')[0].replace(/\[CHAMP_\d+\]/g, '').replace(/\s+/g, ' ').trim();
+  const c = String(colonne || '').replace(/\[CHAMP_\d+\]/g, '').replace(/\s*\/\s*/g, ' — ').replace(/\s+/g, ' ').trim();
+  return l ? `Tableau du cadre, ligne « ${l} », colonne « ${c} » : quelle valeur faut-il écrire ?` : `Tableau du cadre, colonne « ${c} » : quelle valeur faut-il écrire ?`;
+}
+
 export function questionExacte(q: string): string {
   const t = String(q || '').replace(/\s+/g, ' ').trim();
   if (!t) return t;
@@ -1375,6 +1382,13 @@ export function questionExacte(q: string): string {
   }
   const aConfirmer = /^À confirmer\s*:\s*(.+)$/i.exec(t);
   if (aConfirmer) return `Confirmez-vous ce point : « ${sansFin(aConfirmer[1])} » ?`;
+  // Case de tableau du cadre décrite par sa colonne et sa ligne (forme interne « Colonne: "…" | Ligne: "…" ») : la question
+  // en clair des cartes de l'assistant, jamais la forme interne (havre1, T8CS-4).
+  const caseTableau = /^Colonne:\s*"([^"]*)"\s*\|\s*Ligne:\s*"([^"]*)"/.exec(t);
+  if (caseTableau) return questionCaseTableau(caseTableau[2], caseTableau[1]);
+  // Intitulé numéroté d'une partie du cadre (« 3.1 Les moyens humains assignés à la mission ») : l'information à écrire dans
+  // la réponse à cette partie.
+  if (/^\d+(?:\.\d+)*\.?\s+[A-ZÀ-Ý]/.test(t) && t.split(/\s+/).length <= 14) return `Quelle information faut-il écrire dans la réponse à « ${sansFin(t)} » ?`;
   const delaiPropose = /^Délai proposé hors Normandie, à confirmer par GSS \(organisation locale\)\s*:\s*(.+)$/i.exec(t);
   if (delaiPropose) return `Hors Normandie, validez-vous ce délai proposé (organisation locale) : « ${sansFin(delaiPropose[1])} » ?`;
   // Lieu du site introuvable dans le DCE (T7-COH-2) : le délai de GSS n'est valable que si le site est en Normandie.
@@ -5315,7 +5329,26 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
       // Rédaction impossible (OpenAI en panne, réponse vide ou illisible) : réponse développée → texte du mémoire type de GSS
       // repris tel quel (comme la réponse libre, « texte de référence conservé ») et signalé à relire ; sinon champ signalé.
       const echec = () => {
-        const lib = libelleQuestionCadre(String(questionMT || '').replace(/\[CHAMP_\d+\]/gi, '').trim() || intitulePrincipal(((f.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').replace(/\[CHAMP_\d+\]/gi, '')) || `Champ ${f.id}`);
+        let lib = libelleQuestionCadre(String(questionMT || '').replace(/\[CHAMP_\d+\]/gi, '').trim() || intitulePrincipal(((f.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '').replace(/\[CHAMP_\d+\]/gi, '')) || `Champ ${f.id}`);
+        // Libellé court répété dans le cadre (« Nom », « Coordonnées complètes ») : précédé du titre qui le porte dans le document
+        // (« Contact pour la facturation — Nom »), pour que GSS sache quelle ligne compléter (havre1, T8CS-3).
+        const caseT = /Colonne:\s*"([^"]*)"\s*\|\s*Ligne:\s*"([^"]*)"/.exec(f.context);
+        if (caseT) lib = questionCaseTableau(caseT[2], caseT[1]).replace(/\s*:\s*quelle valeur faut-il écrire \?$/, '');
+        else if (lib.split('(')[0].trim().split(/\s+/).length <= 4) {
+          // Titre dans le contexte du champ, sinon dans celui des champs qui le précèdent dans la même section (« Coordonnées
+          // complètes » sous « Contact pour les commandes : Nom : … »).
+          const titreDe = (ctx: string) => ((ctx.match(/Contexte:\s*"([^"]*)"/) || [])[1] || '').split(' / ').reverse()
+            .map((x) => x.replace(/\[CHAMP_\d+\]/gi, '').replace(/[\s:.…_]+$/, '').trim())
+            .find((x) => x.split(/\s+/).length >= 3 && !/^\(/.test(x) && !x.toLowerCase().startsWith(lib.toLowerCase().split('(')[0].trim())) || '';
+          const section = (f.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '';
+          const k = descriptors.findIndex((x) => x.id === f.id);
+          let titre = titreDe(f.context);
+          for (let j = k - 1; !titre && j >= Math.max(0, k - 3); j--) {
+            if (((descriptors[j].context.match(/Section:\s*"([^"]*)"/) || [])[1] || '') !== section) break;
+            titre = titreDe(descriptors[j].context);
+          }
+          if (titre) lib = `${titre} — ${lib}`;
+        }
         const ref = developpee && candidats.length ? texteBrut(String(candidats[0].texte || '')).trim() : '';
         if (ref) {
           replacements.push({ id: f.id, value: ref });
@@ -5327,7 +5360,9 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
       if (aiResponse === null) { echec(); return; }
       let lisible = true;
       try { const d0 = JSON.parse(aiResponse || '{}'); lisible = (d0?.value ?? (Array.isArray(d0?.replacements) ? d0.replacements[0]?.value : undefined)) !== undefined; } catch { lisible = false; }
-      if (!lisible && developpee) { echec(); return; }
+      // Réponse illisible ou sans « value » : échec aussi pour un champ simple (« Nom : », coordonnées, effectifs…), compté dans
+      // le seuil de refus et signalé à GSS, jamais un champ laissé vide sans repère (havre1, T8CS-3).
+      if (!lisible) { echec(); return; }
       try {
         const data = JSON.parse(aiResponse || '{}');
         let value = data.value ?? (Array.isArray(data.replacements) ? data.replacements[0]?.value : undefined);
@@ -5426,7 +5461,11 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
             propositionsCadre.set(f.id, `Proposition de réponse à valider (question que le mémoire type de GSS ne traite pas) : ${libelle}`);
           }
         }
-        if (value !== undefined && value !== null) replacements.push({ id: f.id, value: String(value) });
+        if (value !== undefined && value !== null) {
+          // Champ rédigé à la passe de complétion après un premier échec : il n'est plus signalé comme non rédigé.
+          if (!echecsRedaction.get(f.id)?.reference) echecsRedaction.delete(f.id);
+          replacements.push({ id: f.id, value: String(value) });
+        }
       } catch (e) {
         console.error(`[MemoireGenerator] ${label}: parse JSON échoué:`, (aiResponse || '').slice(0, 160));
       }
@@ -5542,10 +5581,6 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
     // Informations variables à confirmer par GSS (registre) : le marqueur ne doit JAMAIS apparaître dans le
     // document remis à l'acheteur → retiré de la valeur, remonté dans les consultations.
     const confirmationsGss = new Set<string>(alertesComprehension);
-    {
-      const sansTexte = [...echecsRedaction.values()].filter((x) => !x.reference).map((x) => x.libelle);
-      if (sansTexte.length) confirmationsGss.add(`Rédaction automatique indisponible pour ${sansTexte.length === 1 ? 'la réponse' : `${sansTexte.length} réponses`} du cadre ${[...new Set(sansTexte)].map((l) => `« ${l} »`).join(', ')} : à relire et compléter avant la remise (via l'assistant). Pouvez-vous indiquer les éléments à écrire ?`);
-    }
     const confirmationsParChamp = new Map<number, string[]>();
     // Case « PME : Oui / Non » : réponse de GSS au registre (statut_pme) ; à défaut, aucune case cochée et la question
     // posée à GSS (le mémoire type écrit « PME » alors que l'effectif de 380 salariés dépasse le seuil européen).
@@ -5650,6 +5685,18 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     if (missing.length > 0) {
       console.log(`[MemoireGenerator] Passe de complétion : ${missing.length} champ(s) manquant(s).`);
       await runPool(missing.map(d => () => answerField(d)), 2);
+    }
+    // Réponses restées sans texte après la passe de complétion (T8CS-3 : un champ simple aussi) : signalées à GSS.
+    {
+      const sansTexte = [...echecsRedaction.values()].filter((x) => !x.reference).map((x) => x.libelle);
+      if (sansTexte.length) {
+        // Placé, comme avant, juste après les alertes de la compréhension (en tête des questions du cadre).
+        const suite = [...confirmationsGss].filter((c) => !alertesComprehension.has(c));
+        confirmationsGss.clear();
+        alertesComprehension.forEach((c) => confirmationsGss.add(c));
+        confirmationsGss.add(`Rédaction automatique indisponible pour ${sansTexte.length === 1 ? 'la réponse' : `${sansTexte.length} réponses`} du cadre ${[...new Set(sansTexte)].map((l) => `« ${l} »`).join(', ')} : à relire et compléter avant la remise (via l'assistant). Pouvez-vous indiquer les éléments à écrire ?`);
+        suite.forEach((c) => confirmationsGss.add(c));
+      }
     }
 
     await harmoniserGrille();
@@ -6370,7 +6417,13 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         const label = (m ? m.slice(1).find(Boolean) : '') || ctx.replace(/\s*\|\s*Contexte proche:.*$/, '').trim();
         // Bloc de contacts : « Contact comptable — Prénom, Nom » (sinon trois questions identiques, sans le contact visé).
         const groupe = (ctx.match(/Groupe:\s*"([^"]*)"/) || [])[1];
-        const l = (groupe && label ? `${groupe} — ${label}` : label || `Champ ${r.id}`).trim();
+        // Forme des cartes de l'assistant, sans consolidation par le modèle (T8CS-4) : case de tableau par ligne et colonne,
+        // champ d'un contact « Cadre de réponse, « Contact comptable » : prénom, nom à indiquer ? ».
+        const caseT = /^Colonne:\s*"([^"]*)"\s*\|\s*Ligne:\s*"([^"]*)"/.exec(label);
+        const contact = groupe && /^(?:pr[ée]nom|nom\b|num[ée]ro|t[ée]l[ée]phone|portable|adresse (?:[ée]lectronique|mail|e-?mail)|courriel|e-?mail|fonction)/i.test(label.trim());
+        const l = (caseT ? questionCaseTableau(caseT[2], caseT[1])
+          : contact ? `Cadre de réponse, « ${groupe!.replace(/\s*:\s*$/, '')} » : ${label.trim().replace(/\s*:\s*$/, '').replace(/(?<![A-ZÀ-Ý])[A-ZÀ-Ý](?![A-ZÀ-Ý])/g, (c) => c.toLowerCase())} à indiquer ?`
+            : groupe && label ? `${groupe} — ${label}` : label || `Champ ${r.id}`).trim();
         if (!champDuLibelle.has(l)) champDuLibelle.set(l, r.id);
         return l;
       })
@@ -6637,10 +6690,11 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         ...new Set([
           ...(descriptors.some((d) => d.grille)
             ? await this.consoliderConsultations([...aCompleter.flatMap((q) => {
-              // Question générique d'un critère : les questions précises de ses emplacements, une fois chacune.
-              const champ = questionsVaguesGrille.get(q);
+              // Question générique d'un critère : les questions précises de ses emplacements, une fois chacune. Champ hors
+              // critère : les questions précises de ses emplacements aussi (celles des cartes de l'assistant, T8CS-4).
+              const champ = questionsVaguesGrille.get(q) ?? champDuLibelle.get(q);
               if (champ === undefined) return [q];
-              const precises = [...new Set(elementsACompleter.filter((el) => signets.find((x) => x.cle === el.cle)?.champ === champ).map((el) => el.question).filter((x) => x && !questionsVaguesGrille.has(x)))];
+              const precises = [...new Set(elementsACompleter.filter((el) => (questionsVaguesGrille.has(q) || el.statut === 'ouvert') && signets.find((x) => x.cle === el.cle)?.champ === champ).map((el) => el.question).filter((x) => x && !questionsVaguesGrille.has(x)))];
               return precises.length ? precises : [q];
             }), ...confirmationsGss], { dce: dceContext, horsNormandie: marcheHorsNormandie(analysisData, dceContext) })
             // Champ hors grille : la question précise de chacun de ses emplacements (« En complément du téléphone, utilisez-
@@ -6651,7 +6705,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
               const precises = [...new Set(elementsACompleter.filter((el) => el.statut === 'ouvert' && signets.find((x) => x.cle === el.cle)?.champ === champ).map((el) => el.question).filter(Boolean))];
               return precises.length ? precises : [q];
             }), ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))]),
-        ].map((c) => (/p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(c) ? 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».' : c).replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean).map(questionDonneeGss).map(questionExacte)),
+        ].map((c) => (!LIGNE_DETERMINISTE.test(c) && /p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(c) ? 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».' : c).replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean).map(questionDonneeGss).map(questionExacte)),
         // Lieu du site introuvable dans le DCE (T7-COH-2) : une seule question, aucun délai normand promis en attendant.
         ...questionLieuInconnu(analysisData, dceContext),
         // Grille de candidature : une question exacte par donnée de GSS (effectif, cadres, chiffre d'affaires, référence).
