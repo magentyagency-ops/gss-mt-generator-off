@@ -947,13 +947,18 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
   const proteger = (t: string) => t.replace(/\b((?:[A-Z]\.){2,})/g, (m) => m.replace(/\./g, '\u0002'));
   const retablir = (t: string) => t.replace(/\u0002/g, '.');
   const lignesSource = proteger(texte).split('\n');
-  const lignes = lignesSource.map((ligne) => ligne.split(/(?<=[.!?;])\s+/).map((ph) => {
+  // Ligne de tableau (dimensionnement : « | Intervenant rondier | … | 96 h par semaine | ») : un volume horaire, jamais un
+  // délai ; une ligne retirée couperait en plus le tableau (cstb 551, T6N-1).
+  const lignes = lignesSource.map((ligne) => (/^\s*\|/.test(ligne) ? [ligne] : ligne.split(/(?<=[.!?;])\s+/)).map((ph) => {
+    if (/^\s*\|/.test(ph)) return ph;
     if (!PRESENCE.test(ph) || /⟦AC:|\[CONSULTATION REQUISE/.test(ph)) return ph;
     const hors: string[] = [];
     const seuilsPhrase: Array<{ duree: string; objet: string }> = [];
     for (const m of ph.matchAll(DUREE)) {
       const apres = ph.slice((m.index || 0) + m[0].length, (m.index || 0) + m[0].length + 12);
       if (/^\s*avant\b/i.test(apres)) continue;               // « prise de service 15 minutes avant »
+      // Volume horaire (« 96 h par semaine », « 40 h/mois », « 1 607 h par an ») : pas un délai (T6N-1).
+      if (/^\s*(?:par|\/)\s*(?:semaine|mois|an|ann[ée]e|jour|nuit)\b|^\s*(?:hebdomadaires?|mensuel(?:le)?s?|annuel(?:le)?s?)\b/i.test(apres)) continue;
       const r = dansDce(m[1], m[2]);
       if (r.statut === 'oui') continue;
       hors.push(m[0]);
