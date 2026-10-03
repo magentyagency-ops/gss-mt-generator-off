@@ -5256,7 +5256,7 @@
  "questions_nouvelles": {
   "detection": "Exigence ou question du DCE (CCTP, RC, cadre de réponse) qui ne correspond à aucune section du mémoire type dans la matrice du bloc 1.",
   "proposition": "L'IA propose directement une réponse, construite uniquement à partir des sources GSS (base des mémoires, slides, registre). Sans source GSS : réponse structurée avec « [À COMPLÉTER] » là où une donnée manque, jamais de chiffre inventé.",
-  "validation": "GSS valide ou modifie la réponse dans l'assistant avant génération (système d'assistant et de modification/ajout existant) ; la réponse validée est enregistrée et réutilisée pour les appels d'offres suivants.",
+  "validation": "GSS valide, modifie ou supprime la réponse proposée dans l'assistant, avant la remise du mémoire (système d'assistant et de modification/ajout existant) ; la réponse validée vaut pour ce mémoire : elle n'est pas enregistrée dans la base des mémoires ni réutilisée pour les appels d'offres suivants (même question dans un autre DCE : nouvelle proposition à valider).",
   "placement": "Dans le bloc du même thème, en fin de bloc (ou à la place imposée par le cadre), avec son schéma si la réponse décrit un process."
  },
  "questions_gss_une_fois": {
