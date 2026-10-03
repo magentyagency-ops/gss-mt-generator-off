@@ -60,11 +60,19 @@ const CHARS_PER_LINE = 90;
  *  limite (400 mots, lignes de 90 caractères) coupait en deux pages des rubriques qui tiennent sur une seule.
  *  Les lignes de tableau sont désormais estimées d'après leur hauteur réelle (voir lignesParagraphe) ; « ligneTableau »
  *  marque la mise en page v2. */
-const LIMITES_TEXTE_SEUL = { refonte: { mots: 560, lignes: 40, caracteres: 105, ligneTableau: 1.8 }, origine: { mots: 280, lignes: 28 } };
+const LIMITES_TEXTE_SEUL = {
+  refonte: { mots: 560, lignes: 40, caracteres: 105, ligneTableau: 1.8 },
+  origine: { mots: 280, lignes: 28 },
+  // Mémoire type (v2) rendu dans le thème de retour arrière « gss-2026-09 » (T10N-5) : mesure d'origine du thème (pages remplies
+  // à 0,89 au plus avec 280 mots et 28 lignes), un peu plus pleine, et regroupement des paragraphes d'une rubrique en 2 pages
+  // de texte au plus quand elles suffisent (main courante : 7, 20 puis 6 lignes sur 3 pages) ; jamais de page resserrée (la
+  // classe « texte-serre » n'existe que dans les thèmes de la refonte).
+  ancienThemeV2: { mots: 300, lignes: 30, serre: false, regrouper: true },
+};
 
 /** Limites de découpage d'une page de texte : mots, lignes estimées et, pour la mise en page v2 de la refonte, longueur
  *  d'une ligne et poids d'une ligne de tableau (absents : estimation d'origine, lignes de 90 caractères). */
-interface LimitesPage { mots: number; lignes: number; caracteres?: number; ligneTableau?: number }
+interface LimitesPage { mots: number; lignes: number; caracteres?: number; ligneTableau?: number; /** false : jamais de page resserrée. */ serre?: boolean; /** Regroupement des pages d'une rubrique (dernière page courte, 2 pages au lieu de 3). */ regrouper?: boolean }
 /** Path to Marp assets (CSS + logo) bundled with the backend. */
 const MARP_ASSETS_DIR = path.resolve(__dirname, 'marp');
 
@@ -234,12 +242,35 @@ function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots: MAX_W
 
   // Mise en page v2 de la refonte (pages de texte seules) : pas de dernière page de quelques lignes. Elle rejoint la
   // page précédente quand l'ensemble tient dans une page resserrée (la page est alors rendue en « texte-serre »).
+  // Thème de retour arrière avec le mémoire type (T10N-5) : 3 pages ou plus alors que 2 suffisent → 2 pages, la coupe la plus
+  // équilibrée entre paragraphes (chacune dans les limites).
+  if (limites.regrouper && chunks.length >= 3) {
+    // Unités de coupe : les lignes des paragraphes (un paragraphe ou une liste peut continuer sur la page suivante), jamais
+    // après un sous-titre (« ## … », ligne « **…** » seule) ni après une amorce de liste (« … : »).
+    const unites: Array<{ t: string; p: number }> = [];
+    chunks.join('\n\n').split(/\n{2,}/).map((x) => x.trim()).filter(Boolean).forEach((para, p) => {
+      for (const l of para.split('\n')) unites.push({ t: l, p });
+    });
+    const texteDe = (u: Array<{ t: string; p: number }>) => u.map((x, i) => (i && u[i - 1].p !== x.p ? `\n\n${x.t}` : i ? `\n${x.t}` : x.t)).join('');
+    let meilleur: { k: number; ecart: number } | null = null;
+    for (let k = 1; k < unites.length; k++) {
+      if (isHeading(unites[k - 1].t) || /^\s*\*\*[^*]+\*\*\s*$/.test(unites[k - 1].t) || /:\s*$/.test(unites[k - 1].t)) continue;
+      // Ligne de tableau : jamais coupée au milieu d'un tableau.
+      if (/^\s*\|/.test(unites[k - 1].t) && /^\s*\|/.test(unites[k].t)) continue;
+      const a = texteDe(unites.slice(0, k)), b = texteDe(unites.slice(k));
+      const la = lignesTexte(a, limites), lb = lignesTexte(b, limites);
+      if (la > limites.lignes || lb > limites.lignes || wordCount(a) > limites.mots || wordCount(b) > limites.mots) continue;
+      if (!meilleur || Math.abs(la - lb) < meilleur.ecart) meilleur = { k, ecart: Math.abs(la - lb) };
+    }
+    if (meilleur) chunks.splice(0, chunks.length, texteDe(unites.slice(0, meilleur.k)), texteDe(unites.slice(meilleur.k)));
+  }
   const n = chunks.length;
-  if (limites.ligneTableau !== undefined && n >= 2) {
+  if ((limites.ligneTableau !== undefined || limites.regrouper) && n >= 2) {
     const derniere = lignesTexte(chunks[n - 1], limites);
     const ensemble = lignesTexte(chunks[n - 2], limites) + derniere;
     const mots = wordCount(chunks[n - 2]) + wordCount(chunks[n - 1]);
-    if (derniere < limites.lignes * SEUIL_PAGE_ORPHELINE && ensemble <= limites.lignes * MARGE_PAGE_SERREE && mots <= limites.mots * MARGE_PAGE_SERREE) {
+    const marge = limites.serre === false ? 1 : MARGE_PAGE_SERREE;
+    if (derniere < limites.lignes * SEUIL_PAGE_ORPHELINE && ensemble <= limites.lignes * marge && mots <= limites.mots * marge) {
       chunks.splice(n - 2, 2, `${chunks[n - 2]}\n\n${chunks[n - 1]}`);
     }
   }
@@ -249,7 +280,7 @@ function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots: MAX_W
 
 /** Page de texte de la v2 plus haute que la limite normale (regroupement d'une fin de rubrique) : rendu resserré. */
 function pageSerree(chunk: string, limites?: LimitesPage): boolean {
-  return !!limites && limites.ligneTableau !== undefined && lignesTexte(chunk, limites) > limites.lignes;
+  return !!limites && limites.ligneTableau !== undefined && limites.serre !== false && lignesTexte(chunk, limites) > limites.lignes;
 }
 
 /**
@@ -290,7 +321,7 @@ function slideKeyOf(chapterIdx: number, sectionIdx: number, chunkIdx: number): s
  *  dans la mise en page « 1 à 2 pages de texte, puis 1 page de schéma »). */
 function limitesSection(section: AssembleSection, theme: string): LimitesPage | undefined {
   if (!section.schemaPleinePage && !section.texteSeul) return undefined;
-  return estRetourArriere(theme) ? LIMITES_TEXTE_SEUL.origine : LIMITES_TEXTE_SEUL.refonte;
+  return estRetourArriere(theme) ? LIMITES_TEXTE_SEUL.ancienThemeV2 : LIMITES_TEXTE_SEUL.refonte;
 }
 
 /** Pages statiques « Ils nous font confiance » après ce chapitre : choix explicite du plan (réponse libre v2), sinon
