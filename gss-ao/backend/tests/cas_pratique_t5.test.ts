@@ -15,28 +15,31 @@ const REP = {
   cas_pratique: { plages: PL, dispositif: PL.flatMap((p) => P.map((pr, i) => ({ plage: p.libelle, profil: pr, en_service: N[p.libelle][i] }))) },
   mises_en_situation: [{ libelle: 'Sécurisation de la fête communale sur la voie publique pendant 48 heures', citation: 'sécurisation d’un périmètre de manifestation sur la voie publique pour 48 heures', capacite: null, pif: 0, detecteurs: 0, dispositif: [{ fonction: 'Agent de sécurité au contrôle des accès', nombre: 8 }] }],
 };
+// Tour 7 (T7N-1) : une mise en situation qui reprend le scénario du cas pratique est écartée quand le cas pratique est relevé ;
+// les tests du rendu des mises en situation portent donc sur une réponse sans cas pratique.
+const REP_MISE = { ...REP, cas_pratique: null };
 const CHAMP10 = 'Mise en situation appliquée : Descriptif de la solution suggérée par le candidat en cas d’absence de 2 agents et d’1 chien ne pouvant exercer ; Descriptif de la solution en cas de débordement: intrusion au sein du périmètre défini et dégradation de type vandalisme';
 
 describe('mises en situation du cadre (T5CP-3)', () => {
   it('0 PIF et 0 détecteur non demandés par le DCE : rien n’est écrit', () => {
-    const d = calculerDimensionnement(REP, DCE)!;
+    const d = calculerDimensionnement(REP_MISE, DCE)!;
     expect(d.misesEnSituation![0].pif).toBeNull();
     expect(d.misesEnSituation![0].detecteurs).toBeNull();
     expect(dispositifMiseEnSituation(d.misesEnSituation![0])).toBe('8 agents en service (8 agents de sécurité au contrôle des accès)');
   });
   it('0 demandé par le DCE : « aucun » en toutes lettres', () => {
-    const d = calculerDimensionnement(REP, `${DCE}\nLe candidat précise le nombre de PIF et de détecteurs de métaux.`)!;
+    const d = calculerDimensionnement(REP_MISE, `${DCE}\nLe candidat précise le nombre de PIF et de détecteurs de métaux.`)!;
     expect(dispositifMiseEnSituation(d.misesEnSituation![0])).toContain('aucun poste d\'inspection filtrage (PIF) ; aucun détecteur de métaux');
   });
   it('proposition reprise d’une génération antérieure : son « 0 » non demandé n’est plus imprimé', () => {
-    const d = calculerDimensionnement(REP, DCE)!;
+    const d = calculerDimensionnement(REP_MISE, DCE)!;
     const ancienne = { ...d.misesEnSituation![0], pif: 0, detecteurs: 0 };
     const r = reprendreMisesEnSituation(d.misesEnSituation!, { empreinte: 'e', misesEnSituation: [ancienne] }, 'e');
     expect(r.reprises).toBe(true);
     expect(dispositifMiseEnSituation(r.misesEnSituation[0])).not.toMatch(/PIF|détecteur/);
   });
   it('le dispositif n’est ajouté qu’au champ qui décrit la mise en situation', () => {
-    const d = calculerDimensionnement(REP, DCE)!;
+    const d = calculerDimensionnement(REP_MISE, DCE)!;
     expect(miseEnSituationDuChamp(CHAMP10, d.misesEnSituation![0])).toBe(false);
     expect(completerMisesEnSituation('Réponse.', d, CHAMP10).n).toBe(0);
     expect(completerMisesEnSituation('Réponse.', d, 'Présentation du dispositif : sécurisation de la fête communale sur la voie publique').n).toBe(1);

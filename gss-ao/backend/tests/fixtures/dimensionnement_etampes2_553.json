@@ -1,0 +1,132 @@
+{
+ "postes": [],
+ "cas_pratique": {
+  "plages": [
+   {
+    "libelle": "Dimanche férié, 6 h–21 h",
+    "debut": "06:00",
+    "fin": "21:00"
+   },
+   {
+    "libelle": "Nuit, 21 h–6 h",
+    "debut": "21:00",
+    "fin": "06:00"
+   },
+   {
+    "libelle": "Lundi férié, 6 h–21 h",
+    "debut": "06:00",
+    "fin": "21:00"
+   }
+  ],
+  "dispositif": [
+   {
+    "plage": "Dimanche férié, 6 h–21 h",
+    "profil": "Agent de sécurité",
+    "en_service": 10,
+    "justification": "Huit agents assurent le contrôle des accès et deux patrouillent le périmètre de 5 500 m² et les installations, compte tenu des huit accès véhicules et des visiteurs."
+   },
+   {
+    "plage": "Dimanche férié, 6 h–21 h",
+    "profil": "Maître-chien",
+    "en_service": 1,
+    "justification": "Un maître-chien avec son chien renforce la dissuasion et la surveillance mobile du périmètre et des équipements."
+   },
+   {
+    "plage": "Dimanche férié, 6 h–21 h",
+    "profil": "Agent de sécurité incendie",
+    "en_service": 1,
+    "justification": "Un agent de sécurité incendie veille aux risques liés aux tentes, bâches, scène et arceaux de lumières pendant l’accueil du public."
+   },
+   {
+    "plage": "Dimanche férié, 6 h–21 h",
+    "profil": "Encadrant",
+    "en_service": 0,
+    "justification": "Un encadrant peut effectuer des passages de contrôle et rester joignable sans être affecté en permanence au service."
+   },
+   {
+    "plage": "Nuit, 21 h–6 h",
+    "profil": "Agent de sécurité",
+    "en_service": 8,
+    "justification": "Huit agents maintiennent le contrôle des accès jusqu’à la fermeture au public à 22 h 30, puis sécurisent les accès et surveillent les équipements et le périmètre."
+   },
+   {
+    "plage": "Nuit, 21 h–6 h",
+    "profil": "Maître-chien",
+    "en_service": 1,
+    "justification": "Un maître-chien avec son chien renforce les rondes nocturnes autour des tentes, de la scène et des véhicules municipaux."
+   },
+   {
+    "plage": "Nuit, 21 h–6 h",
+    "profil": "Agent de sécurité incendie",
+    "en_service": 1,
+    "justification": "Un agent de sécurité incendie surveille les risques associés aux installations et matériaux présents sur le site pendant la nuit."
+   },
+   {
+    "plage": "Nuit, 21 h–6 h",
+    "profil": "Encadrant",
+    "en_service": 0,
+    "justification": "Un encadrant peut réaliser des passages de contrôle et assurer l’astreinte sans présence permanente sur le site."
+   },
+   {
+    "plage": "Lundi férié, 6 h–21 h",
+    "profil": "Agent de sécurité",
+    "en_service": 10,
+    "justification": "Huit agents assurent le contrôle des accès et deux patrouillent le périmètre de 5 500 m² et les installations, compte tenu des huit accès véhicules et des visiteurs."
+   },
+   {
+    "plage": "Lundi férié, 6 h–21 h",
+    "profil": "Maître-chien",
+    "en_service": 1,
+    "justification": "Un maître-chien avec son chien renforce la dissuasion et la surveillance mobile du périmètre et des équipements."
+   },
+   {
+    "plage": "Lundi férié, 6 h–21 h",
+    "profil": "Agent de sécurité incendie",
+    "en_service": 1,
+    "justification": "Un agent de sécurité incendie veille aux risques liés aux tentes, bâches, scène et arceaux de lumières pendant l’accueil du public."
+   },
+   {
+    "plage": "Lundi férié, 6 h–21 h",
+    "profil": "Encadrant",
+    "en_service": 0,
+    "justification": "Un encadrant peut effectuer des passages de contrôle et rester joignable sans être affecté en permanence au service."
+   }
+  ]
+ },
+ "mises_en_situation": [
+  {
+   "libelle": "Mise en situation : fête communale sur la place Saint Gilles, 48 heures",
+   "citation": "Manifestation à sécuriser : Fête communale\nLieu de la sécurisation : Place Saint Gilles \nDimension : 5 500 m²  \nClôture : Oui. Pose de barrières Vauban assuré par la collectivité\nAccès véhicule : 8 accès par les rues adjacentes \nNombre envisagé de visiteurs : 2500 sur les 48h\nHeures d’ouverture au public et exposants : de 8h à 22h30\nCondition d’exécution : Matériel à conserver sous surveillance, à savoir :\nTentes et stands d’exposants ;\nTentes et bâches municipales ;\nScène et arceaux de lumières appartenant à la collectivité\nVéhicules appartenant à la collectivité\nMissions à réaliser : \nSécurisation du périmètre de jour et de nuit ;\nContrôle des entrées exposants et spectateurs;",
+   "capacite": 2500,
+   "dispositif": [
+    {
+     "fonction": "Chef de site",
+     "nombre": 1,
+     "justification": "Un chef de site coordonne les équipes, les relèves et les échanges avec la collectivité sur les deux journées et la nuit."
+    },
+    {
+     "fonction": "Agent de sécurité au contrôle des accès",
+     "nombre": 8,
+     "justification": "Un agent par accès permet de contrôler les entrées exposants et spectateurs sur les huit accès identifiés pendant les heures d’ouverture."
+    },
+    {
+     "fonction": "Agent de sécurité en surveillance et rondes",
+     "nombre": 2,
+     "justification": "Deux agents assurent les patrouilles du périmètre clôturé de 5 500 m² et la surveillance des tentes, de la scène et des véhicules."
+    },
+    {
+     "fonction": "Maître-chien",
+     "nombre": 1,
+     "justification": "Un maître-chien avec son chien apporte une capacité de dissuasion et de surveillance mobile, notamment en période nocturne."
+    },
+    {
+     "fonction": "Agent de sécurité incendie",
+     "nombre": 1,
+     "justification": "Un agent de sécurité incendie surveille les risques liés aux tentes, bâches, installations de scène et à l’accueil du public."
+    }
+   ],
+   "pif": null,
+   "detecteurs": null
+  }
+ ]
+}

@@ -103,6 +103,25 @@ function citationDansDce(citation: string, dceMots: string): boolean {
   return false;
 }
 
+/** Citation située dans le texte qui suit un intitulé « Cas pratique » du DCE (2 000 caractères au plus après lui). */
+export function citationDuCasPratique(citation: string, dceMots: string): boolean {
+  const mots = normaliser(citation).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+  if (mots.length < 3) return false;
+  const debuts: number[] = [];
+  for (let i = dceMots.indexOf(' cas pratique '); i >= 0; i = dceMots.indexOf(' cas pratique ', i + 1)) debuts.push(i);
+  if (!debuts.length) return false;
+  for (let k = 0; k + Math.min(6, mots.length) <= mots.length; k++) {
+    const extrait = ` ${mots.slice(k, k + Math.min(6, mots.length)).join(' ')} `;
+    for (let p = dceMots.indexOf(extrait); p >= 0; p = dceMots.indexOf(extrait, p + 1)) {
+      // Intitulé le plus proche avant la citation : « cas pratique » (et non une « mise en situation » qui suivrait).
+      const cas = Math.max(-1, ...debuts.filter((d) => d <= p));
+      const mise = dceMots.lastIndexOf(' mise en situation ', p);
+      if (cas >= 0 && p - cas <= 2000 && mise < cas) return true;
+    }
+  }
+  return false;
+}
+
 const NOMBRES_EN_LETTRES: Record<string, number> = { deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, neuf: 9, dix: 10 };
 
 /**
@@ -255,7 +274,11 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     if (!plage || !profil || !d || !Number.isInteger(n) || n < 0 || n > 10) continue;
     casPratique.push({ plage, profil, enService: n, rotation: n * Math.ceil(d / VACATION_MAX_H), dureeH: d, justification: String(l?.justification || '').trim(), ...bornesCas.get(plage) });
   }
-  const misesEnSituation = lireMisesEnSituation(rep?.mises_en_situation, dce, dceMots);
+  // Le scénario du cas pratique n'est jamais aussi une mise en situation (T7N-1, etampes2 553 : « fête communale sur la place
+  // Saint Gilles, 48 heures » relevée deux fois, avec deux dispositifs contradictoires) : le cas pratique, demandé par le DQE,
+  // fait foi ; une mise en situation dont la citation est le texte qui suit l'intitulé « Cas pratique » du DCE est écartée.
+  const misesEnSituation = lireMisesEnSituation(rep?.mises_en_situation, dce, dceMots)
+    .filter((m) => !casPratique.length || !citationDuCasPratique(m.citation || '', dceMots));
   // Accord-cadre sans poste permanent, avec un cas pratique : l'équipe proposée est celle du cas pratique (pour chaque
   // profil, l'effectif nécessaire à la rotation sur la plage la plus exigeante).
   if (!profils.size && casPratique.length) {
