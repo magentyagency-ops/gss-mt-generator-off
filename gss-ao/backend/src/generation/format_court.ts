@@ -30,11 +30,27 @@ export function passagesLimitePages(dce: string): string[] {
   const out: Array<{ pos: number; texte: string }> = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(dce)) && out.length < 8) {
-    const autour = dce.slice(Math.max(0, m.index - 90), m.index + m[0].length + 90);
+    // Pagination d'une pièce (« Le présent CCTP comporte 9 pages numérotées de 1 à 9 », ifits, T9CS-2) : pas une limite.
+    const avant = dce.slice(Math.max(0, m.index - 40), m.index);
+    if (/\bcomporte(?:nt)?\s*$/i.test(avant) || /^\s+num[ée]rot/i.test(dce.slice(m.index + m[0].length, m.index + m[0].length + 14))) continue;
+    // « Date limite de réception des offres », « heure limite », « délai limite de remise » : pas une limite de pages.
+    const autour = dce.slice(Math.max(0, m.index - 90), m.index + m[0].length + 90)
+      .replace(/(?:dates?|heures?|d[ée]lais?)\s+limites?|limites?\s+(?:de\s+|d['’]\s*)?(?:r[ée]ception|remise|d[ée]p[ôo]t|validit[ée]|ex[ée]cution)/gi, ' ');
     if (!limite.test(autour) || out.some((o) => Math.abs(o.pos - m!.index) < 800)) continue;
     out.push({ pos: m.index, texte: dce.slice(Math.max(0, m.index - 700), m.index + 1300) });
   }
   return out.map((o) => o.texte);
+}
+
+/**
+ * Phrase d'un passage qui contient le nombre de pages et le terme de limite (« Maximum 7 pages recto »), pour la citer à
+ * GSS (T9CS-2 : jamais le début du passage de 2 000 caractères, en-tête d'une autre pièce compris). '' si aucune.
+ */
+export function phraseLimitePages(passage: string): string {
+  const LIMITE = /maxim|limit|d[ée]pass|exc[èé]d|au plus|plafon/i;
+  const phrases = String(passage || '').replace(/\s+/g, ' ').split(/(?<=[.;!?])\s+(?=[A-ZÀ-Ý•–—-])|\s+[–—•|]\s+/);
+  const ph = phrases.find((x) => /\(?\b\d{1,3}\)?\s*(?:pages?|feuillets?|faces?)\b/i.test(x) && LIMITE.test(x.replace(/(?:dates?|heures?|d[ée]lais?)\s+limites?/gi, ' ')));
+  return ph ? ph.replace(/^\s*[–—•-]\s*/, '').trim() : '';
 }
 
 /**

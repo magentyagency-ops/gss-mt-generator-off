@@ -3,7 +3,7 @@ import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema, dessinerSpecs, finaliserSvg } from './schema_service';
 import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce, phraseContraireAuDce } from './visuels_cadre';
-import { FormatImpose, PartieCourte, passagesLimitePages, limitePagesMemoire, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
+import { FormatImpose, PartieCourte, passagesLimitePages, limitePagesMemoire, phraseLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque, estRetourArriere } from './themes';
 import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, regrouperQuestions, completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, lireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements } from './completion';
@@ -9231,7 +9231,9 @@ Renvoie UNIQUEMENT un objet JSON : {"limite": true|false, "pagesMax": nombre, "c
         console.warn(`[MemoireGenerator] Format imposé par le RC : réponse du modèle indisponible ; ${lue.pages} pages maximum lues dans le RC (plan par défaut).`);
         return { pagesMax: lue.pages, plan, source: lue.citation };
       }
-      this.alertesFormat.push(`Le RC mentionne une limite de pages (« ${extrait(passages[0].replace(/\s+/g, ' ').trim())} ») que la rédaction automatique n'a pas pu lire : le mémoire est rédigé sans limite de pages. Vérifiez si cette limite porte sur le mémoire technique et relancez la génération avant la remise.`);
+      // Phrase qui contient le nombre de pages (T9CS-2), jamais le début du passage (en-tête d'une autre pièce).
+      const phrase = passages.map(phraseLimitePages).find(Boolean) || passages[0].replace(/\s+/g, ' ').trim();
+      this.alertesFormat.push(`Le RC mentionne une limite de pages (« ${extrait(phrase)} ») que la rédaction automatique n'a pas pu lire : le mémoire est rédigé sans limite de pages. Vérifiez si cette limite porte sur le mémoire technique et relancez la génération avant la remise.`);
       console.warn('[MemoireGenerator] Format imposé par le RC : réponse du modèle indisponible et limite du mémoire technique non lue dans le RC ; alerte posée.');
       return null;
     }
