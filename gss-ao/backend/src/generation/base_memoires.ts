@@ -910,7 +910,11 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
   // Le DCE écrit parfois le délai en toutes lettres (« moins de cinq minutes »).
   const LETTRES: Record<string, string> = { '1': 'une?', '2': 'deux', '3': 'trois', '4': 'quatre', '5': 'cinq', '6': 'six', '8': 'huit', '10': 'dix', '12': 'douze', '15': 'quinze', '20': 'vingt', '24': 'vingt-quatre', '30': 'trente', '45': 'quarante-cinq', '48': 'quarante-huit', '60': 'soixante', '72': 'soixante-douze' };
   /** 'oui' : délai imposé par le DCE ; 'seuil' : seulement un seuil de pénalité (objet du délai) ; 'non' : absent. */
-  const dansDce = (n: string, u: string): { statut: 'oui' | 'seuil' | 'non'; objet?: string } => {
+  // Phrase de GSS sur la remise d'un document (« Les documents demandés… sont remis… dans les 72 h suivant la première
+  // demande ») : son délai est celui que l'acheteur fixe pour ses documents, valable partout (T7N-4).
+  const PHRASE_DOCUMENT = (ph: string) => /\b(?:remis|remise|remettre|transmis|transmise|transmission|transmettre|fourni|fournis)\b/i.test(ph)
+    && /\b(?:documents?|reportings?|rapports?|plannings?|bons? d.intervention|comptes?[- ]rendus?|habilitations?)\b/i.test(ph);
+  const dansDce = (n: string, u: string, ph: string): { statut: 'oui' | 'seuil' | 'non'; objet?: string } => {
     const unite = /^m/i.test(u) ? '(?:minutes?|min\\b|mn\\b)' : '(?:heures?|h\\b)';
     const chiffre = `${n.replace('.', '[.,]').replace(',', '[.,]')}`;
     // Chiffre et lettres dans les deux ordres : « trente (30) minutes » comme « 30 (trente) minutes » (IFITS).
@@ -925,6 +929,15 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
       const autour = dceNorm.slice(Math.max(0, (m.index || 0) - 70), (m.index || 0) + m[0].length + 50);
       // Durée qui n'est pas un délai (« 24 heures de stationnement au tarif horaire ») : ignorée.
       if (/stationnement|tarif|recharge|cons[ée]cuti/i.test(autour.slice(60, 140))) continue;
+      // Délai de remise d'un document fixé par l'acheteur (cstb : « non remise de document… remise tardive lors d'une
+      // sollicitation ponctuelle (+ 72h à partir de la 1ère demande) ») : exigence valable partout pour une phrase de GSS
+      // sur la remise des documents ; jamais un délai de présence pour une autre phrase (T7N-4).
+      const debutPhrase = dceNorm.slice(Math.max(0, (m.index || 0) - 200), m.index || 0).split(/[.;!?](?=\s)/).pop() || '';
+      if (/\bremis(?:e)?\b|\bdocuments?\b|reportings?|\brapports?\b|\bplannings?\b|sollicitation|transmission/.test(debutPhrase)
+        && !/interven|rempla|astreinte|arriv|sur (?:site|place)|lev[ée]e de doute|mobilis|prise de service/.test(debutPhrase)) {
+        if (PHRASE_DOCUMENT(ph)) return { statut: 'oui' };
+        continue;
+      }
       if (!/€|euros?\b|manquement|p[ée]nalit|retard (?:sup|inf)|retard d.un agent/i.test(autour)) return { statut: 'oui' };
       if (seuil) continue;
       // Objet du seuil pris dans son contexte immédiat : « Absence d'un agent ou retard supérieur à 60 min » est une
@@ -960,14 +973,17 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
     for (const m of ph.matchAll(DUREE)) {
       const apres = ph.slice((m.index || 0) + m[0].length, (m.index || 0) + m[0].length + 12);
       if (/^\s*avant\b/i.test(apres)) continue;               // « prise de service 15 minutes avant »
+      if (/^\s*(?:\/|sur)\s*24\b/i.test(apres)) continue;      // « 24 h/24 », « 24 h sur 24 » : une amplitude, pas un délai
       // Plage horaire d'une ligne de tableau (« Dimanche férié, 6 h–21 h ») : une heure de la journée, pas un délai.
       if (tableau && /^h/i.test(m[2]) && (/^\s*(?:[–-]|à)\s*\d/.test(apres) || /\d\s*h(?:\s*\d{2})?\s*(?:[–-]|à)\s*$/i.test(ph.slice(Math.max(0, (m.index || 0) - 12), m.index || 0)))) continue;
       // Volume horaire (« 96 h par semaine », « 40 h/mois », « 1 607 h par an ») : pas un délai (T6N-1).
       if (/^\s*(?:par|\/)\s*(?:semaine|mois|an|ann[ée]e|jour|nuit)\b|^\s*(?:hebdomadaires?|mensuel(?:le)?s?|annuel(?:le)?s?)\b/i.test(apres)) continue;
-      const r = dansDce(m[1], m[2]);
+      const r = dansDce(m[1], m[2], ph);
       if (r.statut === 'oui') continue;
       hors.push(m[0]);
-      if (r.statut === 'seuil') seuilsPhrase.push({ duree: m[0].replace(/\s+/g, ' '), objet: r.objet || 'intervention' });
+      // Seuil dont l'objet n'est pas reconnu (« dépassement ») : la phrase est retirée et la question posée, sans phrase type
+      // (jamais « GSS organise ses remplacements » pour un délai qui ne porte pas sur une absence, T7N-4).
+      if (r.statut === 'seuil' && r.objet !== 'dépassement') seuilsPhrase.push({ duree: m[0].replace(/\s+/g, ' '), objet: r.objet || 'intervention' });
     }
     if (!hors.length) return ph;
     if (tableau) {

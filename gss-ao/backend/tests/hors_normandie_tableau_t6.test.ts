@@ -61,3 +61,12 @@ describe('delaisHorsNormandie : ligne de tableau qui promet un délai normand (R
     expect(delaisHorsNormandie(t, dce, false).texte).toBe(t);
   });
 });
+
+describe('delaisHorsNormandie : amplitude « 24 h/24 » (REG7-1)', () => {
+  it('ligne du périmètre (citedia 341) : gardée', () => {
+    const t = "| Site | Poste | Horaires | Qualification | Missions |\n|---|---|---|---|---|\n| Ensemble des parcs | Premier agent mobile | Du lundi au samedi de 21 h à 9 h ; 24 h/24 les dimanches et jours fériés | SSIAP 1 | Rondes et interventions, levées de doute |";
+    const r = delaisHorsNormandie(t, 'Parcs de stationnement de Lyon (69003).', true);
+    expect(r.texte).toBe(t);
+    expect(r.retires).toEqual([]);
+  });
+});
