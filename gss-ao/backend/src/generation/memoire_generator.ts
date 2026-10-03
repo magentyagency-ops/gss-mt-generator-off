@@ -1260,6 +1260,24 @@ const LIBELLES_IDENTITE_DETERMINISTES = 'Surveillance humaine et gardiennage (ac
  * cynophile affecté, le chien doit être tenu en laisse… », « durée du marché prévue aux pièces contractuelles ») est
  * présentée comme l'exigence du DCE à laquelle GSS doit répondre, avec une vraie question.
  */
+/**
+ * Alerte de la réponse libre quand des appels au modèle ont échoué pendant la génération (OpenAI en panne, T5-COH-2) :
+ * étapes concernées, rubriques non adaptées au CCTP ; '' si tout a répondu.
+ */
+export function alerteRedactionIndisponible(labels: string[], nonAdaptees: string[] = []): string {
+  if (!labels.length) return '';
+  const etapes: string[] = [];
+  const a = (rx: RegExp, nom: string) => { if (labels.some((l) => rx.test(l)) && !etapes.includes(nom)) etapes.push(nom); };
+  a(/analyse dce/i, 'analyse du DCE');
+  a(/matrice|exigences|couverture|coh[ée]rence/i, 'lecture et contrôle des exigences du CCTP');
+  a(/obligations|horaires|valeurs impos/i, 'délais, fréquences et horaires imposés par le CCTP');
+  a(/proposition|nouvelle/i, 'propositions de réponse aux questions nouvelles');
+  a(/compr[ée]hension/i, 'compréhension du besoin');
+  a(/^adaptation/i, 'adaptation des rubriques au CCTP');
+  const n = labels.length;
+  return `Rédaction automatique indisponible pendant la génération (${n} appel${n > 1 ? 's' : ''} au modèle sans réponse)${etapes.length ? ` : ${etapes.join(', ')}` : ''}${nonAdaptees.length ? ` ; rubrique${nonAdaptees.length > 1 ? 's' : ''} non adaptée${nonAdaptees.length > 1 ? 's' : ''} au CCTP : ${nonAdaptees.map((t) => `« ${t} »`).join(', ')}` : ''}. Le mémoire n'est pas complet : relancez la génération avant la remise.`;
+}
+
 /** Ligne de consultation déjà formulée sans modèle (jamais envoyée à la fusion par le modèle, jamais reformulée). */
 export const LIGNE_DETERMINISTE = /^(?:Proposition à valider|Proposition de réponse à valider|Réponse à relire|Réponse «|Réponse du cadre\s*:|Phrases adaptées au cahier des charges|Partie «|Rubrique «|Rédaction automatique indisponible)/;
 
@@ -2315,6 +2333,8 @@ export class MemoireGenerator {
   private demandeParticuliere: DemandeParticuliere | null = null;
   /** Crédit OpenAI épuisé pendant cette génération : plus aucun appel, aucun document produit (CreditOpenAIEpuise). */
   private creditOpenAIEpuise = false;
+  /** Appels au modèle échoués pendant cette génération (OpenAI en panne, erreur 5xx…) : libellés des étapes (T5-COH-2). */
+  private appelsEchoues: string[] = [];
   private verifierCredit(): void {
     if (this.creditOpenAIEpuise) throw new CreditOpenAIEpuise();
   }
@@ -2660,9 +2680,11 @@ export class MemoireGenerator {
           continue;
         }
         console.error(`[MemoireGenerator] ${label}: appel API échoué (status=${status}): ${msg.slice(0, 240)}`);
+        this.appelsEchoues.push(label);
         return null;
       }
     }
+    this.appelsEchoues.push(label);
     return null;
   }
 
@@ -3904,6 +3926,7 @@ Renvoie un JSON valide :
     const settings = getSettings();
     const baseDir = path.resolve(__dirname, '../../');
     const uploadedDceDir = path.resolve(baseDir, `../data/output/dce_${dossierId}`);
+    this.appelsEchoues = [];
     const dp = demandeParticuliere || {};
     this.demandeParticuliere = (dp.demande?.trim() || dp.documentTexte?.trim())
       ? { demande: dp.demande?.trim() || '', documentNom: dp.documentNom, documentTexte: (dp.documentTexte || '').trim() }
@@ -7545,6 +7568,9 @@ RÈGLES DE FORME (rendu Marp) :
     const aAdapter = plan.rubriques.filter((r) => sections[r.id] && (r.mode === 'adapte' || (r.mode === 'fixe' && repartition?.parRubrique[r.id]?.length)));
     // Demande particulière : points de fond, forme et passages du document complémentaire (sources GSS autorisées).
     const demandeMT = this.demandeMemoireType(repartition);
+    /** Rubriques dont le cahier des charges exclut la mission (T5CP-1) et rubriques non adaptées faute de modèle (T5-COH-2). */
+    const rubriquesExclues: Array<{ id: string; titre: string; extrait: string; par: string }> = [];
+    const rubriquesNonAdaptees: string[] = [];
     let adaptees = 0;
     await enParallele(aAdapter, 4, async (rp) => {
       const r = mtParId.get(rp.id)!;
@@ -7560,16 +7586,27 @@ RÈGLES DE FORME (rendu Marp) :
         horsNormandie,
       }, appelAdaptation, { nombresAutorises: [registreGss, this.texteDemande()], nomsAutorises: [registreGss, referents, this.texteDemande()] });
       sections[rp.id] = res.texte;
+      // Mission décrite par la rubrique niée par le cahier des charges (cstb 551 : « Gestion des entrées : pendant l'ouverture
+      // du site, celui-ci n'est pas surveillé » proposé à la place du filtrage) : rubrique retirée, signalée à GSS (T5CP-1).
+      if (res.missionExclue) rubriquesExclues.push({ id: rp.id, titre: r.titre, ...res.missionExclue });
+      if (res.repli && /appel au modèle impossible|réponse du modèle illisible/.test(res.raison || '')) rubriquesNonAdaptees.push(r.titre);
       adaptees++;
       progres(18 + Math.round((30 * adaptees) / Math.max(1, aAdapter.length)), `Adaptation au CCTP : ${adaptees}/${aAdapter.length} rubrique(s)…`);
       console.log(`[MemoireGenerator] Adaptation ${rp.id} : ${res.appliquees.length} modification(s) appliquée(s), ${res.refusees.length} refusée(s), fidélité ${res.fidelite.toFixed(2)}${res.repli ? ` — texte de référence conservé (${res.raison})` : ''}.`);
     });
 
+    // Rubrique dont la mission est exclue par le cahier des charges : retirée du plan et du mémoire, signalée (T5CP-1).
+    for (const x of rubriquesExclues) {
+      delete sections[x.id];
+      const k = plan.rubriques.findIndex((r) => r.id === x.id);
+      if (k >= 0) plan.rubriques.splice(k, 1);
+      console.warn(`[MemoireGenerator] Rubrique ${x.id} retirée : le cahier des charges exclut sa mission (proposition du modèle : « ${x.par.slice(0, 160)} »).`);
+    }
     // ── 5. Remarques sur le CCTP (si le DCE les demande), puis bloc « Notre compréhension de votre besoin » ──
     const remarques = await this.remarquesCahierDesCharges(dceContext);
     const schemasGeneres = new Map<string, string>();
     const titresSchemas: Record<string, string> = {};
-    const avisSecours: string[] = [];
+    const avisSecours: string[] = rubriquesExclues.map((x) => `Rubrique « ${x.titre} » retirée du mémoire : le cahier des charges exclut la mission qu'elle décrit (à la place de « ${x.extrait.slice(0, 160)} », le modèle proposait « ${x.par.slice(0, 160)} »). Si GSS assure bien cette mission sur ce marché, demandez via l'assistant de rétablir la rubrique.`);
     const b1 = plan.rubriques.find((r) => r.mode === 'besoin');
     if (b1) {
       progres(50, 'Notre compréhension de votre besoin : explication et schéma de process…');
@@ -7756,6 +7793,9 @@ RÈGLES DE FORME (rendu Marp) :
     const adaptations = this.finaliserAdaptations(suivi, sections, titreDe, elementsLibres);
     // Questions à GSS mises en forme (vraies questions, sans doublon) comme dans l'état de l'assistant.
     const consultationList = [...new Set(elementsSansDoublon(elementsLibres).filter((e) => e.statut === 'ouvert').map((e) => e.question))];
+    // OpenAI en panne pendant la génération (T5-COH-2) : jamais un publipostage non adapté présenté comme complet.
+    const alertePanne = alerteRedactionIndisponible(this.appelsEchoues, rubriquesNonAdaptees);
+    if (alertePanne) { consultationList.unshift(alertePanne); console.warn(`[MemoireGenerator] ${alertePanne}`); }
     consultationList.push(...avisSecours);
     // Propositions de réponse de l'IA : signalées APRÈS les éléments (jamais envoyées à l'équipe comme des questions).
     for (const a of ajouts) consultationList.push(`Proposition de réponse à valider (question nouvelle du DCE) : ${a.title}`);
@@ -7798,6 +7838,11 @@ RÈGLES DE FORME (rendu Marp) :
       } catch (e: any) {
         console.warn(`[MemoireGenerator] Message des propositions non préparé (${e?.message || e}).`);
       }
+    }
+    // Rédaction automatique indisponible (T5-COH-2) : en tête du premier message de l'assistant.
+    if (alertePanne) {
+      if (etat.conversation?.length) etat.conversation[0].texte = `${alertePanne}\n\n${etat.conversation[0].texte}`;
+      else etat.conversation = [{ role: 'assistant', texte: alertePanne, date: new Date().toISOString() }];
     }
     // Engagements rédigés par l'IA (exigences du CCTP) : annoncés dans le premier message, à valider ou modifier (D5).
     if (engagementsIA.length) {
@@ -9010,6 +9055,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       return (await this.callOpenAI(msgs, 0.2, libelle, true, 'redaction', coupe > 0 ? 1 : 0)) ?? '';
     };
     const toutesRetenues = plan.flatMap((p) => retenues[p.id]);
+    const rubriquesExcluesCourt: string[] = [];
+    const nonAdapteesCourt: string[] = [];
     const aAdapter = toutesRetenues.map((id) => planMT.rubriques.find((r) => r.id === id)!).filter((r) => r && (r.mode === 'adapte' || (r.mode === 'fixe' && repartition?.parRubrique[r.id]?.length)));
     let adaptees = 0;
     await enParallele(aAdapter, 4, async (rp) => {
@@ -9024,6 +9071,9 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
         titresTraites: toutesRetenues.filter((id) => id !== rp.id).map((id) => mtParId.get(id)?.titre || '').filter(Boolean),
       });
       textes[rp.id] = res.texte;
+      // Mission niée par le cahier des charges : rubrique non reprise, signalée (T5CP-1) ; échec du modèle signalé (T5-COH-2).
+      if (res.missionExclue) { textes[rp.id] = ''; rubriquesExcluesCourt.push(`Rubrique « ${r.titre} » non reprise : le cahier des charges exclut la mission qu'elle décrit (à la place de « ${res.missionExclue.extrait.slice(0, 160)} », le modèle proposait « ${res.missionExclue.par.slice(0, 160)} »). Si GSS assure bien cette mission sur ce marché, demandez via l'assistant de la rétablir.`); }
+      if (res.repli && /appel au modèle impossible|réponse du modèle illisible/.test(res.raison || '')) nonAdapteesCourt.push(r.titre);
       adaptees++;
       progres(26 + Math.round((24 * adaptees) / Math.max(1, aAdapter.length)), `Adaptation au CCTP : ${adaptees}/${aAdapter.length} rubrique(s)…`);
       console.log(`[MemoireGenerator] Adaptation ${rp.id} : ${res.appliquees.length} modification(s) appliquée(s), ${res.refusees.length} refusée(s), fidélité ${res.fidelite.toFixed(2)}${res.repli ? ` — texte de référence conservé (${res.raison})` : ''}.`);
@@ -9263,7 +9313,9 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
     const consultationList = [...new Set(elementsSansDoublon(elements).filter((e) => e.statut === 'ouvert').map((e) => e.question))];
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
-    consultationList.push(...avisSecours, ...propositions);
+    const alertePanneCourt = alerteRedactionIndisponible(this.appelsEchoues, nonAdapteesCourt);
+    if (alertePanneCourt) { consultationList.unshift(alertePanneCourt); console.warn(`[MemoireGenerator] ${alertePanneCourt}`); }
+    consultationList.push(...rubriquesExcluesCourt, ...avisSecours, ...propositions);
     // Phrases de GSS adaptées au CCTP (D8) : une ligne par phrase à valider (aucune s'il n'y en a pas).
     consultationList.push(...consultationsAdaptations(adaptations));
     console.log(`[MemoireGenerator] Format court (mémoire type) : ${rendu.pages} page(s) / ${format.pagesMax} autorisée(s) ; ${toutesRetenues.length} rubrique(s) du mémoire type reprise(s), ${propositions.length} proposition(s).`);
@@ -9286,6 +9338,10 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       } catch (e: any) {
         console.warn(`[MemoireGenerator] Message des propositions non préparé (${e?.message || e}).`);
       }
+    }
+    if (alertePanneCourt) {
+      if (conversation?.length) conversation[0].texte = `${alertePanneCourt}\n\n${conversation[0].texte}`;
+      else conversation = [{ role: 'assistant', texte: alertePanneCourt, date: new Date().toISOString() }];
     }
     // Dimensionnement proposé (D5) : annoncé dans le premier message de l'assistant, à valider ou modifier.
     if (ctxBase.dimensionnement?.titulaires) {

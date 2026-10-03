@@ -147,6 +147,7 @@
   "ACCUEIL_PUBLIC": {
    "description": "Le site accueille du public, des visiteurs ou des usagers.",
    "dce": "(?<![\\wÀ-ÿ])ERP(?![\\wÀ-ÿ])|recevant du public|accueil(?:lir|lant)? (?:du |le |des |de )?(?:public|visiteurs|usagers|patients|[ée]tudiants)|poste d.accueil|accueil et (?:d.)?orientation|orientation (?:du public|des visiteurs)|(?<![\\wÀ-ÿ])(?:usagers?|visiteurs?)(?![\\wÀ-ÿ])",
+   "dce_exclure": "(?:pendant|durant)\\s+(?:l'|les heures d')\\s*ouverture[^.]{0,80}n'est pas surveill[ée]",
    "matrice": [
     "b4_accueil_filtrage",
     "b4_proc_perturbateur"
@@ -162,6 +163,7 @@
   "FILTRAGE": {
    "description": "Filtrage, contrôle d'accès ou gestion des entrées.",
    "dce": "filtrage|contr[ôo]le (?:des |d.)?acc[èe]s|contr[ôo]le des entr[ée]es|palpation|inspection (?:visuelle )?des (?:sacs|bagages)",
+   "dce_exclure": "(?:pendant|durant)\\s+(?:l'|les heures d')\\s*ouverture[^.]{0,80}n'est pas surveill[ée]",
    "matrice": [
     "b4_accueil_filtrage"
    ]

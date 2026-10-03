@@ -2296,6 +2296,11 @@ export function debutDePhraseRetire(avant: string, debut: number, fin: number, a
  * pour mot (une seule fois) dans le texte ; au plus `maxModifications` modifications et `maxAjouts` ajouts de
  * `motsParAjout` mots ; tout texte nouveau est contrôlé (chiffres du DCE, noms connus, interdits GSS).
  */
+/** Motif du refus d'un remplacement qui nie la mission décrite par GSS (T5CP-1) : la rubrique décrit une mission exclue. */
+export const RAISON_MISSION_NIEE = 'négation de la mission décrite par GSS (le cahier des charges exclut cette mission)';
+/** Négation (« aucune ronde… », « n'est pas surveillé », « ne … pas », « jamais ») : une adaptation ne nie jamais la phrase de GSS. */
+const NEGATION_MISSION = /(?<![\p{L}])aucun(?:e|s|es)?\s+(?:ronde|contr[ôo]le|surveillance|filtrage|accueil|mission|agent|prestation|gardiennage|pr[ée]sence)|n['’]\s*(?:est|sont)\s+pas\s+(?:surveill|gard[ée]|assur|pr[ée]vu|effectu|r[ée]alis)|(?<![\p{L}])(?:non|pas de)\s+surveill|n['’]\s*(?:assure|effectue|r[ée]alise)(?:nt)?\s+(?:pas|aucun)/iu;
+
 export function appliquerModifications(texte: string, mods: ModificationsProposees, options: OptionsModifications = {}): { texte: string; appliquees: ModificationTraitee[]; refusees: ModificationTraitee[] } {
   const o = { maxModifications: 12, maxAjouts: 3, motsParAjout: 60, ...options };
   const appliquees: ModificationTraitee[] = [];
@@ -2313,6 +2318,10 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     const nRepere = (x: string) => (x.match(/\[À COMPLÉTER\]/g) || []).length;
     if (nRepere(m.extrait) > nRepere(m.par!)) { refusees.push({ ...m, raison: 'un repère à compléter ne se remplace pas' }); continue; }
     m.par = sansCovidEnumere(m.par!);
+    // Remplacement qui nie la phrase de GSS (cstb 551 : « Gestion des entrées : pendant l'ouverture du site, celui-ci n'est pas
+    // surveillé ; … », « Contrôle intérieur : aucune ronde de contrôle… ») : jamais imprimé ; la rubrique décrit une mission
+    // que le cahier des charges exclut (adapterRubrique la signale, le générateur la retire).
+    if (NEGATION_MISSION.test(m.par!) && !NEGATION_MISSION.test(m.extrait)) { refusees.push({ ...m, raison: RAISON_MISSION_NIEE }); continue; }
     const refus = refusTexteNouveau(m.par!, m.extrait, o);
     if (refus) { refusees.push({ ...m, raison: refus }); continue; }
     // Délai de GSS publiposté (caen 441, b4_pti : « en 45 minutes au maximum » → « en 30 minutes au maximum », le 30 du
@@ -2573,6 +2582,9 @@ export interface ResultatAdaptation {
   raison?: string;
   appliquees: ModificationTraitee[];
   refusees: ModificationTraitee[];
+  /** Le modèle a nié la mission décrite par la rubrique (« aucune ronde… », « n'est pas surveillé ») : la rubrique décrit une
+   *  mission que le cahier des charges exclut ; extrait de GSS et texte proposé (T5CP-1). */
+  missionExclue?: { extrait: string; par: string; motif?: string };
 }
 
 const CONSIGNE_ADAPTATION = `Tu adaptes UNE rubrique du mémoire technique de GSS (Global Security Services, sécurité privée, Rouen) au cahier des charges d'un appel d'offres.
@@ -2642,6 +2654,8 @@ export async function adapterRubrique(rubrique: RubriqueMemoireType, textePublip
   if (!mods || typeof mods !== 'object') return sortie(reference, true, 'réponse du modèle illisible');
   const opts: OptionsModifications = { ...options, dce: ctx.dce, reference, sujetAjouts: options.sujetAjouts ?? sujetDeRubrique(rubrique), sujetsDelais: options.sujetsDelais ?? sujetsDelaisDuGabarit(rubrique.texte || '') };
   const tout = appliquerModifications(reference, mods, opts);
+  const niee = tout.refusees.find((m) => m.raison === RAISON_MISSION_NIEE);
+  if (niee) return { ...sortie(reference, true, 'mission niée par le cahier des charges', [], tout.refusees), missionExclue: { extrait: niee.extrait, par: niee.par || '', motif: niee.motif } };
   const fid = (t: string) => fidelite(reference, t, 0.8, ctx.dce || '');
   if (fid(tout.texte) >= seuil) return sortie(tout.texte, false, undefined, tout.appliquees, tout.refusees);
   if (options.repli === 'reference') {
