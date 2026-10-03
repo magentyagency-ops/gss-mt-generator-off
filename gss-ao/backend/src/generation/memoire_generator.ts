@@ -4738,6 +4738,8 @@ Renvoie un JSON valide :
     walkDOM(xmlDoc.documentElement, false);
 
     // ── C. Rubriques à réponse IMPLICITE ──
+    /** Rubriques numérotées ou notées du cadre restées sans zone de réponse (T10-COH-2) : signalées à GSS. */
+    const rubriquesSansZone: string[] = [];
     // Cadres « par rubriques » (ex. Citédia : « SOUS-CRITÈRE 1 … Éléments de réponse attendus : • … • … »,
     // Vitry : « DESCRIPTION DES ATTENTES … PROPOSITION DU SOUMISSIONNAIRE ») : aucune ligne pointillée ni
     // cellule vide, le candidat écrit sous la rubrique. Chaque rubrique notée qui n'a encore aucune zone
@@ -4770,6 +4772,13 @@ Renvoie un JSON valide :
         return !!t && t.length <= 80 && /[A-ZÀ-Ý]{3}/.test(t) && !/[a-zà-ÿ]/.test(t.replace(/\[CHAMP_\d+\]/g, '')) && !/\[CHAMP_/.test(t)
           && !getParentWithLocalName(paras[i], 'tc') && t.replace(/[^A-Za-zÀ-ÿ]/g, '').length >= 6;
       };
+      const BAREME = /\(\s*(?:not[ée]e?\s+sur\s+)?\d+\s*points?\s*\)|\bsur\s+\d+\s*points?\b|[-–—:]\s*\d+\s*points?\s*$/i;
+      // « 1. » puis « 1.1 » (ou « Critère 1 » puis « Sous-critère 1 ») : la seconde est une sous-rubrique de la première.
+      const sousRubrique = (a: string, b: string) => {
+        const na = /^(\d+(?:\.\d+)*)/.exec(a)?.[1], nb = /^(\d+(?:\.\d+)*)/.exec(b)?.[1];
+        if (na && nb) return nb.startsWith(`${na}.`);
+        return /^crit[eè]re/i.test(a) && /^sous[-\s]?crit[eè]re/i.test(b);
+      };
       for (let k = 0; k < debuts.length; k++) {
         const deb = debuts[k];
         let fin = k + 1 < debuts.length ? debuts[k + 1] : paras.length;
@@ -4781,12 +4790,28 @@ Renvoie un JSON valide :
         // Espace de réponse laissé par l'acheteur sous la rubrique (au moins 3 lignes vides en fin de rubrique).
         let videsFin = 0;
         for (let i = zone.length - 1; i > 0 && !zone[i]; i--) videsFin++;
-        const attendus = contenu.some((t) => /attendu|[ée]l[ée]ments? de r[ée]ponse|d[ée]crir|pr[ée]cise|indiquer|d[ée]taill|pr[ée]senter|description|m[ée]thodolog|modalit/i.test(t)) || contenu.length >= 3
+        // Consigne au présent comme à l'infinitif ou au futur (cvide3, T10-COH-2 : « Le candidat décrit les moyens humains… »).
+        const attendus = contenu.some((t) => /attendu|[ée]l[ée]ments? de r[ée]ponse|d[ée]cri(?:re|ra|t|vent|vez)?(?![a-zà-ÿ])|d[ée]crir|pr[ée]cise|indique|d[ée]taill|pr[ée]sente|description|m[ée]thodolog|modalit|(?<![a-zà-ÿ])expos|expliqu|justifi|(?<![a-zà-ÿ])propos(?:e|er|era|ent|ez)(?![a-zà-ÿ])|fourni(?:t|r|ra)(?![a-zà-ÿ])|(?<![a-zà-ÿ])liste(?:r|ra)?(?![a-zà-ÿ])/i.test(t)) || contenu.length >= 3
           // « 7 – Mise en œuvre de la responsabilité environnementale » + « Éco-gestes, déchets… » + espace vide.
-          || (contenu.length >= 1 && videsFin >= 3 && RESSEMBLE_QUESTION.test(textes[deb]));
-        if (emplacement < 0 && !attendus) continue;  // simple titre de chapitre (ses sous-rubriques suivent)
+          || (contenu.length >= 1 && videsFin >= 3 && RESSEMBLE_QUESTION.test(textes[deb]))
+          // Rubrique notée (« (30 points) », « sur 20 points ») : une réponse est attendue.
+          || BAREME.test(textes[deb]);
+        // Rubrique suivie de ses sous-rubriques numérotées (« 1. … » puis « 1.1 … ») : rien à écrire à ce niveau.
+        const aSousRubriques = k + 1 < debuts.length && sousRubrique(textes[deb], textes[debuts[k + 1]]);
+        // Titre numéroté seul, sans sous-rubrique ni zone de réponse (cvide, T10-COH-2 : « 1. Moyens humains », « 2. Moyens
+        // matériels ») : c'est une rubrique à laquelle répondre.
+        // Même règle pour un titre suivi d'une ou deux lignes courtes qui énumèrent le sujet (« 1. Moyens humains » + « Effectifs,
+        // qualifications. ») ; jamais une section d'objet ou de consignes du document (« 1. Objet du présent cadre »).
+        const titreSeul = emplacement < 0 && contenu.length <= 2 && contenu.every((t) => t.length <= 200) && !aSousRubriques && !zone.some((t) => /\[CHAMP_/.test(t))
+          && /^\d+(?:\.\d+)*\s*[-–—.)]\s*\S/.test(textes[deb]) && (textes[deb].match(/[A-Za-zÀ-ÿ]{3,}/g) || []).length >= 2
+          && !/\b(?:objet|pr[ée]ambule|consignes?|instructions?|mode d.emploi|g[ée]n[ée]ralit[ée]s|sommaire|contexte de la consultation)\b/i.test(textes[deb]);
+        if (emplacement < 0 && !attendus && !titreSeul) {
+          // Rubrique numérotée ou notée sans zone de réponse ni sous-rubrique (T10-COH-2) : signalée à GSS, jamais vide en silence.
+          if (!aSousRubriques && !zone.some((t) => /\[CHAMP_/.test(t)) && (BAREME.test(textes[deb]) || /^\d+(?:\.\d+)*\s*[-–—.)]\s*\S/.test(textes[deb]))) rubriquesSansZone.push(textes[deb].replace(/\s+/g, ' ').trim().slice(0, 160));
+          continue;  // simple titre de chapitre (ses sous-rubriques suivent)
+        }
         // Rubrique qui ne contient que des titres de sous-rubriques numérotées : rien à écrire à ce niveau.
-        if (emplacement < 0 && fin < paras.length && !contenu.length) continue;
+        if (emplacement < 0 && (aSousRubriques || (fin < paras.length && !contenu.length && !titreSeul))) continue;
         const question = zone.slice(0, emplacement >= 0 ? emplacement : zone.length).filter((t) => t && !/\[CHAMP_/.test(t)).join(' ; ').replace(/"/g, "'").slice(0, 1800);
         if (!question) continue;
         // Emplacement de la réponse : juste après « PROPOSITION DU SOUMISSIONNAIRE », sinon après le
@@ -4818,6 +4843,13 @@ Renvoie un JSON valide :
       if (!dernier && n.parentNode) n.parentNode.removeChild(n);
     }
 
+    // Cadre sans aucune zone de réponse développée (T10-COH-2 : titres seuls, consignes non reconnues) : le document ne serait
+    // qu'un formulaire d'identité ; il n'est pas remis comme terminé.
+    if (!descriptors.some((d) => d.grille || (d.kind === 'answer' && (d.lineCount || 1) >= 3))) {
+      throw new Error(`Cadre de réponse « ${path.basename(templatePath)} » : aucune zone de réponse aux questions techniques n'a été trouvée${rubriquesSansZone.length ? ` (rubriques sans zone : ${rubriquesSansZone.map((x) => `« ${x} »`).join(', ')})` : ''}. Aucun document n'est remis : vérifiez que ce fichier est bien le cadre du mémoire technique, puis relancez la génération.`);
+    }
+    const alertesRubriquesCadre = rubriquesSansZone.map((x) => `La rubrique « ${x} » du cadre de réponse n'a reçu aucune réponse (aucune zone de réponse reconnue sous ce titre) : à rédiger directement dans le document avant la remise.`);
+    if (alertesRubriquesCadre.length) console.warn(`[MemoireGenerator] ${alertesRubriquesCadre.length} rubrique(s) du cadre sans zone de réponse : ${rubriquesSansZone.join(' ; ')}.`);
     // Construit le libellé de prompt de chaque champ (hint de format + contexte)
     const buildPrompt = (f: FieldDesc): string => {
       // Les mots-codes de champs de formulaire Word ne doivent pas polluer l'inférence ni le prompt
@@ -6787,8 +6819,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       let conversationFinale = texteAdaptations
         ? (conversation?.length ? [{ ...conversation[0], texte: `${conversation[0].texte}\n\n${texteAdaptations}` }] : [{ role: 'assistant' as const, date: new Date().toISOString(), texte: texteAdaptations }])
         : conversation;
-      // DCE sans CCTP (T8-COH-2) : en tête du premier message de l'assistant.
-      const alerteCctp = alerteCctpAbsent(dceContext);
+      // DCE sans CCTP (T8-COH-2), rubriques du cadre sans réponse (T10-COH-2) : en tête du premier message de l'assistant.
+      const alerteCctp = [...alerteCctpAbsent(dceContext), ...alertesRubriquesCadre];
       if (alerteCctp.length) conversationFinale = conversationFinale?.length ? [{ ...conversationFinale[0], texte: `${alerteCctp.join('\n\n')}\n\n${conversationFinale[0].texte}` }] : [{ role: 'assistant' as const, date: new Date().toISOString(), texte: alerteCctp.join('\n\n') }];
       // Schémas non insérés (T6-COH-3) : en tête du premier message de l'assistant.
       if (alertesSchemasCadre.length) {
@@ -6820,8 +6852,9 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       // Grille de notation : chaque sous-critère signale ses manques → fusion des questions en doublon.
       // Aucun repère technique (« [CHAMP_14] ») ni doublon dans les questions remises à GSS (havre1 21).
       consultations: [
-        // DCE sans CCTP (T8-COH-2) : en tête des consultations.
+        // DCE sans CCTP (T8-COH-2), rubriques du cadre sans réponse (T10-COH-2) : en tête des consultations.
         ...alerteCctpAbsent(dceContext),
+        ...alertesRubriquesCadre,
         ...new Set([
           ...(descriptors.some((d) => d.grille)
             ? await this.consoliderConsultations([...aCompleter.flatMap((q) => {
