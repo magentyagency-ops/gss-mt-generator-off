@@ -8,7 +8,7 @@ import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque, estRetourArriere } from './themes';
 import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, lireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements } from './completion';
 import {
-  chargerMemoireType, preparerMemoireType, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
+  chargerMemoireType, preparerMemoireType, reinitialiserJournalIndicateurs, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
   type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, formeCourteApresPremiere, phrasesGeneralesProtegees, ajoutContraireAuxDelaisGss,
@@ -4077,6 +4077,7 @@ Renvoie un JSON valide :
     const baseDir = path.resolve(__dirname, '../../');
     const uploadedDceDir = path.resolve(baseDir, `../data/output/dce_${dossierId}`);
     this.appelsEchoues = [];
+    reinitialiserJournalIndicateurs();
     const dp = demandeParticuliere || {};
     this.demandeParticuliere = (dp.demande?.trim() || dp.documentTexte?.trim())
       ? { demande: dp.demande?.trim() || '', documentNom: dp.documentNom, documentTexte: (dp.documentTexte || '').trim() }
@@ -7332,6 +7333,7 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
     onProgress?: (progress: number, message: string, status?: string) => void
   ): Promise<{ filePath: string, generatedData: Record<string, string>, consultations: string[] }> {
     console.log('[MemoireGenerator] ═══ Génération PDF (Marp Complet) ═══');
+    reinitialiserJournalIndicateurs();
 
     if (onProgress) onProgress(10, 'Analyse du DCE et lecture du contexte...');
 

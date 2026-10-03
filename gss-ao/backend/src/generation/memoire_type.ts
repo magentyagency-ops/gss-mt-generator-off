@@ -492,6 +492,18 @@ function extrait(t: string, i: number, n: number): string {
   return t.slice(Math.max(0, i - 40), Math.min(t.length, i + n + 40)).replace(/\s+/g, ' ').trim();
 }
 
+// Journal des décisions d'indicateurs écrit une seule fois par génération (T7-COH-6) : preparerMemoireType est appelé
+// plusieurs fois par génération (matrice, valeurs imposées, adaptations D8) et répétait 4 à 5 fois chaque message.
+const journalIndicateurs = new Set<string>();
+/** Remet à zéro le journal des indicateurs (début d'une génération). */
+export function reinitialiserJournalIndicateurs(): void { journalIndicateurs.clear(); }
+function journalIndicateur(message: string): void {
+  if (journalIndicateurs.has(message)) return;
+  if (journalIndicateurs.size > 5000) journalIndicateurs.clear();
+  journalIndicateurs.add(message);
+  console.log(message);
+}
+
 /** Évalue chaque indicateur du mémoire type (vrai/faux, avec les raisons). */
 export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record<string, EtatIndicateur> {
   const dce = String(ctx.dce || '').replace(/[’`]/g, "'").replace(/\s+/g, ' ');
@@ -520,7 +532,7 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
         const e = matrice.find((x) => rx.test(x.exigence));
         const sourceDce = !engageants.has(nom) || (def.motif_dce ? dceNorm.includes(normaliser(def.motif_dce)) : !!m);
         if (e && sourceDce) raisons.push(`exigence : « ${e.exigence.slice(0, 120)} »`);
-        else if (e) console.log(`[MemoireType] Indicateur ${nom} : exigence de la matrice écartée, motif absent du DCE (« ${e.exigence.slice(0, 120)} »).`);
+        else if (e) journalIndicateur(`[MemoireType] Indicateur ${nom} : exigence de la matrice écartée, motif absent du DCE (« ${e.exigence.slice(0, 120)} »).`);
       }
       if (def.analyse) {
         const m = new RegExp(def.analyse, 'i').exec(analyse);
@@ -532,11 +544,11 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
         const rattachees = matrice.filter((x) => x.rubrique && def.matrice!.includes(x.rubrique));
         const e = rattachees.find((x) => !rxDce || rxDce.test(x.exigence.replace(/[’`]/g, "'")));
         if (e) raisons.push(`exigence rattachée à ${e.rubrique} : « ${e.exigence.slice(0, 120)} »`);
-        else if (rattachees.length && !raisons.length) console.log(`[MemoireType] Indicateur ${nom} : exigence rattachée à ${rattachees[0].rubrique} écartée, motif de l'indicateur absent de son texte (« ${rattachees[0].exigence.slice(0, 120)} »).`);
+        else if (rattachees.length && !raisons.length) journalIndicateur(`[MemoireType] Indicateur ${nom} : exigence rattachée à ${rattachees[0].rubrique} écartée, motif de l'indicateur absent de son texte (« ${rattachees[0].exigence.slice(0, 120)} »).`);
       }
       // Preuve exigée dans le DCE lisible : l'analyse, le secteur ou la matrice seuls ne suffisent pas (T4N-3).
       if (def.preuve_dce && dce.length >= 2000 && raisons.length && !raisons.some((r) => r.startsWith('DCE'))) {
-        console.log(`[MemoireType] Indicateur ${nom} : écarté, aucune mention dans le DCE (${raisons.join(' ; ').slice(0, 200)}).`);
+        journalIndicateur(`[MemoireType] Indicateur ${nom} : écarté, aucune mention dans le DCE (${raisons.join(' ; ').slice(0, 200)}).`);
         raisons.splice(0, raisons.length);
       }
       valeur = raisons.length > 0;
