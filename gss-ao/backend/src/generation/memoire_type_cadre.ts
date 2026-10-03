@@ -864,7 +864,9 @@ export function completerParThematiques(texte: string, thematiques: PhraseThemat
 export function remonterSousTitreFinal(lignesEntree: string[], racines: (t: string) => Set<string>): string[] {
   let lignes = [...lignesEntree];
   const REPERE = /^\s*\[À COMPLÉTER\][.;]?\s*$/;
-  const titreCadre = (l: string) => estSousTitreCadre(l) && !/:\s*$/.test(l.trim());
+  // Sous-titre (du cadre ou de GSS, « Un réel engagement : ») ; jamais une amorce de liste longue terminée par « : » (« Pour
+  // l'absence prévue, notre procédure interne est la suivante : »).
+  const titreCadre = (l: string) => estSousTitreCadre(l) && (!/:\s*$/.test(l.trim()) || l.trim().split(/\s+/).length <= 6);
   // Mots porteurs comparés sur 6 lettres (« recyclage » et « recycler »).
   const commun = (a: Set<string>, b: Set<string>) => [...a].some((w) => [...b].some((c) => c.slice(0, 6) === w.slice(0, 6)));
   // Sous-titre du cadre vide : suivi d'un seul « [À COMPLÉTER] » puis de la fin ou d'un autre sous-titre du cadre, ou suivi
@@ -885,20 +887,20 @@ export function remonterSousTitreFinal(lignesEntree: string[], racines: (t: stri
       if (!v.vide) continue;
       const cible = racines(lignes[i].replace(/[#*]/g, ''));
       if (!cible.size) continue;
-      let precedent = -1;
-      // Sous-titre du cadre (jamais une amorce de liste de GSS terminée par « : », « Pour l'absence prévue, notre procédure … : »).
-      for (let k = i - 1; k >= 0; k--) if (titreCadre(lignes[k])) { precedent = k; break; }
-      if (precedent < 0) continue;
-      // Première ligne qui traite le sujet du sous-titre, après au moins une ligne laissée au sous-titre précédent.
-      let premiere = -1, gardees = 0;
-      for (let k = precedent + 1; k < i; k++) {
+      // Première ligne de la réponse qui traite le sujet du sous-titre (un mot porteur en commun) : une ligne de texte ou un
+      // intertitre de GSS terminé par « : » (« Les économies d'énergie : »), jamais la première ligne sous le premier sous-titre
+      // (le sous-titre qui la précède garde au moins une ligne).
+      let premiere = -1, precedent = -1, gardees = 0;
+      for (let k = 0; k < i; k++) {
         if (!lignes[k].trim()) continue;
-        // Une ligne de texte, ou un intertitre de GSS terminé par « : » (« Les économies d'énergie : »).
-        const candidate = !estSousTitreCadre(lignes[k]) || /:\s*$/.test(lignes[k].trim());
-        if (gardees >= 1 && candidate && commun(racines(lignes[k]), cible)) { premiere = k; break; }
+        const intertitreGss = /:\s*$/.test(lignes[k].trim()) && lignes[k].trim().split(/\s+/).length <= 6;
+        if (titreCadre(lignes[k]) && !intertitreGss) { precedent = k; gardees = 0; continue; }
+        const candidate = !estSousTitreCadre(lignes[k]) || intertitreGss;
+        if (precedent >= 0 && gardees >= 1 && candidate && commun(racines(lignes[k]), cible)) { premiere = k; break; }
+        if (intertitreGss && precedent < 0) precedent = k;
         gardees++;
       }
-      if (premiere < 0) continue;
+      if (premiere < 0 || precedent < 0) continue;
       const titre = lignes[i];
       const anciens = racines(lignes[precedent].replace(/[#*]/g, ''));
       const sousLeTitre: string[] = [];

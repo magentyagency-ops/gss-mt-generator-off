@@ -209,3 +209,17 @@ describe('Contrôle réel 703 : dernière série', () => {
     expect(r).toMatch(/\| Site \| Poste \| Jours et horaires \| Missions principales \|/);
   });
 });
+
+describe('Contrôle réel 704 : sous-titre du cadre écrit avec deux-points', () => {
+  it('« Écogestes et économies d’énergie : » resté vide en fin de réponse : remonté devant les économies d’énergie (etampes2 704)', () => {
+    const eco = [
+      'Les transports :', '• Nous encourageons nos salariés à venir à vélo.', '',
+      "Les économies d'énergie :", 'Nous veillons au respect de bonnes pratiques dans nos locaux :', '• éteindre les lumières.', '',
+      'Un réel engagement :', 'Nous avons à cœur de sensibiliser nos collaborateurs.', '', "Écogestes et économies d'énergie :", '[À COMPLÉTER]',
+    ].join('\n');
+    const e = completerSousTitresVides(eco, [{ texte: eco }], []).texte;
+    expect(e).not.toMatch(/\[À COMPLÉTER\]/);
+    const l = e.split('\n');
+    expect(l[l.indexOf("Écogestes et économies d'énergie :") + 1]).toBe("Les économies d'énergie :");
+  });
+});
