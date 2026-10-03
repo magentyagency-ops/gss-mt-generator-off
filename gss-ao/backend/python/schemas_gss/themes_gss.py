@@ -129,7 +129,10 @@ def _pale(st, role):
     à l'encre) : la teinte la plus soutenue de la couleur du rôle qui garde l'encre lisible (contraste 4,5:1)."""
     c = st["couleurs"]
     vif = st["roles"][role]["vif"]
-    for t in (0.55, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15):
+    # Style « marine » v3 (règles de rôles : couleurs en touches, au plus 2 par schéma) : teintes légères ; la couleur
+    # franche du rôle reste sur les pastilles et les pictogrammes.
+    paliers = (0.25, 0.2, 0.15) if st.get("regles_roles") else (0.55, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15)
+    for t in paliers:
         m = _melange(vif, c["fond_schema"], t)
         if contraste(c["encre"], m) >= 4.5:
             return m
@@ -220,7 +223,7 @@ def recolorer(svg, theme):
     if est_retour(theme) or theme not in styles():
         return svg
     st = style(theme)
-    t = correspondance(theme)
+    t = _roles_du_schema(svg, theme, correspondance(theme))
     ombre = st["carte"].get("ombre")
 
     def attr(tag, attrs):
@@ -266,6 +269,34 @@ def recolorer(svg, theme):
         return f'{ouv[:-1]} textLength="{origine:.1f}" lengthAdjust="spacingAndGlyphs">{contenu}{ferm}'
 
     return _TEXTE.sub(ajuster, svg)
+
+
+def _roles_du_schema(svg, theme, t):
+    """Style à « regles_roles » (« marine » v3 : au plus 2 couleurs de rôle par schéma) : les rôles du schéma d'origine
+    (couleurs du moteur d'origine) au-delà des 2 premiers dans l'ordre de priorité (rouge, vert, bleu, orange) prennent
+    la couleur de structure (« sable »), comme au format page. Autres styles : table inchangée."""
+    regles = (style(theme) or {}).get("regles_roles")
+    if not regles:
+        return t
+    haut = svg.upper()
+    presents = {r for o, r in list(_PALES.items()) + list(_FONCES.items()) if f'"{o}"' in haut}
+    garde = [r for r in regles.get("priorite", ["rouge", "vert", "bleu", "orange"]) if r in presents][:regles.get("max_par_schema", 2)]
+    retires = [r for r in ("rouge", "vert", "bleu", "orange") if r in presents and r not in garde]
+    if not retires:
+        return t
+    t2 = {k: dict(v) for k, v in t.items()}
+    for o, r in _PALES.items():
+        if r in retires:
+            t2["fond"][o] = t2["trait"][o] = t["fond"][_PALE_DE["sable"]]
+    for o, r in _FONCES.items():
+        if r in retires:
+            t2["fond"][o] = t2["trait"][o] = t["fond"][_FONCE_DE["sable"]]
+            t2["texte"][o] = t["texte"][_FONCE_DE["sable"]]
+    return t2
+
+
+_PALE_DE = {r: o for o, r in _PALES.items()}
+_FONCE_DE = {r: o for o, r in _FONCES.items()}
 
 
 _JETON = re.compile(r"<(/?)(g|rect|circle|text)\b([^>]*?)(/?)>")
@@ -338,11 +369,18 @@ def _numeros_lisibles(svg, theme):
 
 
 # ── Contrôle des textes d'un redessin ────────────────────────────────────────
-_TXT = re.compile(r"<text([^>]*)>([^<]*)</text>")
+_TXT = re.compile(r"<text([^>]*)>(.*?)</text>", re.S)
+_BALISES = re.compile(r"<[^>]+>")
+
+
+def _texte_brut(x):
+    """Texte d'une balise <text> : sous-balises retirées (exposants des ordinaux du style « marine » v3) et apostrophe
+    typographique ramenée à l'apostrophe droite (typographie de rendu, aucun mot changé)."""
+    return html.unescape(_BALISES.sub("", x)).replace("\u2019", "'")
 
 
 def textes(svg):
-    return [html.unescape(x) for _, x in _TXT.findall(svg)]
+    return [_texte_brut(x) for _, x in _TXT.findall(svg)]
 
 
 def _jetons(liste):
@@ -358,7 +396,7 @@ def _blocs(svg):
         if k not in index:
             index[k] = len(out)
             out.append([])
-        out[index[k]].append(html.unescape(x))
+        out[index[k]].append(_texte_brut(x))
     return [" ".join(b) for b in out]
 
 
@@ -398,7 +436,9 @@ def _hash_fichiers(chemins):
 @lru_cache(maxsize=None)
 def empreinte(theme, fmt):
     """Empreinte du rendu : jetons du thème, moteur et spécifications. Elle change → le cache est refait."""
-    moteur = ([os.path.join(ICI, "moteur_page", f) for f in ("theme.py", "gss_lib.py", "gabarits.py", "pictos.py")]
+    dossier = "moteur_marine" if (styles().get(theme) or {}).get("moteur") == "moteur_marine" else "moteur_page"
+    moteur = ([os.path.join(ICI, dossier, f) for f in ("theme.py", "gss_lib.py", "gabarits.py", "pictos.py", "dessin.py")
+               if os.path.exists(os.path.join(ICI, dossier, f))]
               if fmt == "page" else [os.path.join(ICI, f) for f in ("gss_lib.py", "gabarits.py")])
     moteur += [os.path.join(ICI, "themes_gss.py"), os.path.join(BIBLIOTHEQUE, "specs.json"),
                os.path.join(BIBLIOTHEQUE, "index.json")]

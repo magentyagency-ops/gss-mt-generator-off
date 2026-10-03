@@ -2167,7 +2167,7 @@ def part_hauteur(s):
     return (max(b for _, b in ys) - min(a for a, _ in ys)) / s.H
 
 
-def en_grand(dessin, gabarit, cible=CIBLE_HAUTEUR):
+def en_grand(dessin, gabarit, cible=CIBLE_HAUTEUR, params=None):
     """Dessine (dessin() → Svg) ; si la composition reste basse (bandeau au milieu de la page), la redessine sur une
     toile réduite de même proportion, affichée à la même taille : tout le dessin (cartes, textes, pictogrammes) est
     agrandi, sans rien ajouter ni retirer. Premier zoom qui atteint la cible, sinon le plus haut qui tient."""

@@ -88,7 +88,7 @@ def _chaines(p, cle=None):
             yield cle, f"{p:g}"
     elif isinstance(p, dict):
         for k, v in p.items():
-            if k in ("role", "icone", "zone", "tenue", "role_centre", "alternative"):
+            if k in ("role", "icone", "zone", "tenue", "role_centre", "alternative", "forme"):
                 continue
             yield from _chaines(v, k)
     elif isinstance(p, (list, tuple)):
@@ -255,6 +255,10 @@ def construire(gabarit, p, G=G):
                 s["label"] = (_txt(d.get("condition"), "issues.condition", 30), "rouge")
             sorties[i - 1] = s
         _exiger(len(sorties) <= 2, "Deux issues au maximum sous les étapes.")
+        # Process du bloc 1 (« forme » : process_besoin, 5 étapes : besoin, enjeu, dispositif, pilotage, résultat) : le moteur
+        # qui sait le dessiner en miroir « vous → nous → résultat » (style « marine » v3) le fait ; les autres le dessinent en flux.
+        if p.get("forme") == "process_besoin" and len(et) == 5 and not labels and not sorties and hasattr(G, "process_besoin"):
+            return G.process_besoin(et)
         return G.flux(et, labels=labels, sorties=sorties)
     if gabarit == "chevrons":
         et = []
@@ -470,9 +474,19 @@ def _jalons(v):
 
 
 # ── Moteur selon le thème et le format ──────────────────────────────────────
+def _moteur_v3():
+    """Vrai si le thème actif est dessiné par le moteur de la planche validée « Marine & signal » v3."""
+    return (themes_gss.styles().get(THEME) or {}).get("moteur") == "moteur_marine"
+
+
 @lru_cache(maxsize=None)
 def _moteur_page():
-    """Gabarits du format page (A4 portrait) dans le thème actif."""
+    """Gabarits du format page (A4 portrait) dans le thème actif : moteur_marine (style « marine », version 3 validée
+    par le patron de GSS), sinon moteur_page (autres styles, « marine-v1 », retour arrière)."""
+    if _moteur_v3():
+        from moteur_marine import theme as th_v3, gabarits as gabarits_v3
+        th_v3.utiliser(THEME, "page")
+        return gabarits_v3
     from moteur_page import theme as th_page, gabarits as gabarits_page
     th_page.utiliser(THEME, "page")
     return gabarits_page
@@ -486,11 +500,13 @@ def _deborde(e):
     """Débordement de texte : moteur d'origine ou moteur page (même message à l'IA)."""
     if isinstance(e, gss_lib.Deborde):
         return True
-    try:
-        from moteur_page.gss_lib import Deborde as DebordePage
-    except Exception:  # noqa: BLE001
-        return False
-    return isinstance(e, DebordePage)
+    for mod in ("moteur_page.gss_lib", "moteur_marine.gss_lib"):
+        try:
+            if isinstance(e, __import__(mod, fromlist=["Deborde"]).Deborde):
+                return True
+        except Exception:  # noqa: BLE001
+            continue
+    return False
 
 
 def finaliser_page(svg, prefixe):
@@ -513,7 +529,7 @@ def rendre(sp, fmt="paysage"):
             return {"id": ident, "ok": False, "erreurs": erreurs[:12]}
         if fmt == "page":
             GP = _moteur_page()
-            svg = GP.en_grand(lambda: construire(sp.get("gabarit"), params, GP), sp.get("gabarit")).rendu()
+            svg = GP.en_grand(lambda: construire(sp.get("gabarit"), params, GP), sp.get("gabarit"), params=params).rendu()
             return {"id": ident, "ok": True, "svg": finaliser_page(svg, "s" + ident)}
         svg = construire(sp.get("gabarit"), params).rendu()
         return {"id": ident, "ok": True, "svg": finaliser(themes_gss.recolorer(svg, THEME), "s" + ident)}
@@ -580,9 +596,11 @@ def _dessiner_page(sp):
         f = getattr(GP, "COMPOSES", {}).get(sp["id"])
         if f is None:
             raise Invalide(f"schéma composé sans version page : {sp['id']}")
-        return f().rendu()
-    return GP.en_grand(lambda: getattr(GP, sp["gabarit"])(*_decoder(sp["params"]["args"]), **_decoder(sp["params"]["kwargs"])),
-                       sp["gabarit"]).rendu()
+        # Style « marine » v3 : rôles du schéma, palier et page remplie aussi pour un schéma composé.
+        return (GP.en_grand(f, "compose", params=sp) if _moteur_v3() else f()).rendu()
+    params = _decoder(sp["params"])
+    return GP.en_grand(lambda: getattr(GP, sp["gabarit"])(*params["args"], **params["kwargs"]),
+                       sp["gabarit"], params=params).rendu()
 
 
 # ── Vocabulaire du cahier des charges dans les textes des schémas ────────────

@@ -27,7 +27,7 @@ let empreinte: string | null = null;
 function empreinteMoteur(): string {
   if (!empreinte) {
     const h = crypto.createHash('sha1');
-    for (const f of ['themes/themes.json', 'themes_gss.py', 'organigramme_gss.py', 'gss_lib.py', 'gabarits.py', 'moteur_page/organigramme.py',
+    for (const f of ['themes/themes.json', 'themes_gss.py', 'organigramme_gss.py', 'gss_lib.py', 'gabarits.py', 'moteur_page/organigramme.py', 'moteur_marine/organigramme.py', 'moteur_marine/gss_lib.py', 'moteur_marine/gabarits.py', 'moteur_marine/dessin.py',
       'moteur_page/gss_lib.py', 'moteur_page/gabarits.py', 'moteur_page/theme.py', 'moteur_page/pictos.py']) {
       try { h.update(fs.readFileSync(path.join(MOTEUR, f))); } catch { h.update('-'); }
     }

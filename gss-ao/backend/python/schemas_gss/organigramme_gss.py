@@ -85,6 +85,12 @@ def organigramme(d=None):
 def organigramme_theme(d=None, fmt="paysage", theme=None):
     """Organigramme dans le thème : format page (portrait, moteur_page) ou paysage (ce dessin aux couleurs du thème)."""
     theme = theme or themes_gss.theme_actif()
+    if themes_gss.format_effectif(theme, fmt) == "page" and (themes_gss.styles().get(theme) or {}).get("moteur") == "moteur_marine":
+        # style « marine » : version 3 validée par le patron de GSS (moteur_marine)
+        from moteur_marine import theme as th_v3
+        from moteur_marine.organigramme import organigramme as organigramme_v3
+        th_v3.utiliser(theme, "page")
+        return organigramme_v3(d or DEFAUT).rendu()
     if themes_gss.format_effectif(theme, fmt) == "page":
         from moteur_page import theme as th_page
         from moteur_page.organigramme import organigramme as organigramme_page

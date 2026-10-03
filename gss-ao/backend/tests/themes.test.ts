@@ -90,7 +90,10 @@ describe('schémas de la bibliothèque dans le thème', () => {
       expect(svg).toContain('data-format="page"');
       expect(svg).toContain('data-style="marine"');
       for (const c of ANCIENNE_PALETTE) expect(svg.toUpperCase()).not.toContain(`"${c}"`);
-      const mots = (s: string) => [...s.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((x) => x[1]).join(' ').replace(/[  ]/g, ' ').split(/\s+/).filter(Boolean).sort();
+      // Typographie de rendu du style « marine » v3 (planche validée) : apostrophe ’ et ordinaux en exposant (<tspan>) ;
+      // les mots sont comparés après normalisation, comme le contrôle de la planche.
+      const mots = (s: string) => [...s.matchAll(/<text[^>]*>(.*?)<\/text>/g)].map((x) => x[1].replace(/<[^>]+>/g, '')).join(' ')
+        .replace(/\u2019/g, "'").replace(/[\u00a0\u202f]/g, ' ').split(/\s+/).filter(Boolean).sort();
       expect(mots(svg)).toEqual(mots(fs.readFileSync(path.join(MOTEUR, 'bibliotheque', `${id}.svg`), 'utf-8')));
     }
   });

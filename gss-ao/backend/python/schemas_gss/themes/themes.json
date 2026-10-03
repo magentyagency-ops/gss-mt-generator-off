@@ -271,30 +271,31 @@
   "marine": {
    "id": "marine",
    "nom": "Marine & signal",
-   "accroche": "Le bleu marine des institutions, un orange « signal » pour guider l'œil",
-   "principe": "Le code visuel de la sécurité et du service public : un bleu marine profond pour la structure, des bandeaux pleins qui portent les titres en blanc, un orange signal réservé aux numéros d'étapes, aux flèches de lecture et aux chiffres clés. Cartes nettes, angles peu arrondis, pictogrammes blancs dans les bandeaux.",
+   "accroche": "Le marine des institutions, un seul signal orange pour ce qui compte",
+   "principe": "Un rapport d'expert, pas un diaporama : le marine porte la structure et le fil de lecture, le blanc laisse respirer, et un seul orange « signal » marque ce qui compte — le bloc en cours et les chiffres clés. Les couleurs de rôle GSS (contrôle, action, déclencheur, issue), assombries et désaturées, ne sont plus que des touches : la plaque d'un pictogramme, une colonne, une étiquette ; au plus deux par schéma, et le point d'arrivée d'un process en vert plein. Chaque forme dit une relation : un process qui s'enchaîne, des contraintes qui convergent, un sujet au centre de ses composantes. Une échelle typographique unique, IBM Plex en trois largeurs.",
    "forces": [
-    "Couleurs franches qui ressortent : chaque bloc porte son titre dans un bandeau plein",
-    "Crédible auprès des acheteurs publics et privés (codes de l'uniforme et des institutions)",
-    "L'orange signal trace le sens de lecture (numéros, flèches) sans surcharger",
-    "Contrastes AA partout ; s'imprime bien, y compris en noir et blanc"
+    "Hiérarchie immédiate : marine pour la structure, blanc pour l'air, orange pour les seuls chiffres clés",
+    "Chaque forme porte une relation lisible en 5 secondes : process, convergence, sujet et composantes",
+    "Couleurs profondes et imprimables (épreuve CMJN contrôlée), au plus deux couleurs de rôle par schéma",
+    "Une échelle typographique commune (13 / 18 / 24 / 60 pt) : toutes les pages parlent à la même voix",
+    "Une seule famille typographique (IBM Plex Sans, Condensed, Mono), libre et intégrée au PDF"
    ],
    "limites": [
-    "Plus d'encre que les styles clairs (bandeaux pleins)",
-    "Le rouge du logo GSS n'est plus la couleur dominante (logo conservé dans l'en-tête marine)"
+    "Plus sobre que la version 2 : la couleur se concentre sur les pictogrammes, les arrivées et les chiffres",
+    "Le logo monochrome blanc utilisé sur le marine est une proposition, à valider par GSS"
    ],
-   "usage": "Tous les mémoires techniques, publics et privés",
+   "usage": "Tous les mémoires techniques, publics et privés ; version imprimée comme version PDF",
    "polices": {
     "titre": {
-     "famille": "IBM Plex Sans",
+     "famille": "IBM Plex Sans Condensed",
      "repli": "sans-serif",
      "fichiers": {
-      "500": "polices/IBMPlexSans-500.ttf",
-      "600": "polices/IBMPlexSans-600.ttf",
-      "700": "polices/IBMPlexSans-700.ttf"
+      "500": "polices/IBMPlexSansCondensed-500.ttf",
+      "600": "polices/IBMPlexSansCondensed-600.ttf",
+      "700": "polices/IBMPlexSansCondensed-700.ttf"
      },
-     "licence": "polices/LICENCE-IBMPlexSans-OFL.txt",
-     "google_fonts": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&display=swap"
+     "licence": "polices/LICENCE-IBMPlexSansCondensed-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap"
     },
     "texte": {
      "famille": "IBM Plex Sans",
@@ -309,142 +310,196 @@
      "google_fonts": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
     },
     "chiffres": {
-     "famille": "IBM Plex Sans",
+     "famille": "IBM Plex Sans Condensed",
      "repli": "sans-serif",
      "fichiers": {
-      "600": "polices/IBMPlexSans-600.ttf",
-      "700": "polices/IBMPlexSans-700.ttf"
+      "600": "polices/IBMPlexSansCondensed-600.ttf",
+      "700": "polices/IBMPlexSansCondensed-700.ttf"
      },
-     "licence": "polices/LICENCE-IBMPlexSans-OFL.txt",
-     "google_fonts": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@600;700&display=swap"
+     "licence": "polices/LICENCE-IBMPlexSansCondensed-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap"
+    },
+    "numero": {
+     "famille": "IBM Plex Mono",
+     "repli": "sans-serif",
+     "fichiers": {
+      "500": "polices/IBMPlexMono-500.ttf",
+      "600": "polices/IBMPlexMono-600.ttf",
+      "700": "polices/IBMPlexMono-700.ttf"
+     },
+     "licence": "polices/LICENCE-IBMPlexMono-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&display=swap"
     }
    },
    "typo": {
-    "titre_graisse": 600,
+    "titre_graisse": 700,
     "texte_graisse": 400,
     "chiffres_graisse": 700,
-    "interligne_titre": 1.16,
-    "interligne_texte": 1.34,
+    "interligne_titre": 1.12,
+    "interligne_texte": 1.38,
     "interlettrage_titre": 0,
     "echelle_titre": 1.0,
-    "echelle_texte": 1.0
+    "echelle_texte": 1.0,
+    "taille_min_schema": 20,
+    "paliers": {
+     "standard": {
+      "texte": 25.5,
+      "carte": 35.5,
+      "panneau": 47,
+      "chiffre": 118,
+      "chiffre_moyen": 66,
+      "etiquette": 21,
+      "numero": 26,
+      "plaque": 84,
+      "pad": 30,
+      "note": "texte 13 pt, titre de carte 18 pt, panneau 24 pt, chiffre clé 60 pt (34 pt dans une carte), étiquette 10,7 pt"
+     },
+     "dense": {
+      "texte": 21.5,
+      "carte": 29.5,
+      "panneau": 39,
+      "chiffre": 94,
+      "chiffre_moyen": 56,
+      "etiquette": 20,
+      "numero": 23,
+      "plaque": 70,
+      "pad": 24,
+      "note": "texte 11 pt, titre de carte 15 pt, panneau 20 pt, chiffre clé 48 pt (29 pt dans une carte), étiquette 10,2 pt"
+     }
+    },
+    "note": "Toile de schéma 1000 × 1270 affichée sur 180 × 228,6 mm : 1 unité = 0,18 mm = 0,51 pt. Échelle commune à tout le document, en deux paliers : standard (texte 13 pt, titre de carte 18 pt, panneau 24 pt, chiffre clé 60 pt) et dense (11 / 15 / 20 / 48 pt). Un schéma prend le palier standard ; s'il ne tient pas, le palier dense ; la mise en page s'adapte, pas la taille. Plancher : 20 unités (10,2 pt)."
    },
    "couleurs": {
     "fond_page": "#FFFFFF",
     "fond_schema": "#FFFFFF",
-    "encre": "#0F1E33",
-    "encre_2": "#3E4C60",
-    "encre_3": "#5B687C",
-    "filet": "#D5DDE8",
+    "encre": "#0B1B30",
+    "encre_2": "#33445C",
+    "encre_3": "#56657C",
+    "filet": "#D3DCE7",
+    "filet_fort": "#A7B5C8",
     "surface": "#FFFFFF",
     "surface_2": "#F2F5F9",
-    "carte_fond": "#F3F6FA",
-    "accent": "#E85D15",
-    "accent_texte": "#B54708",
+    "carte_fond": "#F2F5F9",
+    "accent": "#F15A22",
+    "chiffre_cle": "#F15A22",
     "structure": "#0B2545",
+    "structure_2": "#23426B",
     "sur_structure": "#FFFFFF",
-    "lien": "#0B2545",
-    "fleche": "#E85D15"
+    "clair_sur_structure": "#C9D6E8",
+    "lien": "#A7B5C8",
+    "fleche": "#0B2545",
+    "accent_texte": "#0B2545"
    },
    "roles": {
     "bleu": {
-     "fonce": "#1F5FBF",
-     "vif": "#1F5FBF",
-     "clair": "#E8EFFA",
+     "fonce": "#3B6286",
+     "vif": "#3B6286",
+     "clair": "#E6ECF3",
      "sur_fonce": "#FFFFFF",
-     "role_gss": "contrôle"
+     "role_gss": "contrôle",
+     "nom": "bleu acier"
     },
     "orange": {
-     "fonce": "#B54708",
-     "vif": "#E85D15",
-     "clair": "#FEEFE5",
+     "fonce": "#8C3B26",
+     "vif": "#8C3B26",
+     "clair": "#F5E9E5",
      "sur_fonce": "#FFFFFF",
-     "role_gss": "action"
+     "role_gss": "action",
+     "nom": "brique"
     },
     "rouge": {
-     "fonce": "#B42318",
-     "vif": "#D92D20",
-     "clair": "#FDECEA",
+     "fonce": "#B3202E",
+     "vif": "#B3202E",
+     "clair": "#F8E6E8",
      "sur_fonce": "#FFFFFF",
-     "role_gss": "déclencheur / non-conformité"
+     "role_gss": "déclencheur / non-conformité",
+     "nom": "rouge profond"
     },
     "vert": {
-     "fonce": "#0E7A50",
-     "vif": "#13955F",
-     "clair": "#E4F4EC",
+     "fonce": "#1F6A4C",
+     "vif": "#1F6A4C",
+     "clair": "#E5F0EA",
      "sur_fonce": "#FFFFFF",
-     "role_gss": "issue"
+     "role_gss": "issue",
+     "nom": "vert sapin"
     },
     "sable": {
-     "fonce": "#1D3A63",
-     "vif": "#1D3A63",
-     "clair": "#E9EFF6",
+     "fonce": "#23426B",
+     "vif": "#23426B",
+     "clair": "#E6ECF4",
      "sur_fonce": "#FFFFFF",
-     "role_gss": "structure"
+     "role_gss": "structure",
+     "nom": "marine moyen"
     },
     "or": {
      "fonce": "#0B2545",
      "vif": "#0B2545",
-     "clair": "#E5EBF3",
+     "clair": "#E3E9F2",
      "sur_fonce": "#FFFFFF",
-     "role_gss": "structure (tête)"
+     "role_gss": "structure (tête)",
+     "nom": "marine"
     },
     "creme": {
-     "fonce": "#4F5F77",
-     "vif": "#4F5F77",
-     "clair": "#EEF2F7",
+     "fonce": "#56677F",
+     "vif": "#56677F",
+     "clair": "#EEF2F6",
      "sur_fonce": "#FFFFFF",
-     "role_gss": "neutre"
+     "role_gss": "neutre",
+     "nom": "ardoise"
     },
     "sombre": {
      "fonce": "#0B2545",
      "vif": "#0B2545",
-     "clair": "#E5EBF3",
+     "clair": "#E3E9F2",
      "sur_fonce": "#FFFFFF",
-     "role_gss": "bandeau"
+     "role_gss": "bandeau",
+     "nom": "marine"
     }
    },
    "carte": {
-    "entete": "bande_titre",
-    "rayon": 6,
+    "entete": "plaque",
+    "rayon": 4,
     "bordure": 0,
-    "couleur_bordure": "#D5DDE8",
-    "ombre": {
-     "dy": 3,
-     "flou": 10,
-     "couleur": "#0B2545",
-     "opacite": 0.1
-    },
+    "couleur_bordure": "#D3DCE7",
+    "ombre": null,
     "remplissage": "carte_fond",
     "epaisseur_filet": 0,
-    "epaisseur_barre": 0,
+    "epaisseur_barre": 10,
     "lueur": false,
     "icone": {
-     "mode": "dans_bande",
+     "mode": "plaque",
      "graisse": "bold"
     },
     "centrer_titre": false
    },
    "bandeau": {
     "mode": "plein",
-    "rayon": 6
+    "rayon": 4,
+    "filet_signal": 0
    },
    "fleches": {
-    "couleur": "#E85D15",
-    "epaisseur": 4,
+    "couleur": "#0B2545",
+    "epaisseur": 5,
     "pointe": "triangle",
-    "taille": 16
+    "taille": 18
    },
    "liens": {
-    "couleur": "#9AAAC0",
-    "epaisseur": 2.5,
+    "couleur": "#A7B5C8",
+    "epaisseur": 3,
     "noeud": 7
+   },
+   "fil": {
+    "couleur": "#0B2545",
+    "epaisseur": 6,
+    "marqueur": "disque",
+    "texte_marqueur": "#FFFFFF",
+    "note": "Fil de lecture marine : relie les étapes d'un process ; numéros d'étapes en disques marine à chiffres blancs (IBM Plex Mono). Les ensembles sans ordre sont rattachés par un filet gris neutre, sans flèche."
    },
    "etiquettes": {
     "mode": "plein"
    },
    "numeros": {
-    "mode": "carre"
+    "mode": "marine"
    },
    "puces": {
     "forme": "carre"
@@ -453,36 +508,76 @@
     "mode": "plein"
    },
    "motif_fond": null,
-   "logo": "original",
+   "logo": "monochrome_blanc_sur_marine",
+   "regles_roles": {
+    "max_par_schema": 2,
+    "priorite": [
+     "rouge",
+     "vert",
+     "bleu",
+     "orange"
+    ],
+    "sequences": [
+     "flux",
+     "chevrons",
+     "cycle",
+     "frise",
+     "jauge",
+     "plan_ronde",
+     "compose"
+    ],
+    "note": "Dans un process (séquence), contrôle et action prennent la couleur de structure : seuls le déclencheur (rouge) et l'issue (vert, point d'arrivée) gardent leur couleur. Ailleurs, au plus 2 couleurs de rôle par schéma, dans l'ordre de priorité ; les autres rôles prennent la structure."
+   },
    "pages": {
     "--gss-fond-page": "#FFFFFF",
-    "--gss-encre": "#0F1E33",
-    "--gss-encre-2": "#3E4C60",
-    "--gss-encre-3": "#5B687C",
-    "--gss-filet": "#D5DDE8",
-    "--gss-accent": "#E85D15",
-    "--gss-accent-texte": "#B54708",
+    "--gss-encre": "#0B1B30",
+    "--gss-encre-2": "#33445C",
+    "--gss-encre-3": "#56657C",
+    "--gss-filet": "#D3DCE7",
+    "--gss-accent": "#F15A22",
     "--gss-structure": "#0B2545",
+    "--gss-structure-2": "#23426B",
+    "--gss-clair-sur-structure": "#C9D6E8",
     "--gss-encadre-fond": "#F2F5F9",
-    "--gss-encadre-filet": "#E85D15",
+    "--gss-encadre-filet": "#0B2545",
     "--gss-tableau-tete": "#0B2545",
     "--gss-tableau-tete-texte": "#FFFFFF",
     "--gss-tableau-ligne": "#F2F5F9",
-    "--gss-police-titre": "'IBM Plex Sans', sans-serif",
+    "--gss-police-titre": "'IBM Plex Sans Condensed', 'IBM Plex Sans', sans-serif",
     "--gss-police-texte": "'IBM Plex Sans', sans-serif",
-    "--gss-titre-graisse": "600",
+    "--gss-police-numero": "'IBM Plex Mono', monospace",
+    "--gss-titre-graisse": "700",
     "--gss-entete-fond": "#0B2545",
     "--gss-entete-texte": "#FFFFFF",
-    "--gss-entete-filet": "#E85D15",
     "--gss-titre": "#0B2545",
-    "--gss-titre-filet": "#E85D15",
     "--gss-couverture-fond": "#0B2545",
     "--gss-couverture-texte": "#FFFFFF",
-    "--gss-couverture-accent": "#F26A21",
     "--gss-intercalaire-fond": "#0B2545",
     "--gss-intercalaire-texte": "#FFFFFF",
-    "--gss-intercalaire-numero": "#F26A21"
-   }
+    "--gss-intercalaire-numero": "#F15A22",
+    "--gss-texte-taille": "10.5pt",
+    "--gss-texte-interligne": "1.5",
+    "--gss-chapeau-taille": "12pt",
+    "--gss-tableau-taille": "9pt",
+    "--gss-tableau-tete-taille": "7.6pt",
+    "--gss-surtitre-taille": "7.6pt",
+    "--gss-entete-taille": "7.5pt",
+    "--gss-pied-taille": "7.5pt",
+    "--gss-source-taille": "7pt",
+    "--gss-titre-taille": "24pt",
+    "--gss-titre-schema-taille": "20pt",
+    "--gss-intertitre-taille": "11.5pt",
+    "--gss-texte-court-taille": "11.5pt",
+    "--gss-texte-court-interligne": "1.6",
+    "--gss-accent-texte": "#0B2545",
+    "--gss-titre-filet": "#0B2545",
+    "--gss-entete-filet": "#0B2545",
+    "--gss-couverture-accent": "#C9D6E8",
+    "--gss-puce": "#0B2545"
+   },
+   "note": "Version 3 de la planche « Marine & signal », validée par le patron de GSS (décision D11, planche_finale.pdf et planche_marine.pdf) : jetons repris tels quels de jetons_marine.json de la planche v3. Schémas dessinés par moteur_marine (formes v3), pages par src/generation/marp/gss-theme-pages-marine.css.",
+   "moteur": "moteur_marine",
+   "feuille_pages": "gss-theme-pages-marine.css"
   },
   "graphite": {
    "id": "graphite",
@@ -1327,6 +1422,223 @@
     "--gss-intercalaire-texte": "#2A1F1A",
     "--gss-intercalaire-numero": "#B8672E"
    }
+  },
+  "marine-v1": {
+   "id": "marine-v1",
+   "nom": "Marine & signal (version 1 de la planche, non retenue)",
+   "accroche": "Le bleu marine des institutions, un orange « signal » pour guider l'œil",
+   "principe": "Le code visuel de la sécurité et du service public : un bleu marine profond pour la structure, des bandeaux pleins qui portent les titres en blanc, un orange signal réservé aux numéros d'étapes, aux flèches de lecture et aux chiffres clés. Cartes nettes, angles peu arrondis, pictogrammes blancs dans les bandeaux.",
+   "forces": [
+    "Couleurs franches qui ressortent : chaque bloc porte son titre dans un bandeau plein",
+    "Crédible auprès des acheteurs publics et privés (codes de l'uniforme et des institutions)",
+    "L'orange signal trace le sens de lecture (numéros, flèches) sans surcharger",
+    "Contrastes AA partout ; s'imprime bien, y compris en noir et blanc"
+   ],
+   "limites": [
+    "Plus d'encre que les styles clairs (bandeaux pleins)",
+    "Le rouge du logo GSS n'est plus la couleur dominante (logo conservé dans l'en-tête marine)"
+   ],
+   "usage": "Tous les mémoires techniques, publics et privés",
+   "polices": {
+    "titre": {
+     "famille": "IBM Plex Sans",
+     "repli": "sans-serif",
+     "fichiers": {
+      "500": "polices/IBMPlexSans-500.ttf",
+      "600": "polices/IBMPlexSans-600.ttf",
+      "700": "polices/IBMPlexSans-700.ttf"
+     },
+     "licence": "polices/LICENCE-IBMPlexSans-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&display=swap"
+    },
+    "texte": {
+     "famille": "IBM Plex Sans",
+     "repli": "sans-serif",
+     "fichiers": {
+      "400": "polices/IBMPlexSans-400.ttf",
+      "500": "polices/IBMPlexSans-500.ttf",
+      "600": "polices/IBMPlexSans-600.ttf",
+      "700": "polices/IBMPlexSans-700.ttf"
+     },
+     "licence": "polices/LICENCE-IBMPlexSans-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+    },
+    "chiffres": {
+     "famille": "IBM Plex Sans",
+     "repli": "sans-serif",
+     "fichiers": {
+      "600": "polices/IBMPlexSans-600.ttf",
+      "700": "polices/IBMPlexSans-700.ttf"
+     },
+     "licence": "polices/LICENCE-IBMPlexSans-OFL.txt",
+     "google_fonts": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@600;700&display=swap"
+    }
+   },
+   "typo": {
+    "titre_graisse": 600,
+    "texte_graisse": 400,
+    "chiffres_graisse": 700,
+    "interligne_titre": 1.16,
+    "interligne_texte": 1.34,
+    "interlettrage_titre": 0,
+    "echelle_titre": 1.0,
+    "echelle_texte": 1.0
+   },
+   "couleurs": {
+    "fond_page": "#FFFFFF",
+    "fond_schema": "#FFFFFF",
+    "encre": "#0F1E33",
+    "encre_2": "#3E4C60",
+    "encre_3": "#5B687C",
+    "filet": "#D5DDE8",
+    "surface": "#FFFFFF",
+    "surface_2": "#F2F5F9",
+    "carte_fond": "#F3F6FA",
+    "accent": "#E85D15",
+    "accent_texte": "#B54708",
+    "structure": "#0B2545",
+    "sur_structure": "#FFFFFF",
+    "lien": "#0B2545",
+    "fleche": "#E85D15"
+   },
+   "roles": {
+    "bleu": {
+     "fonce": "#1F5FBF",
+     "vif": "#1F5FBF",
+     "clair": "#E8EFFA",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "contrôle"
+    },
+    "orange": {
+     "fonce": "#B54708",
+     "vif": "#E85D15",
+     "clair": "#FEEFE5",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "action"
+    },
+    "rouge": {
+     "fonce": "#B42318",
+     "vif": "#D92D20",
+     "clair": "#FDECEA",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "déclencheur / non-conformité"
+    },
+    "vert": {
+     "fonce": "#0E7A50",
+     "vif": "#13955F",
+     "clair": "#E4F4EC",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "issue"
+    },
+    "sable": {
+     "fonce": "#1D3A63",
+     "vif": "#1D3A63",
+     "clair": "#E9EFF6",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "structure"
+    },
+    "or": {
+     "fonce": "#0B2545",
+     "vif": "#0B2545",
+     "clair": "#E5EBF3",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "structure (tête)"
+    },
+    "creme": {
+     "fonce": "#4F5F77",
+     "vif": "#4F5F77",
+     "clair": "#EEF2F7",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "neutre"
+    },
+    "sombre": {
+     "fonce": "#0B2545",
+     "vif": "#0B2545",
+     "clair": "#E5EBF3",
+     "sur_fonce": "#FFFFFF",
+     "role_gss": "bandeau"
+    }
+   },
+   "carte": {
+    "entete": "bande_titre",
+    "rayon": 6,
+    "bordure": 0,
+    "couleur_bordure": "#D5DDE8",
+    "ombre": {
+     "dy": 3,
+     "flou": 10,
+     "couleur": "#0B2545",
+     "opacite": 0.1
+    },
+    "remplissage": "carte_fond",
+    "epaisseur_filet": 0,
+    "epaisseur_barre": 0,
+    "lueur": false,
+    "icone": {
+     "mode": "dans_bande",
+     "graisse": "bold"
+    },
+    "centrer_titre": false
+   },
+   "bandeau": {
+    "mode": "plein",
+    "rayon": 6
+   },
+   "fleches": {
+    "couleur": "#E85D15",
+    "epaisseur": 4,
+    "pointe": "triangle",
+    "taille": 16
+   },
+   "liens": {
+    "couleur": "#9AAAC0",
+    "epaisseur": 2.5,
+    "noeud": 7
+   },
+   "etiquettes": {
+    "mode": "plein"
+   },
+   "numeros": {
+    "mode": "carre"
+   },
+   "puces": {
+    "forme": "carre"
+   },
+   "coche": {
+    "mode": "plein"
+   },
+   "motif_fond": null,
+   "logo": "original",
+   "pages": {
+    "--gss-fond-page": "#FFFFFF",
+    "--gss-encre": "#0F1E33",
+    "--gss-encre-2": "#3E4C60",
+    "--gss-encre-3": "#5B687C",
+    "--gss-filet": "#D5DDE8",
+    "--gss-accent": "#E85D15",
+    "--gss-accent-texte": "#B54708",
+    "--gss-structure": "#0B2545",
+    "--gss-encadre-fond": "#F2F5F9",
+    "--gss-encadre-filet": "#E85D15",
+    "--gss-tableau-tete": "#0B2545",
+    "--gss-tableau-tete-texte": "#FFFFFF",
+    "--gss-tableau-ligne": "#F2F5F9",
+    "--gss-police-titre": "'IBM Plex Sans', sans-serif",
+    "--gss-police-texte": "'IBM Plex Sans', sans-serif",
+    "--gss-titre-graisse": "600",
+    "--gss-entete-fond": "#0B2545",
+    "--gss-entete-texte": "#FFFFFF",
+    "--gss-entete-filet": "#E85D15",
+    "--gss-titre": "#0B2545",
+    "--gss-titre-filet": "#E85D15",
+    "--gss-couverture-fond": "#0B2545",
+    "--gss-couverture-texte": "#FFFFFF",
+    "--gss-couverture-accent": "#F26A21",
+    "--gss-intercalaire-fond": "#0B2545",
+    "--gss-intercalaire-texte": "#FFFFFF",
+    "--gss-intercalaire-numero": "#F26A21"
+   },
+   "note": "Première version de la planche (accent #E85D15, rôles vifs, bandeaux pleins) : ce n'est PAS la version validée par le patron de GSS (décision D11). Gardée pour comparaison sous l'identifiant « marine-v1 » ; le style « marine » est la version 3 validée."
   }
  },
  "correspondance_paysage": {
@@ -1343,13 +1655,13 @@
   "marine": {
    "fond": {
     "#D9D9D9": "#FFFFFF",
-    "#FBFAF4": "#F3F6FA",
-    "#ECE9E2": "#EEF2F7",
-    "#F5F5DE": "#EEF2F7",
+    "#FBFAF4": "#F2F5F9",
+    "#ECE9E2": "#EEF2F6",
+    "#F5F5DE": "#EEF2F6",
     "#484545": "#0B2545",
-    "#2E2B2B": "#0F1E33",
-    "#463A2F": "#0F1E33",
-    "#000000": "#0F1E33",
+    "#2E2B2B": "#0B1B30",
+    "#463A2F": "#0B1B30",
+    "#000000": "#0B1B30",
     "#D6E3EA": "#DCE7F0",
     "#EDEAE6": "#FFFFFF",
     "#EDEAE7": "#F2F5F9",
@@ -1357,70 +1669,70 @@
     "#E9E5DE": "#F2F5F9",
     "#E3E0DD": "#F2F5F9",
     "#F2F0EE": "#F2F5F9",
-    "#47494B": "#3E4C60",
-    "#6298C0": "#84A7DC",
-    "#B8CCB1": "#7DC5A7",
-    "#E78E83": "#EA8C84",
-    "#F0D3A3": "#F2A67E",
-    "#ECDEC2": "#8393A9",
-    "#E5CA97": "#798799",
-    "#1D49A7": "#1F5FBF",
-    "#377E3F": "#0E7A50",
-    "#DD4E49": "#B42318",
-    "#E99842": "#B54708",
-    "#8A7550": "#1D3A63",
-    "#8A817C": "#4F5F77"
+    "#47494B": "#33445C",
+    "#6298C0": "#CED8E1",
+    "#B8CCB1": "#C7DAD2",
+    "#E78E83": "#ECC7CB",
+    "#F0D3A3": "#E2CEC9",
+    "#ECDEC2": "#C8D0DA",
+    "#E5CA97": "#C2C8D0",
+    "#1D49A7": "#3B6286",
+    "#377E3F": "#1F6A4C",
+    "#DD4E49": "#B3202E",
+    "#E99842": "#8C3B26",
+    "#8A7550": "#23426B",
+    "#8A817C": "#56677F"
    },
    "texte": {
-    "#463A2F": "#0F1E33",
-    "#000000": "#0F1E33",
+    "#463A2F": "#0B1B30",
+    "#000000": "#0B1B30",
     "#F5F5DE": "#FFFFFF",
-    "#5B5451": "#5B687C",
-    "#B9423C": "#B54708",
-    "#484545": "#0F1E33",
-    "#47494B": "#3E4C60",
-    "#2E2B2B": "#0F1E33",
-    "#1D49A7": "#1F5FBF",
-    "#377E3F": "#0E7A50",
-    "#DD4E49": "#B42318",
-    "#E99842": "#B54708",
-    "#8A7550": "#1D3A63",
-    "#8A817C": "#4F5F77"
+    "#5B5451": "#56657C",
+    "#B9423C": "#0B2545",
+    "#484545": "#0B1B30",
+    "#47494B": "#33445C",
+    "#2E2B2B": "#0B1B30",
+    "#1D49A7": "#3B6286",
+    "#377E3F": "#1F6A4C",
+    "#DD4E49": "#B3202E",
+    "#E99842": "#8C3B26",
+    "#8A7550": "#23426B",
+    "#8A817C": "#56677F"
    },
    "trait": {
-    "#7A726F": "#E85D15",
-    "#9A928E": "#9AAAC0",
+    "#7A726F": "#0B2545",
+    "#9A928E": "#A7B5C8",
     "#FBFAF4": "#FFFFFF",
     "#F5F5DE": "#FFFFFF",
-    "#463A2F": "#0F1E33",
+    "#463A2F": "#0B1B30",
     "#484545": "#0B2545",
-    "#2E2B2B": "#0F1E33",
-    "#B9B2AE": "#D5DDE8",
-    "#C9C4C1": "#D5DDE8",
-    "#BDB6B2": "#D5DDE8",
+    "#2E2B2B": "#0B1B30",
+    "#B9B2AE": "#D3DCE7",
+    "#C9C4C1": "#D3DCE7",
+    "#BDB6B2": "#D3DCE7",
     "#E9E5DE": "#F2F5F9",
-    "#000000": "#0F1E33",
-    "#47494B": "#3E4C60",
-    "#6298C0": "#84A7DC",
-    "#B8CCB1": "#7DC5A7",
-    "#E78E83": "#EA8C84",
-    "#F0D3A3": "#F2A67E",
-    "#ECDEC2": "#8393A9",
-    "#E5CA97": "#798799",
-    "#1D49A7": "#1F5FBF",
-    "#377E3F": "#0E7A50",
-    "#DD4E49": "#B42318",
-    "#E99842": "#B54708",
-    "#8A7550": "#1D3A63",
-    "#8A817C": "#4F5F77"
+    "#000000": "#0B1B30",
+    "#47494B": "#33445C",
+    "#6298C0": "#CED8E1",
+    "#B8CCB1": "#C7DAD2",
+    "#E78E83": "#ECC7CB",
+    "#F0D3A3": "#E2CEC9",
+    "#ECDEC2": "#C8D0DA",
+    "#E5CA97": "#C2C8D0",
+    "#1D49A7": "#3B6286",
+    "#377E3F": "#1F6A4C",
+    "#DD4E49": "#B3202E",
+    "#E99842": "#8C3B26",
+    "#8A7550": "#23426B",
+    "#8A817C": "#56677F"
    },
    "ligne": {
-    "#7A726F": "#5B687C"
+    "#7A726F": "#56657C"
    },
    "puce": {
-    "#463A2F": "#E85D15"
+    "#463A2F": "#F15A22"
    },
-   "ombre": "#0B2545"
+   "ombre": null
   },
   "graphite": {
    "fond": {
@@ -1749,6 +2061,88 @@
     "#463A2F": "#B8672E"
    },
    "ombre": "#5A3A1A"
+  },
+  "marine-v1": {
+   "fond": {
+    "#D9D9D9": "#FFFFFF",
+    "#FBFAF4": "#F3F6FA",
+    "#ECE9E2": "#EEF2F7",
+    "#F5F5DE": "#EEF2F7",
+    "#484545": "#0B2545",
+    "#2E2B2B": "#0F1E33",
+    "#463A2F": "#0F1E33",
+    "#000000": "#0F1E33",
+    "#D6E3EA": "#DCE7F0",
+    "#EDEAE6": "#FFFFFF",
+    "#EDEAE7": "#F2F5F9",
+    "#E6E3E1": "#F2F5F9",
+    "#E9E5DE": "#F2F5F9",
+    "#E3E0DD": "#F2F5F9",
+    "#F2F0EE": "#F2F5F9",
+    "#47494B": "#3E4C60",
+    "#6298C0": "#84A7DC",
+    "#B8CCB1": "#7DC5A7",
+    "#E78E83": "#EA8C84",
+    "#F0D3A3": "#F2A67E",
+    "#ECDEC2": "#8393A9",
+    "#E5CA97": "#798799",
+    "#1D49A7": "#1F5FBF",
+    "#377E3F": "#0E7A50",
+    "#DD4E49": "#B42318",
+    "#E99842": "#B54708",
+    "#8A7550": "#1D3A63",
+    "#8A817C": "#4F5F77"
+   },
+   "texte": {
+    "#463A2F": "#0F1E33",
+    "#000000": "#0F1E33",
+    "#F5F5DE": "#FFFFFF",
+    "#5B5451": "#5B687C",
+    "#B9423C": "#B54708",
+    "#484545": "#0F1E33",
+    "#47494B": "#3E4C60",
+    "#2E2B2B": "#0F1E33",
+    "#1D49A7": "#1F5FBF",
+    "#377E3F": "#0E7A50",
+    "#DD4E49": "#B42318",
+    "#E99842": "#B54708",
+    "#8A7550": "#1D3A63",
+    "#8A817C": "#4F5F77"
+   },
+   "trait": {
+    "#7A726F": "#E85D15",
+    "#9A928E": "#9AAAC0",
+    "#FBFAF4": "#FFFFFF",
+    "#F5F5DE": "#FFFFFF",
+    "#463A2F": "#0F1E33",
+    "#484545": "#0B2545",
+    "#2E2B2B": "#0F1E33",
+    "#B9B2AE": "#D5DDE8",
+    "#C9C4C1": "#D5DDE8",
+    "#BDB6B2": "#D5DDE8",
+    "#E9E5DE": "#F2F5F9",
+    "#000000": "#0F1E33",
+    "#47494B": "#3E4C60",
+    "#6298C0": "#84A7DC",
+    "#B8CCB1": "#7DC5A7",
+    "#E78E83": "#EA8C84",
+    "#F0D3A3": "#F2A67E",
+    "#ECDEC2": "#8393A9",
+    "#E5CA97": "#798799",
+    "#1D49A7": "#1F5FBF",
+    "#377E3F": "#0E7A50",
+    "#DD4E49": "#B42318",
+    "#E99842": "#B54708",
+    "#8A7550": "#1D3A63",
+    "#8A817C": "#4F5F77"
+   },
+   "ligne": {
+    "#7A726F": "#5B687C"
+   },
+   "puce": {
+    "#463A2F": "#E85D15"
+   },
+   "ombre": "#0B2545"
   }
  }
 }
