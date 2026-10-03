@@ -96,6 +96,22 @@ export function phraseLisible(t: string, max = 420): string {
 }
 
 /**
+ * Phrase d'origine et phrase adaptée lisibles pour GSS, coupées de sorte que la différence se voie toujours (cstb 551,
+ * T6N-4 : deux phrases de plus de 420 caractères qui ne diffèrent qu'à la fin s'affichaient identiques). Si la première
+ * différence tombe au-delà de la coupe, les deux extraits commencent peu avant elle (« … » devant, coupe à un mot entier).
+ */
+export function pairesLisibles(origine: string, adaptee: string, max = 420): [string, string] {
+  const o = phraseLisible(origine, Infinity), a = phraseLisible(adaptee, Infinity);
+  if (!a || (o.length <= max && a.length <= max)) return [phraseLisible(origine, max), a ? phraseLisible(adaptee, max) : ''];
+  let d = 0;
+  while (d < o.length && d < a.length && o[d] === a[d]) d++;
+  if (d <= max - 80) return [phraseLisible(origine, max), phraseLisible(adaptee, max)];
+  const debut = Math.max(0, o.lastIndexOf(' ', Math.max(0, d - 160)) + 1);
+  const extrait = (t: string) => { const x = t.slice(debut); return `${debut > 0 ? '… ' : ''}${x.length > max ? `${x.slice(0, max).replace(/\s+\S*$/, '')}…` : x}`; };
+  return [extrait(o), extrait(a)];
+}
+
+/**
  * Changements de phrases entre deux versions d'un texte (plus longue sous-suite commune des unités) : phrase
  * remplacée (origine → adaptée) ou retirée (adaptée vide, avec ses voisines gardées). Les ajouts ne sont pas des
  * changements d'une phrase existante.
@@ -585,7 +601,7 @@ const libelleExigence = (a: PhraseAdaptee, max: number, majuscule = false) => (e
 /** Lignes des consultations (une par phrase adaptée à valider) ; aucune s'il n'y en a pas. */
 export function consultationsAdaptations(liste: PhraseAdaptee[] | undefined): string[] {
   const l = aValider(liste);
-  return l.map((a) => `${TITRE_ADAPTATIONS} (${l.length}) — n° ${a.n}, « ${a.titre} » : phrase d'origine de GSS : « ${phraseLisible(a.origine)} » ; phrase adaptée : ${a.adaptee ? `« ${phraseLisible(a.adaptee)} »` : '(phrase retirée)'} ; ${libelleExigence(a, 500)}. À valider, modifier ou rétablir via l'assistant avant la remise.`);
+  return l.map((a) => { const [o, ad] = pairesLisibles(a.origine, a.adaptee); return `${TITRE_ADAPTATIONS} (${l.length}) — n° ${a.n}, « ${a.titre} » : phrase d'origine de GSS : « ${o} » ; phrase adaptée : ${a.adaptee ? `« ${ad} »` : '(phrase retirée)'} ; ${libelleExigence(a, 500)}. À valider, modifier ou rétablir via l'assistant avant la remise.`; });
 }
 
 /** Paragraphe du premier message de l'assistant ; '' s'il n'y a aucune phrase adaptée à valider. */
@@ -596,8 +612,8 @@ export function messageAdaptations(liste: PhraseAdaptee[] | undefined): string {
     `${TITRE_ADAPTATIONS} (${l.length}) : le cahier des charges prime sur votre texte, ${l.length === 1 ? 'cette phrase de votre mémoire type a été modifiée' : 'ces phrases de votre mémoire type ont été modifiées'} pour s'y conformer. À relire avant la remise :`,
     ...l.flatMap((a) => [
       `${a.n}. « ${a.titre} »`,
-      `   - Phrase d'origine de GSS : « ${phraseLisible(a.origine)} »`,
-      `   - Phrase adaptée : ${a.adaptee ? `« ${phraseLisible(a.adaptee)} »` : '(phrase retirée du mémoire)'}`,
+      `   - Phrase d'origine de GSS : « ${pairesLisibles(a.origine, a.adaptee)[0]} »`,
+      `   - Phrase adaptée : ${a.adaptee ? `« ${pairesLisibles(a.origine, a.adaptee)[1]} »` : '(phrase retirée du mémoire)'}`,
       `   - ${libelleExigence(a, 500, true)}`,
     ]),
     '',
@@ -613,7 +629,7 @@ export function blocAdaptationsAssistant(liste: PhraseAdaptee[] | undefined): st
   const l = liste || [];
   if (!l.length) return '';
   const statut = (a: PhraseAdaptee) => ({ a_valider: 'à valider', validee: 'validée', modifiee: 'modifiée par GSS', retablie: 'phrase d\'origine rétablie' }[a.statut]);
-  return `\n\n${TITRE_ADAPTATIONS.toUpperCase()} (adaptées par le générateur ; le cahier des charges prime, GSS valide, modifie ou rétablit) :\n${l.map((a) => `- n° ${a.n} | ${a.titre} | ${statut(a)} | origine : « ${phraseLisible(a.origine, 300)} » | adaptée : ${a.adaptee ? `« ${phraseLisible(a.adaptee, 300)} »` : '(retirée)'}${a.statut === 'modifiee' ? ` | texte de GSS : « ${phraseLisible(a.texteGss || '', 300)} »` : ''} | ${estRegleGss(a.exigence) ? `motif (règle de GSS) : ${phraseLisible(a.exigence, 200)}` : `exigence : « ${phraseLisible(a.exigence, 200)} »`}`).join('\n')}`;
+  return `\n\n${TITRE_ADAPTATIONS.toUpperCase()} (adaptées par le générateur ; le cahier des charges prime, GSS valide, modifie ou rétablit) :\n${l.map((a) => `- n° ${a.n} | ${a.titre} | ${statut(a)} | origine : « ${pairesLisibles(a.origine, a.adaptee, 300)[0]} » | adaptée : ${a.adaptee ? `« ${pairesLisibles(a.origine, a.adaptee, 300)[1]} »` : '(retirée)'}${a.statut === 'modifiee' ? ` | texte de GSS : « ${phraseLisible(a.texteGss || '', 300)} »` : ''} | ${estRegleGss(a.exigence) ? `motif (règle de GSS) : ${phraseLisible(a.exigence, 200)}` : `exigence : « ${phraseLisible(a.exigence, 200)} »`}`).join('\n')}`;
 }
 
 /** Consigne de l'action « adaptation » pour l'assistant (ajoutée quand des phrases adaptées existent). */
