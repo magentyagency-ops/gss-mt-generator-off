@@ -999,6 +999,9 @@ export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: b
     }
     const suite = delais.length && penalites.length ? 'sa mobilisation et ses remplacements' : delais.length ? 'sa mobilisation' : 'ses remplacements';
     const phrase = `Le marché ${parties.join(' et ')} ; GSS organise ${suite} en conséquence`;
+    // Suite de la phrase d'origine qui dit déjà comment GSS s'organise (« … ; GSS organise la mobilisation en fonction du délai
+    // applicable… », citedia2 474, T5-COH-4) : la phrase type s'arrête au délai, sans redire « GSS organise … en conséquence ».
+    sortie = sortie.replace(new RegExp(`${MARQUE_SEUIL};(?=\\s*(?:GSS|nous|elle)\\s+(?:organis|mobilis|adapt|planifi))`), `Le marché ${parties.join(' et ')} ;`);
     sortie = sortie.replace(`${MARQUE_SEUIL};`, `${phrase} ;`).replace(MARQUE_SEUIL, `${phrase}.`).split(MARQUE_SEUIL).join('');
   }
   // « ces délais » sans antécédent (phrase retirée, aucun délai cité avant) : « les délais du marché ».
