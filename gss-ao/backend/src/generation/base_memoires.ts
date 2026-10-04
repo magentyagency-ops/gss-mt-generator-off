@@ -639,7 +639,7 @@ const VILLES_HORS_NORMANDIE = ['Paris', 'Marseille', 'Lyon', 'Toulouse', 'Nice',
   'Thiais', 'Saint-Mandé', 'Neuilly-sur-Marne', 'Neuilly-sur-Seine', "Saint-Martin-d'Hères", 'Montrouge', 'Vincennes', 'Issy-les-Moulineaux', 'Puteaux',
   'Massy', 'Palaiseau', 'Saclay'];
 /** Lieux composés et noms de territoires de la zone de GSS, dans leur graphie usuelle (mise en casse des noms en capitales). */
-const LIEUX_COMPOSES = ["Côte d'Albâtre", 'Porte Océane', 'Pays de Caux', 'Pays de Bray', "Pays d'Auge", 'Côte Fleurie', 'Mont-Saint-Michel', 'Seine-Maritime', 'Seine-Eure', 'Normandie', 'Île-de-France', 'Hauts-de-France', 'Val-de-Marne', "Val-d'Oise", 'Seine-Saint-Denis', 'Hauts-de-Seine', 'Seine-et-Marne', 'Eure-et-Loir', 'Ille-et-Vilaine', 'Saint-Étienne-du-Rouvray', 'Mont-Saint-Aignan', 'Bois-Guillaume', 'Le Havre', 'Rouen', 'Caen', 'Évreux', 'Dieppe', 'Fécamp', 'Elbeuf', 'Eure', 'Calvados', 'Manche', 'Orne'];
+const LIEUX_COMPOSES = ['Seine', "Côte d'Albâtre", 'Porte Océane', 'Pays de Caux', 'Pays de Bray', "Pays d'Auge", 'Côte Fleurie', 'Mont-Saint-Michel', 'Seine-Maritime', 'Seine-Eure', 'Normandie', 'Île-de-France', 'Hauts-de-France', 'Val-de-Marne', "Val-d'Oise", 'Seine-Saint-Denis', 'Hauts-de-Seine', 'Seine-et-Marne', 'Eure-et-Loir', 'Ille-et-Vilaine', 'Saint-Étienne-du-Rouvray', 'Mont-Saint-Aignan', 'Bois-Guillaume', 'Le Havre', 'Rouen', 'Caen', 'Évreux', 'Dieppe', 'Fécamp', 'Elbeuf', 'Eure', 'Calvados', 'Manche', 'Orne'];
 /** Lieux connus (communes, territoires, lieux composés) dans leur graphie usuelle. */
 export function lieuxConnus(): string[] {
   return [...new Set([...LIEUX_COMPOSES, ...COMMUNES_NORMANDES, ...VILLES_HORS_NORMANDIE])];

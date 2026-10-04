@@ -13,7 +13,10 @@ const sansAccents = (t: string) => String(t || '').normalize('NFD').replace(/[̀
  * conjugué ou participe : « habitât », « pressé », « centré », « coté »), sinon la forme accentuée (« côte ») ; entre deux
  * formes accentuées, l'accent circonflexe des noms (« pêche », « forêt ») plutôt que le grave des verbes (« pèche »).
  */
+// Mots usuels dont la forme sans accent est de loin la plus fréquente (T5-COH-2 : « JEUNES » → « jeunes », jamais « jeûnes »).
+const SANS_ACCENT = new Set(['jeune', 'jeunes', 'mur', 'murs', 'sur', 'du', 'des', 'ou', 'la', 'a']);
 function meilleureForme(formes: string[], k: string): string {
+  if (SANS_ACCENT.has(k) && formes.includes(k)) return k;
   const accentuees = formes.filter((w) => w !== k);
   const circ = (x: string) => /[âêîôû]/.test(x);
   const premierAccent = (x: string) => x.search(/[àâäéèêëîïôöùûüç]/);
