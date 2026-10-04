@@ -8,6 +8,10 @@ describe('« sans poste fixe » retiré avec toute son énumération (T2-CONS-1,
     ['Le marché porte sur des rondes, sans poste fixe ni accueil.', 'Le marché porte sur des rondes.'],
     ['Le marché porte sur des rondes, sans poste fixe, ni accueil, ni standard.', 'Le marché porte sur des rondes.'],
     ["Des rondes sans poste fixe permanent d'accueil.", 'Des rondes.'],
+    ['- Postes fixes : non ; le marché porte sur des interventions de rondiers, sans poste permanent ni mission d’accueil ou de standard.', '- Postes fixes : non ; le marché porte sur des interventions de rondiers.'],
+    // Complément qui suivrait seul la mention retirée : la phrase reste entière.
+    ['Nous assurons la continuité, sans poste permanent supplémentaire.', 'Nous assurons la continuité, sans poste permanent supplémentaire.'],
+    ['Un agent assure un poste permanent d’accueil.', 'Un agent assure un poste permanent d’accueil.'],
   ])('%s', (entree, attendu) => {
     expect(retirerCommentairesInternes(entree).texte).toBe(attendu);
   });

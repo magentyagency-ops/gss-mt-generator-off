@@ -1265,8 +1265,10 @@ export function retirerCommentairesInternes(texte: string): { texte: string; ret
     .replace(/(^|[.!?]\s+|\n)(?:Cette (?:organisation|préparation|méthode)|Ce dispositif|Aucun (?:remplacement|équipement|poste)[^.\n]{0,60})[^.\n]*(?:ne crée|ne donne lieu|n.est (?:ajouté|créé)|n.est créée?)[^.\n]*poste fixe[^.\n]*\.\s*/g, '$1')
     .replace(/(^|[.!?]\s+|\n)Aucun poste fixe[^.\n]*\.\s*/g, '$1')
     // T2-CONS-1 : la négation emporte toute son énumération (« rondiers, sans poste fixe, accueil ni standard » →
-    // « rondiers » ; « des rondes, sans poste fixe ni accueil » → « des rondes »), jamais un morceau d'énumération orphelin.
-    .replace(/,?\s*(?:et\s+)?sans (?:création de |créer (?:de|un) |ajouter (?:de|un) |ajout de )?(?:aucun )?poste fixe(?: permanent)?(?: d.accueil)?(?:,? (?:de|du) standard)?(?:,? ou de contrôle d.accès)?(?: permanents?)?(?:(?:\s*,\s*(?!et\b|mais\b|qui\b|dont\b)[^,.;:\n]{1,40}?)*\s*,?\s+ni\s+[^,.;:\n]{1,60})?/g, '')
+    // « rondiers » ; « des rondes, sans poste fixe ni accueil » → « des rondes » ; « sans poste permanent ni mission d'accueil »),
+    // jamais un morceau d'énumération orphelin ni un complément laissé seul (« la continuité, sans poste permanent
+    // supplémentaire » reste entière).
+    .replace(/,?\s*(?:et\s+)?sans (?:création de |créer (?:de|un) |ajouter (?:de|un) |ajout de )?(?:aucun )?poste (?:fixe(?: permanent)?|permanent)(?: d.accueil)?(?:,? (?:de|du) standard)?(?:,? ou de contrôle d.accès)?(?: permanents?)?(?:(?:\s*,\s*(?!et\b|mais\b|qui\b|dont\b)[^,.;:\n]{1,40}?)*\s*,?\s+ni\s+[^,.;:\n]{1,60})?(?=\s*(?:[,.;:)\n]|$))/g, '')
     .replace(/,?\s*\*\*\s*\*\*/g, '')
     // Source interne citée (« Le registre GSS recense 27 agents… ») : le chiffre reste, la source part.
     .replace(/\b[Ll]e registre (?:GSS|des informations GSS|des mémoires GSS) (?:recense|indique|mentionne|fait état de|compte)\b/g, 'GSS compte')
