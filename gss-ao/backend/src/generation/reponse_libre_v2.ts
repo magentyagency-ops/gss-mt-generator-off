@@ -4128,8 +4128,56 @@ export function sansEngagementsDejaDits(texte: string): { texte: string; retiree
  * paramétrer les communications nécessaires au PC TLS… ») : une phrase sans sujet au milieu du texte de GSS. Elle devient un
  * engagement de GSS (« GSS s'engage à effectuer… », « Avant démarrage, GSS s'engage à raccorder… »), mots du CCTP gardés.
  */
+/**
+ * Engagement (puce de couverture du CCTP) déjà écrit dans le texte de la réponse (T7-CONS-2 : « GSS limite la taille et le poids
+ * des fichiers transmis » après « …, GSS limite la taille et le poids des fichiers transmis… » ; « GSS tiendra la réunion de
+ * démarrage au moins 10 jours avant la première intervention » après « La réunion de démarrage a lieu au moins 10 jours avant la
+ * première intervention… ») : une phrase du texte porte tous ses chiffres et l'essentiel de ses mots pleins (racines de 6
+ * lettres, hors verbes d'engagement) : 40 % au moins avec un chiffre commun, 65 % sans chiffre.
+ */
+export function engagementDejaEcrit(puce: string, texte: string): boolean {
+  const NEUTRES = /^(?:gss|engag|tiendr|tient|assure|assura|garant|veille|veiller|respec|mettra|mettre|fera|ferons|faire|sera|seront|pourra|devra|toutes?|tous|leurs?|avec|dans|pour|sans|sous|ainsi|chaque|selon|cette|ces|ses|aupres|notamm|egalem|titula)/;
+  const rad = (t: string) => new Set(normaliser(t).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 4 && !/^\d+$/.test(w) && !NEUTRES.test(w)).map((w) => w.slice(0, 6)));
+  const nums = (t: string): string[] => [...(String(t).match(/\d+(?:[,.]\d+)?/g) || [])];
+  const p = rad(puce);
+  const np = nums(puce);
+  if (p.size < 3) return false;
+  for (const ph of String(texte || '').split(/(?<=[.!?;])\s+|\n+/)) {
+    if (/^\s*#/.test(ph) || normaliser(ph).trim() === normaliser(puce).trim()) continue;
+    const r = rad(ph);
+    if (np.length && !np.every((n) => nums(ph).includes(n))) continue;
+    const commun = [...p].filter((w) => r.has(w)).length;
+    if (commun >= Math.min(4, p.size) && commun / p.size >= (np.length ? 0.4 : 0.65)) return true;
+  }
+  return false;
+}
+
+/**
+ * Engagement réduit à ses propositions qui ne sont pas déjà écrites dans le texte (T7-CONS-2) : « GSS tiendra la réunion de
+ * démarrage … , et formera les services bénéficiaires aux outils du marché » → « GSS formera les services bénéficiaires aux
+ * outils du marché… » quand la réunion est déjà écrite ; '' si tout l'engagement l'est.
+ */
+export function engagementSansRedite(puce: string, texte: string): string {
+  const t = String(puce || '').trim();
+  // (coordination de deux verbes : « … , et formera … », jamais « et le responsable »)
+  const parts = t.split(/,?\s+et\s+(?!(?:le|la|les|un|une|des|du|de|son|sa|ses|leur|leurs|notre|nos|ce|cette|ces)\s)(?=(?:[a-zà-ÿ]{3,}(?:ra|ront|e|ent|it)|s['’][a-zà-ÿ]+)\s)/);
+  if (parts.length === 1) return engagementDejaEcrit(t, texte) ? '' : t;
+  const sujet = /^(GSS|Nous|Le titulaire)\s/i.exec(parts[0])?.[1] || 'GSS';
+  const gardees = parts.filter((x, i) => !engagementDejaEcrit(i ? `${sujet} ${x}` : x, texte));
+  if (gardees.length === parts.length) return t;
+  if (!gardees.length) return '';
+  const premiere = parts.indexOf(gardees[0]) === 0 ? gardees[0] : `${sujet} ${gardees[0]}`;
+  return [premiere, ...gardees.slice(1)].join(', et ').replace(/[\s.;]*$/, '.');
+}
+
 export function phraseAjouteeConjuguee(phrase: string): string {
-  const t = String(phrase || '');
+  // T7-CONS-2 : phrase du cahier des charges à la voix de l'acheteur (« La réunion de démarrage devra avoir lieu… », « Les agents
+  // devront être… », « GSS devra transmettre… ») : au présent, à la voix de GSS.
+  const voix = String(phrase || '')
+    .replace(/(?<![\p{L}])(?:devra|doit)\s+avoir\s+lieu(?![\p{L}])/giu, 'a lieu').replace(/(?<![\p{L}])(?:devront|doivent)\s+avoir\s+lieu(?![\p{L}])/giu, 'ont lieu')
+    .replace(/(?<![\p{L}])(?:devra|doit)\s+[êe]tre(?![\p{L}])/giu, 'est').replace(/(?<![\p{L}])(?:devront|doivent)\s+[êe]tre(?![\p{L}])/giu, 'sont')
+    .replace(/(?<![\p{L}])(GSS|Nous)\s+(?:devra|doit|devons)\s+(?=[a-zà-ÿ]+(?:er|ir|re)(?![\p{L}]))/gu, (_m, s: string) => (s === 'Nous' ? 'Nous nous engageons à ' : "GSS s'engage à "));
+  const t = voix;
   const m = /^(\s*(?:[-*•]\s+)?)((?:(?:Avant|Après|Dès|Lors|Pendant|En cas|Au|À|Pour|Sur|Dans|Chaque|Tous|Toutes)\b[^,.;:]{0,70},\s*)?)([A-ZÀ-Ýa-zà-ÿ][a-zà-ÿ]+)(\s+.*)$/su.exec(t);
   if (!m) return t;
   const mot = normaliser(m[3]);
@@ -4140,3 +4188,4 @@ export function phraseAjouteeConjuguee(phrase: string): string {
   const tete = m[2] ? `${m[2]}GSS s'engage à ` : "GSS s'engage à ";
   return `${m[1]}${tete}${verbe}${m[4]}`;
 }
+

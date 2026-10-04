@@ -2112,7 +2112,11 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   // etampes2 552, T5CP-10) : jamais omise ; si elle manque, les phrases omises sont remises (étape 2).
   const amorceManquante = ref.some((p, k) => !position.has(k) && !exclus[k] && /:\s*$/.test(p.brut) && !sousTitre(k)
     && estPuce(p.ligne + 1) && ref.some((q, j) => q.ligne === p.ligne + 1 && position.has(j)));
-  if (o.limite && mesure(texte) >= seuil && !amorceManquante) {
+  // T7-REG-1 : le texte de GSS n'est laissé incomplet que pour tenir une limite de mots réelle (o.maxMots) que la remise des
+  // phrases omises dépasserait ; sans limite de mots (critère d'une grille sans longueur imposée), les phrases de GSS omises
+  // sont remises à leur place (étape 2), comme pour toute réponse (jamais une réponse amputée annoncée fidèle à 1,00).
+  const limiteDeMots = o.maxMots !== undefined && compter(texte) + ref.filter((p, k) => !position.has(k) && !exclus[k]).reduce((a, p) => a + compter(p.brut), 0) > o.maxMots;
+  if (o.limite && limiteDeMots && mesure(texte) >= seuil && !amorceManquante) {
     retirerFragments(true);
     texte = rendre();
     return { texte, fideliteAvant, fidelite: mesure(texte), reformulees, reinserees: lignesTableauRemises, ajoutsRetires: 0, bribesRetirees: pseudoTableau };

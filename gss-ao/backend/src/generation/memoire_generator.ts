@@ -23,7 +23,7 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
   sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, phraseDeRubriqueGss, alignerSchemaSurTexte, FORMALITES_OFFRE, questionFormalite, formalitesDuBloc1, sansClauseSanction, consultationsDuDce,
-  CLAUSE_CONTRACTUELLE, ORGANISATION_ACHETEUR, sansPropositionSurLAcheteur, valeursImposeesValides, titreSansPointFinal, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
+  CLAUSE_CONTRACTUELLE, ORGANISATION_ACHETEUR, sansPropositionSurLAcheteur, engagementSansRedite, valeursImposeesValides, titreSansPointFinal, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, similariteQuestions, recouvrementTextes, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, questionRondes, casPratiqueRepris, type Dimensionnement } from './dimensionnement';
@@ -4933,6 +4933,8 @@ Renvoie un JSON valide :
     let groupeContact = '';
     // Bloc signature / cachet : ses lignes vides ne sont pas une zone de réponse.
     const SIGNATURE = /signature|cachet|lu et approuv|rayer la mention|fait [àa]\b|^le\s*:?$/i;
+    /** Libellé de la zone de réponse d'une question (« Réponse du candidat : », « Votre réponse : », T7-COH-2). */
+    const LIBELLE_ZONE_REPONSE = /^(?:(?:proposition|r[ée]ponse)s?\s+(?:du|de\s+l['’]|de\s+la)\s*(?:soumissionnaire|candidat|titulaire|entreprise|prestataire|opérateur|op[ée]rateur\s+[ée]conomique)|(?:votre|notre)\s+r[ée]ponse|r[ée]ponse(?:\s+(?:apport[ée]e|propos[ée]e|technique))?)\s*:\s*$/i;
     // Une ligne suivie d'un espace vide n'est une QUESTION que si elle en a la forme (numérotée, consigne,
     // thème de réponse technique) — jamais un élément d'en-tête (adresse, n° de marché, titre du document).
     const RESSEMBLE_QUESTION = /\?|^\d+(?:\.\d+)*\s*[-–—.)]\s*\S|d[ée]cri|pr[ée]cis|indiqu|pr[ée]sent|d[ée]taill|expliqu|justifi|organisation|modalit|moyens|m[ée]thod|compr[ée]hension|politique|gestion|suivi|proc[ée]dure|dispositif|mesures|contr[ôo]le|formation|environnement|responsabilit|qualit[ée] de la prestation|planning|astreinte|t[ée]l[ée]surveillance|mat[ée]riel|prise en charge|reprise/i;
@@ -5265,6 +5267,10 @@ Renvoie un JSON valide :
                 openAnswerField = fd;
                 lastQuestionText = '';
               } else if (lastQuestionText && lastQuestionText.trimEnd().endsWith(':') && !SIGNATURE.test(lastQuestionText)
+                // T7-COH-2 : libellé de la zone de réponse (« Réponse du candidat : », « Votre réponse : », « Proposition du
+                // soumissionnaire : ») : jamais un champ court à part ; la réponse développée de la question s'écrit dans la zone
+                // vide qui suit (passe des rubriques), une seule fois.
+                && !LIBELLE_ZONE_REPONSE.test(lastQuestionText.trim())
                 // « Éléments de réponse attendus : » introduit une liste, ce n'est pas un champ à remplir.
                 && (CONSIGNE_DESCRIPTION.test(lastQuestionText) || !/attendus?\s*:|ci-dessous\s*:|suivants?\s*:|notamment\s*:|comprenant\s*:/i.test(lastQuestionText))
                 // « Contact pour les commandes : » suivi de « Nom : …… » : ce sont les lignes suivantes qu'on remplit.
@@ -6123,7 +6129,16 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
           // texte reste sous l'intitulé de sa composante au recalage (etampes2 553, T5CP-2 : « Absence de 2 agents… » suivi du
           // texte de l'intrusion, sous-titre « Intrusion… » resté vide).
           // Familles inséparables (absence prévue puis non prévue, T7CS-2) gardées entières après le choix de la rubrique principale.
-          const retenus = ordonnerSelonReponse(completerFamilles(referencesPrincipales(referencesRetenues(candidats, data.reference)), candidats), String(value));
+          // T7-CONS-1 (consigne 5, cadre_impose) : le modèle ne cite aucun texte de GSS pour une question développée que le mémoire
+          // type traite (ni cas pratique ni mise en situation, rubriques candidates trouvées) : les rubriques sont choisies sans
+          // modèle (thème de la question, table de correspondance), puis la réponse est recalée sur leurs textes ; jamais une
+          // proposition de l'IA annoncée comme « question que le mémoire type ne traite pas ».
+          let references = referencesRetenues(candidats, data.reference);
+          if (!references.length && candidats.length && !reprise.hors && !comprehension) {
+            references = referencesDeSecours(candidats, `${questionMT || ''}\n${f.context}`);
+            if (references.length) console.log(`[MemoireGenerator] ${label} : aucun texte de GSS cité par le modèle, rubriques du mémoire type choisies sans modèle (${references.map((c) => c.id).join(', ')}).`);
+          }
+          const retenus = ordonnerSelonReponse(completerFamilles(referencesPrincipales(references), candidats), String(value));
           // Intitulé de la rubrique du cadre (titre de section) quand la « question » n'est qu'un paragraphe de consigne
           // (havre1 : « Le renvoi vers un rapport général… est à proscrire » au lieu de « Mesures et initiatives sociétales »).
           const sectionChamp = ((f.context.match(/Section:\s*"([^"]*)"/) || [])[1] || '').replace(/\[CHAMP_\d+\]/gi, '').replace(/\s+/g, ' ').trim();
@@ -9765,7 +9780,9 @@ RÈGLES DE FORME (rendu Marp) :
       // Proposition qui renvoie aux sanctions de l'acheteur retirée, l'obligation reste (T6-CONS-10).
       const brutes = (JSON.parse(verif || '{}').puces || []).map((x: any) => sansClauseSanction(String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, ''))).filter(Boolean);
       for (const x of brutes) if (questions && /sans réponse/.test(motifRefusEngagement(x))) { const q = questionDEngagement(x); questions.add(q); sources?.set(q, x); }
-      const puces = brutes.filter((x: string) => !motifRefusEngagement(x));
+      // T7-CONS-2 : jamais une exigence déjà écrite dans le texte de la rubrique (même valeur, mêmes mots pleins), seule la
+      // partie de l'engagement qui n'y est pas encore reste.
+      const puces = brutes.filter((x: string) => !motifRefusEngagement(x)).map((x: string) => engagementSansRedite(x, text)).filter(Boolean);
       if (puces.length) {
         text = `${text.trim()}\n\n## Nos engagements sur les exigences du cahier des charges\n\n${puces.map((x: string) => `- ${x.replace(/^[-•]\s*/, '')}`).join('\n')}`;
         console.log(`[MemoireGenerator] Rubrique ${sectionId} : ${puces.length} exigence(s) du CCTP ajoutée(s) après contrôle de couverture.`);
@@ -9844,7 +9861,11 @@ Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "tex
       for (const [id, ajouts] of parId) {
         const rep = reponses.find((x) => x.id === id)!;
         let v = rep.value;
-        for (const a of ajouts) {
+        for (const a0 of ajouts) {
+          // T7-CONS-2 : exigence déjà écrite dans la réponse (phrase de GSS, phrase ajoutée ou puce précédente) : jamais redite.
+          const reste = engagementSansRedite(a0.texte, v);
+          if (!reste) continue;
+          const a = { ...a0, texte: reste };
           const lignes = v.split('\n');
           const k = a.apres ? lignes.findIndex((l) => l.trim() === a.apres) : -1;
           // Sans rattachement : à la fin, séparée par une ligne vide quand la réponse finit par une liste de GSS (havre2 341 :
