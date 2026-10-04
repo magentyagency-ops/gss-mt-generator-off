@@ -215,3 +215,18 @@ describe('Réponse libre v2 : retour arrière', () => {
     expect(memoireTypeActif()).toBe(false);
   });
 });
+
+// Tour 4, correcteur (T4-CONS-12, imm 1463) : intitulé d'une proposition tiré de l'exigence, jamais coupé au milieu d'un mot.
+import { grouperNouvelles as grouperNouvellesT4c } from '../src/generation/reponse_libre_v2';
+describe('intitulé des propositions D5 (T4-CONS-12)', () => {
+  it('exigence de moins de 160 signes : entière ; plus longue : coupée sur une fin de mot avec « … »', () => {
+    const e1 = { exigence: 'Intervenir sur demande du PCS en moins de 5 minutes, sauf impossibilité liée à la sécurité des agents ou à une crise simultanée.' } as any;
+    const long = `En situation exceptionnelle, le chef d'équipe adapte le dispositif aux plans Vigipirate et aux consignes de la direction de la sûreté, en lien avec le poste central de sécurité et les forces de l'ordre présentes`;
+    const g = grouperNouvellesT4c([e1, { exigence: long } as any]).groupes.map((x) => x.sujet);
+    expect(g).toContain('Intervenir sur demande du PCS en moins de 5 minutes, sauf impossibilité liée à la sécurité des agents ou à une crise simultanée');
+    const s = g.find((x) => x.startsWith('En situation exceptionnelle'))!;
+    expect(s.endsWith('…')).toBe(true);
+    expect(long.startsWith(s.slice(0, -1))).toBe(true);
+    expect(long.charAt(s.length - 1)).toMatch(/\s|,/);
+  });
+});

@@ -604,7 +604,10 @@ const RANG_CRITICITE = (c?: string) => (/bloqu/i.test(c || '') ? 0 : /facult/i.t
 export function grouperNouvelles(nouvelles: ExigenceMatrice[], max = 6): { groupes: GroupeNouveau[]; ecartees: ExigenceMatrice[] } {
   const groupes: Array<GroupeNouveau & { mots: Set<string> }> = [];
   for (const e of nouvelles) {
-    const sujet = String(e.sujet || '').trim() || e.exigence.split(/[.;:]/)[0].slice(0, 80);
+    // Intitulé tiré de l'exigence : entier jusqu'à 160 signes, sinon coupé sur une fin de mot avec « … » (imm 1463, T4-CONS-12 :
+    // « … sauf impossibilité liée à l » dans l'assistant et les consultations).
+    const tete = e.exigence.split(/[.;:]/)[0].replace(/\s+/g, ' ').trim();
+    const sujet = String(e.sujet || '').trim() || (tete.length <= 160 ? tete : `${tete.slice(0, 161).replace(/\s+\S*$/, '').replace(/[\s,;:–-]+$/, '')}…`);
     // Mots ramenés au singulier (« Attestations d'assurance » et « Attestation d'assurance » : un seul sujet, parc_expo 202).
     const mots = new Set([...motsSujet(sujet)].map(singulier));
     const g = groupes.find((x) => {
