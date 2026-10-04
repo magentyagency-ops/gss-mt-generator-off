@@ -1297,6 +1297,11 @@ const HEURE_DU_JOUR = /\b\d{1,2}\s*h\s*\d{2}\b|(?<![\p{L}])(?:à|a|de|dès|des|e
  * ne diffèrent que par leurs heures (période de l'année absente : « de 9h20 à 18h10 » puis « de 9h20 à 17h40 ») ne sont
  * pas imprimés : ils sembleraient se contredire.
  */
+/** Sujet de service du titulaire dans un horaire (agent, poste, SSIAP, chef d'équipe, présence, surveillance, rondes…). */
+const SERVICE_HORAIRE = /(?<![\p{L}])(?:agents?|ssiap\s*\d?|chefs?\s+d['’]\s*[ée]quipe|gardiens?|veilleurs?|rondiers?|ma[îi]tres?[- ]chiens?|postes?|vacations?|pr[ée]sence|surveillance|gardiennage|rondes?|t[ée]l[ée]surveillance|titulaire|prestataire)(?![\p{L}])/iu;
+/** Horaires d'ouverture au public d'un lieu (« Bureau … ouvert », « Parc ouvert », « Accueil ouvert »). */
+const OUVERTURE_PUBLIC = /(?<![\p{L}])(?:bureaux?|parcs?|parkings?|accueils?|guichets?|boutiques?|magasins?|caisses?|halls?)(?![\p{L}])[^.;]{0,60}?(?<![\p{L}])(?:ouverte?s?|ferm[ée]e?s?)(?![\p{L}])/iu;
+
 export function horairesLisibles(horaires: string[]): string[] {
   // Le repère « [section] » est retiré sans être écrit devant l'horaire : le titre de partie qui précède une phrase n'est pas
   // toujours son site (ign l. 194 : phrase générale rangée sous « Bâtiment Coriolis : »). Seule exception : un horaire qui
@@ -1305,6 +1310,15 @@ export function horairesLisibles(horaires: string[]): string[] {
   const lisibles = horaires.map((brut) => {
     const section = (/^\s*\[([^\]]*)\]/.exec(String(brut || '')) || [])[1]?.trim() || '';
     let h = citationImprimable(brut, /[.!?;]$/);
+    // Puce de liste sans ponctuation finale (T5N-11, citedia : « La mise en place d'un 1er SSIAP1 … dédié de 21h à 9h … ») : une
+    // proposition complète avec un sujet de service et une plage horaire, citée avec un point final.
+    if (!h) {
+      const sans = String(brut || '').replace(/^\s*\[[^\]]*\]\s*/, '').replace(/\s+/g, ' ').trim();
+      if (!/[.!?;:]$/.test(sans) && SERVICE_HORAIRE.test(sans) && /\d{1,2}\s*h\s*\d{0,2}\s*(?:à|-|–)\s*\d{1,2}\s*h/i.test(sans)) h = citationImprimable(`${sans}.`, /[.!?;]$/);
+    }
+    // Horaires d'ouverture au public d'un bureau, d'un parc, d'un accueil ou d'un guichet, sans service du titulaire (« Bureau du
+    // Parc Lices ouvert : Les Lundis de 09h00 à 00h00 ») : jamais des horaires imposés à GSS (T5N-11).
+    if (h && OUVERTURE_PUBLIC.test(h) && !SERVICE_HORAIRE.test(h)) h = '';
     if (h && /^Horaires?\s*:/i.test(h)) h = /^(?:b[âa]timent|campus|site|parc|parking|antenne|tribunal|palais|poste)\b/i.test(section) && !/\d/.test(section) ? `${section} : ${h}` : '';
     return h;
   }).filter((h) => {

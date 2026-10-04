@@ -34,7 +34,7 @@ import {
 import { articlesBloc1 } from './bloc1_marine';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, fondementDansDce, exigenceDeModification, ETAPE_ADAPTATION_MODELE, type PhraseAdaptee } from './adaptations_cctp';
 import { questionCaseTableau, questionExacte } from './questions_gss';
-import { exigenceDeGrillePenalites, estCahierDesChargesParContenu, estPieceAdministrative, teteAdministrative, perimetreDuLot, rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
+import { typographieDce, exigenceDeGrillePenalites, estCahierDesChargesParContenu, estPieceAdministrative, teteAdministrative, perimetreDuLot, rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
 import os from 'os';
@@ -9103,7 +9103,9 @@ RÈGLES DE FORME (rendu Marp) :
       brut = (await this.callOpenAI(messages, 0.3, `Compréhension du besoin${essai > 1 ? ` (essai ${essai})` : ''}`, true, 'analyse', 0)) || '';
       rep = lireJson(brut);
     }
-    let texte = String(rep?.texte || '').replace(/^#\s+.*\n+/, '').trim();
+    // Typographie des données du DCE (« 05H30 », « Ronde d'Ouverture », T5-CONS-10) : texte et étapes du schéma.
+    let texte = typographieDce(String(rep?.texte || '').replace(/^#\s+.*\n+/, '').trim());
+    if (Array.isArray(rep?.etapes)) for (const e of rep.etapes) if (e && typeof e === 'object') { if (typeof e.titre === 'string') e.titre = typographieDce(e.titre); if (typeof e.texte === 'string') e.texte = typographieDce(e.texte); }
     const secours = texte.split(/\s+/).length < 150;
     if (secours) {
       console.warn('[MemoireGenerator] Compréhension du besoin : rédaction indisponible → texte de secours (faits du DCE).');

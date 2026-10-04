@@ -2780,8 +2780,20 @@ export function contracterArticlesNomsPropres(texte: string): string {
  * d'introduction « … : » qui n'est plus suivie de rien, un tableau réduit à son en-tête, un sous-titre
  * vide, des caractères invisibles.
  */
+/**
+ * Typographie des données recopiées du DCE (T5-CONS-10, caen 1501) : heure écrite « 05H30 », « 21 H 30 » ramenée à la forme du
+ * mémoire (« 05h30 », « 21h30 ») ; nom commun d'une ronde, d'une tournée, d'une vacation ou d'une patrouille écrit avec une
+ * capitale au milieu de la phrase (« Ronde d'Ouverture », « ronde de Fermeture ») mis en minuscule (jamais un nom de lieu).
+ */
+export function typographieDce(texte: string): string {
+  return String(texte || '')
+    .replace(/(?<![\d\p{L}])(\d{1,2})[ \u00a0\u202f]*H[ \u00a0\u202f]*([0-5]\d)(?![\d\p{L}])/gu, '$1h$2')
+    .replace(/(?<![\p{L}])(rondes?|tourn[ée]es?|vacations?|patrouilles?|Rondes?|Tourn[ée]es?|Vacations?|Patrouilles?)([ \u00a0]+)(d['’]|de[ \u00a0]+|du[ \u00a0]+)([A-ZÀ-Ý])([a-zà-ÿ]+)(?![\p{L}])/gu,
+      (m, n: string, e: string, de: string, c: string, reste: string) => (motDuDictionnaire(`${c}${reste}`) && !estNomDeLieu(`${c}${reste}`) ? `${n}${e}${de}${c.toLowerCase()}${reste}` : m));
+}
+
 export function nettoyerStructure(texte: string): string {
-  let t = reparerTableaux(texte.replace(/[\u200B-\u200D\uFEFF]/g, ''));
+  let t = reparerTableaux(typographieDce(texte.replace(/[\u200B-\u200D\uFEFF]/g, '')));
   const lignes = t.split('\n');
   const out: string[] = [];
   for (let i = 0; i < lignes.length; i++) {
