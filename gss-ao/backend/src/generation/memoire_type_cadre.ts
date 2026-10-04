@@ -15,7 +15,7 @@
  */
 import {
   normaliser, fidelite, decouperSousParties, rechercherRubriques, lireJson, SEUIL_FIDELITE, motsDePhrase, similarite,
-  faitsDePhrase, faitsCompatibles, nombresAutorisesDe, nombresDceCompatibles,
+  faitsDePhrase, faitsCompatibles, nombresAutorisesDe, nombresDceCompatibles, elisionDevantNom,
   type MemoireType, type RubriqueMemoireType, type PlanMemoireType, type SousPartie,
 } from './memoire_type';
 
@@ -2621,7 +2621,9 @@ export function completerDelaisCadre(texte: string, question: string, o: { clien
   const mots = (t: string) => normaliser(t).replace(/[^a-z ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 4 && !['action', 'pour', 'dans', 'avec'].includes(w)).map((w) => w.replace(/e?s$/, ''));
   const precision = (sp: string) => (/urgen|d[ée]bordement/i.test(sp) ? ", entre l'appel de l'acheteur et l'arrivée des agents sur site"
     : /courante|bon de commande|planifi/i.test(sp) ? ', entre la réception du bon de commande et la mise en place des agents' : '');
-  const pour = `${o.client ? `Pour le marché de ${o.client}` : 'Pour ce marché'}${o.horsNormandie ? ' (hors Normandie, où GSS n\'a annoncé aucun délai chiffré)' : ''}`;
+  // « de » contracté ou élidé devant le nom de l'acheteur (« du CHU de Rouen », « d'Habitat 76 », T2-COH-3).
+  const deClient = (c: string) => (/^le\s/i.test(c) ? `du ${c.slice(3)}` : /^les\s/i.test(c) ? `des ${c.slice(4)}` : /^(?:la\s|l['’])/i.test(c) ? `de ${c}` : elisionDevantNom(c) ? `d'${c}` : `de ${c}`);
+  const pour = `${o.client ? `Pour le marché ${deClient(o.client)}` : 'Pour ce marché'}${o.horsNormandie ? ' (hors Normandie, où GSS n\'a annoncé aucun délai chiffré)' : ''}`;
   const questionDe = (sp: string) => `${pour}, quel délai GSS annonce-t-elle pour ${sp ? sp.charAt(0).toLowerCase() + sp.slice(1) : 'une intervention'}${precision(sp)} ?`;
   const lignes = String(texte).split('\n');
   const ajouts: Array<{ ligne: string; question: string }> = [];

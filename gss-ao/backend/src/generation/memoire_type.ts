@@ -767,6 +767,28 @@ export interface ValeurVariable {
   genreCourt?: 'f' | 'm' | 'p' | '';
   /** Acheteur : genre grammatical quand ni l'article ni le premier mot ne le donnent (société : féminin). */
   genre?: 'f' | 'm' | 'p';
+  /** Acheteur sans article commençant par un h muet (« Habitat 76 » : « d'Habitat 76 », T2-COH-3), forme longue et courte. */
+  hMuet?: boolean;
+  hMuetCourt?: boolean;
+}
+
+/** Mots usuels en h muet (élision « d' »), quand le DCE ne tranche pas lui-même. */
+const H_MUET = /^(?:habitat|habitations?|h[ôo]pital|h[ôo]pitaux|h[ôo]tel|hospice|hospitali\p{L}*|h[ée]bergement|h[ée]rouville|honfleur|harfleur|hippodrome|histoire|historique|horizons?|hygi[èe]ne|humanit\p{L}*|homme|horloge)(?![\p{L}])/iu;
+
+/**
+ * Le nom de l'acheteur sans article s'élide-t-il après « de » (« d'Habitat 76 ») ? Voyelle initiale ; h initial : la forme que
+ * le DCE emploie lui-même (« d'Habitat 76 » contre « de Habitat 76 »), sinon un mot usuel en h muet (T2-COH-3).
+ */
+export function elisionDevantNom(nom: string, dce = ''): boolean {
+  const t = String(nom || '').trim();
+  if (/^[aeiouyâàäéèêëîïôöûüœ]/i.test(t)) return true;
+  if (!/^h/i.test(t)) return false;
+  const cle = echapper(normaliser(t).split(/\s+/).slice(0, 2).join(' '));
+  const d = normaliser(dce);
+  const elide = (d.match(new RegExp(`(?<![a-z0-9])d'${cle}(?![a-z0-9])`, 'g')) || []).length;
+  const plein = (d.match(new RegExp(`(?<![a-z0-9])de ${cle}(?![a-z0-9])`, 'g')) || []).length;
+  if (elide || plein) return elide >= plein;
+  return H_MUET.test(t);
 }
 
 export type Variables = Record<string, ValeurVariable>;
@@ -1227,6 +1249,14 @@ function formesClientBrut(nom: string, dce = ''): { long: string; court?: { arti
       if (art) return { long, court: { article: art, nom: sp[1], genre: '' } };
     }
   }
+  // Sigle entre parenthèses en fin de nom, employé seul par le DCE avec un article (T2-GEN-8 : « Établissement Français du
+  // Sang (EFS) » … « l'EFS » ; « Centre Hospitalier Universitaire de Rouen (CHU) » … « le CHU ») : forme courte, quelle que
+  // soit la longueur du nom (jamais « (EFS) » imprimé à chaque mention).
+  if (entites.length === 1 && !suite && parenthese && !juridique && /^[A-Z][A-Z0-9&]{1,11}$/.test(parenthese)) {
+    const nDce = (normaliser(dce).match(new RegExp(`(?:^|[^a-z0-9])(?:l'|le |la |les |du |des |au |aux |de l'|a l')${echapper(normaliser(parenthese))}(?![a-z0-9])`, 'g')) || []).length;
+    const art = articleEtNom(parenthese, dce).article || articleSigle(parenthese, '');
+    if (nDce >= 2 && art) return { long, court: { article: art, nom: parenthese, genre: '' } };
+  }
   if (entites.length === 1 && !suite && (juridique || (mots >= 5 && mots <= 6 && !parenthese))) {
     const sigle = sigleDuDce(juridique ? principal.replace(/\s*\([^()]*\)\s*$/, '') : principal, dce);
     const art = sigle ? articleEtNom(sigle, dce).article || articleSigle(sigle, '') : '';
@@ -1270,7 +1300,14 @@ function formesClientBrut(nom: string, dce = ''): { long: string; court?: { arti
     // Direction des achats », en capitales aussi) : ce n'est pas l'acheteur ; la forme courte est la tutelle (« la Ville
     // du Havre », « le CHU de Rouen »). Un service qui est lui-même l'acheteur (« Service administratif régional de
     // Rouen ») reste la forme courte.
-    if (SERVICE_ACHETEUR.test(entite)) entite = morceaux[0].trim();
+    if (SERVICE_ACHETEUR.test(entite)) {
+      // T2-COH-1 : la tutelle restante suit la même chaîne qu'un nom sans service (sigle du DCE, nom propre après la forme
+      // juridique « l'Opéra de Rouen Normandie », tête nominale), jamais la forme juridique d'un nom propre perdu.
+      const tutelle = morceaux.slice(0, -1).join(' - ').trim();
+      const sous = formesClientBrut(tutelle, dce);
+      if (sous.court) return { long, court: sous.court, ...(sous.pluriel ? { pluriel: sous.pluriel } : {}) };
+      entite = morceaux[0].trim();
+    }
     const m = /^(.+?)\s+((?:de|du|des|d['’])\s*[A-ZÀ-Ý][\wÀ-ÿ'’-]*(?:\s+(?:et|de|du|des)\s+[A-ZÀ-Ý][\wÀ-ÿ'’-]*)*)$/.exec(entite);
     const tete = m ? m[1] : entite;
     const lieu = m ? m[2] : '';
@@ -1914,6 +1951,8 @@ const CALCULS: Record<string, Calculateur> = {
       valeur: formes.long, article: societeDce && !formes.pluriel ? '' : article, source: brut === couverture ? 'page de garde' : 'analyse du DCE (clientName)',
       ...(formes.court ? { court: formes.court.nom, articleCourt: formes.court.article, ...(formes.court.genre !== undefined ? { genreCourt: formes.court.genre } : {}) } : {}),
       ...(formes.pluriel ? { genre: 'p' as const } : societeDce ? { genre: 'f' as const } : {}),
+      ...(elisionDevantNom(formes.long, c.ctx.dce || '') ? { hMuet: true } : {}),
+      ...(formes.court && elisionDevantNom(formes.court.nom, c.ctx.dce || '') ? { hMuetCourt: true } : {}),
     };
   },
   OBJET_MARCHE: (c) => {
@@ -2198,7 +2237,7 @@ function insererClient(sortie: string, v: ValeurVariable): { sortie: string; ins
       const contr = p === 'de' ? (art === 'le' ? 'du' : 'des') : (art === 'le' ? 'au' : 'aux');
       return { sortie: `${avant}${maj ? majuscule(contr) : contr} `, insere: nomAccorde };
     }
-    if (!art && p === 'de' && /^[aeiouyâàäéèêëîïôöûüœ]/i.test(nom)) {
+    if (!art && p === 'de' && (/^[aeiouyâàäéèêëîïôöûüœ]/i.test(nom) || (/^h/i.test(nom) && v.hMuet))) {
       return { sortie: `${avant}${maj ? "D'" : "d'"}`, insere: nomAccorde };
     }
     if (nomAccorde !== nom) {
@@ -2360,7 +2399,7 @@ export function publiposter(texte: string, variables: Variables, options: Option
     }
     if (v && variableRenseignee(v) && typeof v.valeur !== 'boolean') {
       if (def?.type === 'client' || nom === 'CLIENT') {
-        const r = insererClient(sortie, !options.clientLong && v.court ? { ...v, valeur: v.court, article: v.articleCourt ?? '' } : v);
+        const r = insererClient(sortie, !options.clientLong && v.court ? { ...v, valeur: v.court, article: v.articleCourt ?? '', hMuet: v.hMuetCourt } : v);
         sortie = r.sortie + r.insere;
       } else {
         const a = accorderValeur(nom, valeurAffichee(nom, v, def), sortie, t.slice(dernier, dernier + 40));
