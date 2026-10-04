@@ -60,6 +60,12 @@ export interface IndicateurMemoireType {
    */
   motif_dce?: string;
   /**
+   * « titulaire » : le motif « dce » ne compte que dans une proposition dont l'auteur est le titulaire (ou n'est pas nommé),
+   * jamais l'acheteur (T2-GEN-6 : « Le pouvoir adjudicateur pourra procéder à des contrôles inopinés … au moins une fois par
+   * mois » n'exige rien du titulaire).
+   */
+  auteur?: 'titulaire';
+  /**
    * Preuve exigée dans le texte du DCE (motif « dce ») : l'analyse, le secteur ou une rubrique de la matrice ne
    * suffisent pas à rendre l'indicateur vrai quand le DCE est lisible (caen : aucun SSIAP dans le DCE, indicateur
    * rendu vrai par l'analyse « aucun agent SSIAP exigé » ou par une exigence rattachée à une rubrique SSIAP).
@@ -531,6 +537,26 @@ function journalIndicateur(message: string): void {
   console.log(message);
 }
 
+/** Auteur ACHETEUR d'une action dans une proposition (contrôle de l'acheteur, faculté qu'il se réserve). */
+const AUTEUR_ACHETEUR = /pouvoir adjudicateur|(?<![\p{L}])acheteur|ma[îi]tre d['’]ouvrage|personne publique|entit[ée] adjudicatrice|(?:par|de la part d[eu']?)\s*(?:l['’]|le |la |les |ses |son |sa )?(?:services?|direction|repr[ée]sentants?|responsables?|agents?|r[ée]f[ée]rents?)\b[^.;]{0,50}?(?:de l['’][ée]tablissement|du client|de l['’]acheteur|de la (?:ville|collectivit[ée]|commune)|de l['’]universit[ée]|du (?:CHU|centre|d[ée]partement))|(?:par|de la part d[eu']?)\s*(?:l['’][ée]tablissement|le client|la collectivit[ée]|la ville|la commune)|se r[ée]serve(?:nt)? le droit|(?:pourra|pourront|peut|peuvent)\s+(?:proc[ée]der|effectuer|r[ée]aliser|diligenter|organiser)/iu;
+/** Auteur TITULAIRE nommé dans une proposition. */
+const AUTEUR_TITULAIRE = /(?<![\p{L}])(?:titulaire|prestataire|soumissionnaire|candidat|entreprise retenue)(?![\p{L}])/iu;
+
+/** Proposition (entre « . », « ; ») d'un texte autour d'une position. */
+function propositionAutour(t: string, debut: number, fin: number): string {
+  const avant = t.slice(0, debut);
+  const i = Math.max(avant.lastIndexOf('.'), avant.lastIndexOf(';'), avant.lastIndexOf('\n'));
+  const apres = t.slice(fin);
+  const j = apres.search(/[.;\n]/);
+  return t.slice(i + 1, j < 0 ? t.length : fin + j);
+}
+
+/** La proposition est-elle une obligation du titulaire (et non une action ou une faculté de l'acheteur) ? */
+function propositionDuTitulaire(prop: string): boolean {
+  if (AUTEUR_TITULAIRE.test(prop) && !/(?:par|de la part d[eu']?)\s*(?:l['’]|le |la )?(?:pouvoir adjudicateur|acheteur)/i.test(prop)) return true;
+  return !AUTEUR_ACHETEUR.test(prop);
+}
+
 /** Évalue chaque indicateur du mémoire type (vrai/faux, avec les raisons). */
 export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record<string, EtatIndicateur> {
   const dce = String(ctx.dce || '').replace(/[’`]/g, "'").replace(/\s+/g, ' ');
@@ -563,9 +589,16 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
         const rx = new RegExp(def.dce, 'i');
         // Une mention niée du DCE n'est jamais une preuve (T4N-3, T2-GEN-3 : « L'emploi d'agents cynophiles est interdit »,
         // « La télésurveillance du site n'est pas comprise ») ; l'exclusion « dce_exclure » reste lue sur le DCE brut.
-        const m = rx.exec(dceAffirme);
+        let m = rx.exec(dceAffirme);
+        // Indicateur d'une obligation du titulaire : la première mention dont l'auteur n'est pas l'acheteur (T2-GEN-6).
+        if (def.auteur === 'titulaire') {
+          m = null;
+          for (const x of dceAffirme.matchAll(new RegExp(def.dce, 'gi'))) {
+            if (propositionDuTitulaire(propositionAutour(dceAffirme, x.index || 0, (x.index || 0) + x[0].length))) { m = x as RegExpExecArray; break; }
+          }
+        }
         if (m) raisons.push(`DCE : « ${extrait(dceAffirme, m.index, m[0].length)} »`);
-        const e = matrice.find((x) => rx.test(sansMentionsNiees(x.exigence)));
+        const e = matrice.find((x) => rx.test(sansMentionsNiees(x.exigence)) && (def.auteur !== 'titulaire' || propositionDuTitulaire(x.exigence)));
         const sourceDce = !engageants.has(nom) || (def.motif_dce ? dceNorm.includes(normaliser(def.motif_dce)) : !!m);
         if (e && sourceDce) raisons.push(`exigence : « ${e.exigence.slice(0, 120)} »`);
         else if (e) journalIndicateur(`[MemoireType] Indicateur ${nom} : exigence de la matrice écartée, motif absent du DCE (« ${e.exigence.slice(0, 120)} »).`);
@@ -578,7 +611,7 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
       if (def.matrice?.length && (!engageants.has(nom) || (def.motif_dce ? dceNorm.includes(normaliser(def.motif_dce)) : raisons.some((r) => r.startsWith('DCE'))))) {
         const rxDce = def.dce ? new RegExp(def.dce, 'i') : null;
         const rattachees = matrice.filter((x) => x.rubrique && def.matrice!.includes(x.rubrique));
-        const e = rattachees.find((x) => !rxDce || rxDce.test(x.exigence.replace(/[’`]/g, "'")));
+        const e = rattachees.find((x) => (!rxDce || rxDce.test(x.exigence.replace(/[’`]/g, "'"))) && (def.auteur !== 'titulaire' || propositionDuTitulaire(x.exigence)));
         if (e) raisons.push(`exigence rattachée à ${e.rubrique} : « ${e.exigence.slice(0, 120)} »`);
         else if (rattachees.length && !raisons.length) journalIndicateur(`[MemoireType] Indicateur ${nom} : exigence rattachée à ${rattachees[0].rubrique} écartée, motif de l'indicateur absent de son texte (« ${rattachees[0].exigence.slice(0, 120)} »).`);
       }

@@ -124,7 +124,8 @@
   "CONTROLES_INOPINES_EXIGES": {
    "description": "Le cahier des charges exige des contrôles inopinés du titulaire avec un minimum ou une fréquence (GSS s'engage alors sur au moins 3 contrôles inopinés par mois et par site, réponse de GSS du 2026-10-01).",
    "dce": "(?:contr[ôo]les?|visites?|passages?)\\s+inopin[ée]s?[^.;\\n]{0,80}?(?:par mois|mensuels?|par site|au (?:moins|minimum)|minimum)|(?:au (?:moins|minimum)|minimum)\\s+(?:de\\s+)?(?:\\d+|une?|deux|trois|quatre)\\s+(?:contr[ôo]les?|visites?|passages?)\\s+inopin",
-   "motif_dce": "inopin"
+   "motif_dce": "inopin",
+   "auteur": "titulaire"
   },
   "TELESURVEILLANCE": {
    "description": "Le marché prévoit de la télésurveillance ou de la télésécurité (intervention d'un rondier sur alarme), ou la surveillance à distance de l'alarme ou des caméras (ifits : « contrôle de surveillance à distance des locaux »).",

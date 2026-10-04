@@ -134,3 +134,24 @@ describe('CCATP et descriptif technique reconnus comme cahier des charges (T2-CO
     expect(texteCctp(dce).startsWith('=== CCATP_gardiennage_2026.pdf ===')).toBe(true);
   });
 });
+
+describe('contrôles inopinés faits par l’acheteur : jamais un engagement de GSS (T2-GEN-6)', () => {
+  const mt = chargerMemoireType();
+  const prep = (ph: string, matrice: any[] = []) => preparerMemoireType({ analyse: { clientName: 'Société X' }, dce: `${BASE}${ph}\n`, referents: '', matrice } as any, { memoireType: mt });
+  it.each([
+    'Le pouvoir adjudicateur pourra procéder à des contrôles inopinés de la prestation, au moins une fois par mois.',
+    "L'acheteur se réserve le droit d'effectuer des visites inopinées sur site, au minimum une fois par trimestre.",
+    "Des contrôles inopinés seront effectués par le service sûreté de l'établissement au moins une fois par mois afin de vérifier la présence des agents.",
+  ])('%s', (ph) => {
+    const p = prep(ph, [{ exigence: ph, rubrique: 'b5_controle_prestations' }]);
+    expect(p.indicateurs.CONTROLES_INOPINES_EXIGES).toBeFalsy();
+    expect(p.variables.FREQ_CONTROLE_2?.valeur).toBe('une à trois fois par mois');
+  });
+  it('exigé du titulaire : engagement d’au moins trois contrôles par mois', () => {
+    for (const ph of ['Le titulaire réalise au moins deux contrôles inopinés par mois et par site.', "Trois fois par mois au minimum l'entreprise titulaire du marché doit procéder à des contrôles inopinés au moins une fois par mois."]) {
+      const p = prep(ph);
+      expect(p.indicateurs.CONTROLES_INOPINES_EXIGES).toBe(true);
+      expect(p.variables.FREQ_CONTROLE_2?.valeur).toBe('au moins trois fois par mois');
+    }
+  });
+});
