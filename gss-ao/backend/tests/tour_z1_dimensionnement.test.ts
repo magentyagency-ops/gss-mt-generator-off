@@ -29,11 +29,15 @@ describe('périodes de l’année (T1F-2)', () => {
     expect(Math.abs(d.profils[0].heuresAn - 3866)).toBeLessThan(15);
     expect(d.profils[0].titulaires).toBe(3);
   });
-  it('Le Havre lot 1 : service de la seule saison estivale (≈ 1,8 ETP, 2 titulaires)', () => {
+  // T8-CONS-14 : poste saisonnier dimensionné sur une semaine de la saison (2 agents × 8 h × 7 nuits = 112 h, 35 h par agent) :
+  // 3,2 ETP en saison, 4 titulaires ; jamais 2 titulaires à 56 h par semaine et 7 nuits sur 7 chacun (moyenne annuelle).
+  it('Le Havre lot 1 : service de la seule saison estivale (112 h par semaine en saison, 3,2 ETP en saison, 4 titulaires)', () => {
     const dce = "A titre indicatif, la saison démarre le dernier week-end de mars et s'achève le dernier week-end de septembre. Par gardiennage, il faut entendre le déploiement d'agents de sécurité (ADS), en fonction de l'avancement dans la saison et des phénomènes observés (à minima 2 agents). Les horaires prévus sont : Tous les jours, de 22h00 à 06h00.";
     const d = calculerDimensionnement({ postes: [{ profil: 'Agent de sécurité (ADS)', qualification: null, lieu: 'Plage', agents_simultanes: 2, plages: [{ jours: TOUS, debut: '22:00', fin: '06:00' }], citation: "Par gardiennage, il faut entendre le déploiement d'agents de sécurité (ADS), en fonction de l'avancement dans la saison et des phénomènes observés (à minima 2 agents)." }] }, dce)!;
-    expect(d.profils[0].etp).toBeLessThan(2);
-    expect(d.profils[0].titulaires).toBe(2);
+    expect(d.profils[0].heuresSemaine).toBe(112);
+    expect(d.profils[0].etp).toBe(3.2);
+    expect(d.profils[0].titulaires).toBe(4);
+    expect(d.profils[0].semainesSaison).toBeGreaterThan(25);
     expect(d.profils[0].qualification).toBe('CQP APS');
   });
   it('poste saisonnier sans période lisible : question posée à GSS', () => {
