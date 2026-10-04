@@ -16,6 +16,8 @@ import {
   phrasesDeFrequenceDeControle, frequenceMensuelle, CLAUSE_PRIX, rubriqueDeLAjout,
   intituleSansRedite,
   motsDePhrase, similarite, lireRegistre,
+  acheteurDuDce, objetDuDce,
+  variableRenseignee,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
@@ -3997,6 +3999,10 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     );
     try {
       const data = viderValeursNonRenseignees(JSON.parse(content || '{}'));
+      // Rédaction indisponible ou réponse sans acheteur ni objet (T6N-2, mode dégradé) : lus sans modèle dans le DCE.
+      if (!content) data.lectureSansModele = true;
+      if (!data.clientName) data.clientName = acheteurDuDce(dceContext) || undefined;
+      if (!data.projectTitle) data.projectTitle = objetDuDce(dceContext) || undefined;
       // Post-traitement : enrichir / valider les champs stratégiques via détection locale
       // (le modèle peut se tromper sur public/privé ; la détection par mots-clés est plus fiable)
       const detectedType = detectMarketType(data);
@@ -4012,7 +4018,8 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
       return data;
     } catch (e) {
       console.error('[MemoireGenerator] Analyse DCE: parse JSON échoué, repli sur extrait brut.');
-      return { rawExcerpt: dceContext.slice(0, 20_000) };
+      // Acheteur et objet lus sans modèle (T6N-2).
+      return { rawExcerpt: dceContext.slice(0, 20_000), clientName: acheteurDuDce(dceContext) || undefined, projectTitle: objetDuDce(dceContext) || undefined, lectureSansModele: true };
     }
   }
 
@@ -9035,6 +9042,8 @@ RÈGLES DE FORME (rendu Marp) :
       ...questionsCouverture,
       ...questionsAjoutsRefuses,
       ...questionsRC,
+      // Objet du marché inconnu (lecture du DCE sans modèle, T6N-2) : jamais « Mémoire technique » en objet, la question est posée.
+      ...(!variableRenseignee(prep.variables.OBJET_MARCHE) && mt.variables.OBJET_MARCHE?.question ? [mt.variables.OBJET_MARCHE.question] : []),
       ...formalitesOffre.map(questionFormalite),
       ...formalitesBloc1.filter((x) => !formalitesOffre.some((e) => typeFormalite(`${e.sujet || ''} ${e.exigence}`) === typeFormalite(x))).map((x) => questionFormalite({ exigence: x })),
       ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie),
@@ -10723,7 +10732,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     retirerQuestionsCouvertes(questionsCouverture, sourcesCouverture, suivi.exigencesNotees(), Object.values(sections).join('\n\n'));
     const confirmationsAvantSelection = confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie);
     const consultations = new Set<string>([
-      ...alerteCadreAbsent(dceContext, this.cadreNonRemplissable || ''), ...questionLieuInconnu(analysisData, dceContext), ...commentairesRetires, ...questionsCouverture, ...formalitesCourt.map(questionFormalite), ...formalitesBloc1Court.filter((x) => !formalitesCourt.some((e: any) => typeFormalite(`${e.sujet || ''} ${e.exigence}`) === typeFormalite(x))).map((x) => questionFormalite({ exigence: x })), ...confirmationsAvantSelection,
+      ...alerteCadreAbsent(dceContext, this.cadreNonRemplissable || ''), ...questionLieuInconnu(analysisData, dceContext), ...commentairesRetires, ...questionsCouverture, ...formalitesCourt.map(questionFormalite), ...(!variableRenseignee(prep.variables.OBJET_MARCHE) && mt.variables.OBJET_MARCHE?.question ? [mt.variables.OBJET_MARCHE.question] : []), ...formalitesBloc1Court.filter((x) => !formalitesCourt.some((e: any) => typeFormalite(`${e.sujet || ''} ${e.exigence}`) === typeFormalite(x))).map((x) => questionFormalite({ exigence: x })), ...confirmationsAvantSelection,
       ...publiees.filter((p) => toutesRetenues.includes(p.id)).flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)])
         .flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
     ]);

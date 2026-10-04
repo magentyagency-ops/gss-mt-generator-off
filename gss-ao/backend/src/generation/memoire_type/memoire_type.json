@@ -268,7 +268,8 @@
    "description": "Intitulé du marché",
    "origine": "page de garde (title) puis analyzeDce.projectTitle",
    "type": "texte",
-   "si_absente": "retirer_phrase"
+   "si_absente": "retirer_phrase",
+   "question": "Quel est l'objet du marché (son intitulé, tel que l'écrit le DCE) ? Il figure sur la page de garde du mémoire."
   },
   "REF_MARCHE": {
    "description": "Référence du marché",

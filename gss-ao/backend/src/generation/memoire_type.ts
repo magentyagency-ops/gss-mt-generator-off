@@ -1080,7 +1080,10 @@ export function formeCourteApresPremiere(textes: string[], long: string, court: 
   // Variantes du nom entier écrites par la rédaction (ca_normandie 241 : nom de l'analyse du DCE « …(SAR de Rouen), BOP
   // Normand, pour… » à côté de la forme longue « …(SAR de Rouen) et le BOP Normand, pour… ») : traitées comme la forme longue.
   const formes = [...new Set([long, ...variantes.map((v) => String(v || '').replace(/\s+/g, ' ').trim())])].filter((f) => f && f !== court.nom && f.length > court.nom.length).sort((a, b) => b.length - a.length);
-  const rx = new RegExp(formes.map((f) => f.split(/\s+/).map(echapper).join('\\s+')).join('|'), 'g');
+  // Nom long suivi de sa forme courte entre parenthèses (« Institut … Théodore Simon (IFITS) ») : remplacé avec elle, jamais
+  // « l'IFITS (IFITS) » (T6N-2).
+  const parenthese = `(?:\\s*\\(\\s*${echapper(court.nom)}\\s*\\))?`;
+  const rx = new RegExp(`(?:${formes.map((f) => f.split(/\s+/).map(echapper).join('\\s+')).join('|')})${parenthese}`, 'g');
   let vu = false;
   return textes.map((t) => String(t ?? '').replace(rx, (x) => { const r = vu ? court.nom : x; vu = true; return r; }));
 }
@@ -2913,7 +2916,10 @@ export function variablesDuMarche(mt: MemoireType, ctx: ContexteMarche, indicate
     const calc = CALCULS[nom];
     out[nom] = calc ? calc(c) : { valeur: null };
     const def = mt.variables[nom];
-    if (!variableRenseignee(out[nom]) && def?.question && !out[nom].question) out[nom].question = def.question;
+    if (!variableRenseignee(out[nom]) && def?.question && !out[nom].question) {
+      // Lecture du DCE faite sans modèle (rédaction indisponible, T6N-2) : la vraie cause, jamais « Le DCE ne permet pas de le trouver ».
+      out[nom].question = nom === 'CLIENT' && ctx.analyse?.lectureSansModele ? "La lecture automatique du DCE a échoué : quel est le nom exact de l'acheteur ?" : def.question;
+    }
   }
   // Fréquence des contrôles inopinés imposée par le CCTP (becquerel 591, T5N-4 : « au moins une fois par mois de nuit et au
   // moins une fois par mois le week-end de jour ») : le calendrier type en découle, jamais la pratique de GSS « un à trois ».
@@ -3236,6 +3242,105 @@ function accorderPronomsClient(t: string, v?: ValeurVariable): string {
   return t.replace(/(\{\{\s*CLIENT\s*\}\}[^.!?\n{]{0,80}?)\bs['’]il(?![\wÀ-ÿ])/g, (_m, a: string) => `${a}${g === 'f' ? 'si elle' : g === 'fp' ? 'si elles' : "s'ils"}`);
 }
 
+/**
+ * Nom de l'acheteur lu sans modèle (T6N-2, mode dégradé) : libellé « Pouvoir adjudicateur / Acheteur / Maître d'ouvrage : X »,
+ * sinon le bloc en capitales de la tête d'une pièce (RC, AE, CCTP, CCAP) suivi de son adresse ou de sa forme juridique
+ * (« ROUEN NORMANDIE EVENEMENTS / 48 Avenue des Canadiens », « INSTITUT DE FORMATION INTERHOSPITALIER / THÉODORE SIMON /
+ * Groupement d'Intérêt Public », deux acheteurs en tête d'un CCTP commun), avec le sigle entre parenthèses de la ligne
+ * suivante (« (Nouvel IMM) »), sinon le sujet de « L'X se réserve… ». '' si rien n'est sûr ; jamais un intitulé de pièce.
+ */
+export function acheteurDuDce(dce: string): string {
+  const t = String(dce || '').replace(/\r/g, '');
+  const label = /(?:^|\n)\s*(?:pouvoir adjudicateur|entit[ée] adjudicatrice|nom de l['’]acheteur|identification de l['’]acheteur|acheteur|ma[îi]tre d['’]ouvrage|personne publique)\s*[:|]\s*([^\n|]{3,140})/i.exec(t);
+  if (label) { const v = label[1].replace(/[.…_]{3,}.*$/, '').replace(/\s+/g, ' ').trim(); if (v.length >= 3 && !/^(?:\(|le |la |les |un |une )/i.test(v) && /[A-Za-zÀ-ÿ]{3}/.test(v)) return v.replace(/[\s,;:.]+$/, ''); }
+  const GENERIQUE = /ACTE D.ENGAGEMENT|R[EÈ]GLEMENT|CAHIER DES|CLAUSES|MARCH[EÉ]S?\b|ACCORD[- ]CADRE|CONSULTATION|PROC[EÉ]DURE|PRESTATIONS?|SOMMAIRE|OBJET|MINIST[EÈ]RE DE L.[EÉ]CONOMIE|DIRECTION DES AFFAIRES JURIDIQUES|GARDIENNAGE|S[EÉ]CURIT[EÉ]|S[ÛU]RET[EÉ]|SURVEILLANCE|\bCC[TA]P\b|\bRC\b|ANNEXE|\bLOT\b|DATE LIMITE|R[ÉE]F[ÉE]RENCE|FOURNITURES|SERVICES|ATTRI|DC\d|D[ÉE]CLARATION|CANDIDAT|GROUPEMENT|MEMBRE|FORMULAIRE|CONTRAT|NOTIFI|CADRE R[ÉE]SERV|PR[ÉE]SENTATION|^\W*$|\*{2,}/;
+  const majuscules = (l: string) => { const x = l.replace(/[^A-Za-zÀ-ÿ]/g, ''); return x.length >= 4 && x.replace(/[^A-ZÀ-Ý]/g, '').length / x.length > 0.8; };
+  const ADRESSE = /\b\d{5}\b|\b(?:rue|avenue|boulevard|bd|place|quai|all[ée]e|chemin|route|impasse|cours)\b|\bBP\s*\d|\bCS\s*\d|groupement d.int[ée]r[êe]t public|association r[ée]gie|[ée]tablissement public|\bSIREN\b|\bSIRET\b/i;
+  const pieces = t.split(/\n(?:===== PIÈCE : (.+?) =====|--- (.+?) ---)\n/);
+  const liste: Array<{ nom: string; corps: string }> = [];
+  if (pieces.length === 1) liste.push({ nom: '', corps: t });
+  for (let i = 1; i < pieces.length; i += 3) liste.push({ nom: pieces[i] || pieces[i + 1] || '', corps: pieces[i + 2] || '' });
+  // Pièces principales d'abord (RC, AE, CCTP, CCAP), annexes et formulaires (DC1, DC2…) en dernier.
+  const rang = (n: string) => (/annexe|\bDC\s?\d|dpgf|dqe|bpu|bordereau/i.test(n) ? 10 : 0) + (/\bRC\b|r[èe]glement/i.test(n) ? 0 : /\bAE\b|acte|engagement/i.test(n) ? 1 : /cctp|cahier des clauses techniques/i.test(n) ? 2 : /ccap/i.test(n) ? 3 : 4);
+  for (const p of [...liste].sort((a, b) => rang(a.nom) - rang(b.nom))) {
+    const lignes = p.corps.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 40);
+    for (let i = 0; i < lignes.length; i++) {
+      if (!majuscules(lignes[i]) || GENERIQUE.test(lignes[i]) || ADRESSE.test(lignes[i]) || /\d{3,}|[:…]|\.{2,}/.test(lignes[i]) || lignes[i].length > 90) continue;
+      // Lignes en capitales qui se suivent (nom sur plusieurs lignes), puis adresse ou forme juridique dans les 4 lignes.
+      const noms = [lignes[i]];
+      let j = i + 1;
+      while (j < lignes.length && majuscules(lignes[j]) && !GENERIQUE.test(lignes[j]) && !ADRESSE.test(lignes[j]) && lignes[j].length <= 90 && noms.length < 3) noms.push(lignes[j++]);
+      const sigle = /^\(\s*([^()]{2,30})\s*\)/.exec(lignes[j] || '');
+      const suite = lignes.slice(j, j + 4).join(' ');
+      // Deux acheteurs en tête d'un CCTP commun (ign) : deux lignes en capitales de suite, en tout début de pièce.
+      if (!ADRESSE.test(suite) && !sigle && !(i <= 1 && noms.length >= 2)) continue;
+      const nom = (i <= 1 && noms.length >= 2 && !ADRESSE.test(suite) ? noms.join(' et ') : noms.join(' ')).replace(/\s+/g, ' ').trim();
+      return sigle ? `${nom} (${sigle[1].trim()})` : nom;
+    }
+  }
+  // Nom en casse normale juste avant l'adresse, en tête d'une pièce (s2e : « Seine-Eure évènements / 26 Avenue Churchill »).
+  for (const p of [...liste].filter((x) => rang(x.nom) < 10).sort((a, b) => rang(a.nom) - rang(b.nom))) {
+    const lignes = p.corps.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 15);
+    for (let i = 0; i + 1 < lignes.length; i++) {
+      const l = lignes[i];
+      if (l.length < 4 || l.length > 60 || !/^[A-ZÀ-Ý]/.test(l) || GENERIQUE.test(l.toUpperCase()) || ADRESSE.test(l) || /\d|[:…()|]|\.{2,}/.test(l)
+        || /^(?:tribunal|site|b[âa]timent|campus|agence|antenne|parking|gymnase|salle|stade|parc|r[ée]sidence|lieu)\b/i.test(l)) continue;
+      if (/\b(?:rue|avenue|boulevard|bd|place|quai|all[ée]e|chemin|route|impasse|cours)\b/i.test(lignes[i + 1]) || /^\d{5}\s/.test(lignes[i + 1])) return l;
+    }
+  }
+  // « L'IFITS se réserve… » : seulement un sigle que le DCE écrit aussi entre parenthèses après le nom complet (« … (IFITS) »).
+  const reserve = /(?:^|[.\n]\s*)(?:L['’]|Le |La |Les )\s*([A-Z]{2,10})\s+se\s+r[ée]serve/.exec(t);
+  // (le nom complet devant les parenthèses est un nom propre : « Institut de Formation Interhospitalier Théodore Simon (IFITS) »,
+  // jamais « responsable du suivi et de l'exécution du marché (RSEM) »)
+  return reserve && new RegExp(`[A-ZÀ-Ý][\\p{L}'’-]+(?:\\s+(?:(?:de|du|des|d['’]|et|la|le|l['’])\\s*)?[A-ZÀ-Ý][\\p{L}'’-]+){1,6}\\s*\\(\\s*${reserve[1]}\\s*\\)`, 'u').test(t) ? reserve[1].trim() : '';
+}
+
+/** Objet du marché lu sans modèle (T6N-2) : « Le présent marché a pour objet … », sinon la ligne « Objet (du marché) : … ». */
+export function objetDuDce(dce: string): string {
+  const t = String(dce || '').replace(/\r/g, '');
+  // (phrase lue jusqu'à son point, même coupée en fin de ligne par l'extraction du PDF ou du Word)
+  const a = /(?:le\s+pr[ée]sent\s+(?:march[ée]|accord-cadre|contrat)|la\s+(?:pr[ée]sente\s+)?consultation)\s+a\s+pour\s+objet\s+((?:[^\n.;]|\n(?!\s*\n))[^.;]{9,400}?)(?:\.(?:\s|$)|\n\s*\n|;)/i.exec(t);
+  // (valeur en minuscule : suite d'une cellule écrite sur la ligne précédente dans un tableau de PDF, jamais l'objet)
+  const b = /(?:^|\n)\s*objet(?:\s+du\s+march[ée]|\s+de\s+la\s+consultation)?\s*(?::|\s{3,}|\|)\s*([A-ZÀ-Ý][^\n|]{4,200})/.exec(t);
+  let v = (a ? a[1] : b ? b[1] : '').replace(/\s+/g, ' ').trim().replace(/^(?:de|d['’])\s*(?=[a-zà-ÿ])/i, '').replace(/^(?:(?:la|le|les)\s+|l['’]\s*)/i, '');
+  if (!v || /^\W*$/.test(v)) return '';
+  if (v.length > 200) v = `${v.slice(0, 200).replace(/\s+\S*$/, '')}…`;
+  return v.charAt(0).toUpperCase() + v.slice(1);
+}
+
+/**
+ * Réponse de GSS au nom de l'acheteur (T6N-2) : le repli « votre établissement » de tout le texte devient l'acheteur, avec son
+ * article accordé et contracté (« de votre établissement » → « de l'IFITS », « à votre établissement » → « au Centre … »,
+ * « Votre établissement » en tête de phrase → « L'IFITS ») et les pronoms et verbes accordés (« s'il le souhaite » → « si elle
+ * le souhaite »), comme le publipostage de {{CLIENT}}.
+ */
+export function remplacerRepliClient(texte: string, nomBrut: string, dce = ''): string {
+  const nom = String(nomBrut || '').replace(/\s+/g, ' ').replace(/[.\s]+$/, '').trim();
+  if (!nom) return texte;
+  const a = articleEtNom(nom, dce);
+  const v: ValeurVariable = { valeur: a.nom, article: a.article };
+  const forme = (prep: string, majuscule: boolean): string => {
+    const art = a.article;
+    let r: string;
+    if (!art) r = `${prep ? `${prep === 'de' && /^[aeiouyhàâéèêîïôûü]/i.test(a.nom) ? "d'" : `${prep} `}` : ''}${a.nom}`;
+    else if (art === "l'") r = `${prep ? `${prep} ` : ''}l'${a.nom}`;
+    else if (prep === 'de') r = `${art === 'le' ? 'du' : art === 'les' ? 'des' : 'de la'} ${a.nom}`;
+    else if (prep === 'à') r = `${art === 'le' ? 'au' : art === 'les' ? 'aux' : 'à la'} ${a.nom}`;
+    else r = `${art} ${a.nom}`;
+    return majuscule ? r.charAt(0).toUpperCase() + r.slice(1) : r;
+  };
+  // Repère {{CLIENT}} à la place du repli (préposition gardée devant lui), accord des pronoms et des verbes (jamais quand
+  // l'acheteur est complément : « le site de {{CLIENT}} reçoit »), puis le nom avec sa préposition contractée.
+  let t = String(texte || '').replace(/(?<![\p{L}])[Vv]otre\s+[ée]tablissement(?![\p{L}])/gu, '{{CLIENT}}');
+  t = accorderPronomsClient(t, v);
+  // (marque \u0001 devant chaque nom écrit : seule une forme écrite ici reçoit la majuscule d'un début de phrase)
+  t = t.replace(/(?<![\p{L}])(de|De|à|À)\s+\{\{CLIENT\}\}/gu, (_m, p: string) => `\u0001${forme(/^d/i.test(p) ? 'de' : 'à', /^[DÀ]/.test(p))}`)
+    .replace(/(?<![\p{L}])(d['’])\{\{CLIENT\}\}/gu, () => `\u0001${forme('de', false)}`)
+    .replace(/\{\{CLIENT\}\}/g, `\u0001${forme('', false)}`);
+  // Début de phrase, de ligne ou de puce : majuscule.
+  return t.replace(/(^|[.!?]\s+|\n[ \t]*(?:[-*•][ \t]+)?)\u0001([a-zàâéèêîôû])/g, (_m, a: string, c: string) => `${a}${c.toUpperCase()}`).replace(/\u0001/g, '');
+}
+
 /** Retire les phrases (ou lignes de liste / de tableau) qui contiennent le repère de retrait. */
 function retirerPhrasesMarquees(texte: string): string {
   return texte.split('\n').map((ligne) => {
@@ -3332,9 +3437,12 @@ export function publiposter(texte: string, variables: Variables, options: Option
         const r = insererClient(sortie, repli);
         sortie = r.sortie + r.insere;
       } else sortie += def.repli;
-      if (def.question) manque(nom, def.question, false);
+      // (question de la variable, qui peut dire la vraie cause : lecture du DCE sans modèle, T6N-2)
+      if (def.question) manque(nom, question, false);
     } else if (regle === 'retirer_phrase') {
       sortie += RETIRER;
+      // Donnée retirée mais attendue de GSS (objet du marché inconnu, T6N-2) : la question est posée.
+      if (def?.question) manque(nom, question, false);
     } else if (regle === 'vide') {
       // rien
     } else {

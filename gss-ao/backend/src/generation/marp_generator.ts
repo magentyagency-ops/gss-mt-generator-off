@@ -1058,8 +1058,10 @@ export class MarpGenerator {
     lines.push('# GLOBAL SECURITY SERVICES');
     lines.push('## VOTRE PARTENAIRE SÉCURITÉ');
     lines.push('### MÉMOIRE TECHNIQUE');
-    if (cover.objet || cover.title) {
-      lines.push(`#### ${(cover.objet || cover.title || '').toUpperCase()}`);
+    // Objet inconnu (repli « Mémoire technique », T6N-2) : jamais « MÉMOIRE TECHNIQUE » écrit deux fois.
+    const objetCouv = String(cover.objet || cover.title || '').trim();
+    if (objetCouv && !/^m[ée]moire technique$/i.test(objetCouv)) {
+      lines.push(`#### ${objetCouv.toUpperCase()}`);
     } else {
       lines.push('#### SÉCURITÉ INCENDIE & SÛRETÉ');
     }

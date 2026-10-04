@@ -182,7 +182,9 @@ export function taillePoliceObjet(objet: string, client = ''): number {
 /** Couverture : haut marine (arc, logo blanc, « mémoire technique », objet, acheteur, référence), fiche de la
  *  consultation (faits de la page de garde et identité de GSS), marque. */
 export function couvertureV3(cover: { client?: string; title?: string; ref?: string; objet?: string }, c: CouleursV3, date: Date = new Date()): string {
-  const objet = String(cover.objet || cover.title || '').trim();
+  // Objet inconnu (repli « Mémoire technique » de la page de garde, T6N-2) : jamais imprimé comme objet du marché.
+  const objetBrut = String(cover.objet || cover.title || '').trim();
+  const objet = /^m[ée]moire technique$/i.test(objetBrut) ? '' : objetBrut;
   const client = String(cover.client || '').trim();
   const ref = String(cover.ref || '').trim();
   const mois = date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });

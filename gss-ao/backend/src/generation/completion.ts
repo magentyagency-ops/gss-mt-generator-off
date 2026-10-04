@@ -833,6 +833,18 @@ export async function remplir(
     // publipostés (phrase, tableau de l'équipe dédiée), jamais une phrase de plus collée ailleurs (deux chiffres).
     if (etat.mode === 'libre' && PROPOSITION_DIMENSIONNEMENT.test(el.question)) {
       if (!estValidation(v)) { effectifs.push({ el, v }); continue; }
+    } else if (etat.mode === 'libre' && QUESTION_NOM_ACHETEUR.test(el.question)) {
+      // Nom de l'acheteur (T6N-2) : traité comme la variable {{CLIENT}}, publipostée dans toutes les rubriques (article accordé,
+      // pronoms et verbes), sur la page de garde et dans les pieds de page, puis recomposition ; jamais une ligne ajoutée.
+      const { remplacerRepliClient } = await import('./memoire_type');
+      const lib = etat.libre!;
+      for (const id of Object.keys(lib.sections)) lib.sections[id] = remplacerRepliClient(lib.sections[id], v);
+      lib.cover = { ...(lib.cover || {}), client: v.replace(/\s+/g, ' ').replace(/[.\s]+$/, '').trim(), clientCourt: '' };
+      for (const n of el.reperes || []) for (const id of Object.keys(lib.sections)) lib.sections[id] = lib.sections[id].split(REPERE(n)).join('');
+    } else if (etat.mode === 'libre' && QUESTION_OBJET_MARCHE.test(el.question)) {
+      // Objet du marché (T6N-2) : la page de garde, jamais une phrase ajoutée dans une rubrique.
+      const lib = etat.libre!;
+      lib.cover = { ...(lib.cover || {}), title: v.replace(/\s+/g, ' ').replace(/[.\s]+$/, '').trim() };
     } else if (etat.mode === 'cadre') {
       fichier = remplirSignet(fichier, cle, v);
     } else {
@@ -868,6 +880,11 @@ export async function remplir(
   if (!effectifs.length) return etat;
   return appliquerEffectifs(dossierId, effectifs, source);
 }
+
+/** Question du nom de l'acheteur (variable CLIENT du mémoire type, T6N-2). */
+export const QUESTION_NOM_ACHETEUR = /quel est le nom exact de l['’]acheteur/i;
+/** Question de l'objet du marché (variable OBJET_MARCHE du mémoire type, T6N-2). */
+export const QUESTION_OBJET_MARCHE = /quel est l['’]objet du march[ée]/i;
 
 /** Proposition de dimensionnement calculée à la génération (dimensionnement.ts, questionDimensionnement). */
 export const PROPOSITION_DIMENSIONNEMENT = /^Proposition à valider\s*:\s*dimensionnement/i;
