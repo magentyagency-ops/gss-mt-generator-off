@@ -2884,7 +2884,28 @@ Réponds UNIQUEMENT par un objet JSON : {"titre": "…", "texte": "…"}`;
 /** Fait accompli ou pièce jointe affirmés dans une proposition de l'IA (« a été effectuée », « est jointe à l'offre »). */
 const FAIT_ACCOMPLI = /\bvisites?\b[^.]{0,80}\b(?:a|ont) (?:d[ée]j[àa] )?été (?:effectu|r[ée]alis|men|organis|faite?s?)|\b(?:a|ont|avons) (?:d[ée]j[àa] )?(?:effectu[ée]|r[ée]alis[ée]|men[ée]|fait|particip[ée](?: [àa])?)\b[^.]{0,40}\bvisites?\b|\bvisit[ée] (?:le|les) (?:site|lieux|locaux|parcs?)\b|\b(?:est|sont) (?:jointe?s?|annex[ée]e?s?) (?:à|au|en|dans) (?:l['’]offre|annexe|notre (?:offre|dossier)|le dossier|la pr[ée]sente)|\bci-jointe?s?\b/i;
 
+/**
+ * Libellé d'un emplacement « [À COMPLÉTER] » d'une proposition écrit comme une consigne (T3N-9, parc_expo 1331 : « Définir
+ * avec GSS le circuit interne de validation et d'envoi des alertes écrites : [À COMPLÉTER]. ») : le nom de la donnée, à la
+ * voix de GSS (« Circuit interne de validation et d'envoi des alertes écrites : [À COMPLÉTER]. »), jamais un infinitif ni
+ * « avec GSS » / « par GSS » imprimés dans le mémoire remis.
+ */
+export function libellesEmplacementsNominaux(texte: string): string {
+  const VERBES = '(?:d[ée]finir|pr[ée]ciser|indiquer|lister|d[ée]crire|fixer|arr[êe]ter|confirmer|valider|choisir|organiser|d[ée]terminer|formaliser|[ée]tablir|identifier|nommer|d[ée]signer|compl[ée]ter|renseigner|fournir|communiquer|transmettre|d[ée]tailler)';
+  return String(texte || '').split('\n').map((l) => {
+    if (!l.includes('[À COMPLÉTER]')) return l;
+    const m = new RegExp(`^(\\s*(?:[-*•]\\s+|\\d+[.)]\\s+)?)(\\*\\*)?${VERBES}\\s+(?:(?:avec|par|pour|à)\\s+GSS\\s+)?(?:(?:le|la|les|l['’]|un|une|des|du|de la|de l['’]|les modalités de|la liste des?)\\s*)?([^:]+?)(\\*\\*)?\\s*:\\s*\\[À COMPLÉTER\\]`, 'i').exec(l);
+    let r = l;
+    if (m) {
+      const nom = m[3].replace(/\s+(?:avec|par|pour)\s+GSS\b/gi, '').trim();
+      r = `${m[1]}${m[2] || ''}${nom.charAt(0).toUpperCase()}${nom.slice(1)}${m[4] || ''} : [À COMPLÉTER]${l.slice(m.index + m[0].length)}`;
+    }
+    return r.replace(/\s+(?:avec|par)\s+GSS(?=\s*:\s*\[À COMPLÉTER\])/gi, '');
+  }).join('\n');
+}
+
 export function controlerProposition(texte: string, montantsGss: string[] = []): { texte: string; retirees: string[]; questions: string[] } {
+  texte = libellesEmplacementsNominaux(texte);
   const retirees: string[] = [];
   const questions: string[] = [];
   const montant = (x: string) => x.replace(/[\s\u00a0\u202f.]/g, '').replace(/euros?/i, '€');
