@@ -1609,16 +1609,30 @@ export function dateDebutMarche(dce: string): string {
   // Tournures (T3G-11) : « date de commencement », « Le présent marché prendra effet le… », « L'accord-cadre débutera le… »,
   // « Le contrat démarrera le… », et « à compter du <date> » dans une phrase de durée du marché.
   const LIBELLE = `(?:date (?:pr[ée]visionnelle |effective )?(?:de d[ée]marrage|de d[ée]but|de commencement)(?: (?:d.ex[ée]cution|des prestations|du march[ée]|de l.accord-cadre))?|d[ée]marrage (?:effectif )?(?:des prestations|du march[ée])|d[ée]but (?:d.ex[ée]cution|des prestations|du march[ée])|commencement (?:des prestations|d.ex[ée]cution)|prise d.effet)`;
-  const SUJET = `(?:(?:le pr[ée]sent |l.|le |les )?(?:march[ée]|accord-cadre|contrat|prestations|ex[ée]cution(?: du march[ée]| des prestations)?))`;
-  const VERBE = `${SUJET}\\s+(?:(?:d[ée]but\\w*|commenc\\w*|d[ée]marr\\w*|pren\\w* effet|entr\\w* en vigueur)(?:\\s+[àa] compter)?)`;
+  // Sujet au singulier comme au pluriel (« La prestation démarre le… », T4G-7).
+  const SUJET = `(?:(?:le pr[ée]sent |la pr[ée]sente |l.|le |la |les )?(?:march[ée]|accord-cadre|contrat|prestations?|ex[ée]cution(?: du march[ée]| des prestations)?))`;
+  const VERBE = `${SUJET}\\s+(?:(?:d[ée]but\\w*|commenc\\w*|d[ée]marr\\w*|pren\\w* effet|entr\\w* en vigueur|(?:est|sont|sera|seront) ex[ée]cut[ée]e?s?)(?:\\s+[àa] (?:compter|partir))?)`;
   const DUREE = `(?:dur[ée]e (?:du march[ée]|de l.accord-cadre|du contrat)|(?:march[ée]|accord-cadre|contrat) est conclu)[^.;]{0,120}?`;
-  const rx = new RegExp(`(?:${LIBELLE}[^.;]{0,160}?(?:fix[ée]e?|estim[ée]e?|pr[ée]vue?)?\\s*(?:au|le|à compter du|:)\\s*(?:le\\s+)?|${VERBE}\\s+(?:au|le|à compter du|à partir du|du)\\s+|${DUREE}[àa] compter du\\s+)${DATE}`, 'i');
+  // Période d'exécution (« Période d'exécution : du 1er janvier 2027 au 31 décembre 2027 ») : la première date.
+  const PERIODE = `(?:p[ée]riode|dur[ée]e) d.ex[ée]cution\\s*(?:[|:]\\s*)?(?:du\\s+|à compter du\\s+)`;
+  // Libellé de tableau ou de colonnes suivi de sa date (« Date prévisionnelle de début des prestations | 1er janvier 2027 »,
+  // « … des prestations      01/01/2027 », la date seule sur la ligne suivante) : sans aucun mot entre les deux.
+  const rx = new RegExp(`(?:${LIBELLE}(?:\\s*(?:[|:]\\s*)?(?=${DATE.replace(/^\(/, '(?:')})|[^.;]{0,160}?(?:fix[ée]e?|estim[ée]e?|pr[ée]vue?)?\\s*(?:au|le|à compter du|:)\\s*(?:le\\s+)?)|${VERBE}\\s+(?:au|le|à compter du|à partir du|du)\\s+|${PERIODE}|${DUREE}[àa] compter du\\s+)${DATE}`, 'i');
   const m = rx.exec(d);
   if (!m) return '';
   const v = m[1].replace(/\s+/g, ' ');
+  const MOIS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
   const n = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(v);
-  if (!n) return v;
-  const mois = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'][Number(n[2]) - 1];
+  if (!n) {
+    // Date en lettres réécrite sous une forme unique (T4G-4 : « 1er Janvier 2027 », « 1ER JANVIER 2027 » → « 1er janvier 2027 »).
+    const l = /^(1er|\d{1,2})\s+(\S+)\s+(\d{4})$/i.exec(v);
+    if (!l) return v;
+    const k = MOIS_FR.findIndex((x) => normaliser(x) === normaliser(l[2]));
+    if (k < 0) return v;
+    const j = /^1er$/i.test(l[1]) ? 1 : Number(l[1]);
+    return `${j === 1 ? '1er' : j} ${MOIS_FR[k]} ${l[3]}`;
+  }
+  const mois = MOIS_FR[Number(n[2]) - 1];
   if (!mois || Number(n[1]) < 1 || Number(n[1]) > 31) return '';
   return `${Number(n[1]) === 1 ? '1er' : Number(n[1])} ${mois} ${n[3]}`;
 }
