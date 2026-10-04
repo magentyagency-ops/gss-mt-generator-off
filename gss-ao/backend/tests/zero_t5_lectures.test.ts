@@ -41,3 +41,63 @@ describe('pièce unique CCAP-CCTP (T5G-10)', () => {
     expect(estCahierDesCharges('CCAP gardiennage 2026.pdf')).toBe(false);
   });
 });
+
+import { niveauxHabilitation, qualificationsDuDce, frequenceReunionsDce, envoiPlanningsClientDce, frequenceInopinesDce, delaisDuDce } from '../src/generation/memoire_type';
+
+describe('puce coupée en fin de ligne sous une introduction « … : » (T5G-2)', () => {
+  it('le délai porté par la ligne de suite est lu', () => {
+    const dce = "\n\n--- CCTP ---\nDéclenchement des actions :\n○ Le titulaire s'engage à intervenir le plus rapidement possible, en tout état de cause dans un\ndélai maximum de 20 minutes à compter du moment où il était informé par le centre de supervision.\n○ Il rend compte au client.\n";
+    expect(delaisDuDce(dce, 'alarme').map((d: any) => d.minutes)).toEqual([20]);
+  });
+});
+
+describe('habilitation électrique écrite avec des espaces (T5G-3)', () => {
+  it('« H0 B0 » = H0B0, « H0 B0 V » = H0B0V, « B1 V » = B1V', () => {
+    expect(niveauxHabilitation('habilitation électrique H0 B0.')).toEqual(['H0B0']);
+    expect(niveauxHabilitation('habilitation électrique H0B0 V.')).toEqual(['H0B0V']);
+    expect(niveauxHabilitation('habilitations électriques H0 B0 V')).toEqual(['H0B0V']);
+    expect(niveauxHabilitation('habilitation électrique B1 V')).toEqual(['B1V']);
+    expect(qualificationsDuDce("Les agents sont titulaires du CQP APS, du SST et de l'habilitation électrique H0 B0.")).toEqual(['CQP APS', 'SST', 'habilitation électrique H0B0']);
+  });
+});
+
+describe('CQP écrit en toutes lettres (T5G-14)', () => {
+  for (const t of ['titulaires du CQP Agent de Prévention et de Sécurité', 'titulaires du CQP « Agent de prévention et de sécurité »', 'TFP Agent de Prévention et de Sécurité', 'CQP agent de prévention et de sécurité (APS)']) {
+    it(t, () => expect(qualificationsDuDce(t)).toContain('CQP APS'));
+  }
+});
+
+describe('fréquence des réunions écrite autrement (T5G-13)', () => {
+  const f = (t: string) => frequenceReunionsDce(`\n\n--- CCTP ---\n${t}\n`);
+  it('formes lues', () => {
+    expect(f('Une réunion de suivi a lieu 1 fois par mois.')).toBe('chaque mois');
+    expect(f('Fréquence des réunions de suivi : 1 fois par mois.')).toBe('chaque mois');
+    expect(f('Réunions de suivi : une par mois.')).toBe('chaque mois');
+    expect(f('Une réunion de suivi a lieu deux fois par an.')).toBe('chaque semestre');
+    expect(f('Une réunion de bilan annuelle est organisée.')).toBe('chaque année');
+    expect(f('Une réunion de suivi est organisée trois fois par an.')).toBe('trois fois par an');
+  });
+  it('jamais la fréquence d\'un autre document', () => {
+    expect(f('Le titulaire remet chaque mois un rapport qui sert de support à la réunion de suivi.')).toBe('');
+    expect(f('Le titulaire transmet un bilan annuel lors de la réunion de suivi.')).toBe('');
+  });
+});
+
+describe('envoi des plannings au client (T5G-7)', () => {
+  const j = (t: string) => envoiPlanningsClientDce(`\n\n--- CCTP ---\n${t}\n`)?.jours;
+  it('semaines et J-N', () => {
+    expect(j('Le planning mensuel est adressé à la Ville une semaine avant le début du mois concerné.')).toBe(7);
+    expect(j('Le planning mensuel est adressé à la Ville au moins deux semaines avant le début du mois.')).toBe(14);
+    expect(j('Le titulaire transmet à la Ville les plannings du mois suivant à J-7.')).toBe(7);
+    expect(j('Le planning est transmis au plus tard le 25 du mois en cours.')).toBe(5);
+  });
+});
+
+describe('contrôles inopinés écrits « libellé : valeur » (T5G-8)', () => {
+  const v = (t: string) => frequenceInopinesDce(`\n\n--- CCTP ---\n${t}\n`)?.valeur;
+  it('« Contrôles inopinés : 4 par mois minimum », « : 4/mois »', () => {
+    expect(v('Contrôles inopinés : 4 par mois minimum.')).toBe('au moins quatre fois par mois');
+    expect(v('Contrôles inopinés : 4/mois.')).toBe('quatre fois par mois');
+    expect(v('Le titulaire réalise au moins quatre contrôles inopinés par mois.')).toBe('au moins quatre fois par mois');
+  });
+});

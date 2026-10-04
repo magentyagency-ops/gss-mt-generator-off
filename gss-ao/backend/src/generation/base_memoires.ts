@@ -2670,7 +2670,7 @@ const QUALIFS: Array<{ dce: RegExp; texte: string }> = [
   { dce: /SSIAP\s*1\b|S\.S\.I\.A\.P\.?(?!\s*[23])/i, texte: 'SSIAP\\s*1\\b' },
   { dce: /\bSST\b|S\.S\.T\b|secourisme|PSE\s*1/i, texte: '(?:SST|PSE\\s*1|secourisme|sauveteur secouriste)' },
   { dce: /H0\s*B0|H0V|habilitation électrique/i, texte: '(?:H0\\s*-?\\s*B0\\w*|H0V\\s*B0|habilitation électrique)' },
-  { dce: /CQP\s*-?\s*APS|CQPAPS/i, texte: 'CQP\\s*-?\\s*APS' },
+  { dce: /CQP\s*-?\s*APS|CQPAPS|TFP\s*-?\s*APS|(?:CQP|TFP)\s*[«"“]?\s*agents?\s+de\s+pr[ée]vention\s+et\s+de\s+s[ée]curit[ée]/i, texte: 'CQP\\s*-?\\s*APS' },
 ];
 export function qualificationsExigees(dce: string): string[] {
   const d = (dce || '').replace(/[ \t]+/g, ' ');
