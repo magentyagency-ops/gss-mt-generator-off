@@ -2,6 +2,7 @@
  * Questions à GSS en clair (questionExacte), partagées par le générateur et les contrôles des propositions de réponse
  * (reponse_libre_v2.controlerProposition, T5-CONS-8) : une seule règle pour toute consigne interne du modèle.
  */
+import { AsyncLocalStorage } from 'async_hooks';
 import { valeurRegistre } from './base_memoires';
 
 /** Mots en -er / -ir / -re qui ne sont pas des infinitifs (noms, adjectifs, prépositions). */
@@ -20,19 +21,65 @@ export function questionCaseTableau(ligne: string, colonne: string): string {
 }
 
 /** DCE du dossier en cours (posé par le générateur à la lecture du DCE) : une consigne du modèle n'est présentée comme
- *  « Exigence du DCE » que si le DCE l'écrit (T6-CONS-8). Vide : aucune vérification possible (forme seule). */
-let dceDesQuestions = '';
+ *  « Exigence du DCE » que si le DCE l'écrit (T6-CONS-8). Vide : aucune vérification possible (forme seule).
+ *  T7-REG-3 : le DCE est propre à chaque génération (contexte asynchrone ouvert par avecDceDesQuestions à l'entrée de chaque
+ *  génération du serveur), jamais partagé par le processus : deux générations simultanées de dossiers différents ne se
+ *  faussent pas. Hors de tout contexte (harnais, tests), une valeur de repli propre à l'appelant synchrone. */
+const contexteDce = new AsyncLocalStorage<{ dce: string; phrases?: Array<Set<string>> }>();
+let dceHorsContexte = '';
+let phrasesHorsContexte: Array<Set<string>> = [];
+/** Racines (6 lettres) des mots pleins d'un texte normalisé. */
+const racinesDce = (t: string) => new Set(normDce(t).split(' ').filter((w) => w.length >= 4 && !/^(?:dans|pour|avec|sans|sous|entre|leurs?|cette|tous|toutes?|chaque|etre|sont|doit|doivent|devra|devront|titulaire|prestataire)$/.test(w)).map((w) => w.slice(0, 6)));
 const normDce = (t: string) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[’`]/g, "'").replace(/[^a-z0-9']+/g, ' ').replace(/\s+/g, ' ').trim();
-export function definirDceDesQuestions(dce: string | null | undefined): void { dceDesQuestions = normDce(String(dce || '')); }
+/** Exécute fn dans un contexte de DCE propre (réutilise le contexte courant s'il existe déjà : appel imbriqué). */
+export function avecDceDesQuestions<T>(fn: () => T): T {
+  return contexteDce.getStore() ? fn() : contexteDce.run({ dce: '' }, fn);
+}
+export function definirDceDesQuestions(dce: string | null | undefined): void {
+  const n = normDce(String(dce || ''));
+  // Phrases du DCE (racines de leurs mots pleins) : une paraphrase d'une phrase du DCE est reconnue (T7N-11).
+  const phrases = String(dce || '').split(/(?<=[.;!?])\s+|\n+/).map(racinesDce).filter((x) => x.size >= 3);
+  const s = contexteDce.getStore();
+  if (s) { s.dce = n; s.phrases = phrases; } else { dceHorsContexte = n; phrasesHorsContexte = phrases; }
+}
+function dceDesQuestions(): string { const s = contexteDce.getStore(); return s ? s.dce : dceHorsContexte; }
+function phrasesDuDce(): Array<Set<string>> { const s = contexteDce.getStore(); return s ? s.phrases || [] : phrasesHorsContexte; }
 /** Le texte figure dans le DCE (ses 10 premiers mots, normalisés) ; vrai quand le DCE n'est pas connu. */
 export function figureDansLeDce(texte: string): boolean {
-  if (!dceDesQuestions) return true;
+  const dce = dceDesQuestions();
+  if (!dce) return true;
   const mots = normDce(texte).split(' ').filter(Boolean);
   if (mots.length < 3) return true;
-  return dceDesQuestions.includes(mots.slice(0, 10).join(' '));
+  if (dce.includes(mots.slice(0, 10).join(' '))) return true;
+  // Paraphrase d'une phrase du DCE (T7N-11 : « la réparation ou le remplacement lui est facturé » pour « l'IFITS facturera la
+  // réparation ou le remplacement au titulaire ») : 70 % au moins de ses mots pleins dans une même phrase du DCE.
+  const r = [...racinesDce(texte)];
+  if (r.length < 5) return false;
+  return phrasesDuDce().some((p) => r.filter((w) => p.has(w)).length / r.length >= 0.7);
 }
 /** Voix de l'acheteur ou du cahier des charges (« doit », « le titulaire », « exigé »…). */
 const VOIX_ACHETEUR = /\b(?:doit|doivent|devra|devront|est tenue?|sont tenus|le titulaire|le prestataire|le candidat|exig|obligatoire|imp[ée]ratif)\b/i;
+
+/**
+ * Proposition dont le sujet n'est ni GSS ni le titulaire, ajoutée après « ; » à une consigne à l'infinitif (T7-COH-4 : « Réaliser
+ * des tests de ligne … ; le nombre de tests à réaliser chaque jour est précisé par l'organisme », « Fournir un planning
+ * mensuel ; le planning est validé par l'acheteur ») : retirée de la question. Un infinitif coordonné (« ; le tenir à jour »,
+ * « ; transmettre… ») reste, il dépend du même « Pouvez-vous ».
+ */
+export function sansPropositionDeTiers(x: string): string {
+  const segs = String(x || '').split(/\s*;\s*/);
+  if (segs.length < 2) return String(x || '');
+  const VERBE = /(?<![\p{L}])(?:est|sont|sera|seront|doit|doivent|devra|devront|peut|peuvent|reste|restent|[a-zà-ÿ]{3,}(?:era|eront))(?![\p{L}])|(?<![\p{L}])(?:est|sont|sera|seront)\s+[a-zà-ÿ]+(?:é|ée|és|ées|is|ise|it|ite)s?(?![\p{L}])/iu;
+  const garde = [segs[0], ...segs.slice(1).filter((g) => {
+    const m = /^(?:(?:le|la|les|un|une|des|du|ce|cet|cette|ces|chaque|tout|toute|tous|toutes|son|sa|ses|leur|leurs)\s+|l['’]\s*)(\S+)(.*)$/i.exec(g);
+    if (!m) return true;
+    // Pronom complément suivi d'un infinitif (« le tenir à jour ») : un infinitif coordonné, gardé.
+    if (estInfinitif(m[1].replace(/[.,]$/, ''), m[2])) return true;
+    if (/^(?:titulaire|prestataire|candidat)$/i.test(m[1])) return true;
+    return !VERBE.test(g);
+  })];
+  return garde.join(' ; ');
+}
 
 export function questionExacte(q: string): string {
   const t = String(q || '').replace(/\s+/g, ' ').trim();
@@ -131,7 +178,7 @@ export function questionExacte(q: string): string {
   const verbe = inf && estInfinitif(inf[1], `${inf[2]}${inf[3]}`) ? [inf[0], maj(inf[1]), inf[3], inf[2]] as const : null;
   if (verbe) {
     const sep = /,/.test(verbe[3]) ? ', ' : ' ';
-    const reste = sansFin(verbe[2]).replace(/\bauprès de GSS et de son assureur\b/i, 'auprès de votre assureur').replace(/\b(?:auprès de|avec|par|pour) GSS\b/gi, '').replace(/^à GSS\s+/i, '')
+    const reste = sansFin(sansPropositionDeTiers(verbe[2])).replace(/\bauprès de GSS et de son assureur\b/i, 'auprès de votre assureur').replace(/\b(?:auprès de|avec|par|pour) GSS\b/gi, '').replace(/^à GSS\s+/i, '')
       .replace(/\b(que|qu['’]|dont)\s*GSS\s+(fournira|mettra|prévoit|propose|assurera|utilisera|affectera|mobilisera)\b/gi, (_m, rel: string, v: string) => `${/^qu['’]/i.test(rel) ? 'que' : rel} vous ${({ fournira: 'fournirez', mettra: 'mettrez', prévoit: 'prévoyez', propose: 'proposez', assurera: 'assurerez', utilisera: 'utiliserez', affectera: 'affecterez', mobilisera: 'mobiliserez' } as Record<string, string>)[v.toLowerCase()] || v}`)
       .replace(/\bde GSS\b/g, 'de votre entreprise').replace(/\s{2,}/g, ' ').trim();
     return `Pouvez-vous ${verbe[1].toLowerCase()}${sep}${reste} ?`;

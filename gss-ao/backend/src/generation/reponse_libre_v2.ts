@@ -683,7 +683,20 @@ export function formalitesDuBloc1(texte: string): { texte: string; formalites: s
  * → « GSS mobilisera un agent d'astreinte…, dans un délai de 30 minutes. ») : pénalités, carences, sanctions, réfactions,
  * « au-delà de … », articles du CCAP qui « s'appliqueront », faculté de l'acheteur d'appliquer une sanction. '' s'il ne reste rien.
  */
-export function sansClauseSanction(x: string): string {
+/** Personne ou service de l'acheteur (« le responsable du pôle logistique », « le délégué régional », « le service
+ *  prescripteur ») : jamais l'objet d'un engagement de GSS (T7-CONS-7). */
+export const ORGANISATION_ACHETEUR = /(?<![\p{L}])(?:p[ôo]le\s+(?:logistique|achats?|patrimoine|technique|s[ée]curit[ée])|service\s+(?:prescripteur|patrimoine|technique|logistique|achats?|des\s+march[ée]s)|d[ée]l[ée]gu[ée]\s+r[ée]gional|d[ée]l[ée]gation\s+r[ée]gionale|pouvoir\s+adjudicateur|ma[îi]tre\s+d['’]ouvrage|repr[ée]sentant\s+(?:du|de\s+la|de\s+l['’])\s*(?:acheteur|pouvoir|client|ma[îi]tre|ville|service))(?![\p{L}])/iu;
+/** Engagement sans la proposition qui porte sur l'organisation de l'acheteur (T7-CONS-7, ifsem : « …, et à ce que le
+ *  responsable du pôle logistique soit l'interlocuteur privilégié des campus ») : la partie qui relève de GSS reste. */
+export function sansPropositionSurLAcheteur(x: string): string {
+  const t = String(x || '');
+  const rx = new RegExp(`\\s*,?\\s*(?:et|ainsi\\s+que)\\s+(?:[àa]\\s+ce\\s+qu(?:e|['’])|que)\\s*(?:le|la|les|l['’])\\s*[^,;.]{0,80}?${ORGANISATION_ACHETEUR.source}[^;.]*`, 'iu');
+  if (!rx.test(t)) return t;
+  return t.replace(rx, '').replace(/\s+([.;])/g, '$1');
+}
+
+export function sansClauseSanction(x0: string): string {
+  const x = sansPropositionSurLAcheteur(x0);
   const SANCTION = /p[ée]nalit|carences?|sanctions?|r[ée]factions?|retenues? sur|au-del[àa]\s+(?:de|d['’]|du)|s['’]appliquer(?:a|ont)|(?:applique|appliquera|appliquer)\s+(?:les?\s+)?(?:dispositions|p[ée]nalit|sanctions|r[ée]factions)|articles?\s+[\d.,\s]+(?:et\s+[\d.]+\s+)?du\s+C\.?C\.?A\.?P\.?[^.;]{0,40}(?:s['’]appliqu|applicables?)/i;
   const t = String(x || '').trim();
   if (!SANCTION.test(t)) return t;
@@ -1234,7 +1247,7 @@ export function exigenceTraitee(exigence: string, texte: string): boolean {
 }
 
 /** Clause contractuelle ou de procédure du DCE (confidentialité, litiges, forclusion, résiliation…) : pas un besoin de prestation. */
-export const CLAUSE_CONTRACTUELLE = /confidentialit|divulgation|diff[ée]rend|litiges?\b|forclusion|contentieux|tribunal|recours (?:gracieux|contentieux)|r[ée]siliation|reconduction|avenant|facturation|factures?\b|paiement|r[èe]glement des (?:litiges|comptes)|cautionnement|garantie financi|sous peine de/i;
+export const CLAUSE_CONTRACTUELLE = /confidentialit|divulgation|diff[ée]rend|litiges?\b|forclusion|contentieux|tribunal|recours (?:gracieux|contentieux)|r[ée]siliation|reconduction|avenant|factur\w*|paiement|r[ée]examen|r[ée]pond(?:ra)?\s+des\s+(?:d[ée]t[ée]riorations|dommages|d[ée]gradations|d[ée]g[âa]ts)|(?:[àa]\s+ses|aux)\s+frais\s+et\s+risques|r[èe]glement des (?:litiges|comptes)|cautionnement|garantie financi|sous peine de/i;
 
 /**
  * Phrase du CCTP citée dans le texte de secours du bloc 1 (horaire ou obligation chiffrée), nettoyée de ce que la
@@ -1399,11 +1412,13 @@ export function horairesLisibles(horaires: string[]): string[] {
  * le retourner au Titulaire »), sans doublon. Citées mot pour mot : le texte de secours les écrit entre guillemets.
  */
 export function obligationsLisibles(obligations: string[]): string[] {
-  const ACHETEUR = /^(?:(?:si|lorsque|quand|d[èe]s\s+que|dans\s+le\s+cas\s+o[ùu]|en\s+cas\s+de\s+d[ée]saccord\s+avec)\s+)?(?:le\s+pouvoir\s+adjudicateur|l['’]acheteur|l['’]administration|la\s+personne\s+(?:publique|responsable|charg[ée]e)|le\s+ma[îi]tre\s+d['’]ouvrage|la\s+ville|la\s+collectivit[ée]|le\s+repr[ée]sentant\s+du\s+pouvoir)(?![\p{L}])|(?<![\p{L}])(?:les\s+deux\s+parties|d['’]un\s+commun\s+accord)(?![\p{L}])/iu;
+  const ACHETEUR = /^(?:(?:si|lorsque|quand|d[èe]s\s+que|dans\s+le\s+cas\s+o[ùu]|en\s+cas\s+de\s+d[ée]saccord\s+avec)\s+)?(?:le\s+pouvoir\s+adjudicateur|l['’]acheteur|l['’]administration|la\s+personne\s+(?:publique|responsable|charg[ée]e)|le\s+ma[îi]tre\s+d['’]ouvrage|la\s+ville|la\s+collectivit[ée]|le\s+repr[ée]sentant\s+du\s+pouvoir)(?![\p{L}])|(?<![\p{L}])(?:les\s+deux\s+parties|d['’]un\s+commun\s+accord|la\s+partie\s+(?:destinatrice|requ[ée]rante|demanderesse|la\s+plus\s+diligente|concern[ée]e)|chaque\s+partie|l['’]une\s+des\s+parties|les\s+parties)(?![\p{L}])/iu;
   const lisibles = obligations.map((o) => citationImprimable(o, /[.!?;]$/)).filter((o) => {
     if (!o) return false;
     if (!VERBE_CITATION.test(o.replace(/\([^()]*\)/g, ' '))) return false;
     if (ACHETEUR.test(o)) return false;
+    // Clause contractuelle (réexamen, facturation, frais et risques, litige…), T7N-7 : jamais un engagement chiffré de GSS.
+    if (CLAUSE_CONTRACTUELLE.test(o)) return false;
     // Clause réputée acquise (« La commande est réputée acceptée par le Titulaire… », imm) : une règle du contrat, pas un engagement.
     if (/(?<![\p{L}])r[ée]put[ée]e?s?(?![\p{L}])/iu.test(o)) return false;
     // GSS seulement destinataire (« … devra l'annoter et le retourner au Titulaire ») : l'obligation est celle de l'acheteur.

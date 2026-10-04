@@ -23,7 +23,7 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
   sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, phraseDeRubriqueGss, alignerSchemaSurTexte, FORMALITES_OFFRE, questionFormalite, formalitesDuBloc1, sansClauseSanction, consultationsDuDce,
-  CLAUSE_CONTRACTUELLE, valeursImposeesValides, titreSansPointFinal, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
+  CLAUSE_CONTRACTUELLE, ORGANISATION_ACHETEUR, sansPropositionSurLAcheteur, valeursImposeesValides, titreSansPointFinal, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, similariteQuestions, recouvrementTextes, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, questionRondes, casPratiqueRepris, type Dimensionnement } from './dimensionnement';
@@ -37,7 +37,7 @@ import { ajoutsAuTexteDeGss,
 } from './memoire_type_cadre';
 import { articlesBloc1 } from './bloc1_marine';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, fondementDansDce, exigenceDeModification, ETAPE_ADAPTATION_MODELE, type PhraseAdaptee } from './adaptations_cctp';
-import { questionCaseTableau, questionExacte, definirDceDesQuestions } from './questions_gss';
+import { questionCaseTableau, questionExacte, definirDceDesQuestions, avecDceDesQuestions, sansPropositionDeTiers } from './questions_gss';
 import { typographieDce, exigenceDeGrillePenalites, estCahierDesChargesParContenu, estPieceAdministrative, teteAdministrative, perimetreDuLot, rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -1593,7 +1593,8 @@ export function questionOuverte(q: string): string {
     [/^(?:valider|confirmer)$/i, 'Validez-vous'],
   ];
   const reformuler = (verbe: string, reste: string) => {
-    const r = reste.replace(/[.?!\s]+$/, '').trim();
+    // (proposition d'un tiers après « ; » retirée : « … ; le planning est validé par l'acheteur », T7-COH-4)
+    const r = sansPropositionDeTiers(reste).replace(/[.?!\s]+$/, '').trim();
     const v = VERBES.find(([rx]) => rx.test(verbe));
     return v ? `${v[1]} ${r} ?` : `Pouvez-vous ${verbe.toLowerCase()} ${r} ?`;
   };
@@ -1922,6 +1923,9 @@ export function motifRefusEngagement(x: string): string {
     || /\b(?:fourni(?:t|r|ra)?|transmet(?:tre|tra)?)\b[^.]{0,60}\b(?:le nombre|les effectifs|l.effectif|dans (?:le|son|ce|notre) m[ée]moire|dans (?:l.|son |notre )offre|ult[ée]rieurement)/i.test(t)
     || /dans (?:le|son|ce|notre) m[ée]moire technique/i.test(t)) return 'phrase sur le mémoire, sans réponse';
   if (/sous[- ]?trait|int[ée]rim|covid/i.test(t)) return 'fait interdit (faits_gss.md)';
+  // Engagement qui porte sur une personne ou un service de l'acheteur (T7-CONS-7 : « GSS s'engage à ce que le responsable du pôle
+  // logistique soit l'interlocuteur privilégié des campus ») : l'organisation de l'acheteur, jamais un engagement de GSS.
+  if (new RegExp(`^(?:GSS|le titulaire|nous)\\s+(?:s['’]engage(?:ra)?\\s+)?(?:[àa]\\s+)?(?:ce\\s+qu(?:e|['’])|veille(?:ra)?\\s+[àa]\\s+ce\\s+qu(?:e|['’]))\\s*(?:le|la|les|l['’])\\s*[^,;.]{0,80}?${ORGANISATION_ACHETEUR.source}`, 'iu').test(sansPropositionSurLAcheteur(t).replace(/^[-•]\s*/, ''))) return 'organisation de l\'acheteur, pas un engagement de GSS';
   // Clause de prix ou de facturation (T3N-10 : « GSS applique la valorisation des heures de nuit… ») : pas un engagement technique.
   if (CLAUSE_PRIX.test(t)) return 'clause de prix ou de facturation';
   // Délai annoncé sans sa valeur (cstb 551, T5CP-7 : « dans un délai moyen maximum après l'appel de la télésurveillance… »,
@@ -3142,6 +3146,12 @@ export class MemoireGenerator {
     this.responseDir = path.resolve(baseDir, 'response');
     this.templateDir = path.resolve(baseDir, 'Template');
     if (!fs.existsSync(this.responseDir)) fs.mkdirSync(this.responseDir, { recursive: true });
+    // T7-REG-3 : chaque génération lancée par le serveur a son propre DCE pour la mise en forme des questions à GSS
+    // (questionExacte), jamais celui d'une autre génération en cours.
+    for (const m of ['detectMissingInfo', 'generate', 'generateFullMemoire', 'generateFullMarpPdf'] as const) {
+      const orig = (this as any)[m];
+      if (typeof orig === 'function') (this as any)[m] = (...a: any[]) => avecDceDesQuestions(() => orig.apply(this, a));
+    }
   }
 
   private findDceTemplate(dceDir: string): string | null {
@@ -9062,7 +9072,8 @@ RÈGLES DE FORME (rendu Marp) :
       if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence) && !enProposition.has(r)
         && !exigenceTraitee(r.exigence, Object.values(sections).join('\n\n'))) consultations.add(FORMALITES_OFFRE.test(r.exigence) ? questionFormalite(r) : r.exigence.trim());
     }
-    for (const e of ecartees) if (!PIECES_OFFRE.test(e.exigence)) consultations.add(`Exigence du DCE sans réponse dans le mémoire : ${e.exigence.trim()}`);
+    // (clause de l'acheteur : facturation, réexamen, responsabilité des détériorations…, T7N-11 : jamais une question à GSS)
+    for (const e of ecartees) if (!PIECES_OFFRE.test(e.exigence) && !clauseContractuelleOuDuree(e.exigence)) consultations.add(`Exigence du DCE sans réponse dans le mémoire : ${e.exigence.trim()}`);
     const { enPlace, enLigne } = poserReperes(sections, rubriquesDoc.map((r) => r.id), 0);
     // Emplacements sans question (adaptation, rédactions du modèle) : question formulée d'après leur phrase, comme
     // pour un « [À COMPLÉTER] » écrit par l'assistant.
