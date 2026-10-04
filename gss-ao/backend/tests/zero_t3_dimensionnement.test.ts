@@ -47,7 +47,7 @@ describe('quarts d’heure lus comme des délais (T3G-3)', () => {
 
 import { horairesImposes } from '../src/generation/base_memoires';
 describe('horaires imposés reconnus par leur forme (T3G-6)', () => {
-  const dce = (ph: string) => `\n\n--- CCTP.pdf ---\nCahier des clauses techniques particulières\nArticle 3 - Description de la prestation\n${ph}\n`;
+  const dce = (ph: string) => `\n\n--- CCTP.pdf ---\nCahier des clauses techniques particulières.\n\nArticle 3.\n\n${ph}\n`;
   for (const ph of ['Un agent de sécurité est présent du lundi au vendredi de 8h00 à 18h00.', 'La surveillance du site est assurée du lundi au vendredi de 19h00 à 07h00.', 'Le gardien est sur site de 21h00 à 05h00 toutes les nuits.', 'Les prestations sont réalisées du lundi au vendredi de 18 heures à 8 heures.']) {
     it(ph, () => { expect(horairesImposes(dce(ph)).join(' ')).toContain(ph); });
   }
