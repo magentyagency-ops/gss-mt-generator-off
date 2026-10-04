@@ -563,6 +563,35 @@ const AUTEUR_ACHETEUR = /pouvoir adjudicateur|(?<![\p{L}])acheteur|ma[îi]tre d[
 /** Auteur TITULAIRE nommé dans une proposition. */
 const AUTEUR_TITULAIRE = /(?<![\p{L}])(?:titulaire|prestataire|soumissionnaire|candidat|entreprise retenue)(?![\p{L}])/iu;
 
+/** Passages d'un texte qui correspondent à un motif « dce_ignorer » (positions de début et de fin). */
+function zonesDe(texte: string, motif: string): Array<[number, number]> {
+  return [...texte.matchAll(new RegExp(motif, 'gi'))].map((z) => [z.index || 0, (z.index || 0) + z[0].length] as [number, number]);
+}
+const dansZone = (zones: Array<[number, number]>, debut: number, fin: number) => zones.some(([a, b]) => debut >= a && fin <= b);
+/**
+ * « La nuit, le bâtiment est fermé et un agent assure le gardiennage jusqu'à 6h » : la mention de la nuit cadre aussi la
+ * proposition coordonnée qui suit le passage de fermeture, quand elle nomme une présence humaine (agent, gardiennage, ronde,
+ * SSIAP), jamais la télésurveillance ni une absence (« aucun agent »).
+ */
+function presenceApresZone(texte: string, zones: Array<[number, number]>, pos: number): boolean {
+  const z = zones.find(([a, b]) => pos >= a && pos < b);
+  if (!z) return false;
+  const suite = texte.slice(z[1]).split(/[.;!?]/)[0];
+  return /(?<![\p{L}])(?:agents?|gardien(?:nage)?s?|rondiers?|rondes?|SSIAP|vigiles?|ma[îi]tres?[- ]chiens?)(?![\p{L}])/iu.test(suite) && !/(?<![\p{L}])(?:aucun|aucune|ni|sans|pas\s+d)(?![\p{L}])|n['’]/iu.test(suite);
+}
+/** La mention à la position `pos` est-elle dans un segment nié (même découpe que sansMentionsNiees) ? */
+function segmentNie(texte: string, pos: number): boolean {
+  const avant = texte.slice(0, pos);
+  const debut = Math.max(...['.', ',', ';', '!', '?', '\n', '(', ')'].map((c) => avant.lastIndexOf(c))) + 1;
+  const k = texte.slice(pos).search(/[.,;!?\n()]/);
+  return NEGATION.test(texte.slice(debut, k < 0 ? texte.length : pos + k + 1));
+}
+/** Le texte porte-t-il une mention du motif hors des passages à ignorer (T6-COH-3) ? */
+function mentionHorsZones(texte: string, motif: string, ignorer?: string): boolean {
+  const zones = ignorer ? zonesDe(texte, ignorer) : [];
+  return [...texte.matchAll(new RegExp(motif, 'gi'))].some((x) => !dansZone(zones, x.index || 0, (x.index || 0) + x[0].length));
+}
+
 /** Proposition (entre « . », « ; ») d'un texte autour d'une position. */
 function propositionAutour(t: string, debut: number, fin: number): string {
   const avant = t.slice(0, debut);
@@ -601,6 +630,7 @@ function propositionDuTitulaire(prop: string, formesAcheteur: string[] = []): bo
 export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record<string, EtatIndicateur> {
   const dce = String(ctx.dce || '').replace(/[’`]/g, "'").replace(/\s+/g, ' ');
   // Preuves cherchées dans les seules pièces techniques, sans références réglementaires ni RIB (T3G-8).
+  const dcePreuves = textePreuvesIndicateurs(String(ctx.dce || '')).replace(/[’`]/g, "'").replace(/\s+/g, ' ');
   const dceAffirme = sansMentionsNiees(textePreuvesIndicateurs(String(ctx.dce || '')).replace(/[’`]/g, "'")).replace(/\s+/g, ' ');
   const analyse = texteAnalyse(ctx.analyse);
   const secteur = valeurPropre(ctx.analyse?.clientSector);
@@ -637,19 +667,29 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
         // Une mention niée du DCE n'est jamais une preuve (T4N-3, T2-GEN-3 : « L'emploi d'agents cynophiles est interdit »,
         // « La télésurveillance du site n'est pas comprise ») ; l'exclusion « dce_exclure » reste lue sur le DCE brut.
         let m = rx.exec(dceAffirme);
+        let mBase = dceAffirme;
         const ignorer = def.dce_ignorer ? new RegExp(def.dce_ignorer, 'i') : null;
         // Indicateur d'une obligation du titulaire : la première mention dont l'auteur n'est pas l'acheteur (T2-GEN-6) ; mention
         // dans une proposition à ignorer (« fermé la nuit », T5G-11) : la suivante.
         if (def.auteur === 'titulaire' || ignorer) {
           m = null;
-          for (const x of dceAffirme.matchAll(new RegExp(def.dce, 'gi'))) {
-            const prop = propositionAutour(dceAffirme, x.index || 0, (x.index || 0) + x[0].length);
-            if (ignorer && ignorer.test(prop)) continue;
-            if (def.auteur !== 'titulaire' || propositionDuTitulaire(prop, formesAcheteur)) { m = x as RegExpExecArray; break; }
+          // Seule la mention comprise dans le passage à ignorer lui-même est sautée (T6-COH-3 : « Le bâtiment étant fermé la
+          // nuit, un agent assure une ronde de nuit de 22h à 6h » : « fermé la nuit » sauté, « ronde de nuit » et « de 22h à 6h »
+          // restent des preuves).
+          // Passages lus sur le texte non amputé de ses mentions niées (« La nuit, le bâtiment est fermé et aucun agent n'est
+          // présent » : la négation retirait la fermeture et laissait « La nuit, » seul) ; une mention dans un segment nié
+          // reste écartée.
+          const base = ignorer ? dcePreuves : dceAffirme;
+          const zones = ignorer ? zonesDe(base, def.dce_ignorer!) : [];
+          for (const x of base.matchAll(new RegExp(def.dce, 'gi'))) {
+            if (ignorer && segmentNie(base, x.index || 0)) continue;
+            const prop = propositionAutour(base, x.index || 0, (x.index || 0) + x[0].length);
+            if (dansZone(zones, x.index || 0, (x.index || 0) + x[0].length) && !presenceApresZone(base, zones, x.index || 0)) continue;
+            if (def.auteur !== 'titulaire' || propositionDuTitulaire(prop, formesAcheteur)) { m = x as RegExpExecArray; mBase = base; break; }
           }
         }
-        if (m) raisons.push(`DCE : « ${extrait(dceAffirme, m.index, m[0].length)} »`);
-        const e = matrice.find((x) => rx.test(sansMentionsNiees(x.exigence)) && !(ignorer && ignorer.test(x.exigence)) && (def.auteur !== 'titulaire' || propositionDuTitulaire(x.exigence, formesAcheteur)));
+        if (m) raisons.push(`DCE : « ${extrait(mBase, m.index, m[0].length)} »`);
+        const e = matrice.find((x) => mentionHorsZones(sansMentionsNiees(x.exigence), def.dce!, def.dce_ignorer) && (def.auteur !== 'titulaire' || propositionDuTitulaire(x.exigence, formesAcheteur)));
         const sourceDce = !engageants.has(nom) || (def.motif_dce ? dceNorm.includes(normaliser(def.motif_dce)) : !!m);
         if (e && sourceDce) raisons.push(`exigence : « ${e.exigence.slice(0, 120)} »`);
         else if (e) journalIndicateur(`[MemoireType] Indicateur ${nom} : exigence de la matrice écartée, motif absent du DCE (« ${e.exigence.slice(0, 120)} »).`);
@@ -663,7 +703,7 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
         const rxDce = def.dce ? new RegExp(def.dce, 'i') : null;
         const rattachees = matrice.filter((x) => x.rubrique && def.matrice!.includes(x.rubrique));
         const ign = def.dce_ignorer ? new RegExp(def.dce_ignorer, 'i') : null;
-        const e = rattachees.find((x) => (!rxDce || rxDce.test(x.exigence.replace(/[’`]/g, "'"))) && !(ign && ign.test(x.exigence)) && (def.auteur !== 'titulaire' || propositionDuTitulaire(x.exigence, formesAcheteur)));
+        const e = rattachees.find((x) => (!rxDce ? !(ign && ign.test(x.exigence)) : mentionHorsZones(x.exigence.replace(/[’`]/g, "'"), def.dce!, def.dce_ignorer)) && (def.auteur !== 'titulaire' || propositionDuTitulaire(x.exigence, formesAcheteur)));
         if (e) raisons.push(`exigence rattachée à ${e.rubrique} : « ${e.exigence.slice(0, 120)} »`);
         else if (rattachees.length && !raisons.length) journalIndicateur(`[MemoireType] Indicateur ${nom} : exigence rattachée à ${rattachees[0].rubrique} écartée, motif de l'indicateur absent de son texte (« ${rattachees[0].exigence.slice(0, 120)} »).`);
       }
@@ -877,8 +917,12 @@ export function variableRenseignee(v?: ValeurVariable): boolean {
 }
 
 const ARTICLES_MASCULINS = /^(?:groupe|foyer|haras|hospice|centre|conseil|d[ée]partement|minist[èe]re|mus[ée]e|syndicat|groupement|chu|chr|chb|service|p[ôo]le|parc|port|palais|tribunal|th[ée][âa]tre|lyc[ée]e|coll[èe]ge|rectorat|cr[ée]dit|comit[ée]|campus|grand|bailleur|crous|sdis|march[ée]|conservatoire|stade|ccas|centre-?ville)$/i;
-const INSTITUTION_VOYELLE = /^(?:universit[ée]|[ée]cole|[ée]tablissement|office|institut|institution|h[ôo]tel|h[ôo]pital|agence|op[ée]ra|acad[ée]mie|assembl[ée]e|administration|a[ée]roport|association|entreprise|ehpad|espace|observatoire|union|inspection|organisme|ordre|[ée]tat|[ée]glise|abbaye|amphith[ée][âa]tre|auditorium|arsenal|atelier|[ée]quipement|ensemble|internat|unit[ée]|immeuble|archives)$/i;
+const INSTITUTION_VOYELLE = /^(?:universit[ée]|[ée]cole|[ée]tablissement|office|institut|institution|h[ôo]tel|h[ôo]pital|agence|op[ée]ra|acad[ée]mie|assembl[ée]e|administration|a[ée]roport|association|entreprise|ehpad|espace|observatoire|union|inspection|organisme|ordre|[ée]tat|[ée]glise|abbaye|amphith[ée][âa]tre|auditorium|arsenal|atelier|[ée]quipement|ensemble|internat|unit[ée]|immeuble)$/i;
 const ARTICLES_FEMININS = /^(?:r[ée]gion|ville|mairie|commune|communaut[ée]|m[ée]tropole|caisse|caf|cpam|chambre|direction|pr[ée]fecture|fondation|banque|cour|mutualit[ée]|maison|cit[ée]|soci[ée]t[ée]|r[ée]gie|r[ée]sidence|clinique|f[ée]d[ée]ration|biblioth[èe]que|m[ée]diath[èe]que|sncf|ratp|direction)$/i;
+
+/** Tête de nom au pluriel (« Archives nationales », « Hospices civils de Lyon », « Hôpitaux de Paris ») : l'acheteur prend « les »,
+ *  même sans emploi dans le DCE (T6-COH-4). */
+const TETES_PLURIEL = /^(?:archives|hospices|h[ôo]pitaux|mus[ée]es|thermes|services|ateliers|chantiers|entrep[ôo]ts|magasins|[ée]tablissements|centres|instituts|laboratoires|transports|[ée]coles|[ée]curies|r[ée]sidences|galeries|cliniques|mutuelles|biblioth[èe]ques|m[ée]diath[èe]ques|salles|ar[èe]nes|serres|piscines|forges|fermes)$/i;
 
 /**
  * Article du nom de l'acheteur, lu d'abord dans le DCE (« sites de l'ACOSS », « du Centre Henri Becquerel »), puis
@@ -910,7 +954,7 @@ export function articleEtNom(brut: string, dce = ''): { article: string; nom: st
     // Un nom qui commence par un nom commun d'institution (« Ville », « Centre », « Hôtel ») prend toujours l'article :
     // « Hôtel de Ville de Rouen » ne compte pas comme un emploi sans article de « Ville de Rouen ».
     const premierMot = nom.split(/[\s(]/)[0];
-    const nomCommun = ARTICLES_MASCULINS.test(premierMot) || ARTICLES_FEMININS.test(premierMot) || INSTITUTION_VOYELLE.test(premierMot);
+    const nomCommun = ARTICLES_MASCULINS.test(premierMot) || ARTICLES_FEMININS.test(premierMot) || INSTITUTION_VOYELLE.test(premierMot) || TETES_PLURIEL.test(premierMot);
     const rxSans = new RegExp(`(?:(?:^|[^a-z0-9'])(?:de|a|par|pour|avec|chez|aupres de)\\s+|(?:^|[^a-z0-9'])d'\\s*|(?:^|[.!?]\\s+))${echapper(cle)}(?![a-z0-9])`, 'g');
     const sans = nomCommun ? 0 : (d.match(rxSans) || []).length;
     const totalArticles = Object.values(compte).reduce((a, b) => a + b, 0);
@@ -919,6 +963,9 @@ export function articleEtNom(brut: string, dce = ''): { article: string; nom: st
     if (meilleur) return { article: meilleur[0], nom };
   }
   const premier = nom.split(/[\s(]/)[0];
+  // Tête au pluriel (T6-COH-4 : « Archives nationales », « Hospices civils de Lyon ») : « les », jamais « l'Archives » ni « à
+  // Hospices ».
+  if (TETES_PLURIEL.test(premier)) return { article: 'les', nom };
   // Sans indice dans le DCE : « l' » devant voyelle ou h muet seulement pour un nom commun d'institution (« l'Université »,
   // « l'Hôtel de Ville ») ou un sigle (« l'ACOSS ») ; jamais pour un nom propre ou une marque (T1-GEN-5 : « l'Enedis »,
   // « l'Orange », « l'Alcéane », « l'Habitat 76 »).
@@ -1508,7 +1555,7 @@ function teteInstitution(e: string): boolean {
   const premier = e.trim().split(/[\s(]/)[0];
   // Pluriel compris (« Les Hôpitaux de … », « Les Musées de … ») : le nom commun garde son article.
   const singulier = premier.replace(/aux$/i, 'al').replace(/[sx]$/i, '');
-  return [premier, singulier].some((w) => ARTICLES_MASCULINS.test(w) || ARTICLES_FEMININS.test(w) || INSTITUTION_VOYELLE.test(w));
+  return [premier, singulier].some((w) => ARTICLES_MASCULINS.test(w) || ARTICLES_FEMININS.test(w) || INSTITUTION_VOYELLE.test(w)) || TETES_PLURIEL.test(premier);
 }
 
 export function formesClient(nom: string, dce = ''): { long: string; court?: { article: string; nom: string; genre?: 'f' | 'm' | '' }; pluriel?: boolean; articleLong?: string } {

@@ -709,8 +709,20 @@ function communeCommeSite(texte: string, debut: number, fin: number): boolean {
   const apres = texte.slice(fin, ligneFin).split(/[.!?](?:\s|$)/)[0];
   const phrase = `${avant}${texte.slice(debut, fin)}${apres}`;
   if (ROLE_ADMIN.test(phrase) || IDENTIFICATION_ACHETEUR.test(phrase) || /tribunal|cour d.appel|greffe|inspection du travail|CNAPS|pr[ée]fecture|factur/i.test(phrase)) return false;
+  // Site expressément exclu du marché (T6-COH-2 : « Le site de Lyon n'est pas concerné par le présent marché », « … fait l'objet
+  // d'un marché distinct », « … relève d'un autre marché », « … hors du présent marché », « Les autres sites (Lyon, Marseille)
+  // sont exclus du marché ») : jamais un site du marché. Lu dans la proposition de la commune (bornée par « ; » et « : »).
+  const propAvant = avant.split(/[;:]\s*/).pop() || '';
+  const propApres = apres.split(/\s*[;:]/)[0];
+  const prop = `${propAvant}${texte.slice(debut, fin)}${propApres}`;
+  if (SITE_EXCLU.test(prop)) return false;
+  // Commune qui n'est pas celle d'un site de l'acheteur : agence du titulaire, exemple, comparaison (« son agence, par exemple à
+  // Lille », « sur le modèle de celui de Lyon »).
+  if (/(?<![\p{L}])(?:son|sa|ses|leur|leurs)\s+(?:propres?\s+)?(?:agences?|si[èe]ges?|implantations?|locaux|[ée]tablissements?)|agences?\s+(?:du|de\s+son|d['’]un)\s+(?:titulaire|candidat|prestataire|soumissionnaire)|par\s+exemple|sur\s+le\s+mod[èe]le|[àa]\s+l['’]image\s+d|(?<![\p{L}])(?:celui|celle|ceux|celles)\s+d[eu']/iu.test(prop)) return false;
   return CONTEXTE_SITE.test(phrase) || PHRASE_SITE.test(phrase);
 }
+/** Site exclu du marché (T6-COH-2). */
+const SITE_EXCLU = /n['’]\s*(?:est|sont|entre(?:nt)?|fait|font|seront?)\s+pas\s+(?:concern[ée]e?s?|vis[ée]e?s?|inclus(?:e|es)?|compris(?:e|es)?|dans\s+le\s+p[ée]rim[èe]tre|partie)|ne\s+(?:sont|seront|fait|font)\s+pas\s+partie|(?<![\p{L}])exclue?s?(?![\p{L}])|hors\s+(?:du\s+)?(?:(?:pr[ée]sent|p[ée]rim[èe]tre\s+du)\s+)?(?:march[ée]|p[ée]rim[èe]tre|accord-cadre|contrat)|(?:fait|font|feront)\s+l['’]objet\s+d['’]une?\s+(?:autre\s+)?(?:march[ée]|accord-cadre|contrat|consultation)|rel[èe]ve(?:nt)?\s+d['’]une?\s+autre\s+(?:march[ée]|accord-cadre|contrat|lot|consultation)|non\s+compris(?:e|es)?|(?:march[ée]|contrat)\s+distinct/iu;
 
 /** Communes nommées hors adresse postale et hors adresse administrative (tribunal, préfecture…), avec leur nombre de citations. */
 function communesNommees(texte: string, filtre?: (texte: string, debut: number, fin: number) => boolean): { normands: Map<string, number>; hors: Map<string, number> } {
@@ -1022,6 +1034,35 @@ function calculerLieu(analyse: any, dce: string): LieuMarche {
   }
   return calculerLieuBrut(analyse, dce);
 }
+/**
+ * Texte où le nom de l'acheteur est masqué (T6G-7) : la commune écrite dans le nom de l'acheteur (« Métropole Rouen Normandie »,
+ * « Université de Lille », « (ESID) de Rennes », « CHU de Rouen ») n'est jamais une commune du site. Masqués : le nom de
+ * l'analyse (avec ou sans article, casse et accents libres) et la commune qui suit, dans le DCE, un sigle ou un nom
+ * d'institution de ce nom (« L'Établissement … (ESID) de Rennes »). Les longueurs sont gardées (positions inchangées).
+ */
+const MOTS_INSTITUTION = /^(?:ville|mairie|commune|universit[ée]|chu|chr|centre|h[ôo]pital|hospices?|m[ée]tropole|communaut[ée]|d[ée]partement|conseil|r[ée]gion|lyc[ée]e|coll[èe]ge|[ée]cole|institut|[ée]tablissement|office|syndicat|agglom[ée]ration|pr[ée]fecture|rectorat|acad[ée]mie|mus[ée]e|th[ée][âa]tre|palais|port|caisse|chambre|groupement|direction|minist[èe]re|archives)$/i;
+export function masquerAcheteur(texte: string, analyse: any): string {
+  const client = textePropre(analyse?.clientName).replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  if (client.length < 4) return texte;
+  const ACC: Record<string, string> = { a: '[aàâä]', e: '[eéèêë]', i: '[iîï]', o: '[oôö]', u: '[uùûü]', c: '[cç]' };
+  const souple = (f: string) => f.normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[\s'’-]+/).filter(Boolean)
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[aeiouc]/gi, (c) => ACC[c.toLowerCase()] || c)).join("[\\s'’-]+");
+  const masque = (m: string) => m.replace(/[^\s]/g, '·');
+  let t = String(texte || '');
+  for (const f of new Set([client, client.replace(/^(?:la|le|les|l['’])\s*/i, '')])) {
+    if (f.length < 4) continue;
+    t = t.replace(new RegExp(`(?<![\\p{L}])${souple(f)}(?![\\p{L}])`, 'giu'), masque);
+  }
+  // Commune finale du nom (« … de Rennes », « … du Havre ») reprise après un sigle ou un mot d'institution du nom.
+  const commune = /(?:\bde\s+|\bdu\s+|\bd['’]\s*)((?:la\s+|le\s+)?[A-ZÀ-Ý][\p{L}'’]+(?:[\s-](?:[A-ZÀ-Ý][\p{L}'’]+|sur|sous|en|de|du|des|l[èe]s|la|le))*)\s*$/u.exec(client)?.[1];
+  const tetes = client.split(/[\s'’()-]+/).filter((w) => /^[A-Z]{2,}$/.test(w) || MOTS_INSTITUTION.test(w));
+  if (commune && tetes.length) {
+    const rx = new RegExp(`((?<![\\p{L}])(?:${tetes.map(souple).join('|')})(?![\\p{L}])[^.;\\n]{0,60}?(?:\\bde|\\bdu|\\bd['’])\\s*)(${souple(commune.replace(/^(?:la|le)\s+/i, ''))})(?![\\p{L}])`, 'giu');
+    t = t.replace(rx, (_m, a: string, c: string) => `${a}${masque(c)}`);
+  }
+  return t;
+}
+
 function calculerLieuBrut(analyse: any, dce: string): LieuMarche {
   const sites = sitesDuMarche(analyse, dce);
   const texte = `${JSON.stringify(analyse || {})}\n${String(dce || '')}`.replace(/\\n/g, '\n');
@@ -1029,7 +1070,8 @@ function calculerLieuBrut(analyse: any, dce: string): LieuMarche {
     // Communes nommées comme sites sans code postal (T5-COH-3 : « Un second site est situé à Lyon », « agence de Lyon »,
     // « le siège de Rouen et l'antenne de Paris, … 75015 Paris », « Caen (Calvados) et Paris (75) ») réunies aux sites lus par
     // code postal : une commune hors Normandie rend le marché mixte, une commune normande aussi pour un marché lu « hors ».
-    const nommes = communesNommees(String(dce || ''), communeCommeSite);
+    // La commune du nom de l'acheteur n'en est jamais une (T6G-7).
+    const nommes = communesNommees(masquerAcheteur(String(dce || ''), analyse), communeCommeSite);
     // (un département ou une région nommé n'est pas une commune : « Caen (Calvados) »)
     for (const m of [nommes.normands, nommes.hors]) for (const k of [...m.keys()]) if (DEPARTEMENTS[cleCommune2(k)] || REGIONS.has(cleCommune2(k)) || /^(?:normandie|eure|calvados|manche|orne|seine maritime)$/.test(cleCommune2(k))) m.delete(k);
     const unir = (a: string[], b: string[]) => [...a, ...b.filter((x) => !a.some((y) => cleCommune2(y) === cleCommune2(x)))];
@@ -1046,9 +1088,21 @@ function calculerLieuBrut(analyse: any, dce: string): LieuMarche {
     const d = DEPARTEMENTS[m[1].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[\s'-]+/g, ' ').trim()];
     if (d) deps.push(d);
   }
-  const noms = communesNommees(texte);
+  // Commune du nom de l'acheteur masquée (T6G-7 : « La Métropole Rouen Normandie confie … son centre technique situé à
+  // Louviers » → Louviers seul ; « L'… (ESID) de Rennes confie … la base située à Évreux » → Évreux seul). Sans autre commune,
+  // celle de l'acheteur reste le lieu (« La Ville de Rouen confie le gardiennage de l'Hôtel de Ville »), sauf quand le DCE
+  // situe le site dans une commune hors de la liste connue (« … situé à Saint-Romain-de-Colbosc ») : cette commune, dans la
+  // région de l'acheteur.
+  const masque = masquerAcheteur(texte, analyse);
+  const nomsMasques = communesNommees(masque);
+  const sansAcheteur = nomsMasques.normands.size + nomsMasques.hors.size > 0;
+  const noms = sansAcheteur ? nomsMasques : communesNommees(texte);
+  const nommeeAilleurs = sansAcheteur ? '' : communeNommeeHorsListe(masque);
   const nN = [...noms.normands.values()].reduce((a, b) => a + b, 0) + deps.filter((d) => NORMANDIE.includes(d)).length;
   const nH = [...noms.hors.values()].reduce((a, b) => a + b, 0) + deps.filter((d) => !NORMANDIE.includes(d)).length;
+  if (nommeeAilleurs && (nN || nH) && !(nN && nH)) {
+    return { statut: nN ? 'normandie' : 'hors', normands: nN ? [nommeeAilleurs] : [], horsNormandie: nN ? [] : [nommeeAilleurs], source: "commune du site nommée dans le DCE (région de l'acheteur)" };
+  }
   if (nN || nH) {
     const normands = [...noms.normands.keys()];
     const hors = [...noms.hors.keys()];
@@ -1081,6 +1135,21 @@ function calculerLieuBrut(analyse: any, dce: string): LieuMarche {
     return { statut: normands < codes.length / 2 ? 'hors' : 'normandie', normands: [], horsNormandie: [], source: 'adresses du DCE (codes postaux)' };
   }
   return { statut: 'inconnu', normands: [], horsNormandie: [], source: 'aucun lieu trouvé dans le DCE' };
+}
+
+/**
+ * Commune du site nommée par le DCE hors de la liste des communes connues (« son centre de loisirs situé à
+ * Saint-Romain-de-Colbosc », « sur la commune de Yerville ») : nom propre après « situé(e)(s) à », « implanté(e)(s) à »,
+ * « localisé(e)(s) à » ou « sur la commune de » ; '' sinon. Jamais un département, une région ni un mot du dictionnaire seul.
+ */
+function communeNommeeHorsListe(texte: string): string {
+  const m = /(?:situ[ée]e?s?|implant[ée]e?s?|localis[ée]e?s?|install[ée]e?s?)\s+(?:[àa]|au|sur la commune d['’]\s*|sur la commune de)\s+((?:Le |La |Les )?[A-ZÀ-Ý][\p{L}'’]+(?:-(?:[A-ZÀ-Ý][\p{L}'’]+|sur|sous|en|de|du|des|l[èe]s|la|le|aux?|d['’][A-ZÀ-Ý][\p{L}'’]*))*)/u.exec(String(texte || ''));
+  if (!m) return '';
+  const nom = m[1];
+  const k = cleCommune2(nom);
+  if (DEPARTEMENTS[k] || REGIONS.has(k) || /^(?:normandie|france)$/.test(k)) return '';
+  if (!/-/.test(nom) && motDuDictionnaire(nom)) return '';
+  return nom;
 }
 
 /**
