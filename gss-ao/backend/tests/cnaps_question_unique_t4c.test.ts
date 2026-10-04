@@ -20,3 +20,13 @@ describe('données CNAPS connues jamais redemandées (T4N-3)', () => {
     expect(completerIdentiteCnaps("• Agrément de l’entreprise : [À COMPLÉTER].\n[CONSULTATION REQUISE : Quel est le numéro de l'agrément de l'entreprise ?]")).not.toMatch(/CONSULTATION/);
   });
 });
+
+// Tour 4, correcteur (T4N-5, becquerel 1401) : consigne interne du modèle mise en question à GSS, jamais « avec GSS ».
+import { questionExacte } from '../src/generation/memoire_generator';
+describe('question tirée d\'une consigne du modèle (T4N-5)', () => {
+  it('« Définir avec GSS … que GSS fournira » : question à GSS, à la deuxième personne', () => {
+    const q = questionExacte("Définir avec GSS les modalités et la fréquence d'entretien du PC sécurité et du poste d'accueil, ainsi que le matériel et les produits de nettoyage que GSS fournira");
+    expect(q).toBe("Pouvez-vous définir les modalités et la fréquence d'entretien du PC sécurité et du poste d'accueil, ainsi que le matériel et les produits de nettoyage que vous fournirez ?");
+    expect(q).not.toMatch(/GSS|Quelle réponse GSS apporte/);
+  });
+});

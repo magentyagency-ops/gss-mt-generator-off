@@ -1753,9 +1753,13 @@ export function questionExacte(q: string): string {
     return nominale && !/^(?:Quelle réponse GSS|Exigence du DCE)/.test(nominale) ? nominale : `Quelle donnée faut-il indiquer pour : « ${libelle} » ?`;
   }
   // Consigne à l'infinitif (« Préciser les mesures… », « Confirmer auprès de GSS et de son assureur… ») : question à GSS.
-  const verbe = /^(Préciser|Confirmer|Indiquer|Fournir|Transmettre|Joindre|Détailler|Décrire|Compléter|Valider|Vérifier|Lister|Donner|Communiquer|Justifier|Expliquer)\s+(.+)$/i.exec(t);
+  // Consigne interne du modèle (« Définir avec GSS les modalités … que GSS fournira », becquerel 1401, T4N-5) : la question
+  // s'adresse à GSS, jamais « avec GSS » ni « GSS » à la troisième personne.
+  const verbe = /^(Préciser|Confirmer|Indiquer|Fournir|Transmettre|Joindre|Détailler|Décrire|Compléter|Valider|Vérifier|Lister|Donner|Communiquer|Justifier|Expliquer|Définir|Déterminer|Fixer|Établir|Etablir|Arrêter|Prévoir|Organiser|Mentionner|Présenter|Chiffrer|Estimer|Choisir|Identifier|Désigner)\s+(.+)$/i.exec(t);
   if (verbe) {
-    const reste = sansFin(verbe[2]).replace(/\bauprès de GSS et de son assureur\b/i, 'auprès de votre assureur').replace(/\bauprès de GSS\b/i, '').replace(/^à GSS\s+/i, '').replace(/\s{2,}/g, ' ').trim();
+    const reste = sansFin(verbe[2]).replace(/\bauprès de GSS et de son assureur\b/i, 'auprès de votre assureur').replace(/\b(?:auprès de|avec|par|pour) GSS\b/gi, '').replace(/^à GSS\s+/i, '')
+      .replace(/\b(que|qu['’]|dont)\s*GSS\s+(fournira|mettra|prévoit|propose|assurera|utilisera|affectera|mobilisera)\b/gi, (_m, rel: string, v: string) => `${/^qu['’]/i.test(rel) ? 'que' : rel} vous ${({ fournira: 'fournirez', mettra: 'mettrez', prévoit: 'prévoyez', propose: 'proposez', assurera: 'assurerez', utilisera: 'utiliserez', affectera: 'affecterez', mobilisera: 'mobiliserez' } as Record<string, string>)[v.toLowerCase()] || v}`)
+      .replace(/\bde GSS\b/g, 'de votre entreprise').replace(/\s{2,}/g, ' ').trim();
     return `Pouvez-vous ${verbe[1].toLowerCase()} ${reste} ?`;
   }
   // Libellé nominal d'une donnée (« Nombre d'agents… », « Délai d'envoi des plannings… », « Diplômes détenus… »).
