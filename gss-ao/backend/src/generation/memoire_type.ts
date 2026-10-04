@@ -520,7 +520,10 @@ export interface EtatIndicateur {
  * Propositions qui nient ce qu'elles citent (« aucun agent SSIAP exigé », « pas de télésurveillance », « hors
  * périmètre ») retirées : une mention niée n'est jamais une preuve (T4N-3).
  */
-const NEGATION = /(?<![\wÀ-ÿ])(?:(?:aucune?|ni|exclue?s?)(?![\wÀ-ÿ])|pas\s+d(?:e(?![\wÀ-ÿ])|['’])|hors\s+(?:du\s+)?p[ée]rim[èe]tre|non\s+(?:exig|requis|demand|pr[ée]vu|concern|applicable|inclu)|n['’](?:est|exige|implique)\s+pas(?![\wÀ-ÿ])|ne\s+(?:sont|requi[eè]r[\wÀ-ÿ]*|n[ée]cessit[\wÀ-ÿ]*|compren[\wÀ-ÿ]*|comprend)\s+pas(?![\wÀ-ÿ])|sans\s+objet)/i;
+// T2-GEN-3 : aussi l'interdiction (« l'emploi d'agents cynophiles est interdit ») et la négation d'un verbe d'inclusion ou de
+// présence (« ne font pas partie du marché », « n'accueille pas de public », « n'emporte aucune reprise ») ; jamais la
+// négation d'une action du titulaire (« ne pourra pas employer d'agent non titulaire du SSIAP » reste une exigence).
+const NEGATION = /(?<![\wÀ-ÿ])(?:(?:aucune?|ni|exclue?s?)(?![\wÀ-ÿ])|pas\s+d(?:e(?![\wÀ-ÿ])|['’])|hors\s+(?:du\s+)?p[ée]rim[èe]tre|non\s+(?:exig|requis|demand|pr[ée]vu|concern|applicable|inclu)|n['’](?:est|exige|implique)\s+pas(?![\wÀ-ÿ])|ne\s+(?:sont|requi[eè]r[\wÀ-ÿ]*|n[ée]cessit[\wÀ-ÿ]*|compren[\wÀ-ÿ]*|comprend)\s+pas(?![\wÀ-ÿ])|sans\s+objet|(?:est|sont|seront?)\s+(?:formellement\s+|strictement\s+)?(?:interdite?s?|proscrite?s?)(?![\wÀ-ÿ])|interdiction\s+d|ne\s+(?:fait|font)\s+pas\s+partie|(?:ne\s+|n['’])(?:comporte|concerne|pr[ée]voi[tr]|inclu[te]|couvre|accueill\w*|dispose|emporte|vise|porte|demande|exige|y\s+a)(?:nt)?\s+(?:pas|jamais|plus)(?![\wÀ-ÿ]))/i;
 export function sansMentionsNiees(texte: string): string {
   return String(texte || '').split(/(?<=[.,;!?\n])|(?=[()])|(?<=[()])/).filter((p) => !NEGATION.test(p)).join('');
 }
@@ -554,6 +557,7 @@ function journalIndicateur(message: string): void {
 /** Évalue chaque indicateur du mémoire type (vrai/faux, avec les raisons). */
 export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record<string, EtatIndicateur> {
   const dce = String(ctx.dce || '').replace(/[’`]/g, "'").replace(/\s+/g, ' ');
+  const dceAffirme = sansMentionsNiees(String(ctx.dce || '').replace(/[’`]/g, "'")).replace(/\s+/g, ' ');
   const analyse = texteAnalyse(ctx.analyse);
   const secteur = valeurPropre(ctx.analyse?.clientSector);
   const matrice = (ctx.matrice || []).filter((e) => e && e.exigence);
@@ -580,9 +584,11 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
     } else {
       if (def.dce) {
         const rx = new RegExp(def.dce, 'i');
-        const m = rx.exec(dce);
-        if (m) raisons.push(`DCE : « ${extrait(dce, m.index, m[0].length)} »`);
-        const e = matrice.find((x) => rx.test(x.exigence));
+        // Une mention niée du DCE n'est jamais une preuve (T4N-3, T2-GEN-3 : « L'emploi d'agents cynophiles est interdit »,
+        // « La télésurveillance du site n'est pas comprise ») ; l'exclusion « dce_exclure » reste lue sur le DCE brut.
+        const m = rx.exec(dceAffirme);
+        if (m) raisons.push(`DCE : « ${extrait(dceAffirme, m.index, m[0].length)} »`);
+        const e = matrice.find((x) => rx.test(sansMentionsNiees(x.exigence)));
         const sourceDce = !engageants.has(nom) || (def.motif_dce ? dceNorm.includes(normaliser(def.motif_dce)) : !!m);
         if (e && sourceDce) raisons.push(`exigence : « ${e.exigence.slice(0, 120)} »`);
         else if (e) journalIndicateur(`[MemoireType] Indicateur ${nom} : exigence de la matrice écartée, motif absent du DCE (« ${e.exigence.slice(0, 120)} »).`);
@@ -1646,7 +1652,8 @@ const PREUVE_INCENDIE = /(?<![\wÀ-ÿ])(?:SSIAP|S\.S\.I\.A\.P)|service de s[ée]
  * DCE, « SSIAP 1 » imprimé d'après l'analyse).
  */
 export function qualificationsDuDce(dce: string, analyse?: any): string[] {
-  const texteDce = String(dce || '');
+  // Qualification niée (« Les agents ne sont pas tenus d'être titulaires du SSIAP ») : jamais exigée (T2-GEN-3).
+  const texteDce = sansMentionsNiees(String(dce || ''));
   const an = texteAnalyse(analyse);
   const incendie = texteDce.replace(/\s+/g, ' ').length < 2000 || PREUVE_INCENDIE.test(texteDce.replace(/\s+/g, ' '));
   // Écritures ramenées à une forme unique (T1-GEN-10) : « S.S.I.A.P. » → « SSIAP » ; « SSIAP (de) niveau 2 » → « SSIAP 2 » ;
