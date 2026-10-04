@@ -2146,7 +2146,20 @@ export function contientHeure(t: string): boolean {
   return RX_HEURE.test(String(t || ''));
 }
 
-export function horairesImposes(dce: string, max = 30, objet = /ouvert|ferm|alarme|vacation|ronde|relève|pr[ée]sence|poste|horaire|pause|accueil/i, o: { periodes?: boolean } = {}): string[] {
+const OBJET_HORAIRE_DEFAUT = /ouvert|ferm|alarme|vacation|ronde|relève|pr[ée]sence|poste|horaire|pause|accueil/i;
+/**
+ * Horaire imposé reconnu par sa forme (T3G-6 : « Un agent de sécurité est présent du lundi au vendredi de 8h00 à 18h00 », « La
+ * surveillance du site est assurée … de 19h00 à 07h00 », « Le gardien est sur site de 21h00 à 05h00 toutes les nuits ») : une
+ * plage horaire (deux heures reliées), ou une heure avec des jours ; jamais les heures de la remise des offres, d'une visite ou
+ * de l'ouverture des plis (RC).
+ */
+const PLAGE_HORAIRE = /\d{1,2}\s*(?:h|:)\s*\d{0,2}\s*(?:[àa]|-|–|jusqu['’]?\s*[àa])\s*\d{1,2}\s*(?:h|:|heures)/i;
+const JOURS_HORAIRE = /(?:du\s+(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s+au|tous\s+les\s+jours|toutes\s+les\s+nuits|chaque\s+(?:jour|nuit)|en\s+semaine|week-?ends?|jours\s+f[ée]ri[ée]s|en\s+continu)/i;
+/** Sujet d'un horaire de service (agent présent, surveillance assurée, prestation réalisée…), jamais l'accès des usagers. */
+const SUJET_SERVICE = /(?<![\p{L}])(?:agents?|gardiens?|veilleurs?|ssiap|aps|rondiers?|chefs?\s+d['’]\s*[ée]quipe|ma[îi]tres?[- ]chiens?|pr[ée]sente?s?|assur\p{L}*|effectu\p{L}*|r[ée]alis\p{L}*|en\s+service|sur\s+(?:le\s+)?site|surveillance|gardiennage|s[ée]curit[ée]|s[ûu]ret[ée]|prestations?|continu)(?![\p{L}])/iu;
+const HORAIRE_RC = /remise\s+des\s+(?:offres|plis)|date\s+(?:et\s+heure\s+)?limite|r[ée]ception\s+des\s+(?:offres|plis)|ouverture\s+des\s+plis|visite\s+(?:obligatoire|du\s+site|des\s+lieux|sur\s+site)|questions?\s+(?:des\s+candidats|écrites)/i;
+
+export function horairesImposes(dce: string, max = 30, objet = OBJET_HORAIRE_DEFAUT, o: { periodes?: boolean } = {}): string[] {
   const out: string[] = [];
   const vues = new Set<string>();
   // Option « periodes » (texte de secours du bloc 1, T8CS-1) : la période de l'année écrite seule sur sa ligne avant une
@@ -2173,8 +2186,9 @@ export function horairesImposes(dce: string, max = 30, objet = /ouvert|ferm|alar
           plein = true;
           return;
         }
-        if (!contientHeure(ph) || !objet.test(ph)) continue;
-        if (/p[ée]nalit|€|euros?\b|taux horaire|\b(?:J|N)\s+(?:J|N)\b/i.test(ph)) continue;
+        if (!contientHeure(ph)) continue;
+        if (!objet.test(ph) && !(objet === OBJET_HORAIRE_DEFAUT && (PLAGE_HORAIRE.test(ph) || JOURS_HORAIRE.test(ph)) && SUJET_SERVICE.test(ph))) continue;
+        if (/p[ée]nalit|€|euros?\b|taux horaire|\b(?:J|N)\s+(?:J|N)\b/i.test(ph) || HORAIRE_RC.test(ph)) continue;
         const phrase = periode && !ph.toLowerCase().includes(periode.toLowerCase()) ? `${periode} : ${ph}` : ph;
         const cle = `${section}|${phrase}`.toLowerCase().replace(/[^a-z0-9|]+/g, ' ');
         if (vues.has(cle)) continue;

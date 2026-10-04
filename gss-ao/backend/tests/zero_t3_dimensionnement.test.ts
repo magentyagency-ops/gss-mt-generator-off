@@ -44,3 +44,15 @@ describe('quarts d’heure lus comme des délais (T3G-3)', () => {
     expect(normaliserExpressionsDelai('intervention ≤ 2 heures')).toBe('intervention dans 2 heures');
   });
 });
+
+import { horairesImposes } from '../src/generation/base_memoires';
+describe('horaires imposés reconnus par leur forme (T3G-6)', () => {
+  const dce = (ph: string) => `\n\n--- CCTP.pdf ---\nCahier des clauses techniques particulières\nArticle 3 - Description de la prestation\n${ph}\n`;
+  for (const ph of ['Un agent de sécurité est présent du lundi au vendredi de 8h00 à 18h00.', 'La surveillance du site est assurée du lundi au vendredi de 19h00 à 07h00.', 'Le gardien est sur site de 21h00 à 05h00 toutes les nuits.', 'Les prestations sont réalisées du lundi au vendredi de 18 heures à 8 heures.']) {
+    it(ph, () => { expect(horairesImposes(dce(ph)).join(' ')).toContain(ph); });
+  }
+  it('heures de l’accès des usagers et de la remise des offres : jamais des horaires imposés', () => {
+    expect(horairesImposes(dce('Etudiants : du lundi au vendredi, de 8h00 à 21h00.'))).toEqual([]);
+    expect(horairesImposes(dce('La date et heure limite de remise des offres est fixée au lundi 12 octobre de 12h00 à 14h00 pour la sécurité.'))).toEqual([]);
+  });
+});
