@@ -80,3 +80,12 @@ describe('accord de l\'acheteur au pluriel féminin ou avec son propre article (
     expect(client('La Halle aux Toiles', 'La Halle aux Toiles confie au titulaire la surveillance.').t).toMatch(/La Halle aux Toiles peut, si elle le souhaite/);
   });
 });
+
+import { intituleSansRedite } from '../src/generation/memoire_type';
+describe('intitulé du marché sans redite (T5-CONS-12)', () => {
+  it('partie qui reprend les mots de l\'autre retirée, tirets courts séparateurs en tirets moyens', () => {
+    expect(intituleSansRedite('Sécurité - incendie - sûreté — prestations de sécurité, incendie, sûreté')).toBe('Prestations de sécurité, incendie, sûreté');
+    expect(intituleSansRedite('Gardiennage du site — Lot 5, site de Caen')).toBe('Gardiennage du site — Lot 5, site de Caen');
+    expect(intituleSansRedite('Sécurité - incendie - sûreté')).toBe('Sécurité – incendie – sûreté');
+  });
+});

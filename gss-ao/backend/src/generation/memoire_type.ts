@@ -1319,6 +1319,24 @@ function revoirNomsPropres(nom: string, mots: Array<{ debut: number; fin: number
   }
 }
 
+/**
+ * Intitulé du marché sans redite (T5-CONS-12, parc_expo : « Sécurité - incendie - sûreté — prestations de sécurité, incendie,
+ * sûreté », objet de l'acte d'engagement et ligne du CCAP assemblés) : quand une partie séparée par un tiret long reprend les
+ * mots pleins de l'autre (80 % au moins), seule la plus complète reste ; tirets courts séparateurs (« Sécurité - incendie »)
+ * écrits en tirets moyens.
+ */
+export function intituleSansRedite(intitule: string): string {
+  let t = String(intitule || '').trim();
+  const parts = t.split(/\s+[—–]\s+/);
+  if (parts.length === 2) {
+    const pleins = (x: string) => new Set(normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 3 && !MOTS_OUTILS.has(w)));
+    const [a, b] = parts.map(pleins);
+    const [petit, grand, garde] = a.size <= b.size ? [a, b, parts[1]] : [b, a, parts[0]];
+    if (petit.size && [...petit].filter((w) => grand.has(w)).length / petit.size >= 0.8) t = garde.charAt(0).toUpperCase() + garde.slice(1);
+  }
+  return t.replace(/(\S)\s+-\s+(?=\S)/g, '$1 – ');
+}
+
 /** Gentilés de la zone de GSS (adjectifs, en minuscules après un nom commun : « l'agglomération rouennaise »). */
 const GENTILES: Record<string, string> = {
   rouennais: 'rouennais', rouennaise: 'rouennaise', rouennaises: 'rouennaises', havrais: 'havrais', havraise: 'havraise', havraises: 'havraises',
@@ -2475,7 +2493,7 @@ const CALCULS: Record<string, Calculateur> = {
     // DE RONDES DE SURVEILLANCE DU SITE DU CSTB GRENOBLE ») : graphie du DCE mot par mot, sigles gardés (« Prestations de
     // rondes de surveillance du site du CSTB Grenoble »), comme le nom de l'acheteur.
     const intitule = textePropre(v) ? v.replace(/\.$/, '') : '';
-    return { valeur: intitule ? casseDuDce(intitule, c.ctx.dce || '', true) || intitule : null, source: 'analyse du DCE (projectTitle)' };
+    return { valeur: intitule ? intituleSansRedite(casseDuDce(intitule, c.ctx.dce || '', true) || intitule) : null, source: 'analyse du DCE (projectTitle)' };
   },
   REF_MARCHE: (c) => ({ valeur: valeurPropre(c.ctx.cover?.ref) || valeurPropre(c.ctx.analyse?.marketRef) || null }),
   LOTS: (c) => {

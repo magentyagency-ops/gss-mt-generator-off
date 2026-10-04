@@ -14,6 +14,7 @@ import {
   type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, harmoniserVariantesAcheteur, formeCourteApresPremiere, phrasesGeneralesProtegees, ajoutContraireAuxDelaisGss,
   variablesDesSchemas, lotsDuMemoire, nomAcheteurAffiche, nomAcheteurCourtAffiche, rubriqueAdmetSujet, rechercherRubriques, rubriqueDuTheme,
   phrasesDeFrequenceDeControle, frequenceMensuelle, CLAUSE_PRIX, rubriqueDeLAjout,
+  intituleSansRedite,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
@@ -8920,6 +8921,8 @@ RÈGLES DE FORME (rendu Marp) :
     cover.clientCourt = nomAcheteurCourtAffiche(prep.variables.CLIENT);
     // Intitulé du marché affiché : celui du mémoire, mis en casse normale s'il était en capitales (T2-CONS-14).
     if (typeof prep.variables.OBJET_MARCHE?.valeur === 'string' && prep.variables.OBJET_MARCHE.valeur.trim() && cover.title && cover.title === cover.title.toUpperCase()) cover.title = prep.variables.OBJET_MARCHE.valeur.trim();
+    // Intitulé de la couverture sans redite (« Sécurité - incendie - sûreté — prestations de sécurité, incendie, sûreté », T5-CONS-12).
+    if (cover.title) cover.title = intituleSansRedite(cover.title);
     // Articles du CCTP des chiffres du bloc 1 (style « marine » v3 : bandeau des chiffres clés et lignes de source, T1-CONS-5).
     const articlesB1 = articlesBloc1(propres.b1_comprehension || '', dceContext);
     const rendu = await this.rendreDepuisSections(propres, dossierId, { onProgress, cover, schemas: schemasGeneres, ajouts, theme, plan, titresSchemas, articlesBloc1: articlesB1 });
