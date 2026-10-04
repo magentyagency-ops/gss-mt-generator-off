@@ -27,7 +27,7 @@
 // comme une exigence du CCTP (T6C-10).
 
 import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, variableRenseignee, phraseDelaiDuDce, phrasesDelaisDuDce, sujetDelaiDePhrase, sujetsDelaisDuGabarit, phraseDuDceContenant, phraseFrequenceReunionsDce, envoiPlanningsClientDce, frequenceInopinesDce, VARIABLES_IMPOSABLES, SUJET_VARIABLE_DELAI, type MemoireType, type ContexteMarche } from './memoire_type';
-import { sitesDuMarche, lieuDuMarche, communesParCodePostal, interditPhotosDce, RX_RONDES_A_PIED } from './base_memoires';
+import { sitesDuMarche, lieuDuMarche, communesParCodePostal, interditPhotosDce, RX_RONDES_A_PIED, separerIntitules } from './base_memoires';
 
 export type StatutAdaptation = 'a_valider' | 'validee' | 'modifiee' | 'retablie';
 
@@ -241,6 +241,21 @@ export function appliquerChoix(texte: string, a: PhraseAdaptee, cible: string): 
       return { texte: texte.replace(entre, forme(entre, cible)), ok: true };
     }
   }
+  // Voisine d'avant dans une liste (puce ou étape numérotée) alors que la phrase retirée n'en était pas une (T8N-8, ifsem :
+  // « Selon l'urgence… » recollé dans l'étape « 4. Envoi du planning… ») : la phrase reprend sa place en tête du paragraphe
+  // qui la suivait, sinon après la liste, dans son propre paragraphe ; jamais sous la dernière ligne d'une liste.
+  const PUCE_LISTE = /^\s*(?:[-*•]|\d+[.)])\s+/;
+  const ligneDe = (x: string) => texte.split('\n').find((l) => l.includes(x)) || '';
+  const avDansListe = !!av && PUCE_LISTE.test(ligneDe(av)) && !PUCE_LISTE.test(a.origine);
+  if (av && avDansListe) {
+    const apL = a.apres ? localiser(texte, a.apres) : null;
+    if (apL) return { texte: texte.replace(apL, `${cible.trim()} ${apL}`), ok: true };
+    const lignes = texte.split('\n');
+    let k = lignes.findIndex((l) => l.includes(av));
+    while (k + 1 < lignes.length && PUCE_LISTE.test(lignes[k + 1])) k++;
+    lignes.splice(k + 1, 0, '', cible.trim());
+    return { texte: lignes.join('\n').replace(/\n{3,}/g, '\n\n'), ok: true };
+  }
   if (av) {
     if (ligne || LIGNE_ENTIERE.test(av)) {
       const lignes = texte.split('\n');
@@ -273,8 +288,10 @@ export function texteDecide(a: Pick<PhraseAdaptee, 'statut' | 'origine' | 'adapt
 
 /** Phrases du DCE (pour citer une exigence). */
 function phrasesDce(dce: string): string[] {
-  return String(dce || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ')
-    .split(/(?<=[.;!?])\s+|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n{2,}/)
+  // (jamais coupée après une abréviation suivie d'un numéro : « article L. 1224-1 », « R. 2122-7 », « art. 5 », T8-CONS-5 ;
+  // intitulé d'article séparé de la phrase qui le suit, T8G-4)
+  return separerIntitules(String(dce || '')).replace(/[ \t]+/g, ' ')
+    .split(/(?<=[.;!?])(?<!(?:^|[\s(])(?:[LRDA]|art|Art|ART|cf|Cf|n°|p|pp|al|Al)\.)\s+(?!\d)|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n\s*\n/)
     .map((x) => x.replace(/\s+/g, ' ').replace(/^[-•▪●○◦−]\s*/, '').trim())
     .filter((x) => x.length >= 12);
 }
@@ -594,17 +611,25 @@ export function fondementDansDce(m: { type: string; extrait: string; par?: strin
   if (m.type === 'retrait' && MOTIF_SILENCE.test(String(m.motif || ''))) return '';
   // Jamais un titre, une page de garde ou un bloc d'adresse comme exigence (T5N-2 : « CAHIER DES CLAUSES PARTICULIÈRES … Tél :
   // 0276460330 ») : une phrase avec un verbe conjugué, en casse mêlée.
-  const sentences = phrasesDce(dce).filter((x) => x.length <= 900 && phraseExigible(x)).map(sansTitresEnTete);
-  const nouveaux = m.type === 'remplacement' ? motsPleins(m.par || '').filter((w) => !motsPleins(m.extrait).includes(w)) : [];
+  // (jamais une ligne de pénalités ou de prix : « Ronde non effectuée … 50 € HT / manquement »)
+  const sentences = phrasesDce(dce).filter((x) => x.length <= 900 && phraseExigible(x) && !/€|p[ée]nalit/i.test(x)).map(sansTitresEnTete);
+  // Mots nouveaux génériques (« suivants », « valide », « présent ») : jamais une preuve à eux seuls (T8-CONS-5, becquerel :
+  // « L. 1224-1 et suivants » fondé sur « Le CHB est actuellement composé des bâtiments suivants : »).
+  const GENERIQUES = new Set(['suivant', 'suivants', 'suivante', 'suivantes', 'valide', 'valides', 'present', 'presente', 'presents', 'notamment', 'ainsi', 'egalement', 'ensemble', 'cadre', 'mesure', 'cours', 'compte', 'place', 'fois', 'part', 'lieu', 'titre', 'effet']);
+  const nouveaux = m.type === 'remplacement' ? motsPleins(m.par || '').filter((w) => !motsPleins(m.extrait).includes(w) && !GENERIQUES.has(normaliser(w))) : [];
   const nombres = m.type === 'remplacement' ? (String(m.par || '').match(/\d+(?:[.,]\d+)?/g) || []).filter((n) => !String(m.extrait).includes(n)) : [];
   const contexte = motsPleins(m.type === 'retrait' ? `${m.extrait} ${m.motif || ''}` : `${phrase} ${m.par || ''}`);
   let meilleure = '', score = 0;
   for (const x of sentences) {
     if (nombres.some((n) => !new RegExp(`(?<![\\d,.])${n.replace('.', '[.,]')}(?![\\d])`).test(x))) continue;
-    const mx = new Set(mots(x));
-    const sNouveaux = nouveaux.length ? nouveaux.filter((w) => mx.has(w)).length / nouveaux.length : 0;
-    const sContexte = contexte.filter((w) => mx.has(w)).length / Math.max(4, contexte.length);
-    const ok = nouveaux.length ? sNouveaux >= 0.5 && (sContexte >= 0.08 || sNouveaux === 1) : (nombres.length ? sContexte >= 0.15 : sContexte >= 0.25);
+    // (singulier et pluriel confondus : « point de contrôle » / « points de contrôle », « pointeau » / « pointeaux »)
+    const sing = (w: string) => (w.length > 3 ? w.replace(/(?:s|x)$/, '') : w);
+    const mx = new Set(mots(x).map(sing));
+    const sNouveaux = nouveaux.length ? nouveaux.filter((w) => mx.has(sing(w))).length / nouveaux.length : 0;
+    const sContexte = contexte.filter((w) => mx.has(sing(w))).length / Math.max(4, contexte.length);
+    // (expression nouvelle de plusieurs mots, « point de contrôle » : tous ses mots, ou un contexte fort ; jamais un seul mot
+    // retrouvé dans une phrase d'un autre sujet, imm 1883 : « … le contrôle est validé comme contradictoire »)
+    const ok = nouveaux.length ? (sNouveaux === 1 && (sContexte >= 0.08 || nouveaux.length >= 2)) || (sNouveaux >= 0.5 && sContexte >= 0.2) : (nombres.length ? sContexte >= 0.15 : sContexte >= 0.25);
     const total = sNouveaux * 2 + sContexte;
     if (ok && total > score) { score = total; meilleure = x; }
   }
