@@ -34,7 +34,7 @@ import { ajoutsAuTexteDeGss,
 } from './memoire_type_cadre';
 import { articlesBloc1 } from './bloc1_marine';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, fondementDansDce, exigenceDeModification, ETAPE_ADAPTATION_MODELE, type PhraseAdaptee } from './adaptations_cctp';
-import { questionCaseTableau, questionExacte } from './questions_gss';
+import { questionCaseTableau, questionExacte, definirDceDesQuestions } from './questions_gss';
 import { typographieDce, exigenceDeGrillePenalites, estCahierDesChargesParContenu, estPieceAdministrative, teteAdministrative, perimetreDuLot, rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -3126,7 +3126,15 @@ export class MemoireGenerator {
     return tmpDir;
   }
 
+  /** DCE assemblé du dossier ; retenu aussi pour la mise en forme des questions à GSS (questionExacte : une consigne du modèle
+   *  n'est présentée comme « Exigence du DCE » que si le DCE l'écrit, T6-CONS-8). */
   private async getDceContext(dossierId: string): Promise<string> {
+    const dce = await this.lireDceContext(dossierId);
+    definirDceDesQuestions(dce);
+    return dce;
+  }
+
+  private async lireDceContext(dossierId: string): Promise<string> {
     const baseDir = path.resolve(__dirname, '../../');
     this.lastDceTables = '';   // réinitialisé à chaque analyse de DCE
     this.lastDceSiteCols = [];

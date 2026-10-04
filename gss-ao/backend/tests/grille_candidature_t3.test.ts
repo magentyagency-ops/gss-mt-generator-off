@@ -37,7 +37,7 @@ describe('grille de candidature (T3-COH-4)', () => {
       'Éléments de candidature, référence 2025 : quel établissement client (dénomination sociale, public ou privé) faut-il citer ?',
       'Éléments de candidature, référence 2025 : quel est le numéro de téléphone du contact dans cet établissement ?',
       'Éléments de candidature, référence 2025 : quel est le montant annuel HT de cette prestation ?',
-      "Éléments de candidature : quel a été le chiffre d'affaires HT de GSS pour l'exercice 2025 ?",
+      "Éléments de candidature : quel a été le chiffre d'affaires HT de GSS pour l'exercice 2025 (montant en euros, sans le signe €) ?",
     ]);
   });
   it('cadre réel de vitry (s’il est présent) : plus aucun « ….. » dans la grille', () => {

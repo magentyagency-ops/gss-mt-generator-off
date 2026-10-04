@@ -328,7 +328,18 @@ export function libelleEmplacementSeul(question: string | undefined, texteAvant:
     const titres = [...String(texteAvant || '').matchAll(/^#{2,4}\s+(.+?)\s*$/gm)];
     l = titres.length ? titres[titres.length - 1][1].replace(/[*_]/g, '').trim() : '';
   }
-  if (l.length > 110) l = l.slice(0, 110).replace(/\s+\S*$/, '');
+  // Groupe nominal de la donnée (T6-CONS-7) : article retiré au milieu d'une coordination (« Processus interne et les
+  // échéances » → « Processus interne et échéances ») et participe sans objet propre devant « pour / afin de » (« appliqués
+  // pour instruire » → « pour instruire »).
+  l = l.replace(/(\s(?:et|ou)\s+)(?:les|le|la|l['’]|des)\s*(?=\p{L})/giu, '$1')
+    .replace(/\s+(?:appliqu|utilis|retenu|pr[ée]vu|mobilis|employ|suivi|adopt|engag)[\p{L}]*(?=\s+(?:pour|afin)\b)/giu, '')
+    .replace(/\s+mis(?:es?)?\s+en\s+(?:œ|oe)uvre(?=\s+(?:pour|afin)\b)/giu, '');
+  // Coupe seulement au-delà de 110 signes : sur une fin de mot, jamais sur un mot-outil (« … en cours de »), avec « … ».
+  if (l.length > 110) {
+    l = l.slice(0, 110).replace(/\s+\S*$/, '');
+    for (let k = 0; k < 4; k++) l = l.replace(/\s+(?:de|du|des|d['’]|en|à|au|aux|pour|par|et|ou|le|la|les|l['’]|un|une|sur|dans|avec|sans|selon|vers|chez|entre|cours|afin|lors)$/i, '');
+    l = `${l.replace(/[\s,;:]+$/, '')}…`;
+  }
   return l ? l.charAt(0).toUpperCase() + l.slice(1) : '';
 }
 

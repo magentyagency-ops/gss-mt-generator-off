@@ -246,7 +246,9 @@ export function completerGrilleCandidature(xmlDoc: any): string[] {
         if ((m = new RegExp(`^(\\s*((?:19|20)\\d{2})\\s*:\\s*)${POINTS}(\\s*dont\\s*)${POINTS}(\\s*cadres?\\s*)$`, 'i').exec(t))) {
           nouveau = `${m[1]}${marque(`Éléments de candidature : quel était l'effectif moyen annuel de GSS en ${m[2]} ?`)}${m[3]}${marque(`Éléments de candidature : combien de cadres GSS comptait-elle en ${m[2]} (part de l'encadrement) ?`)}${m[4]}`;
         } else if ((m = new RegExp(`^(\\s*((?:19|20)\\d{2})\\s*:\\s*)${POINTS}(\\s*(?:€|euros?)?\\s*(?:HT)?\\s*)$`, 'i').exec(t))) {
-          nouveau = `${m[1]}${marque(`Éléments de candidature : quel a été le chiffre d'affaires HT de GSS pour l'exercice ${m[2]} ?`)}${m[3]}`;
+          // Unité écrite par le cadre après l'emplacement (« € ») : précisée dans la question, jamais redite (T6N-6).
+          const unite = /€|euro/i.test(m[3]) ? ' (montant en euros, sans le signe €)' : '';
+          nouveau = `${m[1]}${marque(`Éléments de candidature : quel a été le chiffre d'affaires HT de GSS pour l'exercice ${m[2]}${unite} ?`)}${m[3]}`;
         } else if ((m = /^\s*((?:19|20)\d{2})\s*[-–—]\s*d[ée]nomination sociale[^:]*?\s*$/i.exec(t))) {
           annee = m[1];
           nouveau = `${t.replace(/\s+$/, '')} : ${marque(`Éléments de candidature, référence ${annee} : quel établissement client (dénomination sociale, public ou privé) faut-il citer ?`)}`;
@@ -579,6 +581,31 @@ export async function remplirSaisie(dossierId: string, cle: string, valeur: stri
   return remplir(dossierId, [{ cle, valeur }, ...complements], 'saisie');
 }
 
+/**
+ * Valeur saisie sans l'unité que le texte du document écrit déjà juste après l'emplacement (T6N-6 : « 15 200 000 € » devant
+ * « € » → « 15 200 000 », jamais « 15 200 000 € € ») : euros (€, euro(s), EUR), HT, TTC, %, heures, minutes, jours.
+ */
+export function sansUniteRedite(valeur: string, suite: string): string {
+  const famille = (u: string): string => {
+    const x = u.toLowerCase();
+    if (/^(?:€|euros?|eur)$/.test(x)) return '€';
+    if (/^(?:heures?|h)$/.test(x)) return 'h';
+    if (/^(?:minutes?|min)$/.test(x)) return 'min';
+    if (/^jours?$/.test(x)) return 'j';
+    return x;
+  };
+  const UNITE = '€|euros?|EUR|HT|TTC|%|heures?|h|minutes?|min|jours?';
+  const tete = new RegExp(`^[\\s\\u00a0\\u202f]*(${UNITE})(?![\\p{L}\\d])`, 'iu');
+  const familles = new Set<string>();
+  let reste = String(suite || '');
+  for (let m = tete.exec(reste); m; m = tete.exec(reste)) { familles.add(famille(m[1])); reste = reste.slice(m[0].length); }
+  if (!familles.size) return valeur;
+  let v = String(valeur || '').replace(/[\s\u00a0\u202f]+$/, '');
+  const queue = new RegExp(`(?:^|[\\s\\u00a0\\u202f]+|(?<=\\d))(${UNITE})\\.?$`, 'iu');
+  for (let m = queue.exec(v); m && familles.has(famille(m[1])); m = queue.exec(v)) v = v.slice(0, m.index).replace(/[\s\u00a0\u202f]+$/, '');
+  return v || valeur;
+}
+
 /** Remplace le contenu du signet `cle` par `valeur` et enregistre une NOUVELLE version du .docx. */
 function remplirSignet(fichier: string, cle: string, valeur: string): string {
   const zip = new PizZip(fs.readFileSync(fichier));
@@ -592,6 +619,12 @@ function remplirSignet(fichier: string, cle: string, valeur: string): string {
     if (n.nodeType === 1 && n.localName === 'r') runs.push(n);
   }
   if (!runs.length) throw new Error(`Emplacement ${cle} vide.`);
+  // Texte qui suit l'emplacement dans le même paragraphe : l'unité qu'il écrit déjà n'est pas redite (T6N-6).
+  let suite = '';
+  let fin: any = null;
+  for (let n = debut.nextSibling; n; n = n.nextSibling) if (n.nodeType === 1 && n.localName === 'bookmarkEnd' && n.getAttribute('w:id') === id) { fin = n; break; }
+  for (let n = fin?.nextSibling; n && suite.length < 40; n = n.nextSibling) if (n.nodeType === 1) suite += elements(n, 't').map((t: any) => t.textContent || '').join('');
+  valeur = sansUniteRedite(valeur, suite);
   const [premier, ...autres] = runs;
   autres.forEach((r) => r.parentNode.removeChild(r));
   for (let i = premier.childNodes.length - 1; i >= 0; i--) {

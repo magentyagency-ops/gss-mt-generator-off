@@ -19,6 +19,21 @@ export function questionCaseTableau(ligne: string, colonne: string): string {
   return l ? `Tableau du cadre, ligne « ${l} », colonne « ${c} » : quelle valeur faut-il écrire ?` : `Tableau du cadre, colonne « ${c} » : quelle valeur faut-il écrire ?`;
 }
 
+/** DCE du dossier en cours (posé par le générateur à la lecture du DCE) : une consigne du modèle n'est présentée comme
+ *  « Exigence du DCE » que si le DCE l'écrit (T6-CONS-8). Vide : aucune vérification possible (forme seule). */
+let dceDesQuestions = '';
+const normDce = (t: string) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[’`]/g, "'").replace(/[^a-z0-9']+/g, ' ').replace(/\s+/g, ' ').trim();
+export function definirDceDesQuestions(dce: string | null | undefined): void { dceDesQuestions = normDce(String(dce || '')); }
+/** Le texte figure dans le DCE (ses 10 premiers mots, normalisés) ; vrai quand le DCE n'est pas connu. */
+export function figureDansLeDce(texte: string): boolean {
+  if (!dceDesQuestions) return true;
+  const mots = normDce(texte).split(' ').filter(Boolean);
+  if (mots.length < 3) return true;
+  return dceDesQuestions.includes(mots.slice(0, 10).join(' '));
+}
+/** Voix de l'acheteur ou du cahier des charges (« doit », « le titulaire », « exigé »…). */
+const VOIX_ACHETEUR = /\b(?:doit|doivent|devra|devront|est tenue?|sont tenus|le titulaire|le prestataire|le candidat|exig|obligatoire|imp[ée]ratif)\b/i;
+
 export function questionExacte(q: string): string {
   const t = String(q || '').replace(/\s+/g, ' ').trim();
   if (!t) return t;
@@ -62,6 +77,9 @@ export function questionExacte(q: string): string {
     // Consigne du modèle (infinitif, « de GSS ») : jamais présentée comme une exigence du DCE (T5N-9).
     const premierMot = /^([A-Za-zÀ-ÿ][a-zà-ÿ'’-]+)(.*)$/.exec(inner);
     if ((premierMot && estInfinitif(premierMot[1], premierMot[2])) || /\b(?:de|à|avec|auprès de|par)\s+GSS\b/.test(inner)) return questionExacte(inner);
+    // Texte absent du DCE (consigne nominale du modèle : « identité de l'agent affecté et disponibilité de ses titres… ») :
+    // jamais présenté comme une exigence du DCE (T6-CONS-8).
+    if (!figureDansLeDce(inner)) return `Pouvez-vous préciser ce point : « ${inner} » ?`;
     return `Exigence du ${exigence[1]}${exigence[2]} : « ${inner} ». Comment GSS y répond-elle (moyen, délai ou document à indiquer) ?`;
   }
   const information = /^(?:Information|Valeur) à fournir(?: pour compléter(?: le mémoire)?)?\s*:\s*(.+)$/i.exec(t);
@@ -185,7 +203,10 @@ export function questionExacte(q: string): string {
   // Consigne qui nomme GSS (« … de GSS », « … avec GSS ») : jamais une « Exigence du DCE » (T5N-9).
   if (/^[a-zà-ÿ]/.test(t) && /\b(?:de|à|avec|auprès de|par)\s+GSS\b/.test(t)) return `Pouvez-vous préciser ce point : « ${sansFin(t).replace(/\s*\b(?:auprès de|avec|par)\s+GSS\b/g, '').replace(/\bde GSS\b/g, 'de votre entreprise').replace(/\bà GSS\b/g, 'à votre entreprise')} » ?`;
   // Exigence du DCE (phrase à la voix de l'acheteur, ou fragment en minuscule tiré du cahier des charges).
-  if (/^[a-zà-ÿ]/.test(t) || /\b(?:doit|doivent|devra|devront|est tenue?|sont tenus|le titulaire|le prestataire|le candidat|exig|obligatoire|imp[ée]ratif)\b/i.test(t)) {
+  // Seulement quand le DCE l'écrit (T6-CONS-8) : une consigne nominale du modèle en minuscule (« identité de l'agent affecté
+  // et disponibilité de ses titres… »), absente du DCE, est une question à GSS, jamais une « Exigence du DCE ».
+  if (/^[a-zà-ÿ]/.test(t) || VOIX_ACHETEUR.test(t)) {
+    if (!figureDansLeDce(t)) return `Pouvez-vous préciser ce point : « ${sansFin(t)} » ?`;
     return `Exigence du DCE à laquelle le mémoire doit répondre : « ${sansFin(t)} ». Comment GSS y répond-elle (moyen, délai ou document à indiquer) ?`;
   }
   return `Quelle réponse GSS apporte-t-elle sur ce point : « ${sansFin(t)} » ?`;

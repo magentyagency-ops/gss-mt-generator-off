@@ -219,6 +219,16 @@ export function chiffresCles(texte: string, articles: Record<string, string> = {
     }
     // T2N-3 : jamais un morceau de phrase avec son verbe (« la surveillance à distance doit être active 24 h/24 » donnait
     // « distance doit active ») : la légende générique.
+    // T6-CONS-13 : jamais une légende qui porte un nombre ou « sur N » (« 365 jours sur 365 et 24 heures sur 24 » donnait
+    // « jours sur 365 ») : le sujet de la phrase (« La surveillance à distance, active … » → « surveillance à distance »),
+    // sinon « présence continue ».
+    if (/\d|(?<![\p{L}])sur(?![\p{L}])/iu.test(legende)) {
+      const debutPhrase = ligne24.split(RX_24)[0].split(/(?<=[.!?:;])\s+/).pop() || '';
+      let sujet = (debutPhrase.split(/[,(]/)[0] || '').replace(/^\s*[-*•]\s+/, '').replace(/\*+/g, '').trim();
+      sujet = sujet.replace(/^(?:la|le|les|l['’]|une?|des|notre|nos|votre|vos|cette|ce|cet|ces)(?:\s+|(?<=['’]))/i, '').trim();
+      const mots = sujet.split(/\s+/);
+      legende = sujet && mots.length <= 5 && !/\d/.test(sujet) && !VERBE_CONJUGUE.test(sujet) ? sujet.replace(/^\p{Lu}(?=\p{Ll})/u, (c) => c.toLowerCase()) : '';
+    }
     if (legende.length < 3 || legende.length > 40 || VERBE_CONJUGUE.test(legende)) legende = 'présence continue';
     ajouter('24 h/24', legende);
   }

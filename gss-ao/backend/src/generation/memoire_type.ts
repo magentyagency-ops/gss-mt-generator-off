@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { motDuDictionnaire } from './dictionnaire_fr';
 import { lignesEquipe, questionDimensionnement, questionRondes, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { estNomDeLieu, lieuxConnus, horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative, lotsDuMemoireDce, perimetreDuLot, normaliserSsiap, contracterArticlesNomsPropres, MONTANT_PENALITE, textePreuvesIndicateurs } from './base_memoires';
+import { estNomDeLieu, lieuxConnus, horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, NOMME_DELAI, heureEstUnDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative, lotsDuMemoireDce, perimetreDuLot, normaliserSsiap, contracterArticlesNomsPropres, MONTANT_PENALITE, textePreuvesIndicateurs } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -1769,16 +1769,20 @@ export function dateDebutMarche(dce: string): string {
   const DATE = `((?:1er|\\d{1,2})\\s+(?:${MOIS})\\s+\\d{4}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{4})`;
   // Tournures (T3G-11) : « date de commencement », « Le présent marché prendra effet le… », « L'accord-cadre débutera le… »,
   // « Le contrat démarrera le… », et « à compter du <date> » dans une phrase de durée du marché.
-  const LIBELLE = `(?:date (?:pr[ée]visionnelle |effective )?(?:de d[ée]marrage|de d[ée]but|de commencement)(?: (?:d.ex[ée]cution|des prestations|du march[ée]|de l.accord-cadre))?|d[ée]marrage (?:effectif )?(?:des prestations|du march[ée])|d[ée]but (?:d.ex[ée]cution|des prestations|du march[ée])|commencement (?:des prestations|d.ex[ée]cution)|prise d.effet)`;
+  // Jour de la semaine facultatif devant la date (T6G-10 : « le lundi 4 janvier 2027 »).
+  const JOUR = '(?:(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\s+)?';
+  const LIBELLE = `(?:date (?:pr[ée]visionnelle |effective )?(?:de d[ée]marrage|de d[ée]but|de commencement)(?: (?:d.ex[ée]cution|des prestations|du march[ée]|de l.accord-cadre))?|d[ée]marrage (?:effectif )?(?:des prestations|du march[ée])|d[ée]but (?:d.ex[ée]cution|des prestations|du march[ée])|commencement (?:des prestations|d.ex[ée]cution)|prise d.effet|date d.effet(?: (?:du march[ée]|de l.accord-cadre|du contrat))?)`;
   // Sujet au singulier comme au pluriel (« La prestation démarre le… », T4G-7).
   const SUJET = `(?:(?:le pr[ée]sent |la pr[ée]sente |l.|le |la |les )?(?:march[ée]|accord-cadre|contrat|prestations?|ex[ée]cution(?: du march[ée]| des prestations)?))`;
   const VERBE = `${SUJET}\\s+(?:(?:d[ée]but\\w*|commenc\\w*|d[ée]marr\\w*|pren\\w* effet|entr\\w* en vigueur|(?:est|sont|sera|seront) ex[ée]cut[ée]e?s?)(?:\\s+[àa] (?:compter|partir))?)`;
   const DUREE = `(?:dur[ée]e (?:du march[ée]|de l.accord-cadre|du contrat)|(?:march[ée]|accord-cadre|contrat) est conclu)[^.;]{0,120}?`;
   // Période d'exécution (« Période d'exécution : du 1er janvier 2027 au 31 décembre 2027 ») : la première date.
-  const PERIODE = `(?:p[ée]riode|dur[ée]e) d.ex[ée]cution\\s*(?:[|:]\\s*)?(?:du\\s+|à compter du\\s+)`;
+  // (T6G-10 : « Durée du marché : du 01/01/2027 au … », « Durée de l'accord-cadre : du … », « pour la période du … », « Le marché
+  // court / s'étend / s'exécute du … »)
+  const PERIODE = `(?:(?:(?:p[ée]riode|dur[ée]e) d.ex[ée]cution|dur[ée]e (?:du march[ée]|de l.accord-cadre|du contrat))\\s*(?:[|:]\\s*)?(?:du\\s+|à compter du\\s+)|pour la p[ée]riode (?:allant )?du\\s+|${SUJET}\\s+(?:court|courra|s.[ée]tend|s.[ée]tendra|s.ex[ée]cute|s.ex[ée]cutera)\\s+du\\s+)`;
   // Libellé de tableau ou de colonnes suivi de sa date (« Date prévisionnelle de début des prestations | 1er janvier 2027 »,
   // « … des prestations      01/01/2027 », la date seule sur la ligne suivante) : sans aucun mot entre les deux.
-  const rx = new RegExp(`(?:${LIBELLE}(?:\\s*(?:[|:]\\s*)?(?=${DATE.replace(/^\(/, '(?:')})|[^.;]{0,160}?(?:fix[ée]e?|estim[ée]e?|pr[ée]vue?)?\\s*(?:au|le|à compter du|:)\\s*(?:le\\s+)?)|${VERBE}\\s+(?:au|le|à compter du|à partir du|du)\\s+|${PERIODE}|${DUREE}[àa] compter du\\s+)${DATE}`, 'i');
+  const rx = new RegExp(`(?:${LIBELLE}(?:\\s*(?:[|:]\\s*)?(?=${JOUR}${DATE.replace(/^\(/, '(?:')})|[^.;]{0,160}?(?:fix[ée]e?|estim[ée]e?|pr[ée]vue?)?\\s*(?:au|le|à compter du|:)\\s*(?:le\\s+)?)|${VERBE}\\s+(?:au|le|à compter du|à partir du|du)\\s+|${PERIODE}|${DUREE}[àa] compter du\\s+)${JOUR}${DATE}`, 'i');
   const m = rx.exec(d);
   if (!m) return '';
   const v = m[1].replace(/\s+/g, ' ');
@@ -1888,9 +1892,54 @@ export function delaisDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): Arra
  * « DÉLAIS D'INTERVENTION … délais maximaux suivants : ») mais citée seule ; « Délai maximum : 20 minutes. » est lue avec la
  * phrase qui la précède (son sujet). Les autres phrases restent celles de phrasesEntieresDuDce.
  */
-function phrasesDuDcePourDelais(dce: string): Array<{ lu: string; cite: string }> {
+/**
+ * Tableaux d'un vrai PDF (T6G-4) : colonnes séparées par des espaces (« Événement   Délai maximal », « Remplacement d'un agent
+ * absent   1 heure », « Intervention sur déclenchement d'alarme 30 minutes »). Une ligne d'en-tête dont les colonnes sont
+ * séparées par 3 espaces ou plus ouvre un tableau ; chaque ligne qui suit est découpée en cellules sur 3 espaces ou plus, ou, à
+ * défaut, sur sa valeur finale (durée, heure, fréquence). Le tableau est réécrit en lignes « a | b », lues ensuite exactement
+ * comme les tableaux Word. Aucune autre ligne n'est changée.
+ */
+const VALEUR_FINALE = /^(.{3,110}?)\s+((?:\d{1,4}\s*(?:\(\s*[^()]{1,25}\)\s*)?(?:minutes?|mn|min|heures?|h|jours?(?:\s+ouvr[ée]s)?|semaines?|mois)(?:\s+(?:maximum|au\s+maximum|au\s+plus|minimum))?|\d{1,2}\s*[h:]\s*[0-5]\d|(?:\d{1,3}|une?|deux|trois|quatre|cinq|six)\s*(?:fois\s*)?(?:par|\/)\s*(?:jour|nuit|semaine|mois|trimestre|semestre|an(?:n[ée]e)?)(?:\s+(?:minimum|au\s+minimum))?|(?:bi|tri|se)?mensuelle?s?|hebdomadaires?|trimestrielle?s?|semestrielle?s?|annuelle?s?|quotidienne?s?|journali[èe]re?s?))\.?\s*$/iu;
+export function tableauxEnColonnes(dce: string): string {
+  const lignes = String(dce || '').replace(/\r/g, '').split('\n');
+  const colonnes = (l: string) => l.trim().split(/\s{3,}|\t+/).map((c) => c.trim()).filter(Boolean);
+  const enTete = (l: string) => {
+    const c = colonnes(l);
+    return !/\|/.test(l) && c.length >= 2 && c.length <= 6 && c.every((x) => x.length >= 2 && x.length <= 60 && !/[.;!?]$/.test(x)) && !/\d{2,}/.test(l);
+  };
+  const rangee = (l: string, n: number): string[] | null => {
+    if (!l.trim() || /\|/.test(l)) return null;
+    const c = colonnes(l);
+    if (c.length === n) return c;
+    if (n === 2) { const m = VALEUR_FINALE.exec(l.trim()); if (m && !/[.;!?:]$/.test(m[1].trim())) return [m[1].trim(), m[2].trim()]; }
+    return null;
+  };
+  for (let i = 0; i < lignes.length; i++) {
+    if (!enTete(lignes[i])) continue;
+    const n = colonnes(lignes[i]).length;
+    const rangs: string[][] = [];
+    for (let j = i + 1; j < lignes.length; j++) { const r = rangee(lignes[j], n); if (!r) break; rangs.push(r); }
+    if (!rangs.length) continue;
+    lignes[i] = colonnes(lignes[i]).join(' | ');
+    rangs.forEach((r, k) => { lignes[i + 1 + k] = r.join(' | '); });
+    i += rangs.length;
+  }
+  return lignes.join('\n');
+}
+
+/** Durée seule d'une cellule ou d'une valeur (« 20 minutes », « 1 h maximum », « vingt (20) minutes »). */
+const DUREE_VALEUR = new RegExp(String.raw`^(?:${RX_NOMBRE_LETTRES}|\d{1,4})\s*(?:\(\s*[^()]{1,25}\)\s*)?(?:minutes?|mn|min|heures?|h)(?![\p{L}])(?:\s+(?:maximum|au\s+maximum|au\s+plus|maxi))?\.?$`, 'iu');
+const HEURE_VALEUR = /^\d{1,2}\s*(?:h|:)\s*[0-5]\d\.?$/i;
+/** Action de présence nommée par un libellé sans le mot « délai » (« Remplacement d'un agent absent », « Levée de doute PTI »). */
+const LIBELLE_PRESENCE = /interven|rempla[cç]|lev[ée]e\s+de\s+doute|arriv[ée]e|pr[ée]sence|mobilisation|rel[èe]ve|astreinte|d[ée]placement|mise\s+en\s+place/i;
+/** Le libellé nomme-t-il lui-même un sujet de délai (alarme, remplacement, PTI…) ? Le contexte n'est alors pas ajouté. */
+const sujetNomme = (x: string) => Object.values(SUJETS_DELAI).some((d) => d.sujet.test(x));
+
+function phrasesDuDcePourDelais(dceBrut: string): Array<{ lu: string; cite: string }> {
+  const dce = tableauxEnColonnes(dceBrut);
   const out: Array<{ lu: string; cite: string }> = [];
   let titre = '', intro = '', entete = '';
+  let cellulesEntete: string[] = [];
   let tampon: string[] = [];
   const net = (x: string) => x.replace(/\s+/g, ' ').trim();
   const vider = () => {
@@ -1905,6 +1954,27 @@ function phrasesDuDcePourDelais(dce: string): Array<{ lu: string; cite: string }
   const contexte = () => net(`${titre} ${intro} ${entete}`);
   // Durée seule après le libellé (« intervention sur alarme : 20 minutes ») sous une introduction qui parle de délais : un délai.
   const avecDelai = (ctx: string, x: string) => (/d[ée]lai/i.test(ctx) ? x.replace(/:\s*(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/u, ': dans ') : x);
+  // Valeur d'un délai (cellule ou « libellé : valeur ») lue avec SON libellé seulement (T6G-2, T6G-3) : « dans » ajouté quand
+  // la valeur est une durée seule (ou une heure « 0h20 » sous un libellé qui nomme un délai) et que le libellé (ou le contexte)
+  // nomme un délai ou une action de présence ; le contexte (intitulé, introduction) n'est ajouté que si le libellé ne nomme
+  // aucun sujet de délai, pour qu'une colonne « remplacement » ne soit jamais lue sous un intitulé « … alarme … ».
+  const lireValeur = (libelle: string, valeur: string, cite: string, ctx: string) => {
+    const v = valeur.trim().replace(/[\s.;,]+$/, '');
+    const heure = HEURE_VALEUR.test(v);
+    if (heure && !heureEstUnDelai(libelle, v) && !(NOMME_DELAI.test(ctx) && Number(/^\d{1,2}/.exec(v)![0]) <= 2)) return false;
+    if (!heure && !dureesEnMinutes(v).length) return false;
+    const seule = heure || DUREE_VALEUR.test(v);
+    const delai = seule && (NOMME_DELAI.test(libelle) || LIBELLE_PRESENCE.test(libelle) || NOMME_DELAI.test(ctx));
+    // Heure écrite « 0h20 », « 2h00 », « 01:00 » : en minutes, ou en heures pleines.
+    const hm = /^(\d{1,2})\s*(?:h|:)\s*([0-5]\d)$/i.exec(v);
+    const duree = hm ? (Number(hm[2]) === 0 && Number(hm[1]) > 0 ? `${Number(hm[1])} ${Number(hm[1]) > 1 ? 'heures' : 'heure'}` : `${Number(hm[1]) * 60 + Number(hm[2])} minutes`) : v.replace(/\s+(?:maximum|au\s+maximum|au\s+plus|maxi)$/i, '');
+    // Libellé d'un événement sans action (« Déclenchement d'un PTI », colonne « Délai maximal ») : le délai est celui de
+    // l'intervention, sauf quand le libellé nomme un document ou une communication (rapport, information, traitement au PC).
+    const sansAction = delai && !new RegExp(ACTION_PRESENCE.source, 'iu').test(libelle) && !new RegExp(ACTION_DOCUMENT.source, 'iu').test(libelle);
+    const lu = `${sujetNomme(libelle) ? '' : `${ctx} `}${libelle} : ${delai ? `${sansAction ? 'intervention ' : ''}dans ${duree}` : v}`;
+    out.push({ lu: net(lu), cite: net(cite) });
+    return true;
+  };
   // Puce (ou ligne étiquetée « — … : ») en cours, avec ses lignes de suite (T5G-2 : texte de PDF coupé à 100 colonnes,
   // « ○ Le titulaire s'engage à intervenir … dans un ⏎ délai maximum de 20 minutes … ») : lue entière, avec son introduction.
   let puce: { lu: string; cite: string; ctx: string } | null = null;
@@ -1914,39 +1984,84 @@ function phrasesDuDcePourDelais(dce: string): Array<{ lu: string; cite: string }
     puce = null;
   };
   const RX_PUCE = /^(?:[-•▪●○◦−*]|\d+[.)])\s+/;
-  const RX_TITRE = /^(?:ARTICLE|Article|CHAPITRE|Chapitre)\b|^\d{1,2}(?:[.\-–]\s?\d{1,2})*[.\-–]?\s+[A-ZÉÈ]/;
-  for (const brute of String(dce || '').replace(/\r/g, '').split('\n')) {
+  // Intitulé (T6G-3) : « ARTICLE / CHAPITRE », numérotation, lettre (« B. Délais »), Markdown (« **Délais maximaux** »,
+  // « # … »), ligne courte en capitales sans ponctuation finale (« DÉLAIS D'INTERVENTION »), ou ligne courte isolée entre deux
+  // lignes vides (même définition que les ruptures de perimetreDuLot).
+  const RX_TITRE = /^(?:ARTICLE|Article|CHAPITRE|Chapitre|TITRE|Titre|PARTIE|Partie)\b|^\d{1,2}(?:[.\-–]\s?\d{1,2})*[.\-–]?\s+[A-ZÉÈ]|^[A-H]\s*[.)]\s+[A-ZÉÈ]|^[IVX]{1,4}\s*[.)–-]\s*[A-ZÉÈ]|^\*\*[^*]+\*\*\s*$|^#{1,4}\s/;
+  const brutes = String(dce || '').replace(/\r/g, '').split('\n');
+  const titreCapitales = (t: string) => { const lettres = t.replace(/[^A-Za-zÀ-ÿ]/g, ''); return t.length >= 4 && t.length <= 90 && !/[.;,:]$/.test(t) && lettres.length >= 4 && lettres === lettres.toUpperCase() && !/\|/.test(t); };
+  const titreIsole = (i: number, t: string) => t.length >= 3 && t.length <= 70 && /^[A-ZÀ-Ý]/.test(t) && !/[.;:,!?]$/.test(t) && !/\|/.test(t) && !/\d/.test(t) && !(brutes[i - 1] || '').trim() && !(brutes[i + 1] || '').trim() && i > 0;
+  // Ligne « libellé : valeur » (libellé sans verbe conjugué ni ponctuation, valeur qui commence par une durée) : T6G-3.
+  const RX_ETIQUETTE = /^([^:|.;!?]{3,90}?)\s*:\s*(.+?)\s*$/;
+  brutes.forEach((brute, i) => {
     const l = brute.trim();
     // Ligne de suite de la puce en cours : ni puce, ni titre, ni tableau, ni ligne étiquetée ; la puce ne finit pas sa phrase,
     // ou la ligne commence en minuscule.
     if (puce && l && !RX_PUCE.test(l) && !(RX_TITRE.test(l) && l.length <= 120) && !/\|/.test(l) && !/\s[—–]\s[^:|]{2,60}:\s*\S/.test(l)
       && (!/[.;!?:]$/.test((puce as { cite: string }).cite.trim()) || /^[a-zà-ÿ]/.test(l))) {
       (puce as { cite: string }).cite = `${(puce as { cite: string }).cite} ${l}`;
-      continue;
+      return;
     }
     fermerPuce();
-    if (!l) { vider(); tampon.push(''); entete = ''; continue; }
-    if (/^(?:ARTICLE|Article|CHAPITRE|Chapitre)\b|^\d{1,2}(?:[.\-–]\s?\d{1,2})*[.\-–]?\s+[A-ZÉÈ]/.test(l) && l.length <= 120) { vider(); titre = l; intro = ''; entete = ''; tampon.push(l); continue; }
-    if (/^=+\s*TABLEAUX/i.test(l)) { vider(); entete = ''; continue; }
-    // Ligne de tableau : la première ligne d'un tableau est son en-tête.
+    if (!l) { vider(); tampon.push(''); entete = ''; cellulesEntete = []; return; }
+    if (((RX_TITRE.test(l) || titreCapitales(l)) && l.length <= 120) || titreIsole(i, l)) { vider(); titre = l.replace(/\*\*/g, '').replace(/^#+\s*/, ''); intro = ''; entete = ''; cellulesEntete = []; tampon.push(l); return; }
+    if (/^=+\s*TABLEAUX/i.test(l)) { vider(); entete = ''; cellulesEntete = []; return; }
+    // Ligne de tableau (la première ligne d'un tableau est son en-tête) : lue cellule par cellule (T6G-2), chaque durée avec
+    // l'en-tête de SA colonne et le libellé de sa ligne (« Hôtel de Ville — Délai d'intervention sur alarme : 20 minutes »),
+    // jamais la ligne entière ; une heure de planning (« | Prise de service | 19h00 | ») n'est jamais un délai (REG6-1).
     if (/\|/.test(l)) {
       vider();
-      if (!entete) { entete = l; if (!/\d/.test(l)) continue; }
-      out.push({ lu: `${contexte()} ${l}`, cite: net(l) });
-      continue;
+      if (/^[\s|:-]+$/.test(l)) return;
+      const cellules = l.split('|').map((c) => c.trim());
+      if (!entete) { entete = l; cellulesEntete = cellules; if (!/\d/.test(l)) return; }
+      const k0 = cellules.findIndex((c) => !!c);
+      const libelle = cellules[k0] || '';
+      const ctx = net(`${titre} ${intro}`);
+      let lue = false;
+      if (dureesEnMinutes(libelle).length && /\s/.test(libelle) && libelle.split(/\s+/).length > 4) { out.push({ lu: net(`${ctx} ${libelle}`), cite: net(l) }); lue = true; }
+      cellules.forEach((c, k) => {
+        if (!c || k === k0) return;
+        const col = cellulesEntete !== cellules ? (cellulesEntete[k] || '') : '';
+        if (lireValeur(`${libelle}${col ? ` — ${col}` : ''}`, c, l, ctx)) lue = true;
+      });
+      if (!lue) out.push({ lu: `${contexte()} ${l}`, cite: net(l) });
+      return;
     }
-    // Ligne étiquetée par l'en-tête de colonne (« Déclenchement d'un PTI — Délai maximal: 10 minutes »).
-    if (/\s[—–]\s[^:|]{2,60}:\s*\S/.test(l)) { vider(); puce = { lu: net(`${titre} ${intro}`), cite: l, ctx: l }; continue; }
+    // Ligne étiquetée par l'en-tête de colonne (« Hôtel de Ville — Délai d'intervention sur alarme: 20 minutes ; Délai de
+    // remplacement d'un agent absent: 1 heure ») : chaque segment séparé par « ; » lu à part, avec le libellé de la ligne (T6G-2).
+    const etiquetee = /^(.{2,120}?)\s[—–]\s(.+)$/.exec(l);
+    if (etiquetee && /^[^:|]{2,90}:\s*\S/.test(etiquetee[2])) {
+      vider();
+      const segments = etiquetee[2].split(/\s;\s/);
+      let lue = false;
+      for (const seg of segments) {
+        const m = /^([^:|]{2,90}?)\s*:\s*(.+)$/.exec(seg);
+        if (m && lireValeur(`${etiquetee[1]} — ${m[1]}`, m[2], l, net(`${titre} ${intro}`))) lue = true;
+      }
+      if (!lue) puce = { lu: net(`${titre} ${intro}`), cite: l, ctx: l };
+      return;
+    }
+    // Ligne « libellé : durée » sans puce (T6G-3 : « Remplacement d'un agent absent : 1 heure. », « Intervention sur alarme :
+    // 30 minutes. ») : une phrase à part, lue avec son libellé (et le contexte si le libellé ne nomme aucun sujet).
+    const et = RX_ETIQUETTE.exec(l.replace(RX_PUCE, ''));
+    const valeurEt = et ? et[2].replace(/[\s.;,]+$/, '') : '';
+    if (et && !VERBE_CONJUGUE_LIBELLE.test(et[1]) && (DUREE_VALEUR.test(valeurEt) || HEURE_VALEUR.test(valeurEt))) {
+      vider();
+      if (lireValeur(et[1], valeurEt, l.replace(RX_PUCE, ''), net(`${titre} ${intro}`))) return;
+    }
     // Puce d'une liste introduite par « … : » : lue avec l'introduction (et ses lignes de suite).
-    if (RX_PUCE.test(l) && intro) { vider(); puce = { lu: net(`${titre} ${intro}`), cite: l.replace(RX_PUCE, ''), ctx: `${titre} ${intro}` }; continue; }
+    if (RX_PUCE.test(l) && intro) { vider(); puce = { lu: net(`${titre} ${intro}`), cite: l.replace(RX_PUCE, ''), ctx: `${titre} ${intro}` }; return; }
     entete = '';
+    cellulesEntete = [];
     if (/:\s*$/.test(l)) intro = l; else if (!/^(?:[-•▪●○◦−*]|\d+[.)])\s+/.test(l)) intro = intro && /:\s*$/.test(tampon[tampon.length - 1] || '') ? intro : '';
     tampon.push(brute);
-  }
+  });
   fermerPuce();
   vider();
   return out.filter((x) => x.cite.length >= 12 && !LIGNE_SOMMAIRE.test(x.cite));
 }
+/** Verbe conjugué dans un libellé (« Le titulaire intervient : … ») : ce n'est pas une ligne étiquetée. */
+const VERBE_CONJUGUE_LIBELLE = /(?<![\p{L}])(?:est|sont|sera|seront|doit|doivent|devra|devront|intervient|interviennent|assure|assurent|effectue|effectuent|dispose|disposent|respecte|respectent|s['’]engage)(?![\p{L}])/iu;
 
 /** Phrases entières du DCE (coupées sur « . ! ? » et les puces, jamais sur « ; ») : le sujet d'un délai peut précéder le « ; ». */
 function phrasesEntieresDuDce(dce: string): string[] {
@@ -2049,7 +2164,7 @@ export function phraseDuDceContenant(dce: string, citation: string): string {
  * Fréquence écrite « N (fois | réunion(s)) par <unité> » (T5G-13 : « 1 fois par mois », « une par mois », « deux fois par an »),
  * ramenée au libellé usuel (« chaque mois », « chaque semestre ») ou écrite telle quelle (« trois fois par an »).
  */
-const RX_N_PAR = /(?<![\wÀ-ÿ])(\d{1,2}|une?|deux|trois|quatre|cinq|six|douze)\s+(?:fois\s+|r[ée]unions?\s+(?:de\s+suivi\s+)?)?par\s+(semaine|mois|trimestre|semestre|an(?:n[ée]e)?)(?![\wÀ-ÿ])/i;
+const RX_N_PAR = /(?<![\wÀ-ÿ])(\d{1,2}|une?|deux|trois|quatre|cinq|six|douze)\s*(?:fois\s*|r[ée]unions?\s+(?:de\s+suivi\s+)?)?(?:\s+par\s+|(?<=\S)\s*\/\s*)(semaine|mois|trimestre|semestre|an(?:n[ée]e)?)(?![\wÀ-ÿ])/i;
 function libelleNPar(m: RegExpMatchArray): string {
   const n = nombreFr(m[1]);
   const u = m[2].toLowerCase().startsWith('an') ? 'an' : m[2].toLowerCase();
@@ -2067,7 +2182,8 @@ const FREQUENCES: Array<[RegExp, string | ((m: RegExpMatchArray) => string)]> = 
   [/bimensuel(?:le)?s?|deux fois par mois/i, 'deux fois par mois'],
   [/toutes les (?:deux|2) semaines|tous les quinze jours|tous les 15 jours/i, 'toutes les deux semaines'],
   [/toutes les (?:quatre|4) semaines/i, 'toutes les quatre semaines'],
-  [/hebdomadaires?|chaque semaine|toutes les semaines|une fois par semaine/i, 'chaque semaine'],
+  // « bi-hebdomadaire » (deux fois par semaine, ou toutes les deux semaines selon les rédacteurs) : jamais « chaque semaine ».
+  [/(?<!bi-?)hebdomadaires?|chaque semaine|toutes les semaines|une fois par semaine/i, 'chaque semaine'],
   [/(?<![\wÀ-ÿ])annuel(?:le)?s?|chaque ann[ée]e|une fois par an(?![\wÀ-ÿ])/i, 'chaque année'],
 ];
 
@@ -2081,7 +2197,7 @@ function frequenceDeLaReunion(prop: string, debut: number, fin: number): boolean
   // « Les fréquences des réunions sont les suivantes : … », « Une réunion de suivi sera mise en place…, sa périodicité sera
   // bimestrielle » : toute fréquence de la proposition est celle des réunions.
   if (/(?:fr[ée]quences?|p[ée]riodicit[ée]s?)\s+(?:des|de la|de ces|de cette)\s+r[ée]unions?|r[ée]unions?[^.]{0,100}(?:sa|leur)\s+(?:fr[ée]quence|p[ée]riodicit[ée])/i.test(prop)) return true;
-  for (const r of prop.matchAll(/r[ée]unions?/gi)) {
+  for (const r of prop.matchAll(new RegExp(RX_REUNION.source, 'giu'))) {
     const entre = r.index! < debut ? prop.slice(r.index! + r[0].length, debut) : prop.slice(fin, r.index!);
     if (entre.length > 70) continue;
     // Complément du nom de la réunion (« réunion de bilan annuelle », « réunion de suivi : une par mois ») : la fréquence est
@@ -2096,35 +2212,71 @@ function frequenceDeLaReunion(prop: string, debut: number, fin: number): boolean
   return false;
 }
 
+/**
+ * Réunion de suivi nommée (T6G-14) : « réunion(s) », « se réunit / se réuniront », « comité de suivi / de pilotage », « point
+ * (de suivi) mensuel ». Les bilans et rapports restent exclus (frequenceDeLaReunion).
+ */
+const RX_REUNION = /r[ée]unions?|(?<![\p{L}])se\s+r[ée]uni(?:t|ra|ront|ssent|r)(?![\p{L}])|comit[ée]s?\s+(?:de\s+)?(?:suivi|pilotage)|(?<![\p{L}])points?\s+(?:de\s+suivi|(?:bi|tri|se)?mensuels?|hebdomadaires?|trimestriels?|semestriels?|annuels?)(?![\p{L}])/iu;
+/**
+ * DCE lu pour les fréquences (T6G-4, T6G-9) : tableaux de PDF réécrits en lignes « a | b », chaque ligne de tableau (ou ligne
+ * étiquetée « … — En-tête: valeur ») est une phrase à part, et un intitulé (« ARTICLE 10 – CONTRÔLES ET SUIVI ») n'est jamais
+ * collé à la phrase qui le suit.
+ */
+function dcePourFrequences(dce: string): string {
+  return tableauxEnColonnes(dce).split('\n').map((l) => {
+    const t = l.trim();
+    if (/\|/.test(t) || /\s[—–]\s[^:|]{2,60}:\s*\S/.test(t)) return `\n\n${t.replace(/[.;]?\s*$/, '')}.\n\n`;
+    if (/^(?:ARTICLE|Article|CHAPITRE|Chapitre|TITRE|PARTIE)\b|^\d{1,2}(?:[.\-–]\s?\d{1,2})*[.\-–]?\s+[A-ZÉÈ]/.test(t) && t.length <= 120 && !/[.;:!?]$/.test(t)) return `\n\n${t}.\n\n`;
+    return l;
+  }).join('\n');
+}
+
+/** « quatre (4) », « 4 (quatre) » : une seule valeur, le chiffre (T6G-6) ; la citation à GSS garde le texte du DCE. */
+export function sansNombreDouble(t: string): string {
+  return String(t || '')
+    .replace(new RegExp(String.raw`(?<![\p{L}\d-])(?:${RX_NOMBRE_LETTRES})\s*\(\s*(\d{1,3})\s*\)`, 'giu'), '$1')
+    .replace(new RegExp(String.raw`(?<![\p{L}\d])(\d{1,3})\s*\(\s*(?:${RX_NOMBRE_LETTRES})\s*\)`, 'giu'), '$1');
+}
+
 /** Fréquence des réunions de suivi imposée par le DCE (une seule fréquence citée, sinon ''). */
 export function frequenceReunionsDce(dce: string): string {
-  const trouvees = new Map<string, boolean>();
-  for (const ph of phrasesDuDce(dce)) {
-    if (!/r[ée]unions?/i.test(ph)) continue;
-    for (const prop of ph.split(/\s*;\s*/)) {
-      if (!/r[ée]unions?/i.test(prop)) continue;
+  const trouvees = new Map<string, { minimum: boolean; suivi: boolean }>();
+  for (const ph of phrasesDuDce(dcePourFrequences(dce))) {
+    if (!RX_REUNION.test(ph)) continue;
+    for (const prop of sansNombreDouble(ph).split(/\s*;\s*/)) {
+      if (!RX_REUNION.test(prop)) continue;
       for (const [rx, lib] of FREQUENCES) {
         for (const m of prop.matchAll(new RegExp(rx.source, 'gi'))) {
           if (!frequenceDeLaReunion(prop, m.index!, m.index! + m[0].length)) continue;
           const libelle = typeof lib === 'string' ? lib : lib(m);
           if (!libelle) continue;
-          trouvees.set(libelle, (trouvees.get(libelle) || false) || /au (?:minimum|moins)/i.test(prop));
+          const avant = trouvees.get(libelle);
+          trouvees.set(libelle, {
+            minimum: (avant?.minimum || false) || /au (?:minimum|moins)|a minima/i.test(prop),
+            // Réunion (ou comité, point) DE SUIVI : c'est elle que le texte de GSS décrit, jamais le comité de pilotage, la
+            // réunion de bilan ou de coordination.
+            suivi: (avant?.suivi || false) || (/(?:r[ée]unions?|comit[ée]s?|points?)\s+(?:\S+\s+){0,2}?de\s+suivi/i.test(prop) && !/pilotage|bilan|coordination/i.test(prop)),
+          });
         }
       }
     }
   }
-  if (trouvees.size !== 1) return '';
-  const [[libelle, minimum]] = [...trouvees.entries()];
+  // Plusieurs fréquences (comité de pilotage chaque trimestre, comité de suivi toutes les deux semaines) : celle de la réunion de
+  // suivi quand elle est seule.
+  let retenues = [...trouvees.entries()];
+  if (retenues.length > 1) retenues = retenues.filter(([, x]) => x.suivi);
+  if (retenues.length !== 1) return '';
+  const [[libelle, { minimum }]] = retenues;
   return minimum ? `au minimum ${libelle}` : libelle;
 }
 
 /** Phrase du DCE qui fixe la fréquence des réunions de suivi ('' si aucune) : l'exigence citée à GSS (D8, T2-CONS-4). */
 export function phraseFrequenceReunionsDce(dce: string): string {
   const trouvees: string[] = [];
-  for (const ph of phrasesDuDce(dce)) {
-    if (!/r[ée]unions?/i.test(ph)) continue;
+  for (const ph of phrasesDuDce(dcePourFrequences(dce))) {
+    if (!RX_REUNION.test(ph)) continue;
     let ok = false;
-    for (const prop of ph.split(/\s*;\s*/)) {
+    for (const prop of sansNombreDouble(ph).split(/\s*;\s*/)) {
       for (const [rx] of FREQUENCES) for (const m of prop.matchAll(new RegExp(rx.source, 'gi'))) if (frequenceDeLaReunion(prop, m.index!, m.index! + m[0].length)) ok = true;
     }
     if (ok) trouvees.push(ph);
@@ -2132,7 +2284,8 @@ export function phraseFrequenceReunionsDce(dce: string): string {
   // Phrase du corps de l'article (avec son verbe) avant un intitulé d'article sans verbe (« a. Réunions de suivi mensuelles »,
   // imm, T4N-4) : c'est elle qui fixe la fréquence.
   const phrase = (x: string) => /[.!?]$/.test(x) || /\b(?:est|sont|sera|seront|doit|doivent|devra|devront|participe\w*|organis\w*|tien(?:t|nent|dra|dront)|a lieu|ont lieu|aura lieu|auront lieu|se r[ée]uni\w*|r[ée]unit|pr[ée]voi\w*)\b/i.test(x);
-  return trouvees.find(phrase) || trouvees[0] || '';
+  const suivi = (x: string) => /(?:r[ée]unions?|comit[ée]s?|points?)\s+(?:\S+\s+){0,2}?de\s+suivi/i.test(x) && !/pilotage|bilan|coordination/i.test(x);
+  return trouvees.find((x) => phrase(x) && suivi(x)) || trouvees.find(phrase) || trouvees[0] || '';
 }
 
 /** Fondement juridique de la reprise CITÉ PAR LE DCE (jamais d'article L. 1224-1 si le DCE ne le cite pas). */
@@ -2172,9 +2325,10 @@ export function qualificationsDuDce(dce: string, analyse?: any): string[] {
   if (/SSIAP\s*(?:1|I)(?![\wÀ-ÿ])|SSIAP(?!\s*(?:[23]|II))/i.test(t)) out.push('SSIAP 1');
   // CQP APS et ses équivalents : C.Q.P.A.D.S., CQP ADS, certificat des agents de sécurité, TFP APS (titre qui l'a remplacé),
   // T1-GEN-10, T1F-13.
-  if (/C\.?\s?Q\.?\s?P\.?\s?-?\s?A\.?\s?[PD]\.?\s?S(?![\wÀ-ÿ])|CQPAPS|certificat de qualification professionnelle (?:d.|des\s+)agents?\s+de\s+(?:pr[ée]vention|s[ée]curit[ée])|(?<![\wÀ-ÿ])TFP\s*-?\s*APS(?![\wÀ-ÿ])|titre [àa] finalit[ée] professionnelle d.agent de pr[ée]vention|(?<![\wÀ-ÿ])(?:CQP|TFP|titre\s+[àa]\s+finalit[ée]\s+professionnelle|certificat\s+de\s+qualification\s+professionnelle)\s*[«"“]?\s*(?:d['’]\s*|de\s+l['’]\s*)?agents?\s+de\s+pr[ée]vention\s+et\s+de\s+s[ée]curit[ée]/i.test(t)) out.push('CQP APS');
-  if (/(?<![\wÀ-ÿ])SST(?![\wÀ-ÿ])|sauveteur secouriste du travail/i.test(t)) out.push('SST');
-  if (/PSC\s*1/i.test(t)) out.push('PSC1');
+  if (/C\.?\s?Q\.?\s?P\.?\s?-?\s?A\.?\s?[PD]\.?\s?S(?![\wÀ-ÿ])|CQPAPS|certificat de qualification professionnelle (?:d.|des\s+)agents?\s+de\s+(?:pr[ée]vention|s[ée]curit[ée])|(?<![\wÀ-ÿ])TFP\s*-?\s*APS(?![\wÀ-ÿ])|titre [àa] finalit[ée] professionnelle d.agent de pr[ée]vention|(?<![\wÀ-ÿ])(?:CQP|TFP|titre\s+[àa]\s+finalit[ée]\s+professionnelle|certificat\s+de\s+qualification\s+professionnelle)\s*[«"“]?\s*(?:d['’]\s*|de\s+l['’]\s*)?agents?\s+de\s+pr[ée]vention\s+et\s+de\s+s[ée]curit[ée]|certificat\s+de\s+qualification\s+professionnelle\s*[«"“(]?\s*A\.?\s?[PD]\.?\s?S\.?(?![\wÀ-ÿ])/i.test(t)) out.push('CQP APS');
+  // Sigles à points ramenés à leur forme (T6G-13) : « S.S.T. » = SST, « P.S.C.1 » = PSC1.
+  if (/(?<![\wÀ-ÿ])(?:SST|S\.\s?S\.\s?T\.?)(?![\wÀ-ÿ])|sauveteurs?[\s-]+secouristes?\s+du\s+travail/i.test(t)) out.push('SST');
+  if (/(?<![\wÀ-ÿ])P\.?\s?S\.?\s?C\.?\s*-?\s*1(?!\d)/i.test(t)) out.push('PSC1');
   // Habilitation électrique : le niveau écrit par le DCE (T4G-5 : « BS-BE manœuvre », « HO/BE Manœuvre », « H0B0V/BE », « B1V »,
   // « BR »), jamais ramené à H0B0 ; H0B0 (ou H0V) quand c'est le niveau demandé ou qu'aucun niveau n'est écrit.
   const niveaux = niveauxHabilitation(t);
@@ -2801,12 +2955,29 @@ export function frequenceInopinesDce(dce: string): { valeur: string; mensuels: s
   // ligne qui nomme les contrôles inopinés compte N contrôles par mois.
   // Ligne « libellé : valeur » qui nomme les contrôles inopinés (T5G-8 : « Contrôles inopinés : 4 par mois minimum »,
   // « … : 4/mois ») : même réécriture.
-  const lignes = String(dce || '').replace(/\r/g, '').split('\n').map((l) => (/\|/.test(l) || /\s[—–]\s[^:|]{2,60}:\s*\S/.test(l) || (/inopin/i.test(l) && /^[^:.]{3,80}:\s*\S/.test(l)) ? `\n${/inopin/i.test(l) ? l.replace(/(?<![\p{L}\d])(\d+)\s*\/\s*(mois|semaine)(?![\p{L}])/giu, '$1 contrôles par $2').replace(/(?<![\p{L}\d])(\d+|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix)\s+(?:fois\s+)?par\s+(mois|semaine)(?![\p{L}])/giu, '$1 contrôles par $2') : l}.\n` : l)).join('\n');
-  for (const ph of lignes.replace(/\s+/g, ' ').split(/(?<=[.;])\s+/)) {
-    if (!/inopin/i.test(ph) || /p[ée]nalit|€/i.test(ph)) continue;
-    const n = frequenceMensuelle(ph);
+  const lignes = dcePourFrequences(dce).replace(/\r/g, '').split('\n').map((l) => (/\|/.test(l) || /\s[—–]\s[^:|]{2,60}:\s*\S/.test(l) || (/inopin/i.test(l) && /^[^:.]{3,80}:\s*\S/.test(l)) ? `\n${/inopin/i.test(l) ? l.replace(/(?<![\p{L}\d])(\d+)\s*\/\s*(mois|semaine)(?![\p{L}])/giu, '$1 contrôles par $2').replace(/(?<![\p{L}\d])(\d+|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix)\s+(?:fois\s+)?par\s+(mois|semaine)(?![\p{L}])/giu, '$1 contrôles par $2') : l}.\n` : l)).join('\n');
+  // Proposition qui nomme les contrôles inopinés (REG6-4) : la phrase est coupée sur « ; » et sur « , » / « et » devant un
+  // nouveau sujet ou un nouvel objet (« L'agent effectue des rondes 3 fois par nuit et le titulaire organise des contrôles
+  // inopinés », « … des contrôles inopinés de ses agents et une ronde de fermeture 5 fois par semaine ») ; la fréquence n'est
+  // lue que dans la proposition des contrôles inopinés, jamais dans celle d'une ronde, d'une réunion ou d'un rapport.
+  const propositions = (ph: string) => ph.split(/\s*;\s*|,?\s+et\s+(?=(?:le|la|les|l['’]|un|une|des|du|il|elle|ils|elles|chaque|ses|son|sa|leurs?)\s|l['’])|,\s+(?=(?:le|la|les|l['’]|un|une|des|il|elle|ils|elles)\s|l['’])/i);
+  const AUTRE_OBJET = /(?<![\p{L}])(?:rondes?|r[ée]unions?|rapports?|bilans?|patrouilles?|tourn[ée]es?|vacations?|relev[ée]s?|plannings?)(?![\p{L}])/iu;
+  for (const brute of lignes.replace(/\s+/g, ' ').split(/(?<=[.;])\s+/)) {
+    if (!/inopin/i.test(brute) || /p[ée]nalit|€/i.test(brute)) continue;
+    // Groupes « N contrôles (inopinés) mensuels / hebdomadaires » et « au nombre de N par mois » (T6G-6) : « N contrôles par mois ».
+    const ph = sansNombreDouble(brute)
+      .replace(/(?<![\p{L}\d])(\d+|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix)\s+(contr[ôo]les?|visites?|passages?)((?:\s+inopin[ée]e?s?)?)\s+(mensuel(?:le)?s?|hebdomadaires?|quotidien(?:ne)?s?|journali[eè]re?s?)(?![\p{L}])/giu,
+        (_m, n: string, c: string, i: string, p: string) => `${n} ${c}${i} par ${/^m/i.test(p) ? 'mois' : /^h/i.test(p) ? 'semaine' : 'jour'}`)
+      .replace(/au\s+nombre\s+de\s+(\d+|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix)\s+par\s+(mois|semaine|jour)/giu, '$1 contrôles par $2');
+    const prop = propositions(ph).find((x) => /inopin/i.test(x) && frequenceMensuelle(x) !== null);
+    if (!prop) continue;
+    // Un autre objet (ronde, réunion, rapport…) entre la mention des contrôles inopinés et la fréquence : pas leur fréquence.
+    const iInop = prop.search(/inopin/i);
+    const iFreq = prop.search(/(?:une|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+(?:fois|contr[ôo]les?|visites?|passages?)/i);
+    if (iFreq >= 0 && AUTRE_OBJET.test(prop.slice(Math.min(iInop, iFreq), Math.max(iInop, iFreq)))) continue;
+    const n = frequenceMensuelle(prop);
     if (n === null || n <= 3) continue;
-    const f = normaliser(ph);
+    const f = normaliser(prop);
     const m = /(au moins|au minimum|minimum)?\s*(une|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+(?:fois|controles?|visites?|passages?)(?:\s+inopines?)?\s+(?:par|chaque|tous les|toutes les)\s+(jour|nuit|semaine|mois)/.exec(f);
     const nb = m ? (NOMBRES_FOIS[m[2]] ?? (Number(m[2]) || ({ sept: 7, huit: 8, neuf: 9, dix: 10 } as Record<string, number>)[m[2]] || 1)) : 1;
     const per = m ? m[3] : /hebdomadaire|semaine/.test(f) ? 'semaine' : 'mois';
@@ -2816,7 +2987,7 @@ export function frequenceInopinesDce(dce: string): { valeur: string; mensuels: s
     // Mois de quatre semaines au moins : « une fois par semaine » donne au moins quatre contrôles par mois.
     const parMois = per === 'semaine' ? Math.floor(n) : Math.ceil(n);
     const mensuels = `au moins ${LETTRES[parMois] || parMois} contrôle${parMois > 1 ? 's' : ''} inopiné${parMois > 1 ? 's' : ''}`;
-    return { valeur, mensuels, phrase: ph.trim() };
+    return { valeur, mensuels, phrase: brute.trim() };
   }
   return null;
 }

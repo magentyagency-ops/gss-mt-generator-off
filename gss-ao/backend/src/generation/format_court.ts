@@ -24,7 +24,7 @@ const RX_PAGES = String.raw`\(?(?<![\p{L}\d])(\d{1,3}|${RX_NOMBRE_LETTRES})\)?\s
 const RX_PAGES_INVERSE = String.raw`nombre\s+(?:maxim(?:al|um)\s+)?de\s+(?:pages|feuillets|feuilles|faces)[^.;]{0,90}?(?:limit[ée]e?|fix[ée]e?|plafonn[ée]e?|maxim\p{L}*|ne\s+(?:doit|peut|devra|pourra)\s+(?:pas\s+)?(?:d[ée]passer|exc[ée]der)|est\s+de)\s*(?:[àa]\s+)?(\d{1,3}|${RX_NOMBRE_LETTRES})(?![\p{L}\d])`;
 const valeurNombre = (a?: string, b?: string): number => (b && /^\d+$/.test(b) ? Number(b) : nombreFr(String(a || '')));
 /** Durée ou mention de forme qui n'est jamais une limite : « hors annexes », « annexes non comprises ». */
-const HORS_ANNEXES = /hors\s+annexes?|annexes?\s+(?:non\s+comprises?|exclues?|en\s+sus|non\s+compt[ée]es?)|sans\s+(?:les\s+)?annexes?|(?:non\s+compris|en\s+dehors\s+des?)\s+(?:les\s+)?annexes?/gi;
+const HORS_ANNEXES = /hors\s+annexes?|(?:les\s+)?annexes?\s+(?:non\s+comprises?|exclues?|en\s+sus|non\s+compt(?:[ée]es?|abilis[ée]es?)|n['’]\s*[ée]tant\s+pas\s+(?:compt[ée]es?|comptabilis[ée]es?|comprises?|incluses?)|ne\s+(?:sont|seront)\s+pas\s+(?:compt[ée]es?|comptabilis[ée]es?|comprises?|incluses?))|sans\s+(?:les\s+)?annexes?|(?:non\s+compris|en\s+dehors\s+des?)\s+(?:les\s+)?annexes?/gi;
 
 export interface PartieCourte { id: string; title: string; attendu?: string }
 export interface FormatImpose {
@@ -126,7 +126,10 @@ export function limitePagesMemoire(passages: string[]): { pages: number; citatio
       if (RX_LIMITE_PAR_PARTIE.test(ph.slice(m.index + m[0].length, m.index + m[0].length + 60))) continue;
       // « hors annexes », « annexes non comprises » : la limite porte bien sur le mémoire (T1-GEN-1) ; « renvoyer à des annexes
       // dans la limite de 10 pages » (rouen_univ) : la limite porte sur les annexes.
-      const voisinage = ph.slice(Math.max(0, Math.min(iMem, m.index) - 40), Math.max(iMem, m.index) + m[0].length + 20).replace(HORS_ANNEXES, ' ');
+      // Mention « annexes non comprises » retirée de la phrase entière AVANT la découpe du voisinage (T6G-12) : coupée à
+      // « annexes non c… », elle n'était plus reconnue et la limite était écartée comme portant sur les annexes.
+      const sansHors = ph.replace(HORS_ANNEXES, (x) => ' '.repeat(x.length));
+      const voisinage = sansHors.slice(Math.max(0, Math.min(iMem, m.index) - 40), Math.max(iMem, m.index) + m[0].length + 20);
       if (AUTRE.test(voisinage)) continue;
       return { pages: n, citation: ph.replace(/^\s*[–—•-]\s*/, '').trim().slice(0, 300) };
     }

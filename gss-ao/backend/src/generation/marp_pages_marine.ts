@@ -18,7 +18,9 @@ export const LIMITES_MARINE_V3 = { mots: 600, lignes: 47, caracteres: 75, ligneT
 export const SEUIL_TEXTE_COURT = 1300;
 
 const echapper = (t: string) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const apostrophes = (t: string) => t.replace(/(?<=\w)'(?=\w)/g, '’');
+// Apostrophe typographique entre deux lettres, lettres accentuées comprises (T6N-7 : « L'équipe », « d'être », « d'ébriété »),
+// comme typoV3 : couverture, sommaire, ouvertures de bloc, surtitre et encadré « L'essentiel ».
+const apostrophes = (t: string) => t.replace(/(?<=[A-Za-z0-9À-ÖØ-öø-ÿŒœ])'(?=[A-Za-z0-9À-ÖØ-öø-ÿŒœ])/g, '’');
 const norm = (t: string) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[’']/g, "'").replace(/\s+/g, ' ').trim().toLowerCase();
 
 /** Typographie de rendu des pages du style v3 (comme la planche) : apostrophe typographique entre deux lettres et

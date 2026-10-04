@@ -811,8 +811,9 @@ export function lotsDuMemoireDce(analyse: any, dce: string, propre: (v: unknown)
   const noms = [...String(dce || '').matchAll(/\n\n--- (.+?) ---\n|===== PIÈCE : (.+?) =====/g)].map((m) => m[1] || m[2] || '');
   const numeros = (nom: string): string[] => {
     // Numéro de lot, jamais une référence de contrat (« lots 54.6.09 et 54.6.10 »).
-    const m = /\blots?\s*(?:n\s*[°o.]?\s*)?(\d{1,3})(?!\d|[.,]\d)((?:\s*(?:,|et|&|-|à)\s*(?:(?:lot\s*)?n\s*[°o.]?\s*)?\d{1,3}(?!\d|[.,]\d))*)/i.exec(nom.replace(/_/g, ' '));
-    return m ? [...`${m[1]}${m[2] || ''}`.matchAll(/\d{1,3}/g)].map((x) => numeroDeLot(x[0])) : [];
+    // Séparateur entre « lot » et le numéro (« LOT-2 », « lot#2 ») et numéro romain (« Lot II ») acceptés (T6G-11).
+    const m = /(?<![\p{L}\d])lots?\s*[-#]?\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}(?!\d|[.,]\d)|[IVX]{1,4}(?![\p{L}\d]))((?:\s*(?:,|et|&|-|à)\s*(?:(?:lot\s*)?n\s*[°ºo.]?\s*)?(?:\d{1,3}(?!\d|[.,]\d)|[IVX]{1,4}(?![\p{L}\d])))*)/iu.exec(nom.replace(/_/g, ' '));
+    return m ? [...`${m[1]}${m[2] || ''}`.matchAll(/\d{1,3}|(?<![\p{L}])[IVX]{1,4}(?![\p{L}])/giu)].map((x) => numeroDeLot(x[0], lettres)) : [];
   };
   const memoireCommun = noms.find((n) => /cadre|m[ée]moire/i.test(n) && numeros(n).length > 1);
   if (memoireCommun) return { lots: numeros(memoireCommun) };
@@ -838,10 +839,10 @@ export function perimetreDuLot(analyse: any, dce: string): { analyse: any; dce: 
   const lot = num(r.lots[0]);
   // Têtes de lot (T3G-4) : « Lot 2 : », « Lot n° 2 – », « Lot 2 (», mais aussi « LOT 02 » ou « LOT 2 GARDIENNAGE … » seul en tête
   // de ligne, « pour le lot 2 » / « au titre du lot 2 », et la ligne d'un tableau dont la première colonne est « Lot ».
-  const TETE = /(?:^|(?<=[.;]\s{1,3}))(?:[-•▪*]\s*)?lot\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/])\s*(?:[:–—-]|\()/gi;
-  const TETE_LIGNE = /^\s*(?:[-•▪*]\s*)?lot\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/])\s*(?:$|[A-ZÉÈ«"(]|[-–—:])/i;
+  const TETE = /(?:^|(?<=[.;]\s{1,3}))(?:[-•▪*]\s*)?lot(?:\s*n\s*[°ºo.]?\s*(?=[\dIVX])|\s+|(?=\d))(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/'’])\s*(?:[:–—-]|\()/gi;
+  const TETE_LIGNE = /^\s*(?:[-•▪*]\s*)?lot(?:\s*n\s*[°ºo.]?\s*(?=[\dIVX])|\s+|(?=\d))(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/'’])\s*(?:$|[A-ZÉÈ«"(]|[-–—:])/i;
   // « s’agissant du lot » avec l'apostrophe typographique des PDF (T4-REG-1).
-  const TETE_PHRASE = /(?:pour|au titre du|concernant|s['’]agissant du)\s+(?:le\s+)?lot\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/])/gi;
+  const TETE_PHRASE = /(?:pour|au titre du|concernant|s['’]agissant du)\s+(?:le\s+)?lot(?:\s*n\s*[°ºo.]?\s*(?=[\dIVX])|\s+|(?=\d))(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/'’])/gi;
   // Passage de plusieurs lots ou de tous les lots (T4-REG-1, citedia2 : « Pour les lots 1 et 2, la phase de préparation
   // comprendra… » ; havre1 : « Pour chacun des lots, la durée du contrat… ») : commun (« * ») si le lot du mémoire en est,
   // sinon d'un autre lot. Seulement en tête de phrase et pour cette phrase (T5-REG-3) : « Comme pour chaque lot, … » ou « Les
@@ -874,9 +875,56 @@ export function perimetreDuLot(analyse: any, dce: string): { analyse: any; dce: 
   let tableauLots = false;
   const lignes: string[] = [];
   const autre = (n: string | null) => !!n && n !== lot && n !== '*';
+  // Intitulé de lot (T6G-1) : ligne d'intitulé (pièce exclue) qui nomme un seul lot, où que soit la mention (« ARTICLE 5 – LOT 1 :
+  // … », « TITRE II – DISPOSITIONS PARTICULIÈRES AU LOT N°1 », « CHAPITRE 2 – LOT 1 – … », « PARTIE A – DISPOSITIONS PROPRES AU
+  // LOT 1 (LILLE) », « LOT N°1 – GARDIENNAGE LILLE »). Son passage ne se ferme que sur un intitulé de même rang ou de rang
+  // supérieur (autre intitulé de lot, même famille ARTICLE / TITRE / CHAPITRE / PARTIE ou famille supérieure, même niveau de
+  // numérotation), sur une nouvelle pièce ou sur un intitulé des dispositions communes ; les sous-intitulés plus profonds
+  // (« 1.1 Lieu », « 5.1 … », titres isolés « Lieu », « Délais ») restent dans le lot.
+  type Rang = { num: string; famille: number | null; numero: number | null; profondeur: number | null; lot: boolean };
+  const FAMILLES: Record<string, number> = { partie: 1, titre: 2, chapitre: 3, section: 4, article: 5 };
+  const familleDe = (l: string): { rang: number; numero: number | null } | null => {
+    const m = /^\s*(PARTIE|TITRE|CHAPITRE|SECTION|ARTICLE)\b\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[IVX]{1,4}|[A-Z])?/i.exec(l);
+    if (!m || !/^[A-ZÀ-Ý]/.test(m[1])) return null;
+    return { rang: FAMILLES[m[1].toLowerCase()], numero: m[2] ? Number(numeroDeLot(m[2])) || null : null };
+  };
+  const numerotation = (l: string): { premier: number; profondeur: number } | null => {
+    const m = /^\s*(\d{1,2}(?:[-.–]\s?\d{1,2})*)(?:[-.–]\s*|\.?\s+)[A-ZÉÈ]/.exec(l);
+    return m ? { premier: Number(m[1].split(/[-.–]\s?/)[0]), profondeur: m[1].split(/[-.–]\s?/).length } : null;
+  };
+  const DISPOSITIONS_COMMUNES = /commun(?:e|es|s)?\b|tous\s+les\s+lots|l['’]ensemble\s+des\s+lots|chacun\s+des\s+lots|aux\s+lots|lots\s+confondus/i;
+  const intituleDeLot = (l: string, i: number): Rang | null => {
+    if (/^\s*(?:--- .+ ---|===== PIÈCE)/.test(l) || DISPOSITIONS_COMMUNES.test(l) || /lots\s*(?:n\s*[°ºo.]?\s*)?\d/i.test(l)) return null;
+    const estIntitule = RUPTURE.test(l) || titreCapitales(l.replace(/^\s*(?:[-•▪*]\s*)?lots?\b/i, 'X')) || titreIsole(i);
+    const ligneDeLot = TETE_LIGNE.test(l) && !TETE_LIGNE.test(toutes[i - 1] || '') && !TETE_LIGNE.test(toutes[i + 1] || '') && l.trim().length <= 120 && !/[.;]\s*$/.test(l.trim());
+    if (!estIntitule && !ligneDeLot) return null;
+    const mentions = [...l.matchAll(/(?<![\p{L}])lot(?:\s*n\s*[°ºo.]?\s*(?=[\dIVX])|\s+|(?=\d))(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/'’])/giu)].map((m) => num(m[1]));
+    if (!mentions.length || new Set(mentions).size !== 1) return null;
+    const f = familleDe(l);
+    const n = numerotation(l);
+    return { num: mentions[0], famille: f?.rang ?? null, numero: f?.numero ?? n?.premier ?? null, profondeur: f ? null : n?.profondeur ?? null, lot: /^\s*(?:[-•▪*]\s*)?lots?\b/i.test(l) };
+  };
+  let ouvert: Rang | null = null;
+  const resteDansLeLot = (o: Rang, l: string, i: number): boolean => {
+    if (/^\s*(?:--- .+ ---|===== PIÈCE)/.test(l) || DISPOSITIONS_COMMUNES.test(l)) return false;
+    const f = familleDe(l);
+    if (f) return o.famille !== null && f.rang > o.famille;
+    const n = numerotation(l);
+    if (n) {
+      if (o.famille !== null) return o.numero === null || n.premier === o.numero;
+      if (o.profondeur !== null) return n.profondeur > o.profondeur;
+      return n.profondeur >= 2;
+    }
+    // Titre en capitales, titre Markdown, lettre (« B. Délais ») ou ligne isolée : sous-intitulé du lot.
+    return true;
+  };
   toutes.forEach((ligne, i) => {
     if (vide(ligne) && listeLots) { courant = null; listeLots = false; restaurer = undefined; }
-    if (RUPTURE.test(ligne) || titreCapitales(ligne) || titreIsole(i)) { courant = null; restaurer = undefined; listeLots = false; }
+    const intitule = intituleDeLot(ligne, i);
+    if (intitule) { courant = null; restaurer = undefined; listeLots = false; ouvert = intitule; }
+    else if (RUPTURE.test(ligne) || titreCapitales(ligne) || titreIsole(i)) {
+      if (!(ouvert && resteDansLeLot(ouvert, ligne, i))) { courant = null; restaurer = undefined; listeLots = false; ouvert = null; }
+    }
     // Tableau « | Lot | Site | Adresse | » : chaque rangée appartient au lot de sa première cellule.
     if (/^\s*\|?\s*lots?\s*(?:n\s*[°ºo.]?)?\s*\|/i.test(ligne)) { tableauLots = true; lignes.push(ligne); return; }
     if (tableauLots) {
@@ -898,7 +946,7 @@ export function perimetreDuLot(analyse: any, dce: string): { analyse: any; dce: 
     const communes = [...ligne.matchAll(TETE_COMMUNE)].filter((m) => enTete(m.index || 0)).map((m) => ({ pos: m.index || 0, num: '*', portee: true }));
     // Mention plurielle au milieu d'une phrase : la tête au singulier qu'elle contient (« lots 2 et 3 ») n'est pas une coupe.
     const plurielsMilieu = [...ligne.matchAll(TETE_PLURIEL)].filter((m) => !enTete(m.index || 0)).map((m) => ({ pos: m.index || 0, fin: (m.index || 0) + m[0].length }));
-    let coupes: Array<{ pos: number; num: string | null; portee?: boolean }> = tl ? [{ pos: 0, num: num(tl[1]) }] : [...[...ligne.matchAll(TETE), ...ligne.matchAll(TETE_PHRASE)].map((m) => ({ pos: m.index || 0, num: num(m[1]) })), ...pluriels, ...communes]
+    let coupes: Array<{ pos: number; num: string | null; portee?: boolean }> = intitule ? [{ pos: 0, num: intitule.num }] : tl ? [{ pos: 0, num: num(tl[1]) }] : [...[...ligne.matchAll(TETE), ...ligne.matchAll(TETE_PHRASE)].map((m) => ({ pos: m.index || 0, num: num(m[1]) })), ...pluriels, ...communes]
       .sort((a, b) => a.pos - b.pos)
       // Une tête de lot au singulier prise dans une mention plurielle (« lots 1 et 2 ») n'est pas une coupe à part.
       .filter((c, k, t) => !(c.num !== '*' && c.num !== '#' && (t.some((x) => (x.num === '*' || x.num === '#') && x.pos <= c.pos && c.pos - x.pos < 40) || plurielsMilieu.some((x) => c.pos >= x.pos && c.pos < x.fin))));
@@ -1623,7 +1671,7 @@ const MOTS_NOMBRES: Record<string, number> = {
   cinquante: 50, soixante: 60, cent: 100, cents: 100,
 };
 /** Nombre écrit en lettres, formes composées comprises (« vingt-cinq », « quatre-vingt-dix », « trente et un »). */
-export const RX_NOMBRE_LETTRES = String.raw`(?:z[ée]ro|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingts?|trente|quarante|cinquante|soixante|cents?)(?:(?:-et-|\s+et\s+|-)(?:une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingts?|cents?))*`;
+export const RX_NOMBRE_LETTRES = String.raw`(?:z[ée]ro|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingts?|trente|quarante|cinquante|soixante|cents?)(?:(?:-et-|\s+et\s+|-|(?<=cents?|vingts?|soixante|quatre)\s+(?=(?:dix|vingts?|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|onze|douze|treize|quatorze|quinze|seize)(?![\p{L}])))(?:une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingts?|cents?))*`;
 /** Valeur d'un nombre en lettres (« quatre-vingt-dix » → 90) ; NaN si illisible. Un nombre en chiffres est lu tel quel. */
 export function nombreFr(t: string): number {
   const x = String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -1652,6 +1700,50 @@ export function dureesEnMinutes(t: string): number[] {
     .map((m) => minutesDe(m[1], m[2])).filter((n) => Number.isFinite(n));
 }
 
+/**
+ * Cellules de tableau qui ne portent qu'une durée (« Levée de doute sur alarme | 30 minutes », T2-GEN-2) : « | dans 30 minutes ».
+ * Une heure écrite « HHhMM » ou « HH:MM » (« | 0h20 | », T5G-1) n'est lue comme durée que si la ligne (sa première cellule)
+ * ou l'en-tête de sa colonne nomme un délai (« délai », « sous », « au plus tard », « maximum », « temps d'intervention ») :
+ * l'heure d'un planning (« | Prise de service | 19h00 | », « | 21:00 | 07:00 | ») n'est jamais un délai (REG6-1). Une
+ * cellule ne s'étend jamais sur la ligne suivante.
+ */
+/**
+ * Une heure « HHhMM » / « HH:MM » d'une cellule (ou d'une ligne « libellé : valeur ») est-elle une durée (REG6-1) ? Oui quand le
+ * libellé (ligne ou en-tête de colonne) nomme un délai (« délai », « sous », « au plus tard », « maximum », « temps
+ * d'intervention ») ; ou quand elle fait moins de 3 heures (« 0h20 », « 2h00 ») sous une action de présence (« Intervention sur
+ * déclenchement d'alarme | 0h20 ») qui n'est pas un moment du planning (prise de poste ou de service, début, fin, relève,
+ * ouverture, fermeture). L'heure d'un planning (« | 19h00 | », « | 21:00 | 07:00 | ») n'est jamais un délai.
+ */
+export const NOMME_DELAI = /d[ée]lai|(?<![\p{L}])sous(?![\p{L}])|au\s+plus\s+tard|maxim|temps\s+d['’]\s*(?:intervention|arriv|r[ée]action|d[ée]placement)|temps\s+de\s+(?:d[ée]placement|r[ée]action)|dur[ée]e\s+(?:maximale|d['’]intervention)/iu;
+export function heureEstUnDelai(libelle: string, heure: string): boolean {
+  if (NOMME_DELAI.test(libelle)) return true;
+  const h = /^\s*(\d{1,2})\s*(?:h|:)/i.exec(heure);
+  if (!h || Number(h[1]) > 2) return false;
+  if (/prise\s+de\s+(?:poste|service)|d[ée]but|(?<![\p{L}])fin(?![\p{L}])|rel[èe]ve|ouverture|fermeture|horaire|heure|planning|vacation/iu.test(libelle)) return false;
+  return /interven|rempla[cç]|lev[ée]e\s+de\s+doute|arriv[ée]e|mobilisation|d[ée]placement/i.test(libelle);
+}
+
+function cellulesDeDelai(texte: string): string {
+  const DUREE_SEULE = /^[ \t]*\d{1,4}[ \t]*(?:minutes?|mn|min|heures?|h)(?![\p{L}\/])[ \t]*$/iu;
+  const HEURE_SEULE = /^[ \t]*\d{1,2}[ \t]*(?:h|:)[ \t]*[0-5]\d(?![\d\p{L}])[ \t]*$/iu;
+  const lignes = texte.split('\n');
+  let entete: string[] | null = null;
+  return lignes.map((ligne, i) => {
+    if (!/\|/.test(ligne)) { entete = null; return ligne; }
+    const cellules = ligne.split('|');
+    // En-tête : première ligne d'un bloc de lignes « | » (le séparateur « |---| » n'en est pas une).
+    if (/^[\s|:-]+$/.test(ligne)) return ligne;
+    if (!entete || !/\|/.test(lignes[i - 1] || '')) { entete = cellules; }
+    const libelleLigne = cellules.find((c, k) => k > 0 || c.trim()) || '';
+    return cellules.map((c, k) => {
+      if (k === 0) return c;
+      if (DUREE_SEULE.test(c)) return ` dans ${c.trim()}${/[ \t]$/.test(c) ? ' ' : ''}`;
+      if (HEURE_SEULE.test(c) && heureEstUnDelai(`${libelleLigne} ${entete && entete !== cellules ? entete[k] || '' : ''}`, c)) return ` dans ${c.trim()}${/[ \t]$/.test(c) ? ' ' : ''}`;
+      return c;
+    }).join('|');
+  }).join('\n');
+}
+
 export function normaliserExpressionsDelai(t: string): string {
   return String(t || '')
     // Nombre en lettres devant une unité de durée (T1-GEN-3 : « vingt-cinq minutes », « quatre-vingt-dix minutes »,
@@ -1660,6 +1752,15 @@ export function normaliserExpressionsDelai(t: string): string {
       const n = nombreFr(m);
       return Number.isFinite(n) ? String(n) : m;
     })
+    // « N (N) unité » (T6G-5 : « vingt-cinq (25) minutes » devenu « 25 (25) minutes », « 30 (trente) minutes ») : une seule
+    // valeur, le chiffre entre parenthèses faisant foi comme dans delaisDePhrase ; toutes les règles qui suivent s'appliquent
+    // alors sans cas particulier.
+    .replace(new RegExp(String.raw`(?<![\p{L}\d])(\d{1,4})\s*\(\s*(\d{1,4}|${RX_NOMBRE_LETTRES})\s*\)\s*(?=${UNITE_DUREE})`, 'giu'), (_m, a: string, b: string) => `${/^\d+$/.test(b) ? Number(b) : a} `)
+    // Temps d'intervention, d'arrivée, de déplacement ou de réaction : un délai (T6G-5 : « le temps d'intervention garanti est
+    // de 20 minutes », « garantit un temps d'arrivée sur site de 20 minutes »).
+    .replace(/(?<![\p{L}])temps(?=\s+(?:maxim(?:al|um)\s+)?(?:d['’]\s*(?:intervention|arriv[ée]e|attente)|de\s+(?:d[ée]placement|r[ée]action|r[ée]ponse|mobilisation|remplacement|pr[ée]sence)))/giu, 'délai')
+    // « sera sur place 20 minutes maximum après l'appel », « 1 h au plus après » (T6G-5) : « dans 20 minutes ».
+    .replace(/(?<![\p{L}\d,.])(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)\s+(?:maximum|au\s+maximum|au\s+plus|maxi)\s+(?:apr[èe]s|[àa]\s+compter|suivant))/giu, 'dans ')
     // « d'1 heure » (ou « d'une heure » devenu « d'1 heure ») : « de 1 heure ».
     .replace(/(?<![\p{L}])d['’]\s*(?=\d{1,4}\s*(?:\(\s*[^()]{1,25}\)\s*)?(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/giu, 'de ')
     // « ½ heure », « 1/2 h », « demi heure » (T2-COH-7) : une demi-heure.
@@ -1697,7 +1798,7 @@ export function normaliserExpressionsDelai(t: string): string {
     .replace(/(?<![\p{L}])(dispos\p{L}*)\s+(?:d['’]un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?de\s+|de\s+)(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}])\s+pour\s)/giu, '$1 dans ')
     // Cellule de tableau qui ne porte que la durée (« Levée de doute sur alarme | 30 minutes », T2-GEN-2) : « | dans 30 minutes ».
     // (durée écrite en heures et minutes, « 0h20 », « 2h00 », « 01h00 », « 0 h 20 », T5G-1 : convertie plus bas)
-    .replace(/\|\s*(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}\/])\s*(?:\||$)|\d{1,2}\s*(?:h|:)\s*[0-5]\d(?![\d\p{L}])\s*(?:\||$))/gimu, '| dans ')
+    .replace(/[\s\S]+/, (tout) => cellulesDeDelai(tout))
     .replace(/(d[ée]lais?(?:\s+maxim(?:al|um))?\b[^.;:]{0,90}?)\s*:\s*(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}\d])|\d{1,2}\s*(?:h|:)\s*[0-5]\d(?![\d\p{L}])(?!\s*(?:à|a|-|–)\s*\d))/giu, '$1 dans ')
     .replace(/(?<![\p{L}])au\s+maximum\s+(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/giu, 'dans ')
     .replace(/\bdans l['’]heure(?![a-zà-ÿ])/gi, 'dans 1 heure')
@@ -2109,7 +2210,13 @@ function positionInterditPhoto(p: string): number {
 const RX_INTERDIT_PHOTOS = { test: (p: string) => positionInterditPhoto(p) >= 0, exec: (p: string) => { const i = positionInterditPhoto(p); return i >= 0 ? { index: i } : null; } };
 
 /** Rondes imposées à pied (T1-GEN-6 : « se font exclusivement à pied », « Toutes les rondes sont pédestres »). */
-export const RX_RONDES_A_PIED = /rondes?[^.]{0,60}(?:se font|se feront|sont|seront|effectu[ée]es|r[ée]alis[ée]es|faites|assur[ée]es)\s+(?:(?:exclusivement|uniquement|obligatoirement|imp[ée]rativement|toujours)\s+)?(?:[àa] pied|p[ée]destres?)|rondes? p[ée]destres?/i;
+/**
+ * Rondes imposées à pied (T6G-8) : règle de forme, quel que soit le verbe (« sont effectuées », « s'effectuent »,
+ * « s'effectueront », « se déroulent », « doivent se faire »…) : « ronde(s) » suivi, dans la même proposition (60 signes),
+ * de « à pied », « pédestre(s) » ou « de manière / de façon pédestre ». Jamais une proposition niée (« ne … pas à pied »),
+ * une alternative (« en voiture ou à pied ») ni une phrase qui prévoit aussi un véhicule pour les rondes (« en véhicule »).
+ */
+export const RX_RONDES_A_PIED = /(?<![^.;]*(?:\ben|\bà|\bau moyen d['’]une?|\bpar)\s+(?:v[ée]hicules?|voitures?|v[ée]los?|trottinettes?|gyropodes?)(?![\p{L}])[^.;]*)(?<![\p{L}])rondes?(?![\p{L}])(?:(?!\bne\b|\bn['’]|\bpas\b|\bou\b|v[ée]hicule|voiture|v[ée]lo|motoris)[^.;]){0,60}?(?:[àa]\s+pied(?![\p{L}])|p[ée]destres?(?![\p{L}])|de\s+(?:mani[èe]re|fa[çc]on)\s+p[ée]destre)(?![^.;]*(?:\ben|\bà|\bau moyen d['’]une?|\bpar)\s+(?:v[ée]hicules?|voitures?|v[ée]los?|trottinettes?|gyropodes?)(?![\p{L}]))/iu;
 const RX_EXCEPTION_PHOTOS = /(?:ne s.applique pas|n.est pas applicable|ne concerne pas|à l.exception d|sauf\b|excepté)[^.]{0,80}(?:photos?|photographies?|clichés)(?![a-zà-ÿ])/i;
 const RX_PHOTOS_EXIGEES = /(?:photos?|photographies?|clichés)\s+(?:justificatives?|de constat)|(?:rapports?|comptes? rendus?)[^.;]{0,120}(?:illustrés?|accompagnés?|comportant|assortis?)[^.;]{0,80}(?:photos?|photographies?)(?![a-zà-ÿ])/i;
 const RX_VIDEO = /(?<![a-zà-ÿ])vidéos?(?![a-zà-ÿ])/i;
@@ -2785,11 +2892,18 @@ export function contracterArticlesNomsPropres(texte: string): string {
  * mémoire (« 05h30 », « 21h30 ») ; nom commun d'une ronde, d'une tournée, d'une vacation ou d'une patrouille écrit avec une
  * capitale au milieu de la phrase (« Ronde d'Ouverture », « ronde de Fermeture ») mis en minuscule (jamais un nom de lieu).
  */
+/** Fêtes et dates qui prennent toujours une majuscule (« vacations de Noël », « rondes de Pâques ») : jamais mises en
+ *  minuscule par typographieDce, même quand le mot est aussi un nom commun du dictionnaire (REG6-5). */
+const FETES_MAJUSCULE = /^(?:no[eë]l|p[aâ]ques|pentec[oô]te|ascension|toussaint|assomption|[ée]piphanie|chandeleur|car[eê]me|ramadan|armistice|lib[ée]ration|f[eê]te|r[ée]veillon|saint|sainte|nouvel|jour|mardi|lundi|vendredi|mercredi|jeudi|samedi|dimanche|janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[uû]t|septembre|octobre|novembre|d[ée]cembre)$/i;
+
 export function typographieDce(texte: string): string {
   return String(texte || '')
     .replace(/(?<![\d\p{L}])(\d{1,2})[ \u00a0\u202f]*H[ \u00a0\u202f]*([0-5]\d)(?![\d\p{L}])/gu, '$1h$2')
-    .replace(/(?<![\p{L}])(rondes?|tourn[ée]es?|vacations?|patrouilles?|Rondes?|Tourn[ée]es?|Vacations?|Patrouilles?)([ \u00a0]+)(d['’]|de[ \u00a0]+|du[ \u00a0]+)([A-ZÀ-Ý])([a-zà-ÿ]+)(?![\p{L}])/gu,
-      (m, n: string, e: string, de: string, c: string, reste: string) => (motDuDictionnaire(`${c}${reste}`) && !estNomDeLieu(`${c}${reste}`) ? `${n}${e}${de}${c.toLowerCase()}${reste}` : m));
+    // Nom commun d'une ronde, tournée, vacation ou patrouille en minuscule (« ronde d'Ouverture » → « ronde d'ouverture »),
+    // jamais une fête ou une date (« vacations de Noël », « rondes de Pâques »), ni le premier mot d'un nom propre composé
+    // (« vacations du Nouvel An », « rondes de Saint-Sylvestre ») (REG6-5).
+    .replace(/(?<![\p{L}])(rondes?|tourn[ée]es?|vacations?|patrouilles?|Rondes?|Tourn[ée]es?|Vacations?|Patrouilles?)([ \u00a0]+)(d['’]|de[ \u00a0]+|du[ \u00a0]+)([A-ZÀ-Ý])([a-zà-ÿ]+)(?![\p{L}])(?![-\u2011][A-ZÀ-Ý]|[ \u00a0]+(?:[A-ZÀ-Ý]|de[ \u00a0]+l['’][A-ZÀ-Ý]))/gu,
+      (m, n: string, e: string, de: string, c: string, reste: string) => (motDuDictionnaire(`${c}${reste}`) && !estNomDeLieu(`${c}${reste}`) && !FETES_MAJUSCULE.test(`${c}${reste}`) ? `${n}${e}${de}${c.toLowerCase()}${reste}` : m));
 }
 
 export function nettoyerStructure(texte: string): string {
