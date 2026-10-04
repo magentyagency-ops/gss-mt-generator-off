@@ -2082,7 +2082,7 @@ export function estCahierDesCharges(nomPiece: string): boolean {
   // « Descriptif technique », « Descriptif des prestations » (MAPA, T2-COH-6) : la description technique de la prestation.
   // Autres noms courants du cahier des charges (T3G-2) : « Description des prestations », « Dossier technique », « Expression des
   // besoins », « Cahier technique », « Annexe technique », « Termes de référence », « Spécifications ».
-  return /cctp|(?<![a-z])ccp(?![a-z])|(?<![a-z])cdc(?![a-z])|cahier des (?:clauses|charges)|clauses techniques|prescriptions techniques|specifications techniques|programme fonctionnel|descriptif (?:technique|des prestations)|description (?:technique |detaillee )?des (?:prestations|besoins)|dossier technique|expression des besoins|cahier technique|annexe technique|termes de reference|(?<![a-z])specifications(?![a-z])/.test(n)
+  return /cctp|(?<![a-z])ccp(?![a-z])|(?<![a-z])cdc(?![a-z])|(?<![a-z])cpt(?![a-z])|cahier des (?:clauses|charges|prescriptions)|clauses techniques|prescriptions techniques|specifications techniques|programme fonctionnel|descriptif (?:technique|des prestations)|description (?:technique |detaillee )?des (?:prestations|besoins)|dossier technique|expression des besoins|cahier technique|annexe technique|termes de reference|(?<![a-z])specifications(?![a-z])/.test(n)
     || /cctp|cahierdes(?:clauses|charges)|clausestechniques|prescriptionstechniques|specificationstechniques|descriptif(?:technique|desprestations)|descriptiondesprestations|dossiertechnique|expressiondesbesoins|cahiertechnique|annexetechnique|termesdereference/.test(colle);
 }
 
@@ -2095,8 +2095,25 @@ export function estCahierDesChargesParContenu(nomPiece: string, corps: string): 
   if (estCahierDesCharges(nomPiece)) return true;
   if (estPieceAdministrative(nomPiece) || /annexe|plan|photo|(?<![a-z])bpu(?![a-z])|dpgf|dqe|(?<![a-z])ccap(?![a-z])/i.test(String(nomPiece || '').replace(/_/g, ' '))) return false;
   const debut = String(corps || '').slice(0, 3000);
-  if (/cahier\s+des\s+(?:clauses\s+techniques|clauses\s+particuli[eè]res|charges)|descri(?:ption|ptif)\s+(?:technique\s+|d[ée]taill[ée]e\s+)?des\s+(?:prestations|besoins)|expression\s+des\s+besoins|dossier\s+technique|termes\s+de\s+r[ée]f[ée]rence|sp[ée]cifications\s+techniques/i.test(debut)) return true;
+  // Titre de tête de la pièce (premières lignes non vides) : une pièce administrative mal nommée (acte d'engagement ATTRI1,
+  // règlement de la consultation, CCAP, bordereau, formulaire DC) n'est jamais un cahier des charges, même si elle cite « le
+  // cahier des clauses techniques particulières (CCTP) » dans la liste des pièces (T4-COH-1).
+  if (teteAdministrative(corps)) return false;
+  // Titre de cahier des charges en tête de la pièce (une ligne de titre, jamais une mention au milieu d'une phrase) ; « cahier
+  // des prescriptions techniques » (CPT) compris (T4-COH-10).
+  const TITRE_CDC = /cahier\s+des\s+(?:clauses\s+techniques|clauses\s+particuli[eè]res|charges|prescriptions(?:\s+techniques|\s+particuli[eè]res)?)|prescriptions\s+techniques|descri(?:ption|ptif)\s+(?:technique\s+|d[ée]taill[ée]e\s+)?des\s+(?:prestations|besoins)|expression\s+des\s+besoins|dossier\s+technique|termes\s+de\s+r[ée]f[ée]rence|sp[ée]cifications\s+techniques/i;
+  const lignesTete = debut.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 12);
+  if (lignesTete.some((l) => l.length <= 160 && TITRE_CDC.test(l) && !/\b(?:le|la|les|du|des|au|aux)\s+(?:pr[ée]sent\s+)?cahier\s+des\s+clauses\s+techniques\s+particuli[eè]res\s*\((?:cctp)\)/i.test(l) && !/^[a-zà-ÿ]/.test(l))) return true;
   return /article\s*1\b[^\n]{0,60}objet/i.test(debut) && /\ble\s+(?:titulaire|prestataire)\b/i.test(String(corps || '').slice(0, 8000)) && !/r[èe]glement\s+de\s+(?:la\s+)?consultation|acte\s+d.engagement|clauses\s+administratives/i.test(debut);
+}
+
+/**
+ * Pièce dont le titre de tête (premières lignes non vides) est celui d'une pièce administrative : acte d'engagement (ATTRI1),
+ * règlement de la consultation, CCAP, bordereau, détail quantitatif, formulaire DC ou DUME (T4-COH-1).
+ */
+export function teteAdministrative(corps: string): boolean {
+  const tete = String(corps || '').slice(0, 1500).split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 6).join('\n');
+  return /acte\s+d.engagement|(?<![a-z])attri\s?\d|r[èée]glement\s+de\s+(?:la\s+)?consultation|clauses\s+administratives|(?<![a-z])ccap(?![a-z])|bordereau|d[ée]tail\s+quantitatif|(?<![a-z])dc\s?[1-4](?![0-9])|(?<![a-z])dume(?![a-z])/i.test(tete);
 }
 
 /** Pièce sans exigence technique (RC, AE, bordereaux, formulaires, cadre de réponse, CCAP…). */
@@ -2105,6 +2122,13 @@ export function estPieceAdministrative(nomPiece: string): boolean {
   const brut = String(nomPiece || '').replace(/_/g, ' ');
   const nom = `${brut} ${brut.replace(/[_.\s-]+/g, '')}`;
   if (RX_CCATP.test(nom)) return false;
+  // Nom sans accents, « _ - . » lus comme des espaces, et sa forme collée (T4-COH-1, noms réels du corpus : « R_C.pdf »,
+  // « réglement de consultation.pdf », « Reglement-de-la-consultation.pdf », « Acte_engagement_2026-01-SECU.pdf »,
+  // « Acted_engagement.pdf », « ATTRI1_gardiennage.docx », « Cahierdesclausesadministrativesparticulieres.pdf »).
+  const n = String(nomPiece || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[_.\-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const colle = n.replace(/[^a-z0-9]+/g, '');
+  if (/(?:^|\s)r\s?c(?:\s|$)|reglement (?:de (?:la )?)?consultation|acte\s*(?:d\s*'?\s*)?engagement|(?:^|\s)attri\s?\d|cadre\s*(?:de\s*)?reponse/.test(n)
+    || /reglementdelaconsultation|reglementdeconsultation|actedengagement|acteengagement|clausesadministratives|cadrede?reponse/.test(colle)) return true;
   return /\bRC\b|r[èe]glement (?:de (?:la )?)?consultation|acte d.engagement|\bAE\b|DPGF|BPU|DQE|bordereau|\bDC\s?\d|attestation|cadre de r[ée]ponse|m[ée]moire|candidature|lettre|avis|ccap|clauses administratives/i.test(nom);
 }
 
@@ -2123,7 +2147,10 @@ export function textePreuvesIndicateurs(dce: string): string {
   const pieces: string[] = [];
   for (let i = 1; i < blocs.length; i += 3) {
     const nom = String(blocs[i] || blocs[i + 1] || '').replace(/_/g, ' ');
-    if (/acte\s*d.engagement|(?<![A-Za-z])AE(?![A-Za-z])|(?<![A-Za-z])DC\s?\d|attestation|candidature|fiche contact|(?<![A-Za-z])(?:RIB|AAPC)(?![A-Za-z])|avis d.appel/i.test(nom)) continue;
+    // Acte d'engagement sous tous ses noms (« Acte_engagement_2026-01-SECU.pdf », « Acted_engagement.pdf », « ATTRI1.pdf »,
+    // T4-COH-1) ou par son titre de tête.
+    if (/acte\s*(?:d\s*['’.]?\s*)?engagement|acted\s*engagement|(?<![A-Za-z])attri\s?\d|(?<![A-Za-z])AE(?![A-Za-z])|(?<![A-Za-z])DC\s?\d|attestation|candidature|fiche contact|(?<![A-Za-z])(?:RIB|AAPC)(?![A-Za-z])|avis d.appel/i.test(nom)
+      || /acte\s+d.engagement|(?<![a-z])attri\s?\d/i.test(String(blocs[i + 2] || '').slice(0, 1500).split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 6).join('\n'))) continue;
     pieces.push(blocs[i + 2] || '');
   }
   if (!pieces.length && !/--- .+? ---|===== PIÈCE/.test(dce || '')) pieces.push(String(dce || ''));
@@ -2246,7 +2273,10 @@ const PLAGE_HORAIRE = /\d{1,2}\s*(?:h|:)\s*\d{0,2}\s*(?:[àa]|-|–|jusqu['’]?
 const JOURS_HORAIRE = /(?:du\s+(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s+au|tous\s+les\s+jours|toutes\s+les\s+nuits|chaque\s+(?:jour|nuit)|en\s+semaine|week-?ends?|jours\s+f[ée]ri[ée]s|en\s+continu)/i;
 /** Sujet d'un horaire de service (agent présent, surveillance assurée, prestation réalisée…), jamais l'accès des usagers. */
 const SUJET_SERVICE = /(?<![\p{L}])(?:agents?|gardiens?|veilleurs?|ssiap|aps|rondiers?|chefs?\s+d['’]\s*[ée]quipe|ma[îi]tres?[- ]chiens?|pr[ée]sente?s?|assur\p{L}*|effectu\p{L}*|r[ée]alis\p{L}*|en\s+service|sur\s+(?:le\s+)?site|surveillance|gardiennage|s[ée]curit[ée]|s[ûu]ret[ée]|prestations?|continu)(?![\p{L}])/iu;
-const HORAIRE_RC = /remise\s+des\s+(?:offres|plis)|date\s+(?:et\s+heure\s+)?limite|r[ée]ception\s+des\s+(?:offres|plis)|ouverture\s+des\s+plis|visite\s+(?:obligatoire|du\s+site|des\s+lieux|sur\s+site)|questions?\s+(?:des\s+candidats|écrites)/i;
+// Horaires de la procédure, jamais du service (T4-COH-4, RC de citedia : fuseau « (GMT+01:00) Paris », « copie … sous pli
+// scellé … (horaires d'ouverture des bureaux : du Lundi au Vendredi de 09H00 à 12H30 ») : remise, transmission ou dépôt des
+// offres et des plis, copie de sauvegarde, bureaux de l'acheteur, fuseau horaire.
+const HORAIRE_RC = /remise\s+des\s+(?:offres|plis)|date\s+(?:et\s+heure\s+)?limite|r[ée]ception\s+des\s+(?:offres|plis)|ouverture\s+des\s+plis|visite\s+(?:obligatoire|du\s+site|des\s+lieux|sur\s+site)|questions?\s+(?:des\s+candidats|écrites)|(?:transmission|d[ée]p[ôo]t|envoi)\s+(?:des|de\s+l['’]|de\s+son)\s+(?:offres?|plis?|candidatures?)|\bplis?\s+(?:scell|cachet|ferm)|copie\s+de\s+sauvegarde|horaires?\s+d['’]ouverture\s+des\s+(?:bureaux|services)|fuseau\s+horaire|\b(?:GMT|UTC)\s*[+-]/i;
 
 export function horairesImposes(dce: string, max = 30, objet = OBJET_HORAIRE_DEFAUT, o: { periodes?: boolean } = {}): string[] {
   const out: string[] = [];

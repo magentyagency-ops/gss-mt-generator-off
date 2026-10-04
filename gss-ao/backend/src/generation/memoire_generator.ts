@@ -33,7 +33,7 @@ import {
 } from './memoire_type_cadre';
 import { articlesBloc1 } from './bloc1_marine';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, fondementDansDce, exigenceDeModification, ETAPE_ADAPTATION_MODELE, type PhraseAdaptee } from './adaptations_cctp';
-import { exigenceDeGrillePenalites, estCahierDesChargesParContenu, perimetreDuLot, rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
+import { exigenceDeGrillePenalites, estCahierDesChargesParContenu, estPieceAdministrative, teteAdministrative, perimetreDuLot, rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
 import os from 'os';
@@ -2720,7 +2720,11 @@ function alerteCctpAbsentLu(dce: string): string[] {
     const nomEsp = p.nom.replace(/_/g, ' ');
     const nom = `${nomEsp} ${p.nom.replace(/[_.\s-]+/g, '')}`;
     if (((NOM_CCTP.test(nom) || estCahierDesCharges(p.nom)) && !/ccap|clauses\s*administratives/i.test(nom)) || RX_CCATP.test(nom)) return true;
-    if (AUTRE.test(nomEsp)) return false;
+    // Pièce administrative reconnue par son nom (« R_C.pdf », « ATTRI1.pdf », « Acte_engagement.pdf ») ou par son titre de tête :
+    // jamais le cahier des charges, même si elle cite le CCTP dans la liste des pièces (T4-COH-1).
+    // (un DCE remis en un seul fichier, RC puis CCTP, garde le titre du CCTP plus loin : T9-COH-5)
+    if (AUTRE.test(nomEsp) || estPieceAdministrative(p.nom)) return false;
+    if (teteAdministrative(p.corps) && !TITRE_CCTP.test(p.corps) && (p.corps.match(ENTETE_CCTP) || []).length < 3) return false;
     if (estCahierDesChargesParContenu(p.nom, p.corps)) return true;
     return DEBUT_CCTP.test(p.corps.slice(0, 3000)) || TITRE_CCTP.test(p.corps) || (p.corps.match(ENTETE_CCTP) || []).length >= 3;
   });
