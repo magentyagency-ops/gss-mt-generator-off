@@ -32,7 +32,7 @@ import {
 } from './memoire_type_cadre';
 import { articlesBloc1 } from './bloc1_marine';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr } from './base_memoires';
+import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
 import os from 'os';
@@ -2409,7 +2409,7 @@ export function alerteCctpAbsent(dce: string, illisibles: string[] = []): string
   // Pièce scannée illisible (T10-COH-4) : nommée à GSS ; un CCTP illisible n'est jamais annoncé « absent du dossier ».
   const NOM_CCTP_ILLISIBLE = /cctp|\bccp\b|cahier\s*des\s*(?:clauses\s*(?:techniques|particuli)|charges)|clauses?\s*techniques|programme\s*fonctionnel/i;
   const nomPropre = (n: string) => n.replace(/_/g, ' ');
-  const cctpIllisibles = illisibles.filter((n) => NOM_CCTP_ILLISIBLE.test(nomPropre(n)) && !/ccap|clauses\s*administratives/i.test(nomPropre(n)));
+  const cctpIllisibles = illisibles.filter((n) => (NOM_CCTP_ILLISIBLE.test(nomPropre(n)) && !/ccap|clauses\s*administratives/i.test(nomPropre(n))) || RX_CCATP.test(nomPropre(n)));
   const autresIllisibles = illisibles.filter((n) => !cctpIllisibles.includes(n));
   const alertesIllisibles = [
     ...cctpIllisibles.map((n) => `Le cahier des charges « ${n} » est un PDF scanné qui n'a pas pu être lu (transcription impossible) : relancez la génération, ou ajoutez au dossier une version texte (PDF texte ou Word) ; en attendant, le mémoire n'est pas adapté au CCTP.`),
@@ -2427,7 +2427,8 @@ function alerteCctpAbsentLu(dce: string): string[] {
   if (!pieces.length && t.trim()) pieces.push({ nom: '', corps: t });
   const NOM_CCTP = /cctp|\bccp\b|cahier\s*des\s*(?:clauses\s*(?:techniques|particuli)|charges)|clauses?\s*techniques|programme\s*fonctionnel/i;
   const AUTRE = /\bRC\b|r[èe]glement\s*(?:de\s*(?:la\s*)?)?consultation|acte\s*d.engagement|\bAE\b|DPGF|BPU|DQE|bordereau|\bDC\s?\d|attestation|cadre|m[ée]moire|candidature|lettre|avis|ccap|clauses\s*administratives/i;
-  const DEBUT_CCTP = /cahier\s+des\s+(?:clauses\s+techniques|clauses\s+particuli[eè]res|charges)|\bC\.?\s?C\.?\s?T\.?\s?P\b|\bC\.C\.P\.|clauses\s+techniques\s+particuli/i;
+  // Cahier des clauses administratives et techniques particulières (CCATP, T2-COH-6) : un cahier des charges.
+  const DEBUT_CCTP = /cahier\s+des\s+(?:clauses\s+techniques|clauses\s+particuli[eè]res|clauses\s+administratives\s+et\s+techniques|charges)|\bC\.?\s?C\.?\s?T\.?\s?P\b|\bC\.?\s?C\.?\s?A\.?\s?T\.?\s?P\b|\bC\.C\.P\.|clauses\s+techniques\s+particuli/i;
   // DCE remis en un seul fichier (RC puis CCTP, T9-COH-5) : le CCTP commence plus loin que les 3 000 premiers caractères ;
   // il est présent quand la pièce porte, n'importe où, son titre en capitales seul sur sa ligne (« CAHIER DES CLAUSES
   // TECHNIQUES PARTICULIERES »), ou l'en-tête « CCTP » répété en haut de ses pages (au moins 3 fois).
@@ -2435,7 +2436,7 @@ function alerteCctpAbsentLu(dce: string): string[] {
   const ENTETE_CCTP = /^[ \t]*(?:CCTP|C\.C\.T\.P\.?)[ \t]*$/gm;
   const present = pieces.some((p) => {
     const nom = `${p.nom} ${p.nom.replace(/[_.\s-]+/g, '')}`;
-    if ((NOM_CCTP.test(nom) || estCahierDesCharges(p.nom)) && !/ccap|clauses\s*administratives/i.test(nom)) return true;
+    if (((NOM_CCTP.test(nom) || estCahierDesCharges(p.nom)) && !/ccap|clauses\s*administratives/i.test(nom)) || RX_CCATP.test(nom)) return true;
     if (AUTRE.test(nom)) return false;
     return DEBUT_CCTP.test(p.corps.slice(0, 3000)) || TITRE_CCTP.test(p.corps) || (p.corps.match(ENTETE_CCTP) || []).length >= 3;
   });

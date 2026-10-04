@@ -115,3 +115,22 @@ describe('accord-cadre en plusieurs lots (T2-GEN-5, T2-COH-5)', () => {
     expect(lotsDuMemoire(analyse3, ph).lots).toEqual([]);
   });
 });
+
+import { estCahierDesCharges, estPieceAdministrative, texteCctp } from '../src/generation/base_memoires';
+import { alerteCctpAbsent } from '../src/generation/memoire_generator';
+
+describe('CCATP et descriptif technique reconnus comme cahier des charges (T2-COH-6)', () => {
+  it('nom de pièce', () => {
+    for (const n of ['CCATP_gardiennage_2026.pdf', 'C.C.A.T.P. surveillance', 'Cahier des clauses administratives et techniques particulières', 'Descriptif des prestations de sécurité.pdf', 'Descriptif technique.pdf']) {
+      expect(estCahierDesCharges(n)).toBe(true);
+      expect(estPieceAdministrative(n)).toBe(false);
+    }
+    expect(estCahierDesCharges('CCAP.pdf')).toBe(false);
+    expect(estCahierDesCharges('Cahier des clauses administratives particulières.pdf')).toBe(false);
+  });
+  it('aucune fausse alerte « Aucun cahier des charges », CCATP lu en tête', () => {
+    const dce = "\n\n--- Annexe 1 - plans ---\nPlans des bâtiments\n\n--- CCATP_gardiennage_2026.pdf ---\nCahier des clauses administratives et techniques particulières\nArticle 1 objet : surveillance\n";
+    expect(alerteCctpAbsent(dce)).toEqual([]);
+    expect(texteCctp(dce).startsWith('=== CCATP_gardiennage_2026.pdf ===')).toBe(true);
+  });
+});

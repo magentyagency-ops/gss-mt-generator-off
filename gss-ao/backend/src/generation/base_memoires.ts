@@ -1984,18 +1984,26 @@ export function obligationsChiffrees(dce: string): Array<{ phrase: string; cle: 
  * « CdC »), jamais le CCAP : une seule règle pour l'ordre de lecture du DCE, texteCctp, piecesTechniques et l'alerte du
  * CCTP absent (T1-COH-3, T1-GEN-13). Le nom est comparé avec et sans séparateurs.
  */
+/**
+ * Cahier des clauses administratives ET techniques particulières (CCATP, courant dans les MAPA, T2-COH-6) : un cahier des
+ * charges, jamais un CCAP.
+ */
+export const RX_CCATP = /c\.?\s?c\.?\s?a\.?\s?t\.?\s?p(?![a-z])|clauses\s*administratives\s*et\s*techniques|clausesadministrativesettechniques/i;
 export function estCahierDesCharges(nomPiece: string): boolean {
   const n = String(nomPiece || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/_/g, ' ');
   const colle = n.replace(/[^a-z0-9]+/g, '');
+  if (RX_CCATP.test(n) || RX_CCATP.test(colle)) return true;
   if (/ccap|clauses ?administratives|clausesadministratives/.test(`${n} ${colle}`)) return false;
-  return /cctp|(?<![a-z])ccp(?![a-z])|(?<![a-z])cdc(?![a-z])|cahier des (?:clauses|charges)|clauses techniques|prescriptions techniques|specifications techniques|programme fonctionnel/.test(n)
-    || /cctp|cahierdes(?:clauses|charges)|clausestechniques|prescriptionstechniques|specificationstechniques/.test(colle);
+  // « Descriptif technique », « Descriptif des prestations » (MAPA, T2-COH-6) : la description technique de la prestation.
+  return /cctp|(?<![a-z])ccp(?![a-z])|(?<![a-z])cdc(?![a-z])|cahier des (?:clauses|charges)|clauses techniques|prescriptions techniques|specifications techniques|programme fonctionnel|descriptif (?:technique|des prestations)/.test(n)
+    || /cctp|cahierdes(?:clauses|charges)|clausestechniques|prescriptionstechniques|specificationstechniques|descriptif(?:technique|desprestations)/.test(colle);
 }
 
 /** Pièce sans exigence technique (RC, AE, bordereaux, formulaires, cadre de réponse, CCAP…). */
 export function estPieceAdministrative(nomPiece: string): boolean {
   const brut = String(nomPiece || '');
   const nom = `${brut} ${brut.replace(/[_.\s-]+/g, '')}`;
+  if (RX_CCATP.test(nom)) return false;
   return /\bRC\b|r[èe]glement (?:de (?:la )?)?consultation|acte d.engagement|\bAE\b|DPGF|BPU|DQE|bordereau|\bDC\s?\d|attestation|cadre de r[ée]ponse|m[ée]moire|candidature|lettre|avis|ccap|clauses administratives/i.test(nom);
 }
 
