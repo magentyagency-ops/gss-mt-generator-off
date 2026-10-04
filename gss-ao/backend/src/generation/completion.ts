@@ -228,7 +228,9 @@ export const CHAMP_GRILLE_CANDIDATURE = 990000;
 export function completerGrilleCandidature(xmlDoc: any): string[] {
   const questions: string[] = [];
   const texte = (n: any) => elements(n, 't').map((t: any) => t.textContent || '').join('');
-  const marque = (q: string) => { questions.push(q); return `${PLACEHOLDER}${CHAMP_GRILLE_CANDIDATURE + questions.length - 1}`; };
+  // Marque avec ses délimiteurs (MARQUE_CHAMP), comme tout autre champ : le signet GSS_AC est posé par poserSignets, jamais
+  // « [À COMPLÉTER]990000 » imprimé (vitry, T5N-1).
+  const marque = (q: string) => { questions.push(q); return `${PLACEHOLDER}${MARQUE_CHAMP(CHAMP_GRILLE_CANDIDATURE + questions.length - 1)}`; };
   const POINTS = '(?:…|\\.){2,}';
   const tables = elements(xmlDoc, 'tbl').filter((tbl: any) => /chiffre d.affaires|effectifs? moyens|r[ée]f[ée]rences? professionnelles|capacit[ée] (?:technique|professionnelle|financi[èe]re)/i.test(texte(tbl)));
   for (const tbl of tables) {

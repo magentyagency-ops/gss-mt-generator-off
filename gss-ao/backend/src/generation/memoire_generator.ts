@@ -7295,6 +7295,12 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       // DCE sans CCTP (T8-COH-2), rubriques du cadre sans réponse (T10-COH-2) : en tête du premier message de l'assistant.
       const alerteCctp = [...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...alertesRubriquesCadre];
       if (alerteCctp.length) conversationFinale = conversationFinale?.length ? [{ ...conversationFinale[0], texte: `${alerteCctp.join('\n\n')}\n\n${conversationFinale[0].texte}` }] : [{ role: 'assistant' as const, date: new Date().toISOString(), texte: alerteCctp.join('\n\n') }];
+      // Grille « Éléments de candidature » du cadre (vitry, T5N-1) : les données de GSS à y écrire sont annoncées dans le premier
+      // message (une question chacune dans la liste des informations à compléter).
+      if (questionsGrilleCandidature.length) {
+        const texteGrille = `La grille « Éléments de candidature » du cadre attend ${questionsGrilleCandidature.length} donnée${questionsGrilleCandidature.length > 1 ? 's' : ''} de GSS (effectifs moyens et cadres, chiffres d'affaires, références avec leur contact et leur montant) : répondez aux questions « Éléments de candidature » de la liste des informations à compléter avant la remise.`;
+        conversationFinale = conversationFinale?.length ? [{ ...conversationFinale[0], texte: `${conversationFinale[0].texte}\n\n${texteGrille}` }] : [{ role: 'assistant' as const, date: new Date().toISOString(), texte: texteGrille }];
+      }
       // Schémas non insérés (T6-COH-3) : en tête du premier message de l'assistant.
       if (alertesSchemasCadre.length) {
         const texteSchemas = `Schémas manquants dans le cadre de réponse (${alertesSchemasCadre.length}) :\n${alertesSchemasCadre.map((x) => `- ${x}`).join('\n')}`;

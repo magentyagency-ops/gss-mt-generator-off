@@ -4,7 +4,7 @@ import path from 'path';
 import PizZip from 'pizzip';
 import { describe, it, expect } from 'vitest';
 import { DOMParser } from '@xmldom/xmldom';
-import { completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, elements } from '../src/generation/completion';
+import { completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, elements, MARQUE_CHAMP, poserSignets } from '../src/generation/completion';
 import { questionDonneeGss } from '../src/generation/base_memoires';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -21,7 +21,8 @@ describe('grille de candidature (T3-COH-4)', () => {
     const doc = new DOMParser().parseFromString(xml, 'text/xml');
     const qs = completerGrilleCandidature(doc);
     const t = texte(doc);
-    const n = (i: number) => `[À COMPLÉTER]${CHAMP_GRILLE_CANDIDATURE + i}`;
+    // (marque délimitée comme tout champ, T5N-1)
+    const n = (i: number) => `[À COMPLÉTER]${MARQUE_CHAMP(CHAMP_GRILLE_CANDIDATURE + i)}`;
     expect(t).toContain(`2025 : ${n(0)} dont ${n(1)} cadres`);
     expect(t).toContain(`2025 – Dénomination sociale (public ou privé) : ${n(4)}`);
     expect(t).toContain(`– n° de téléphone du contact dans cet établissement : ${n(5)}`);
@@ -61,5 +62,15 @@ describe('calendrier de GSS jamais « à demander à l’acheteur » (ifsem 361)
   it('préfixe retiré', () => {
     expect(questionDonneeGss('À demander à l’acheteur : quelles échéances faut-il retenir pour l’envoi du planning nominatif prévisionnel au service prescripteur — exigé au moins 10 jours ouvrés avant le début du mois —, sa validation par les agents et son envoi à l’acheteur, compte tenu du calendrier GSS proposé (J-10, J-7 et J-3) ?'))
       .toMatch(/^Quelles échéances faut-il retenir/);
+  });
+});
+
+describe('grille de candidature : signets posés, jamais de marque imprimée (T5N-1)', () => {
+  it('un signet GSS_AC par donnée, aucun « 9900… » dans le texte', () => {
+    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+    const qs = completerGrilleCandidature(doc);
+    const signets = poserSignets(doc);
+    expect(signets.map((x) => x.champ)).toEqual(qs.map((_q, i) => CHAMP_GRILLE_CANDIDATURE + i));
+    expect(texte(doc)).not.toMatch(/9900\d\d|\uE000|\uE001/);
   });
 });
