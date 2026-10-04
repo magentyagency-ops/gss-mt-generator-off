@@ -1905,7 +1905,8 @@ export function questionDEngagement(x: string): string {
   const motif = motifRefusEngagement(entier);
   // Une question sur la première phrase de l'engagement, jamais une seconde phrase « GSS conservera… » gardée telle quelle
   // dans la question (T5-COH-1).
-  const t = entier.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý])/)[0].replace(/[.;…]+\s*$/, '');
+  // (proposition après « ; » au futur, « … ; tout équipement défaillant sera remplacé », retirée aussi : jamais un futur dans la question)
+  const t = entier.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý])/)[0].replace(/\s*;\s*[^;]*?(?<![\p{L}])(?:sera|seront|[a-zà-ÿ]{3,}(?:era|ira|ront))(?![\p{L}]).*$/iu, '').replace(/[.;…]+\s*$/, '');
   const exigence = t.replace(/^(?:GSS|le titulaire|nous)\s+(?:s['’]engage(?:ra)?\s+[àa]\s+)?/i, '');
   // Délai annoncé sans valeur (T5CP-7) : la valeur exacte est demandée à GSS.
   if (/^délai sans valeur/.test(motif)) return `Quel délai GSS annonce-t-elle pour cette exigence du CCTP : « ${exigence} » ?`;

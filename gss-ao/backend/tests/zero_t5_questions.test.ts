@@ -69,3 +69,17 @@ describe('liste nominative des agents demandée une seule fois (T5N-14)', () => 
     expect(q.some((x) => /Transmettre|transmettre/.test(x))).toBe(false);
   });
 });
+
+describe('libellé « nombre de … et confirmation de … » (T5-CONS-9, caen 1501)', () => {
+  it('deux questions correctes', () => {
+    expect(questionExacte("nombre d’agents à habiliter pour les prestations habituelles et les remplacements, et confirmation de l’engagement à maintenir les mêmes agents pour les interventions successives"))
+      .toBe("Combien d’agents à habiliter pour les prestations habituelles et les remplacements ? Confirmez-vous l'engagement à maintenir les mêmes agents pour les interventions successives ?");
+  });
+});
+
+describe('engagement refusé : proposition au futur après « ; » retirée de la question (T5-COH-1, rejeu citedia)', () => {
+  it('« … ; tout équipement défaillant sera remplacé »', () => {
+    expect(questionDEngagement('GSS fournira et maintiendra en état les équipements nécessaires, notamment un PTI avec communication et une lampe torche ; tout équipement défaillant sera remplacé.'))
+      .toBe('Que prévoyez-vous pour fournir et maintenir en état les équipements nécessaires, notamment un PTI avec communication et une lampe torche ?');
+  });
+});

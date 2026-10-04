@@ -28,15 +28,7 @@ export function questionExacte(q: string): string {
   // Question déjà posée (éventuellement suivie d'une explication : « … PME … ? L'effectif est de 380 salariés ; … »). Question
   // qui coordonne une demande et un groupe nominal (« Combien d'agents …, et confirmation de l'engagement à … ? », T5-CONS-9) :
   // deux questions correctes.
-  if (/\?/.test(t) && !/^(?:Information|Valeur) à fournir/i.test(t)) {
-    const coord = /^(.+?),?\s+et\s+(confirmation|pr[ée]cision|indication)\s+(de la|de l['’]|du|des|de|d['’])\s*([^?]+?)\s*\?(.*)$/i.exec(t);
-    if (coord) {
-      const art = /^de la$/i.test(coord[3]) ? 'la ' : /^(?:de l['’]|d['’])$/i.test(coord[3]) ? "l'" : /^du$/i.test(coord[3]) ? 'le ' : /^des$/i.test(coord[3]) ? 'les ' : '';
-      const verbe = /^confirmation$/i.test(coord[2]) ? 'Confirmez-vous' : /^pr/i.test(coord[2]) ? 'Pouvez-vous préciser' : 'Pouvez-vous indiquer';
-      return `${maj(coord[1].replace(/\s*[,;]\s*$/, ''))} ? ${verbe} ${art}${coord[4]} ?${coord[5]}`.replace(/\s+$/, '');
-    }
-    return maj(t);
-  }
+  if (/\?/.test(t) && !/^(?:Information|Valeur) à fournir/i.test(t)) return scinderCoordination(maj(t));
   // Tâches de validation et alertes signalées comme telles (propositions de réponse, rubriques à relire, schéma absent).
   if (/^(?:Proposition|Réponse à relire|(?:Partie|Rubrique|Réponse) «|Phrases? (?:ajoutées? au texte de GSS|proposées? par l'IA|adaptées? au cahier des charges)|Engagements à valider)/i.test(t)) return t;
   // Préfixes : la question qui suit est mise en forme à son tour.
@@ -131,7 +123,7 @@ export function questionExacte(q: string): string {
   const nombre = /^Nombre\s+(total\s+|global\s+|moyen\s+|maximal\s+|minimal\s+|maximum\s+|minimum\s+)?(d['’]|de |des )(.+)$/i.exec(t);
   if (nombre) {
     const q2 = nombre[1] ? ({ total: ' au total', global: ' au total', moyen: ' en moyenne', maximal: ' au maximum', maximum: ' au maximum', minimal: ' au minimum', minimum: ' au minimum' } as Record<string, string>)[nombre[1].trim().toLowerCase()] : '';
-    return `Combien ${nombre[2].toLowerCase() === 'des ' ? 'de ' : nombre[2].toLowerCase()}${sansFin(nombre[3])}${q2} ?`;
+    return scinderCoordination(`Combien ${nombre[2].toLowerCase() === 'des ' ? 'de ' : nombre[2].toLowerCase()}${sansFin(nombre[3])}${q2} ?`);
   }
   const GENRES: Record<string, string> = {
     nom: 'Quel est', numero: 'Quel est', delai: 'Quel est', taux: 'Quel est', partenaire: 'Quel est', organigramme: 'Quel est', montant: 'Quel est',
@@ -223,4 +215,16 @@ export function estInfinitif(mot: string, suite: string): boolean {
   if (/ier$/.test(k) && !/ifier$/.test(k) && !/^(?:etudier|copier|relier|trier|publier|multiplier|associer|negocier|apprecier|privilegier|remercier|oublier|varier|lier|plier|nier|envoyer|appuyer)$/.test(k)) return false;
   if (/re$/.test(k) && !/(?:dre|tre|ire|vre|aitre|oitre)$/.test(k)) return false;
   return /^\s*[,:]|^\s+(?:la|le|les|l['’]|un|une|des|du|de|d['’]|à|au|aux|chaque|tout|toute|tous|toutes|son|sa|ses|leur|leurs|ce|cet|cette|ces|sans|en|sur|si|que|qu['’]|et\s+[a-zà-ÿ]+(?:er|ir|re))(?=[\s,.;'’]|$)/i.test(suite);
+}
+
+/**
+ * Question qui coordonne une demande et un groupe nominal (« Combien d'agents …, et confirmation de l'engagement à … ? »,
+ * T5-CONS-9) : deux questions correctes (« … ? Confirmez-vous l'engagement à … ? »).
+ */
+function scinderCoordination(t: string): string {
+  const coord = /^(.+?),?\s+et\s+(confirmation|pr[ée]cision|indication)\s+(de la|de l['’]|du|des|de|d['’])\s*([^?]+?)\s*\?(.*)$/i.exec(t);
+  if (!coord) return t;
+  const art = /^de la$/i.test(coord[3]) ? 'la ' : /^(?:de l['’]|d['’])$/i.test(coord[3]) ? "l'" : /^du$/i.test(coord[3]) ? 'le ' : /^des$/i.test(coord[3]) ? 'les ' : '';
+  const verbe = /^confirmation$/i.test(coord[2]) ? 'Confirmez-vous' : /^pr/i.test(coord[2]) ? 'Pouvez-vous préciser' : 'Pouvez-vous indiquer';
+  return `${coord[1].replace(/\s*[,;]\s*$/, '')} ? ${verbe} ${art}${coord[4]} ?${coord[5]}`.replace(/\s+$/, '');
 }

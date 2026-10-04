@@ -1936,7 +1936,7 @@ function titreExigenceBrut(x: string, max = 34): string {
     const dernier = mots[i - 1];
     if (MOTS_OUTILS.has(dernier.toLowerCase().replace(/['’]$/, '')) || /['’]$/.test(dernier) || !/[\p{L}\d)]$/u.test(dernier)) continue;
     // Préposition ou conjonction en fin de libellé (T5N-12 : « Assurer l'égalité des usagers devant ») : jamais.
-    if (/^(?:devant|derri[èe]re|contre|malgr[ée]|parmi|sauf|envers|outre|via|jusqu|quant|ni|mais|car|donc|comme|o[ùu]|apr[èe]s|avant|depuis|pendant|durant|hors|suivant|afin|d[èe]s)$/i.test(dernier)) continue;
+    if (/^(?:devant|derri[èe]re|contre|malgr[ée]|parmi|sauf|envers|outre|via|jusqu|quant|ni|mais|car|donc|comme|o[ùu]|apr[èe]s|avant|depuis|pendant|durant|hors|suivant|afin|d[èe]s|conform[ée]ment|notamment|relativement|pr[ée]alablement|ult[ée]rieurement|respectivement|[ée]ventuellement|[ée]galement|compte|conjointement|ensuite)$/i.test(dernier)) continue;
     // Nombre séparé de son unité (« … de 30 » pour « 30 minutes ») : jamais.
     if (/^\(?\d+(?:[,.]\d+)?\)?$|^(?:une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|quinze|vingt|trente|quarante|soixante)$/i.test(dernier) && /^(?:minutes?|heures?|h|jours?|semaines?|mois|ans?|m²|m2|km|agents?|personnes?|fois|rondes?)$/i.test(mots[i] || '')) continue;
     // Locution coupée (génération réelle caen 703 : « Assurer la continuité en cas » pour « … en cas de défaillance »).

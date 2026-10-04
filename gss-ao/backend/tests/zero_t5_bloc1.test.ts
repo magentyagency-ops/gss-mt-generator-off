@@ -71,3 +71,9 @@ describe('délai de présence sur alarme rattaché à la procédure d\'alarme (T
     expect(rubriqueDuTheme("Le remplaçant doit être présent sur site dans un délai d'une heure.", ids)).not.toBe('b4_proc_alarme');
   });
 });
+
+describe('libellé EXIGENCE jamais terminé par un adverbe qui attend son complément (T5N-12, rejeu parc_expo)', () => {
+  it('« conformément » sans « à la réglementation » : jamais', () => {
+    expect(titreExigence("Exécuter les prestations de sécurité incendie conformément à la réglementation citée au CCTP, notamment l'arrêté du 25 juin 1980", MAX_LIBELLE_EXIGENCE)).toBe('Exécuter les prestations de sécurité incendie');
+  });
+});
