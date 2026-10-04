@@ -78,6 +78,9 @@ section ol { padding-left: 5mm; }
 section ol li { margin: 0 0 2.4mm; }
 section ol li::marker { color: var(--gss-structure); font-weight: 600; }
 section li > ul, section li > ol { margin: 1.2mm 0 0 0; }
+/* Liste « lâche » (puces séparées par une ligne vide : paragraphe dans chaque puce) : jamais la marge de la colonne de lecture
+   en plus de celle de la liste (T3-CONS-9 : texte des puces décalé de 44 mm, colonne étroite, puces séparées du texte). */
+section li > p { margin: 0; }
 section strong { color: var(--gss-encre); font-weight: 600; }
 section h1 + p {
   margin: 0 0 6mm 0; font: 400 var(--gss-chapeau-taille)/1.5 var(--gss-police-texte); color: var(--gss-encre);

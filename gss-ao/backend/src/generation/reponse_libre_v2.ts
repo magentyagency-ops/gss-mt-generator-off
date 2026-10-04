@@ -989,7 +989,7 @@ export function reduireBesoinAPages(texte: string, pages: (t: string) => number,
   // vigilance sous le minimum (2 de chaque au moins) ; si le bloc dépasse encore 2 pages, GSS est prévenu (depasse).
   let t = resserrerBesoin(r.texte);
   if (pages(t) <= maxPages) return { texte: t, retirees: r.retirees, depasse: false };
-  const r2 = reduireBesoinParLignes(t, pages, maxPages, { attentes: 2, vigilance: 2 });
+  const r2 = reduireBesoinParLignes(t, pages, maxPages, { attentes: 2, vigilance: 2, perimetre: 5 });
   t = r2.texte;
   return { texte: t, retirees: [...r.retirees, ...r2.retirees], depasse: pages(t) > maxPages };
 }
@@ -1013,9 +1013,30 @@ function couperA(texte: string, max: number): string {
  */
 export function resserrerBesoin(texte: string): string {
   let section = '';
-  return String(texte || '').split('\n').map((l) => {
+  const tout = String(texte || '');
+  // Heures citées ailleurs que dans le rappel « Horaires imposés par le cahier des charges » (texte de secours) : un horaire
+  // déjà écrit dans le périmètre n'est pas cité une seconde fois.
+  const heures = (t: string) => (normaliser(t).match(/\b\d{1,2}\s*h\s*\d{0,2}/g) || []).map((x) => x.replace(/\s+/g, '').replace(/h(\d)$/, 'h0$1').replace(/h$/, 'h00').replace(/^0(\d)/, '$1'));
+  const lignesHoraires = tout.split('\n').filter((l) => /^\s*[-*•]\s+«/.test(l));
+  const ailleurs = new Set(heures(tout.split('\n').filter((l) => !lignesHoraires.includes(l)).join('\n')));
+  return tout.split('\n').map((l) => {
     const h = /^##\s+(.+)$/.exec(l);
     if (h) { section = h[1]; return l; }
+    if (/^Le périmètre/i.test(section) && lignesHoraires.includes(l) && heures(l).length && heures(l).every((x) => ailleurs.has(x))) return null;
+    // Puce du périmètre (texte de secours, cstb 1201) de plus de 160 signes : sa première phrase, ou coupée à une virgule.
+    if (/^Le périmètre/i.test(section) && /^\s*[-*•]\s/.test(l) && l.length > 180) {
+      const [puce, corps] = [(/^\s*[-*•]\s+/.exec(l) || [''])[0], l.replace(/^\s*[-*•]\s+/, '')];
+      // Propositions gardées dans l'ordre tant que la puce reste sous 170 signes (« Hors périmètre : A ; B ; C »).
+      const morceaux = corps.replace(/\.\s*$/, '').split(/(\s*;\s*|(?<=[.])\s+)/);
+      let garde = morceaux[0];
+      for (let k = 1; k + 1 < morceaux.length; k += 2) {
+        const sep = /;/.test(morceaux[k]) ? ' ; ' : ' ';
+        if (`${garde}${sep}${morceaux[k + 1]}`.length > 170) break;
+        garde = `${garde}${sep}${morceaux[k + 1]}`;
+      }
+      if (garde.length > 170) garde = couperA(garde, 170);
+      return `${puce}${garde.replace(/[\s,;:.]+$/, '')}.`;
+    }
     if (/^Le périmètre/i.test(section) && /^\s*\|/.test(l) && !/^\s*\|?\s*:?-{3,}/.test(l)) {
       const cellules = l.split('|');
       return cellules.map((c, i) => (i === 0 || i === cellules.length - 1 || c.trim().length <= 70 ? c : ` ${couperA(c, 70)} `)).join('|');
@@ -1024,10 +1045,11 @@ export function resserrerBesoin(texte: string): string {
       return l.replace(/«\s*([^«»]{111,}?)\s*»/g, (_m, c: string) => `« ${couperA(c, 100).replace(/\s*[.;,:]$/, '')} […] »`);
     }
     return l;
-  }).join('\n');
+  }).filter((l): l is string => l !== null).join('\n').replace(/\n*Horaires imposés par le cahier des charges :\s*(?=\n\n|\n##|$)/g, '')
+    .replace(/([^\n])\n(##\s)/g, '$1\n\n$2').replace(/\n{3,}/g, '\n\n');
 }
 
-function reduireBesoinParLignes(texte: string, pages: (t: string) => number, maxPages: number, minimum: { attentes: number; vigilance: number }): { texte: string; retirees: string[] } {
+function reduireBesoinParLignes(texte: string, pages: (t: string) => number, maxPages: number, minimum: { attentes: number; vigilance: number; perimetre?: number }): { texte: string; retirees: string[] } {
   if (pages(texte) <= maxPages) return { texte, retirees: [] };
   const lignes = texte.split('\n');
   const section = (k: number) => {
@@ -1049,6 +1071,13 @@ function reduireBesoinParLignes(texte: string, pages: (t: string) => number, max
     const sec = Object.keys(parSection).find((x) => cle.test(x));
     const puces = sec ? parSection[sec].filter((k) => PUCE.test(lignes[k])) : [];
     candidats[rang].push(...puces.slice(min).reverse());
+  }
+  // Second passage (T3N-1) : puces du périmètre au-delà des 5 premières (texte de secours en puces, cstb 1201), avant les
+  // attentes et les points de vigilance.
+  if (minimum.perimetre !== undefined) {
+    const sec = Object.keys(parSection).find((x) => /^Le périmètre/i.test(x));
+    const puces = sec ? parSection[sec].filter((k) => PUCE.test(lignes[k])) : [];
+    candidats[1].push(...puces.slice(minimum.perimetre).reverse());
   }
   const contexte = Object.keys(parSection).find((x) => /^Votre contexte/i.test(x));
   if (contexte) candidats[4].push(...parSection[contexte].filter((k) => libre(lignes[k])).slice(2).reverse());

@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { decouperPagesTexte, pagesQuiDebordentDuLayout, clientDuPied, stylePiedV3, rubriquesDePlusDeDeuxPages } from '../src/generation/marp_generator';
+import { decouperPagesTexte, pagesQuiDebordentDuLayout, clientDuPied, stylePiedV3, rubriquesDePlusDeDeuxPages, splitIntoSlideChunks } from '../src/generation/marp_generator';
 import { reduireBesoinAPages, resserrerBesoin } from '../src/generation/reponse_libre_v2';
 import { sommaireV3 } from '../src/generation/marp_pages_marine';
 import { nomAcheteurCourtAffiche } from '../src/generation/memoire_type';
@@ -54,6 +54,15 @@ describe('bloc 1 tenu en 2 pages de texte (T3N-1)', () => {
     expect(r).toContain('| Coordonner l’équipe, diriger le poste de sécurité lors des sinistres |');
     expect(r).toMatch(/« (?:mot ){10,}mot \[…\] »/);
   });
+  it('texte de secours de cstb 1201 (périmètre en puces, horaires cités deux fois) : 2 pages', () => {
+    const t = fs.readFileSync(path.join(__dirname, 'fixtures', 'bloc1_cstb_secours.md'), 'utf-8');
+    const n = (x: string) => decouperPagesTexte(x, false, true).length;
+    expect(n(t)).toBe(3);
+    const r = reduireBesoinAPages(t, n);
+    expect(n(r.texte)).toBeLessThanOrEqual(2);
+    expect(r.texte).not.toMatch(/\. ;|[^\n]\n## /);
+    expect(r.texte).toMatch(/Hors périmètre : champ agricole de 3,4 ha/);
+  });
   it('dépassement impossible à résorber : signalé (depasse)', () => {
     const r = reduireBesoinAPages('x', () => 3);
     expect(r.depasse).toBe(true);
@@ -65,5 +74,21 @@ describe('contrôle final : rubrique de plus de 2 pages de texte avant son sché
     const d = (t: string, c = 'texte') => `<!-- _class: ${c} -->\n<!-- rubrique: "${t}" -->\nx`;
     const md = ['---\nmarp: true\n---', d('A'), d('A'), d('A'), d('A', 'schema'), d('B'), d('B'), d('B', 'schema')].join('\n---\n');
     expect(rubriquesDePlusDeDeuxPages(md)).toEqual(['A']);
+  });
+});
+
+describe('suite de liste sur une page de suite (T3-CONS-9)', () => {
+  const puces = Array.from({ length: 10 }, (_, i) => `- **Point ${i + 1}** : ${'nos agents connaissent les règles et les appliquent sur le site '.repeat(i % 3 + 2)}.`).join('\n');
+  const texte = `Introduction de la rubrique.\n\n${puces}\n\n## Nos engagements sur les exigences du cahier des charges\n\n- GSS s’engage à affecter des agents qualifiés.`;
+  it('jamais de ligne vide entre deux puces d’une même liste scindée (liste « lâche »)', () => {
+    for (const lignes of [40, 37, 34, 31, 28]) {
+      for (const c of splitIntoSlideChunks(texte, { mots: 560, lignes, caracteres: 105, ligneTableau: 1.8, reserve: 6, titresEnMarge: true } as any)) {
+        expect(c).not.toMatch(/\n- [^\n]*\n\n- \*\*Point/);
+      }
+    }
+  });
+  it('CSS : un paragraphe dans une puce ne reprend pas la marge de la colonne de lecture', () => {
+    const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'generation', 'marp', 'gss-theme-pages-marine.css'), 'utf-8');
+    expect(css).toMatch(/section li > p \{ margin: 0; \}/);
   });
 });

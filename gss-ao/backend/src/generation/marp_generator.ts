@@ -252,6 +252,7 @@ export function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots
   };
 
   // Un bloc plus haut qu'une slide (longue liste sans ligne vide) est scindé par groupes de lignes.
+  const groupesDeListe = new Set<string>();
   for (let i = 0; i < paragraphs.length; i++) {
     const lignes = paragraphs[i].split('\n');
     // Mise en page v2 de la refonte : aussi un bloc de plus de mots qu'une page (longue liste de puces courtes).
@@ -271,6 +272,7 @@ export function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots
         g.push(l);
       }
       if (g.length) groupes.push(g.join('\n'));
+      for (const x of groupes.slice(1)) groupesDeListe.add(x);
       paragraphs.splice(i, 1, ...groupes);
       i += groupes.length - 1;
     }
@@ -338,13 +340,17 @@ export function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots
           current += `\n\n${puces.slice(0, k).join('\n')}`;
           flush();
           paragraphs.splice(i + 1, 0, puces.slice(k).join('\n'));
+          groupesDeListe.add(puces.slice(k).join('\n'));
           continue;
         }
       }
       flush();
     }
 
-    current += (current ? '\n\n' : '') + para;
+    // Suite d'une même liste scindée en groupes (puces consécutives) : jointe sans ligne vide, la liste reste une liste
+    // « serrée » (T3-CONS-9 : une ligne vide entre deux puces met un paragraphe dans chaque puce).
+    const memeListe = /^\s*(?:[-*•]|\d+[.)])\s/.test(para) && /(?:^|\n)\s*(?:[-*•]|\d+[.)])\s[^\n]*$/.test(current) && groupesDeListe.has(para);
+    current += (current ? (memeListe ? '\n' : '\n\n') : '') + para;
     currentWords += paraWords;
     currentLines += lineCountH(i);
   }
@@ -409,6 +415,14 @@ export function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots
       }
     }
     chunks[k] = ps.join('\n\n');
+  }
+  // Groupes d'une même liste réunis sur une page (dernière page regroupée, coupe déplacée) : sans ligne vide entre eux
+  // (T3-CONS-9 : liste « lâche », un paragraphe dans chaque puce).
+  for (let k = 0; groupesDeListe.size && k < chunks.length; k++) {
+    for (const g of groupesDeListe) {
+      const i = chunks[k].indexOf(`\n\n${g}`);
+      if (i > 0 && /(?:^|\n)\s*(?:[-*•]|\d+[.)])\s[^\n]*$/.test(chunks[k].slice(0, i))) chunks[k] = `${chunks[k].slice(0, i)}\n${chunks[k].slice(i + 2)}`;
+    }
   }
   return chunks.length > 0 ? chunks : [''];
 }
