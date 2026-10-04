@@ -2428,6 +2428,9 @@ export interface SourcesFaitsCadre {
   telephoneFixe?: string;
   /** Question à poser quand la réponse nomme un partenaire de télésurveillance (ERYMA ou Delta) non confirmé par GSS. */
   questionPartenaire?: string;
+  /** Texte du DCE (brut) : un numéro ou un nom de personne qu'il écrit est celui d'un tiers (acheteur, service, police), jamais
+   *  un contact de GSS à remplacer (T8-CONS-2, T8-COH-1). */
+  dce?: string;
 }
 
 const echapperRx = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -2480,17 +2483,29 @@ export function controlerFaitsNouveauxCadre(valeur: string, contexte: string, s:
     const CONTACT = /interlocut(?:eur|rice)|personne (?:a|à) contacter|(?<![\p{L}])contact(?![\p{L}])|correspondant|r[ée]f[ée]rent/iu;
     const TELEPHONE = /(?<!\d)0[1-9](?:[\s.\-]?\d{2}){4}(?!\d)/;
     const AUTRE_FONCTION = /responsables?\s+(?:d['’]exploitation|qualit[ée]|rh|des ressources|administratif|commercial|technique|de site|d['’][ée]quipe)|directeurs?\s+(?:g[ée]n[ée]ral|des op[ée]rations|administratif|financier)|charg[ée]e?s?\s+de|chefs?\s+d['’][ée]quipe|contr[ôo]leurs?|formateurs?|g[ée]rants?|dirigeants?/i;
+    // Numéros et noms de personnes écrits par le DCE : ceux d'un tiers (CSU, PC sécurité, police, acheteur), jamais remplacés
+    // (T8-CONS-2, T8-COH-1 : « contacter le CSU au 02 35 42 29 45 » imprimé avec le numéro de GSS).
+    const dceBrut = String(s.dce || '');
+    const numerosDce = new Set([...dceBrut.matchAll(/(?<!\d)0[1-9](?:[\s.\-]?\d{2}){4}(?!\d)/g)].map((m) => m[0].replace(/\D/g, '')));
+    const dceN = normaliser(dceBrut);
+    // Segment qui nomme un service, un agent ou un correspondant de l'acheteur ou d'un tiers : jamais le contact de GSS.
+    const TIERS = /(?<![\p{L}])(?:CSU|PCS?|PC\s+s[ée]curit[ée]|poste (?:central|de s[ée]curit[ée])|centre (?:de supervision|superviseur)|police|gendarmerie|pompiers|sdis|samu|secours|mairie|services? (?:techniques?|municipaux|de la ville)|t[ée]l[ée]surveill\p{L}*|(?:de|du|des) (?:la )?(?:ville|commune|mairie|m[ée]tropole|acheteur|pouvoir adjudicateur|ma[îi]tre d['’]ouvrage|client|collectivit[ée]|d[ée]partement|r[ée]gion|centre|institut|universit[ée]|[ée]tablissement))(?![\p{L}])/iu;
+    const PRESENTE_GSS = /interlocut(?:eur|rice) unique|personne (?:a|à) contacter|notre (?:interlocut|contact|r[ée]f[ée]rent|correspondant|num[ée]ro)|num[ée]ro unique|\bGSS\b|Global Security/i;
     v = v.split('\n').map((ligne) => ligne.split(/(?<=;)/).map((seg) => {
       const nomSeul = champContact && /^\s*(?:[-•*]\s*)?(?:nom|nom et pr[ée]nom|identit[ée])\s*:/i.test(seg);
-      if (!CONTACT.test(seg) && !TELEPHONE.test(seg) && !nomSeul) return seg;
+      // Seul un segment qui présente un contact (ou une ligne « Nom : » / un numéro dans un champ de contact du candidat) est
+      // concerné ; jamais sur la seule présence d'un numéro de téléphone dans une réponse sur un autre sujet.
+      if (!CONTACT.test(seg) && !nomSeul && !(champContact && TELEPHONE.test(seg))) return seg;
       if (AUTRE_FONCTION.test(seg) && !/interlocut(?:eur|rice) unique|personne (?:a|à) contacter/i.test(seg)) return seg;
+      if (TIERS.test(seg) && !PRESENTE_GSS.test(seg)) return seg;
       let x = seg;
       for (const m of [...x.matchAll(/(?:\b(?:M(?:me|lle)?\.?|Madame|Monsieur)\s+)?\b([A-ZÀ-ÖØ-Þ]{2,}(?:[ -][A-ZÀ-ÖØ-Þ]{2,})*)\s+([A-ZÀ-ÖØ-Þ][a-zà-ÿ][\wà-ÿ'’-]*)/g)]) {
         if (SIGLES_ADMIS.has(normaliser(m[1].split(/[ -]/)[0])) || normaliser(m[0]).includes(normaliser(s.interlocuteurUnique || '§'))) continue;
+        if (dceN && dansSources(`${m[1]} ${m[2]}`, dceN)) continue;
         x = x.replace(m[0], s.interlocuteurNom!);
       }
       if ((x.split(s.interlocuteurNom!).length - 1) > 1) return seg;
-      x = x.replace(/(?<!\d)0[1-9](?:[\s.\-]?\d{2}){4}(?!\d)/g, (num) => (admis.includes(num.replace(/\D/g, '')) ? num : s.telephoneUnique!));
+      x = x.replace(/(?<!\d)0[1-9](?:[\s.\-]?\d{2}){4}(?!\d)/g, (num) => (admis.includes(num.replace(/\D/g, '')) || numerosDce.has(num.replace(/\D/g, '')) ? num : s.telephoneUnique!));
       return x.replace(/\binterlocutrice unique\b/gi, 'interlocuteur unique');
     }).join('')).join('\n');
   }

@@ -6720,6 +6720,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       interlocuteurNom: (valeurRegistre('dirigeant') || '').trim().split(/\s+/).map((m, i) => (i === 0 ? m.toUpperCase() : m.charAt(0).toUpperCase() + m.slice(1).toLowerCase())).join(' ') || undefined,
       questionPartenaire: valeurRegistre('partenaire_telesurveillance') ? undefined
         : repriseMT?.mt.variables.PARTENAIRE_TELESURVEILLANCE?.question || 'Quel partenaire de télésurveillance retenez-vous pour ce marché, ERYMA ou Delta ?',
+      dce: dceContext,
     };
     const guardServiceCert = (val: string, _ctx: string): string => {
       // On scanne la VALEUR (pas le contexte) : si elle CITE une certification de service et que la
