@@ -3608,7 +3608,9 @@ const THEMES_EXIGENCE: Array<{ sujet: RegExp; rubriques: string[] }> = [
   // Délai d'intervention sur une alarme (citedia 1461, T4-CONS-13 : « Alarme technique : intervenir en 30 minutes maximum, sauf
   // bouton anti-agression en 15 minutes… (HO/BE) » sous « Habilitation électrique, SST et PSC1 ») : la procédure d'intervention
   // sur alarme, jamais une rubrique de formation rattachée sur un mot secondaire.
-  { sujet: /\b(?:alarmes?|t[ée]l[ée]surveillance|lev[ée]e de doute|bouton anti-agression)\b[^.]{0,160}\b(?:intervenir|intervention|se rendre|arriv[ée]e)\b[^.]{0,60}\b\d+\s*(?:minutes?|min|mn|heures?|h)\b|\b(?:intervenir|intervention)\b[^.]{0,60}\b\d+\s*(?:minutes?|min|mn)\b[^.]{0,80}\balarmes?\b/iu, rubriques: ['b4_proc_alarme'] },
+  // (aussi « présent(e) sur (le) site / sur place dans un délai de 30 minutes … d'une alarme », « se présenter », « délai de
+  // présence » : caen 1501, T5-CONS-7, imprimé sous « Le remplacement d'un agent absent »)
+  { sujet: /\b(?:alarmes?|t[ée]l[ée]surveillance|lev[ée]e de doute|bouton anti-agression)\b[^.]{0,160}\b(?:intervenir|intervention|se rendre|arriv[ée]e|pr[ée]sente?s?\s+sur\s+(?:le\s+|chaque\s+)?(?:site|place|les lieux)|sur place|se pr[ée]senter|d[ée]lai de pr[ée]sence)\b[^.]{0,60}\b\d+\s*(?:minutes?|min|mn|heures?|h)\b|\b(?:intervenir|intervention|pr[ée]sente?s?\s+sur\s+(?:le\s+|chaque\s+)?(?:site|place|les lieux)|sur place|se pr[ée]senter|d[ée]lai de pr[ée]sence)\b[^.]{0,80}\b\d+\s*(?:minutes?|min|mn)\b[^.]{0,120}\b(?:alarmes?|t[ée]l[ée]surveillance|lev[ée]e de doute)\b/iu, rubriques: ['b4_proc_alarme'] },
   // Mobilisation d'un agent supplémentaire et ses horaires (citedia 1461 : « un second agent SSIAP 1/CQP APS… sollicitable du
   // lundi au samedi de 22h à 6h » sous « La main courante électronique », rattaché sur « traçabilité ») : l'adéquation des
   // moyens humains, sinon la planification.

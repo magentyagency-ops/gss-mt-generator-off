@@ -215,7 +215,9 @@ export function renvoisVersParties(
   return nettoyee.replace(/\(\s*[:;,]\s*/g, '(').replace(/[;,]\s*[:;,]\s*/g, '; ').replace(/\(\s*\)/g, '').replace(/ +([,.)])/g, '$1').replace(/ {2,}/g, ' ')
     // Ligne au gras déséquilibré après un retrait (« **« … courriel. dans … », T2-CONS-10) : marques retirées de la ligne.
     .split('\n').map((l) => ((l.match(/\*\*/g) || []).length % 2 ? l.replace(/\*\*/g, '') : l)).join('\n')
-    .replace(/\s*:\s*([.;])/g, '$1');
+    .replace(/\s*:\s*([.;])/g, '$1')
+    // Point resté après une citation qui finit déjà par sa ponctuation (« … par courriel. ». » → « … par courriel. » », T5-CONS-11).
+    .replace(/([.!?…])(\s*»(?:\*\*)?)\s*\.(?!\.)/g, '$1$2');
 }
 
 /**

@@ -61,3 +61,13 @@ describe('emplacement seul (T5-CONS-4)', () => {
     expect(libelleEmplacementSeul('Établir avec GSS la liste des moyens', '')).toBe('Liste des moyens');
   });
 });
+
+import { rubriqueDuTheme } from '../src/generation/memoire_type';
+describe('délai de présence sur alarme rattaché à la procédure d\'alarme (T5-CONS-7)', () => {
+  it('« présent sur chaque site dans un délai maximal de 30 minutes … d\'une alarme »', () => {
+    const ids = ['b4_proc_alarme', 'b5_remplacement_prevu', 'b5_remplacement_imprevu'];
+    expect(rubriqueDuTheme("GSS sera présent sur chaque site dans un délai maximal de 30 minutes à compter du déclenchement d'une alarme ou de l'appel d'un agent de l'organisme.", ids)).toBe('b4_proc_alarme');
+    expect(rubriqueDuTheme("Le titulaire doit être présent sur site dans un délai maximal de 30 minutes après le déclenchement de l'alarme.", ids)).toBe('b4_proc_alarme');
+    expect(rubriqueDuTheme("Le remplaçant doit être présent sur site dans un délai d'une heure.", ids)).not.toBe('b4_proc_alarme');
+  });
+});
