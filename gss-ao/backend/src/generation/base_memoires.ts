@@ -2354,6 +2354,33 @@ export function reparerTableaux(texte: string): string {
 }
 
 /**
+ * Exigence tirée d'une grille de pénalités du DCE (T3-CONS-8, imm 1353 : ligne « Tenue des locaux et vestiaires des agents |
+ * Propreté / dégradation | Sur devis » de l'article « Pénalités » du CCAP, devenue une « question nouvelle » et un engagement
+ * « toute réparation … sera facturée sur devis ») : jamais une exigence de prestation. Vrai si l'exigence parle de pénalité ou
+ * de montant, ou si sa ligne du DCE se trouve sous l'en-tête d'une grille de pénalités (même article) ou finit par un montant.
+ */
+export function exigenceDeGrillePenalites(exigence: string, dce: string): boolean {
+  const e = String(exigence || '');
+  // Montant de pénalité ou phrase dont la pénalité est le sujet ; une obligation suivie de « sous peine de pénalités » reste.
+  if (MONTANT_PENALITE.test(e) || /^\s*(?:les?\s+|des\s+)?p[ée]nalit/i.test(e)) return true;
+  const n = (t: string) => normTxt(t).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const mots = [...new Set(n(e).split(' ').filter((w) => w.length >= 4))].slice(0, 8);
+  if (mots.length < 2) return false;
+  const lignes = String(dce || '').split('\n');
+  for (let i = 0; i < lignes.length; i++) {
+    const l = ` ${n(lignes[i])} `;
+    if (mots.filter((w) => l.includes(` ${w} `)).length / mots.length < 0.8) continue;
+    if (/(?:€|euros?|sur devis|\d\s*%)\s*(?:HT)?\s*(?:\/\s*(?:manquement|jour|heure|agent|infraction))?\s*$/i.test(lignes[i].trim())) return true;
+    for (let j = i; j >= Math.max(0, i - 60); j--) {
+      const t = lignes[j];
+      if (/^\s*(?:article\s+\d+[^\n]{0,8})?\s*p[ée]nalit[ée]s?\b/i.test(t) || (/p[ée]nalit/i.test(t) && /montant|modalit[ée] de contr[ôo]le/i.test(t))) return true;
+      if (j < i && /^\s*article\s+\d+/i.test(t)) break;
+    }
+  }
+  return false;
+}
+
+/**
  * Préposition devant un nom propre qui commence par un article (T3N-8 : « à Le Grand-Quevilly » ; T3-COH-3 : « à Le Havre
  * Seine Métropole ») : contractée comme le veut la langue (« au Grand-Quevilly », « aux Docks Vauban », « du Havre »,
  * « des Andelys »). « La » et « L' » ne se contractent pas (« à La Poste »).

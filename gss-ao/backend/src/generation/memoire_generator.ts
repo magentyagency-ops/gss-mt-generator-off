@@ -33,7 +33,7 @@ import {
 } from './memoire_type_cadre';
 import { articlesBloc1 } from './bloc1_marine';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, fondementDansDce, exigenceDeModification, ETAPE_ADAPTATION_MODELE, type PhraseAdaptee } from './adaptations_cctp';
-import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
+import { exigenceDeGrillePenalites, rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
 import os from 'os';
@@ -8373,7 +8373,9 @@ RÈGLES DE FORME (rendu Marp) :
     progres(14, 'Analyse des exigences du CCTP et rattachement au mémoire type…');
     const gssFullContext = this.buildFullGssContext(gssDocs, 3000, 60_000);
     const rubriquesMatrice = mt.rubriques.filter((r) => r.ancienne_rubrique !== 'b_references').map((r) => ({ id: r.id, title: r.titre }));
-    const matrice = await this.analyzeRequirements(dceContext, gssFullContext, rubriquesMatrice, { themes: themesPourMatrice(prep.plan), nouvelles: true });
+    // Lignes d'une grille de pénalités (T3-CONS-8) : jamais des exigences de prestation (ni question nouvelle, ni engagement).
+    const matrice = (await this.analyzeRequirements(dceContext, gssFullContext, rubriquesMatrice, { themes: themesPourMatrice(prep.plan), nouvelles: true }))
+      .filter((e: any) => !exigenceDeGrillePenalites(String(e?.exigence || ''), dceContext));
     prep = preparerMemoireType({ ...ctxBase, matrice }, { memoireType: mt });
     // Délais et fréquences imposés par le CCTP (citation vérifiée) : ils remplacent la valeur de GSS dans tout le mémoire.
     const appelAnalyse: AppelModele = async (messages, libelle) => (await this.callOpenAI(messages, 0.1, libelle, true, 'analyse')) ?? '';
@@ -10140,7 +10142,9 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const perimetre = await this.perimetreMarche(dceContext);
     progres(15, 'Analyse des exigences du CCTP et rattachement au mémoire type…');
     const rubriquesMatrice = mt.rubriques.filter((r) => r.ancienne_rubrique !== 'b_references').map((r) => ({ id: r.id, title: r.titre }));
-    const matrice = await this.analyzeRequirements(dceContext, gssFullContext, rubriquesMatrice, { themes: themesPourMatrice(prep.plan), nouvelles: true });
+    // Lignes d'une grille de pénalités (T3-CONS-8) : jamais des exigences de prestation (ni question nouvelle, ni engagement).
+    const matrice = (await this.analyzeRequirements(dceContext, gssFullContext, rubriquesMatrice, { themes: themesPourMatrice(prep.plan), nouvelles: true }))
+      .filter((e: any) => !exigenceDeGrillePenalites(String(e?.exigence || ''), dceContext));
     prep = preparerMemoireType({ ...ctxBase, matrice }, { memoireType: mt });
     const appelAnalyse: AppelModele = async (messages, libelle) => (await this.callOpenAI(messages, 0.1, libelle, true, 'analyse')) ?? '';
     const imposees = valeursImposeesValides((await extraireValeursImposees(mt, dceContext, prep.variables, appelAnalyse)).imposees);
@@ -10291,7 +10295,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const sections: Record<string, string> = {};
     const propositions: string[] = [];
     // Propositions de l'IA par partie (titres rédigés), pour le premier message de l'assistant et l'action « valider » (D5).
-    const propositionsCourt: Array<{ pid: string; titres: string[]; dansLeTexte: boolean }> = [];
+    const propositionsCourt: Array<{ pid: string; titres: string[]; dansLeTexte: boolean; phrase?: string }> = [];
     const analysisJson = JSON.stringify(analysisData, null, 2);
     const registreComplet = registreGss + referencesGss() + this.blocPerimetre(perimetre);
     for (let i = 0; i < plan.length; i++) {
@@ -10530,6 +10534,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     // Questions nouvelles du DCE (T6N-3) : « proposition en engagement dans la partie X » seulement si le texte final de la
     // partie traite l'exigence (engagement écrit, gardé par le plafond et par la sélection au rendu) ; traitée dans une autre
     // partie : cette partie est annoncée ; traitée nulle part : question exacte à GSS, jamais une proposition qui n'existe pas.
+    const propositionsHorsPages: Array<{ sujet: string; partie: string; texte: string }> = [];
     for (const { g, partie } of nouvellesEnEngagement) {
       // Le bloc de la compréhension (contexte, périmètre, attentes, points de vigilance) cite l'exigence sans y répondre (imm :
       // « Plan de continuité en cas de grève… remis au démarrage », point de vigilance sans réponse) : il ne compte pas.
@@ -10542,7 +10547,26 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       const cible = traiteeDans(partie.id) ? partie : plan.find((p) => traiteeDans(p.id));
       if (cible) {
         propositions.push(`Proposition de réponse à valider (question nouvelle du DCE, en engagement dans la partie « ${cible.title} ») : ${g.sujet}`);
-        propositionsCourt.push({ pid: cible.id, titres: [g.sujet], dansLeTexte: false });
+        // Page de la phrase qui traite l'exigence, jamais la page d'ouverture de la partie (T3-CONS-8).
+        const paragraphe = sansComprehension(sections[cible.id] || '').split(/\n{2,}|\n(?=\s*[-*•]\s)/).find((x) => g.exigences.some((e) => exigenceTraitee(e.exigence, x)));
+        propositionsCourt.push({ pid: cible.id, titres: [g.sujet], dansLeTexte: false, ...(paragraphe ? { phrase: paragraphe.trim() } : {}) });
+        continue;
+      }
+      // Traitée nulle part dans les pages remises (D5, T3-CONS-7) : une proposition de réponse est rédigée et remise à GSS dans
+      // l'assistant (non imprimée faute de place), à valider puis à insérer à la place d'un autre passage, ou à laisser de côté.
+      let proposition: { titre: string; texte: string } | null = null;
+      try {
+        proposition = await this.proposerReponse(g, {
+          client: besoin.client, bloc: partie.title, perimetre, horsNormandie, analyse: analyseResumee, registre: registreGss,
+          gssDocs, availableCategories: Object.keys(gssDocs), dce: dceContext,
+        });
+      } catch (e: any) {
+        console.warn(`[MemoireGenerator] Format court : proposition « ${g.sujet} » non rédigée (${e?.message || e}).`);
+      }
+      if (proposition) {
+        console.warn(`[MemoireGenerator] Format court : question nouvelle « ${g.sujet} » hors des ${format.pagesMax} pages ; proposition de réponse remise à GSS dans l'assistant.`);
+        propositionsHorsPages.push({ sujet: g.sujet, partie: partie.title, texte: proposition.texte });
+        elements.push({ cle: `Q${elements.length + 1}`, question: `Proposition de réponse à valider (question nouvelle du DCE, non imprimée faute de place dans les ${format.pagesMax} pages du RC) : ${g.sujet} — « ${phraseLisible(proposition.texte.replace(/^#+\s.*$/gm, '').replace(/\s+/g, ' '), 900)} »`, contexte: partie.title, statut: 'ouvert', reperes: [], pourAcheteur: false });
         continue;
       }
       console.warn(`[MemoireGenerator] Format court : question nouvelle « ${g.sujet} » sans engagement dans le texte final ; posée à GSS.`);
@@ -10569,15 +10593,22 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     let conversation: EtatCompletion['conversation'];
     if (propositionsCourt.length) {
       try {
-        const { pageDe } = await import('./assistant_memoire');
+        const { pageDe, pageDePhrase } = await import('./assistant_memoire');
         const titrePartie = (pid: string) => plan.find((x) => x.id === pid)?.title || '';
         const texte = messagePropositions(propositionsCourt.flatMap((x) => x.titres.map((t) => ({
-          titre: t, page: (x.dansLeTexte ? pageDe(rendu.filePath, t) : undefined) ?? pageDe(rendu.filePath, titrePartie(x.pid)),
+          titre: t, page: (x.dansLeTexte ? pageDe(rendu.filePath, t) : undefined) ?? (x.phrase ? pageDePhrase(rendu.filePath, x.phrase) : undefined) ?? pageDe(rendu.filePath, titrePartie(x.pid)),
         })))).replace(/- la supprimer : « Supprime la proposition sur … »\./, '- la retirer : « Dans la partie …, retire la proposition sur … » (le reste de la partie est conservé).');
         conversation = [{ role: 'assistant', texte, date: new Date().toISOString() }];
       } catch (e: any) {
         console.warn(`[MemoireGenerator] Message des propositions non préparé (${e?.message || e}).`);
       }
+    }
+    // Propositions non imprimées faute de place (D5, T3-CONS-7) : annoncées avec leur texte, à valider ou à insérer.
+    if (propositionsHorsPages.length) {
+      const texteHors = [`${propositionsHorsPages.length === 1 ? 'Une question nouvelle du cahier des charges n\'a' : `${propositionsHorsPages.length} questions nouvelles du cahier des charges n'ont`} pas trouvé de place dans les ${format.pagesMax} pages imposées par le RC. J'ai rédigé une proposition de réponse pour ${propositionsHorsPages.length === 1 ? 'elle' : 'chacune'}, non imprimée ; vous pouvez la valider et me demander de l'insérer à la place d'un autre passage, ou la laisser de côté :`,
+        ...propositionsHorsPages.map((x) => `- « ${x.sujet} » (partie « ${x.partie} ») : ${phraseLisible(x.texte.replace(/^#+\s.*$/gm, '').replace(/\s+/g, ' '), 600)}`)].join('\n');
+      if (conversation?.length) conversation[0].texte = `${conversation[0].texte}\n\n${texteHors}`;
+      else conversation = [{ role: 'assistant', texte: texteHors, date: new Date().toISOString() }];
     }
     if (alertePanneCourt) {
       if (conversation?.length) conversation[0].texte = `${alertePanneCourt}\n\n${conversation[0].texte}`;

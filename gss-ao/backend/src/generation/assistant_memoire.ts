@@ -414,6 +414,17 @@ const ouChapitres = (cles: string[]) => (cles.length > 1 ? `${cles.slice(0, -1).
  * Page du PDF où apparaît un texte (titre de rubrique, légende de photo), hors couverture et sommaire,
  * pour ouvrir l'aperçu au bon endroit. `derniere` : dernière page correspondante (photo ajoutée en fin de rubrique).
  */
+/** Page du PDF où figure une phrase (ses 8 premiers mots, espaces et casse ignorés) ; undefined sinon (T3-CONS-8). */
+export function pageDePhrase(fichier: string, phrase: string): number | undefined {
+  const r = spawnSync('pdftotext', ['-layout', fichier, '-'], { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
+  if (r.status !== 0 || !r.stdout) return undefined;
+  const colle = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '');
+  const cible = colle(String(phrase || '').replace(/\*\*/g, '').replace(/^\s*[-*•]\s*/, '').split(/\s+/).slice(0, 8).join(' '));
+  if (cible.length < 20) return undefined;
+  const i = r.stdout.split('\f').findIndex((p) => colle(p).includes(cible));
+  return i >= 0 ? i + 1 : undefined;
+}
+
 export function pageDe(fichier: string, titre: string, derniere = false): number | undefined {
   const r = spawnSync('pdftotext', ['-layout', fichier, '-'], { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
   if (r.status !== 0 || !r.stdout) return undefined;
