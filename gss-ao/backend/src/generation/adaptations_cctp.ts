@@ -784,7 +784,7 @@ export function consultationsAdaptations(liste: PhraseAdaptee[] | undefined): st
   const l = aValider(liste);
   // (T7N-10 : phrase rétablie par GSS, phrases ajoutées d'après le CCTP qui la contredisaient retirées : GSS en est informé)
   const contraires = (liste || []).filter((a) => a.statut === 'retablie' && a.contrairesRetirees?.length)
-    .map((a) => `Phrase d'origine de GSS rétablie à votre demande (« ${a.titre} ») : ${a.contrairesRetirees!.length > 1 ? 'les phrases ajoutées' : 'la phrase ajoutée'} d'après le cahier des charges qui la ${a.contrairesRetirees!.length > 1 ? 'contredisaient ont été retirées' : 'contredisait a été retirée'} : ${a.contrairesRetirees!.map((x) => `« ${x.replace(/\s+/g, ' ').trim().slice(0, 300)} »`).join(' ; ')}. Pour ${a.contrairesRetirees!.length > 1 ? 'les garder' : 'la garder'}, demandez-le à l'assistant avant la remise.`);
+    .map((a) => `Phrase d'origine de GSS rétablie à votre demande (« ${a.titre} ») : ${a.contrairesRetirees!.length > 1 ? 'les phrases ajoutées' : 'la phrase ajoutée'} d'après le cahier des charges qui la ${a.contrairesRetirees!.length > 1 ? 'contredisaient ont été retirées' : 'contredisait a été retirée'} : ${a.contrairesRetirees!.map((x) => `« ${x.replace(/\s+/g, ' ').trim().replace(/[.;\s]+$/, '').slice(0, 300)} »`).join(' ; ')}. Pour ${a.contrairesRetirees!.length > 1 ? 'les garder' : 'la garder'}, demandez-le à l'assistant avant la remise.`);
   return [...contraires, ...l.map((a) => { const [o, ad] = pairesLisibles(a.origine, a.adaptee); return `${TITRE_ADAPTATIONS} (${l.length}) — n° ${a.n}, « ${a.titre} » : phrase d'origine de GSS : « ${o} » ; phrase adaptée : ${a.adaptee ? `« ${ad} »` : '(phrase retirée)'} ; ${libelleExigence(a, 500)}. À valider, modifier ou rétablir via l'assistant avant la remise.`; })];
 }
 
@@ -839,7 +839,7 @@ export function deciderAdaptation(texte: string, a: PhraseAdaptee, choix: string
   // T7N-10 : phrase rétablie dont la valeur contredit une autre phrase de la rubrique ajoutée d'après le CCTP : signalé à GSS,
   // qui choisit de la garder ou de la retirer avant la remise.
   const contraires = statut === 'retablie' && a.adaptee ? phrasesContrairesAuChoix(r.texte, a.origine, a.adaptee) : [];
-  const avertissement = contraires.length ? ` Attention : ${contraires.length > 1 ? 'ces phrases de la rubrique reprennent' : 'cette phrase de la rubrique reprend'} encore la valeur du cahier des charges : ${contraires.map((x) => `« ${x.replace(/\s+/g, ' ').trim().slice(0, 300)} »`).join(' ; ')}. Faut-il ${contraires.length > 1 ? 'les garder ou les retirer' : 'la garder ou la retirer'} ?` : '';
+  const avertissement = contraires.length ? ` Attention : ${contraires.length > 1 ? 'ces phrases de la rubrique reprennent' : 'cette phrase de la rubrique reprend'} encore la valeur du cahier des charges : ${contraires.map((x) => `« ${x.replace(/\s+/g, ' ').trim().replace(/[.;\s]+$/, '').slice(0, 300)} »`).join(' ; ')}. Faut-il ${contraires.length > 1 ? 'les garder ou les retirer' : 'la garder ou la retirer'} ?` : '';
   const message = statut === 'validee' ? `Phrase adaptée n° ${a.n} validée (« ${a.titre} »).`
     : statut === 'retablie' ? `Phrase d'origine de GSS rétablie pour la phrase n° ${a.n} (« ${a.titre} »).${avertissement}`
       : `Phrase n° ${a.n} remplacée par votre texte (« ${a.titre} »).`;

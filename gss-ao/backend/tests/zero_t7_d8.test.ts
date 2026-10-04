@@ -1,6 +1,7 @@
 // Tour 7 (correcteur) : phrase d'origine rétablie par GSS et phrase ajoutée d'après le CCTP qui la contredit (T7N-10).
 import { describe, it, expect } from 'vitest';
 import { phrasesContrairesAuChoix, deciderAdaptation, SuiviAdaptations, consultationsAdaptations, type PhraseAdaptee } from '../src/generation/adaptations_cctp';
+import { frequencesAbsentes } from '../src/generation/memoire_generator';
 
 const origine = 'Autre axe primordial de notre suivi qualité, les réunions de suivi sont mensuelles ou trimestrielles selon la nature et les besoins du site.';
 const adaptee = "Autre axe primordial de notre suivi qualité, les réunions de suivi ont lieu tous les deux mois pour l'ENPC et l'IGN.";
@@ -26,5 +27,15 @@ describe('phrase rétablie et valeur du CCTP redite ailleurs (T7N-10)', () => {
     expect(sections.b5).toContain('mensuelles ou trimestrielles');
     expect(sections.b5).not.toMatch(/deux mois/);
     expect(consultationsAdaptations(liste).join('\n')).toMatch(/la phrase ajoutée d'après le cahier des charges qui la contredisait a été retirée/);
+  });
+  it('consultation : la phrase retirée est citée sans son point final', () => {
+    const decision: PhraseAdaptee = { n: 5, rubrique: 'b5', titre: 'Les réunions de suivi', origine, adaptee, exigence: 'x', etape: 'publipostage', statut: 'retablie', actuelle: origine, contrairesRetirees: [ajout] };
+    expect(consultationsAdaptations([decision]).join('\n')).toMatch(/ou demandées »\. Pour la garder/);
+  });
+  it('schéma : la fréquence écrite en toutes lettres (« Tous les deux mois ») absente du texte rétabli est repérée', () => {
+    const svg = '<svg><text>Réunions de suivi</text><text>Tous les deux mois</text></svg>';
+    expect(frequencesAbsentes(svg, origine)).toEqual(['bimestriel']);
+    expect(frequencesAbsentes(svg, adaptee)).toEqual([]);
+    expect(frequencesAbsentes('<svg><text>Mensuelles ou trimestrielles</text></svg>', origine)).toEqual([]);
   });
 });

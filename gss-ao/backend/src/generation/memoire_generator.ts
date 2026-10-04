@@ -1429,7 +1429,11 @@ export function frequencesAbsentes(svg: string, texte: string): string[] {
     ['mensuel', /par mois|chaque mois|tous les mois/], ['bimestriel', /tous les deux mois/], ['trimestriel', /par trimestre|chaque trimestre|tous les trois mois|dans le trimestre/],
     ['semestriel', /par semestre|tous les six mois/], ['annuel', /par an\b|chaque année|tous les ans|par année/]];
   for (const [w, rx] of EQUIV) if (rx.test(t)) dansTexte.add(w);
-  return [...new Set((mots.match(FREQ) || []).map(racine))].filter((w) => !dansTexte.has(w));
+  // (T7N-10 : fréquence écrite en toutes lettres dans le schéma, « Tous les deux mois », « Chaque mois », comme un adjectif)
+  const dansSchema = new Set((mots.match(FREQ) || []).map(racine));
+  const m = mots.toLowerCase().replace(/\s+/g, ' ');
+  for (const [w, rx] of EQUIV) if (rx.test(m)) dansSchema.add(w);
+  return [...dansSchema].filter((w) => !dansTexte.has(w));
 }
 
 /** Familles de fréquence d'un texte (« une fois par trimestre », « trimestrielles », « dans le trimestre » → « trimestriel »). */
@@ -9730,6 +9734,9 @@ RÈGLES DE FORME (rendu Marp) :
       const svgs = schemasBibliotheque(biblio.map((r) => sourceDe(r.id)!.ref!), 'page', theme, plan.vocabulaireSchemas || []);
       for (const r of biblio) {
         const svg = svgs.get(sourceDe(r.id)!.ref!);
+        // (même contrôle qu'à la génération, T5CP-8, T7N-10 : fréquence du schéma absente du texte final de la rubrique,
+        // par exemple après une phrase d'origine rétablie par GSS : schéma construit d'après le texte)
+        if (svg && frequencesAbsentes(svg, sectionsMap[r.id] || '').length) continue;
         if (svg) schemas.set(CLE_SCHEMA(r.id), finaliserSvg(svg, `b${r.id}`));
       }
     }
