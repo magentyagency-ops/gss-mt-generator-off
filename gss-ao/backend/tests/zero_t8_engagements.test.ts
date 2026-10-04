@@ -46,3 +46,13 @@ describe('ajouts de l’adaptation (T8-CONS-6, T8-CONS-8)', () => {
     expect(perimetreSecours('- Site unique : IMM.\n- Hors périmètre : ne pas présenter les options BPU comme des effectifs de base.\n- Contrôle des accès : oui. Aucune télésurveillance par GSS n’est décrite.')).toBe('- Site unique : IMM.\n- Contrôle des accès : oui.');
   });
 });
+
+import { nettoyerBloc1 } from '../src/generation/reponse_libre_v2';
+describe('bloc 1 : attente qui reprend une clause coercitive retirée (C3, C6, T8N-7)', () => {
+  it('« à ses frais et risques auprès d’un tiers » jamais repris', () => {
+    const t = "## Vos attentes et nos engagements\n- **« l'exécution de la prestation se fera à ses frais et risques auprès d'un tiers »** si GSS ne peut intervenir : nous préparons le remplacement → notre réponse : « La planification ».\n- **Remplacement sous 1 heure** : nous remplaçons l'agent absent → notre réponse : « Le remplacement d'un agent absent ».\n";
+    const r = nettoyerBloc1(t, undefined, '1 an', []);
+    expect(r.texte).not.toMatch(/frais et risques/);
+    expect(r.texte).toMatch(/Remplacement sous 1 heure/);
+  });
+});

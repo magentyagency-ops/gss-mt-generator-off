@@ -3586,6 +3586,20 @@ export function nettoyerBloc1(texte: string, plan: PlanMemoireType | undefined, 
     t = r.texte;
     retirees.push(...r.retirees);
   }
+  // 0 quater. Attente ou point de vigilance qui reprend une clause coercitive ou une sanction de l'acheteur (s2e 1501 : « l'exécution
+  //    de la prestation se fera à ses frais et risques auprès d'un tiers », « … peut être confiée à un tiers aux frais et risques
+  //    de GSS ») : jamais reprise dans le mémoire (C3, C6), la puce est retirée.
+  {
+    let section = '';
+    t = t.split('\n').filter((l) => {
+      const h = /^##\s+(.+)$/.exec(l);
+      if (h) { section = h[1]; return true; }
+      if (!/^(?:Vos attentes|Les points de vigilance)/i.test(section) || !/^\s*[-*•]\s/.test(l)) return true;
+      const sans = l.replace(/→.*$/, '');
+      if (/(?:[àa]\s+ses|aux)\s+frais\s+et\s+risques|aux\s+frais\s+(?:de\s+GSS|du\s+(?:prestataire|titulaire))|p[ée]nalit[ée]s?\s+(?:de|d['’])\s*\d|se\s+r[ée]serve(?:nt)?\s+le\s+droit\s+de\s+(?:faire|confier|r[ée]silier)/i.test(sans)) { retirees.push(l.trim()); return false; }
+      return true;
+    }).join('\n');
+  }
   // 1. Durée inconnue du DCE.
   if (!String(duree || '').trim()) {
     t = t.split('\n').filter((l) => !(/\[CONSULTATION REQUISE\s*:[^\]]*dur[ée]e/i.test(l) && !l.replace(/\[CONSULTATION REQUISE\s*:[^\]]*\]/gi, '').trim())).join('\n');
