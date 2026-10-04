@@ -6,7 +6,7 @@ import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce, 
 import { FormatImpose, PartieCourte, passagesLimitePages, passagesContenuOffre, limitePagesMemoire, phraseLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss, RX_LIMITE_PAR_PARTIE, pagesDesParties } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque, estRetourArriere } from './themes';
-import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, regrouperQuestions, completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, lireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements, libelleDuRepere } from './completion';
+import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, regrouperQuestions, completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, lireEtat, integrerDansRubrique, REPERE, REPERE_RE, LIGNE_REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements, libelleDuRepere } from './completion';
 import {
   chargerMemoireType, preparerMemoireType, reinitialiserJournalIndicateurs, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
@@ -2716,7 +2716,7 @@ export function typeFormalite(t: string): string {
   return /visite/i.test(t) ? 'visite' : /cadres? de r[ée]ponse/i.test(t) ? 'cadre' : /irr[ée]guli|irrecevab|rejet/i.test(t) ? 'rejet' : t;
 }
 
-export function alerteCctpAbsent(dce: string, illisibles: string[] = [], partielles: Array<{ nom: string; pages: string[] }> = []): string[] {
+export function alerteCctpAbsent(dce: string, illisibles: string[] = [], partielles: Array<{ nom: string; pages: string[] }> = [], nonLues: Array<{ nom: string; cause: string }> = []): string[] {
   // Pièce scannée illisible (T10-COH-4) : nommée à GSS ; un CCTP illisible n'est jamais annoncé « absent du dossier ».
   const NOM_CCTP_ILLISIBLE = /cctp|\bccp\b|cahier\s*des\s*(?:clauses\s*(?:techniques|particuli)|charges)|clauses?\s*techniques|programme\s*fonctionnel/i;
   const nomPropre = (n: string) => n.replace(/_/g, ' ');
@@ -2729,6 +2729,13 @@ export function alerteCctpAbsent(dce: string, illisibles: string[] = [], partiel
   // PDF scanné transcrit en partie (REG6-3 : crédit épuisé ou échecs répétés) : pièce et pages non lues nommées à GSS, jamais
   // un CCTP tronqué lu en silence.
   const plages = (p: string[]) => listePages(p.map((x) => x.replace('-', ' à ')));
+  // Pièce Word, tableur ou PDF qui n'a pas pu être ouverte (T8-COH-4 : « CCTP.docx » de 0 octet annoncé « Aucun cahier des
+  // charges n'a été trouvé ») : nommée avec sa cause ; un cahier des charges illisible n'est jamais annoncé absent.
+  const estCctpNom = (n: string) => (NOM_CCTP_ILLISIBLE.test(nomPropre(n)) && !/ccap|clauses\s*administratives/i.test(nomPropre(n))) || RX_CCATP.test(nomPropre(n));
+  for (const x of nonLues) {
+    if (estCctpNom(x.nom)) { cctpIllisibles.push(x.nom); alertesIllisibles.unshift(`Le cahier des charges « ${x.nom} » n'a pas pu être lu (${x.cause}) : ajoutez une version lisible au dossier, puis relancez la génération ; en attendant, le mémoire n'est pas adapté au CCTP.`); }
+    else alertesIllisibles.push(`La pièce « ${x.nom} » n'a pas pu être lue (${x.cause}) : ajoutez une version lisible au dossier, puis relancez la génération ; en attendant, le mémoire n'en tient pas compte.`);
+  }
   for (const x of partielles) alertesIllisibles.push(`La pièce « ${x.nom} » est un PDF scanné dont ${x.pages.length > 1 || /-/.test(x.pages[0]) ? 'les pages' : 'la page'} ${plages(x.pages)} n'${x.pages.length > 1 || /-/.test(x.pages[0]) ? 'ont' : 'a'} pas pu être ${x.pages.length > 1 || /-/.test(x.pages[0]) ? 'lues' : 'lue'} (transcription interrompue) : relancez la génération pour les lire ; en attendant, le mémoire n'en tient pas compte.`);
   if (cctpIllisibles.length) return alertesIllisibles;
   return [...alerteCctpAbsentLu(dce), ...alertesIllisibles];
@@ -3134,6 +3141,8 @@ export class MemoireGenerator {
   private cadreNonRemplissable: string | null = null;
   /** Pièces du DCE (PDF scannés) dont la transcription a échoué (T10-COH-4). */
   private piecesIllisibles: string[] = [];
+  /** Pièces (Word, tableur, PDF) qui n'ont pas pu être ouvertes : fichier vide, endommagé ou protégé (T8-COH-4). */
+  private piecesNonLues: Array<{ nom: string; cause: string }> = [];
   /** PDF scannés transcrits en partie (REG6-3) : nom de la pièce et pages non lues, nommés à GSS dans les alertes. */
   private piecesPartielles: Array<{ nom: string; pages: string[] }> = [];
   /** Pièces du cahier des charges tronquées ou écartées par le budget de lecture du DCE (T1-COH-3) : signalées à GSS. */
@@ -3392,6 +3401,7 @@ export class MemoireGenerator {
 
     const loadedFiles = new Set<string>();
     this.piecesIllisibles = [];
+    this.piecesNonLues = [];
     this.piecesPartielles = [];
     this.alertesDceTronque = [];
     const scanDir = async (dir: string) => {
@@ -3414,6 +3424,12 @@ export class MemoireGenerator {
           text = ext === '.xlsx' ? lireTableur(fullPath) : await extractText(fullPath, { texteBrutSiIllisible: true });
         } catch (e: any) {
           console.warn(`[MemoireGenerator] Impossible de lire: ${entry.name} — ${e.message}`);
+          // Pièce présente mais illisible (T8-COH-4) : nommée à GSS avec sa cause, jamais ignorée en silence (un CCTP illisible
+          // n'est jamais annoncé « absent du dossier »).
+          let taille = -1;
+          try { taille = fs.statSync(fullPath).size; } catch { /* taille inconnue */ }
+          const cause = taille === 0 ? 'fichier vide' : /password|encrypt|chiffr|prot[ée]g/i.test(String(e?.message || '')) ? 'fichier protégé par mot de passe' : 'fichier vide, endommagé ou protégé par mot de passe';
+          if (!this.piecesNonLues.some((x) => x.nom === entry.name)) this.piecesNonLues.push({ nom: entry.name, cause });
           continue;
         }
         // Pour un .docx, le texte plat APLATIT les tableaux (en-têtes et valeurs sur des lignes
@@ -7643,7 +7659,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         ? (conversation?.length ? [{ ...conversation[0], texte: `${conversation[0].texte}\n\n${texteAdaptations}` }] : [{ role: 'assistant' as const, date: new Date().toISOString(), texte: texteAdaptations }])
         : conversation;
       // DCE sans CCTP (T8-COH-2), rubriques du cadre sans réponse (T10-COH-2) : en tête du premier message de l'assistant.
-      const alerteCctp = [...alerteCctpAbsent(dceContext, this.piecesIllisibles, this.piecesPartielles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...alertesRubriquesCadre];
+      const alerteCctp = [...alerteCctpAbsent(dceContext, this.piecesIllisibles, this.piecesPartielles, this.piecesNonLues), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...alertesRubriquesCadre];
       if (alerteCctp.length) conversationFinale = conversationFinale?.length ? [{ ...conversationFinale[0], texte: `${alerteCctp.join('\n\n')}\n\n${conversationFinale[0].texte}` }] : [{ role: 'assistant' as const, date: new Date().toISOString(), texte: alerteCctp.join('\n\n') }];
       // Grille « Éléments de candidature » du cadre (vitry, T5N-1) : les données de GSS à y écrire sont annoncées dans le premier
       // message (une question chacune dans la liste des informations à compléter).
@@ -7682,7 +7698,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       // Aucun repère technique (« [CHAMP_14] ») ni doublon dans les questions remises à GSS (havre1 21).
       consultations: [
         // DCE sans CCTP (T8-COH-2), rubriques du cadre sans réponse (T10-COH-2) : en tête des consultations.
-        ...alerteCctpAbsent(dceContext, this.piecesIllisibles, this.piecesPartielles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext),
+        ...alerteCctpAbsent(dceContext, this.piecesIllisibles, this.piecesPartielles, this.piecesNonLues), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext),
         ...alertesRubriquesCadre,
         // Même donnée inconnue (partenaire de télésurveillance, sa station, sa certification) : une seule question (T1-COH-8).
         // Questions sans redite (T2-CONS-7) : une question qui redit celle d'un emplacement à compléter est retirée.
@@ -8658,7 +8674,7 @@ RÈGLES DE FORME (rendu Marp) :
     // Deux sources : (1) les écarts détectés par la matrice de conformité ; (2) les marqueurs
     // [CONSULTATION REQUISE : …] que le rédacteur a insérés faute de réponse spécifique dans la Doc GSS.
     const consultations = new Set<string>([
-      ...this.alertesFormat, ...alerteCctpAbsent(dceContext, this.piecesIllisibles, this.piecesPartielles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),
+      ...this.alertesFormat, ...alerteCctpAbsent(dceContext, this.piecesIllisibles, this.piecesPartielles, this.piecesNonLues), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),
       ...commentairesRetires,
       // Valeurs du registre encore « à confirmer » reprises dans le texte : GSS est prévenu.
       ...confirmationsRegistreUtilisees(Object.values(sectionsMap).join('\n'), horsNormandieLibre),
@@ -8706,7 +8722,7 @@ RÈGLES DE FORME (rendu Marp) :
     // Les marqueurs sont des flags INTERNES (pour GSS) : on les retire du texte pour qu'ils
     // n'apparaissent pas dans le PDF remis au client.
     for (const id of Object.keys(sectionsMap)) {
-      sectionsMap[id] = sectionsReperes[id].replace(REPERE_RE, '').replace(/\n{3,}/g, '\n\n').trim();
+      sectionsMap[id] = sectionsReperes[id].replace(LIGNE_REPERE_RE, '').replace(REPERE_RE, '').replace(/\n{3,}/g, '\n\n').trim();
     }
 
     if (consultationList.length) {
@@ -9271,7 +9287,7 @@ RÈGLES DE FORME (rendu Marp) :
     const consultationList = questionsUniques(elementsSansDoublon(elementsLibres));
     // OpenAI en panne pendant la génération (T5-COH-2) : jamais un publipostage non adapté présenté comme complet.
     // DCE sans CCTP (T8-COH-2) : en tête des consultations et du premier message de l'assistant, comme la limite de pages.
-    const alertePanne = [...alerteCctpAbsent(dceContext, this.piecesIllisibles, this.piecesPartielles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, rubriquesNonAdaptees)].filter(Boolean).join('\n\n');
+    const alertePanne = [...alerteCctpAbsent(dceContext, this.piecesIllisibles, this.piecesPartielles, this.piecesNonLues), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, rubriquesNonAdaptees)].filter(Boolean).join('\n\n');
     if (alertePanne) { consultationList.unshift(...alertePanne.split('\n\n')); console.warn(`[MemoireGenerator] ${alertePanne}`); }
     consultationList.push(...avisSecours);
     // Propositions de réponse de l'IA : signalées APRÈS les éléments (jamais envoyées à l'équipe comme des questions).
@@ -9295,7 +9311,7 @@ RÈGLES DE FORME (rendu Marp) :
 
     // ── 11. Schémas (1 par rubrique, sans modèle quand le mémoire type les fixe) et rendu ──
     const propres: Record<string, string> = {};
-    for (const [id, t] of Object.entries(sections)) propres[id] = t.replace(REPERE_RE, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    for (const [id, t] of Object.entries(sections)) propres[id] = t.replace(LIGNE_REPERE_RE, '').replace(REPERE_RE, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
     progres(88, 'Schémas du mémoire type : 1 page de schéma par rubrique…');
     const theme = themeActif();
     actualiserOrganigramme(referents);
@@ -10542,7 +10558,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
 
     // ── Points à compléter (même logique que la réponse libre) ──
     const consultations = new Set<string>([
-      ...this.alertesFormat, ...alerteCctpAbsent(dceContext, this.piecesIllisibles, this.piecesPartielles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie)]);
+      ...this.alertesFormat, ...alerteCctpAbsent(dceContext, this.piecesIllisibles, this.piecesPartielles, this.piecesNonLues), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),...commentairesRetires, ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie)]);
     for (const r of requirementsMatrix) if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence)) consultations.add(r.exigence.trim());
     const markerRe = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
     const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
@@ -11098,7 +11114,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const consultationList = questionsUniques(elementsSansDoublon(elements));
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
     consultationList.push(...this.controlePagesParPartie(rendu.filePath, format, plan));
-    const alertePanneCourt = [...alerteCctpAbsent(dceContext, this.piecesIllisibles, this.piecesPartielles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, nonAdapteesCourt)].filter(Boolean).join('\n\n');
+    const alertePanneCourt = [...alerteCctpAbsent(dceContext, this.piecesIllisibles, this.piecesPartielles, this.piecesNonLues), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, nonAdapteesCourt)].filter(Boolean).join('\n\n');
     if (alertePanneCourt) { consultationList.unshift(...alertePanneCourt.split('\n\n')); console.warn(`[MemoireGenerator] ${alertePanneCourt}`); }
     consultationList.push(...rubriquesExcluesCourt, ...avisSecours, ...propositions);
     // Phrases de GSS adaptées au CCTP (D8) : une ligne par phrase à valider (aucune s'il n'y en a pas).
@@ -11208,7 +11224,7 @@ FORME : sous-titres « ## » courts (un par élément), paragraphes courts et li
       .map((p) => ({
         titre: p.title,
         // Repères retirés avec la ponctuation qui les suivait (aucun « . » orphelin).
-        texte: sections[p.id].replace(new RegExp(`${REPERE_RE.source}[ \\t]*[.;,]?`, 'g'), '').replace(/^[ \t]*[.;,][ \t]*$/gm, '').replace(/\n{3,}/g, '\n\n').trim(),
+        texte: sections[p.id].replace(LIGNE_REPERE_RE, '').replace(new RegExp(`${REPERE_RE.source}[ \\t]*[.;,]?`, 'g'), '').replace(/^[ \t]*[.;,][ \t]*$/gm, '').replace(/\n{3,}/g, '\n\n').trim(),
         schema: schemas[`${p.id}#court`] ?? schemas[`${p.id}#court#organigramme`] ?? schemas[`${p.id}#court#process`],
         garder: !!(schemas[`${p.id}#court#organigramme`] || schemas[`${p.id}#court#process`]),
         // Process de la compréhension : juste après l'explication de la compréhension (consigne 6), avant les autres rubriques

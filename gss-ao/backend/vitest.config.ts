@@ -5,5 +5,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     setupFiles: ['./tests/setup_env.ts'],
+    // T8-COH-9 : tests qui chargent le générateur entier (D9, REG6-3) près de 5 s sur une machine chargée : délai de 30 s,
+    // assertions inchangées.
+    testTimeout: 30_000,
   },
 });

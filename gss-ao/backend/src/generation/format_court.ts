@@ -576,25 +576,39 @@ export async function rendreFormatCourt(
   const theme = themeActif(themeDemande);
   const { pied, piedPolice, piedStyle } = jetonsCourt(theme);
   const puppeteer = require('puppeteer');
-  const navigateur = await puppeteer.launch({
-    headless: 'new',
-    executablePath: process.env.CHROME_PATH || undefined,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--allow-file-access-from-files'],
-  });
+  // Navigateur absent ou bloqué (T8-COH-5) : erreur claire en français, jamais le message brut de Puppeteer (« Browser was not
+  // found at the configured executablePath… »).
+  const CHROME_KO = 'Rendu PDF impossible : le navigateur (Chrome) est indisponible ou bloqué ; aucun document n\'est produit. Relancez la génération ; si le problème persiste, vérifiez l\'installation de Chrome sur le serveur (CHROME_PATH).';
+  let navigateur: any;
+  try {
+    navigateur = await puppeteer.launch({
+      headless: 'new',
+      executablePath: process.env.CHROME_PATH || undefined,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--allow-file-access-from-files'],
+    });
+  } catch (e: any) {
+    console.warn(`[FormatCourt] Lancement de Chrome impossible : ${e?.message || e}`);
+    throw new Error(CHROME_KO);
+  }
   const travail = fs.mkdtempSync(path.join(os.tmpdir(), 'gss-court-'));
   const pdf = path.join(dossierSortie, `Mémoire technique GSS (format RC)_${Date.now()}.pdf`);
   try {
-    const page = await navigateur.newPage();
+    const page = await navigateur.newPage().catch((e: any) => { console.warn(`[FormatCourt] Page Chrome impossible : ${e?.message || e}`); throw new Error(CHROME_KO); });
     const essai = async (pts: typeof parties, corps: number): Promise<number> => {
       const f = path.join(travail, 'memoire.html');
       fs.writeFileSync(f, html(pts, cover, corps, theme), 'utf-8');
-      await page.goto(`file://${f}`, { waitUntil: 'load', timeout: 120_000 });
-      await page.pdf({
-        path: pdf, format: 'A4', printBackground: true, preferCSSPageSize: true,
-        displayHeaderFooter: true, headerTemplate: '<span></span>',
-        footerTemplate: `${piedStyle}<div style="width:100%;font-size:7.5pt;color:${pied};padding:0 14mm;display:flex;justify-content:space-between;font-family:${piedPolice.replace(/"/g, "'")}"><span>GSS — Global Security Services</span><span>Page <span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
-        timeout: 300_000,
-      });
+      try {
+        await page.goto(`file://${f}`, { waitUntil: 'load', timeout: 120_000 });
+        await page.pdf({
+          path: pdf, format: 'A4', printBackground: true, preferCSSPageSize: true,
+          displayHeaderFooter: true, headerTemplate: '<span></span>',
+          footerTemplate: `${piedStyle}<div style="width:100%;font-size:7.5pt;color:${pied};padding:0 14mm;display:flex;justify-content:space-between;font-family:${piedPolice.replace(/"/g, "'")}"><span>GSS — Global Security Services</span><span>Page <span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
+          timeout: 300_000,
+        });
+      } catch (e: any) {
+        console.warn(`[FormatCourt] Rendu de la page par Chrome impossible : ${e?.message || e}`);
+        throw new Error(CHROME_KO);
+      }
       return nombrePages(pdf);
     };
     let pts = parties.map((p) => ({ ...p }));
@@ -613,7 +627,7 @@ export async function rendreFormatCourt(
     }
     return { filePath: pdf, pages: nombrePages(pdf), corps: 9, schemasRetires };
   } finally {
-    await navigateur.close();
+    await navigateur.close().catch(() => undefined);
     fs.rmSync(travail, { recursive: true, force: true });
   }
 }

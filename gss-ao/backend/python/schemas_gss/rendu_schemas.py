@@ -129,6 +129,9 @@ PREFIXES = ("anti", "auto", "multi", "semi", "télé", "inter", "extra", "contre
 # faute de « courrier »).
 MOTS_SUPPLEMENT = {"courriel", "courriels", "horodatage", "horodatages", "tuilage", "tuilages", "smartphone", "smartphones",
                    "digicode", "digicodes", "badgeuse", "badgeuses",
+                   # « week-end(s) » coupé au trait d'union par le contrôle (T8N-3 : carte « Les week-ends et jours fériés » refusée,
+                   # « ends » lu comme une faute ; bloc 1 d'ifits sans schéma de process).
+                   "week", "weeks", "end", "ends", "week-end", "week-ends", "weekend", "weekends",
                    # Commune de la référence FM Logistic écrite par GSS (le vocabulaire validé porte la coquille « Eudebouville ») :
                    # sans elle, le schéma de la rubrique b2_ref_logistique n'était jamais dessiné.
                    "heudebouville"}

@@ -41,6 +41,9 @@ export const PLACEHOLDER = '[À COMPLÉTER]';
 /** Repère d'un manque dans le texte d'une rubrique (réponse libre). */
 export const REPERE = (n: number) => `⟦AC:${n}⟧`;
 export const REPERE_RE = /⟦AC:(\d+)⟧/g;
+/** Ligne qui ne porte qu'un repère (T8N-4) : retirée entière avant le rendu, jamais laissée en ligne vide qui couperait un
+ *  tableau du bloc 1 (« ■ Mesures d'information des personnels… » imprimée hors du tableau des points de vigilance). */
+export const LIGNE_REPERE_RE = /^[ \t]*(?:⟦AC:\d+⟧[ \t]*)+\n/gm;
 
 export interface ElementACompleter {
   cle: string;                 // GSS_AC_n (cadre) ou Qn (réponse libre)
@@ -789,7 +792,7 @@ export async function recomposerPdf(etat: EtatCompletion): Promise<string> {
   // Schémas qui écrivent les effectifs accordés au texte (T10N-2).
   await accorderSchemasEffectifs(etat);
   const propres: Record<string, string> = {};
-  for (const [id, t] of Object.entries(etat.libre!.sections)) propres[id] = t.replace(REPERE_RE, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  for (const [id, t] of Object.entries(etat.libre!.sections)) propres[id] = t.replace(LIGNE_REPERE_RE, '').replace(REPERE_RE, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   // Même thème que le rendu d'origine (schémas déjà construits réutilisés) ; état d'avant les thèmes : retour arrière.
   const theme = etat.libre!.theme || RETOUR_ARRIERE;
   if (etat.libre!.court) {
