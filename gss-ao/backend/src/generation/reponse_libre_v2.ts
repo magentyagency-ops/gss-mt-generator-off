@@ -14,7 +14,7 @@
 import fs from 'fs';
 import path from 'path';
 import {
-  chargerMemoireType, normaliser, rechercherRubriques, similarite, motsDePhrase, faitsDePhrase, listeFr, cleCommune,
+  chargerMemoireType, normaliser, rechercherRubriques, similarite, motsDePhrase, faitsDePhrase, listeFr, cleCommune, delaiImposeNet,
   type DonneesBesoin, type ExigenceMatrice, type MemoireType, type PlanMemoireType, type SchemaRubrique,
 } from './memoire_type';
 import { ZONE_GSS, vocabulaireDuCctp, periodeEnTete, normaliserExpressionsDelai, minutesDe, RX_NOMBRE_LETTRES as RX_NOMBRE_LETTRES_V2 } from './base_memoires';
@@ -87,9 +87,12 @@ export function valeursImposeesValides<T extends { valeur: string }>(imposees: R
     // Valeur recopiée avec la majuscule de sa phrase du CCTP (citedia 701 : « les réunions de suivi ont lieu Au minimum une
     // fois par trimestre ») : elle est insérée au milieu d'une phrase de GSS, en minuscule.
     const brute = String(v?.valeur || '');
-    const valeur = /^(?:Au|Aux|Une?|Deux|Trois|Quatre|Cinq|Six|Sept|Huit|Neuf|Dix|Douze|Quinze|Trente|Dans|Sous|En|Chaque|Tous|Toutes|Tout|Toute|Le|La|Les|Des|Par|Selon|Entre|Avant|Après|Dès|Mensuel\w*|Trimestriel\w*|Hebdomadaire\w*|Annuel\w*|Semestriel\w*|Quotidien\w*|Journali\w*)(?=[\s'’-])/.test(brute)
+    const casse = /^(?:Au|Aux|Une?|Deux|Trois|Quatre|Cinq|Six|Sept|Huit|Neuf|Dix|Douze|Quinze|Trente|Dans|Sous|En|Chaque|Tous|Toutes|Tout|Toute|Le|La|Les|Des|Par|Selon|Entre|Avant|Après|Dès|Mensuel\w*|Trimestriel\w*|Hebdomadaire\w*|Annuel\w*|Semestriel\w*|Quotidien\w*|Journali\w*)(?=[\s'’-])/.test(brute)
       ? brute.charAt(0).toLowerCase() + brute.slice(1) : brute;
-    if (!forme || forme.test(valeur)) valides[nom] = valeur === brute ? v : { ...v, valeur };
+    // Délai : la durée seule (« 30 minutes maximum (alarme intrusion) » → « 30 minutes », T4-CONS-4), la phrase de GSS porte
+    // déjà « en … au maximum » ; écarté si un qualificatif reste.
+    const valeur = /^DELAI_/.test(nom) ? delaiImposeNet(casse) : casse;
+    if (!forme || (valeur && forme.test(valeur))) valides[nom] = valeur === brute ? v : { ...v, valeur };
     else ecartees.push({ variable: nom, valeur: String(v?.valeur || '') });
   }
   return { valides, ecartees };

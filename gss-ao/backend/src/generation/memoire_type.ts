@@ -433,6 +433,18 @@ export function delaiNu(v: string): string {
     .trim();
 }
 
+/**
+ * Délai imposé par le CCTP réduit à sa durée, pour la phrase de GSS qui porte déjà « en … au maximum » (citedia 1461,
+ * T4-CONS-4 : « 30 minutes maximum (alarme intrusion) » imprimé « en 30 minutes maximum (alarme intrusion) au maximum ») :
+ * qualificatifs entre parenthèses, « maximum », « au plus », « au maximum » retirés. '' si autre chose qu'une durée reste
+ * (« 30 minutes pour une alarme intrusion ») : la valeur n'est pas insérée.
+ */
+export function delaiImposeNet(v: string): string {
+  const net = delaiNu(String(v || '').replace(/\s*\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim())
+    .replace(/\s+(?:au\s+)?(?:maximum|max\.?|maximal)(?=\s|$)/gi, '').replace(/\s+au\s+plus(?:\s+tard)?(?=\s|$)/gi, '').trim();
+  return /^\d+(?:[.,]\d+)?\s*(?:minutes?|mn|min|h|heures?|jours?(?:\s+ouvr[ée]s)?)(?:\s*\d{2})?$/i.test(net) ? net : '';
+}
+
 export function normaliserDelai(v: string): string {
   // Heures et minutes (« 1h30 », « 1 h 30 », « 1 heure 30 ») : « 1 h 30 » (T1-GEN-3), jamais « 1 heure ».
   const hm = /(?<![\d.,])(\d{1,2})\s*(?:h|heures?)\s*(\d{2})(?![\d])/i.exec(v || '');
@@ -2266,7 +2278,14 @@ export function variablesDuMarche(mt: MemoireType, ctx: ContexteMarche, indicate
       out[nom] = def?.valeur_si_exige ? { valeur: def.valeur_si_exige, source: `engagement GSS quand le cahier des charges l'exige (exigence du DCE : « ${imp.citation.slice(0, 200)} »)` } : (CALCULS[nom]?.(c) || { valeur: null });
       continue;
     }
-    if (imp && valeurPropre(imp.valeur)) {
+    // Délai imposé pour un sujet où le CCTP fixe plusieurs délais (citedia : 15 minutes pour l'intervenant TLS et le bouton
+    // anti-agression, 30 minutes pour une alarme technique ou intrusion, T4-CONS-4) : une seule valeur ne peut pas les dire
+    // tous ; la règle des délais multiples s'applique (T10C-2 : délai de GSS s'il les respecte tous, sinon phrase sans délai
+    // et question citant les phrases du CCTP).
+    const sujetImp = SUJET_VARIABLE_DELAI[nom];
+    const delaisMultiples = !!imp && !!sujetImp && ctx.delaisDuDce !== false
+      && new Set(delaisDuDce(ctx.dce || '', sujetImp as keyof typeof SUJETS_DELAI).map((d) => d.minutes)).size > 1;
+    if (imp && valeurPropre(imp.valeur) && !delaisMultiples) {
       out[nom] = { valeur: imp.valeur, source: `imposé par le DCE : « ${imp.citation.slice(0, 200)} »` };
       continue;
     }
@@ -4053,8 +4072,9 @@ Réponds UNIQUEMENT par un objet JSON : {"valeurs":[{"variable":"NOM","valeur":"
       const etrangers = nombresDe(valeur).filter((n) => !nombresCitation.has(n));
       if (etrangers.length) { refusees.push({ variable: nom, raison: `chiffre absent de la citation (${etrangers.join(', ')})` }); continue; }
     }
-    // Délai : la durée seule, la phrase de GSS porte déjà « en … au maximum ».
-    imposees[nom] = { valeur: sujetV !== undefined ? delaiNu(valeur) || valeur : valeur, citation };
+    // Délai : la durée seule, la phrase de GSS porte déjà « en … au maximum » ; refusé si un qualificatif reste (T4-CONS-4).
+    if (sujetV !== undefined && !delaiImposeNet(valeur)) { refusees.push({ variable: nom, raison: `délai avec un qualificatif (« ${valeur} »)` }); continue; }
+    imposees[nom] = { valeur: sujetV !== undefined ? delaiImposeNet(valeur) : valeur, citation };
   }
   return { imposees, refusees };
 }
