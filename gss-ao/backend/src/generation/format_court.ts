@@ -76,7 +76,11 @@ export function passagesContenuOffre(dce: string): string[] {
   const out: string[] = [];
   const t = String(dce || '');
   for (const m of t.matchAll(/m[ée]moire\s+(?:technique|justificatif)|offre\s+technique|note\s+m[ée]thodologique/gi)) {
-    const zone = t.slice(Math.max(0, m.index! - 300), m.index! + 500);
+    // Numéros de page des pieds de page (« Marché n°26R045 page 9/17 », « Page 1 sur 12 ») et « date / heure / délai
+    // limite » ne parlent pas du nombre de pages du mémoire (T3-REG-1, T3N-7) : retirés avant le repérage.
+    const zone = t.slice(Math.max(0, m.index! - 300), m.index! + 500)
+      .replace(/\bpages?\s*(?:n[°o]\s*)?\d+\s*(?:\/|sur)\s*\d+/gi, ' ')
+      .replace(/(?:dates?|heures?|d[ée]lais?)\s+(?:et\s+heures?\s+)?limites?|limites?\s+(?:de\s+|d['’]\s*)?(?:r[ée]ception|remise|d[ée]p[ôo]t|validit[ée]|ex[ée]cution)/gi, ' ');
     if (!/pages?|feuillets?|feuilles?|limit|n.exc[èé]d|ne\s+(?:doit|devra|pourra)\s+pas\s+(?:d[ée]passer|exc[èé]der)/i.test(zone)) continue;
     if (out.some((o) => o.includes(t.slice(m.index!, m.index! + 40)))) continue;
     out.push(t.slice(Math.max(0, m.index! - 700), m.index! + 1300));

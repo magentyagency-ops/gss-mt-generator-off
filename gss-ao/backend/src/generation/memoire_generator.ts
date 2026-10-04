@@ -9725,6 +9725,7 @@ Renvoie UNIQUEMENT un objet JSON : {"impose": true|false, "parties": [{"numero":
   private async detecterFormatImpose(dce: string): Promise<FormatImpose | null> {
     // Repérage sans modèle pour choisir les extraits, jamais pour décider seul qu'il n'y a pas de limite (T1-GEN-1).
     let passages = passagesLimitePages(dce);
+    const limiteRepereeSansModele = passages.length > 0;
     if (!passages.length) passages = passagesContenuOffre(dce);
     if (!passages.length) return null;
     const criteres: string[] = [];
@@ -9760,10 +9761,14 @@ Renvoie UNIQUEMENT un objet JSON : {"limite": true|false, "pagesMax": nombre, "p
         console.warn(`[MemoireGenerator] Format imposé par le RC : réponse du modèle indisponible ; ${lue.pages} pages maximum lues dans le RC (plan par défaut).`);
         return { pagesMax: lue.pages, plan, source: lue.citation };
       }
-      // Phrase qui contient le nombre de pages (T9CS-2), jamais le début du passage (en-tête d'une autre pièce).
-      const phrase = passages.map(phraseLimitePages).find(Boolean) || passages[0].replace(/\s+/g, ' ').trim();
-      this.alertesFormat.push(`Le RC mentionne une limite de pages (« ${extrait(phrase)} ») que la rédaction automatique n'a pas pu lire : le mémoire est rédigé sans limite de pages. Vérifiez si cette limite porte sur le mémoire technique et relancez la génération avant la remise.`);
-      console.warn('[MemoireGenerator] Format imposé par le RC : réponse du modèle indisponible et limite du mémoire technique non lue dans le RC ; alerte posée.');
+      // Phrase qui contient le nombre de pages (T9CS-2), jamais le début du passage (en-tête d'une autre pièce). Sans phrase de
+      // limite (T3-REG-1, T3N-7 : DCE du CSTB, de l'IFITS, d'Étampes, sans aucune limite, où seuls des pieds de page « page
+      // 9/17 » faisaient passer le repli) : une limite repérée par son nombre de pages est signalée sans citation, sinon le RC
+      // ne parle pas de pages et rien n'est signalé ; jamais un extrait brut cité.
+      const phrase = passages.map(phraseLimitePages).find(Boolean);
+      if (phrase) this.alertesFormat.push(`Le RC mentionne une limite de pages (« ${extrait(phrase)} ») que la rédaction automatique n'a pas pu lire : le mémoire est rédigé sans limite de pages. Vérifiez si cette limite porte sur le mémoire technique et relancez la génération avant la remise.`);
+      else if (limiteRepereeSansModele) this.alertesFormat.push(`La rédaction automatique n'a pas pu vérifier si le RC limite le nombre de pages du mémoire technique : le mémoire est rédigé sans limite de pages. Vérifiez-le dans le RC avant la remise.`);
+      console.warn(`[MemoireGenerator] Format imposé par le RC : réponse du modèle indisponible et limite du mémoire technique non lue dans le RC${phrase || limiteRepereeSansModele ? ' ; alerte posée' : ' ; aucune phrase de limite de pages dans le RC'}.`);
       return null;
     }
     try {
