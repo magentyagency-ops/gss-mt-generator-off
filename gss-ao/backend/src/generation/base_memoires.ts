@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { motDuDictionnaire } from './dictionnaire_fr';
 
 /**
  * BASE DE MÉMOIRES GSS : les réponses d'appels d'offres déjà rédigées par GSS (Université de Rouen,
@@ -739,22 +740,34 @@ const RX_NON_ALLOTI = /(?<!en cas de )\bnon[- ]allotie?s?\b(?!\s+(?:en|jusqu|dep
 /**
  * Numéro de lot sous une forme unique (T3G-4) : « 02 », « n° 2 », « II » → « 2 » ; une lettre (« B ») reste une lettre.
  */
-export function numeroDeLot(v: string): string {
+export function numeroDeLot(v: string, lettres = false): string {
   const t = String(v || '').trim().toUpperCase();
   if (/^\d{1,3}$/.test(t)) return String(Number(t));
   const romains: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10 };
-  if (romains[t] && t.length > 1) return String(romains[t]);
+  // « I », « V », « X » seuls (T5G-5) : chiffres romains, sauf quand les lots du DCE sont des lettres (« Lot A », « Lot B »).
+  if (romains[t] && (t.length > 1 || !lettres)) return String(romains[t]);
   return t;
+}
+
+/**
+ * Lots du DCE numérotés par des lettres (« Lot A », « Lot B », T5G-5) : une lettre de lot autre que I, V ou X dans l'analyse
+ * ou en tête de lot dans le DCE. Sinon « Lot I » et « Lot V » sont des chiffres romains.
+ */
+export function lotsEnLettres(analyse: any, dce: string): boolean {
+  const nums = (Array.isArray(analyse?.lots) ? analyse.lots : []).map((l: any) => String(typeof l === 'object' ? l?.num ?? '' : l ?? '').trim());
+  if (nums.some((n: string) => /^(?:lots?\s*)?(?:n\s*[°ºo.]?\s*)?[A-HJ-UWYZa-hj-uwyz]$/i.test(n) && !/^lots?$/i.test(n))) return true;
+  return /(?:^|\n)\s*(?:[-•▪*]\s*)?[Ll][Oo][Tt]\s*(?:[Nn]\s*[°ºo.]?\s*)?[A-HJ-UWYZ](?![\wÀ-ÿ°º/])\s*[:–—-]/.test(String(dce || ''));
 }
 
 export function lotsDuMemoireDce(analyse: any, dce: string, propre: (v: unknown) => string = textePropre): { lots: string[]; question?: string } {
   const plat = String(dce || '').replace(/\s+/g, ' ');
   const lots: Array<{ num: string; perimetre: string }> = [];
+  const lettres = lotsEnLettres(analyse, dce);
   for (const l of Array.isArray(analyse?.lots) ? analyse.lots : []) {
     // « lot » et « n° / no / n. » facultatifs l'un sans l'autre (T1-COH-2 : « N°1 » lu « lot N ») ; une lettre suivie de
     // « ° » n'est jamais un lot.
     const m = /^(?:lots?\s*)?(?:n\s*[°ºo.]\s*(?=\d))?(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/])/i.exec(propre(typeof l === 'object' ? l?.num : l));
-    if (m && !lots.some((x) => x.num === numeroDeLot(m[1]))) lots.push({ num: numeroDeLot(m[1]), perimetre: propre(typeof l === 'object' ? l?.perimetre : '') });
+    if (m && !lots.some((x) => x.num === numeroDeLot(m[1], lettres))) lots.push({ num: numeroDeLot(m[1], lettres), perimetre: propre(typeof l === 'object' ? l?.perimetre : '') });
   }
   // Marché déclaré non alloti : aucun lot, même si l'analyse en a relevé plusieurs (seulement sur une affirmation).
   if (RX_NON_ALLOTI.test(plat)) return { lots: [] };
@@ -771,7 +784,8 @@ export function lotsDuMemoireDce(analyse: any, dce: string, propre: (v: unknown)
   const seuls = [...new Set(noms.map(numeros).filter((x) => x.length === 1).map((x) => x[0]))];
   if (seuls.length === 1) return { lots: seuls };
   const parLot = /offre distincte pour chaque lot|offres? s[ée]par[ée]es? pour chacun des lots|m[ée]moire technique distinct[^.]{0,40}chaque lot|cadre de r[ée]ponse par lot|un m[ée]moire (?:technique )?par lot/i.test(plat);
-  const liste = lots.map((x) => `${x.num}${x.perimetre ? ` : ${x.perimetre.length > 90 ? `${x.perimetre.slice(0, 90).replace(/\s+\S*$/, '')}…` : x.perimetre}` : ''}`).join(' ; ');
+  // Périmètre sans sa ponctuation finale (T5N-15 : jamais « … à Louviers. ; 2 : … »).
+  const liste = lots.map((x) => { const p = x.perimetre.replace(/[\s.;:,]+$/, ''); return `${x.num}${p ? ` : ${p.length > 90 ? `${p.slice(0, 90).replace(/\s+\S*$/, '')}…` : p}` : ''}`; }).join(' ; ');
   return { lots: lots.map((x) => x.num), question: `Le DCE comporte ${lots.length} lots (${liste})${parLot ? ' et le RC demande une offre distincte par lot' : ''} : pour quel lot ce mémoire est-il remis ?` };
 }
 
@@ -784,7 +798,9 @@ export function perimetreDuLot(analyse: any, dce: string): { analyse: any; dce: 
   if (!Array.isArray(analyse?.lots) || analyse.lots.length < 2) return null;
   const r = lotsDuMemoireDce(analyse, dce);
   if (r.lots.length !== 1 || r.question) return null;
-  const lot = numeroDeLot(r.lots[0]);
+  const lettres = lotsEnLettres(analyse, dce);
+  const num = (v: string) => numeroDeLot(v, lettres);
+  const lot = num(r.lots[0]);
   // Têtes de lot (T3G-4) : « Lot 2 : », « Lot n° 2 – », « Lot 2 (», mais aussi « LOT 02 » ou « LOT 2 GARDIENNAGE … » seul en tête
   // de ligne, « pour le lot 2 » / « au titre du lot 2 », et la ligne d'un tableau dont la première colonne est « Lot ».
   const TETE = /(?:^|(?<=[.;]\s{1,3}))(?:[-•▪*]\s*)?lot\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/])\s*(?:[:–—-]|\()/gi;
@@ -793,46 +809,95 @@ export function perimetreDuLot(analyse: any, dce: string): { analyse: any; dce: 
   const TETE_PHRASE = /(?:pour|au titre du|concernant|s['’]agissant du)\s+(?:le\s+)?lot\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/])/gi;
   // Passage de plusieurs lots ou de tous les lots (T4-REG-1, citedia2 : « Pour les lots 1 et 2, la phase de préparation
   // comprendra… » ; havre1 : « Pour chacun des lots, la durée du contrat… ») : commun (« * ») si le lot du mémoire en est,
-  // sinon d'un autre lot.
+  // sinon d'un autre lot. Seulement en tête de phrase et pour cette phrase (T5-REG-3) : « Comme pour chaque lot, … » ou « Les
+  // dispositions propres aux lots 2 et 3 … » au milieu d'une phrase ne changent pas le lot du passage.
   const TETE_PLURIEL = /(?:pour|au titre des|concernant|s['’]agissant des|dans|aux|des)\s+(?:les\s+)?lots\s*(?:n\s*[°ºo.]?\s*)?((?:\d{1,3}|[IVX]{2,4})(?:\s*(?:,|et|&|à|-|ou)\s*(?:n\s*[°ºo.]?\s*)?(?:\d{1,3}|[IVX]{2,4}))+)(?![\wÀ-ÿ°º/])/gi;
   const TETE_COMMUNE = /(?:pour|à|a|de|dans|sur)\s+(?:chacun\s+des\s+lots|l['’]ensemble\s+des\s+lots|tous\s+les\s+lots|chaque\s+lot)\b|^\s*(?:[-•▪*]\s*)?(?:tous\s+(?:les\s+)?lots|lots?\s+confondus)\b/gi;
-  // Intitulé numéroté (« 3.2 Délais », « 3-3-Modalités », « 6-5-Non-respect des consignes », « 3.2- Délais ») : rupture.
-  const RUPTURE = /^\s*(?:--- .+ ---|===== PIÈCE|(?:ARTICLE|Article|CHAPITRE|Chapitre|TITRE|Titre|PARTIE|Partie)\b|\d{1,2}(?:[-.–]\s?\d{1,2})*(?:[-.–]\s*|\.?\s+)[A-ZÉÈ])/;
+  // Intitulé (rupture) : pièce, « Article / Chapitre / Titre / Partie », numérotation arabe (« 3.2 Délais », « 3-3-Modalités »,
+  // « 6-5-Non-respect des consignes », « 3.2- Délais »), romaine (« II. Délais ») ou par lettre (« B. Délais », « A) … »),
+  // titre Markdown (« ** … ** », « # … ») ou ligne courte en capitales sans point final (« DÉLAIS D'INTERVENTION ») (T5G-6).
+  const RUPTURE = /^\s*(?:--- .+ ---|===== PIÈCE|(?:ARTICLE|Article|CHAPITRE|Chapitre|TITRE|Titre|PARTIE|Partie)\b|\d{1,2}(?:[-.–]\s?\d{1,2})*(?:[-.–]\s*|\.?\s+)[A-ZÉÈ]|[IVX]{1,4}\s*[.)–-]\s*[A-ZÉÈ]|[A-H]\s*[.)]\s+[A-ZÉÈ]|\*\*[^*]+\*\*\s*$|#{1,4}\s)/;
+  const titreCapitales = (l: string) => {
+    const t = l.trim();
+    const lettresL = t.replace(/[^A-Za-zÀ-ÿ]/g, '');
+    return t.length >= 4 && t.length <= 90 && !/[.;,]$/.test(t) && lettresL.length >= 4 && lettresL === lettresL.toUpperCase() && !/^(?:[-•▪*]\s*)?lots?\b/i.test(t);
+  };
+  const toutes = String(dce || '').split('\n');
+  const vide = (l: string | undefined) => !String(l ?? '').trim();
+  // Titre en casse normale isolé entre deux lignes vides (ou après une ligne vide et avant le texte) : ligne courte, sans
+  // ponctuation finale, qui ne commence pas par « Lot ».
+  const titreIsole = (i: number) => {
+    const t = toutes[i].trim();
+    return t.length >= 3 && t.length <= 70 && /^[A-ZÀ-Ý]/.test(t) && !/[.;:,!?]$/.test(t) && !/^lots?\b/i.test(t) && vide(toutes[i - 1]) && i > 0;
+  };
   let courant: string | null = null;
+  // Lot du passage avant une mention plurielle en tête de phrase, rétabli à la fin de cette phrase (T5-REG-3).
+  let restaurer: string | null | undefined;
+  // Tête de lot faisant partie d'une liste de lots (lignes « Lot n : … » consécutives) : la ligne vide ferme le passage (T5G-6).
+  let listeLots = false;
   let retire = false;
   let tableauLots = false;
   const lignes: string[] = [];
-  for (const ligne of String(dce || '').split('\n')) {
-    if (RUPTURE.test(ligne)) courant = null;
+  const autre = (n: string | null) => !!n && n !== lot && n !== '*';
+  toutes.forEach((ligne, i) => {
+    if (vide(ligne) && listeLots) { courant = null; listeLots = false; restaurer = undefined; }
+    if (RUPTURE.test(ligne) || titreCapitales(ligne) || titreIsole(i)) { courant = null; restaurer = undefined; listeLots = false; }
     // Tableau « | Lot | Site | Adresse | » : chaque rangée appartient au lot de sa première cellule.
-    if (/^\s*\|?\s*lots?\s*(?:n\s*[°ºo.]?)?\s*\|/i.test(ligne)) { tableauLots = true; lignes.push(ligne); continue; }
+    if (/^\s*\|?\s*lots?\s*(?:n\s*[°ºo.]?)?\s*\|/i.test(ligne)) { tableauLots = true; lignes.push(ligne); return; }
     if (tableauLots) {
       const rang = /^\s*\|?\s*(?:lot\s*)?(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[IVX]{2,4}|[A-Z])\s*\|/i.exec(ligne);
-      if (rang) { if (numeroDeLot(rang[1]) === lot) lignes.push(ligne); else retire = true; continue; }
-      if (!/^\s*\|/.test(ligne)) tableauLots = false; else { lignes.push(ligne); continue; }
+      if (rang) { if (num(rang[1]) === lot) lignes.push(ligne); else retire = true; return; }
+      if (!/^\s*\|/.test(ligne)) tableauLots = false; else { lignes.push(ligne); return; }
     }
     const tl = TETE_LIGNE.exec(ligne);
-    const pluriels = [...ligne.matchAll(TETE_PLURIEL)].map((m) => ({ pos: m.index || 0, num: [...m[1].matchAll(/\d{1,3}|[IVX]{2,4}/gi)].map((x) => numeroDeLot(x[0])).includes(lot) ? '*' : '#' }));
-    const communes = [...ligne.matchAll(TETE_COMMUNE)].map((m) => ({ pos: m.index || 0, num: '*' }));
-    const coupes = tl ? [{ pos: 0, num: numeroDeLot(tl[1]) }] : [...[...ligne.matchAll(TETE), ...ligne.matchAll(TETE_PHRASE)].map((m) => ({ pos: m.index || 0, num: numeroDeLot(m[1]) })), ...pluriels, ...communes]
+    if (tl) listeLots = !!(TETE_LIGNE.test(toutes[i - 1] || '') || TETE_LIGNE.test(toutes[i + 1] || ''));
+    // Début de phrase : début de ligne qui commence par une majuscule (ou après une ligne finie par une ponctuation forte), ou
+    // après « . ; : ! ? » sur la ligne.
+    const precedente = [...toutes.slice(0, i)].reverse().find((l) => !vide(l)) || '';
+    const enTete = (pos: number) => {
+      const avant = ligne.slice(0, pos);
+      if (/^\s*(?:[-•▪*]\s*)?$/.test(avant)) return /^[A-ZÀ-Ý]/.test(ligne.slice(pos)) || /[.;:!?]\s*$/.test(precedente) || vide(toutes[i - 1]);
+      return /[.;:!?]\s+$/.test(avant);
+    };
+    const pluriels = [...ligne.matchAll(TETE_PLURIEL)].filter((m) => enTete(m.index || 0)).map((m) => ({ pos: m.index || 0, num: [...m[1].matchAll(/\d{1,3}|[IVX]{2,4}/gi)].map((x) => num(x[0])).includes(lot) ? '*' : '#', portee: true }));
+    const communes = [...ligne.matchAll(TETE_COMMUNE)].filter((m) => enTete(m.index || 0)).map((m) => ({ pos: m.index || 0, num: '*', portee: true }));
+    // Mention plurielle au milieu d'une phrase : la tête au singulier qu'elle contient (« lots 2 et 3 ») n'est pas une coupe.
+    const plurielsMilieu = [...ligne.matchAll(TETE_PLURIEL)].filter((m) => !enTete(m.index || 0)).map((m) => ({ pos: m.index || 0, fin: (m.index || 0) + m[0].length }));
+    let coupes: Array<{ pos: number; num: string | null; portee?: boolean }> = tl ? [{ pos: 0, num: num(tl[1]) }] : [...[...ligne.matchAll(TETE), ...ligne.matchAll(TETE_PHRASE)].map((m) => ({ pos: m.index || 0, num: num(m[1]) })), ...pluriels, ...communes]
       .sort((a, b) => a.pos - b.pos)
       // Une tête de lot au singulier prise dans une mention plurielle (« lots 1 et 2 ») n'est pas une coupe à part.
-      .filter((c, i, t) => !(c.num !== '*' && c.num !== '#' && t.some((x) => (x.num === '*' || x.num === '#') && x.pos <= c.pos && c.pos - x.pos < 40)));
+      .filter((c, k, t) => !(c.num !== '*' && c.num !== '#' && (t.some((x) => (x.num === '*' || x.num === '#') && x.pos <= c.pos && c.pos - x.pos < 40) || plurielsMilieu.some((x) => c.pos >= x.pos && c.pos < x.fin))));
+    // Fin de la phrase d'une mention plurielle : le passage reprend le lot dont il dépendait.
+    const finPhrase = (depuis: number) => { const m = /[.!?](?=\s|$)/.exec(ligne.slice(depuis)); return m ? depuis + m.index + 1 : -1; };
+    const ajoutees: Array<{ pos: number; num: string | null }> = [];
+    let avantPortee: string | null = courant;
+    if (restaurer !== undefined) {
+      const f = finPhrase(0);
+      const premiere = coupes.length ? coupes[0].pos : ligne.length;
+      if (f >= 0 && f < premiere) { ajoutees.push({ pos: f, num: restaurer }); avantPortee = restaurer; restaurer = undefined; }
+    }
+    coupes.forEach((c, k) => {
+      if (!c.portee) { avantPortee = c.num; return; }
+      const suivante = k + 1 < coupes.length ? coupes[k + 1].pos : ligne.length;
+      const f = finPhrase(c.pos);
+      if (f >= 0 && f < suivante) { if (f < ligne.replace(/\s+$/, '').length) ajoutees.push({ pos: f, num: avantPortee }); else restaurer = avantPortee; } else if (f < 0) restaurer = avantPortee;
+    });
+    coupes = [...coupes, ...ajoutees].sort((a, b) => a.pos - b.pos);
     // Ligne sans tête de lot : elle suit le passage en cours (commun, du lot du mémoire, ou d'un autre lot).
-    const autre = (n: string | null) => !!n && n !== lot && n !== '*';
     if (!coupes.length) {
-      if (autre(courant)) { retire = true; continue; }
+      if (autre(courant)) { retire = true; return; }
       lignes.push(ligne);
-      continue;
+      return;
     }
     let garde = coupes[0].pos > 0 && !autre(courant) ? ligne.slice(0, coupes[0].pos) : '';
-    coupes.forEach((c, i) => {
+    if (coupes[0].pos > 0 && autre(courant)) retire = true;
+    coupes.forEach((c, k) => {
       courant = c.num;
-      const morceau = ligne.slice(c.pos, i + 1 < coupes.length ? coupes[i + 1].pos : ligne.length);
-      if (!autre(courant)) garde += morceau; else retire = true;
+      const morceau = ligne.slice(c.pos, k + 1 < coupes.length ? coupes[k + 1].pos : ligne.length);
+      if (!autre(courant)) garde += morceau; else if (morceau.trim()) retire = true;
     });
     lignes.push(garde);
-  }
+  });
   if (!retire) return null;
   const texte = lignes.join('\n');
   // Sites de l'analyse : ceux que le périmètre du lot cite (code postal ou nom), et les lots réduits au lot du mémoire.
@@ -843,7 +908,7 @@ export function perimetreDuLot(analyse: any, dce: string): { analyse: any; dce: 
     const nom = textePropre(site?.name);
     return !nom || texte.toLowerCase().includes(nom.toLowerCase());
   };
-  const numDe = (l: any) => { const m = /(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ])\s*$/i.exec(String(textePropre(typeof l === 'object' ? l?.num : l)).trim()); return m ? numeroDeLot(m[1]) : ''; };
+  const numDe = (l: any) => { const m = /(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ])\s*$/i.exec(String(textePropre(typeof l === 'object' ? l?.num : l)).trim()); return m ? num(m[1]) : ''; };
   const a = { ...analyse, lots: analyse.lots.filter((l: any) => numDe(l) === lot) };
   if (Array.isArray(analyse.sites)) a.sites = analyse.sites.filter(cite);
   return { analyse: a, dce: texte, lot };
@@ -987,6 +1052,31 @@ export function communeLisible(brut: string, dce = ''): string {
   return c;
 }
 
+/** Commune connue (listes de communes normandes et hors Normandie), sous sa clé, avec ou sans article « Le ». */
+function communeConnue(c: string): boolean {
+  const k = cleCommune2(c);
+  return !!k && [...COMMUNES_NORMANDES, ...VILLES_HORS_NORMANDIE].some((x) => [cleCommune2(x), `le ${cleCommune2(x)}`].includes(k));
+}
+
+/**
+ * Ligne lue seule comme commune (adresse coupée après le code, cellule de tableau, T5-REG-1) : une commune connue, ou un nom
+ * propre vérifiable : un à quatre mots, chaque mot plein écrit avec sa majuscule (ou tout en capitales), sans ponctuation
+ * ni chiffre, et au moins un mot plein qui n'est pas un mot du dictionnaire (« Les Andelys », « Bolbec »). Jamais un titre
+ * ou un début de phrase (« Objet du marché », « Description des lieux », « REGLEMENT DE LA CONSULTATION », « Le titulaire
+ * assure », « Pouvoir adjudicateur »).
+ */
+function ligneCommune(l: string): boolean {
+  const t = String(l || '').trim();
+  if (!t || communeConnue(t)) return !!t;
+  if (/[.:;!?()\d,|/]/.test(t)) return false;
+  const mots = t.split(/[\s-]+/).filter(Boolean);
+  if (mots.length > 4) return false;
+  const PARTICULE = /^(?:de|du|des|la|le|les|sur|sous|lès|lez|en|et|aux|au|[dl]['’].*)$/i;
+  const pleins = mots.map((w) => w.replace(/^[dl]['’]/i, '')).filter((w, i) => w && !(i > 0 && PARTICULE.test(mots[i])) && !/^(?:le|la|les)$/i.test(w));
+  if (!pleins.length || pleins.some((w) => !/^[A-ZÀ-Ý]/.test(w))) return false;
+  return pleins.some((w) => !motDuDictionnaire(w) && !/^(?:saint|sainte|st|ste)$/i.test(w));
+}
+
 /**
  * Communes lues par code postal sur une même ligne : « 76000 Rouen », « 93330 – Neuilly-sur-Marne », et « Fontainebleau
  * 77300 France » (commune écrite avant le code, pays après). Jamais le mot de la ligne suivante (« à DIEPPE 76200 ⏎
@@ -1012,16 +1102,25 @@ export function communesParCodePostal(texte: string, dce = texte): Array<{ code:
     const ligneSuivante = () => (String(texte).slice(debut + m0[0].length + finLigne.length + 1).split('\n').find((l) => l.replace(/[\s|]/g, '')) || '').replace(/^[\s|]+|[\s|]+$/g, '');
     if (!commune && !m[2] && /^[\s|]*$/.test(finLigne) && /^[\s|]*$/.test(debutLigne)) {
       const suivante = ligneSuivante();
-      if (/^[A-ZÀ-Ý]/.test(suivante) && suivante.split(/\s+/).length <= 5) commune = communeLisible(suivante, dce);
+      if (/^[A-ZÀ-Ý]/.test(suivante) && ligneCommune(suivante)) commune = communeLisible(suivante, dce);
     }
     // (trait d'union en fin de ligne : « Saint-Martin- ⏎ d'Hères »)
     if (commune && m[2] && /^[\s|]*-?[\s|]*$/.test(finLigne)) {
       const suivante = ligneSuivante();
       const tiret = /-/.test(finLigne);
       const dernier = commune.split(/[\s-]+/).pop() || '';
-      const suiteMots = /^((?:d['’]|de\s|du\s|des\s|sur\s|sous\s|lès\s|en\s|-)\S+|[A-ZÀ-Ý][a-zà-ÿ'’-]+)/.exec(suivante);
-      if (suiteMots && (tiret || /^(?:d['’]|de\s|du\s|des\s|sur\s|sous\s|lès\s|en\s|-)/.test(suiteMots[1]) || /^(?:saint|sainte|st|ste|mont|grand|petit|val|port|pont|bois|le|la|les|notre)$/i.test(dernier))) {
-        commune = communeLisible(`${commune}${tiret || /^-/.test(suiteMots[1]) ? '-' : ' '}${suiteMots[1].replace(/^-/, '').replace(/[,.;]+$/, '')}`, dce) || commune;
+      // Suite = particule éventuelle et nom entier, traits d'union compris (« Étienne-du-Rouvray », jamais « Étienne-du »).
+      const suiteMots = /^((?:d['’]|de\s|du\s|des\s|sur\s|sous\s|lès\s|en\s|-)?[A-Za-zÀ-ÿ'’]+(?:-[A-Za-zÀ-ÿ'’]+)*)/.exec(suivante);
+      const particule = !!suiteMots && /^(?:d['’]|de\s|du\s|des\s|sur\s|sous\s|lès\s|en\s|-)/.test(suiteMots[1]);
+      // Nom propre de la suite (après la particule) : majuscule et hors dictionnaire (« d'Hères », « Aignan »), jamais
+      // « du lundi », « sur demande », « en cas » (T5-REG-2).
+      const nomSuite = suiteMots ? suiteMots[1].replace(/^(?:d['’]|de\s|du\s|des\s|sur\s|sous\s|lès\s|en\s|-)/, '').split('-')[0] : '';
+      const nomPropre = /^[A-ZÀ-Ý]/.test(nomSuite) && !motDuDictionnaire(nomSuite);
+      if (suiteMots && (particule || tiret || /^(?:saint|sainte|st|ste|mont|grand|petit|val|port|pont|bois|le|la|les|notre)$/i.test(dernier))) {
+        const recollee = communeLisible(`${commune}${tiret || /^-/.test(suiteMots[1]) ? '-' : ' '}${suiteMots[1].replace(/^-/, '').replace(/[,.;]+$/, '')}`, dce);
+        // Recollée seulement si le résultat est une commune connue, si la ligne finit par un trait d'union, ou si la suite
+        // est un nom propre ; sinon la commune de la ligne du code reste seule (« Rouen ⏎ du lundi au vendredi » → Rouen).
+        if (recollee && (communeConnue(recollee) || tiret || nomPropre)) commune = recollee;
       }
     }
 
@@ -1060,7 +1159,7 @@ export function communesParCodePostal(texte: string, dce = texte): Array<{ code:
     // les mots écrits avant le code.
     if (!commune && !m[2] && /^[\s|]*$/.test(finLigne)) {
       const suivante = ligneSuivante().replace(/[\s,.;]+$/, '');
-      if (/^[A-ZÀ-Ý]/.test(suivante) && suivante.split(/\s+/).length <= 4 && !/[:;]|^(?:article|chapitre|titre|partie|annexe|lot|site|tél|tel)\b/i.test(suivante)) commune = communeLisible(suivante, dce);
+      if (/^[A-ZÀ-Ý]/.test(suivante) && suivante.split(/\s+/).length <= 4 && !/[:;]|^(?:article|chapitre|titre|partie|annexe|lot|site|tél|tel)\b/i.test(suivante) && ligneCommune(suivante)) commune = communeLisible(suivante, dce);
     }
     // Commune coupée en fin de ligne (« 38400 Saint Martin ⏎ d'Hères », « 76821 Mont Saint ⏎ Aignan ») : recollée à la suite.
     // Code espacé : seulement une commune connue, ou écrite après le code dans une adresse (voie, « adresse »), jamais

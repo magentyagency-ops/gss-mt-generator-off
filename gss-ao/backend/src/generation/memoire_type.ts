@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import zlib from 'zlib';
+import { motDuDictionnaire } from './dictionnaire_fr';
 import { lignesEquipe, questionDimensionnement, questionRondes, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
 import { estNomDeLieu, lieuxConnus, horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative, lotsDuMemoireDce, perimetreDuLot, normaliserSsiap, contracterArticlesNomsPropres, MONTANT_PENALITE, textePreuvesIndicateurs } from './base_memoires';
 
@@ -1057,40 +1057,6 @@ function graphieEntiereDuDce(nom: string, dce: string): string {
  * « château », « Fontainebleau »), la majuscule initiale étant rétablie ; un sigle que le DCE n'écrit qu'en capitales le
  * reste. Si un mot est absent du DCE, le nom reste tel quel (jamais d'accent ni de casse inventés). '' si rien à faire.
  */
-/** Dictionnaire français (python/schemas_gss/dictionnaire_fr.txt.gz) : forme accentuée de chaque mot sans accents. */
-let dictionnaireFr: Map<string, string> | null = null;
-/**
- * Choix entre les formes d'un même mot sans accent (T3-COH-4) : la forme accentuée quand le mot sans accent n'existe pas
- * (« château ») ; quand il existe, la forme sans accent si les accents de l'autre ne sont que dans sa terminaison (verbe
- * conjugué ou participe : « habitât », « pressé », « centré », « coté »), sinon la forme accentuée (« côte ») ; entre deux
- * formes accentuées, l'accent circonflexe des noms (« pêche », « forêt ») plutôt que le grave des verbes (« pèche »).
- */
-function meilleureForme(formes: string[], k: string): string {
-  const accentuees = formes.filter((w) => w !== k);
-  const circ = (x: string) => /[âêîôû]/.test(x);
-  const premierAccent = (x: string) => x.search(/[àâäéèêëîïôöùûüç]/);
-  const accentuee = accentuees.find(circ) || accentuees[0];
-  if (!accentuee) return k;
-  if (!formes.includes(k)) return accentuee;
-  return premierAccent(accentuee) < accentuee.length - 2 ? accentuee : k;
-}
-function motDuDictionnaire(mot: string): string {
-  if (!dictionnaireFr) {
-    const toutes = new Map<string, string[]>();
-    try {
-      const fichier = path.resolve(__dirname, '../../python/schemas_gss/dictionnaire_fr.txt.gz');
-      for (const l of zlib.gunzipSync(fs.readFileSync(fichier)).toString('utf-8').split('\n')) {
-        const w = l.trim();
-        if (!w || /[A-Z]/.test(w)) continue;
-        const k = normaliser(w);
-        (toutes.get(k) || toutes.set(k, []).get(k)!).push(w);
-      }
-    } catch { /* dictionnaire absent : noms propres seulement */ }
-    dictionnaireFr = new Map([...toutes].map(([k, f]) => [k, meilleureForme(f, k)]));
-  }
-  return dictionnaireFr.get(normaliser(mot)) || '';
-}
-
 /** Nom commun en « -ité » absent du dictionnaire (« ATTRACTIVITE » → « attractivité », T4-COH-8) ; '' sinon. */
 function nomEnIte(mot: string): string {
   return mot.length >= 7 && /^[A-ZÀ-Ý]+ITE(S?)$/.test(mot) ? mot.toLowerCase().replace(/ite(s?)$/, 'ité$1') : '';
