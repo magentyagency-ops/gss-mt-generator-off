@@ -17,7 +17,7 @@ import {
   intituleSansRedite,
   motsDePhrase, similarite, lireRegistre,
   acheteurDuDce, objetDuDce,
-  variableRenseignee, envoiPlanningsClientDce,
+  variableRenseignee, envoiPlanningsClientDce, phraseFrequenceReunionsDce, frequenceInopinesDce,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
@@ -38,7 +38,7 @@ import { ajoutsAuTexteDeGss,
 import { articlesBloc1 } from './bloc1_marine';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, fondementDansDce, exigenceDeModification, ETAPE_ADAPTATION_MODELE, type PhraseAdaptee } from './adaptations_cctp';
 import { questionCaseTableau, questionExacte, definirDceDesQuestions, avecDceDesQuestions, sansPropositionDeTiers } from './questions_gss';
-import { typographieDce, exigenceDeGrillePenalites, estCahierDesChargesParContenu, estPieceAdministrative, teteAdministrative, perimetreDuLot, rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
+import { typographieDce, exigenceDeGrillePenalites, estCahierDesChargesParContenu, estPieceAdministrative, teteAdministrative, perimetreDuLot, rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, sansConsultationsDelaiHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
 import os from 'os';
@@ -1584,6 +1584,19 @@ export async function dessinerProcessSecoursBloc1(texte: string, id: string, tit
   return '';
 }
 
+/**
+ * Question (à GSS ou à l'acheteur) sur une fréquence que le DCE écrit déjà (T7-CONS-8, ifsem : « Pouvez-vous préciser la fréquence
+ * attendue des réunions de suivi … ? » alors que le CCTP donne « Site de Pouchet : une fois tous les trois mois ; l'ensemble des
+ * autres sites : une fois tous les mois », déjà reprise par la phrase adaptée D8) : jamais posée.
+ */
+export function questionSurFrequenceDuDce(q: string, dce: string): boolean {
+  const t = String(q || '');
+  if (!/fr[ée]quences?|p[ée]riodicit[ée]|rythme|combien de fois/i.test(t)) return false;
+  if (/r[ée]unions?|comit[ée]s?\s+de\s+suivi|points?\s+de\s+suivi/i.test(t)) return !!phraseFrequenceReunionsDce(dce);
+  if (/contr[ôo]les?\s+inopin/i.test(t)) return !!frequenceInopinesDce(dce);
+  return false;
+}
+
 export function questionOuverte(q: string): string {
   const t = String(q || '').trim();
   if (!t || LIGNE_DETERMINISTE.test(t) || /^À demander à l.acheteur/i.test(t)) return t;
@@ -1780,6 +1793,8 @@ export function elementsSansDoublon(elements: ElementACompleter[]): ElementAComp
   const out: ElementACompleter[] = [];
   for (const e of elements) {
     if (e.statut === 'ouvert' && !/^Proposition à valider/i.test(e.question)) e.question = questionExacte(e.question);
+    // (question vide : emplacement sans donnée nommée, T7N-3 ; jamais une carte sans question)
+    if (e.statut === 'ouvert' && !String(e.question || '').trim()) continue;
     const k = norm(e.question);
     // Même demande formulée autrement (cstb 221 : « délai moyen maximum d'intervention sur site après appel de
     // télésurveillance pour une levée de doute » et « … le délai moyen maximum d'arrivée sur site du rondier après l'appel
@@ -4055,7 +4070,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     if (!contexte) return brutes;
     // Ligne déjà formulée sans modèle (proposition de dimensionnement : « 96 h par semaine », « 1 607 heures par an »,
     // T9N-2) : jamais retirée par ce filtre, qui ne vise que les questions de délai rédigées par le modèle.
-    const gardees = brutes.filter((q) => LIGNE_DETERMINISTE.test(q.question) || !questionDelaiInapplicable(q.question, contexte.dce, contexte.horsNormandie));
+    const gardees = brutes.filter((q) => LIGNE_DETERMINISTE.test(q.question) || (!questionDelaiInapplicable(q.question, contexte.dce, contexte.horsNormandie) && !questionSurFrequenceDuDce(q.question, contexte.dce)));
     if (gardees.length < brutes.length) console.log(`[MemoireGenerator] Consultations : ${brutes.length - gardees.length} question(s) sur un délai chiffré absent du DCE retirée(s) (${contexte.horsNormandie ? 'marché hors Normandie' : 'délai déjà au registre'}).`);
     return gardees;
   }
@@ -6524,7 +6539,11 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       const recopie = sansRecopieCctp(texte, dceContext);
       // Texte nettoyé toujours repris (reformulations et montants de pénalité retirés, même sans commentaire interne).
       const avantFiltres = fondementReprise(voixDeGss(recopie.texte), dceContext);
-      const delais = delaisHorsNormandie(interditsDce(avantFiltres, dceContext), dceContext, horsNormandieCadre);
+      const delais0 = delaisHorsNormandie(interditsDce(avantFiltres, dceContext), dceContext, horsNormandieCadre);
+      // (T7-CONS-9 : consultation du modèle sur un délai hors Normandie, déjà posée une seule fois à GSS : retirée)
+      const sansQ = sansConsultationsDelaiHorsNormandie(delais0.texte, horsNormandieCadre);
+      if (sansQ.retires.length) console.log(`[MemoireGenerator] Champ ${r.id} : ${sansQ.retires.length} consultation(s) sur un délai hors Normandie retirée(s) (question posée une seule fois à GSS).`);
+      const delais = { ...delais0, texte: sansQ.texte };
       suiviCadre?.noterFiltres(`GSS_CH_${r.id}`, avantFiltres, delais.texte, dceContext, horsNormandieCadre, analysisData);
       // Étiquette « … : » restée sans contenu, phrases répétées dans le même champ : retirées.
       r.value = nettoyerChampCadre(delais.texte).trim() || (retires.length || delais.retires.length || recopie.retires.length ? '[À COMPLÉTER]' : r.value);
@@ -9016,7 +9035,9 @@ RÈGLES DE FORME (rendu Marp) :
     for (const id of Object.keys(sections)) {
       const nettoye = retirerCommentairesInternes(protegerGras(sections[id]));
       nettoye.retires.forEach((x) => commentairesRetires.add(`À confirmer : ${retablirGras(x)}`));
-      const delais = delaisHorsNormandie(retablirGras(nettoye.texte), dceContext, horsNormandie);
+      const delais0 = delaisHorsNormandie(retablirGras(nettoye.texte), dceContext, horsNormandie);
+      // (T7-CONS-9 : consultation du modèle sur un délai hors Normandie, déjà posée une seule fois à GSS : retirée)
+      const delais = { ...delais0, texte: sansConsultationsDelaiHorsNormandie(delais0.texte, horsNormandie).texte };
       delais.retires.forEach((x) => commentairesRetires.add(`${libelleDelaiRetire(analysisData, dceContext)}${x}`));
       suivi.noterFiltres(id, retablirGras(nettoye.texte), delais.texte, dceContext, horsNormandie, analysisData);
       sections[id] = delais.texte;

@@ -538,8 +538,13 @@ export function poserReperes(sections: Record<string, string>, ordre: string[], 
         const libelle = libelleLigneTableau(ligne);
         if (libelle) question = /\?\s*$/.test(question) ? `${question.replace(/\s*\?\s*$/, '')} — ligne « ${libelle} » ?` : `${question.replace(/[.\s]+$/, '')} — ligne « ${libelle} »`;
       }
+      // T7N-3 : « [À COMPLÉTER] » seul sur sa ligne, sans question (sa consultation a été retirée) : aucune donnée nommée, jamais
+      // un intertitre en guise de libellé ni une question « Quelle donnée faut-il indiquer pour : « [À COMPLÉTER] » » ; retiré.
+      // (jamais quand la ligne précédente l'annonce : « Effectif dédié : ⏎ [À COMPLÉTER] » reste, sa question est formulée)
+      const precedente = (brut.slice(0, Math.max(0, brut.lastIndexOf('\n', pos - 1))).split('\n').reverse().find((x) => x.trim()) || '').trim();
+      if (!question && /^\s*\[À COMPLÉTER\]\s*[.;]?\s*$/.test(ligne) && !/:\s*$/.test(precedente)) { n--; return ''; }
       enPlace.push({ n, id, question, contexte, environnement });
-      // « [À COMPLÉTER] » seul sur sa ligne : précédé du libellé de la donnée attendue (question, sinon intertitre).
+      // « [À COMPLÉTER] » seul sur sa ligne : précédé du libellé de la donnée attendue (sa question).
       if (/^\s*\[À COMPLÉTER\]\s*[.;]?\s*$/.test(ligne)) {
         const libelle = libelleEmplacementSeul(question, brut.slice(0, pos));
         if (libelle) return `${libelle} : ${PLACEHOLDER_V2}⟦AC:${n}⟧${/\]\s*[.;]\s*$/.test(ligne) ? '' : '.'}`;
@@ -3704,10 +3709,12 @@ export function controlerProposition(texte: string, montantsGss: string[] = [], 
     const l = lignes[i];
     const consultation = /^\s*\[CONSULTATION REQUISE\s*:/i.exec(l);
     if (consultation) {
-      if (INTERDIT.test(l)) { retirees.push(l.trim()); continue; }
+      // (T7N-3 : l'emplacement seul sur la ligne qui précède une consultation retirée part avec elle)
+      const orpheline = () => { while (out.length && /^\s*\[À COMPLÉTER\]\s*[.;]?\s*$/.test(out[out.length - 1])) retirees.push(out.pop()!.trim()); };
+      if (INTERDIT.test(l)) { retirees.push(l.trim()); orpheline(); continue; }
       // Consultation sur un délai que le DCE impose et que le mémoire publie déjà comme engagement (« confirmer la capacité
       // opérationnelle à envoyer un agent … en moins de 30 minutes, comme l'exige le DCE », T6-CONS-6) : jamais posée.
-      if (delaiDejaImpose(l)) { retirees.push(l.trim()); continue; }
+      if (delaiDejaImpose(l)) { retirees.push(l.trim()); orpheline(); continue; }
       out.push(l);
       continue;
     }
@@ -3773,6 +3780,12 @@ export function controlerProposition(texte: string, montantsGss: string[] = [], 
     // Question qui suit une phrase retirée (repère [À COMPLÉTER] retiré avec elle) : retirée aussi.
     if (retireAvecQuestion && /^\s*\[CONSULTATION REQUISE\s*:/i.test(lignes[i + 1] || '')) { retirees.push(lignes[i + 1].trim()); i++; }
     if (gardees.length) out.push(`${puce}${gardees.join(' ')}`);
+  }
+  // Emplacement seul resté sans consultation après le contrôle (T7N-3) : aucune donnée nommée, retiré.
+  for (let k = out.length - 1; k >= 0; k--) {
+    if (!/^\s*\[À COMPLÉTER\]\s*[.;]?\s*$/.test(out[k])) continue;
+    const suite = out.slice(k + 1).find((x) => x.trim()) || '';
+    if (!/^\s*\[CONSULTATION REQUISE\s*:/i.test(suite)) { retirees.push(out[k].trim()); out.splice(k, 1); }
   }
   // Consigne restée en libellé d'un emplacement (dans une liste, T3N-9) : nom de la donnée à la voix de GSS.
   return { texte: libellesEmplacementsNominaux(out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/(^|\n)(#{2,4} [^\n]+)\n+(?=#{2,4} |$)/g, '$1').trim()), retirees, questions };

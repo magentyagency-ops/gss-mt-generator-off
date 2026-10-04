@@ -144,6 +144,8 @@ export function questionExacte(q: string): string {
     }
     // Libellé nominal (« Nombre de véhicules » → « Combien de véhicules ? ») ; sinon la donnée nommée par son libellé.
     const nominale = libelle && !/^(?:Information|Valeur) à fournir/i.test(libelle) ? questionExacte(libelle) : '';
+    // (T7N-3 : jamais « Quelle donnée faut-il indiquer pour : « [À COMPLÉTER] » » : sans libellé, '' ; l'emplacement est retiré)
+    if (/^\s*\[?À COMPLÉTER\]?\s*\.?\s*$/i.test(libelle)) return '';
     return nominale && !/^(?:Quelle réponse GSS|Exigence du DCE)/.test(nominale) ? nominale : `Quelle donnée faut-il indiquer pour : « ${libelle} » ?`;
   }
   // Consigne à l'infinitif (« Préciser les mesures… », « Confirmer auprès de GSS et de son assureur… ») : question à GSS.

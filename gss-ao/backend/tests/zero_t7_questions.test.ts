@@ -57,3 +57,36 @@ describe('engagement sur l’organisation de l’acheteur (T7-CONS-7)', () => {
     expect(motifRefusEngagement('GSS s’engage à ce que le responsable du pôle logistique soit l’interlocuteur privilégié des campus.')).toMatch(/organisation de l'acheteur/);
   });
 });
+
+import { questionSurFrequenceDuDce } from '../src/generation/memoire_generator';
+import { sansConsultationsDelaiHorsNormandie } from '../src/generation/base_memoires';
+import { controlerProposition, poserReperes } from '../src/generation/reponse_libre_v2';
+
+describe('questions déjà tranchées par le DCE ou posées une fois à GSS (T7-CONS-8, T7-CONS-9)', () => {
+  it('fréquence des réunions écrite dans le DCE : jamais demandée', () => {
+    const dce = 'ARTICLE 6 - SUIVI. Les fréquences des réunions sont les suivantes : Site de Pouchet : Une fois tous les trois mois. L’ensemble des autres sites : Une fois tous les mois.';
+    expect(questionSurFrequenceDuDce("À demander à l'acheteur : Pouvez-vous préciser la fréquence attendue des réunions de suivi pour les sites autres que Pouchet ?", dce)).toBe(true);
+    expect(questionSurFrequenceDuDce('Quelle est la fréquence des réunions de suivi ?', 'Le titulaire assure le gardiennage.')).toBe(false);
+  });
+  it('consultation sur un délai hors Normandie retirée (question unique), jamais celle d’un emplacement', () => {
+    const t = 'GSS mobilise ses équipes selon les demandes de la Ville.\n[CONSULTATION REQUISE : Confirmer avec GSS le délai de mobilisation applicable aux sites de Vitry-sur-Seine pour les commandes courantes et les demandes urgentes.]';
+    expect(sansConsultationsDelaiHorsNormandie(t, true).texte).not.toMatch(/CONSULTATION/);
+    expect(sansConsultationsDelaiHorsNormandie(t, false).texte).toMatch(/CONSULTATION/);
+    const e = 'Délai de mise en place : [À COMPLÉTER]\n[CONSULTATION REQUISE : délai de mise en place d’une commande supplémentaire]';
+    expect(sansConsultationsDelaiHorsNormandie(e, true).texte).toMatch(/CONSULTATION/);
+  });
+});
+
+describe('emplacement orphelin d’une proposition (T7N-3)', () => {
+  it('consultation retirée sur un délai imposé : l’emplacement seul part avec elle, aucune question « [À COMPLÉTER] »', () => {
+    const dce = "En cas de déclenchement de l'alarme intrusion, le titulaire doit être en capacité d'envoyer sur le site un agent pour intervention en moins de 30 (trente) minutes.";
+    const texte = "## Traçabilité et intervention\n\nÀ chaque vacation, l’agent consigne rondes et alarmes dans la main courante. En l’absence de personnel, le DCE exige l’envoi d’un agent sur place en moins de 30 minutes ; GSS intervient.\n[À COMPLÉTER]\n[CONSULTATION REQUISE : confirmer la capacité opérationnelle à envoyer un agent en moins de 30 minutes, comme l’exige le DCE.]";
+    const r = controlerProposition(texte, [], dce);
+    expect(r.texte).not.toMatch(/À COMPLÉTER|CONSULTATION/);
+    const s: Record<string, string> = { x: '## Traçabilité et intervention\n\nTexte de GSS.\n[À COMPLÉTER]' };
+    const p = poserReperes(s, ['x']);
+    expect(p.enPlace).toHaveLength(0);
+    expect(s.x).not.toMatch(/Traçabilité et intervention : \[À COMPLÉTER\]/);
+    expect(questionExacte('Information à fournir pour compléter : « [À COMPLÉTER] »')).toBe('');
+  });
+});

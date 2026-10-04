@@ -1933,6 +1933,28 @@ export function minutesDe(n: string | number, unite: string): number {
  * délais imposés par le DCE (GSS s'y engage) et les procédures internes (« prise de service 15 minutes
  * avant ») sont conservés.
  */
+/**
+ * Consultation du modèle sur un délai de présence (intervention, mobilisation, mise en place, arrivée, remplacement, astreinte)
+ * pour un marché hors Normandie (T7-CONS-9, vitry : « [CONSULTATION REQUISE : Confirmer avec GSS le délai de mobilisation
+ * applicable aux sites de Vitry-sur-Seine…] ») : la question des délais hors Normandie est posée une seule fois à GSS
+ * (questions_gss_une_fois), jamais reposée à chaque génération ; le marqueur est retiré, sauf s'il accompagne un emplacement
+ * « [À COMPLÉTER] » de la même ligne ou de la ligne précédente (la donnée reste alors demandée).
+ */
+export function sansConsultationsDelaiHorsNormandie(texte: string, horsNormandie: boolean): { texte: string; retires: string[] } {
+  const retires: string[] = [];
+  if (!horsNormandie) return { texte, retires };
+  const DELAI = /d[ée]lais?|r[ée]activit[ée]|temps d['’]intervention|sous\s+\d|en\s+moins\s+de/i;
+  const PRESENCE = /interven|mobilis|mise en place|mettre en place|arriv|rempla[cç]|astreinte|sur (?:site|place)|d[ée]plac|demandes? urgentes?|urgence|commandes?/i;
+  const lignes = String(texte || '').split('\n');
+  const out = lignes.map((l, i) => l.replace(/\s*\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi, (m, q: string) => {
+    if (!DELAI.test(q) || !PRESENCE.test(q)) return m;
+    if (/\[À COMPLÉTER\]|⟦AC:\d+⟧/.test(l.replace(m, '')) || (!l.replace(m, '').trim() && /\[À COMPLÉTER\]|⟦AC:\d+⟧/.test(lignes[i - 1] || ''))) return m;
+    retires.push(q.trim());
+    return '';
+  }));
+  return { texte: out.filter((l, i) => l.trim() || !lignes[i].trim()).join('\n').replace(/\n{3,}/g, '\n\n'), retires };
+}
+
 export function delaisHorsNormandie(texte: string, dce: string, horsNormandie: boolean): { texte: string; retires: string[] } {
   const retires: string[] = [];
   if (!horsNormandie) return { texte, retires };
