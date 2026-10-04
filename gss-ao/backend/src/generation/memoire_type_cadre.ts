@@ -18,7 +18,7 @@ import {
   faitsDePhrase, faitsCompatibles, nombresAutorisesDe, nombresDceCompatibles, elisionDevantNom,
   type MemoireType, type RubriqueMemoireType, type PlanMemoireType, type SousPartie,
 } from './memoire_type';
-import { contracterArticlesNomsPropres } from './base_memoires';
+import { contracterArticlesNomsPropres, recopieDuDce } from './base_memoires';
 
 export interface PartieRC { id: string; title: string; attendu?: string }
 
@@ -1540,6 +1540,44 @@ function recalerParAttendus(reference: string, reponse: string, o: { limite?: bo
   };
   const final = texte.join('\n\n');
   return { texte: final, fideliteAvant: base(reponse) * (poids ? ordreAvant / poids : 1), fidelite: base(final) * (poids ? ordre / poids : 1), ...cumul };
+}
+
+/** Phrase d'enrobage ajoutée par le modèle (évaluation sans donnée propre : « Cette organisation renforce… », « Le dispositif est
+ *  adapté aux enjeux de ce marché… », « Ces partenariats soutiennent… », « Cette combinaison … renforce… »), T5-CONS-6. */
+const ENROBAGE = /^(?:[•\-*]\s*)?(?:ainsi,?\s+)?(?:ce|cet|cette|ces|le|la|les|notre|nos)\s+(?:dispositif|organisation|d[ée]marche|approche|combinaison|ensemble|moyens?|mesures?|partenariats?|solutions?|outils?|syst[èe]mes?|engagements?|m[ée]thodes?|fonctionnement|articulation|pr[ée]sence|choix)\b[^.!?]{0,200}?\b(?:renfor\w*|garanti\w*|permet\w*|assure\w*|contribue\w*|s['’]inscri\w*|(?:est|sont) (?:ainsi )?adapt[ée]e?s?|r[ée]pond\w*|soutien\w*|favoris\w*|optimis\w*|s[ée]curis\w*|facilit\w*|offr\w*)(?![\p{L}])/iu;
+
+const ENROBAGE_EXPLICITE = /(?<![\p{L}])(?:est|sont) (?:ainsi |parfaitement |pleinement )?adapt[ée]e?s? (?:aux|[àa]) (?:enjeux|attentes|besoins|exigences|sp[ée]cificit[ée]s)|(?<![\p{L}])r[ée]pond(?:ent)? (?:pleinement |ainsi |parfaitement )?aux? (?:enjeux|attentes|besoins)(?![\p{L}])|(?<![\p{L}])renforce(?:nt)? (?:ainsi )?(?:la|le|les) (?:fiabilit[ée]|tra[çc]abilit[ée]|qualit[ée]|efficacit[ée]|s[ée]r[ée]nit[ée])(?![\p{L}])/iu;
+
+/**
+ * Phrases ajoutées par le modèle au texte de GSS d'une réponse du cadre (consigne 5 : « elle restructure et adapte juste le
+ * texte au client. Rien de plus. » ; T5-CONS-6, havre2) : phrase absente du texte de GSS (aucune phrase de GSS ressemblante) et
+ * du DCE. Une phrase d'enrobage sans donnée propre est retirée ; les autres restent et sont signalées à GSS (consultations,
+ * comme en réponse libre), jamais imprimées comme signalement.
+ */
+export function ajoutsAuTexteDeGss(texte: string, reference: string, dce = '', autresTextesGss: string[] = []): { texte: string; retirees: string[]; signalees: string[] } {
+  const PUCE = /^\s*(?:[•\-*]|\d+[.)])\s+/;
+  // Texte de GSS : la référence du champ et les autres textes du mémoire type (une rubrique reprise ailleurs reste le texte de GSS).
+  const refs = [String(reference || ''), ...autresTextesGss.map((x) => texteBrut(String(x || '')))].join('\n').replace(/\r/g, '').split('\n').flatMap((l) => l.replace(PUCE, '').split(/(?<=[.!?;])\s+/)).map((x) => motsDePhrase(x)).filter((m) => m.length >= 3);
+  const deGss = (ph: string) => { const m = motsDePhrase(ph); return refs.some((r) => similarite(r, m) >= 0.5); };
+  const retirees: string[] = [];
+  const signalees: string[] = [];
+  const lignes = String(texte || '').split('\n').map((l) => {
+    if (!l.trim() || /:\s*$/.test(l.trim())) return l;
+    const puce = (PUCE.exec(l) || [''])[0];
+    const phrases = l.slice(puce.length).split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«])/);
+    const gardees = phrases.filter((ph) => {
+      const m = motsDePhrase(ph);
+      if (m.length < 6 || deGss(ph) || (dce && recopieDuDce(ph, dce, 0.8))) return true;
+      // Enrobage : évaluation explicite (« … est adapté aux enjeux de ce marché », « … renforce la fiabilité / la traçabilité »), ou
+      // cadre évaluatif sans donnée propre (ni chiffre ni nom propre) ; sinon la phrase reste, signalée à GSS.
+      const sansDonnee = !/\d/.test(ph) && !/\s[A-ZÀ-Ý][\p{L}]/u.test(ph.trim().slice(1));
+      if (ENROBAGE_EXPLICITE.test(ph) || (ENROBAGE.test(ph.trim()) && sansDonnee)) { retirees.push(ph.trim()); return false; }
+      signalees.push(ph.trim());
+      return true;
+    });
+    return gardees.length ? `${puce}${gardees.join(' ')}` : null;
+  }).filter((l): l is string => l !== null);
+  return { texte: lignes.join('\n').replace(/\n{3,}/g, '\n\n').trim(), retirees, signalees };
 }
 
 export function recalerSurReference(reference: string, reponse: string, o: { limite?: boolean; maxMots?: number; seuil?: number; exclure?: (phrase: string) => boolean; dce?: string; attendus?: string[]; parAttendus?: boolean } = {}): ResultatRecalage {

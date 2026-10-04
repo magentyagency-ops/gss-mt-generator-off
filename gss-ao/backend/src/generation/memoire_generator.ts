@@ -24,7 +24,7 @@ import {
   sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, similariteQuestions, recouvrementTextes, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, questionRondes, casPratiqueRepris, type Dimensionnement } from './dimensionnement';
-import {
+import { ajoutsAuTexteDeGss,
   type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, phrasesThematiques, completerParThematiques, completerMailUnique, COLONNE_VALEUR, colonneCase, sansPseudoTableau, textesSchemaSvg, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
   consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
@@ -1491,7 +1491,7 @@ export function rubriquesSansSchema(plan: PlanMemoireType, ajouts: Array<{ id: s
 }
 
 /** Ligne de consultation déjà formulée sans modèle (jamais envoyée à la fusion par le modèle, jamais reformulée). */
-export const LIGNE_DETERMINISTE = /^(?:Proposition à valider|Le cahier des charges prévoit des rondes ponctuelles|Proposition de réponse à valider|Réponse à relire|Réponse «|Réponse du cadre\s*:|Phrases adaptées au cahier des charges|Partie «|Rubrique «|Rédaction automatique indisponible|Phrase proposée par l'IA d'après le cahier des charges|Phrase ajoutée au texte de GSS)/;
+export const LIGNE_DETERMINISTE = /^(?:Proposition à valider|Le cahier des charges prévoit des rondes ponctuelles|Proposition de réponse à valider|Réponse à relire|Réponse «|Réponse du cadre\s*:|Phrases adaptées au cahier des charges|Partie «|Rubrique «|Rédaction automatique indisponible|Phrase proposée par l'IA d'après le cahier des charges|Phrases? ajoutées? au texte de GSS)/;
 
 /**
  * Demande écrite à l'impératif ou en question fermée au sens inversé (T2-CONS-7 : « Joindre les CV… » devenu « GSS doit-elle
@@ -5436,6 +5436,8 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const svgComprehension = new Map<number, string>();
     /** Réponses de compréhension restées sans schéma de process (R4-2), signalées à GSS dans les consultations. */
     const alertesComprehension = new Set<string>();
+    // Phrases ajoutées par l'IA au texte de GSS d'une réponse du cadre (consigne 5, T5-CONS-6) : signalées à GSS.
+    const ajoutsCadreIA = new Set<string>();
     /** Champs dont la rédaction automatique a échoué (OpenAI en panne, réponse illisible) : intitulé, et si le texte du
      *  mémoire type de GSS a été repris tel quel (T4-COH-1). */
     const echecsRedaction = new Map<number, { libelle: string; reference: boolean; developpee: boolean }>();
@@ -5959,6 +5961,17 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
             const sousTitres = completerSousTitresVides(rec.texte, [...retenus, ...renvois], phrasesThematiques(repriseMT!.textes), `${questionMT || ''}\n${f.context}`);
             if (sousTitres.completes.length) console.log(`[MemoireGenerator] ${label} : sous-titre(s) sans texte complété(s) par le mémoire type (${sousTitres.completes.join(' ; ')}).`);
             rec.texte = sousTitres.texte;
+            // Phrases ajoutées au texte de GSS (consigne 5 : « elle restructure et adapte juste le texte au client. Rien de
+            // plus. », T5-CONS-6) : l'enrobage sans donnée propre retiré ; toute autre phrase absente du texte de GSS et du DCE
+            // signalée à GSS (rubrique, phrase), comme en réponse libre ; rien de ce signalement n'est imprimé.
+            {
+              const aj = ajoutsAuTexteDeGss(rec.texte, retenus.map((c) => c.texte).join('\n\n'), dceContext, Object.values(repriseMT!.textes || {}));
+              if (aj.retirees.length) console.log(`[MemoireGenerator] ${label} : ${aj.retirees.length} phrase(s) d'enrobage ajoutée(s) par l'IA retirée(s) (${aj.retirees.map((x) => x.slice(0, 60)).join(' ; ')}).`);
+              if (aj.texte.trim()) rec.texte = aj.texte;
+              // Une ligne par réponse (jamais une consultation par phrase).
+              if (aj.signalees.length === 1) ajoutsCadreIA.add(`Phrase ajoutée au texte de GSS (rédigée par l'IA), à valider : « ${libelle} » — « ${phraseLisible(aj.signalees[0], 600)} »`);
+              else if (aj.signalees.length > 1) ajoutsCadreIA.add(`Phrases ajoutées au texte de GSS (rédigées par l'IA), à valider : « ${libelle} » — ${aj.signalees.map((ph) => `« ${phraseLisible(ph, 300)} »`).join(' ; ')}`);
+            }
             if (rec.texte !== String(value)) {
               console.log(`[MemoireGenerator] ${label} : réponse recalée sur le mémoire type (${retenus.map((c) => c.id).join(', ')}), fidélité ${rec.fideliteAvant.toFixed(2)} → ${rec.fidelite.toFixed(2)} (${rec.reformulees} phrase(s) reformulée(s) rétablie(s), ${rec.reinserees} remise(s), ${rec.bribesRetirees} bribe(s) et ${rec.ajoutsRetires} ajout(s) retiré(s)).`);
               value = rec.texte;
@@ -6107,7 +6120,7 @@ Renvoie UNIQUEMENT un objet JSON : {"items": ["ligne 1", "ligne 2", ...]} (au pl
 
     // Informations variables à confirmer par GSS (registre) : le marqueur ne doit JAMAIS apparaître dans le
     // document remis à l'acheteur → retiré de la valeur, remonté dans les consultations.
-    const confirmationsGss = new Set<string>(alertesComprehension);
+    const confirmationsGss = new Set<string>([...alertesComprehension, ...ajoutsCadreIA]);
     const confirmationsParChamp = new Map<number, string[]>();
     // Case « PME : Oui / Non » : réponse de GSS au registre (statut_pme) ; à défaut, aucune case cochée et la question
     // posée à GSS (le mémoire type écrit « PME » alors que l'effectif de 380 salariés dépasse le seuil européen).

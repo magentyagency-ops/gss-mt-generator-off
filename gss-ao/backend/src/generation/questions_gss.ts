@@ -38,7 +38,7 @@ export function questionExacte(q: string): string {
     return maj(t);
   }
   // Tâches de validation et alertes signalées comme telles (propositions de réponse, rubriques à relire, schéma absent).
-  if (/^(?:Proposition|Réponse à relire|(?:Partie|Rubrique|Réponse) «)/i.test(t)) return t;
+  if (/^(?:Proposition|Réponse à relire|(?:Partie|Rubrique|Réponse) «|Phrases? (?:ajoutées? au texte de GSS|proposées? par l'IA|adaptées? au cahier des charges)|Engagements à valider)/i.test(t)) return t;
   // Préfixes : la question qui suit est mise en forme à son tour.
   const pref = /^(À demander à l.acheteur|Pour le critère «[^»]*»|Critère «[^»]*»|«[^»]*» — à confirmer|Champ \d+)\s*:\s*(.+)$/i.exec(t);
   if (pref) {
@@ -191,7 +191,7 @@ export function questionExacte(q: string): string {
     return `Pouvez-vous ${min(reste)} ?`;
   }
   // Consigne qui nomme GSS (« … de GSS », « … avec GSS ») : jamais une « Exigence du DCE » (T5N-9).
-  if (/\b(?:de|à|avec|auprès de|par)\s+GSS\b/.test(t)) return `Pouvez-vous préciser ce point : « ${sansFin(t).replace(/\s*\b(?:auprès de|avec|par)\s+GSS\b/g, '').replace(/\bde GSS\b/g, 'de votre entreprise').replace(/\bà GSS\b/g, 'à votre entreprise')} » ?`;
+  if (/^[a-zà-ÿ]/.test(t) && /\b(?:de|à|avec|auprès de|par)\s+GSS\b/.test(t)) return `Pouvez-vous préciser ce point : « ${sansFin(t).replace(/\s*\b(?:auprès de|avec|par)\s+GSS\b/g, '').replace(/\bde GSS\b/g, 'de votre entreprise').replace(/\bà GSS\b/g, 'à votre entreprise')} » ?`;
   // Exigence du DCE (phrase à la voix de l'acheteur, ou fragment en minuscule tiré du cahier des charges).
   if (/^[a-zà-ÿ]/.test(t) || /\b(?:doit|doivent|devra|devront|est tenue?|sont tenus|le titulaire|le prestataire|le candidat|exig|obligatoire|imp[ée]ratif)\b/i.test(t)) {
     return `Exigence du DCE à laquelle le mémoire doit répondre : « ${sansFin(t)} ». Comment GSS y répond-elle (moyen, délai ou document à indiquer) ?`;
