@@ -358,11 +358,15 @@ const majuscule = (t: string) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t
 const echapper = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** Texte du DCE en phrases (comme obligationsChiffrees de base_memoires.ts). */
+/** Ligne de sommaire (points de conduite, numéro de page : « a. Réunions de suivi mensuelles …… 37 », imm, T4N-4) : jamais une
+ *  phrase du DCE (l'exigence est dans le corps de l'article). */
+export const LIGNE_SOMMAIRE = /\.{5,}|…{2,}|(?:\.\s){5,}|_{5,}/;
+
 function phrasesDuDce(dce: string): string[] {
   return String(dce || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ')
     .split(/(?<=[.;!?])\s+|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n{2,}/)
     .map((x) => x.replace(/\s+/g, ' ').replace(/^[-•▪●○◦−]\s*/, '').trim())
-    .filter((x) => x.length >= 12 && x.length <= 600);
+    .filter((x) => x.length >= 12 && x.length <= 600 && !LIGNE_SOMMAIRE.test(x));
 }
 
 // ─── Registre des informations GSS ───────────────────────────────────────────────────────────────
@@ -1620,7 +1624,7 @@ function phrasesEntieresDuDce(dce: string): string[] {
   return String(dce || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ')
     .split(/(?<=[.!?])\s+|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n{2,}/)
     .map((x) => x.replace(/\s+/g, ' ').replace(/^[-•▪●○◦−]\s*/, '').trim())
-    .filter((x) => x.length >= 12 && x.length <= 900);
+    .filter((x) => x.length >= 12 && x.length <= 900 && !LIGNE_SOMMAIRE.test(x));
 }
 
 /**
@@ -1765,13 +1769,19 @@ export function frequenceReunionsDce(dce: string): string {
 
 /** Phrase du DCE qui fixe la fréquence des réunions de suivi ('' si aucune) : l'exigence citée à GSS (D8, T2-CONS-4). */
 export function phraseFrequenceReunionsDce(dce: string): string {
+  const trouvees: string[] = [];
   for (const ph of phrasesDuDce(dce)) {
     if (!/r[ée]unions?/i.test(ph)) continue;
+    let ok = false;
     for (const prop of ph.split(/\s*;\s*/)) {
-      for (const [rx] of FREQUENCES) for (const m of prop.matchAll(new RegExp(rx.source, 'gi'))) if (frequenceDeLaReunion(prop, m.index!, m.index! + m[0].length)) return ph;
+      for (const [rx] of FREQUENCES) for (const m of prop.matchAll(new RegExp(rx.source, 'gi'))) if (frequenceDeLaReunion(prop, m.index!, m.index! + m[0].length)) ok = true;
     }
+    if (ok) trouvees.push(ph);
   }
-  return '';
+  // Phrase du corps de l'article (avec son verbe) avant un intitulé d'article sans verbe (« a. Réunions de suivi mensuelles »,
+  // imm, T4N-4) : c'est elle qui fixe la fréquence.
+  const phrase = (x: string) => /[.!?]$/.test(x) || /\b(?:est|sont|sera|seront|doit|doivent|devra|devront|participe\w*|organis\w*|tien(?:t|nent|dra|dront)|a lieu|ont lieu|aura lieu|auront lieu|se r[ée]uni\w*|r[ée]unit|pr[ée]voi\w*)\b/i.test(x);
+  return trouvees.find(phrase) || trouvees[0] || '';
 }
 
 /** Fondement juridique de la reprise CITÉ PAR LE DCE (jamais d'article L. 1224-1 si le DCE ne le cite pas). */
