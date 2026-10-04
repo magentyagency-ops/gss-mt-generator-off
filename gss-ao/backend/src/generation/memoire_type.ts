@@ -1950,8 +1950,39 @@ export function qualificationsDuDce(dce: string, analyse?: any): string[] {
   if (/C\.?\s?Q\.?\s?P\.?\s?-?\s?A\.?\s?[PD]\.?\s?S(?![\wÀ-ÿ])|CQPAPS|certificat de qualification professionnelle (?:d.|des\s+)agents?\s+de\s+(?:pr[ée]vention|s[ée]curit[ée])|(?<![\wÀ-ÿ])TFP\s*-?\s*APS(?![\wÀ-ÿ])|titre [àa] finalit[ée] professionnelle d.agent de pr[ée]vention/i.test(t)) out.push('CQP APS');
   if (/(?<![\wÀ-ÿ])SST(?![\wÀ-ÿ])|sauveteur secouriste du travail/i.test(t)) out.push('SST');
   if (/PSC\s*1/i.test(t)) out.push('PSC1');
-  if (/H0\s*-?\s*B0|H0V|habilitation [ée]lectrique/i.test(t)) out.push('habilitation électrique H0B0');
+  // Habilitation électrique : le niveau écrit par le DCE (T4G-5 : « BS-BE manœuvre », « HO/BE Manœuvre », « H0B0V/BE », « B1V »,
+  // « BR »), jamais ramené à H0B0 ; H0B0 (ou H0V) quand c'est le niveau demandé ou qu'aucun niveau n'est écrit.
+  const niveaux = niveauxHabilitation(t);
+  if (niveaux.length) for (const n of niveaux) out.push(`habilitation électrique ${n}`);
+  else if (/H0\s*-?\s*B0|H0V|habilitation [ée]lectrique/i.test(t)) out.push('habilitation électrique H0B0');
   return out;
+}
+
+/** Habilitation électrique que GSS détient (faits_gss.md : H0B0). */
+export const HABILITATION_GSS = /^habilitation électrique H0B0$/;
+
+/**
+ * Niveaux d'habilitation électrique écrits par le DCE (dans les 60 signes qui suivent « habilitation électrique », ou codes
+ * seuls) : « H0B0 », « BS-BE manœuvre », « H0/BE manœuvre », « H0B0V/BE », « B1V », « BR »… ; H0B0 et H0V ramenés à « H0B0 ».
+ */
+export function niveauxHabilitation(t: string): string[] {
+  const out: string[] = [];
+  const CODE = /(?<![A-Za-z0-9])((?:H[0O]\s*-?\s*B[0O]\s*V?|H[0O]\s*V|H[0O]|B[SRC]|B[12]\s*V?|H[12]\s*V?|BE)(?:\s*[\/-]\s*(?:B[SECR]|H[0O]\s*V?|B[12]\s*V?)(?![A-Za-z0-9]))*(?:\s+man[oœ]e?uvres?)?)(?![A-Za-z0-9])/gi;
+  const zones: string[] = [];
+  for (const m of t.matchAll(/habilitations?\s+[ée]lectriques?([^.;\n]{0,60})/gi)) zones.push(m[1]);
+  // Codes seuls hors de la mention (« titulaire du H0B0 ») : H0B0 et H0V seulement (« BE », « BR » seuls sont ambigus).
+  for (const m of t.matchAll(/(?<![A-Za-z0-9])H[0O]\s*-?\s*B[0O]V?(?![A-Za-z0-9])|(?<![A-Za-z0-9])H[0O]V(?![A-Za-z0-9])/g)) zones.push(m[0]);
+  for (const z of zones) {
+    for (const m of z.matchAll(CODE)) {
+      let n = m[1].replace(/\s+/g, ' ').trim().toUpperCase().replace(/\s*([\/-])\s*/g, '$1').replace(/MAN[OŒ]E?UVRES?/, 'manœuvre').replace(/H O/g, 'H0');
+      n = n.replace(/^HO(?=[\/ BV-]|$)/, 'H0').replace(/^H0-?B[0O]/, 'H0B0').replace(/^H0 ?V$/, 'H0V').replace(/\/HO(?=[\/ BV-]|$)/g, '/H0');
+      if (/^H0$/.test(n)) continue;
+      if (/^(?:H0B0|H0V)$/.test(n)) n = 'H0B0';
+      if (!out.includes(n)) out.push(n);
+    }
+  }
+  // Code repris seul d'un niveau déjà lu en entier (« H0B0V » de « H0B0V/BE ») : une seule fois.
+  return out.filter((n) => !out.some((x) => x !== n && x.startsWith(`${n}/`)));
 }
 
 /** Clé d'une commune : « St Martin d'Hères », « Saint-Martin-d’Hères » et « SAINT MARTIN D'HERES » sont la même commune (T7N-6). */
@@ -2068,7 +2099,9 @@ function diplomesEquipe(c: CalculVariables): string[] {
   }
   const tableau = lignesEquipeParQualification(c).map(([, q]) => q).join(' ; ');
   const q = qualificationsDuDce(tableau);
-  const autres = c.qualifs.filter((x) => !/^SSIAP|^CQP APS$/.test(x));
+  // Habilitation électrique d'un autre niveau que celui de GSS (H0B0) : jamais écrite dans les diplômes de l'équipe sans
+  // l'accord de GSS (T4G-5) ; la question est posée (DIPLOMES_EQUIPE).
+  const autres = c.qualifs.filter((x) => !/^SSIAP|^CQP APS$/.test(x) && (!/^habilitation électrique/.test(x) || HABILITATION_GSS.test(x)));
   return [...q, ...autres.filter((x) => !q.includes(x))];
 }
 
@@ -2264,8 +2297,11 @@ const CALCULS: Record<string, Calculateur> = {
   // Diplômes de l'équipe dédiée = qualifications des profils du tableau de l'équipe (T4N-3 : citedia2, lot 2 en SSIAP 1 et
   // CQP APS, imprimait « SSIAP 2 » exigé pour le seul chef d'équipe du lot 1 ; caen imprimait « SSIAP 1 » sans CQP APS).
   DIPLOMES_EQUIPE: (c) => {
-    const q = diplomesEquipe(c);
-    return q.length ? { valeur: q, source: c.ctx.dimensionnement?.profils.length ? "qualifications des profils de l'équipe dédiée (dimensionnement)" : "qualifications des lignes du tableau de l'équipe dédiée" } : { valeur: null };
+    const q = diplomesEquipe(c).filter((x) => !/^habilitation électrique/.test(x) || HABILITATION_GSS.test(x));
+    // Habilitation électrique exigée à un autre niveau que H0B0 (T4G-5) : une seule question à GSS, propre au marché.
+    const autres = c.qualifs.filter((x) => /^habilitation électrique/.test(x) && !HABILITATION_GSS.test(x));
+    const question = autres.length ? `Le cahier des charges exige l'${autres.length > 1 ? `${autres.slice(0, -1).join(', ')} et l'${autres[autres.length - 1]}` : autres[0]} : vos agents la détiennent-ils ? Si oui, elle sera ajoutée aux diplômes de l'équipe dédiée.` : '';
+    return q.length ? { valeur: q, source: c.ctx.dimensionnement?.profils.length ? "qualifications des profils de l'équipe dédiée (dimensionnement)" : "qualifications des lignes du tableau de l'équipe dédiée", ...(question ? { aConfirmer: question } : {}) } : { valeur: null, ...(question ? { question } : {}) };
   },
   TENUE_RETENUE: (c) => {
     const uniformes = valeurPropre(c.ctx.analyse?.operationalSummary?.uniforms);
