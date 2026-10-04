@@ -13,7 +13,7 @@ import {
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
   type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, harmoniserVariantesAcheteur, formeCourteApresPremiere, phrasesGeneralesProtegees, ajoutContraireAuxDelaisGss,
   variablesDesSchemas, lotsDuMemoire, nomAcheteurAffiche, nomAcheteurCourtAffiche, rubriqueAdmetSujet, rechercherRubriques, rubriqueDuTheme,
-  phrasesDeFrequenceDeControle, frequenceMensuelle,
+  phrasesDeFrequenceDeControle, frequenceMensuelle, CLAUSE_PRIX,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
@@ -1857,6 +1857,8 @@ export function motifRefusEngagement(x: string): string {
     || /\b(?:fourni(?:t|r|ra)?|transmet(?:tre|tra)?)\b[^.]{0,60}\b(?:le nombre|les effectifs|l.effectif|dans (?:le|son|ce|notre) m[ée]moire|dans (?:l.|son |notre )offre|ult[ée]rieurement)/i.test(t)
     || /dans (?:le|son|ce|notre) m[ée]moire technique/i.test(t)) return 'phrase sur le mémoire, sans réponse';
   if (/sous[- ]?trait|int[ée]rim|covid/i.test(t)) return 'fait interdit (faits_gss.md)';
+  // Clause de prix ou de facturation (T3N-10 : « GSS applique la valorisation des heures de nuit… ») : pas un engagement technique.
+  if (CLAUSE_PRIX.test(t)) return 'clause de prix ou de facturation';
   // Délai annoncé sans sa valeur (cstb 551, T5CP-7 : « dans un délai moyen maximum après l'appel de la télésurveillance… »,
   // « le délai d'intervention de levée de doute indiqué pour le marché » alors qu'aucun délai n'est indiqué).
   if (/d[ée]lai (?:moyen )?(?:maximum|maximal|minimum)(?! de\s*\d)\s+(?:apr[èe]s|[àa] compter|suivant|pour|d['’]intervention)|d[ée]lai[^.;]{0,60}\b(?:indiqu[ée]|pr[ée]vu|fix[ée]|demand[ée]|propos[ée])\s+(?:pour|dans|par|au)\s+(?:le|ce|la) (?:march[ée]|CCTP|contrat)/i.test(t) && !/\d/.test(t)) return 'délai sans valeur, sans réponse';

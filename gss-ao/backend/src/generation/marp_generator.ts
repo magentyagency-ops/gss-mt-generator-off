@@ -464,6 +464,9 @@ function slideKeyOf(chapterIdx: number, sectionIdx: number, chunkIdx: number): s
 
 /** Lignes retirées à la page de texte d'une rubrique dont le rendu a débordé sur le pied de page (style v3, T2-CONS-2). */
 const reductionsLignes = new WeakMap<AssembleSection, number>();
+/** Rubriques dont les pages de texte sont resserrées (interligne et espaces) après un débordement mesuré, avant toute ligne
+ *  retirée de leurs pages : le texte reste sur ses 2 pages au lieu de passer sur une troisième (T3-CONS-1). */
+const rubriquesResserrees = new WeakSet<AssembleSection>();
 
 /**
  * Pages d'un PDF du style v3 dont un mot passe sous le haut du pied de page « Mémoire technique · … » (T2-CONS-2 : cstb 1201
@@ -811,7 +814,7 @@ export class MarpGenerator {
     // Style « marine » v3 : contrôle mesuré du PDF rendu (T2-CONS-2) : une page de texte dont un mot passe sous le haut du pied
     // de page fait raccourcir les pages de sa rubrique, puis le mémoire est rendu de nouveau (deux reprises au plus).
     if (pagesMarineV3(theme)) {
-      for (let reprise = 1; reprise <= 2; reprise++) {
+      for (let reprise = 1; reprise <= 3; reprise++) {
         const debords = pagesQuiDebordent(pdfPath);
         if (!debords.length) break;
         const diapos = markdown.replace(/^---\n[\s\S]*?\n---\n/, '').split(/\n---\n/);
@@ -825,7 +828,9 @@ export class MarpGenerator {
         let n = 0;
         for (const ch of chapters) for (const sec of ch.sections || []) {
           if (!titres.has(String(sec.title || '').replace(/["\r\n]+/g, ' ').trim().toUpperCase())) continue;
-          reductionsLignes.set(sec, (reductionsLignes.get(sec) || 0) + 3);
+          // D'abord la page resserrée (même découpage), puis seulement des pages plus courtes.
+          if (!rubriquesResserrees.has(sec)) rubriquesResserrees.add(sec);
+          else reductionsLignes.set(sec, (reductionsLignes.get(sec) || 0) + 3);
           n++;
         }
         if (!n) break;
@@ -1178,7 +1183,7 @@ export class MarpGenerator {
             // Style « marine » v3 : en-tête du bloc, parcours, surtitre et titre en tête de la rubrique, colonne de titrage ;
             // texte court (une seule page, sous 1 300 signes, suivie de son schéma) : corps plus grand et « l'essentiel ».
             const court = chunks.length === 1 && !!section.schemaPleinePage && signes(chunk) < SEUIL_TEXTE_COURT;
-            const classes = ['texte', court ? 'court' : '', !court && pageSerree(chunk, limites) ? 'texte-serre' : '', `bloc-${ctx.rangBloc(chapter)}`];
+            const classes = ['texte', court ? 'court' : '', !court && (pageSerree(chunk, limites) || rubriquesResserrees.has(section)) ? 'texte-serre' : '', `bloc-${ctx.rangBloc(chapter)}`];
             lines.push(`<!-- _class: ${classes.filter(Boolean).join(' ')} -->`);
             lines.push(ctx.enteteDe(chapter));
             lines.push(repereRubrique(section.title));

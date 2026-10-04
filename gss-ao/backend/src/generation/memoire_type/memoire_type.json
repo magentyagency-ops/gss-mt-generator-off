@@ -2158,7 +2158,9 @@
    ],
    "longueur_mots": 463,
    "sujet_ajouts": {
-    "exige": "formation|form[ée]e?s?\\b|qualifi|cqp|carte professionnelle|cnaps|dipl[ôo]me|certifica|recyclage|comp[ée]tence|d[ée]ontolog|palpation|gestion des conflits|aptitude|habilit|sst\\b|secourisme"
+    "exige": "formation|form[ée]e?s?\\b|qualifi|cqp|carte professionnelle|cnaps|dipl[ôo]me|certifica|recyclage|comp[ée]tence|d[ée]ontolog|palpation|gestion des conflits|aptitude|habilit|sst\\b|secourisme",
+    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis",
+    "motif": "Rubrique des formations et qualifications de l'agent : une exigence de présence, d'horaires, d'effectif ou de prise de poste sur le site relève de l'adéquation des moyens humains, des postes ou de l'intégration d'un nouvel agent (T3N-10, T3-CONS-1 : ign 1351, « À Carnot-Cassini, du samedi 19h00 au lundi 7h00, seul un SSIAP 2 sera présent » sous la formation SSIAP 1)."
    }
   },
   {
@@ -2216,7 +2218,12 @@
     "Le paragraphe « La sécurité incendie » de la source recopiait par erreur celui du « feu et ses conséquences » : il est remplacé par le contenu réel de la page suivante (classement ERP/IGH, desserte, cloisonnement, évacuation, désenfumage)",
     "« Global Sécurité Services, disposons » corrigé"
    ],
-   "longueur_mots": 330
+   "longueur_mots": 330,
+   "sujet_ajouts": {
+    "exige": "formation|form[ée]e?s?\\b|qualifi|dipl[ôo]me|certifica|recyclage|comp[ée]tence|aptitude|habilit|connaissance|ma[îi]tris|incendie|[ée]vacuation|d[ée]senfumage|extincteur|\\bria\\b|moyens de secours|erp\\b|igh\\b",
+    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis",
+    "motif": "Rubrique des formations et qualifications de l'agent : une exigence de présence, d'horaires, d'effectif ou de prise de poste sur le site relève de l'adéquation des moyens humains, des postes ou de l'intégration d'un nouvel agent (T3N-10, T3-CONS-1 : ign 1351, « À Carnot-Cassini, du samedi 19h00 au lundi 7h00, seul un SSIAP 2 sera présent » sous la formation SSIAP 1)."
+   }
   },
   {
    "id": "b3_formation_ssiap_b",
@@ -2274,7 +2281,12 @@
    "nettoyage": [
     "Orthographe et syntaxe corrigées (« maitrisent », « attenants », « disfonctionnement »…)"
    ],
-   "longueur_mots": 740
+   "longueur_mots": 740,
+   "sujet_ajouts": {
+    "exige": "formation|form[ée]e?s?\\b|qualifi|dipl[ôo]me|certifica|recyclage|comp[ée]tence|aptitude|habilit|connaissance|ma[îi]tris|\\bssi\\b|syst[èe]me de s[ée]curit[ée] incendie|installations? techniques?|registre de s[ée]curit[ée]|accueil des secours",
+    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis",
+    "motif": "Rubrique des formations et qualifications de l'agent : une exigence de présence, d'horaires, d'effectif ou de prise de poste sur le site relève de l'adéquation des moyens humains, des postes ou de l'intégration d'un nouvel agent (T3N-10, T3-CONS-1 : ign 1351, « À Carnot-Cassini, du samedi 19h00 au lundi 7h00, seul un SSIAP 2 sera présent » sous la formation SSIAP 1)."
+   }
   },
   {
    "id": "b3_formation_cynophile",
@@ -2310,7 +2322,12 @@
    "nettoyage": [
     "Effectif (27) et responsable (PODKOLZIN Sergeï) ajoutés depuis le registre et l'organigramme du mémoire type"
    ],
-   "longueur_mots": 203
+   "longueur_mots": 203,
+   "sujet_ajouts": {
+    "exige": "formation|form[ée]e?s?\\b|qualifi|dipl[ôo]me|certifica|recyclage|comp[ée]tence|aptitude|habilit|connaissance|ma[îi]tris|ma[îi]tre[- ]chien|\\bchiens?\\b|cynotechni",
+    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis",
+    "motif": "Rubrique des formations et qualifications de l'agent : une exigence de présence, d'horaires, d'effectif ou de prise de poste sur le site relève de l'adéquation des moyens humains, des postes ou de l'intégration d'un nouvel agent (T3N-10, T3-CONS-1 : ign 1351, « À Carnot-Cassini, du samedi 19h00 au lundi 7h00, seul un SSIAP 2 sera présent » sous la formation SSIAP 1)."
+   }
   },
   {
    "id": "b3_formation_apr",
@@ -2379,7 +2396,12 @@
     "« RAPROCHEE », « NATIONLE » corrigés",
     "« Nous faisons alors appel à Global Security Protection » retiré : contraire à la règle « pas de sous-traitance » (registre, faits_gss.md) ; à confirmer par GSS."
    ],
-   "longueur_mots": 193
+   "longueur_mots": 193,
+   "sujet_ajouts": {
+    "exige": "formation|form[ée]e?s?\\b|qualifi|dipl[ôo]me|certifica|recyclage|comp[ée]tence|aptitude|habilit|connaissance|ma[îi]tris|protection rapproch[ée]e|garde du corps|\\bapr\\b|a3p|escorte",
+    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis",
+    "motif": "Rubrique des formations et qualifications de l'agent : une exigence de présence, d'horaires, d'effectif ou de prise de poste sur le site relève de l'adéquation des moyens humains, des postes ou de l'intégration d'un nouvel agent (T3N-10, T3-CONS-1 : ign 1351, « À Carnot-Cassini, du samedi 19h00 au lundi 7h00, seul un SSIAP 2 sera présent » sous la formation SSIAP 1)."
+   }
   },
   {
    "id": "b3_formation_secourisme",
@@ -2432,7 +2454,12 @@
     "« HOBO » (lettre O) corrigé en « HOB0 » (chiffre zéro)",
     "« UTE C 18510 », « NFC 15-100 » écrits selon l'usage (UTE C 18-510, NF C 15-100)"
    ],
-   "longueur_mots": 262
+   "longueur_mots": 262,
+   "sujet_ajouts": {
+    "exige": "formation|form[ée]e?s?\\b|qualifi|dipl[ôo]me|certifica|recyclage|comp[ée]tence|aptitude|habilit|connaissance|ma[îi]tris|\\bsst\\b|psc ?1|secouris|premiers secours|habilitation [ée]lectrique|h0b0|d[ée]fibrillat",
+    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis",
+    "motif": "Rubrique des formations et qualifications de l'agent : une exigence de présence, d'horaires, d'effectif ou de prise de poste sur le site relève de l'adéquation des moyens humains, des postes ou de l'intégration d'un nouvel agent (T3N-10, T3-CONS-1 : ign 1351, « À Carnot-Cassini, du samedi 19h00 au lundi 7h00, seul un SSIAP 2 sera présent » sous la formation SSIAP 1)."
+   }
   },
   {
    "id": "b3_formations_internes",
@@ -4346,7 +4373,11 @@
    "notes": [
     "GSS n'a fourni que le schéma (4 étapes) ; aucun texte explicatif : le texte ci-dessus est la transcription du schéma."
    ],
-   "longueur_mots": 92
+   "longueur_mots": 92,
+   "sujet_ajouts": {
+    "exclut": "valoris|\\bprix\\b|tarif|factur|major[ée]e?s?|majoration",
+    "motif": "Rubrique du contrôle des vacations de nuit : une règle de prix des heures de nuit (valorisation, majoration) n'est pas un contrôle (T3N-10, parc_expo 1331)."
+   }
   },
   {
    "id": "b5_reunions_indicateurs",

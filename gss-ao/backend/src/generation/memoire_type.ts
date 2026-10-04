@@ -3059,6 +3059,9 @@ export function rubriqueDuTheme(texte: string, ids: string[]): string {
  * reçoit jamais une exigence hors de son sujet (sujet_ajouts : « absence imprévue » refusée dans la rubrique de l'absence
  * prévue ; bloc de présentation : seulement ses sujets) ; l'exigence va alors à la rubrique admise la plus proche.
  */
+/** Clause de prix, de facturation ou de révision du DCE (« les heures de nuit seront valorisées », « majoration de 10 % »). */
+export const CLAUSE_PRIX = /\bvaloris(?:e|é|ée|ées|és|er|ation)\b|\bmajor(?:é|ée|ées|és|ation)s?\b|\bprix\b|\btarif|\bfactur|r[ée]vision (?:des |du )?prix|\bbordereau\b/i;
+
 export function exigencesParRubrique(mt: MemoireType, plan: PlanMemoireType, matrice: ExigenceMatrice[]): { parRubrique: Record<string, ExigenceMatrice[]>; nouvelles: ExigenceMatrice[] } {
   const ids = plan.rubriques.map((r) => r.id);
   const parRubrique: Record<string, ExigenceMatrice[]> = {};
@@ -3081,7 +3084,9 @@ export function exigencesParRubrique(mt: MemoireType, plan: PlanMemoireType, mat
     if (a) ajouter(a, e); else nouvelles.push(e);
   };
   for (const e of matrice || []) {
-    if (!e?.exigence || PIECES_OFFRE.test(e.exigence)) continue;
+    // Clause de prix ou de facturation (T3N-10, parc_expo 1331 : « les heures de nuit seront valorisées… » rattachée au contrôle
+    // des vacations de nuit) : pas une exigence de prestation, jamais un engagement technique.
+    if (!e?.exigence || PIECES_OFFRE.test(e.exigence) || CLAUSE_PRIX.test(e.exigence)) continue;
     // Thème net de l'exigence (cstb 551, T5CP-7 : assurance sous « La gestion d'un incendie », alcool et tabac sous « Nos
     // valeurs », congés et effectif sous « Un interlocuteur unique », rondes d'ouverture sous « L'ordre d'alerte ») : la
     // rubrique de GSS qui traite ce thème, si elle est au plan et l'admet.
