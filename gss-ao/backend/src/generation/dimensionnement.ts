@@ -65,6 +65,11 @@ export interface Dimensionnement {
    * posée à GSS (durée d'une ronde, nombre d'intervenants).
    */
   rondesSansDuree?: string[];
+  /** Durée d'une ronde écrite par le DCE (« Ronde d'une heure le jour / la nuit », « 1 heure de ronde », T6-CONS-9) : jamais
+   *  demandée à GSS. */
+  dureeRonde?: { valeur: string; citation: string };
+  /** Le DCE prévoit des rondiers (intervenants dédiés aux rondes) : sinon la question ne parle jamais de « rondiers ». */
+  rondiersDce?: boolean;
   /** Écarts relevés sans modèle entre les postes retenus et le DCE (total hebdomadaire du DQE), posés à GSS. */
   alertes?: string[];
   titulaires: number;
@@ -284,7 +289,8 @@ const RONDES_PONCTUELLES = /(?<![\p{L}\d])(?:\d{1,2}|une?|deux|trois|quatre|cinq
 // 7h00 et effectue 3 rondes par nuit », « Le gardien est sur site toutes les nuits… », « est présent… ») : un poste, pas des
 // rondes ponctuelles.
 const PRESENCE_CONTINUE = /\bpostes?\b|pr[ée]sen(?:ce|te?s?)\b|vacations?|permanence|en continu|24\s*h\s*\/\s*24|\bH24\b|\bassurent?\b|\bsur (?:le )?site\b|en service|de garde/i;
-const AGENT_SUR_PLAGE = /(?:agents?|gardiens?|veilleurs?|ssiap|aps|rondiers?|ma[îi]tres?[- ]chiens?)\b[^.;]{0,80}?\d{1,2}\s*(?:h|:)\s*\d{0,2}\s*(?:[àa-]|jusqu)\s*\d{1,2}\s*(?:h|:)/i;
+// (T6-CONS-9 : « Gardiennage de 8h00 à 14h00 le matin puis 1 ronde de nuit » : le gardiennage sur sa plage est une présence)
+const AGENT_SUR_PLAGE = /(?:agents?|gardiens?|veilleurs?|ssiap|aps|rondiers?|ma[îi]tres?[- ]chiens?|gardiennage|surveillance|garde|accueil|permanence)\b[^.;]{0,80}?\d{1,2}\s*(?:h|:)\s*\d{0,2}\s*(?:[àa-]|jusqu)\s*\d{1,2}\s*(?:h|:)/i;
 export function citationDeRondes(citation: string): boolean {
   const c = String(citation || '');
   // Rondes ponctuelles seulement quand les rondes sont le sujet (« 3 rondes, entre 21h30 et 06h30 »), jamais quand un agent est
@@ -292,12 +298,43 @@ export function citationDeRondes(citation: string): boolean {
   return RONDES_PONCTUELLES.test(c) && !PRESENCE_CONTINUE.test(c) && !AGENT_SUR_PLAGE.test(c);
 }
 
+/**
+ * Durée d'une ronde écrite par le DCE (T6-CONS-9 : « Ronde d'une heure le jour / la nuit », « 1 heure de ronde entre 6h00 et
+ * 21h00 », « rondes de 30 minutes », « ronde d'une durée de 45 minutes ») ; null si le DCE n'en écrit aucune ou plusieurs.
+ */
+export function dureeRondeDce(dce: string): { valeur: string; citation: string } | null {
+  const t = String(dce || '').replace(/[ \t]+/g, ' ');
+  const N = String.raw`(\d{1,3}|une?|deux|trois|quatre)`;
+  const U = String.raw`(heures?|h|minutes?|min)`;
+  const rx = new RegExp(String.raw`(?<![\p{L}])rondes?\s+(?:(?:d['’]\s*une\s+dur[ée]e\s+)?(?:de\s+|d['’]\s*)${N}\s*${U}|d['’]\s*${N}\s*${U})(?![\p{L}])|(?<![\p{L}\d])${N}\s*${U}\s+de\s+rondes?(?![\p{L}])`, 'giu');
+  const vues = new Map<number, string>();
+  for (const m of t.matchAll(rx)) {
+    const n = m[1] || m[3] || m[5];
+    const u = m[2] || m[4] || m[6];
+    const k = (/^\d+$/.test(n) ? Number(n) : ({ un: 1, une: 1, deux: 2, trois: 3, quatre: 4 } as Record<string, number>)[n.toLowerCase()]) * (/^m/i.test(u) ? 1 : 60);
+    if (!k || k > 240) continue;
+    // Citation : la ligne (ou la phrase) de la durée, sans déborder sur les lignes voisines.
+    const debut = Math.max(t.lastIndexOf('\n', m.index!) + 1, t.lastIndexOf('. ', m.index!) + 2, 0);
+    const finLigne = t.indexOf('\n', m.index! + m[0].length);
+    const finPhrase = t.indexOf('. ', m.index! + m[0].length);
+    const fin = [finLigne, finPhrase >= 0 ? finPhrase + 1 : -1].filter((x) => x >= 0).sort((a, b) => a - b)[0] ?? t.length;
+    if (!vues.has(k)) vues.set(k, t.slice(debut, fin).replace(/\s+/g, ' ').replace(/^[\s|]+|[\s|]+$/g, '').trim());
+  }
+  if (vues.size !== 1) return null;
+  const [[k, citation]] = [...vues.entries()];
+  return { valeur: k % 60 === 0 ? `${k / 60} heure${k > 60 ? 's' : ''}` : `${k} minutes`, citation: citationCourte(citation, 160) };
+}
+
 /** Question exacte posée à GSS pour des rondes ponctuelles sans durée (T9N-1). '' sans rondes. */
 export function questionRondes(d: Dimensionnement | null | undefined): string {
   const r = d?.rondesSansDuree || [];
   if (!r.length) return '';
-  const cites = r.slice(0, 3).map((c) => `« ${c.replace(/\s+/g, ' ').trim().slice(0, 90)} »`).join(', ');
-  return `Le cahier des charges prévoit des rondes ponctuelles sans durée de présence (${cites}) : elles ne sont pas comptées en heures de poste. Combien de temps dure une ronde sur le site, et combien d'intervenants rondiers dédiez-vous au marché ?`;
+  // Citation coupée sur une fin de mot, avec « … » (T6-CONS-9).
+  const cites = r.slice(0, 3).map((c) => `« ${citationCourte(c, 90)} »`).join(', ');
+  const intervenants = d?.rondiersDce ? "combien d'intervenants rondiers dédiez-vous au marché" : 'quel agent du marché les assure';
+  // Durée écrite par le DCE : jamais redemandée.
+  if (d?.dureeRonde) return `Le cahier des charges prévoit des rondes ponctuelles (${cites}) d'une durée de ${d.dureeRonde.valeur} (« ${d.dureeRonde.citation} ») : elles ne sont pas comptées en heures de poste. Combien de rondes faut-il compter par an, et ${intervenants} ?`;
+  return `Le cahier des charges prévoit des rondes ponctuelles sans durée de présence (${cites}) : elles ne sont pas comptées en heures de poste. Combien de temps dure une ronde sur le site, et ${intervenants} ?`;
 }
 
 /** Poste qui n'est pas permanent : option, tranche optionnelle, agent supplémentaire, prestation à la demande ou ponctuelle. */
@@ -328,8 +365,12 @@ export function posteOptionnel(citation: string, profil: string): boolean {
   // Poste « dédié » avec ses horaires : jamais optionnel ; le caractère optionnel ne se lit que dans la tête du poste, jamais dans
   // un complément de mission (« … et mobilisable pour toutes interventions incluses et pour des interventions à la demande le
   // reste du temps », citedia 1461, T5N-7).
-  if (/(?<![\p{L}])d[ée]di[ée]e?s?(?![\p{L}])/iu.test(principale) && HORAIRE.test(principale)) return false;
   const tete = principale.split(/\s(?:et\s+)?mobilisables?\s+pour\b|\s(?:et\s+)?pour\s+(?:des|les|toutes?|d['’]autres)\s+interventions?\b|\s(?:et\s+)?(?:disponibles?|appelables?)\s+pour\b/i)[0];
+  // Option écrite dans la tête du poste (REG6-2 : « En option : un agent … dédié au parking de 20h à 6h », « Option 1 : … dédié
+  // au PC sécurité de 19h à 7h, à activer sur bon de commande », « Prestation optionnelle : un agent dédié … ») : optionnel,
+  // même « dédié » avec ses horaires ; ces marques sont lues avant la règle du poste dédié.
+  if (/^\s*(?:en\s+)?options?\b|\boptions?\s*\d*\s*:|(?<![\p{L}])(?:en\s+option|optionnel(?:le)?s?)(?![\p{L}])|bons?\s+de\s+commande/iu.test(tete)) return true;
+  if (/(?<![\p{L}])d[ée]di[ée]e?s?(?![\p{L}])/iu.test(principale) && HORAIRE.test(principale)) return false;
   return OPTION_DU_POSTE.test(tete);
 }
 
@@ -392,6 +433,8 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
   /** Profil dont toutes les heures viennent des volumes hebdomadaires du DQE. */
   const dqeParProfil = new Map<string, boolean>();
   const rondes: string[] = [];
+  /** Intitulés des postes de rondes (« Intervenant rondier ») : la question parle de rondiers seulement s'ils en sont. */
+  const profilsRondes: string[] = [];
   /** Postes écartés comme optionnels (signalés à GSS, T1-GEN-7). */
   const optionnels: string[] = [];
   /** Postes saisonniers dont la période n'a pas pu être lue (T1F-2) : comptés sur l'année, question posée à GSS. */
@@ -416,6 +459,7 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     // (un volume horaire du DQE pour ce poste reste, lui, un volume de poste)
     if (citationDeRondes(String(p?.citation || '')) && !nombre(p?.heures_hebdo) && !nombre(p?.heures_an)) {
       rondes.push(String(p?.citation || '').replace(/\s+/g, ' ').trim());
+      profilsRondes.push(brut);
       continue;
     }
     const plages: PlageHoraire[] = (Array.isArray(p?.plages) ? p.plages : [])
@@ -594,15 +638,16 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
   if (optionnels.length) alertes.push(`${optionnels.length > 1 ? `${optionnels.length} postes ont été écartés` : 'un poste a été écarté'} de l'équipe dédiée comme ${optionnels.length > 1 ? 'optionnels ou ponctuels' : 'optionnel ou ponctuel'} (${optionnels.slice(0, 3).map((c) => `« ${citationCourte(c, 120)} »`).join(', ')}) : ${optionnels.length > 1 ? 'sont-ils' : 'est-il'} bien hors de l'équipe permanente ?`);
   if (sansPeriode.length) alertes.push(`la période de l'année de ${sansPeriode.length > 1 ? 'ces postes saisonniers' : 'ce poste saisonnier'} n'a pas pu être lue (${sansPeriode.slice(0, 3).map((c) => `« ${citationCourte(c, 120)} »`).join(', ')}) : ${sansPeriode.length > 1 ? 'ils sont comptés' : 'il est compté'} sur toute l'année ; sur combien de semaines par an faut-il ${sansPeriode.length > 1 ? 'les' : 'le'} compter ?`);
   // Rondes ponctuelles écartées : posées à GSS (durée d'une ronde, nombre d'intervenants), jamais converties en heures.
+  const infosRondes = rondes.length ? { dureeRonde: dureeRondeDce(dce) || undefined, rondiersDce: /(?<![\p{L}])rondiers?(?![\p{L}])/iu.test(`${String(dce || '')} ${profilsRondes.join(' ')}`) } : {};
   if (rondes.length) {
-    const q = questionRondes({ profils: [], titulaires: 0, suppleants: 0, casPratique: [], rondesSansDuree: rondes });
+    const q = questionRondes({ profils: [], titulaires: 0, suppleants: 0, casPratique: [], rondesSansDuree: rondes, ...infosRondes });
     console.warn(`[Dimensionnement] ${rondes.length} ronde(s) ponctuelle(s) sans durée de présence : non comptée(s) en heures de poste, question posée à GSS.`);
     if (profils.size) alertes.push(q.charAt(0).toLowerCase() + q.slice(1));
   }
   if (!profils.size && !casPratique.length && !misesEnSituation.length) {
-    return rondes.length ? { profils: [], titulaires: 0, suppleants: 0, casPratique: [], rondesSansDuree: rondes } : null;
+    return rondes.length ? { profils: [], titulaires: 0, suppleants: 0, casPratique: [], rondesSansDuree: rondes, ...infosRondes } : null;
   }
-  return { profils: [...profils.values()], titulaires, suppleants, casPratique, ...(misesEnSituation.length ? { misesEnSituation } : {}), ...(alertes.length ? { alertes } : {}), ...(rondes.length ? { rondesSansDuree: rondes } : {}) };
+  return { profils: [...profils.values()], titulaires, suppleants, casPratique, ...(misesEnSituation.length ? { misesEnSituation } : {}), ...(alertes.length ? { alertes } : {}), ...(rondes.length ? { rondesSansDuree: rondes, ...infosRondes } : {}) };
 }
 
 /**

@@ -933,7 +933,10 @@ export function appliquerEffectifsParProfil(sections: Record<string, string>, sa
     const profilSingulier = profil.split(/\s+/).map((w) => (w.length > 3 ? w.replace(/(?<=[A-Za-zÀ-ÿ]{3})[sx]$/, '') : w)).join(' ');
     const cat = singulier(categorieDe(profilSingulier));
     const q = singulier(profil);
-    const ok = lignes.filter((l) => singulier(l.categorie) === cat || singulier(l.qualification) === q || singulier(l.categorie) === q);
+    let ok = lignes.filter((l) => singulier(l.categorie) === cat || singulier(l.qualification) === q || singulier(l.categorie) === q);
+    // Profil saisi plus court que le libellé de la ligne (T6N-3 : « chef d'équipe » face à « Chef d'équipe de sécurité incendie »,
+    // exemple proposé par l'assistant lui-même) : la seule ligne dont la catégorie commence par ce profil.
+    if (!ok.length) ok = lignes.filter((l) => q.length >= 4 && `${singulier(l.categorie)} `.startsWith(`${q} `));
     if (ok.length !== 1) return null;
     const c = brut[ok[0].index].split('|');
     c[3] = ` ${s.nombre} `;
