@@ -148,3 +148,11 @@ describe('process du bloc 1 construit sur le texte, jamais une grille (T2N-6, if
     expect(JSON.stringify(etapesDesPuces(t))).not.toMatch(/"texte":"Photographier/);
   });
 });
+
+describe('texte d’étape : jamais un complément de temps seul (rejeu cstb 1201)', () => {
+  it('« Pendant toute absence du responsable » n’est pas un texte de carte', () => {
+    expect(texteEtapeAvecVerbe('Pendant toute absence du responsable, le remplacer par une personne disposant de compétences et moyens identiques')).not.toMatch(/^Pendant/);
+    const t = "## Vos attentes et nos engagements\n- **Pendant toute absence** du responsable, le remplacer par une personne disposant de compétences et moyens identiques ; signaler toute absence prévue au moins 5 jours ouvrés avant son premier jour, sauf si le contact téléphonique reste identique → notre réponse : « Un interlocuteur unique », développée au bloc 3.\n";
+    expect(etapesDesPuces(t).map((e) => e.texte)).not.toContain('Pendant toute absence du responsable');
+  });
+});

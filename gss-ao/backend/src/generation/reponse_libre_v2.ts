@@ -1845,7 +1845,7 @@ export function texteEtapeAvecVerbe(x: string): string {
   const cap = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
   const infinitif = (v: string) => { const w = (/^[a-zà-ÿ]+/i.exec(v) || [''])[0]; return w.length >= 4 && /(?:er|ir|oir|re)$/i.test(w) && !NOMS_EN_R.test(w); };
   const premier = texteEtapeCoordination(cap(t));
-  const fragment = (v: string) => /^(?:pour|par|dans|selon|lors|en cas|en|apr[èe]s|avant|d[èe]s|sur|sous|avec|sans|au|aux|à|de|du|des|d['’])\b/i.test(v) && !VERBE_CONJUGUE.test(v) && !v.split(/\s+/).some((w, i) => i > 0 && infinitif(w) && /^(?:de|d['’]|à|pour)$/i.test(v.split(/\s+/)[i - 1] || ''));
+  const fragment = (v: string) => /^(?:pour|par|dans|selon|lors|en cas|en|apr[èe]s|avant|d[èe]s|sur|sous|avec|sans|pendant|durant|jusqu['’]|hors|entre|au|aux|à|de|du|des|d['’])\b/i.test(v) && !VERBE_CONJUGUE.test(v) && !v.split(/\s+/).some((w, i) => i > 0 && infinitif(w) && /^(?:de|d['’]|à|pour)$/i.test(v.split(/\s+/)[i - 1] || ''));
   if (premier && !fragment(premier)) return premier;
   for (const m of t.matchAll(/[,;]\s+/g)) {
     const suite = t.slice((m.index || 0) + m[0].length).split(/\s*;\s*/)[0];
