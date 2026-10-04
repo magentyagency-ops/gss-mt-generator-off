@@ -7,8 +7,8 @@ describe('questions du contrôle de couverture (T7CS-7)', () => {
   it('objet introduit par une préposition : le verbe reste dans la question', () => {
     expect(/sans réponse/.test(motifRefusEngagement(PUCE))).toBe(true);
     expect(questionDEngagement(PUCE)).toBe('Que prévoyez-vous pour fournir aux agents des tenues propres permettant d’identifier le nom de la société titulaire ?');
-    // Objet nominal : forme d'avant inchangée.
-    expect(questionDEngagement('GSS précisera les modalités de transmission des rapports.')).toBe('Que prévoyez-vous pour répondre à cette exigence du CCTP : les modalités de transmission des rapports ?');
+    // Objet nominal : la donnée est demandée, verbe en tête (T5-COH-1 : jamais une question sans verbe).
+    expect(questionDEngagement('GSS précisera les modalités de transmission des rapports.')).toBe('Pouvez-vous préciser les modalités de transmission des rapports ?');
   });
   it('exigence déjà source d’une phrase adaptée (D8) : question retirée ; exigence non traitée : question gardée', () => {
     const q = questionDEngagement(PUCE);

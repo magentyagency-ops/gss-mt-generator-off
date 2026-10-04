@@ -19,6 +19,7 @@ import {
 } from './memoire_type';
 import { ZONE_GSS, vocabulaireDuCctp, periodeEnTete, normaliserExpressionsDelai, minutesDe, RX_NOMBRE_LETTRES as RX_NOMBRE_LETTRES_V2 } from './base_memoires';
 import { insecablesNombres } from './dimensionnement';
+import { PAS_INFINITIF, questionExacte } from './questions_gss';
 
 export const PLACEHOLDER_V2 = '[À COMPLÉTER]';
 
@@ -3206,7 +3207,9 @@ export function controlerProposition(texte: string, montantsGss: string[] = []):
       if (instruction && /(?:er|ir|re)$/.test(normaliser(instruction[1])) && !PAS_INFINITIF.has(normaliser(instruction[1]))) {
         retirees.push(ph.trim());
         retireAvecQuestion = true;
-        questions.push(`Quelle réponse GSS apporte-t-elle sur ce point : « ${ph.replace(/\[À COMPLÉTER\]|⟦AC:\d+⟧|[*_]/g, '').replace(/\s*:\s*\.?\s*$/, '').trim()} » ?`);
+        // Question à GSS à la deuxième personne (« Pouvez-vous définir … ? »), jamais « avec GSS » ni « Quelle réponse GSS
+        // apporte-t-elle … » (T5-CONS-8).
+        questions.push(questionExacte(ph.replace(/\[À COMPLÉTER\]|⟦AC:\d+⟧|[*_]/g, '').replace(/\s*:\s*\.?\s*$/, '').trim()));
         return false;
       }
       // Fait accompli ou pièce jointe affirmés par GSS sans source (citedia 341 : « La visite obligatoire des lieux a été
@@ -3568,13 +3571,6 @@ export function sansEngagementsDejaDits(texte: string): { texte: string; retiree
 }
 
 /** Mots en -er, -ir, -re qui ne sont pas des infinitifs (noms, adjectifs, possessifs). */
-const PAS_INFINITIF = new Set(['premier', 'dernier', 'cahier', 'quartier', 'dossier', 'papier', 'fichier', 'chantier', 'metier', 'calendrier', 'palier',
-  'escalier', 'particulier', 'regulier', 'entier', 'hier', 'cher', 'fer', 'mer', 'hiver', 'super', 'laser', 'leader', 'plaisir', 'avenir', 'loisir',
-  'soir', 'espoir', 'desir', 'manoir', 'couloir', 'trottoir', 'miroir', 'cadre', 'ordre', 'titre', 'nombre', 'membre', 'centre', 'registre', 'lettre',
-  'livre', 'chiffre', 'metre', 'offre', 'autre', 'notre', 'votre', 'entre', 'contre', 'outre', 'quatre', 'libre', 'propre', 'sobre', 'pupitre', 'acier',
-  'atelier', 'clavier', 'collier', 'courrier', 'denier', 'foyer', 'loyer', 'pompier', 'routier', 'sentier', 'usager', 'voisinage', 'tiers', 'ouvrier',
-  'gardiennage', 'tir', 'noir', 'mur', 'sur', 'pur', 'sir', 'lire', 'faire']);
-
 /**
  * Phrase ajoutée au texte de GSS par l'adaptation, recopiée du CCTP à l'infinitif (générations réelles du 3 octobre 2026 :
  * caen 701 « Effectuer la ronde d'ouverture du lundi au vendredi à 05 h 30… », citedia 701 « Avant démarrage, raccorder et

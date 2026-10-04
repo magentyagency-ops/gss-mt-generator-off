@@ -96,7 +96,8 @@ describe('Contrôle réel 701 : textes rédigés par l’IA', () => {
   it('consigne à l’infinitif laissée en blanc dans une proposition : retirée, question posée (ifits)', () => {
     const r = controlerProposition('## Organisation de la vacation\n\nLe samedi 30 janvier 2027, un agent assure le gardiennage.\n\n## Modalités opérationnelles\n\nDéfinir avec GSS les consignes et modalités opérationnelles spécifiques de la vacation de gardiennage du 30 : [À COMPLÉTER].');
     expect(r.texte).not.toMatch(/Définir avec GSS|Modalités opérationnelles/);
-    expect(r.questions[0]).toMatch(/^Quelle réponse GSS apporte-t-elle sur ce point : « Définir avec GSS/);
+    // (T5-CONS-8 : question à la deuxième personne, jamais « avec GSS » ni « Quelle réponse GSS apporte-t-elle »)
+    expect(r.questions[0]).toBe('Pouvez-vous définir les consignes et modalités opérationnelles spécifiques de la vacation de gardiennage du 30 ?');
   });
 });
 

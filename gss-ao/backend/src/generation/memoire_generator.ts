@@ -33,6 +33,7 @@ import {
 } from './memoire_type_cadre';
 import { articlesBloc1 } from './bloc1_marine';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, fondementDansDce, exigenceDeModification, ETAPE_ADAPTATION_MODELE, type PhraseAdaptee } from './adaptations_cctp';
+import { questionCaseTableau, questionExacte } from './questions_gss';
 import { exigenceDeGrillePenalites, estCahierDesChargesParContenu, estPieceAdministrative, teteAdministrative, perimetreDuLot, rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -1665,6 +1666,17 @@ export function sansQuestionsRedites<T extends { question: string; sources?: num
 }
 
 /**
+ * Description factuelle du site tirée du DCE (site, adresse, surface, horaires d'ouverture, bâtiments), sans obligation du
+ * titulaire : jamais une question à GSS (T5-CONS-9).
+ */
+export function faitDuDce(e: string): boolean {
+  const t = String(e || '').replace(/\s+/g, ' ').trim();
+  const DESCRIPTION = /^(?:(?:le |la |les |l['’])?(?:sites?|lieux?|adresses?|surfaces?|superficies?|horaires? d['’]ouverture|b[âa]timents?|locaux|localisation|implantation|p[ée]rim[èe]tre g[ée]ographique|effectif du site))\b[^:;]{0,80}:/i;
+  const OBLIGATION = /\b(?:doit|doivent|devra|devront|est tenue?|sont tenus|s['’]engage|assure|assurera|r[ée]alise|effectue|fournit|fournira|transmet|garantit|met en place|mettra|exige|exig[ée]e?s?|obligatoire|imp[ée]rati\w*|titulaire|prestataire)\b/i;
+  return DESCRIPTION.test(t) && !OBLIGATION.test(t);
+}
+
+/**
  * Exigence couverte par un paragraphe du mémoire, à la conjugaison près (« garde, effectue, prévienne, dissuade » / « assurera
  * la garde, effectuera, préviendra, dissuadera ») : 70 % au moins de ses mots porteurs (racines de 5 lettres) et tous ses
  * chiffres dans un même paragraphe.
@@ -1694,143 +1706,7 @@ function citationDe(q: string): string {
   return ((/«\s*([^«»]{20,}?)\s*»/.exec(String(q || '')) || [])[1] || '').trim();
 }
 
-/** Question en clair sur une case de tableau du cadre (même forme que les cartes de l'assistant, T8CS-4). */
-export function questionCaseTableau(ligne: string, colonne: string): string {
-  const l = String(ligne || '').split('|')[0].replace(/\[CHAMP_\d+\]/g, '').replace(/\s+/g, ' ').trim();
-  const c = String(colonne || '').replace(/\[CHAMP_\d+\]/g, '').replace(/\s*\/\s*/g, ' — ').replace(/\s+/g, ' ').trim();
-  return l ? `Tableau du cadre, ligne « ${l} », colonne « ${c} » : quelle valeur faut-il écrire ?` : `Tableau du cadre, colonne « ${c} » : quelle valeur faut-il écrire ?`;
-}
-
-export function questionExacte(q: string): string {
-  const t = String(q || '').replace(/\s+/g, ' ').trim();
-  if (!t) return t;
-  const maj = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
-  const min = (x: string) => (/^[A-ZÀ-Ý][a-zà-ÿ]/.test(x) ? x.charAt(0).toLowerCase() + x.slice(1) : x);
-  const sansFin = (x: string) => x.replace(/\s*[.;:…]+\s*$/, '').trim();
-  // Question déjà posée (éventuellement suivie d'une explication : « … PME … ? L'effectif est de 380 salariés ; … »).
-  if (/\?/.test(t) && !/^(?:Information|Valeur) à fournir/i.test(t)) return maj(t);
-  // Tâches de validation et alertes signalées comme telles (propositions de réponse, rubriques à relire, schéma absent).
-  if (/^(?:Proposition|Réponse à relire|(?:Partie|Rubrique|Réponse) «)/i.test(t)) return t;
-  // Préfixes : la question qui suit est mise en forme à son tour.
-  const pref = /^(À demander à l.acheteur|Pour le critère «[^»]*»|Critère «[^»]*»|«[^»]*» — à confirmer|Champ \d+)\s*:\s*(.+)$/i.exec(t);
-  if (pref) {
-    const interieur = sansFin(pref[2]);
-    if (/^À demander à l.acheteur$/i.test(pref[1]) && !/\?/.test(interieur)) return `${pref[1]} : pouvez-vous nous transmettre ou préciser ${/^«/.test(interieur) ? interieur : `« ${interieur} »`} ?`;
-    if (/— à confirmer$/i.test(pref[1]) && !/\?/.test(interieur)) return `${pref[1].replace(/ — à confirmer$/, '')} : confirmez-vous ce point : « ${interieur} » ?`;
-    const suite = questionExacte(pref[2]);
-    return /^«[^»]*» — à confirmer$/i.test(pref[1]) ? `${pref[1].replace(/ — à confirmer$/, '')} : ${suite}` : `${pref[1]} : ${suite.startsWith('À demander') ? suite : min(suite)}`;
-  }
-  const aConfirmer = /^À confirmer\s*:\s*(.+)$/i.exec(t);
-  if (aConfirmer) return `Confirmez-vous ce point : « ${sansFin(aConfirmer[1])} » ?`;
-  // Case de tableau du cadre décrite par sa colonne et sa ligne (forme interne « Colonne: "…" | Ligne: "…" ») : la question
-  // en clair des cartes de l'assistant, jamais la forme interne (havre1, T8CS-4).
-  const caseTableau = /^Colonne:\s*"([^"]*)"\s*\|\s*Ligne:\s*"([^"]*)"/.exec(t);
-  if (caseTableau) return questionCaseTableau(caseTableau[2], caseTableau[1]);
-  // Intitulé numéroté d'une partie du cadre (« 3.1 Les moyens humains assignés à la mission ») : l'information à écrire dans
-  // la réponse à cette partie.
-  if (/^\d+(?:\.\d+)*\.?\s+[A-ZÀ-Ý]/.test(t) && t.split(/\s+/).length <= 14) return `Quelle information faut-il écrire dans la réponse à « ${sansFin(t)} » ?`;
-  const delaiPropose = /^Délai proposé hors Normandie, à confirmer par GSS \(organisation locale\)\s*:\s*(.+)$/i.exec(t);
-  if (delaiPropose) return `Hors Normandie, validez-vous ce délai proposé (organisation locale) : « ${sansFin(delaiPropose[1])} » ?`;
-  // Lieu du site introuvable dans le DCE (T7-COH-2) : le délai de GSS n'est valable que si le site est en Normandie.
-  const delaiLieu = /^Délai retiré faute de lieu du site dans le DCE, à confirmer par GSS\s*:\s*(.+)$/i.exec(t);
-  if (delaiLieu) return `Le DCE ne donne pas la commune du site : si le site est en Normandie, validez-vous ce délai : « ${sansFin(delaiLieu[1])} » ? Sinon, quel délai GSS annonce-t-elle ?`;
-  const horsNormandie = /^Marché hors Normandie\s*:\s*délai à confirmer par GSS \((.+)\)\.?$/i.exec(t);
-  if (horsNormandie) return `Marché hors Normandie : quel délai GSS annonce-t-elle (${horsNormandie[1]}) ?`;
-  const exigence = /^Exigence du (DCE|CCTP)( sans réponse dans le mémoire| à laquelle le mémoire (?:doit répondre|ne répond pas encore)[^:]*)\s*:\s*(.+)$/i.exec(t);
-  if (exigence) return `Exigence du ${exigence[1]}${exigence[2]} : « ${sansFin(exigence[3]).replace(/^«\s*|\s*»$/g, '')} ». Comment GSS y répond-elle (moyen, délai ou document à indiquer) ?`;
-  const information = /^(?:Information|Valeur) à fournir(?: pour compléter(?: le mémoire)?)?\s*:\s*(.+)$/i.exec(t);
-  if (information) {
-    const libelle = sansFin(information[1]).replace(/^«\s*|\s*»$/g, '');
-    // Libellé d'une personne (imm 341 : « Chargé d'affaires dédié » → « Quelle donnée faut-il indiquer ici ? ») : qui, avec
-    // son nom, sa fonction et son téléphone ; pour le chargé d'affaires ou l'interlocuteur, le responsable de marché de GSS.
-    const personne = /^(?:(?:le|la|l['’]|un|une)\s*)?(chargée? d['’]affaires?|r[ée]f[ée]rent(?:e)?|responsable|interlocut(?:eur|rice)|chef (?:de (?:poste|site|service|projet|secteur|groupe)|d['’][ée]quipe)|coordinat(?:eur|rice)|correspondant(?:e)?|superviseur|contact|gestionnaire|directeur|directrice)\b(.*)$/i.exec(libelle);
-    if (personne) {
-      const fonction = `${personne[1]}${personne[2]}`.trim();
-      const dirigeant = valeurRegistre('dirigeant').replace(/\s+/g, ' ').trim().replace(/^(\S+)\s+(\S+)$/, (_m, nom: string, prenom: string) => `${nom.toUpperCase()} ${prenom.charAt(0).toUpperCase()}${prenom.slice(1).toLowerCase()}`);
-      const proposition = /chargée? d['’]affaires?|interlocut|responsable (?:du |de )?march[ée]|r[ée]f[ée]rent(?:e)? (?:du |de )?march[ée]/i.test(fonction) && dirigeant
-        ? ` ${dirigeant}, responsable de marché et interlocuteur unique de GSS, peut-il être indiqué ?` : '';
-      return `Qui sera ${/^[aeiouyhàâéèêîïôûü]/i.test(fonction) ? "l'" : 'le '}${min(fonction)} pour ce marché (nom, fonction et téléphone) ?${proposition}`;
-    }
-    // Libellé nominal (« Nombre de véhicules » → « Combien de véhicules ? ») ; sinon la donnée nommée par son libellé.
-    const nominale = libelle && !/^(?:Information|Valeur) à fournir/i.test(libelle) ? questionExacte(libelle) : '';
-    return nominale && !/^(?:Quelle réponse GSS|Exigence du DCE)/.test(nominale) ? nominale : `Quelle donnée faut-il indiquer pour : « ${libelle} » ?`;
-  }
-  // Consigne à l'infinitif (« Préciser les mesures… », « Confirmer auprès de GSS et de son assureur… ») : question à GSS.
-  // Consigne interne du modèle (« Définir avec GSS les modalités … que GSS fournira », becquerel 1401, T4N-5) : la question
-  // s'adresse à GSS, jamais « avec GSS » ni « GSS » à la troisième personne.
-  const verbe = /^(Préciser|Confirmer|Indiquer|Fournir|Transmettre|Joindre|Détailler|Décrire|Compléter|Valider|Vérifier|Lister|Donner|Communiquer|Justifier|Expliquer|Définir|Déterminer|Fixer|Établir|Etablir|Arrêter|Prévoir|Organiser|Mentionner|Présenter|Chiffrer|Estimer|Choisir|Identifier|Désigner)\s+(.+)$/i.exec(t);
-  if (verbe) {
-    const reste = sansFin(verbe[2]).replace(/\bauprès de GSS et de son assureur\b/i, 'auprès de votre assureur').replace(/\b(?:auprès de|avec|par|pour) GSS\b/gi, '').replace(/^à GSS\s+/i, '')
-      .replace(/\b(que|qu['’]|dont)\s*GSS\s+(fournira|mettra|prévoit|propose|assurera|utilisera|affectera|mobilisera)\b/gi, (_m, rel: string, v: string) => `${/^qu['’]/i.test(rel) ? 'que' : rel} vous ${({ fournira: 'fournirez', mettra: 'mettrez', prévoit: 'prévoyez', propose: 'proposez', assurera: 'assurerez', utilisera: 'utiliserez', affectera: 'affecterez', mobilisera: 'mobiliserez' } as Record<string, string>)[v.toLowerCase()] || v}`)
-      .replace(/\bde GSS\b/g, 'de votre entreprise').replace(/\s{2,}/g, ' ').trim();
-    return `Pouvez-vous ${verbe[1].toLowerCase()} ${reste} ?`;
-  }
-  // Libellé nominal d'une donnée (« Nombre d'agents… », « Délai d'envoi des plannings… », « Diplômes détenus… »).
-  const nombre = /^Nombre (d['’]|de |des )(.+)$/i.exec(t);
-  if (nombre) return `Combien ${nombre[1].toLowerCase() === 'des ' ? 'de ' : nombre[1].toLowerCase()}${sansFin(nombre[2])} ?`;
-  const GENRES: Record<string, string> = {
-    nom: 'Quel est', numero: 'Quel est', delai: 'Quel est', taux: 'Quel est', partenaire: 'Quel est', organigramme: 'Quel est', montant: 'Quel est',
-    date: 'Quelle est', liste: 'Quelle est', composition: 'Quelle est', duree: 'Quelle est', frequence: 'Quelle est', periodicite: 'Quelle est', adresse: 'Quelle est',
-    diplomes: 'Quels sont', noms: 'Quels sont', moyens: 'Quels sont', effectifs: 'Quels sont', horaires: 'Quels sont',
-    quantites: 'Quelles sont', coordonnees: 'Quelles sont', modalites: 'Quelles sont', qualifications: 'Quelles sont', dates: 'Quelles sont', references: 'Quelles sont',
-  };
-  const premier = t.split(/[\s'’]/)[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  // Nom suivi d'un adjectif au pluriel (« taux horaires … ») ou libellé qui coordonne plusieurs données (« nom et
-  // coordonnées du chef de site », « délai de remplacement et taux de reprise ») : chaque donnée prend son article
-  // (T4N-9 : « Quel est le taux horaires … et montants … ? » n'était pas une question correcte).
-  const sansAcc = (w: string) => w.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  const articleDe = (groupe: string): string | null => {
-    const mots = groupe.trim().split(/\s+/);
-    const w = sansAcc(mots[0].replace(/['’].*$/, ''));
-    const suivant = mots[1] || '';
-    const pluriel = /^(?:quels|quelles)/i.test(GENRES[w] || '')
-      || (!GENRES[w] && /s$/.test(w) && !!GENRES[w.replace(/s$/, '')])
-      || (!!GENRES[w] && /[sxz]$/.test(w) && /^[a-zà-ÿ]+s$/.test(suivant) && !/^(?:de|des|du|par|pour|sur|dans|avec|sous)$/.test(suivant));
-    if (pluriel) return 'les';
-    const g = GENRES[w];
-    if (!g) return null;
-    if (/^[aeiouyhàâéèêîïôûü]/i.test(mots[0])) return "l'";
-    return /^Quelle /.test(g) ? 'la' : 'le';
-  };
-  const avecArticle = (groupe: string, art: string) => (art === "l'" ? `l'${min(groupe.trim())}` : `${art} ${min(groupe.trim())}`);
-  if (GENRES[premier] || GENRES[premier.replace(/s$/, '')]) {
-    const corps = sansFin(t);
-    // Coordination : « A et B » (une seule coordination de premier niveau, avant toute virgule).
-    const iVirgule = corps.search(/,\s/);
-    const tete = iVirgule > 0 ? corps.slice(0, iVirgule) : corps;
-    const suiteVirgule = iVirgule > 0 ? corps.slice(iVirgule) : '';
-    const parts = tete.split(/\s+et\s+/);
-    if (parts.length === 2) {
-      const a1 = articleDe(parts[0]);
-      const a2 = articleDe(parts[1]);
-      if (a1 && a2) return `Pouvez-vous indiquer ${avecArticle(parts[0], a1)} et ${avecArticle(parts[1], a2)}${suiteVirgule} ?`;
-    }
-    const a = articleDe(corps);
-    if (a === 'les' && GENRES[premier] && !/^(?:quels|quelles)/i.test(GENRES[premier])) return `Quels sont les ${min(corps)} ?`;
-  }
-  if (GENRES[premier]) {
-    const article = /^(?:quels|quelles)/i.test(GENRES[premier]) ? 'les' : /^(?:date|liste|composition|duree|frequence|periodicite|adresse)$/.test(premier) ? 'la' : 'le';
-    const corps = min(sansFin(t));
-    return `${GENRES[premier]} ${/^[aeiouyhàâéèêîïôûü]/i.test(corps) && article !== 'les' ? `l'${corps}` : `${article} ${corps}`} ?`;
-  }
-  // Phrase dont GSS est le sujet (« GSS doit préciser les délais… », « GSS devra valider ou modifier dans l'assistant le
-  // dimensionnement… ») : une question à GSS, jamais une « Exigence du DCE » (etampes1 592, T5N-1).
-  const sujetGss = /^GSS\s+(?:doit|devra|devrait|est invitée? à|a à)\s+(.+)$/i.exec(t);
-  if (sujetGss) {
-    const reste = sansFin(sujetGss[1]);
-    const valider = /^(?:valider|confirmer)(?:\s+ou\s+modifier)?(?:\s+dans\s+l['’]assistant)?\s+(.+)$/i.exec(reste);
-    // Délais que le mémoire laisse à compléter (etampes2 701 : « Validez-vous les délais chiffrés de prise en compte… ? » alors
-    // qu'aucun délai n'est écrit, hors Normandie) : la valeur est demandée, jamais une validation.
-    if (valider && /^les\s+d[ée]lais\b/i.test(valider[1])) return `Quels ${valider[1].replace(/^les\s+/i, '')} GSS annonce-t-elle ?`;
-    if (valider) return `Validez-vous ${valider[1]} ? Sinon, modifiez-le dans l'assistant.`;
-    return `Pouvez-vous ${min(reste)} ?`;
-  }
-  // Exigence du DCE (phrase à la voix de l'acheteur, ou fragment en minuscule tiré du cahier des charges).
-  if (/^[a-zà-ÿ]/.test(t) || /\b(?:doit|doivent|devra|devront|est tenue?|sont tenus|le titulaire|le prestataire|le candidat|exig|obligatoire|imp[ée]ratif)\b/i.test(t)) {
-    return `Exigence du DCE à laquelle le mémoire doit répondre : « ${sansFin(t)} ». Comment GSS y répond-elle (moyen, délai ou document à indiquer) ?`;
-  }
-  return `Quelle réponse GSS apporte-t-elle sur ce point : « ${sansFin(t)} » ?`;
-}
+export { questionCaseTableau, questionExacte } from './questions_gss';
 
 /**
  * Éléments à compléter d'un document, sans doublon (T1C-13) : une même question sans emplacement n'est posée qu'une fois ;
@@ -1878,7 +1754,8 @@ export function elementsSansDoublon(elements: ElementACompleter[]): ElementAComp
       const autre = memes.find((x) => !aEmplacement(x) && cles.get(x)!.join('|') === k.join('|'));
       return !autre || filtres.indexOf(autre) > filtres.indexOf(e);
     }
-    const jumeau = memes.find((x) => aEmplacement(x) && cles.get(x)!.join('|') === k.join('|'));
+    // (cases d'un tableau de noms et de dates : chacune sa valeur, jamais groupées, T5N-14)
+    const jumeau = k.some((c) => /^(?:liste_nominative_agents|cnaps_agents)$/.test(c)) ? undefined : memes.find((x) => aEmplacement(x) && cles.get(x)!.join('|') === k.join('|'));
     if (jumeau) { const g = jumeau.groupe || e.groupe || `donnee ${k.join('+')}`; jumeau.groupe = g; e.groupe = g; }
     return true;
   });
@@ -1924,6 +1801,11 @@ export function cleDonnee(question: string): string[] {
   if (/plannings?/i.test(q) && /J\s?-\s?\d|[ée]ch[ée]ances?|jours? ouvr|calendrier/i.test(q)) out.push('echeances_planning');
   // Couverture horaire du cas pratique (etampes2 553 : « 48 heures annoncées / 39 heures détaillées », « 9 heures non décrites »).
   if (/cas pratique|plages?|intitul|non d[ée]crites/i.test(q) && /\d+\s*h(?:eures)?\b[^?]{0,160}\d+\s*h(?:eures)?\b/i.test(q) && /couvr|couverture|intitul|non d[ée]crites|clarifi/i.test(q)) out.push('couverture_cas_pratique');
+  // Liste nominative des agents et dates de leurs formations (havre2, T5N-14 : cases « SST » / « C.Q.P.A.D.S. » × « NOM / Prénom /
+  // Date » du tableau du cadre, « Transmettre … les noms, prénoms et dates de formation SST … », « la liste nominative des agents …
+  // et les dates de leurs formations ») : une seule donnée ; l'autorisation CNAPS en est une autre.
+  if (/\b(?:noms?|pr[ée]noms?|nominative?s?)\b/i.test(q) && /\b(?:agents?|SST|CQP|C\.?\s?Q\.?\s?P|SSIAP|formations?|dipl[ôo]mes?)\b/i.test(q) && /\b(?:dates?|formations?|SST|CQP|C\.?\s?Q\.?\s?P|SSIAP|dipl[ôo]mes?)\b/i.test(q)) out.push('liste_nominative_agents');
+  if (/\bCNAPS\b|carte professionnelle|autorisations? (?:pr[ée]alable|d['’]exercer)/i.test(q) && out.includes('liste_nominative_agents')) out.push('cnaps_agents');
   return out.sort();
 }
 
@@ -2002,8 +1884,11 @@ export function motifRefusEngagement(x: string): string {
 /** Question à GSS tirée d'une puce refusée parce qu'elle parle du mémoire au lieu de répondre (« GSS précise le nombre
  *  de contrôleurs affectés au site » → « Combien de contrôleurs seront affectés au site ? »). */
 export function questionDEngagement(x: string): string {
-  const t = String(x || '').replace(/^[-•]\s*/, '').trim().replace(/[.;…]+\s*$/, '');
-  const motif = motifRefusEngagement(t);
+  const entier = String(x || '').replace(/^[-•]\s*/, '').trim().replace(/[.;…]+\s*$/, '');
+  const motif = motifRefusEngagement(entier);
+  // Une question sur la première phrase de l'engagement, jamais une seconde phrase « GSS conservera… » gardée telle quelle
+  // dans la question (T5-COH-1).
+  const t = entier.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý])/)[0].replace(/[.;…]+\s*$/, '');
   const exigence = t.replace(/^(?:GSS|le titulaire|nous)\s+(?:s['’]engage(?:ra)?\s+[àa]\s+)?/i, '');
   // Délai annoncé sans valeur (T5CP-7) : la valeur exacte est demandée à GSS.
   if (/^délai sans valeur/.test(motif)) return `Quel délai GSS annonce-t-elle pour cette exigence du CCTP : « ${exigence} » ?`;
@@ -2018,23 +1903,30 @@ export function questionDEngagement(x: string): string {
   }
   // Objet annoncé (« s'engage à préciser les moyens matériels envisagés…, notamment le nombre de véhicules… ») : la donnée
   // attendue est demandée telle que le DCE la formule.
-  const o = /\b(?:s.engage(?:ra)? [àa] (?:lui )?)?(pr[ée]cis|indiqu|d[ée]taill|communiqu|fourni|transmet|mentionn|pr[ée]sent|renseign|d[ée]termin|d[ée]fini)[a-zé]*\s+(.+)$/i.exec(t);
+  // Verbe d'information juste après le sujet (« GSS (s'engage à) <verbe> »), jamais un participe ou un adjectif au milieu de la
+  // phrase (« un compte-rendu détaillé », « un rapport précis », T5N-10, T5-COH-1).
+  const o = /^(?:(?:GSS|le titulaire|nous)\s+)?(?:s.engage(?:ra)?\s+[àa]\s+(?:lui\s+)?)?(pr[ée]cis|indiqu|d[ée]taill|communiqu|fourni|transmet|mentionn|pr[ée]sent|renseign|d[ée]termin|d[ée]fini)[a-zé]*\s+(.+)$/i.exec(t);
   const objet = sansMemoire(o ? o[2] : t).replace(/\s+ult[ée]rieurement\b/i, '');
   // Le verbe reste dans la question, à l'infinitif, quel que soit le début de l'objet (cstb 551, T7CS-7 ; ign, T4-COH-5 : « GSS
   // fournira dès la notification les scénarios… » donnait « … exigence du CCTP : dès la notification les scénarios… ? », sans
   // verbe) ; les verbes coordonnés au futur aussi (« et mettra en place » → « et mettre en place », « et se coordonnera » →
   // « et vous coordonner »).
-  const coordonnes = (s: string) => s.replace(/\bet\s+(se\s+|s['’])?([a-zà-ÿ]{3,}(?:era|ira|tra|dra|ra))\b/gi, (m, se: string | undefined, v: string) => {
+  // (aussi après une virgule ou un pronom complément : « et le transmettra » → « et le transmettre », « , la tiendra à jour » →
+  // « , la tenir à jour », T5N-10, T5-COH-1)
+  const coordonnes = (s: string) => s.replace(/(\bet\s+|,\s+)(se\s+|s['’])?((?:(?:le|la|les|lui|leur|en|y)\s+|l['’]))?([a-zà-ÿ]{3,}(?:era|ira|tra|dra|ra))\b/gi, (m, lien: string, se: string | undefined, pron: string | undefined, v: string) => {
     const inf = infinitifDuFutur(v);
-    return inf ? `et ${se ? 'vous ' : ''}${inf}` : m;
+    return inf ? `${lien}${se ? 'vous ' : ''}${pron || ''}${inf}` : m;
   });
   if (o) {
     const INFINITIFS: Record<string, string> = { precis: 'préciser', 'précis': 'préciser', indiqu: 'indiquer', detaill: 'détailler', 'détaill': 'détailler', communiqu: 'communiquer', fourni: 'fournir', transmet: 'transmettre', mentionn: 'mentionner', present: 'présenter', 'présent': 'présenter', renseign: 'renseigner', determin: 'déterminer', 'détermin': 'déterminer', defini: 'définir', 'défini': 'définir' };
     const verbe = INFINITIFS[o[1].toLowerCase()];
     // Verbe d'action (fournir, transmettre) : toujours gardé ; verbe d'information (préciser, indiquer…) devant un objet nominal :
     // la question porte sur l'objet lui-même (« … exigence du CCTP : les modalités de transmission des rapports ? »).
-    if (verbe && (/^(?:fournir|transmettre)$/.test(verbe) || /^(?:aux?|à|en|par|dans|pour|sur)\s/i.test(objet))) return `Que prévoyez-vous pour ${verbe} ${coordonnes(objet)} ?`;
-    if (verbe) return `Que prévoyez-vous pour répondre à cette exigence du CCTP : ${coordonnes(objet)} ?`;
+    // Le verbe est toujours gardé à l'infinitif (T5-COH-1 : « … exigence du CCTP : un planning détaillé à la Ville et
+    // l'actualiser … ? » n'avait pas de verbe en tête).
+    // Verbe d'information devant l'objet (« GSS précisera les modalités … ») : la donnée est demandée (« Pouvez-vous préciser … ? »).
+    if (verbe && /^(?:préciser|indiquer|détailler|mentionner|renseigner|déterminer|définir)$/.test(verbe) && !/^(?:aux?|à|en|par|dans|pour|sur)\s/i.test(objet)) return `Pouvez-vous ${verbe} ${coordonnes(objet)} ?`;
+    if (verbe) return `Que prévoyez-vous pour ${verbe} ${coordonnes(objet)} ?`;
   }
   // Phrase dont GSS est le sujet, verbe au futur ou au présent (« GSS organisera… ») : le verbe à l'infinitif.
   const sujet = /^(?:GSS|le titulaire|nous)\s+(?:s['’]engage(?:ra)?\s+[àa]\s+)?(se\s+|s['’])?([a-zà-ÿ]{3,})\s+(.+)$/i.exec(t);
@@ -8864,6 +8756,9 @@ RÈGLES DE FORME (rendu Marp) :
       ...publiees.flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)]).flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
     ]);
     for (const r of matrice) {
+      // Description du site tirée du DCE (« Site de Caen : 20 rue Alfred Kastler… ; surface utile brute de 2 820 m² ; horaires
+      // d'ouverture… », caen 1501, T5-CONS-9) : un fait du DCE, déjà imprimé au bloc 1, jamais une question à GSS.
+      if (r.exigence && faitDuDce(r.exigence)) continue;
       if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence) && !enProposition.has(r)
         && !exigenceTraitee(r.exigence, Object.values(sections).join('\n\n'))) consultations.add(FORMALITES_OFFRE.test(r.exigence) ? questionFormalite(r) : r.exigence.trim());
     }
