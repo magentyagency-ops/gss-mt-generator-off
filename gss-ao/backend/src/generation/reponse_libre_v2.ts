@@ -1957,7 +1957,14 @@ export function titreExigence(x: string, max = 34): string {
     const reste = a.slice(b.length);
     const mots = b.split(' ');
     const dernier = mots[mots.length - 1] || '';
-    return (/^\s+(?:de|du|des|d')\s*\S/.test(reste) && /^(?:un|une)$/.test(mots[mots.length - 2] || ''))
+    // (sigle coupé : « … un premier agent SSIAP 1/CQP | APS de 21h à 9h »)
+    const brut = String(x || '').replace(/\*\*/g, '').replace(/^[«"“\s]+/, '').replace(/\s+/g, ' ');
+    const resteBrut = brut.toLowerCase().startsWith(t.toLowerCase()) ? brut.slice(t.length) : '';
+    if (/^\s+[A-ZÀ-Ý]{2,}(?![\p{L}])/u.test(resteBrut) && /[A-Z0-9]$/.test(t)) return true;
+    // (« Communiquer à l'acheteur les mesures | d'information des personnels » : nom précédé de son article, coupé de son
+    // complément)
+    return (/^\s+(?:de|du|des|d')\s*\S/.test(reste) && (/^(?:un|une|le|la|les|des|ses|leurs|nos|vos)$/.test(mots[mots.length - 2] || '') || /^l'/.test(dernier))
+      && !/^\s+(?:de|du|des|d')\s*(?:\d|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|jour|nuit|semaine)/.test(reste))
       || (/^\s+(?:a|au|aux|par|dans)\s/.test(reste) && /^[a-z]{3,}(?:e|ee|es|ees|is|ise|ises|it|ite|ites)$/.test(dernier) && /(?:indiqu|mentionn|pr[eé]vu|vis|fix|d[eé]fini|pr[eé]cis|list|annex|r[eé]f[eé]renc)/.test(dernier))
       // « Le contrôle de surveillance | à distance » : complément sans article du dernier nom.
       // (sujet coupé avant son verbe : « … à distance doit être actif »)
@@ -2097,12 +2104,25 @@ export function libelleExigenceBloc1(besoin: string, citation: string, max = MAX
   // Rubrique de GSS citée dans la réponse (« Le remplacement d'un agent absent ») et délai de la citation.
   const rub = nominal(String(reponse || '').match(/«\s*([^»:]{3,80}?)\s*(?::[^»]*)?»/)?.[1] || '');
   const dureeC = dureeDe(normaliserExpressionsDelai(c));
+  const dansLeDelaiC = /(?:dans\s+(?:les?|un\s+d[ée]lai)|sous|en\s+moins\s+de|au\s+plus\s+tard\s+(?:dans|sous|en))\s/i.test(normaliserExpressionsDelai(c));
   // Citation qui n'est qu'un délai « dans / sous / en moins de N » (T7-CONS-5 : « dans un délai maximal de deux heures à compter
   // du début de la vacation ») : l'action à laquelle GSS répond, avec son délai (« Remplacement d'un agent absent sous 2 heures »).
-  if (rub && dureeC && /^(?:dans\s+(?:les?|un\s+d[ée]lai)|sous|en\s+moins\s+de)\s/i.test(c)) { const s = `${rub} sous ${dureeC}`; if (ok(s)) return s; }
+  // (jamais une citation qui commence par un lieu, « Dans les jardins et cours, organiser les rondes… toutes les 30 minutes »)
+  const citationDelai = /^(?:dans\s+un\s+d[ée]lai|sous|en\s+moins\s+de)\s/i.test(c)
+    || /^[Dd]ans\s+les?\s+(?:\d|[A-ZÀ-Ý]{2,}(?![\p{L}])|(?:une?|deux|trois|quatre|cinq|six|sept|huit|dix|douze|quinze|vingt|trente|quarante|quarante-huit|soixante-douze)(?![\p{L}]))/u.test(c);
+  if (rub && dureeC && citationDelai) { const s = `${rub} sous ${dureeC}`; if (ok(s)) return s; }
   let tc = titreExigence(base, max);
   tc = nominal(tc.replace(/\s+(?:permettant|pour|afin|visant|destin[ée]e?s?|charg[ée]e?s?)(?:\s.*)?$/i, ''));
-  if (tc && !VERBE.test(tc) && !/\s(?:de|du|des|d['’]|à|au|aux|en|par|pour|sur|dans|et|ou)$/i.test(tc) && tc.split(' ').length >= 2 && ok(tc)) return tc;
+  if (tc && !VERBE.test(tc) && !/\s(?:de|du|des|d['’]|à|au|aux|en|par|pour|sur|dans|et|ou)$/i.test(tc) && tc.split(' ').length >= 2 && ok(tc)) {
+    // Sujet seul (« Chef d'équipe ») quand la structure de la citation le précise (« Chef d'équipe présent tous les jours ») :
+    // le libellé précisé.
+    const structures = libellesStructures(c, max);
+    const precise = structures.find((s) => s.length > tc.length && s.startsWith(`${tc} `) && s.slice(tc.length).trim().split(' ').length >= 2 && !/\ssous\s/.test(s.slice(tc.length)) && ok(s));
+    // Délai de la citation absent du groupe nominal (« Dépêcher sur le site le personnel » pour « … dans les DEUX (2) heures ») :
+    // le libellé structuré qui le porte (« Envoi du personnel de remplacement sous 2 heures »).
+    const avecDelai = dureeC && !/\d/.test(tc) && dansLeDelaiC ? structures.find((s) => s.includes(`sous ${dureeC}`) && ok(s)) : '';
+    return precise || avecDelai || tc;
+  }
   for (const s of libellesStructures(c, max)) if (ok(s)) return s;
   if (sujet && ok(sujet)) return sujet;
   const dernier = nominal(titreExigence(b || c, max));
@@ -2138,9 +2158,18 @@ export function libelleBloc1Valide(t: string, max = MAX_LIBELLE_EXIGENCE): boole
   const dernier = (x.split(' ').pop() || '').toLowerCase();
   if (MOTS_OUTILS.has(dernier.replace(/['’]$/, '')) || /['’]$/.test(dernier) || FIN_A_COMPLEMENT.test(x)) return false;
   // Intervalle coupé : « du lundi » sans « au … », « entre 6 h » sans « et … ».
-  if (/(?:^|\s)du\s+\S+(?:\s+\S+)?$/i.test(x) && /(?:^|\s)du\s+(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|\d{1,2}(?:er)?)(?:\s|$)/i.test(x) && !/\sau\s/i.test(x.slice(x.search(/(?:^|\s)du\s/i)))) return false;
+  // (une date « du samedi 30 janvier 2027 » n'est pas un intervalle)
+  const DATE_PLEINE = /(?:^|\s)du\s+(?:(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s+)?\d{1,2}(?:er)?\s+(?:janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre)(?:\s+\d{4})?$/i;
+  if (/(?:^|\s)du\s+\S+(?:\s+\S+)?$/i.test(x) && /(?:^|\s)du\s+(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|\d{1,2}(?:er)?)(?:\s|$)/i.test(x) && !/\sau\s/i.test(x.slice(x.search(/(?:^|\s)du\s/i))) && !DATE_PLEINE.test(x)) return false;
   if (/(?:^|\s)entre\s/i.test(x) && !/(?:^|\s)entre\s.+\set\s/i.test(x)) return false;
   if ((x.match(/\(/g) || []).length !== (x.match(/\)/g) || []).length || (x.match(/«/g) || []).length !== (x.match(/»/g) || []).length) return false;
+  // Coordination coupée dans un complément (« SST ou du PSC1 », tiré de « titulaire du SST ou du PSC1 ») : le second membre a
+  // l'article « du / de la / des » que le premier n'a pas.
+  const coord = /^(.+?)\s(?:ou|et)\s+(?:du|de\s+la|de\s+l['’]|des)\s/iu.exec(x);
+  if (coord && !/(?<![\p{L}])(?:de|du|des|d['’])/iu.test(coord[1])) return false;
+  // Lieu ou objet de tête suivi d'une virgule et d'un infinitif (« Les jardins et cours, organiser les rondes ») : jamais un
+  // groupe nominal.
+  if (/,\s+\p{L}{3,}(?:er|ir|re)\s+(?:les?|la|l['’]|des|une?|du|d['’]|son|sa|ses|leur|leurs)(?![\p{L}])/iu.test(x)) return false;
   return true;
 }
 
@@ -2227,6 +2256,10 @@ export function libellesStructures(citation: string, max = MAX_LIBELLE_EXIGENCE)
     const nom = nomDAction(passif[2]);
     const compl = sansRelative((passif[3] || '').replace(/^(?:\p{L}+ment\s+)+/iu, ''));
     if (!sujetCoupe && !ACTEUR_SUJET.test(passif[1]) && sujet) {
+      // Participe ou attribut suivi d'un complément de temps (« Un chef d'équipe doit être présent tous les jours et pendant… ») :
+      // « Chef d'équipe présent tous les jours ».
+      const temps = /^(?:tous\s+les\s+jours|chaque\s+jour|en\s+permanence|24\s*h\s*\/\s*24|jour\s+et\s+nuit|7\s*j(?:ours)?\s*\/\s*7)(?![\p{L}\d])/iu.exec(passif[3] || '');
+      if (!delai && temps) out.push(cap(`${sujet} ${passif[2]} ${temps[0]}`));
       out.push(cap(`${sujet}${delai}`));
       if (!delai) out.push(cap(`${sujet} ${passif[2]}`));
       // Sujet trop long (« horaires précis de début et de fin de chaque ronde ») : sa tête et son dernier complément
@@ -2245,7 +2278,25 @@ export function libellesStructures(citation: string, max = MAX_LIBELLE_EXIGENCE)
   // « <infinitif> <au lieu> <objet> » (« assurer au centre de permanence un retour des caméras 24 h/24, toute l'année, pour… ») :
   // l'infinitif et son objet (« Assurer un retour des caméras 24 h/24 »).
   { const il = /^(\p{L}+(?:er|ir|re))\s+(?:au|aux|[àa]\s+la|[àa]\s+l['’]|dans\s+(?:le|la|les|l['’])|sur\s+(?:le|la|les|l['’]))\s*[^,;]{2,50}?\s+((?:un|une|le|la|les|des|du)\s+[^,;]+|l['’][^,;]+)/iu.exec(c);
-    if (il) { const o = il[2].replace(/\s+(?:pour|afin|en\s+vue)\s.*$/i, '').trim(); out.push(cap(`${il[1]} ${o}`), cap(sansDet(o))); } }
+    if (il) {
+      const o = il[2].replace(/\s+(?:pour|afin|en\s+vue)\s.*$/i, '').trim();
+      out.push(cap(`${il[1]} ${o}`), cap(sansDet(o)));
+      // Objet long fait de compléments coordonnés (« les mesures d'information des personnels et de remédiation aux
+      // manquements… ») : son premier membre (« Mesures d'information des personnels »).
+      const o1 = o.split(/\s+(?:et|ou)\s+(?=(?:de|du|des|d['’]|aux?|à)\s*)/i)[0].trim();
+      if (o1 !== o) out.push(cap(`${il[1]} ${o1}`), cap(sansDet(o1)));
+    } }
+  // « Lot N : <consigne> » (« Lot 1 : affecter un premier agent SSIAP 1/CQP APS de 21h à 9h du lundi au samedi… ») : le
+  // libellé de la consigne, précédé du lot.
+  { const lot = /^(lot\s+\d+\s*:\s*)(\p{L}+(?:er|ir|re))\s+((?:un|une|le|la|les|des|du)\s+[^,;]+|l['’][^,;]+)/iu.exec(c);
+    if (lot) {
+      const o = sansDet(lot[3].replace(/\s+(?:de|entre)\s+\d{1,2}\s*h\s*\d{0,2}\s+(?:[àa]|et)\s+\d{1,2}\s*h.*$/i, '').replace(/\s+(?:du|le|les|tous|toute|pour|afin)\s.*$/i, '').trim());
+      if (o) out.push(cap(`${lot[1].replace(/\s*:\s*$/, '')} : ${o}`), cap(o));
+    } }
+  // « Dans <lieu>, <infinitif> <objet> … » (« Dans les jardins et cours, organiser les rondes pour que chacun soit parcouru… ») :
+  // l'objet et son lieu (« Rondes dans les jardins et cours »).
+  { const lt = /^(dans|sur|aux?|[àa]\s+la|[àa]\s+l['’])\s+([^,]{3,60}),\s*\p{L}{3,}(?:er|ir|re)\s+([^,;]+)/iu.exec(String(citation || '').replace(/\*\*/g, '').replace(/^[«"“\s]+/, '').replace(/\s+/g, ' ').trim());
+    if (lt) { const o = sansDet(sansRelative(lt[3].replace(/\s+(?:pour|afin|en\s+vue|de\s+fa[çc]on|de\s+mani[èe]re)(?:\s.*)?$/i, ''))); if (o) out.push(cap(`${o} ${lt[1].toLowerCase()} ${lt[2].trim()}`)); } }
   // « <circonstance> : <action> » (« Les jours de week-end et/ou fériés indiqués à l'annexe 2 : une ronde de jour d'une heure, à
   // effectuer entre 6 h et 21 h ») : l'action (« Ronde de jour d'une heure »).
   { const dp = /^[^:]{3,120}?\s:\s+((?:une?|le|la|les|des|du|l['’])\s*[^,;:]+)/i.exec(String(citation || '').replace(/\*\*/g, '').replace(/\s*\[…\]\s*/g, ' ').replace(/\s+/g, ' ').trim()); if (dp) out.push(cap(sansDet(dp[1].replace(/\s+(?:[àa]\s+effectuer|pour|afin)\s.*$/i, '')))); }

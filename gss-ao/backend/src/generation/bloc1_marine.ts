@@ -11,7 +11,7 @@
 // (relevés à la génération). Rien n'est ajouté pour les autres styles.
 
 import { normaliserExpressionsDelai, nombreFr, RX_NOMBRE_LETTRES, estCahierDesCharges, estPieceAdministrative } from './base_memoires';
-import { titreExigence, MAX_LIBELLE_EXIGENCE, libelleExigenceBloc1 } from './reponse_libre_v2';
+import { titreExigence, MAX_LIBELLE_EXIGENCE, libelleExigenceBloc1, libelleBloc1Valide } from './reponse_libre_v2';
 
 const echapper = (t: string) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const norm = (t: string) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’`]/g, "'").toLowerCase();
@@ -391,6 +391,35 @@ function titreRubriqueCitee(reponse: string): string {
  * articulation relève de « Rubrique », développée au bloc n », ou une puce sans réponse (colonne NOTRE RÉPONSE vide). Le
  * tableau n'est jamais abandonné pour une seule puce d'une autre forme.
  */
+/**
+ * Libellé en gras écrit par le modèle (T7N-2, T7-CONS-5, fontainebleau 801 : « Un chef d'équipe doit être présent tous les
+ * jours et pendant toute la durée d'ouverture des jardins », « SST ou du PSC1 », « Les jardins et cours, organiser les
+ * rondes ») : gardé seulement s'il passe le contrôle des libellés ; sinon le libellé tiré de la phrase qu'il commence (gras et
+ * suite), puis de la phrase du CCTP qui le suit ; à défaut le gras tel quel, jamais une case vide.
+ */
+function libelleDuGras(libelle: string, gras: string, suite: string, besoin: string, reponse: string): string {
+  const phrase = `${gras}${suite ? ` ${suite}` : ''}`;
+  // Gras coupé dans un groupe (« **Communiquer à l'acheteur les mesures** d'information des personnels… », « **affecter un
+  // premier agent SSIAP 1/CQP** APS de 21h à 9h ») : la suite complète le dernier nom, le gras seul n'est pas un libellé.
+  const coupe = libelle === gras && !!suite && (/^(?:de|du|des|d['’])\s*(?!(?:\d|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|jour|nuit|semaine)(?![\p{L}]))\p{L}/iu.test(suite) || /^[A-ZÀ-Ý]{2,}(?![\p{L}])/u.test(suite));
+  const sansArticle = (t: string) => { const y = t.replace(/^(?:(?:le|la|les)\s+|l['’])(?=\p{L})/iu, ''); return y.charAt(0).toUpperCase() + y.slice(1); };
+  if (!coupe && libelleBloc1Valide(libelle, MAX_LIBELLE_EXIGENCE)) {
+    // (sans article en tête, comme les libellés tirés des citations : « Contrôle de surveillance à distance »)
+    const s = sansArticle(libelle);
+    return s !== libelle && s.split(' ').length >= 2 && libelleBloc1Valide(s, MAX_LIBELLE_EXIGENCE) ? s : libelle;
+  }
+  const verbe = /\s(?:est|sont|doit|doivent|devra|devront|sera|seront)\s/i.test(phrase);
+  // Gras seul correct suivi d'un complément sans verbe (« **Journée portes ouvertes** du samedi 30 janvier 2027 ») : le gras.
+  if (!coupe && !verbe && gras !== libelle && libelleBloc1Valide(gras, MAX_LIBELLE_EXIGENCE)) return sansArticle(gras);
+  const candidats = coupe || verbe || phrase !== libelle ? [phrase, besoin] : [besoin, phrase];
+  for (const c of candidats) {
+    if (!c) continue;
+    const l = libelleExigenceBloc1('', c, MAX_LIBELLE_EXIGENCE, reponse);
+    if (l && libelleBloc1Valide(l, MAX_LIBELLE_EXIGENCE)) return l;
+  }
+  return libelle;
+}
+
 function tableauAttentes(liste: string, blocsRubriques: Record<string, number> = {}): string {
   // T7N-6 : ligne faite des seuls repères de consultation (« ⟦AC:1⟧ ») au milieu de la liste : placée après le tableau, jamais
   // une coupure du tableau (la puce qui la suit reste dans le tableau, avec sa colonne « Notre réponse »).
@@ -455,9 +484,11 @@ function tableauAttentes(liste: string, blocsRubriques: Record<string, number> =
       // la colonne de l'exigence et la colonne du CCTP vide, rejeu cstb 1201).
       exigence = gras;
       demande = joindre(gras, suite);
+      exigence = libelleDuGras(gras, gras, suite, besoin, reponse);
     } else if (gras) {
-      exigence = joindre(gras, suite);
-      demande = besoin;
+      exigence = libelleDuGras(joindre(gras, suite), gras, suite, besoin, reponse);
+      // Phrase du modèle remplacée par un libellé : la phrase entière reste dans la colonne du CCTP, jamais perdue.
+      demande = suite && exigence !== joindre(gras, suite) ? `${joindre(gras, suite)}${besoin ? ` : ${besoin}` : ''}` : besoin;
     } else {
       // Puce faite de la seule citation (« « […] et Régulations (PCR) doit être informé … dans les 3 minutes […] » ») : le
       // libellé tiré de la citation, contrôlé comme les autres (T7N-2 : jamais « Et Régulations (PCR) »).

@@ -100,3 +100,28 @@ describe('libellé EXIGENCE : jamais une préposition prise pour l’attribut (T
     expect(libelleExigenceBloc1('', c, MAX_LIBELLE_EXIGENCE)).not.toMatch(/Titulaire en/);
   });
 });
+
+describe('libellés en gras du modèle contrôlés dans le tableau « Vos attentes » (T7N-2, T7-CONS-5, fontainebleau 801)', () => {
+  const colonne = (puces: string) => [...pageBloc1Marine(`## Vos attentes et nos engagements\n\n${puces}\n`).matchAll(/^\| ([^|]+?) \| (.*?) \|/gm)].map((m) => [m[1], m[2]]).slice(1).filter((r) => r[0] !== '---');
+  it('phrase complète, coordination coupée, lieu suivi d’un infinitif, gras coupé dans son groupe, date', () => {
+    const r = colonne([
+      '- **Un chef d’équipe** doit être présent tous les jours et pendant toute la durée d’ouverture des jardins : du 1er mai au 30 septembre de 8 h 30 à 20 h → notre réponse : « L\'adéquation de nos moyens humains avec votre besoin », développée au bloc 3.',
+      '- **SST ou du PSC1** : Chaque agent doit être titulaire du SST ou du PSC1 ; les remises à niveau doivent être maintenues → notre réponse : « Formations et certifications », développée au bloc 3.',
+      '- **Les jardins et cours, organiser les rondes** : Dans les jardins et cours, organiser les rondes pour que chacun soit parcouru par au moins un agent toutes les 30 minutes → notre réponse : « Le contrôleur de rondes », développée au bloc 4.',
+      '- **Communiquer à l’acheteur les mesures** d’information des personnels et de remédiation aux manquements aux principes d’égalité, de laïcité et de neutralité.',
+      '- **Journée portes ouvertes** du samedi 30 janvier 2027 : gardiennage de 8 h à 14 h, puis une ronde de nuit comme un samedi habituel.',
+      '- **Le contrôle de surveillance à distance** doit être actif 365 jours sur 365, 24 heures sur 24.',
+    ].join('\n'));
+    expect(r.map((x) => x[0])).toEqual(['Chef d’équipe présent tous les jours', 'Être titulaire du SST ou du PSC1', 'Rondes dans les jardins et cours',
+      'Mesures d’information des personnels', 'Journée portes ouvertes', 'Contrôle de surveillance à distance']);
+    expect(r[0][1]).toMatch(/^Un chef d’équipe doit être présent tous les jours et pendant toute la durée d’ouverture des jardins : du 1er mai/);
+    expect(r[4][1]).toMatch(/samedi 30 janvier 2027 : gardiennage/);
+  });
+  it('libellés tirés des citations : délai porté, sigle et lot', () => {
+    expect(libelleExigenceBloc1('', 'le Titulaire doit dépêcher sur le site le personnel de remplacement dans les DEUX (2) heures suivant la constatation')).toBe('Personnel de remplacement sous 2 heures');
+    expect(libelleExigenceBloc1('', 'Lot 1 : affecter un premier agent SSIAP 1/CQP APS de 21h à 9h du lundi au samedi toute l’année')).toBe('Lot 1 : premier agent SSIAP 1/CQP APS');
+    expect(libelleBloc1Valide('SST ou du PSC1')).toBe(false);
+    expect(libelleBloc1Valide('Respect des horaires et des consignes')).toBe(true);
+  });
+});
+
