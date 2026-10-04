@@ -113,8 +113,19 @@ export function phraseLimitePages(passage: string): string {
  * nombre (« Mémoire technique | … | 20 maximum ») est lue avec la ligne d'en-tête qui la précède (« … | Nombre de pages »).
  */
 function phrasesDuPassage(passage: string): string[] {
-  const lignes = String(passage || '').replace(/\r/g, '').split(/\n+/)
-    .map((l) => l.replace(/^\s*={3,}\s*PI[ÈE]CE\s*:.*?={3,}\s*/i, '').replace(/^\s*-{3}\s.+?\s-{3}\s*/, '').replace(/^\s*(?:-{3,}|={3,})\s*$/, '').trim()).filter(Boolean);
+  const brutes = String(passage || '').replace(/\r/g, '').split('\n')
+    .map((l) => (/^\s*={3,}\s*PI[ÈE]CE\s*:|^\s*-{3}\s.+?\s-{3}\s*$|^\s*(?:-{3,}|={3,})\s*$/i.test(l) ? '' : l.trim()));
+  // Phrase coupée par la fin de ligne du PDF (T8-REG-4, imm : « … structuré comme suit : organisation et moyens ⏎ humains (équipe,
+  // … ») : la ligne qui commence par une minuscule continue la précédente quand celle-ci ne finit par aucune ponctuation ; jamais
+  // par-dessus une ligne vide, un séparateur de pièce ni une ligne de tableau (titres, en-têtes et cellules restent coupés).
+  const lignes: string[] = [];
+  for (let k = 0; k < brutes.length; k++) {
+    const l = brutes[k];
+    if (!l) continue;
+    const prec = lignes[lignes.length - 1];
+    if (prec !== undefined && brutes[k - 1] && !/[.;:!?|]\s*$/.test(prec) && /^[a-zà-ÿ(]/.test(l) && !/\|/.test(l) && !/\|/.test(prec)) lignes[lignes.length - 1] = `${prec} ${l}`;
+    else lignes.push(l);
+  }
   const out: string[] = [];
   for (let i = 0; i < lignes.length; i++) {
     const l = lignes[i].replace(/\s+/g, ' ');

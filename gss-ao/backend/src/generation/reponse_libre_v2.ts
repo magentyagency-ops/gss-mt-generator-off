@@ -17,7 +17,7 @@ import {
   chargerMemoireType, normaliser, rechercherRubriques, similarite, motsDePhrase, faitsDePhrase, listeFr, cleCommune, delaiImposeNet, delaisDuDce,
   type DonneesBesoin, type ExigenceMatrice, type MemoireType, type PlanMemoireType, type SchemaRubrique,
 } from './memoire_type';
-import { ZONE_GSS, vocabulaireDuCctp, periodeEnTete, normaliserExpressionsDelai, minutesDe, RX_NOMBRE_LETTRES as RX_NOMBRE_LETTRES_V2, MONTANT_PENALITE } from './base_memoires';
+import { ZONE_GSS, vocabulaireDuCctp, periodeEnTete, normaliserExpressionsDelai, minutesDe, RX_NOMBRE_LETTRES as RX_NOMBRE_LETTRES_V2, MONTANT_PENALITE, contientHeure } from './base_memoires';
 import { insecablesNombres } from './dimensionnement';
 import { PAS_INFINITIF, questionExacte } from './questions_gss';
 
@@ -1347,7 +1347,8 @@ function citationImprimable(brut: string, fin: RegExp): string {
   // Trois mots en capitales de suite : tableau aplati (« SEMAINE (LUNDI AU VENDREDI) WEEK-END ET/OU JOURS FÉRIÉS… », ifits).
   if (/(?:(?<![\p{L}])[\p{Lu}][\p{Lu}'’/-]{2,}(?![\p{L}])[\s,()&/-]*){3,}/u.test(t)) return '';
   // Numéro de partie au milieu, pied de page, renvoi à une annexe au milieu de la phrase, puce « o » restante.
-  if (/(?:^|\s)\d+(?:\.\d+)+\s+[A-ZÀ-Ý]{3,}|\bCCTP\s*-|\bconsultation\s+\d{4,}|\bCf\.?\s+Annexe\b(?!.{0,3}$)|(?:^|[:;]\s*)o\s+[A-ZÀ-Ýa-zà-ÿ0-9]/i.test(t)) return '';
+  // (numéro de partie suivi d'un titre en capitales, sensible à la casse : jamais une heure « 06.00 tous les jours », T8G-6)
+  if (/(?:^|\s)\d+(?:\.\d+)+\s+[A-ZÀ-Ý]{3,}/.test(t) || /\bCCTP\s*-|\bconsultation\s+\d{4,}|\bCf\.?\s+Annexe\b(?!.{0,3}$)|(?:^|[:;]\s*)o\s+[A-ZÀ-Ýa-zà-ÿ0-9]/i.test(t)) return '';
   // Liste annoncée et coupée (« … les pièces suivantes : − CV de l'agent ; »), renvoi à un passage non cité.
   if (/:\s*[-–−•]\s|:\s*$|\bci-(?:dessus|dessous|apr[èe]s)\b|\bsusvis[ée]|\bpr[ée]cit[ée]|suivant(?:e)?s\s*:\s*(?:[-–−•]|$)/i.test(t)) return '';
   if ((t.match(/:/g) || []).length >= 4) return '';
@@ -1428,7 +1429,9 @@ export function horairesLisibles(horaires: string[]): string[] {
     return h;
   }).filter((h) => {
     if (!h) return false;
-    if (HEURE_DU_JOUR.test(h)) return true;
+    // Même lecture de l'heure qu'à la lecture du DCE (T8G-6 : « de 22:00 à 06:00 », « de 22 heures à 6 heures », en lettres,
+    // « 22.00 ») : jamais un horaire lu puis écarté à l'impression ; les durées restent écartées (contientHeure).
+    if (HEURE_DU_JOUR.test(h) || contientHeure(h)) return true;
     // « 24h/24 » : présence continue, sauf dans une phrase de délai (« basé 24h/24 … dans les 3 minutes », citedia).
     return /\b24\s*h\s*\/\s*24/i.test(h) && /couvert|ouvert|assur|pr[ée]sence|permanence|gardiennage|surveillance|tenu/i.test(h)
       && !/\bdans\s+(?:les|un\s+d[ée]lai)|\bsous\s+(?:un\s+d[ée]lai|\d)|\bd[ée]lai\b/i.test(h);

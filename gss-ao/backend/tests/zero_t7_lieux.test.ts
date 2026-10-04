@@ -33,7 +33,9 @@ describe('durée « N h » jamais un horaire imposé (T7G-8)', () => {
   const cctp = (ph: string) => `\n\n--- CCTP ---\nCAHIER DES CLAUSES TECHNIQUES PARTICULIÈRES\nARTICLE 3 – HORAIRES\n${ph}\n`;
   it('durées, pauses, chevauchements, amplitudes', () => {
     for (const ph of ["Les vacations seront d'une durée minimale de 4 h.", 'Chaque vacation a une durée de 12 h, pause comprise.', "Un temps de pause de 1 h est accordé à l'agent de poste.",
-      'La relève entre deux agents donne lieu à un chevauchement de 0 h 15.', 'Le site est surveillé 24 h sur 24 h par un agent de poste.']) expect(horairesImposes(cctp(ph)), ph).toEqual([]);
+      'La relève entre deux agents donne lieu à un chevauchement de 0 h 15.']) expect(horairesImposes(cctp(ph)), ph).toEqual([]);
     expect(horairesImposes(cctp('Le poste de sécurité fonctionne avec un agent présent du lundi au vendredi de 8 h à 18 h.'))).toHaveLength(1);
+    // T8-REG-2 : une présence continue d'un service (« surveillé 24 h sur 24 h par un agent ») est un horaire imposé, pas une durée.
+    expect(horairesImposes(cctp('Le site est surveillé 24 h sur 24 h par un agent de poste.'))).toHaveLength(1);
   });
 });

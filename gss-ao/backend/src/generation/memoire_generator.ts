@@ -3474,7 +3474,13 @@ export class MemoireGenerator {
       const remaining = TOTAL_BUDGET - used;
       // Ligatures typographiques de certains PDF (« notiﬁcation », « afﬁchage ») ramenées à leurs lettres, fins de ligne Windows
       // ramenées à « \n » : les lectures sans modèle (obligations, délais, pièces) lisent le même texte quelle que soit l'extraction.
-      let body = p.text.replace(/\r\n?/g, '\n').replace(/\uFB00/g, 'ff').replace(/\uFB01/g, 'fi').replace(/\uFB02/g, 'fl').replace(/\uFB03/g, 'ffi').replace(/\uFB04/g, 'ffl').replace(/[\uFB05\uFB06]/g, 'st');
+      let body = p.text.replace(/\r\n?/g, '\n').replace(/\uFB00/g, 'ff').replace(/\uFB01/g, 'fi').replace(/\uFB02/g, 'fl').replace(/\uFB03/g, 'ffi').replace(/\uFB04/g, 'ffl').replace(/[\uFB05\uFB06]/g, 'st')
+        // Puces Word extraites en glyphes de la zone privée (Symbol, Wingdings : U+F0B7, U+F0D8, U+F0A7…, T8G-5) : « • », comme
+        // le reste du corpus, pour toutes les lectures sans modèle (horaires d'une liste, obligations, titres d'article).
+        .replace(/[\uF020-\uF0FF][ \t\u00a0]*/g, '• ')
+        // Titre extrait lettre par lettre en double par pdf-parse (caen, T8N-2 : « P⏎P⏎r⏎r⏎e⏎e… ») : recollé (« Prestation de
+        // gardiennage … des sites de l'ACOSS »), pour que le titre, l'objet et le sigle de l'acheteur se lisent sans modèle.
+        .replace(/(?:^([^\n])\n\1(?:\n|$)){6,}/gm, (m: string) => { const ls = m.split('\n'); let s = ''; for (let k = 0; k + 1 < ls.length; k += 2) s += ls[k]; return s.trim() ? `${s.replace(/\s+/g, ' ').trim()}\n` : m; });
       const cap = Math.min(PER_FILE_CAP, remaining);
       if (body.length > cap) body = body.slice(0, cap) + `\n[… document tronqué (${p.text.length - cap} caractères omis) …]`;
       // Pièce du cahier des charges tronquée (T1-COH-3) : GSS est prévenu, rien ne se perd en silence.

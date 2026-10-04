@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { motDuDictionnaire, motDuDictionnaireInstitution, graphieSansAmbiguite } from './dictionnaire_fr';
 import { lignesEquipe, questionDimensionnement, questionRondes, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { estNomDeLieu, lieuxConnus, horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, NOMME_DELAI, heureEstUnDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative, lotsDuMemoireDce, perimetreDuLot, normaliserSsiap, contracterArticlesNomsPropres, MONTANT_PENALITE, textePreuvesIndicateurs } from './base_memoires';
+import { separerIntitules, estNomDeLieu, lieuxConnus, horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, NOMME_DELAI, heureEstUnDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative, lotsDuMemoireDce, perimetreDuLot, normaliserSsiap, contracterArticlesNomsPropres, MONTANT_PENALITE, textePreuvesIndicateurs } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -368,8 +368,9 @@ const echapper = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export const LIGNE_SOMMAIRE = /\.{5,}|…{2,}|(?:\.\s){5,}|_{5,}/;
 
 function phrasesDuDce(dce: string): string[] {
-  return String(dce || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ')
-    .split(/(?<=[.;!?])\s+|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n{2,}/)
+  // (intitulé d'article séparé de la phrase qui le suit, T8G-4)
+  return separerIntitules(String(dce || '')).replace(/[ \t]+/g, ' ')
+    .split(/(?<=[.;!?])\s+|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n\s*\n/)
     .map((x) => x.replace(/\s+/g, ' ').replace(/^[-•▪●○◦−]\s*/, '').trim())
     .filter((x) => x.length >= 12 && x.length <= 600 && !LIGNE_SOMMAIRE.test(x));
 }
@@ -1910,12 +1911,13 @@ export function dateDebutMarche(dce: string): string {
   const LIBELLE = `(?:date (?:pr[ée]visionnelle |effective )?(?:de d[ée]marrage|de d[ée]but|de commencement)(?: (?:d.ex[ée]cution|des prestations|du march[ée]|de l.accord-cadre))?|d[ée]marrage (?:effectif )?(?:des prestations|du march[ée])|d[ée]but (?:d.ex[ée]cution|des prestations|du march[ée])|commencement (?:des prestations|d.ex[ée]cution)|prise d.effet|date d.effet(?: (?:du march[ée]|de l.accord-cadre|du contrat))?)`;
   // Sujet au singulier comme au pluriel (« La prestation démarre le… », T4G-7).
   const SUJET = `(?:(?:le pr[ée]sent |la pr[ée]sente |l.|le |la |les )?(?:march[ée]|accord-cadre|contrat|prestations?|ex[ée]cution(?: du march[ée]| des prestations)?))`;
-  const VERBE = `${SUJET}\\s+(?:(?:d[ée]but\\w*|commenc\\w*|d[ée]marr\\w*|pren\\w* effet|entr\\w* en vigueur|(?:est|sont|sera|seront) ex[ée]cut[ée]e?s?)(?:\\s+[àa] (?:compter|partir))?)`;
+  // (T8G-8 : « Le marché commence à courir le 1er janvier 2027 », « Le contrat court à compter du … »)
+  const VERBE = `${SUJET}\\s+(?:(?:d[ée]but\\w*|commenc\\w*(?:\\s+[àa]\\s+courir)?|d[ée]marr\\w*|pren\\w* effet|entr\\w* en vigueur|court|courra|(?:est|sont|sera|seront) ex[ée]cut[ée]e?s?)(?:\\s+[àa] (?:compter|partir))?)`;
   const DUREE = `(?:dur[ée]e (?:du march[ée]|de l.accord-cadre|du contrat)|(?:march[ée]|accord-cadre|contrat) est conclu)[^.;]{0,120}?`;
   // Période d'exécution (« Période d'exécution : du 1er janvier 2027 au 31 décembre 2027 ») : la première date.
   // (T6G-10 : « Durée du marché : du 01/01/2027 au … », « Durée de l'accord-cadre : du … », « pour la période du … », « Le marché
   // court / s'étend / s'exécute du … »)
-  const PERIODE = `(?:(?:(?:p[ée]riode|dur[ée]e) d.ex[ée]cution|dur[ée]e (?:du march[ée]|de l.accord-cadre|du contrat))\\s*(?:[|:]\\s*)?(?:du\\s+|à compter du\\s+)|pour la p[ée]riode (?:allant )?du\\s+|${SUJET}\\s+(?:court|courra|s.[ée]tend|s.[ée]tendra|s.ex[ée]cute|s.ex[ée]cutera)\\s+du\\s+)`;
+  const PERIODE = `(?:(?:(?:p[ée]riode|dur[ée]e) d.ex[ée]cution|dur[ée]e (?:du march[ée]|de l.accord-cadre|du contrat))\\s*(?:[|:]\\s*)?(?:du\\s+|à compter du\\s+)|pour la p[ée]riode (?:allant )?du\\s+|${SUJET}\\s+(?:court|courra|s.[ée]tend|s.[ée]tendra|s.ex[ée]cute|s.ex[ée]cutera|(?:est|sera)\\s+conclue?|(?:est|sera)\\s+pass[ée]e?)\\s+du\\s+)`;
   // Libellé de tableau ou de colonnes suivi de sa date (« Date prévisionnelle de début des prestations | 1er janvier 2027 »,
   // « … des prestations      01/01/2027 », la date seule sur la ligne suivante) : sans aucun mot entre les deux.
   const rx = new RegExp(`(?:${LIBELLE}(?:\\s*(?:[|:]\\s*)?(?=${JOUR}${DATE.replace(/^\(/, '(?:')})|[^.;]{0,160}?(?:fix[ée]e?|estim[ée]e?|pr[ée]vue?)?\\s*(?:au|le|à compter du|:)\\s*(?:le\\s+)?)|${VERBE}\\s+(?:au|le|à compter du|à partir du|du)\\s+|${PERIODE}|${DUREE}[àa] compter du\\s+)${JOUR}${DATE}`, 'i');
@@ -2204,8 +2206,9 @@ const VERBE_CONJUGUE_LIBELLE = /(?<![\p{L}])(?:est|sont|sera|seront|doit|doivent
 
 /** Phrases entières du DCE (coupées sur « . ! ? » et les puces, jamais sur « ; ») : le sujet d'un délai peut précéder le « ; ». */
 function phrasesEntieresDuDce(dce: string): string[] {
-  return String(dce || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ')
-    .split(/(?<=[.!?])\s+|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n{2,}/)
+  // (intitulé d'article séparé de la phrase qui le suit, T8G-4)
+  return separerIntitules(String(dce || '')).replace(/[ \t]+/g, ' ')
+    .split(/(?<=[.!?])\s+|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n\s*\n/)
     .map((x) => x.replace(/\s+/g, ' ').replace(/^[-•▪●○◦−]\s*/, '').trim())
     .filter((x) => x.length >= 12 && x.length <= 900 && !LIGNE_SOMMAIRE.test(x));
 }
@@ -3211,11 +3214,13 @@ const LETTRES_FOIS = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept'
  */
 export function frequenceInopinesDce(dce: string): { valeur: string; mensuels: string; phrase: string } | null {
   const LETTRES = ['', 'une', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix'];
+  // Contrôles inopinés sous toutes leurs formes (T8G-2 : « contrôles surprises », « sans préavis », « impromptus », « à l'improviste »).
+  const INOPINE = /inopin|surprises?(?![\p{L}])|sans\s+pr[ée]avis|impromptu|[àa]\s+l['’]improviste/iu;
   // Ligne de tableau, une phrase à part (T4G-3 : « Contrôle inopiné des agents sur site | 4 par mois ») ; « N par mois » dans une
   // ligne qui nomme les contrôles inopinés compte N contrôles par mois.
   // Ligne « libellé : valeur » qui nomme les contrôles inopinés (T5G-8 : « Contrôles inopinés : 4 par mois minimum »,
   // « … : 4/mois ») : même réécriture.
-  const lignes = dcePourFrequences(dce).replace(/\r/g, '').split('\n').map((l) => (/\|/.test(l) || /\s[—–]\s[^:|]{2,60}:\s*\S/.test(l) || (/inopin/i.test(l) && /^[^:.]{3,80}:\s*\S/.test(l)) ? `\n${/inopin/i.test(l) ? l.replace(/(?<![\p{L}\d])(\d+)\s*\/\s*(mois|semaine)(?![\p{L}])/giu, '$1 contrôles par $2').replace(/(?<![\p{L}\d])(\d+|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix)\s+(?:fois\s+)?par\s+(mois|semaine)(?![\p{L}])/giu, '$1 contrôles par $2') : l}.\n` : l)).join('\n');
+  const lignes = dcePourFrequences(dce).replace(/\r/g, '').split('\n').map((l) => (/\|/.test(l) || /\s[—–]\s[^:|]{2,60}:\s*\S/.test(l) || (INOPINE.test(l) && /^[^:.]{3,80}:\s*\S/.test(l)) ? `\n${INOPINE.test(l) ? l.replace(/(?<![\p{L}\d])(\d+)\s*\/\s*(mois|semaine)(?![\p{L}])/giu, '$1 contrôles par $2').replace(/(?<![\p{L}\d])(\d+|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix)\s+(?:fois\s+)?par\s+(mois|semaine)(?![\p{L}])/giu, '$1 contrôles par $2') : l}.\n` : l)).join('\n');
   // Proposition qui nomme les contrôles inopinés (REG6-4) : la phrase est coupée sur « ; » et sur « , » / « et » devant un
   // nouveau sujet ou un nouvel objet (« L'agent effectue des rondes 3 fois par nuit et le titulaire organise des contrôles
   // inopinés », « … des contrôles inopinés de ses agents et une ronde de fermeture 5 fois par semaine ») ; la fréquence n'est
@@ -3223,14 +3228,14 @@ export function frequenceInopinesDce(dce: string): { valeur: string; mensuels: s
   const propositions = (ph: string) => ph.split(/\s*;\s*|,?\s+et\s+(?=(?:le|la|les|l['’]|un|une|des|du|il|elle|ils|elles|chaque|ses|son|sa|leurs?)\s|l['’])|,\s+(?=(?:le|la|les|l['’]|un|une|des|il|elle|ils|elles)\s|l['’])/i);
   const AUTRE_OBJET = /(?<![\p{L}])(?:rondes?|r[ée]unions?|rapports?|bilans?|patrouilles?|tourn[ée]es?|vacations?|relev[ée]s?|plannings?)(?![\p{L}])/iu;
   for (const brute of lignes.replace(/\s+/g, ' ').split(/(?<=[.;])\s+/)) {
-    if (!/inopin/i.test(brute) || /p[ée]nalit|€/i.test(brute)) continue;
+    if (!INOPINE.test(brute) || /p[ée]nalit|€/i.test(brute)) continue;
     // Groupes « N contrôles (inopinés) mensuels / hebdomadaires » et « au nombre de N par mois » (T6G-6) : « N contrôles par mois ».
     // (même réécriture que la valeur du modèle, T7G-2 : « contrôles inopinés hebdomadaires », « à raison de cinq par mois »…)
     const ph = normaliserFrequence(sansNombreDouble(brute));
-    const prop = propositions(ph).find((x) => /inopin/i.test(x) && frequenceMensuelle(x) !== null);
+    const prop = propositions(ph).find((x) => INOPINE.test(x) && frequenceMensuelle(x) !== null);
     if (!prop) continue;
     // Un autre objet (ronde, réunion, rapport…) entre la mention des contrôles inopinés et la fréquence : pas leur fréquence.
-    const iInop = prop.search(/inopin/i);
+    const iInop = prop.search(INOPINE);
     const iFreq = prop.search(/(?:une|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+(?:fois|contr[ôo]les?|visites?|passages?|par)/i);
     if (iFreq >= 0 && AUTRE_OBJET.test(prop.slice(Math.min(iInop, iFreq), Math.max(iInop, iFreq)))) continue;
     const n = frequenceMensuelle(prop);
@@ -3270,13 +3275,21 @@ export function frequenceRempliePourGss(frequence: string, mensuelParDefaut = fa
  *  fois par mois le week-end » → « au moins deux contrôles inopinés ») ; '' si la fréquence ne se ramène pas au mois. */
 export function controlesInopinesDe(frequence: string): string {
   const f = normaliser(frequence);
-  // Fréquence hebdomadaire, quotidienne ou par quinzaine (T7G-2 : « une fois par semaine » → au moins quatre par mois).
+  // Une seule lecture de la fréquence (frequenceMensuelle, T8G-2 : « chaque semaine », « hebdomadaire », « toutes les semaines »,
+  // « 5 contrôles inopinés mensuels », « 4 par mois », « quatre par mois ») : nombre de contrôles par mois, arrondi à l'entier
+  // inférieur pour une fréquence par semaine (« une fois par semaine » → au moins quatre), supérieur sinon ; jamais pour une
+  // fréquence moins que mensuelle, ni quand un moment est précisé (« de nuit », « le week-end ») : ces parts sont additionnées
+  // plus bas.
   {
     const nf = normaliserFrequence(frequence);
-    if (!/par mois/.test(nf) && /par (?:semaine|jour|quinzaine)/.test(nf) && !/nuit|week|samedi|dimanche|de jour/.test(nf)) {
+    if (!/nuit|week|samedi|dimanche|de jour/.test(nf)) {
       const n = frequenceMensuelle(frequence);
-      const k = n === null ? 0 : /semaine/.test(nf) ? Math.floor(n) : Math.ceil(n);
-      if (k >= 1 && k <= 31) return `au moins ${LETTRES_FOIS[k] || k} contrôle${k > 1 ? 's' : ''} inopiné${k > 1 ? 's' : ''}`;
+      const hebdo = /semaine|hebdomadaire/.test(nf) || /semaine|hebdomadaire/.test(f);
+      if (n !== null && n >= 1 - 1e-9) {
+        const k = hebdo ? Math.floor(n + 1e-9) : Math.ceil(n - 1e-9);
+        const auMoins = hebdo || /par (?:jour|quinzaine)/.test(nf) || /(?<![a-z])(?:au moins|au minimum|minimum)(?![a-z])/.test(f);
+        if (k >= 1 && k <= 31) return `${auMoins ? 'au moins ' : ''}${LETTRES_FOIS[k] || k} contrôle${k > 1 ? 's' : ''} inopiné${k > 1 ? 's' : ''}`;
+      }
     }
   }
   const parties = [...f.matchAll(/(?:(au moins|au minimum|minimum)\s+)?(une|un|deux|trois|quatre|cinq|six|\d+)\s+(?:fois|controles?|visites?|passages?)\s+(?:inopines?\s+)?par mois/g)];
@@ -3487,10 +3500,33 @@ export function nomAcheteurSansAdresse(valeur: string): string {
 
 export function acheteurDuDce(dce: string): string {
   const t = String(dce || '').replace(/\r/g, '');
-  const label = /(?:^|\n)\s*(?:pouvoir adjudicateur|entit[ée] adjudicatrice|nom de l['’]acheteur|identification de l['’]acheteur|acheteur|ma[îi]tre d['’]ouvrage|personne publique)\s*[:|]\s*([^\n|]{3,140})/i.exec(t);
+  const label = /(?:^|\n)\s*(?:nom\s+et\s+adresse\s+(?:officiels?\s+)?(?:du\s+pouvoir\s+adjudicateur|de\s+l['’](?:organisme\s+)?acheteur)|pouvoir adjudicateur|entit[ée] adjudicatrice|nom de l['’]acheteur|identification de l['’]acheteur|organisme acheteur|acheteur public|acheteur|ma[îi]tre\s+(?:d['’]|de\s+l['’])\s*ouvrage|personne publique)\s*[:|]\s*([^\n|]{3,140})/i.exec(t);
   if (label) {
-    const v = nomAcheteurSansAdresse(label[1].replace(/[.…_]{3,}.*$/, '').replace(/\s+/g, ' ').trim());
+    const v = nomAcheteurSansAdresse(label[1].replace(/[.…_]{3,}.*$/, '').replace(/^d[ée]nomination\s*:\s*/i, '').replace(/\s+/g, ' ').trim());
     if (v.length >= 3 && !/^(?:\(|le |la |les |un |une )/i.test(v) && /[A-Za-zÀ-ÿ]{3}/.test(v)) return v;
+  }
+  // Intitulé d'article ou de rubrique sur sa ligne, nom à la ligne suivante (T8N-2, T8G-9 : cstb « Article 1.1 : Identification
+  // de l'organisme acheteur ⏎ LE CENTRE SCIENTIFIQUE ET TECHNIQUE DU BATIMENT », fontainebleau « Nom et adresse du pouvoir
+  // adjudicateur : ⏎ Dénomination : Château de Fontainebleau ») ; jamais une ligne du sommaire (numéro de page en fin de ligne).
+  {
+    const lignes = t.split('\n');
+    const TETE = /^\s*(?:(?:article|chapitre)\s+[\d.]+\s*[:–-]?\s*)?(?:identification\s+de\s+l['’](?:organisme\s+)?acheteur|nom\s+et\s+adresse\s+(?:officiels?\s+)?(?:du\s+pouvoir\s+adjudicateur|de\s+l['’](?:organisme\s+)?acheteur|de\s+l['’]entit[ée]\s+adjudicatrice)|(?:pouvoir\s+adjudicateur|organisme\s+acheteur|acheteur(?:\s+public)?)\s*:)\s*:?\s*$/i;
+    for (let i = 0; i < lignes.length; i++) {
+      if (!TETE.test(lignes[i])) continue;
+      const suite = lignes.slice(i + 1, i + 5).map((l) => l.trim()).filter(Boolean)[0] || '';
+      const brut = suite.replace(/^d[ée]nomination\s*:\s*/i, '').replace(/\s{2,}.*$/, '').trim();
+      if (!brut || /^(?:article|chapitre|\d|adresse|domicili|si[èe]ge)/i.test(brut) || /\.{3,}|…/.test(brut)) continue;
+      const v = nomAcheteurSansAdresse(brut);
+      if (v.length >= 3 && /[A-Za-zÀ-ÿ]{3}/.test(v)) return v;
+    }
+  }
+  // « Le pouvoir adjudicateur est la Ville de Bolbec. » (T8G-9)
+  {
+    const m = /(?:le\s+pouvoir\s+adjudicateur|l['’]acheteur|l['’]entit[ée]\s+adjudicatrice)\s+est\s+((?:la|le|les|l['’])\s*[A-ZÀ-Ý][^.\n;]{2,120})/i.exec(t);
+    if (m) {
+      const v = nomAcheteurSansAdresse(m[1].replace(/^(?:la|le|les)\s+|^l['’]\s*/i, '').trim());
+      if (v.length >= 3 && /^[A-ZÀ-Ý]/.test(v)) return v;
+    }
   }
   const GENERIQUE = /ACTE D.ENGAGEMENT|R[EÈ]GLEMENT|CAHIER DES|CLAUSES|MARCH[EÉ]S?\b|ACCORD[- ]CADRE|CONSULTATION|PROC[EÉ]DURE|PRESTATIONS?|SOMMAIRE|OBJET|MINIST[EÈ]RE DE L.[EÉ]CONOMIE|DIRECTION DES AFFAIRES JURIDIQUES|GARDIENNAGE|S[EÉ]CURIT[EÉ]|S[ÛU]RET[EÉ]|SURVEILLANCE|\bCC[TA]P\b|\bRC\b|ANNEXE|\bLOT\b|DATE LIMITE|R[ÉE]F[ÉE]RENCE|FOURNITURES|SERVICES|ATTRI|DC\d|D[ÉE]CLARATION|CANDIDAT|GROUPEMENT|MEMBRE|FORMULAIRE|CONTRAT|NOTIFI|CADRE R[ÉE]SERV|PR[ÉE]SENTATION|^\W*$|\*{2,}/;
   const majuscules = (l: string) => { const x = l.replace(/[^A-Za-zÀ-ÿ]/g, ''); return x.length >= 4 && x.replace(/[^A-ZÀ-Ý]/g, '').length / x.length > 0.8; };
@@ -3504,7 +3540,9 @@ export function acheteurDuDce(dce: string): string {
   for (const p of [...liste].sort((a, b) => rang(a.nom) - rang(b.nom))) {
     const lignes = p.corps.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 40);
     for (let i = 0; i < lignes.length; i++) {
-      if (!majuscules(lignes[i]) || GENERIQUE.test(lignes[i]) || ADRESSE.test(lignes[i]) || /\d{3,}|[:…]|\.{2,}/.test(lignes[i]) || lignes[i].length > 90) continue;
+      // (jusqu'à 160 signes quand l'adresse suit : « SYNDICAT MIXTE DES TRANSPORTS POUR LE RHÔNE ET L'AGGLOMÉRATION LYONNAISE
+      // (SYTRAL MOBILITÉS) », 101 signes, T8-COH-6)
+      if (!majuscules(lignes[i]) || GENERIQUE.test(lignes[i]) || ADRESSE.test(lignes[i]) || /\d{3,}|[:…]|\.{2,}/.test(lignes[i]) || lignes[i].length > 160 || (lignes[i].length > 90 && !ADRESSE.test(lignes[i + 1] || ''))) continue;
       // Lignes en capitales qui se suivent (nom sur plusieurs lignes), puis adresse ou forme juridique dans les 4 lignes.
       const noms = [lignes[i]];
       let j = i + 1;
@@ -3551,14 +3589,27 @@ export function titreDuMarcheDce(dce: string): string {
   const t = String(dce || '').replace(/\r/g, '');
   const pieces = t.split(/\n(?:===== PIÈCE : .+? =====|--- .+? ---)\n/);
   for (const corps of pieces.length > 1 ? pieces.slice(1) : pieces) {
-    const lignes = corps.split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 30);
+    // (lignes vides gardées en « » : un titre ne continue jamais par-dessus une ligne vide, T8-REG-3)
+    const lignes = corps.split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter((l, k, tt) => l || (k > 0 && tt[k - 1])).slice(0, 40);
+    const enCapitales = (l: string) => { const x = l.replace(/[^A-Za-zÀ-ÿ]/g, ''); return x.length >= 3 && x === x.toUpperCase(); };
+    const ouverte = (s: string) => (s.match(/\(/g) || []).length > (s.match(/\)/g) || []).length;
+    const ENTETE = /^(?:CAHIER|R[ÈE]GLEMENT|ACTE|CCTP|CCAP|C\.C\.T\.P|RC\b|LOT\b|MARCH[ÉE]\s+PUBLIC|ACCORD|ARTICLE|SOMMAIRE|N°|PROC[ÉE]DURE|DATE|AVIS|PAGE)/i;
     for (let i = 0; i < lignes.length; i++) {
       if (/^(?:sommaire|table des mati[èe]res|article\s+1\b)/i.test(lignes[i])) break;
       // (jamais « Service de l'accueil », nom d'un service de l'acheteur, ni un libellé de code CPV « Service de sécurité, de police… »)
       if (!/^(?:prestations?|march[ée]|missions?|fournitures?)\s+(?:de|d['’]|du|des)\s/i.test(lignes[i]) || /cpv/i.test(lignes[i - 1] || '')) continue;
       let titre = lignes[i];
-      while (i + 1 < lignes.length && !/[.:;!?]$/.test(titre) && /^(?:de|du|des|d['’]|et|ou|à|au|aux|pour|sur)(?![\p{L}])|^[a-zà-ÿ]/u.test(lignes[i + 1]) && titre.length < 200) titre = `${titre} ${lignes[++i]}`;
-      if (/gardiennage|s[ée]curit[ée]|s[ûu]ret[ée]|surveillance|accueil|s[ée]curit[ée]\s+incendie/i.test(titre) && titre.length <= 200) return titre.replace(/[\s.;:]+$/, '');
+      // Suite du titre sur la ligne suivante (T8-REG-3) : groupe qui continue (préposition, minuscule), parenthèse encore ouverte
+      // (« … la SPL S2E (société public local ⏎ Seine-Eure évènements) »), ou titre écrit en capitales continué en capitales
+      // (« … DE RONDES ⏎ DE SECURITE … ⏎ AU SEIN DES PARCS … ⏎ GERES PAR CITEDIA METROPOLE A RENNES ») ; jamais par-dessus une ligne vide.
+      const capitales = enCapitales(titre);
+      while (i + 1 < lignes.length && lignes[i + 1] && !/[.:;!?]$/.test(titre) && titre.length < 300
+        && (/^(?:de|du|des|d['’]|et|ou|à|au|aux|pour|sur)(?![\p{L}])|^[a-zà-ÿ]/u.test(lignes[i + 1]) || ouverte(titre)
+          || (capitales && enCapitales(lignes[i + 1]) && !ENTETE.test(lignes[i + 1]) && lignes[i + 1].length <= 120))) titre = `${titre} ${lignes[++i]}`;
+      titre = titre.replace(/[\s.;:]+$/, '');
+      // Titre resté inachevé (parenthèse ouverte, fin sur une préposition ou une virgule) : jamais rendu.
+      if (ouverte(titre) || /(?:^|\s)(?:de|du|des|d['’]|et|ou|à|au|aux|pour|sur|par|les|la|le|l['’])$|,$/i.test(titre)) continue;
+      if (/gardiennage|s[ée]curit[ée]|s[ûu]ret[ée]|surveillance|accueil|s[ée]curit[ée]\s+incendie/i.test(titre) && titre.length <= 300) return titre;
     }
   }
   return '';
@@ -3569,16 +3620,42 @@ export function titreDuMarcheDce(dce: string): string {
 export function objetDuDce(dce: string): string {
   const t = String(dce || '').replace(/\r/g, '');
   // (phrase lue jusqu'à son point, même coupée en fin de ligne par l'extraction du PDF ou du Word)
-  const a = /(?:le\s+pr[ée]sent\s+(?:march[ée]|accord-cadre|contrat)|la\s+(?:pr[ée]sente\s+)?consultation)\s+a\s+pour\s+objet\s+((?:[^\n.;]|\n(?!\s*\n))[^.;]{9,400}?)(?:\.(?:\s|$)|\n\s*\n|;)/i.exec(t);
-  // (valeur en minuscule : suite d'une cellule écrite sur la ligne précédente dans un tableau de PDF, jamais l'objet)
-  const b = /(?:^|\n)\s*objet(?:\s+du\s+march[ée]|\s+de\s+la\s+consultation)?\s*(?::|\s{3,}|\|)\s*([A-ZÀ-Ý][^\n|]{4,200})/.exec(t);
+  // (« Le présent marché public a pour objet », « L'accord-cadre a pour objet », « La consultation porte sur », T8N-2, T8G-9)
+  // (« le présent marché / accord-cadre a pour objet » d'abord : objet du lot quand le DCE en a plusieurs ; « la consultation porte
+  // sur » ensuite)
+  const FIN_A = String.raw`\s+((?:[^\n.;]|\n(?!\s*\n))[^.;]{9,400}?)(?:\.(?:\s|$)|\n\s*\n|;)`;
+  const a = new RegExp(String.raw`(?:le\s+pr[ée]sent\s+(?:march[ée](?:\s+public)?|accord-cadre|contrat)|l['’]\s*accord-cadre|le\s+march[ée](?:\s+public)?|la\s+(?:pr[ée]sente\s+)?consultation)\s+a\s+pour\s+objet${FIN_A}`, 'i').exec(t)
+    || new RegExp(String.raw`(?:le|la|l['’])\s*(?:pr[ée]sente?\s+)?(?:march[ée](?:\s+public)?|accord-cadre|contrat|consultation)\s+porte\s+sur${FIN_A}`, 'i').exec(t);
+  // Ligne « Objet (du marché) : … », quelle que soit la casse du libellé (T8-COH-6, T8G-9 : « Objet : … », « OBJET : … »,
+  // « Objet du marché : … ») ; une valeur en minuscule seulement après « : » en tête de ligne (sinon : suite d'une cellule écrite
+  // sur la ligne précédente dans un tableau de PDF, jamais l'objet).
+  // (sur la ligne du libellé seulement : jamais la phrase de la ligne suivante, citedia « Objet du marché ⏎ Les stipulations… »)
+  // (cellule « Objet   … » seulement si sa valeur commence par une majuscule : jamais la fin d'une cellule coupée, s2e « Objet
+  // exploités par la SPL S2E (société public local Seine-Eure »)
+  const b = [...t.matchAll(/(?:^|\n)[ \t]*objet(?:[ \t]+du[ \t]+march[ée]|[ \t]+de[ \t]+la[ \t]+consultation|[ \t]+de[ \t]+l['’]accord-cadre)?[ \t]*(?::[ \t]*([^\n|]{4,200})|(?:[ \t]{3,}|\|)[ \t]*([^\n|]{4,200}))/gi)]
+    .find((m) => m[1] || /^[A-ZÀ-Ý]/.test(m[2] || '')) || null;
+  // CCTP qui « définit les prescriptions techniques relatives à la réalisation des prestations de … » (ifsem, parc_expo, T8N-2).
+  // (« … a pour objet de définir l'exécution des prestations de sécurité… », ifsem)
+  const c = /(?:(?:prescriptions|clauses|conditions|sp[ée]cifications)[^.]{0,40}?relatives?\s+(?:[àa]\s+la\s+r[ée]alisation\s+|[àa]\s+l['’]ex[ée]cution\s+)?|a\s+pour\s+objet\s+de\s+d[ée]finir\s+(?:l['’]ex[ée]cution|les\s+(?:conditions|modalit[ée]s)\s+d['’]ex[ée]cution)\s+)(?:des|aux)\s+(prestations?\s+(?:[^\n.;]|\n(?!\s*\n)){9,300}?)(?:\.(?:\s|$)|\n\s*\n|;)/i.exec(t);
   // (« de définir … » → « Définir … » ; « des prestations » → « Prestations », jamais « s prestations »)
-  let v = (a ? a[1] : b ? b[1] : '').replace(/\s+/g, ' ').trim().replace(/^[:\s]+/, '')
+  let brutB = b ? (b[1] || b[2] || '') : '';
+  if (brutB && brutB === brutB.toUpperCase() && /[A-ZÀ-Ý]{3}/.test(brutB)) brutB = casseDuDce(brutB, t, true) || brutB;
+  // (libellé « Objet : … » d'abord, puis la phrase des prescriptions, puis une cellule « Objet   … » d'un tableau)
+  let v = (a ? a[1] : (b && b[1] ? brutB : '') || (c ? c[1] : '') || brutB).replace(/\s+/g, ' ').trim().replace(/^[:\s]+/, '')
+    // (lieu ajouté en fin d'objet : « …, situé au 24 rue Joseph Fourier 38400 Saint Martin d'Hères »)
+    .replace(/,\s*(?:situ[ée]e?s?|sis(?:e|es)?)\s+(?:au|à|a)\s.*$/i, '')
+    // (renvoi aux pièces du marché en fin d'objet : « …, dans les conditions définies au CCAP, au Cahier des Clauses… », imm)
+    .replace(/,?\s+(?:dans\s+les\s+conditions|selon\s+les\s+(?:modalit[ée]s|conditions)|conform[ée]ment\s+aux?)\s+(?:d[ée]finies|pr[ée]vues|fix[ée]es|pr[ée]cis[ée]es|stipul[ée]es|dispositions|pi[èe]ces|documents|clauses|au|aux|du|des)\b.*$/i, '')
     .replace(/^(?:(?:de|des|du)\s+|d['’]\s*)(?=\p{L})/iu, '').replace(/^(?:(?:la|le|les)\s+|l['’]\s*)/i, '');
   // Objet écrit comme une action (« de définir les prestations… », « de confier au titulaire… ») : pas un intitulé de marché.
   if (!v || /^\W*$/.test(v) || /^(?:d[ée]finir|confier|fixer|pr[ée]ciser|d[ée]crire|r[ée]gir|organiser|d[ée]terminer|encadrer)(?![\p{L}])/iu.test(v)) v = titreDuMarcheDce(t);
   if (!v) return '';
-  if (v.length > 200) v = `${v.slice(0, 200).replace(/\s+\S*$/, '')}…`;
+  // (fin coupée après un deux-points : « … au sein de l'établissement : A », imm)
+  v = v.replace(/\s*:\s*\S{0,3}$/, '');
+  // Objet écrit en capitales (titre de citedia) : graphie d'un intitulé (mots du dictionnaire en minuscules, noms propres).
+  if (v === v.toUpperCase() && /[A-ZÀ-Ý]{3}/.test(v)) v = casseDuDce(v, t, true) || v;
+  // (titre du marché en entier jusqu'à 300 signes : jamais « … GERES PAR CITEDIA METROPOLE A… », T8-REG-3)
+  if (v.length > 300) v = `${v.slice(0, 300).replace(/\s+\S*$/, '')}…`;
   return v.charAt(0).toUpperCase() + v.slice(1);
 }
 

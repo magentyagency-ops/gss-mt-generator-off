@@ -1210,14 +1210,21 @@ function casseCommune(c: string): string {
 export function communeLisible(brut: string, dce = ''): string {
   let c = String(brut || '')
     // Libellé de formulaire devant la commune (« Commune : ROUEN », « Ville ROUEN », « Localité : Rouen », « Commune de Rouen »).
-    .replace(/^\s*(?:commune|ville|localit[ée]|cp|code\s+postal)\s*(?::\s*|de\s+|d['’]\s*|(?=[A-ZÀ-Ý]{2}))/i, '')
+    // Libellé seulement en mot entier suivi d'un séparateur, jamais la tête d'un nom (T8-REG-1, T8G-1 : « Villejuif »,
+    // « Villers-Bocage », « VILLERS-BOCAGE » lus « juif », « rs-Bocage ») ; valeur en capitales après une espace (sans casse).
+    .replace(/^\s*(?:commune|ville|localit[ée]|cp|code\s+postal)(?:\s*:\s*|\s+de\s+|\s+d['’]\s*)/i, '')
+    .replace(/^\s*(?:[Cc]ommune|COMMUNE|[Vv]ille|VILLE|[Ll]ocalit[ée]|LOCALIT[ÉE]|CP|[Cc]ode\s+postal|CODE\s+POSTAL)\s+(?=[A-ZÀ-Ý]{2})/, '')
+    // Pays après la commune, quelle que soit sa ponctuation (T8G-7 : « ROUEN - France » → jamais « ROUEN-France ») ; jamais la
+    // fin d'un nom de commune (« Roissy-en-France »).
+    .replace(/(?:\s*[,;]\s*|\s+[–—-]?\s*|\s*[–—-]\s+)\(?\s*france\s*\)?\s*$/i, '')
     // Mention Cedex, quelle que soit sa ponctuation (« LE HAVRE - CEDEX », « EVREUX-CEDEX », « Rouen Cédex », « ROUEN - CEDEX 1 »).
     .replace(/[\s,;–—-]*c[ée]dex(?:\s*\d{1,2})?(?![\p{L}]).*$/iu, '')
     .replace(/[ \t]*[-\u2011][ \t]*/g, '-').replace(/\s+/g, ' ').trim()
     .replace(/\s+(?:t[ée]l|tel|fax|courriel|mail|et|pour|france)\b.*$/i, '').replace(/\s+(?:le|la|les)\s+(?=[a-zà-ÿ\d]).*$/, '').replace(/[\s,;:.-]+$/, '').trim();
   const premier = c.split(/[ -]/)[0] || '';
   const courte = COMMUNES_COURTES.has(cleCommune2(c));
-  if ((c.replace(/[^A-Za-zÀ-ÿ]/g, '').length < 3 && !courte) || PAS_COMMUNE.test(premier) || UNITE_CP.test(premier) || /\d/.test(c)) return '';
+  // (libellé isolé seulement : « Ville-d'Avray », « Ville-la-Grand » sont des communes)
+  if ((c.replace(/[^A-Za-zÀ-ÿ]/g, '').length < 3 && !courte) || PAS_COMMUNE.test(c.split(' ')[0]) || UNITE_CP.test(premier) || /\d/.test(c)) return '';
   if (courte) return c.charAt(0).toUpperCase() + c.slice(1).toLowerCase();
   // Commune connue écrite autrement (« Mont Saint Aignan », « Saint Martin d'Hères ») : sa graphie officielle (T4G-2).
   if (c !== c.toUpperCase()) {
@@ -1272,7 +1279,7 @@ export function communesParCodePostal(texte: string, dce = texte): Array<{ code:
   const MOT = String.raw`[A-Za-zÀ-ÿ'’]${SUITE}`;
   // Jamais le numéro d'un tri postal (« CS 31402 », « BP 21 », « TSA 70011 », « SP 51000 », T9REG-1) : ce n'est pas un code postal.
   // Code postal collé (« 14460 ») ou espacé (« 14 460 », T1-GEN-4), jamais un groupe de milliers (« 1 214 460 »).
-  const rx = new RegExp(String.raw`(?<![=/?&#.\d])(?<!(?<![A-Za-zÀ-ÿ])(?:CS|C\.S\.|BP|B\.P\.?|TSA|SP|cs|bp|tsa)[ \t]*(?:n°[ \t]*)?)\b(\d{5}|(?<!\d[ \u00a0\u202f])\d{2}[ \u00a0\u202f]\d{3})\b(?![\d]|[ \u00a0\u202f]\d{3}|[,.]\d)[ \t\u00a0\u202f]*(?:(?:[–—,|;-][ \t\u00a0\u202f]*)?(?:(?:[Vv]ille|VILLE|[Cc]ommune|COMMUNE|[Ll]ocalit[ée]|LOCALIT[ÉE])[ \t]*(?::|de(?=[ \t])|d['’])?[ \t\u00a0\u202f]*)?)?([A-ZÉÈÀÂÎÔÛ]${SUITE}(?:[ \t\u00a0\u202f]+(?!cedex|CEDEX|Cedex)${MOT}){0,4})?`, 'g');
+  const rx = new RegExp(String.raw`(?<![=/?&#.\d])(?<!(?<![A-Za-zÀ-ÿ])(?:CS|C\.S\.|BP|B\.P\.?|TSA|SP|cs|bp|tsa)[ \t]*(?:n°[ \t]*)?)\b(\d{5}|(?<!\d[ \u00a0\u202f])\d{2}[ \u00a0\u202f]\d{3})\b(?![\d]|[ \u00a0\u202f]\d{3}|[,.]\d)[ \t\u00a0\u202f]*(?:(?:[–—,|;-][ \t\u00a0\u202f]*)?(?:(?:[Vv]ille|VILLE|[Cc]ommune|COMMUNE|[Ll]ocalit[ée]|LOCALIT[ÉE])(?![A-Za-zÀ-ÿ'’\u2011-])[ \t]*(?::|de(?=[ \t])|d['’])?[ \t\u00a0\u202f]*)?)?([A-ZÉÈÀÂÎÔÛ]${SUITE}(?:[ \t\u00a0\u202f]+(?!cedex|CEDEX|Cedex)${MOT}){0,4})?`, 'g');
   for (const m0 of String(texte || '').matchAll(rx)) {
     const espace = /\D/.test(m0[1]);
     const m = [m0[0], m0[1].replace(/\D/g, ''), m0[2]] as unknown as RegExpMatchArray;
@@ -1422,6 +1429,25 @@ export function adresseAdministrative(texte: string, debut: number, fin: number,
   // la préfecture, l'URSSAF ou le site d'un ministère GARDÉS (phrase de l'objet ou du lieu d'exécution : « gardiennage du siège
   // de la CAF … 50000 Saint-Lô », « Les prestations sont exécutées à l'Hôtel de Ville, … 76084 LE HAVRE CEDEX ») sont le site.
   if (PHRASE_SITE.test(avant)) return false;
+  // Bloc d'identification en tête d'une pièce (T8-COH-3, RC de SYTRAL : « SYNDICAT MIXTE DES TRANSPORTS … (SYTRAL MOBILITÉS) ⏎
+  // 21 boulevard Vivier-Merle, 69003 Lyon », sans libellé « Acheteur : ») : adresse sur l'une des trois premières lignes de la
+  // pièce, sous une ligne en capitales (le nom de l'acheteur) : l'adresse de l'acheteur, jamais un site.
+  {
+    const t = String(texte || '');
+    const d = t.lastIndexOf('\n', debut - 1) + 1;
+    const precedentes: string[] = [];
+    let tete = false;
+    const lignes = t.slice(Math.max(0, d - 1500), d).split('\n');
+    for (let i = lignes.length - 1; i >= 0; i--) {
+      const l = lignes[i].trim();
+      if (/^-{3}\s.*\s-{3}$/.test(l)) { tete = true; break; }
+      if (!l) continue;
+      precedentes.push(l);
+      if (precedentes.length > 3) break;
+    }
+    const enCapitales = (l: string) => l === l.toUpperCase() && (l.match(/[A-ZÀ-Ý]{2,}/g) || []).length >= 2 && !/^(?:R[ÈE]GLEMENT|CAHIER|CCTP|CCAP|RC|ACTE|AVIS|MARCH[ÉE]|ACCORD|LOT|ARTICLE|ANNEXE|OBJET)\b/.test(l);
+    if (tete && precedentes.length >= 1 && precedentes.length <= 3 && precedentes.some(enCapitales)) return true;
+  }
   const rx = opts.strict ? ADMIN_ADRESSE : INSTITUTION_ADMIN;
   if (rx.test(apres) || rx.test(avant)) return true;
   if ((opts.strict || opts.postale) && (ADMIN_POSTALE.test(apres) || ADMIN_POSTALE.test(avant))) return true;
@@ -2346,9 +2372,43 @@ const RX_EXCEPTION_PHOTOS = /(?:ne s.applique pas|n.est pas applicable|ne concer
 const RX_PHOTOS_EXIGEES = /(?:photos?|photographies?|clichés)\s+(?:justificatives?|de constat)|(?:rapports?|comptes? rendus?)[^.;]{0,120}(?:illustrés?|accompagnés?|comportant|assortis?)[^.;]{0,80}(?:photos?|photographies?)(?![a-zà-ÿ])/i;
 const RX_VIDEO = /(?<![a-zà-ÿ])vidéos?(?![a-zà-ÿ])/i;
 
-/** Phrases du DCE (texte remis à plat), coupées aux fins de phrase. */
+/**
+ * Intitulé d'article ou de partie sur sa propre ligne (T8G-4 : « ARTICLE 5 – DÉLAIS », « 1 Intervention sur site », « 4.4.2
+ * Formation préalable à toute affectation », « ARTICLE 3 - MODALITES D'EXECUTION DES PRESTATIONS », « Réunions de suivi ») suivi
+ * d'une ligne qui commence par une majuscule : séparé de la phrase qui le suit par une ligne vide, pour que les lectures sans
+ * modèle ne le citent jamais en tête de cette phrase. Intitulé : « Article / Chapitre / Titre / Partie / Section / Annexe n »,
+ * numérotation (« 1 », « 4.4.2 », « II. »), ligne en capitales, ou ligne courte (8 mots au plus) sans ponctuation finale qui ne
+ * finit pas par un mot-outil ; jamais une puce, une ligne de tableau ni une ligne coupée au milieu d'une phrase.
+ */
+export function separerIntitules(texte: string): string {
+  const lignes = String(texte || '').replace(/\r/g, '').split('\n');
+  const out: string[] = [];
+  // Éléments d'une liste annoncée par « … : » (« Fournir au CNRS une fiche indiquant : ⏎ Le Nom ⏎ Le Prénom ») : jamais des intitulés.
+  let liste = false;
+  for (let i = 0; i < lignes.length; i++) {
+    out.push(lignes[i]);
+    const l = lignes[i].trim();
+    const suivante = (lignes[i + 1] || '').trim();
+    const dansListe = liste;
+    if (!l) liste = false;
+    else if (/:\s*$/.test(l)) liste = true;
+    else if (/[.!?]\s*$/.test(l)) liste = false;
+    if (dansListe) continue;
+    if (!l || !suivante || /\|/.test(l) || /^[-•▪●○◦−*➢>]/.test(l) || /[.;:!?,…]$/.test(l) || !/^[A-ZÀ-Ý«]/.test(suivante)) continue;
+    if (/(?:^|\s)(?:de|du|des|d['’]|la|le|les|l['’]|et|ou|à|au|aux|en|par|pour|sur|un|une|dans|avec|sans|que|qui|est|sont|ne|se|son|sa|ses|leur|leurs|ce|cet|cette|ces)$/i.test(l)) continue;
+    const lettres = l.replace(/[^A-Za-zÀ-ÿ]/g, '');
+    const intitule = /^(?:ARTICLE|Article|CHAPITRE|Chapitre|TITRE|Titre|PARTIE|Partie|SECTION|Section|ANNEXE|Annexe)\s+[\dIVX]/.test(l)
+      || /^\d{1,2}(?:[.-]\d{1,2}){0,4}[.)-]?\s+[A-ZÀ-Ý]/.test(l) || /^[IVX]{1,4}\s*[.)–-]\s*[A-ZÀ-Ý]/.test(l)
+      || (lettres.length >= 4 && lettres === lettres.toUpperCase() && l.length <= 120)
+      || (/^[A-ZÀ-Ý]/.test(l) && l.split(/\s+/).length <= 8 && l.length <= 80);
+    if (intitule) out.push('');
+  }
+  return out.join('\n');
+}
+
+/** Phrases du DCE (texte remis à plat), coupées aux fins de phrase et aux intitulés (T8G-4). */
 function phrasesDuDce(dce: string): string[] {
-  return String(dce || '').replace(/\s+/g, ' ').split(/(?<=[.!?;])\s+(?=[A-ZÀ-Ý«•\-–])/).map((p) => p.trim()).filter(Boolean);
+  return separerIntitules(String(dce || '')).split(/\n\s*\n/).flatMap((b) => b.replace(/\s+/g, ' ').split(/(?<=[.!?;])\s+(?=[A-ZÀ-Ý«•\-–])/)).map((p) => p.trim()).filter(Boolean);
 }
 
 /**
@@ -2437,11 +2497,11 @@ export function obligationsChiffrees(dce: string): Array<{ phrase: string; cle: 
   const unite = (u: string) => UNITES.find(([rx]) => rx.test(u.trim()))?.[1] || '';
   const pieces = piecesTechniques(dce);
   const HORS_PRESTATION = /p[ée]nalit|€|euros?\b|factur|paiement|mandatement|int[ée]r[êe]ts|avance|acompte|r[ée]vis(?:ion|er)|\bprix\b|actualisation|garantie (?:[àa] premi[èe]re demande|financi[èe]re|bancaire|de parfait)|r[ée]siliation|reconduction|notifi|litige|tribunal|\boffres?\b|candidat|date limite|remise des plis|questions?\b|d[ée]lai de validit|sous-trait|assurance|ordre de service|admission|r[ée]ception des prestations|v[ée]rifications? (?:quantitative|qualitative)|retenue|variation|dur[ée]e (?:du march|de l.accord)|\bans?\b[^.]{0,20}(?:reconductible|ferme)|prolongation|préavis|pr[ée]avis|cong[ée]s pay|convention collective|code du travail|article [LR]\s?\d/i;
-  const ACHETEUR = /\b(?:le pouvoir adjudicateur|l.acheteur|l.administration|la personne publique|le ma[îi]tre d.ouvrage|le client|l.[ée]tablissement)\s+(?:dispose|peut|pourra|notifie|informe|transmet|adresse|communique|se r[ée]serve)/i;
+  const ACHETEUR = /\b(?:le pouvoir adjudicateur|l.acheteur|l.administration|la personne publique|le ma[îi]tre d.ouvrage|le client|l.[ée]tablissement)\s+(?:dispose|peut|pourra|notifie|notifiera|informe|transmet|adresse|communique|se r[ée]serve|fera conna[îi]tre|fait conna[îi]tre)/i;
   const out: Array<{ phrase: string; cle: RegExp }> = [];
   const vues = new Set<string>();
   for (const piece of pieces) {
-    const phrases = piece.replace(/[ \t]+/g, ' ').split(/(?<=[.;!?])\s+|\n\s*(?:[-•▪●○◦]|\d+[.)])\s+|\n{2,}/).map((x) => x.replace(/\s+/g, ' ').replace(/^[-•▪●○◦]\s*/, '').trim()).filter((x) => x.length >= 25 && x.length <= 400);
+    const phrases = separerIntitules(piece).replace(/[ \t]+/g, ' ').split(/(?<=[.;!?])\s+|\n\s*(?:[-•▪●○◦]|\d+[.)])\s+|\n\s*\n/).map((x) => x.replace(/\s+/g, ' ').replace(/^[-•▪●○◦]\s*/, '').trim()).filter((x) => x.length >= 25 && x.length <= 400);
     for (const ph of phrases) {
       if (HORS_PRESTATION.test(ph) || ACHETEUR.test(ph)) continue;
       const motifs: string[] = [];
@@ -2583,7 +2643,8 @@ export function estPieceAdministrative(nomPiece: string): boolean {
   const colle = n.replace(/[^a-z0-9]+/g, '');
   if (/(?:^|\s)r\s?c(?:\s|$)|reglement (?:de (?:la )?)?consultation|acte\s*(?:d\s*'?\s*)?engagement|(?:^|\s)attri\s?\d|cadre\s*(?:de\s*)?reponse/.test(n)
     || /reglementdelaconsultation|reglementdeconsultation|actedengagement|acteengagement|clausesadministratives|cadrede?reponse/.test(colle)) return true;
-  return /\bRC\b|r[èe]glement (?:de (?:la )?)?consultation|acte d.engagement|\bAE\b|DPGF|BPU|DQE|bordereau|\bDC\s?\d|attestation|cadre de r[ée]ponse|m[ée]moire|candidature|lettre|avis|ccap|clauses administratives/i.test(nom);
+  // (avis d'appel public à la concurrence « MPI1876410_AAPC », T8G-3)
+  return /\bRC\b|\bAAPC\b|r[èe]glement (?:de (?:la )?)?consultation|acte d.engagement|\bAE\b|DPGF|BPU|DQE|bordereau|\bDC\s?\d|attestation|cadre de r[ée]ponse|m[ée]moire|candidature|lettre|avis|ccap|clauses administratives/i.test(nom);
 }
 
 /**
@@ -2751,7 +2812,12 @@ const SUJET_SERVICE = /(?<![\p{L}])(?:agents?|gardiens?|veilleurs?|ssiap|aps|ron
 // Horaires de la procédure, jamais du service (T4-COH-4, RC de citedia : fuseau « (GMT+01:00) Paris », « copie … sous pli
 // scellé … (horaires d'ouverture des bureaux : du Lundi au Vendredi de 09H00 à 12H30 ») : remise, transmission ou dépôt des
 // offres et des plis, copie de sauvegarde, bureaux de l'acheteur, fuseau horaire.
-const HORAIRE_RC = /remise\s+des\s+(?:offres|plis)|date\s+(?:et\s+heure\s+)?limite|r[ée]ception\s+des\s+(?:offres|plis)|ouverture\s+des\s+plis|visite\s+(?:obligatoire|du\s+site|des\s+lieux|sur\s+site)|questions?\s+(?:des\s+candidats|écrites)|(?:transmission|d[ée]p[ôo]t|envoi)\s+(?:des|de\s+l['’]|de\s+son)\s+(?:offres?|plis?|candidatures?)|\bplis?\s+(?:scell|cachet|ferm)|copie\s+de\s+sauvegarde|horaires?\s+d['’]ouverture\s+des\s+(?:bureaux|services)|fuseau\s+horaire|\b(?:GMT|UTC)\s*[+-]/i;
+// (T8G-3 : « Modalités d'ouverture des offres : … le 13/10/26 à 09h00 », « Une visite groupée … prévue le lundi 16 mars à 10h00 »)
+const HORAIRE_RC = /remise\s+des\s+(?:offres|plis)|date\s+(?:et\s+heure\s+)?limite|heure\s+limite|r[ée]ception\s+des\s+(?:offres|plis)|(?:ouverture|s[ée]ance\s+d['’]ouverture)\s+des\s+(?:plis|offres|candidatures)|visite\s+(?:obligatoire|facultative|group[ée]e|du\s+site|des\s+lieux|des\s+locaux|du\s+campus|sur\s+site)|\bla\s+visite\b[^.]{0,80}(?:pr[ée]vue|organis[ée]e|aura\s+lieu)|renseignements\s+compl[ée]mentaires|d[ée]p[ôo]ts?\s+(?:de|des)\s+plis|(?:offres?|plis|candidatures?)\s+(?:devront|doivent|doit|devra)\s+(?:parvenir|[êe]tre\s+(?:remis|d[ée]pos|transmis))|poser\s+(?:leurs|des)\s+questions|questions?\s+(?:des\s+candidats|écrites)|(?:transmission|d[ée]p[ôo]t|envoi)\s+(?:des|de\s+l['’]|de\s+son)\s+(?:offres?|plis?|candidatures?)|\bplis?\s+(?:scell|cachet|ferm)|copie\s+de\s+sauvegarde|horaires?\s+d['’]ouverture\s+des\s+(?:bureaux|services)|fuseau\s+horaire|\b(?:GMT|UTC)\s*[+-]/i;
+
+const PRESENCE_CONTINUE = /(?<![\d])24\s*h(?:eures?)?\s*(?:\/|sur)\s*24(?:\s*h(?:eures?)?)?(?![\d])/i;
+const SUJET_CONTINU = /(?<![\p{L}])(?:agents?|gardiens?|veilleurs?|ssiap\s*\d?|rondiers?|chefs?\s+d['’]\s*(?:[ée]quipe|poste)|postes?|couverte?s?|assur[ée]e?s?|surveillances?|gardiennage|t[ée]l[ée]surveillance|pr[ée]sence)(?![\p{L}])/iu;
+const OUVERT_AU_PUBLIC = /ouverte?s?\s+(?:au|aux)\s+(?:public|usagers|visiteurs)|accessibles?\s+au\s+public|ouverture\s+au\s+public/i;
 
 export function horairesImposes(dce: string, max = 30, objet = OBJET_HORAIRE_DEFAUT, o: { periodes?: boolean } = {}): string[] {
   const out: string[] = [];
@@ -2768,7 +2834,8 @@ export function horairesImposes(dce: string, max = 30, objet = OBJET_HORAIRE_DEF
     let section = '';
     let tampon: string[] = [];
     const vider = () => {
-      const texte = tampon.join('\n');
+      // (intitulé séparé de la phrase qui le suit, T8G-4)
+      const texte = separerIntitules(tampon.join('\n'));
       tampon = [];
       const phrases = texte.replace(/[ \t]+/g, ' ').split(/(?<=[.;!?])\s+|\n\s*(?:[-•▪●○◦−]|\d+[.)])\s+|\n{2,}/).map((x) => x.replace(/\s+/g, ' ').trim().replace(/^[-•▪●○◦−]\s*/, '').trim()).filter((x) => x.length >= 30 && x.length <= 350);
       for (const ph of phrases) {
@@ -2780,8 +2847,13 @@ export function horairesImposes(dce: string, max = 30, objet = OBJET_HORAIRE_DEF
           plein = true;
           return;
         }
-        if (!contientHeure(ph)) continue;
-        if (!objet.test(ph) && !(objet === OBJET_HORAIRE_DEFAUT && (PLAGE_HORAIRE.test(ph) || JOURS_HORAIRE.test(ph)) && SUJET_SERVICE.test(ph))) continue;
+        // Présence continue (« Le poste devra être couvert 24h / 24h, 7 jours sur 7 par un agent SSIAP2 », « surveillance … 7j/7,
+        // 24h/24 ») : un horaire imposé quand la phrase a un sujet de service, jamais l'ouverture d'un lieu au public (T8-REG-2).
+        // (24 h/24 hors parenthèse, jamais dans la phrase de l'objet du marché ni pour une permanence téléphonique)
+        const horsParentheses = ph.replace(/\([^()]*\)/g, ' ');
+        const continu = PRESENCE_CONTINUE.test(horsParentheses) && SUJET_CONTINU.test(horsParentheses) && !OUVERT_AU_PUBLIC.test(ph) && !/a\s+pour\s+objet|permanence\s+t[ée]l[ée]phonique|joignable/i.test(ph);
+        if (!continu && !contientHeure(ph)) continue;
+        if (!objet.test(ph) && !(objet === OBJET_HORAIRE_DEFAUT && (PLAGE_HORAIRE.test(ph) || JOURS_HORAIRE.test(ph) || continu) && SUJET_SERVICE.test(ph))) continue;
         if (/p[ée]nalit|€|euros?\b|taux horaire|\b(?:J|N)\s+(?:J|N)\b/i.test(ph) || HORAIRE_RC.test(ph)) continue;
         const phrase = periode && !ph.toLowerCase().includes(periode.toLowerCase()) ? `${periode} : ${ph}` : ph;
         const cle = `${section}|${phrase}`.toLowerCase().replace(/[^a-z0-9|]+/g, ' ');
