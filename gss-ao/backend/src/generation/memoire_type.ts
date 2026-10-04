@@ -1645,11 +1645,16 @@ export function frequenceReunionsDce(dce: string): string {
 
 /** Fondement juridique de la reprise CITÉ PAR LE DCE (jamais d'article L. 1224-1 si le DCE ne le cite pas). */
 export function fondementRepriseDce(dce: string): string {
-  const d = String(dce || '').replace(/\s+/g, ' ');
+  // Typographie des PDF (T2-GEN-10) : tirets insécables, demi-cadratins et signes moins ramenés au trait d'union ; dates
+  // en chiffres (« 05/03/2002 ») écrites en lettres ; « annexe 7 » = « annexe VII ».
+  const MOIS_LETTRES = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+  const d = String(dce || '').replace(/[\u2010-\u2015\u2212]/g, '-').replace(/\s+/g, ' ')
+    .replace(/\b(\d{1,2})[/.](\d{1,2})[/.](\d{4})\b/g, (m, j: string, mo: string, a: string) => (Number(mo) >= 1 && Number(mo) <= 12 ? `${Number(j) === 1 ? '1er' : Number(j)} ${MOIS_LETTRES[Number(mo) - 1]} ${a}` : m))
+    .replace(/\b0(\d) (janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre)\b/gi, '$1 $2');
   const parts: string[] = [];
-  if (/L\.?\s?1224-1/.test(d)) parts.push("l'article L. 1224-1 du Code du travail");
-  if (/accord du 5 mars 2002/i.test(d)) parts.push(`l'accord du 5 mars 2002 relatif à la reprise du personnel${/avenant du 28 janvier 2011/i.test(d) ? ', modifié par l\'avenant du 28 janvier 2011' : ''}`);
-  else if (/annexe VII/i.test(d) && /convention collective/i.test(d)) parts.push("l'annexe VII de la convention collective nationale des entreprises de prévention et de sécurité");
+  if (/L\.?\s?1224\s?-\s?1/.test(d)) parts.push("l'article L. 1224-1 du Code du travail");
+  if (/accord (?:national )?(?:du|en date du) 5 mars 2002/i.test(d)) parts.push(`l'accord du 5 mars 2002 relatif à la reprise du personnel${/avenant du 28 janvier 2011/i.test(d) ? ', modifié par l\'avenant du 28 janvier 2011' : ''}`);
+  else if (/annexe (?:VII|7)(?![\dIVX])/i.test(d) && /convention collective/i.test(d)) parts.push("l'annexe VII de la convention collective nationale des entreprises de prévention et de sécurité");
   return parts.join(' et à ');
 }
 

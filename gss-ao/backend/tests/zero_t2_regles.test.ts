@@ -176,3 +176,19 @@ describe('intitulés SSIAP écrits autrement dans le dimensionnement (T2-GEN-7)'
     expect(profilSansNombre('SSIAP1')).toBe('SSIAP 1');
   });
 });
+
+import { fondementRepriseDce } from '../src/generation/memoire_type';
+
+describe('fondement de la reprise cité avec une autre typographie (T2-GEN-10)', () => {
+  it.each([
+    ["l'article L. 1224‑1 du Code du travail", "l'article L. 1224-1 du Code du travail"],
+    ["l'article L.1224–1 du Code du travail", "l'article L. 1224-1 du Code du travail"],
+    ["l'annexe 7 de la convention collective nationale des entreprises de prévention et de sécurité", "l'annexe VII de la convention collective nationale des entreprises de prévention et de sécurité"],
+    ["l'accord du 05/03/2002 relatif à la reprise du personnel", "l'accord du 5 mars 2002 relatif à la reprise du personnel"],
+  ])('%s', (cite, attendu) => {
+    expect(fondementRepriseDce(`La reprise du personnel s'effectue conformément à ${cite}.`)).toBe(attendu);
+  });
+  it('rien d’inventé sans citation', () => {
+    expect(fondementRepriseDce('Le titulaire reprend le personnel en place.')).toBe('');
+  });
+});
