@@ -434,7 +434,8 @@ export function sansDonneesCnapsConnues(question: string): string | null {
   }
   const numeroConnu = (!dirigeant || !!valeurRegistre('agrement_dirigeant')) && (!entreprise || !!valeurRegistre('autorisation_cnaps'));
   const obtentionConnue = entreprise && !dirigeant && !!valeurRegistre('date_autorisation_cnaps');
-  const NUM = "(?:le |son |leur )?num[ée]ro(?: d['’](?:autorisation(?: d['’]exercer)?|agr[ée]ment))?";
+  // « le numéro de l'agrément de l'entreprise » (havre2 1352, T4N-3) comme « le numéro d'agrément ».
+  const NUM = "(?:le |son |leur )?num[ée]ro(?:\\s+(?:d['’]|de\\s+l['’]|de\\s+la\\s+|du\\s+)\\s*(?:autorisation(?: d['’]exercer)?|agr[ée]ment)(?:\\s+(?:de\\s+l['’]\\s*entreprise|de\\s+la\\s+soci[ée]t[ée]|de\\s+GSS|du\\s+dirigeant))?)?";
   const OBT = "(?:la |sa )?date d['’](?:obtention|d[ée]livrance)";
   let t = q;
   const retirer = (motif: string) => {

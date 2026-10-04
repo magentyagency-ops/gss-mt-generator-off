@@ -1351,10 +1351,18 @@ export function completerIdentiteCnaps(texte: string): string {
     if (/^(?:agrement|autorisation)(?: d'exercer)?(?: de l'entreprise| cnaps| de gss)?(?: n ?°?| numero)?$|^(?:n ?°?|numero) d'(?:autorisation|agrement)(?: de l'entreprise| cnaps)?$/.test(l)) return valeurRegistre('autorisation_cnaps');
     return '';
   };
-  return String(texte || '').replace(/^(\s*(?:[•\-*]\s+)?)([^:\n\[]{3,80}?)\s*:\s*\[À COMPLÉTER\]/gm, (m, puce: string, libelle: string) => {
+  const rempli = String(texte || '').replace(/^(\s*(?:[•\-*]\s+)?)([^:\n\[]{3,80}?)\s*:\s*\[À COMPLÉTER\]/gm, (m, puce: string, libelle: string) => {
     const v = valeur(libelle.replace(/\*\*/g, ''));
     return v ? `${puce}${libelle} : ${v}` : m;
   });
+  // Marqueur du modèle qui demandait une donnée CNAPS connue (« [CONSULTATION REQUISE : Transmettre les dates de fin de validité
+  // de l'autorisation d'exercer et le numéro de l'agrément de l'entreprise.] », havre2 1352, T4N-3) : la donnée connue n'est
+  // plus demandée ; le marqueur est retiré s'il ne demandait qu'elle.
+  return rempli.replace(/\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/g, (m, q: string) => {
+    const reste = sansDonneesCnapsConnues(q);
+    if (reste === null) return '';
+    return reste === q ? m : `[CONSULTATION REQUISE : ${reste}]`;
+  }).replace(/\n{3,}/g, '\n\n');
 }
 
 /** Question unique des dates CNAPS (questions_gss_une_fois, rubrique b2_identite) ; '' si la liste ne la porte plus. */
@@ -3897,7 +3905,20 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
     // Données CNAPS déjà connues du registre (numéros AUT et AGD, date d'obtention de l'autorisation) : jamais redemandées,
     // même dans une question fusionnée (havre2 341, T3C-8).
     // Donnée de GSS (référence, chiffre d'affaires, effectif) : posée à GSS, jamais « À demander à l'acheteur » (vitry 351).
-    const connues = (l: Array<{ question: string; sources: number[] }>) => l.map((q) => ({ ...q, question: questionDonneeGss(sansDonneesCnapsConnues(q.question) || '') })).filter((q) => q.question);
+    // Question restante sur les dates CNAPS de l'entreprise ou du dirigeant (« Pouvez-vous fournir les dates de fin de validité
+    // de l'autorisation d'exercer ? », havre2 1352, T4N-3) : la question unique de questions_gss_une_fois, une seule carte.
+    const qCnaps = questionDatesCnaps();
+    const versUnique = (q: string) => (qCnaps && /(?:fin de validit|expiration|date)/i.test(q) && /autorisation d.exercer|agr[ée]ment (?:du |de l[ae] )?(?:dirigeant|entreprise)|cnaps/i.test(q) && !/\bagents?\b|cartes? professionnelles?/i.test(q) ? qCnaps : q);
+    const connues = (l: Array<{ question: string; sources: number[] }>) => {
+      const out: Array<{ question: string; sources: number[] }> = [];
+      for (const q of l) {
+        const question = questionDonneeGss(versUnique(sansDonneesCnapsConnues(q.question) || ''));
+        if (!question) continue;
+        const deja = out.find((x) => x.question === question);
+        if (deja) deja.sources = [...new Set([...deja.sources, ...q.sources])]; else out.push({ ...q, question });
+      }
+      return out;
+    };
     // Question rédigée par le modèle qui redemande une donnée déjà posée par une ligne formulée sans modèle (couverture du cas
     // pratique, délais…) : retirée, la ligne déterministe reste (T5CP-11, etampes2 553).
     const l = connues(await this.consoliderAvecSourcesFusion(liste));
