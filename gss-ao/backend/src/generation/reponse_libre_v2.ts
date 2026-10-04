@@ -690,7 +690,7 @@ export function sansClauseSanction(x: string): string {
   const fin = (/[.!]\s*$/.exec(t) || [''])[0].trim() || '.';
   const props = t.replace(/[.!]\s*$/, '').split(/\s*;\s*|(?<=[.!])\s+(?=[A-ZÀ-Ý])/).filter((p) => p.trim() && !SANCTION.test(p));
   if (!props.length) return '';
-  return `${props.join(' ; ').replace(/[\s,;:]+$/, '')}${fin}`;
+  return `${props.join(' ; ').replace(/[\s,;:.!]+$/, '')}${fin}`;
 }
 
 /** Question exacte posée à GSS pour une formalité de l'offre (hors mémoire technique). */

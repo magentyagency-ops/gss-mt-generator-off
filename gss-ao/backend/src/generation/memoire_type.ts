@@ -3302,8 +3302,11 @@ export function objetDuDce(dce: string): string {
   const a = /(?:le\s+pr[ée]sent\s+(?:march[ée]|accord-cadre|contrat)|la\s+(?:pr[ée]sente\s+)?consultation)\s+a\s+pour\s+objet\s+((?:[^\n.;]|\n(?!\s*\n))[^.;]{9,400}?)(?:\.(?:\s|$)|\n\s*\n|;)/i.exec(t);
   // (valeur en minuscule : suite d'une cellule écrite sur la ligne précédente dans un tableau de PDF, jamais l'objet)
   const b = /(?:^|\n)\s*objet(?:\s+du\s+march[ée]|\s+de\s+la\s+consultation)?\s*(?::|\s{3,}|\|)\s*([A-ZÀ-Ý][^\n|]{4,200})/.exec(t);
-  let v = (a ? a[1] : b ? b[1] : '').replace(/\s+/g, ' ').trim().replace(/^(?:de|d['’])\s*(?=[a-zà-ÿ])/i, '').replace(/^(?:(?:la|le|les)\s+|l['’]\s*)/i, '');
-  if (!v || /^\W*$/.test(v)) return '';
+  // (« de définir … » → « Définir … » ; « des prestations » → « Prestations », jamais « s prestations »)
+  let v = (a ? a[1] : b ? b[1] : '').replace(/\s+/g, ' ').trim().replace(/^[:\s]+/, '')
+    .replace(/^(?:(?:de|des|du)\s+|d['’]\s*)(?=\p{L})/iu, '').replace(/^(?:(?:la|le|les)\s+|l['’]\s*)/i, '');
+  // Objet écrit comme une action (« de définir les prestations… », « de confier au titulaire… ») : pas un intitulé de marché.
+  if (!v || /^\W*$/.test(v) || /^(?:d[ée]finir|confier|fixer|pr[ée]ciser|d[ée]crire|r[ée]gir|organiser|d[ée]terminer|encadrer)(?![\p{L}])/iu.test(v)) return '';
   if (v.length > 200) v = `${v.slice(0, 200).replace(/\s+\S*$/, '')}…`;
   return v.charAt(0).toUpperCase() + v.slice(1);
 }

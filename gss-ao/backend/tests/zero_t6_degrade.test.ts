@@ -18,7 +18,8 @@ describe('nom de l\'acheteur et objet lus sans modèle', () => {
   ])('%#', (dce, nom) => expect(acheteurDuDce(dce)).toBe(nom));
   it('objet du marché, même coupé en fin de ligne', () => {
     expect(objetDuDce('Objet du marché\nLe présent marché a pour objet la prestation de services en gardiennage avec agent\nconducteur de chien et le contrôle de surveillance à distance des locaux.\nSuite.')).toBe('Prestation de services en gardiennage avec agent conducteur de chien et le contrôle de surveillance à distance des locaux');
-    expect(objetDuDce('La consultation a pour objet de définir les prestations de gardiennage du site.')).toBe('Définir les prestations de gardiennage du site');
+    expect(objetDuDce('La consultation a pour objet de définir les prestations de gardiennage du site.')).toBe('');
+    expect(objetDuDce('Le présent marché a pour objet des prestations de prévention et de sécurité.')).toBe('Prestations de prévention et de sécurité');
   });
 });
 

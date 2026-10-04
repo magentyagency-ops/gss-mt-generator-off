@@ -1671,7 +1671,13 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     // pratiques dans nos locaux : éteindre les lumières… ; ne pas allumer… ; fermer les robinets… ») : l'amorce et chaque
     // élément redeviennent des phrases, pour retrouver chacune sa place dans la liste de GSS.
     const liste = /^((?:[•\-*]\s+)?.*\S)\s:\s+([a-zà-ÿ].*;.*)$/.exec(brut);
-    if (liste && motsDePhrase(liste[1]).length >= 6) {
+    // (seulement quand GSS écrit cette amorce seule sur sa ligne, suivie de sa liste : jamais une phrase de GSS qui contient
+    // elle-même « … : a, b, c ; », etampes1 1202 « … selon les besoins du site : tenue, main courante, locaux ; »)
+    const amorceDeGss = (a: string) => lignesRef.some((l, i) => {
+      const der = l[l.length - 1] || '';
+      return /:\s*$/.test(der) && PUCE.test((lignesRef[i + 1] || [])[0] || '') && similarite(motsDePhrase(der), motsDePhrase(a)) >= 0.8;
+    });
+    if (liste && motsDePhrase(liste[1]).length >= 6 && amorceDeGss(liste[1].replace(PUCE, ''))) {
       const elements = liste[2].split(/(?<=;)\s+/).map((x) => x.trim()).filter(Boolean);
       if (elements.length >= 1 && elements.every((x) => motsDePhrase(x).length >= 3)) return [`${liste[1]} :`, ...elements];
     }
