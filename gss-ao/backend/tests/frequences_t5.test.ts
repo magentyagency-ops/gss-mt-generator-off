@@ -38,14 +38,15 @@ describe('alignement d’une fréquence sur le CCTP (T5N-4, T5N-6)', () => {
 });
 
 describe('réunions de suivi (T5CP-8)', () => {
-  it('phrase générale de GSS protégée quand la phrase propre au client est publiée', () => {
+  it('fréquence imposée par le CCTP : elle remplace la fréquence habituelle de GSS, jamais les deux (T2-CONS-4)', () => {
     const r = mt.rubriques.find((x) => x.id === 'b5_reunions_indicateurs')!;
-    const publie = "**Les réunions de suivi**\nAutre axe primordial de notre suivi qualité, les réunions de suivi sont mensuelles ou trimestrielles selon la nature et les besoins du site. Pour le CSTB, les réunions de suivi ont lieu une fois par an. Elles permettent de faire le point.";
-    const p = phrasesGeneralesProtegees(r.texte!, publie);
-    expect(p).toEqual(['Autre axe primordial de notre suivi qualité, les réunions de suivi sont mensuelles ou trimestrielles selon la nature et les besoins du site.']);
-    const m = appliquerModifications(publie, { remplacements: [{ extrait: 'les réunions de suivi sont mensuelles ou trimestrielles selon la nature et les besoins du site', par: 'les réunions de suivi sont annuelles' }] }, { phrasesProtegees: p });
-    expect(m.texte).toBe(publie);
-    expect(phrasesGeneralesProtegees(r.texte!, publie.replace(' Pour le CSTB, les réunions de suivi ont lieu une fois par an.', ''))).toEqual([]);
+    // La phrase générale suivie d'une phrase propre au client n'existe plus dans le mémoire type : rien à protéger.
+    expect(phrasesGeneralesProtegees(r.texte!, 'x')).toEqual([]);
+    const avec = publierMemoire(preparerMemoireType({ analyse: { clientName: 'CSTB' }, dce: 'Réunion de suivi : trimestrielle. 38400 Saint-Martin-d\'Hères.', referents: '' } as any, { memoireType: mt })).find((x: any) => x.id === 'b5_reunions_indicateurs')?.texte || '';
+    expect(avec).toMatch(/les réunions de suivi ont lieu chaque trimestre pour (?:le )?CSTB\./);
+    expect(avec).not.toMatch(/mensuelles ou trimestrielles/);
+    const sans = publierMemoire(preparerMemoireType({ analyse: { clientName: 'CSTB' }, dce: 'Le titulaire assure des rondes. 76000 Rouen.', referents: '' } as any, { memoireType: mt })).find((x: any) => x.id === 'b5_reunions_indicateurs')?.texte || '';
+    expect(sans).toContain('les réunions de suivi sont mensuelles ou trimestrielles selon la nature et les besoins du site.');
   });
   it('schéma de la bibliothèque écarté si sa fréquence n’est plus dans le texte', () => {
     const svg = fs.readFileSync(path.join(__dirname, '../python/schemas_gss/bibliotheque/IV-QUA-04.svg'), 'utf-8');

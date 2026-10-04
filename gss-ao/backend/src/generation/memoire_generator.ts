@@ -12,14 +12,14 @@ import {
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
   type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, harmoniserVariantesAcheteur, formeCourteApresPremiere, phrasesGeneralesProtegees, ajoutContraireAuxDelaisGss,
-  variablesDesSchemas, lotsDuMemoire, nomAcheteurAffiche, rubriqueAdmetSujet, rechercherRubriques,
+  variablesDesSchemas, lotsDuMemoire, nomAcheteurAffiche, rubriqueAdmetSujet, rechercherRubriques, rubriqueDuTheme,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
   sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
-  sansEngagementsEnDouble, sansEngagementsDejaDits, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
+  sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, questionRondes, casPratiqueRepris, type Dimensionnement } from './dimensionnement';
 import {
@@ -31,7 +31,7 @@ import {
   questionsPubliposteParEmplacement, questionDeLEmplacement, completerFamilles, referencesDeSecours, ecartEquipeTableau, questionAvecLibelle, regrouperQuestionsTelesurveillance,
 } from './memoire_type_cadre';
 import { articlesBloc1 } from './bloc1_marine';
-import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, type PhraseAdaptee } from './adaptations_cctp';
+import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, fondementDansDce, exigenceDeModification, ETAPE_ADAPTATION_MODELE, type PhraseAdaptee } from './adaptations_cctp';
 import { rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -1355,6 +1355,18 @@ export function alerteRedactionIndisponible(labels: string[], nonAdaptees: strin
   a(/^adaptation/i, 'adaptation des rubriques au CCTP');
   const n = labels.length;
   return `Rédaction automatique indisponible pendant la génération (${n} appel${n > 1 ? 's' : ''} au modèle sans réponse)${etapes.length ? ` : ${etapes.join(', ')}` : ''}${nonAdaptees.length ? ` ; rubrique${nonAdaptees.length > 1 ? 's' : ''} non adaptée${nonAdaptees.length > 1 ? 's' : ''} au CCTP : ${nonAdaptees.map((t) => `« ${t} »`).join(', ')}` : ''}. Le mémoire n'est pas complet : relancez la génération avant la remise.`;
+}
+
+/**
+ * Vocabulaire des schémas de la bibliothèque pour ce marché : terme du CCTP (« chef de poste ») et fréquence des réunions de
+ * suivi du DCE à la place de la fréquence habituelle de GSS (T2-CONS-4 : schéma « Réunions de suivi — Mensuelles ou
+ * trimestrielles » à côté d'un texte « chaque année »).
+ */
+export function vocabulaireSchemasDuMarche(dce: string, variables: Record<string, any> = {}): Array<[string, string]> {
+  const v = vocabulaireSchemas(dce);
+  const f = variables.FREQ_REUNIONS?.valeur;
+  if (typeof f === 'string' && f.trim()) v.push(['mensuelles ou trimestrielles', f.trim()]);
+  return v;
 }
 
 /** Fréquences écrites dans les textes d'un schéma SVG (« Mensuelles ou trimestrielles ») et absentes d'un texte. */
@@ -8163,7 +8175,7 @@ RÈGLES DE FORME (rendu Marp) :
       console.log(`[MemoireGenerator] Valeurs imposées par le CCTP : ${Object.entries(imposees.valides).map(([k, v]) => `${k} = ${v.valeur}`).join(' ; ')}.`);
     }
     const plan = prep.plan;
-    plan.vocabulaireSchemas = vocabulaireSchemas(dceContext);
+    plan.vocabulaireSchemas = vocabulaireSchemasDuMarche(dceContext, prep.variables);
     // Plan imposé par le RC (ordre et numérotation des pièces, sans limite de pages) : les blocs deviennent les parties du
     // RC ; chaque rubrique du mémoire type va dans la partie qui la reçoit (répartition du format court, rubriques que le
     // modèle ne place pas gardées dans leur bloc d'origine) ; un élément attendu qu'aucune rubrique ne traite est demandé à GSS.
@@ -8225,6 +8237,7 @@ RÈGLES DE FORME (rendu Marp) :
     let adaptees = 0;
     await enParallele(aAdapter, 4, async (rp) => {
       const r = mtParId.get(rp.id)!;
+      const avantAdaptation = sections[rp.id];
       const res = await adapterRubrique({ ...r, mode: 'adapte' }, sections[rp.id], {
         client: besoin.client,
         exigences: parRubrique[rp.id] || [],
@@ -8235,8 +8248,13 @@ RÈGLES DE FORME (rendu Marp) :
         demande: await demandeMT.consigne(rp.id, r.titre),
         dce: dceContext,
         horsNormandie,
-      }, appelAdaptation, { nombresAutorises: [registreGss, this.texteDemande()], nomsAutorises: [registreGss, referents, this.texteDemande()] });
+      }, appelAdaptation, {
+        nombresAutorises: [registreGss, this.texteDemande()], nomsAutorises: [registreGss, referents, this.texteDemande()],
+        // D8 (T2-CONS-3) : une phrase de GSS n'est modifiée que si une phrase du DCE le fonde ; elle est alors signalée à GSS.
+        fondement: (m, ph) => fondementDansDce(m, ph, dceContext),
+      });
       sections[rp.id] = res.texte;
+      suivi.noter(rp.id, avantAdaptation, res.texte, (c) => exigenceDeModification(c, res.appliquees), ETAPE_ADAPTATION_MODELE);
       // Mission décrite par la rubrique niée par le cahier des charges (cstb 551 : « Gestion des entrées : pendant l'ouverture
       // du site, celui-ci n'est pas surveillé » proposé à la place du filtrage) : rubrique retirée, signalée à GSS (T5CP-1).
       if (res.missionExclue) rubriquesExclues.push({ id: rp.id, titre: r.titre, ...res.missionExclue });
@@ -8348,6 +8366,14 @@ RÈGLES DE FORME (rendu Marp) :
         const r = sansRediteDuPerimetre(sections[id], sections[b1.id]);
         if (r.retirees.length) { sections[id] = r.texte; console.log(`[MemoireGenerator] Rubrique ${id} : ${r.retirees.length} engagement(s) déjà présenté(s) dans le périmètre du bloc 1 retiré(s).`); }
       }
+    }
+    // Même exigence du CCTP ajoutée dans plusieurs rubriques (T2-CONS-13) : gardée dans la rubrique de son sujet seulement.
+    {
+      const idsPlan = plan.rubriques.map((r) => r.id).filter((id) => id !== b1?.id);
+      const corps: Record<string, string> = Object.fromEntries(Object.entries(sections).filter(([id]) => idsPlan.includes(id)));
+      const retires = sansAjoutsRepetesEntreRubriques(corps, ajoutsAdaptation, (phrase, ids) => rubriqueDuTheme(phrase, ids) || rechercherRubriques(mt, phrase, 1, ids)[0]?.id || ids.sort((a, b) => idsPlan.indexOf(a) - idsPlan.indexOf(b))[0]);
+      Object.assign(sections, corps);
+      if (retires.length) console.log(`[MemoireGenerator] ${retires.length} exigence(s) du CCTP déjà ajoutée(s) dans la rubrique de leur sujet retirée(s) d'une autre rubrique : ${retires.map((x) => `${x.id} « ${x.phrase.slice(0, 70)} »`).join(' ; ')}.`);
     }
 
     // Jalon d'envoi des plannings au client : celui de « La planification », jamais un autre dans un texte rédigé par l'IA
@@ -9913,7 +9939,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const choixTous = choisirSchemasGss(plan.map((p) => ({
       cle: p.id, question: `${p.title} ${p.attendu || ''}`, texte: '',
       ...(svgComprehension && p.id === partieB1?.id ? { svg: svgComprehension, svgId: 'comprehension' } : {}),
-    })), undefined, { vocabulaire: vocabulaireSchemas(dceContext) });
+    })), undefined, { vocabulaire: vocabulaireSchemasDuMarche(dceContext, prep.variables) });
     const schemaProcess = choixTous.filter((c) => c.id === 'comprehension');
     const choixSchemas = [...schemaProcess, ...choixTous.filter((c) => c.id !== 'comprehension').slice(0, schemaProcess.length && format.pagesMax < 6 ? nbSchemas - 1 : nbSchemas)]
       // Organigramme : toile portrait, affiché en grand (noms lisibles) au lieu d'une vignette paysage.
@@ -9964,6 +9990,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     let adaptees = 0;
     await enParallele(aAdapter, 4, async (rp) => {
       const r = mtParId.get(rp.id)!;
+      const avantAdaptation = textes[rp.id];
       const res = await adapterRubrique({ ...r, mode: 'adapte' }, textes[rp.id], {
         client: besoin.client, exigences: parRubrique[rp.id] || [], obligations: obligationsPourRubrique(r, dceContext), perimetre,
         analyseCompacte: analyseResumee, registre: registreGss, demande: await demandeMT.consigne(rp.id, r.titre),
@@ -9972,8 +9999,11 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
         nombresAutorises: [registreGss, this.texteDemande()], nomsAutorises: [registreGss, referents, this.texteDemande()],
         // Sujets traités par les autres rubriques gardées : pas de « [À COMPLÉTER] » ajouté sur eux.
         titresTraites: toutesRetenues.filter((id) => id !== rp.id).map((id) => mtParId.get(id)?.titre || '').filter(Boolean),
+        // D8 (T2-CONS-3) : une phrase de GSS n'est modifiée que si une phrase du DCE le fonde ; elle est alors signalée à GSS.
+        fondement: (m, ph) => fondementDansDce(m, ph, dceContext),
       });
       textes[rp.id] = res.texte;
+      suivi.noter(rp.id, avantAdaptation, res.texte, (c) => exigenceDeModification(c, res.appliquees), ETAPE_ADAPTATION_MODELE);
       // Mission niée par le cahier des charges : rubrique non reprise, signalée (T5CP-1) ; échec du modèle signalé (T5-COH-2).
       if (res.missionExclue) { textes[rp.id] = ''; rubriquesExcluesCourt.push(`Rubrique « ${r.titre} » non reprise : le cahier des charges exclut la mission qu'elle décrit (à la place de « ${phraseLisible(res.missionExclue.extrait, 160)} », le modèle proposait « ${phraseLisible(res.missionExclue.par, 160)} »). Si GSS assure bien cette mission sur ce marché, demandez via l'assistant de la rétablir.`); }
       if (res.repli && /appel au modèle impossible|réponse du modèle illisible/.test(res.raison || '')) nonAdapteesCourt.push(r.titre);

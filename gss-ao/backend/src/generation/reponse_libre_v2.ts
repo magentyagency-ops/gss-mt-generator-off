@@ -800,6 +800,69 @@ export function sansEngagementsEnDouble(texte: string): { texte: string; retiree
 }
 
 /**
+ * Même exigence du CCTP ajoutée par l'IA dans plusieurs rubriques (T2-CONS-13, cstb 1201 : « Un point intermédiaire à mi-année
+ * est organisé la première année » sous « Les réunions de suivi », « L'équipe de contrôle » et « Le contrôleur de rondes ») :
+ * phrases ajoutées par l'adaptation et puces « Nos engagements… », comparées entre rubriques (radicaux porteurs et chiffres) ;
+ * la phrase reste dans la rubrique de son sujet (`choisir`), elle est retirée des autres. Le texte de GSS n'est jamais touché.
+ */
+export function sansAjoutsRepetesEntreRubriques(
+  sections: Record<string, string>,
+  ajouts: Array<{ id: string; phrase: string }>,
+  choisir: (phrase: string, ids: string[]) => string,
+): Array<{ id: string; phrase: string }> {
+  const TITRE = '## Nos engagements sur les exigences du cahier des charges';
+  const NEUTRES = /^(?:respec|fera|ferons|faire|veille|engage|mettra|mettre|oeuvre|garant|sera|seront|pourra|devra|toutes?|tous|leurs?|avec|dans|pour|sans|sous|ainsi|chaque|selon|cette|ces|ses|aupres|organi|realis|effect|assure)/;
+  const radicaux = (t: string) => new Set(normaliser(t).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 4 && !/^\d+$/.test(w) && !NEUTRES.test(w)).map((w) => w.slice(0, 6)));
+  const chiffres = (t: string) => [...new Set(t.match(/\d+(?:[.,]\d+)?/g) || [])].sort().join(',');
+  // Candidats : phrases ajoutées par l'adaptation, puis puces des listes d'engagements.
+  const cands: Array<{ id: string; phrase: string; puce: boolean }> = ajouts.filter((a) => (sections[a.id] || '').includes(a.phrase)).map((a) => ({ ...a, puce: false }));
+  for (const [id, t] of Object.entries(sections)) {
+    const i = t.indexOf(TITRE);
+    if (i < 0) continue;
+    for (const l of t.slice(i + TITRE.length).split('\n')) if (/^\s*[-*•]\s/.test(l)) cands.push({ id, phrase: l, puce: true });
+  }
+  const retires: Array<{ id: string; phrase: string }> = [];
+  const vus = new Set<number>();
+  for (let a = 0; a < cands.length; a++) {
+    if (vus.has(a)) continue;
+    const ra = radicaux(cands[a].phrase);
+    if (ra.size < 3) continue;
+    const groupe = [a];
+    for (let b = a + 1; b < cands.length; b++) {
+      if (vus.has(b) || cands[b].id === cands[a].id || groupe.some((g) => cands[g].id === cands[b].id)) continue;
+      const rb = radicaux(cands[b].phrase);
+      if (rb.size < 3 || chiffres(cands[a].phrase) !== chiffres(cands[b].phrase)) continue;
+      const communs = [...rb].filter((w) => ra.has(w)).length;
+      if (communs / Math.min(ra.size, rb.size) >= 0.6 && communs >= 3) groupe.push(b);
+    }
+    if (groupe.length < 2) continue;
+    groupe.forEach((g) => vus.add(g));
+    const ids = groupe.map((g) => cands[g].id);
+    const garde = choisir(groupe.map((g) => cands[g].phrase).join(' '), ids) || ids[0];
+    for (const g of groupe) {
+      const c = cands[g];
+      if (c.id === garde) continue;
+      const t = sections[c.id];
+      if (c.puce) {
+        const lignes = t.split('\n');
+        const k = lignes.lastIndexOf(c.phrase);
+        if (k < 0) continue;
+        lignes.splice(k, 1);
+        let nt = lignes.join('\n');
+        // Liste devenue vide : le sous-titre part avec elle.
+        const i = nt.indexOf(TITRE);
+        if (i >= 0 && !/^\s*[-*•]\s/m.test(nt.slice(i + TITRE.length))) nt = `${nt.slice(0, i).trimEnd()}${nt.slice(i + TITRE.length).trim() ? `\n\n${nt.slice(i + TITRE.length).trim()}` : ''}`;
+        sections[c.id] = nt.replace(/\n{3,}/g, '\n\n').trim();
+      } else {
+        sections[c.id] = t.replace(c.phrase, '').replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;])/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+      }
+      retires.push({ id: c.id, phrase: c.phrase.replace(/^\s*[-*•]\s*/, '').trim() });
+    }
+  }
+  return retires;
+}
+
+/**
  * Rubrique « 1 à 2 pages d'explication, puis 1 page de schéma » (consignes 3 et 6) : quand les puces ajoutées par le
  * contrôle de couverture (« ## Nos engagements sur les exigences du cahier des charges ») font dépasser 2 pages de texte,
  * les puces sont retirées jusqu'à tenir dans 2 pages, en commençant par les plus longues sans chiffre (listes de missions

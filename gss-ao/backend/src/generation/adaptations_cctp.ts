@@ -26,7 +26,7 @@
 // viennent pas du CCTP. Un délai normand retiré hors Normandie est signalé avec son motif (règle de GSS), jamais présenté
 // comme une exigence du CCTP (T6C-10).
 
-import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, variableRenseignee, phraseDelaiDuDce, phrasesDelaisDuDce, sujetDelaiDePhrase, sujetsDelaisDuGabarit, phraseDuDceContenant, VARIABLES_IMPOSABLES, SUJET_VARIABLE_DELAI, type MemoireType, type ContexteMarche } from './memoire_type';
+import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, variableRenseignee, phraseDelaiDuDce, phrasesDelaisDuDce, sujetDelaiDePhrase, sujetsDelaisDuGabarit, phraseDuDceContenant, phraseFrequenceReunionsDce, VARIABLES_IMPOSABLES, SUJET_VARIABLE_DELAI, type MemoireType, type ContexteMarche } from './memoire_type';
 import { sitesDuMarche, lieuDuMarche, communesParCodePostal, interditPhotosDce, RX_RONDES_A_PIED } from './base_memoires';
 
 export type StatutAdaptation = 'a_valider' | 'validee' | 'modifiee' | 'retablie';
@@ -513,6 +513,44 @@ export function phraseDuDceProche(phrase: string, dce: string): string {
   return p ? phraseLisible(p, 420) : '';
 }
 
+/** Mots vides pour rattacher une modification à sa phrase du DCE. */
+const VIDES_FONDEMENT = new Set(['dans', 'pour', 'avec', 'sans', 'sous', 'entre', 'leur', 'leurs', 'cette', 'tout', 'toute', 'tous', 'toutes', 'chaque', 'etre', 'sont', 'doit', 'doivent', 'devra', 'devront', 'plus', 'moins', 'ainsi', 'notre', 'votre', 'nous', 'vous', 'elle', 'elles', 'titulaire', 'prestataire', 'marche', 'prestation', 'prestations', 'site', 'sites', 'agent', 'agents', 'selon', 'afin', 'lors', 'avant', 'apres', 'aussi', 'ensuite', 'egalement', "l'agent", "d'une", "d'un", "qu'il", "qu'elle"]);
+const motsPleins = (t: string) => [...new Set(mots(t).filter((w) => w.length >= 4 && !VIDES_FONDEMENT.has(w)))];
+
+/**
+ * Phrase du DCE qui fonde une modification d'une phrase de GSS par l'adaptation (D8, T2-CONS-3), '' s'il n'y en a pas :
+ * remplacement — la phrase du DCE qui porte les mots et les chiffres nouveaux (« annuelles » : « Des rencontres annuelles
+ * seront organisées… ») ; retrait — la phrase du DCE la plus proche du passage retiré et du motif donné. Jamais la seule
+ * justification du modèle.
+ */
+export function fondementDansDce(m: { type: string; extrait: string; par?: string; motif?: string }, phrase: string, dce: string): string {
+  const sentences = phrasesDce(dce).filter((x) => x.length <= 900);
+  const nouveaux = m.type === 'remplacement' ? motsPleins(m.par || '').filter((w) => !motsPleins(m.extrait).includes(w)) : [];
+  const nombres = m.type === 'remplacement' ? (String(m.par || '').match(/\d+(?:[.,]\d+)?/g) || []).filter((n) => !String(m.extrait).includes(n)) : [];
+  const contexte = motsPleins(m.type === 'retrait' ? `${m.extrait} ${m.motif || ''}` : `${phrase} ${m.par || ''}`);
+  let meilleure = '', score = 0;
+  for (const x of sentences) {
+    if (nombres.some((n) => !new RegExp(`(?<![\\d,.])${n.replace('.', '[.,]')}(?![\\d])`).test(x))) continue;
+    const mx = new Set(mots(x));
+    const sNouveaux = nouveaux.length ? nouveaux.filter((w) => mx.has(w)).length / nouveaux.length : 0;
+    const sContexte = contexte.filter((w) => mx.has(w)).length / Math.max(4, contexte.length);
+    const ok = nouveaux.length ? sNouveaux >= 0.5 && (sContexte >= 0.08 || sNouveaux === 1) : (nombres.length ? sContexte >= 0.15 : sContexte >= 0.25);
+    const total = sNouveaux * 2 + sContexte;
+    if (ok && total > score) { score = total; meilleure = x; }
+  }
+  return meilleure ? phraseLisible(meilleure, 420) : '';
+}
+
+/** Étape des modifications de l'adaptation au CCTP par le modèle (D8, T2-CONS-3). */
+export const ETAPE_ADAPTATION_MODELE = 'Adaptation de la rubrique au CCTP';
+
+/** Exigence d'un changement de phrase : celle de la modification appliquée qui l'a produit ('' si aucune). */
+export function exigenceDeModification(c: Changement, appliquees: Array<{ extrait: string; par?: string; exigence?: string }>): string {
+  const k = (t: string) => cle(t);
+  const m = appliquees.find((x) => x.exigence && ((x.extrait && k(c.origine).includes(k(x.extrait))) || (x.par && c.adaptee && k(c.adaptee).includes(k(x.par)))));
+  return m?.exigence || '';
+}
+
 /** Exigence de la liste la plus proche d'une phrase (mots en commun). */
 export function exigenceProche(phrase: string, exigences: string[]): string {
   const m = new Set(mots(phrase).filter((w) => w.length >= 4));
@@ -591,12 +629,15 @@ export function adaptationsDesValeursImposees(mt: MemoireType, ctx: ContexteMarc
     // Plusieurs délais imposés par le CCTP (T10C-2) : la phrase de GSS est imprimée sans son délai, signalée avec les
     // phrases du CCTP.
     const plusieurs = /^Le CCTP impose plusieurs délais/.test(String(r?.question || ''));
-    if (!/imposé par le DCE/.test(source) && !plusieurs) continue;
-    const g = gss.variables[nom];
-    if (!variableRenseignee(g) || (!variableRenseignee(r) && !plusieurs)) continue;
-    // Valeur « de GSS » elle-même lue dans le DCE (fréquence des réunions, cstb 551 : « chaque année » puis « une fois par
-    // an ; … ») : pas une phrase de GSS, rien à signaler.
-    if (/^(?:DCE$|délai imposé par le DCE|imposé par le DCE|déduit de la fréquence imposée)/.test(String(g.source || '').trim())) continue;
+    // Fréquence des réunions (T2-CONS-4) : GSS n'a pas de valeur, sa phrase dit « mensuelles ou trimestrielles selon la nature
+    // et les besoins du site » ; la fréquence du DCE (lue dans le DCE ou imposée) la remplace : phrase signalée.
+    const sansValeurGss = nom === 'FREQ_REUNIONS' && variableRenseignee(r);
+    if (!/imposé par le DCE/.test(source) && !plusieurs && !sansValeurGss) continue;
+    const g = sansValeurGss ? { valeur: null, source: 'GSS' } : gss.variables[nom];
+    if (!sansValeurGss && (!variableRenseignee(g) || (!variableRenseignee(r) && !plusieurs))) continue;
+    // Valeur « de GSS » elle-même lue dans le DCE (cstb 551 : « chaque année » puis « une fois par an ; … ») : pas une phrase
+    // de GSS, rien à signaler.
+    if (!sansValeurGss && /^(?:DCE$|délai imposé par le DCE|imposé par le DCE|déduit de la fréquence imposée)/.test(String(g.source || '').trim())) continue;
     const vr = texte(r.valeur), vg = texte(g.valeur);
     if (normaliser(vr) === normaliser(vg)) continue;
     const sujet = SUJET_VARIABLE_DELAI[nom];
@@ -607,7 +648,8 @@ export function adaptationsDesValeursImposees(mt: MemoireType, ctx: ContexteMarc
     const imposee = ctx.imposees?.[nom];
     const exigence = plusieurs && sujet ? exigenceDelaisDuSujet(ctx.dce || '', sujet)
       : imposee?.citation ? phraseDuDceContenant(ctx.dce || '', imposee.citation)
-      : sujet ? phraseDelaiDuDce(ctx.dce || '', sujet as any) : '';
+      : sujet ? phraseDelaiDuDce(ctx.dce || '', sujet as any)
+        : nom === 'FREQ_REUNIONS' ? phraseFrequenceReunionsDce(ctx.dce || '') : '';
     if (!exigence) continue;
     const variables = { ...reel.variables, [nom]: g };
     // Contrôles inopinés déduits de la fréquence imposée du contrôle 2 : la valeur de GSS revient avec elle.

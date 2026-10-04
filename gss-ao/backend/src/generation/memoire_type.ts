@@ -1681,6 +1681,17 @@ export function frequenceReunionsDce(dce: string): string {
   return minimum ? `au minimum ${libelle}` : libelle;
 }
 
+/** Phrase du DCE qui fixe la fréquence des réunions de suivi ('' si aucune) : l'exigence citée à GSS (D8, T2-CONS-4). */
+export function phraseFrequenceReunionsDce(dce: string): string {
+  for (const ph of phrasesDuDce(dce)) {
+    if (!/r[ée]unions?/i.test(ph)) continue;
+    for (const prop of ph.split(/\s*;\s*/)) {
+      for (const [rx] of FREQUENCES) for (const m of prop.matchAll(new RegExp(rx.source, 'gi'))) if (frequenceDeLaReunion(prop, m.index!, m.index! + m[0].length)) return ph;
+    }
+  }
+  return '';
+}
+
 /** Fondement juridique de la reprise CITÉ PAR LE DCE (jamais d'article L. 1224-1 si le DCE ne le cite pas). */
 export function fondementRepriseDce(dce: string): string {
   // Typographie des PDF (T2-GEN-10) : tirets insécables, demi-cadratins et signes moins ramenés au trait d'union ; dates
@@ -2907,7 +2918,16 @@ const THEMES_EXIGENCE: Array<{ sujet: RegExp; rubriques: string[] }> = [
   // Plan de prévention (hygiène et sécurité) à remettre après la notification : un livrable du démarrage du marché, jamais
   // la planification des agents (caen 475, T6C-9).
   { sujet: /plan de pr[ée]vention|(?<![\p{L}])PPSPS(?![\p{L}])|hygi[èe]ne et (?:de )?s[ée]curit[ée]|organismes? d.hygi[èe]ne/iu, rubriques: ['b5_nouveau_marche'] },
+  // Réunions et rencontres de suivi du contrat, point intermédiaire, comité de pilotage : « Les réunions de suivi » (T2-CONS-13 :
+  // le point intermédiaire à mi-année du CSTB écrit aussi sous « Le contrôleur de rondes » et « L'équipe de contrôle »).
+  { sujet: /r[ée]unions? de suivi|rencontres? (?:annuelles?|trimestrielles?|mensuelles?|semestrielles?|de suivi|p[ée]riodiques?)|point interm[ée]diaire|comit[ée]s? de (?:pilotage|suivi)/iu, rubriques: ['b5_reunions_indicateurs'] },
 ];
+
+/** Rubrique du plan qui traite le thème net d'une exigence (THEMES_EXIGENCE), parmi `ids` ; '' sinon. */
+export function rubriqueDuTheme(texte: string, ids: string[]): string {
+  for (const t of THEMES_EXIGENCE) if (t.sujet.test(texte)) { const id = t.rubriques.find((x) => ids.includes(x)); if (id) return id; }
+  return '';
+}
 
 /**
  * Rattache les exigences de la matrice aux rubriques du plan : rubrique du plan citée ; ancienne rubrique (b_*) →
@@ -3027,6 +3047,8 @@ export interface ModificationTraitee {
   par?: string;
   motif?: string;
   raison?: string;
+  /** Phrase du DCE qui fonde la modification (citée à GSS avec la phrase adaptée, D8). */
+  exigence?: string;
 }
 
 export interface OptionsModifications {
@@ -3049,6 +3071,12 @@ export interface OptionsModifications {
   /** Sujets des délais de GSS publipostés dans la rubrique ({{DELAI_PTI}} → « pti » ; null : délai propre à GSS, sans
    *  sujet du DCE) : un délai de la rubrique n'est remplacé que par le délai que le DCE impose pour l'un de ces sujets. */
   sujetsDelais?: Array<string | null>;
+  /**
+   * Phrase du DCE qui fonde un remplacement ou un retrait d'une phrase de GSS ('' : aucune). D8 et T2-CONS-3 : toute phrase de
+   * GSS modifiée par l'adaptation est signalée à GSS avec l'exigence du CCTP qui la justifie ; une modification qu'aucune
+   * phrase du DCE ne fonde n'est pas appliquée.
+   */
+  fondement?: (m: ModificationTraitee, phrase: string) => string;
   /** Phrases de GSS jamais modifiées ni retirées (pratique générale de GSS suivie de la phrase propre au client). */
   phrasesProtegees?: string[];
 }
@@ -3220,6 +3248,34 @@ export const RAISON_MISSION_NIEE = 'négation de la mission décrite par GSS (le
 const NEGATION_MISSION = /(?<![\p{L}])aucun(?:e|s|es)?\s+(?:ronde|contr[ôo]le|surveillance|filtrage|accueil|mission|agent|prestation|gardiennage|pr[ée]sence)|n['’]\s*(?:est|sont)\s+pas\s+(?:surveill|gard[ée]|assur|pr[ée]vu|effectu|r[ée]alis)|(?<![\p{L}])(?:non|pas de)\s+surveill|n['’]\s*(?:assure|effectue|r[ée]alise)(?:nt)?\s+(?:pas|aucun)/iu;
 
 /** Vrai si l'extrait (position dans le texte) chevauche une phrase protégée. */
+/** Raison du refus d'une modification qu'aucune phrase du DCE ne fonde (D8, T2-CONS-3). */
+export const RAISON_SANS_FONDEMENT = 'aucune phrase du DCE ne fonde la modification';
+
+/** Phrase (entre « . », « ! », « ? » ou fin de ligne) qui contient un extrait du texte. */
+function phraseAutour(t: string, debut: number, fin: number): string {
+  const avant = t.slice(0, debut);
+  const i = Math.max(avant.lastIndexOf('. '), avant.lastIndexOf('\n'), avant.lastIndexOf('! '), avant.lastIndexOf('? '));
+  const apres = t.slice(fin);
+  const j = apres.search(/[.!?](?:\s|$)|\n/);
+  return t.slice(i + 1, j < 0 ? t.length : fin + j + 1).trim();
+}
+
+/**
+ * Phrases de GSS qui donnent la fréquence d'un contrôle, d'une réunion qualité ou d'un bilan (T2-CONS-3 : « VATTIER Marie,
+ * responsable qualité : lors des réunions trimestrielles, elle se rend sur site… bilan du trimestre écoulé ») : leur fréquence
+ * ne change que par les fréquences imposées du CCTP (FREQ_CONTROLE_n, FREQ_REUNIONS, publipostage contrôlé), jamais par
+ * l'adaptation du modèle (« annuelles » tiré des rencontres annuelles du contrat, phrase devenue incohérente).
+ */
+export function phrasesDeFrequenceDeControle(texte: string): string[] {
+  const FREQ = /(?<![\p{L}])(?:hebdomadaires?|mensuel(?:le)?s?|bimestriel(?:le)?s?|trimestriel(?:le)?s?|semestriel(?:le)?s?|annuel(?:le)?s?|trimestre|semestre|par (?:semaine|mois|trimestre|semestre|an)|chaque (?:semaine|mois|trimestre|semestre|année)|tous les (?:mois|ans|trimestres))(?![\p{L}])/iu;
+  const SUJET = /contr[ôo]l|qualit[ée]|bilan|r[ée]unions?|rapports?/i;
+  const out: string[] = [];
+  for (const ligne of String(texte || '').split('\n')) {
+    for (const ph of ligne.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«*])/)) if (FREQ.test(ph) && SUJET.test(ph) && ph.trim().length >= 20) out.push(ph.trim());
+  }
+  return out;
+}
+
 function touchePhraseProtegee(t: string, pos: { debut: number; fin: number }, phrases?: string[]): boolean {
   // Ligne de tableau (« | Agent de sécurité | CQP APS | 7 | … | ») : tableau calculé ou chiffré de GSS, jamais réécrit par
   // l'adaptation (T1F-3 : « Adaptation b3_adequation : 2 modification(s) » avait réécrit le tableau de l'équipe dédiée).
@@ -3279,6 +3335,11 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     if (jalonsChronologiques(t) && !jalonsChronologiques(essai)) { refusees.push({ ...m, raison: 'suite de jalons non chronologique' }); continue; }
     if (etapesRetirees(t, essai).length) { refusees.push({ ...m, raison: 'une étape de procédure ne se retire pas' }); continue; }
     if (debutDePhraseRetire(t, pos[0].debut, pos[0].fin, essai)) { refusees.push({ ...m, raison: 'début de phrase de GSS remplacé par un texte sans majuscule' }); continue; }
+    if (o.fondement) {
+      const e = o.fondement(m, phraseAutour(t, pos[0].debut, pos[0].fin));
+      if (!e) { refusees.push({ ...m, raison: RAISON_SANS_FONDEMENT }); continue; }
+      m.exigence = e;
+    }
     t = essai;
     appliquees.push(m);
   }
@@ -3292,6 +3353,11 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
     const essai = t.slice(0, pos[0].debut) + t.slice(pos[0].fin);
     if (etapesRetirees(t, essai).length) { refusees.push({ ...m, raison: 'une étape de procédure ne se retire pas' }); continue; }
     if (debutDePhraseRetire(t, pos[0].debut, pos[0].fin, essai)) { refusees.push({ ...m, raison: 'début de phrase de GSS retiré seul (phrase gardée entière)' }); continue; }
+    if (o.fondement) {
+      const e = o.fondement(m, phraseAutour(t, pos[0].debut, pos[0].fin));
+      if (!e) { refusees.push({ ...m, raison: RAISON_SANS_FONDEMENT }); continue; }
+      m.exigence = e;
+    }
     t = essai;
     appliquees.push(m);
   }
@@ -3637,7 +3703,7 @@ export async function adapterRubrique(rubrique: RubriqueMemoireType, textePublip
   // change, à la demande de GSS.
   const effectifs = /\{\{\s*(?:LIGNES_EQUIPE_DEDIEE|EFFECTIF_AGENTS|NB_AGENTS_RENFORT)\s*\}\}/.test(rubrique.texte || '')
     ? reference.split(/(?<=[.!?])\s+|\n+/).filter((ph) => /agents? titulaires?|[ée]quipe suppl[ée]ante de/i.test(ph) && /\d/.test(ph)) : [];
-  const opts: OptionsModifications = { ...options, dce: ctx.dce, reference, sujetAjouts: options.sujetAjouts ?? sujetDeRubrique(rubrique), sujetsDelais: options.sujetsDelais ?? sujetsDelaisDuGabarit(rubrique.texte || ''), phrasesProtegees: [...(options.phrasesProtegees || []), ...phrasesGeneralesProtegees(rubrique.texte || '', reference), ...effectifs] };
+  const opts: OptionsModifications = { ...options, dce: ctx.dce, reference, sujetAjouts: options.sujetAjouts ?? sujetDeRubrique(rubrique), sujetsDelais: options.sujetsDelais ?? sujetsDelaisDuGabarit(rubrique.texte || ''), phrasesProtegees: [...(options.phrasesProtegees || []), ...phrasesGeneralesProtegees(rubrique.texte || '', reference), ...effectifs, ...phrasesDeFrequenceDeControle(reference)] };
   const tout = appliquerModifications(reference, mods, opts);
   const niee = tout.refusees.find((m) => m.raison === RAISON_MISSION_NIEE);
   if (niee) return { ...sortie(reference, true, 'mission niée par le cahier des charges', [], tout.refusees), missionExclue: { extrait: niee.extrait, par: niee.par || '', motif: niee.motif } };

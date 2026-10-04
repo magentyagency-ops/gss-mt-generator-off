@@ -53,9 +53,14 @@ describe('Délai normand retiré hors Normandie : motif, pas exigence du CCTP (T
   });
 });
 
-describe('Valeur « de GSS » lue elle aussi dans le DCE', () => {
-  it.skipIf(!aCorpus('cstb'))('cstb : la fréquence des réunions (DCE) remplacée par celle extraite du DCE n\'est pas une phrase adaptée de GSS', () => {
-    const l = signaler({ dce: DCE('cstb'), analyse: { clientName: 'CSTB' }, imposees: { FREQ_REUNIONS: { valeur: 'une fois par an ; la première année, un point intermédiaire à mi-année', citation: 'Des rencontres annuelles seront organisées' } } });
-    expect(l.some((a) => a.rubrique === 'b5_reunions_indicateurs')).toBe(false);
+describe('Fréquence des réunions du CCTP à la place de celle de GSS (T2-CONS-4)', () => {
+  it.skipIf(!aCorpus('cstb'))('cstb : « mensuelles ou trimestrielles » de GSS devenu la fréquence du CCTP, phrase signalée avec l\'exigence', () => {
+    const l = signaler({ dce: DCE('cstb'), analyse: { clientName: 'CSTB' }, imposees: { FREQ_REUNIONS: { valeur: 'une fois par an', citation: 'Des rencontres annuelles seront organisées' } } });
+    const r = l.filter((a) => a.rubrique === 'b5_reunions_indicateurs');
+    expect(r).toHaveLength(1);
+    expect(r[0].avant).toMatch(/sont mensuelles ou trimestrielles selon la nature et les besoins du site/);
+    expect(r[0].apres).toMatch(/ont lieu une fois par an pour/);
+    expect(r[0].apres).not.toMatch(/mensuelles ou trimestrielles/);
+    expect(r[0].exigence).toMatch(/rencontres annuelles/);
   });
 });
