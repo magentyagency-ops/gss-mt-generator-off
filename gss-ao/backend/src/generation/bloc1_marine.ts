@@ -11,7 +11,7 @@
 // (relevés à la génération). Rien n'est ajouté pour les autres styles.
 
 import { normaliserExpressionsDelai, nombreFr, RX_NOMBRE_LETTRES, estCahierDesCharges, estPieceAdministrative } from './base_memoires';
-import { titreExigence, MAX_LIBELLE_EXIGENCE, libelleExigenceBloc1, libelleBloc1Valide } from './reponse_libre_v2';
+import { titreExigence, MAX_LIBELLE_EXIGENCE, libelleExigenceBloc1, libelleBloc1Valide, groupesNominauxCitation } from './reponse_libre_v2';
 
 const echapper = (t: string) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const norm = (t: string) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’`]/g, "'").toLowerCase();
@@ -493,9 +493,12 @@ function tableauAttentes(liste: string, blocsRubriques: Record<string, number> =
       // Puce faite de la seule citation (« « […] et Régulations (PCR) doit être informé … dans les 3 minutes […] » ») : le
       // libellé tiré de la citation, contrôlé comme les autres (T7N-2 : jamais « Et Régulations (PCR) »).
       const cit = /^\s*«\s*([^»]{3,400}?)\s*»\s*$/.exec(besoin);
-      exigence = cit ? (libelleExigenceBloc1('', cit[1], MAX_LIBELLE_EXIGENCE, reponse) || titreExigence(cit[1], MAX_LIBELLE_EXIGENCE)) : titreExigence(besoin, MAX_LIBELLE_EXIGENCE);
+      // (puce sans gras ni citation, « Agents de chaque site : secourisme à jour (AFPS…) … », T8N-5 : jamais une case vide)
+      exigence = cit ? (libelleExigenceBloc1('', cit[1], MAX_LIBELLE_EXIGENCE, reponse) || titreExigence(cit[1], MAX_LIBELLE_EXIGENCE)) : (libelleExigenceBloc1('', besoin, MAX_LIBELLE_EXIGENCE, reponse) || titreExigence(besoin, MAX_LIBELLE_EXIGENCE));
       demande = besoin;
     }
+    // Jamais une case EXIGENCE vide (T8N-5) : à défaut, le groupe nominal en tête de ce que le CCTP demande.
+    if (!exigence.trim()) exigence = groupesNominauxCitation(demande || besoin)[0] || titreExigence(demande || besoin, MAX_LIBELLE_EXIGENCE) || String(demande || besoin).split(/\s*[,;:(]\s*/)[0].split(/\s+/).slice(0, 6).join(' ');
     rangs.push(`| ${cellule(exigence)} | ${cellule(demande)} | ${celluleReponse(reponse, blocsRubriques).replace(/\|/g, '\\|')} |`);
   }
   return rangs.length ? ['| Exigence | Ce que le CCTP demande | Notre réponse |', '|---|---|---|', ...rangs].join('\n') + (reperes.length ? `\n\n${reperes.join('\n')}` : '') : liste;

@@ -1673,7 +1673,8 @@ const INTERNE = /\[À COMPLÉTER\]|⟦|\[CONSULTATION|\[\s*[A-ZÀ-Ý]/;
  *  garde pas au moins 3 mots (cstb 221 : « Le remplacement des absences prévues et imprévues suit les processus du bloc 5 »). */
 export function sansRenvoiBloc(y: string): string {
   let t = String(y || '').replace(/\s+/g, ' ').trim();
-  const k = t.search(/(?:\b(?:du|au|aux|des|dans les?|en|le|les)\s+)?\bblocs?\s+\d/i);
+  // (« développé dans la partie 2 » du format court comme « développée au bloc 4 », T8-CONS-9)
+  const k = t.search(/(?:\b(?:du|au|aux|des|dans les?|dans la|à la|en|le|les|la)\s+)?\b(?:blocs?|parties?)\s+\d/i);
   if (k < 0) return t;
   t = t.slice(0, k);
   const QUEUE = /(?:\s*[,;:(]\s*|\s+(?:suit|suivent|suivant|selon|conform[ée]ment|d['’]apr[èe]s|[àa]|au|aux|le|la|les|l['’]|du|des|de|dans|en|processus|proc[ée]dures?|process|d[ée]crite?s?|d[ée]taill[ée]e?s?|d[ée]velopp[ée]e?s?|trait[ée]e?s?|pr[ée]sent[ée]e?s?|expos[ée]e?s?|expliqu[ée]e?s?|voir|cf\.?|et|est|sont|sera|seront|qui))+\s*$/i;
@@ -1822,8 +1823,17 @@ export function anomaliesSchemaBloc1(spec: { gabarit?: string; params?: any } | 
     if (/\*\*|__|(?:^|\s)#{1,4}\s|`/.test(`${ti0} ${tx0}`)) out.push(`${n0} : marque de mise en forme imprimée (« ** », « __ », « # »)`);
     for (const x of [ti0, tx0]) if ((x.match(/«/g) || []).length !== (x.match(/»/g) || []).length || (x.match(/\(/g) || []).length !== (x.match(/\)/g) || []).length) out.push(`${n0} : guillemet ou parenthèse non refermé (« ${x} »)`);
     if (/\b(?:est|sont|sera|seront|a été|ont été)\s+[a-zà-ÿ]+(?:é|ée|és|ées|i|ie|is|ies|u|ue|us|ues)(?![a-zà-ÿ])/i.test(ti0)) out.push(`${n0} : le titre est une phrase, pas un titre nominal`);
+    // Titre à la première personne (becquerel 1881, T8-CONS-16 : « Nous préparons l'affectation ») : une phrase, jamais un titre.
+    else if (/^(?:nous|vous|on|il|elle|ils|elles)\s/i.test(ti0)) out.push(`${n0} : le titre est une phrase, pas un titre nominal`);
     // Titre qui a l'acheteur pour sujet (becquerel 1401, T4N-1 : « Le CCTP confie les rondes ») : une phrase, jamais un titre.
     else if (/^(?:le|la|les|l['’])\s?(?:cctp|ccap|dce|cahier des charges|r[èe]glement|acheteur|client|march[ée])\s+[a-zà-ÿ]{3,}(?:e|ent|t)\b/i.test(ti0)) out.push(`${n0} : le titre est une phrase, pas un titre nominal`);
+    // Titre réduit à un participe ou à un mot isolé de la citation (imm 1883, T8-CONS-9 : carte « Faite »).
+    if (ti0 && i < etapes.length - 1 && !/\s/.test(ti0) && /^[A-ZÀ-Ýa-zà-ÿ]+(?:é|ée|és|ées|aite?s?|uite?s?|ite?s?|ise?s?|ie|ies|ue|ues)$/.test(ti0)) out.push(`${n0} : titre réduit à un participe (« ${ti0} »)`);
+    // Texte qui renvoie à un nom sans antécédent sur la carte (« La relève de ce poste » sous « Nous préparons l'affectation »).
+    {
+      const dem = /(?<![\p{L}])(?:ce|cet|cette|ces)\s+(\p{L}{3,})/iu.exec(tx0);
+      if (dem && !normaliser(ti0).includes(normaliser(dem[1]).replace(/s$/, ''))) out.push(`${n0} : « ${dem[0]} » sans antécédent sur la carte`);
+    }
     // Texte coupé dans une incise ouverte après un verbe (« Le CCTP exige, pour le personnel affecté aux prestations incendie »).
     if (/\b(?:exige|exigent|impose|imposent|demande|demandent|pr[ée]voit|pr[ée]voient|requiert|attend|fixe|fixent|confie|confient|pr[ée]cise|indique)\s*,\s*[^,]*$/i.test(tx0)) out.push(`${n0} : texte coupé dans une incise (« ${tx0.slice(-40)} »)`);
     if (/^[A-ZÀ-Ý][a-zà-ÿ]+(?:ée?s?|ie?s?|ue?s?|ite?s?)\s+(?:par|avec|selon)\b/.test(tx0) && !/^(?:Une?|Les?|La|Chaque|Toute?s?)\b/.test(tx0)) out.push(`${n0} : texte sans sujet (« ${tx0.slice(0, 30)}… »)`);
@@ -1852,7 +1862,8 @@ export function anomaliesSchemaBloc1(spec: { gabarit?: string; params?: any } | 
     // des deux postes : … »), dernière étape comprise.
     const sansArticle = (x: string) => norm(x).replace(/^(?:le|la|les|l|un|une|des|du)\s+/, '');
     if (ti.length >= 4 && (norm(t).startsWith(ti) || sansArticle(t).startsWith(sansArticle(String(e?.titre || ''))))) out.push(`${n} : le texte redit le titre`);
-    if (/\bblocs?\s+\d/i.test(t) || INTERNE.test(`${e?.titre || ''} ${t}`)) out.push(`${n} : renvoi ou repère interne dans le schéma`);
+    // (« Développé dans la partie 2 », « Développée dans la partie 3 « Moyens… » », imm 1883, T8-CONS-9)
+    if (/\bblocs?\s+\d|\bparties?\s+\d|^d[ée](?:velopp|taill)[ée]e?s?\s+(?:dans|au|à)\b/i.test(t) || INTERNE.test(`${e?.titre || ''} ${t}`)) out.push(`${n} : renvoi ou repère interne dans le schéma`);
   });
   for (let i = 1; i < etapes.length; i++) {
     const a = pleins(String(etapes[i - 1]?.titre || '')), b = pleins(String(etapes[i]?.titre || ''));
@@ -2108,7 +2119,16 @@ export function libelleExigenceBloc1(besoin: string, citation: string, max = MAX
   // Régulations », « Interventions seront effectuées », « 10 jours », « … du lundi », « … à compter ») ; sinon le libellé tiré
   // de la structure de la citation (libellesStructures : sujet et délai, objet de l'action de l'acteur), puis le sujet du
   // besoin, puis la rubrique de GSS qui y répond avec le délai.
-  const ok = (t: string) => libelleBloc1Valide(t, max);
+  // (T8N-5 : groupe « A du B » absent de la citation alors que A et B y sont, séparés par une autre tête : « Copie du canidé »
+  // pour « une copie des documents règlementaires du canidé » ; jamais un génitif sans sa tête)
+  const genitifFidele = (t: string): boolean => {
+    const g = /^(\p{L}{3,})\s+(du|de\s+la|de\s+l['’]|des)\s*(\p{L}{3,})/iu.exec(t.replace(/\s+sous\s.*$/i, ''));
+    if (!g) return true;
+    const cn = normaliser(c), a = normaliser(g[1]), bb = normaliser(g[3]);
+    if (!cn.includes(a) || !cn.includes(bb)) return true;
+    return new RegExp(`(?<![a-z])${a}s?\\s+${normaliser(g[2]).replace(/\s+/g, '\\s+')}\\s*${bb}`).test(cn);
+  };
+  const ok = (t: string) => libelleBloc1Valide(t, max) && genitifFidele(t);
   // Le sujet acteur n'est retiré que s'il est en tête (jamais « le personnel » dans « … dans les 2 heures »), avec son
   // complément (« Le Titulaire du marché met… »), et le verbe retiré n'est qu'un verbe (jamais l'article « de »).
   const acteurTete = new RegExp(`^${ACTEUR_SUJET.source.slice(1)}(?:\\s+(?:du|de\\s+la|de\\s+l['’]|des)\\s*(?:march[ée]|contrat|prestation|lot|accord-cadre)(?=\\s|$))?`, 'i');
@@ -2137,6 +2157,8 @@ export function libelleExigenceBloc1(besoin: string, citation: string, max = MAX
     return precise || avecDelai || tc;
   }
   for (const s of libellesStructures(c, max)) if (ok(s)) return s;
+  // Groupe nominal entier tiré de la citation (T8N-5), avant les replis plus faibles (sujet du besoin, rubrique de GSS) :
+  for (const s of groupesNominauxCitation(c, max)) if (ok(s)) return s;
   if (sujet && ok(sujet)) return sujet;
   const dernier = nominal(titreExigence(b || c, max));
   if (ok(dernier)) return dernier;
@@ -2145,6 +2167,41 @@ export function libelleExigenceBloc1(besoin: string, citation: string, max = MAX
   const dansLeDelai = !/(?:avant|apr[èe]s|au\s+moins|au\s+minimum|a\s+minima)/i.test(c);
   for (const s of [rub && dureeC && dansLeDelai ? `${rub} sous ${dureeC}` : '', rub]) if (s && ok(s)) return s;
   return '';
+}
+
+/**
+ * Groupes nominaux entiers d'une citation du CCTP pour le libellé EXIGENCE (T8N-5), sans complément de tête : « À Villejuif et
+ * Thiais : présence permanente d'un SSIAP 1, … » → « Présence permanente d'un SSIAP 1 » ; « Agents de chaque site : secourisme à
+ * jour (AFPS…) » → « Secourisme à jour » ; « … doit détenir un SSIAP 2 à jour depuis moins de 3 ans » → « SSIAP 2 de moins de 3
+ * ans » ; « Disposer d'une carte professionnelle en cours de validité, … » → « Carte professionnelle en cours de validité » ;
+ * « En cas de défaillance…, le délai de remplacement est de 24 heures maximum » → « Remplacement sous 24 heures » ; « Réaliser
+ * une ronde de fermeture … » → « Ronde de fermeture ».
+ */
+export function groupesNominauxCitation(citation: string, max = MAX_LIBELLE_EXIGENCE): string[] {
+  const c = String(citation || '').replace(/\s*\[…\]\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  const out: string[] = [];
+  const maj = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+  const net = (x: string) => x.replace(/\s*\([^)]*\)/g, '').replace(/[\s,;:.]+$/, '').trim();
+  const sansDet = (x: string) => x.replace(/^(?:(?:le|la|les|un|une|des|du)\s+|l['’]\s*)/i, '');
+  const coupe = (x: string) => { const y = net(x.split(/\s*[,;(]\s*/)[0]); return y.length <= max ? y : ''; };
+  // « Libellé : groupe nominal » (lieu, acteur ou site en tête).
+  const dp = /^[^:]{2,60}:\s*(.+)$/.exec(c);
+  if (dp && !/^(?:[àa]|au|aux|en|sur|dans|pour|par|de|du|des|d['’])\s/i.test(dp[1])) { const g = coupe(sansDet(dp[1])); if (g) out.push(maj(g)); }
+  // « En cas de …, le délai de X est de N » : « X sous N ».
+  const dl = /(?:le|un)\s+d[ée]lai\s+(?:de|d['’])\s*(\p{L}[\p{L}\s'’-]{2,30}?)\s+(?:est|sera)\s+(?:fix[ée]\s+[àa]\s+)?(?:de\s+)?(\d{1,3})\s*(minutes?|heures?|jours?(?:\s+ouvr[ée]s)?)/iu.exec(c);
+  if (dl) out.push(maj(`${sansDet(dl[1].trim())} sous ${dl[2]} ${dl[3].toLowerCase()}`));
+  // Objet d'une obligation de détention ou de disposition (« détenir un SSIAP 2 à jour depuis moins de 3 ans »).
+  const ob = /(?:d[ée]tenir|disposer\s+d(?:['’]|e\s+|u\s+|es\s+)|[êe]tre\s+titulaires?\s+d(?:['’]|e\s+|u\s+|es\s+)|poss[ée]der|justifier\s+d(?:['’]|e\s+|u\s+|es\s+))\s*(?:un\s+|une\s+|des\s+|le\s+|la\s+|les\s+|l['’]\s*)?(.+)$/i.exec(c);
+  if (ob) {
+    let g = net(ob[1].split(/\s*[,;(]\s*/)[0]).replace(/\s+[àa]\s+jour\s+depuis\s+moins\s+de\s+/i, ' de moins de ').replace(/\s+datant\s+de\s+moins\s+de\s+/i, ' de moins de ');
+    g = g.replace(/\s+(?:et|ou)\s+(?:[êe]tre|pr[ée]senter|fournir)\b.*$/i, '');
+    if (g.length > max) g = g.replace(/\s+(?:de\s+moins\s+de|en\s+cours\s+de|pour|afin).*$/i, '');
+    if (g && g.length <= max) out.push(maj(g));
+  }
+  // Infinitif en tête (« Réaliser une ronde de fermeture du lundi… ») : son objet (« Ronde de fermeture »).
+  const inf = /^(?:r[ée]aliser|effectuer|assurer|organiser|mettre\s+en\s+(?:place|œuvre|oeuvre)|fournir|transmettre|remettre|tenir|garantir)\s+(?:[àa]\s+(?:chaque|tous\s+les|toutes\s+les|l['’]|la|le|les)\s*[\p{L}'’-]+\s+)?(?:un\s+|une\s+|des\s+|le\s+|la\s+|les\s+|l['’]\s*)?(.+)$/iu.exec(c);
+  if (inf) { const g = coupe(inf[1].replace(/\s+(?:du\s+(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)|chaque|tous\s+les|toutes\s+les|entre|de\s+\d|à\s+\d|à\s+chaque)\b.*$/i, '')); if (g) out.push(maj(g)); }
+  return [...new Set(out)].filter((x) => x.split(/\s+/).length >= 2);
 }
 
 /** Nombre écrit en capitales (« les UNE (1) heure », « DEUX (2) heures ») : jamais dans un libellé. */
@@ -2178,8 +2235,18 @@ export function libelleBloc1Valide(t: string, max = MAX_LIBELLE_EXIGENCE): boole
   if ((x.match(/\(/g) || []).length !== (x.match(/\)/g) || []).length || (x.match(/«/g) || []).length !== (x.match(/»/g) || []).length) return false;
   // Coordination coupée dans un complément (« SST ou du PSC1 », tiré de « titulaire du SST ou du PSC1 ») : le second membre a
   // l'article « du / de la / des » que le premier n'a pas.
-  const coord = /^(.+?)\s(?:ou|et)\s+(?:du|de\s+la|de\s+l['’]|des)\s/iu.exec(x);
+  // (T8N-5 : « Défaillance ou de perte d'un matériel » : second membre en « de »)
+  const coord = /^(.+?)\s(?:ou|et)\s+(?:du|de\s+la|de\s+l['’]|des|de)\s/iu.exec(x);
   if (coord && !/(?<![\p{L}])(?:de|du|des|d['’])/iu.test(coord[1])) return false;
+  // Coordination sans tête après une virgule (« 3 rondes de nuit, et les jours de fermeture »).
+  if (/,\s+(?:et|ou)\s+(?:les?|la|l['’]|des|du)\s/iu.test(x)) return false;
+  // Locution ou groupe inachevés en fin de libellé (T8N-5 : « … à jour depuis moins », « … en cours », « présence permanente
+  // d'un »).
+  if (/(?:^|\s)(?:depuis\s+moins|depuis|moins|plus|en\s+cours|jusqu['’]|sans|hormis|sauf)$/i.test(x) || /(?:^|\s)(?:d|l)['’](?:un|une)$/i.test(x)) return false;
+  // Participe en tête (« Affecté, même ponctuellement, aux prestations ») : jamais un groupe nominal.
+  if (/^\p{L}+(?:é|ée|és|ées),/u.test(x)) return false;
+  // Participe final sans complément dans un libellé long (« Fournir à chaque agent un téléphone utilisé »).
+  if (x.split(' ').length >= 4 && /(?<![\p{L}])\p{L}{3,}(?:é|ée|és|ées)$/u.test(x) && /(?:^|\s)(?:un|une|des|le|la|les|l['’])\s*\p{L}+\s+\p{L}+$/iu.test(x)) return false;
   // Lieu ou objet de tête suivi d'une virgule et d'un infinitif (« Les jardins et cours, organiser les rondes ») : jamais un
   // groupe nominal.
   if (/,\s+\p{L}{3,}(?:er|ir|re)\s+(?:les?|la|l['’]|des|une?|du|d['’]|son|sa|ses|leur|leurs)(?![\p{L}])/iu.test(x)) return false;
@@ -2874,10 +2941,24 @@ export function etapesDesPuces(texte: string, phraseDe?: (titreRubrique: string)
   // Titre coupé qui perd le complément de son nom (T6-CONS-14 : « L'ensemble du système » pour « L'ensemble du système de
   // surveillance à distance ») : « L'ensemble du / La totalité des » retiré d'abord (« Système de surveillance à distance »).
   const SANS_ENSEMBLE = /^(?:l['’]ensemble|la\s+totalit[ée]|l['’]int[ée]gralit[ée])\s+(?:du|de\s+la|de\s+l['’]|des)\s*/i;
-  const titreDe = (c: { x: string; citation: boolean }) => {
+  // Titre tiré de la réponse de GSS quand l'exigence ne donne qu'un mot isolé (imm 1883, T8-CONS-9 : « Faite » pour « … répondre
+  // favorablement à la demande faite par téléphone… ») : l'objet que GSS traite, avec le délai de l'exigence (« Besoins
+  // ponctuels sous 24 h »).
+  const titreDepuisReponse = (y: string, x: string): string => {
+    const m = /^\s*nous\s+[a-zà-ÿ]+\s+(?:les?\s+|la\s+|l['’]\s*|des\s+|du\s+|nos\s+|notre\s+)?([^,;.«»]{4,34}?)(?=\s+(?:selon|avec|par|pour|dans|sur|en|afin|de\s+fa[çc]on|d[èe]s|sous|qui|que)\b|[,;.]|$)/i.exec(y);
+    if (!m || pleinsDe(m[1]).length < 2) return '';
+    const d = /(\d{1,3})\s*(h(?:eures?)?|minutes?|min|jours?(?:\s+ouvr[ée]s)?)(?![\p{L}])/iu.exec(x);
+    const unite = d ? (/^h/i.test(d[2]) ? 'h' : /^min/i.test(d[2]) ? 'min' : d[2].toLowerCase()) : '';
+    const t = `${m[1].charAt(0).toUpperCase()}${m[1].slice(1)}${d ? ` sous ${d[1]} ${unite}` : ''}`;
+    return t.length <= 40 ? t : '';
+  };
+  const PARTICIPE_SEUL = /^[A-ZÀ-Ýa-zà-ÿ]+(?:é|ée|és|ées|aite?s?|uite?s?|ite?s?|ise?s?|ie|ies|ue|ues)$/;
+  const titreDe = (c: { x: string; y?: string; citation: boolean }) => {
     const x = c.x.replace(SANS_ENSEMBLE, (m) => (m ? '' : m)).replace(/^./, (ch) => ch.toUpperCase());
     const cc = { ...c, x };
-    return citationTitre(cc) || avecValeur(x, nominal(x)) || avecValeur(x, titreExigence(x));
+    const t0 = citationTitre(cc) || avecValeur(x, nominal(x)) || avecValeur(x, titreExigence(x));
+    if (t0 && (/\s/.test(t0) || !PARTICIPE_SEUL.test(t0))) return t0;
+    return titreDepuisReponse(String(c.y || ''), x) || '';
   };
   for (const c of [...ordre.filter((x) => titreDe(x)), ...ordre.filter((x) => !titreDe(x))]) {
     if (etapes.length >= 3) break;
@@ -3150,7 +3231,10 @@ export function specSecoursBesoin(texte: string, phraseDe?: (titreRubrique: stri
     // arrêté avant un complément ; jamais coupé au milieu d'un groupe (imm 473 : « 1er poste : chef d'équipe ou agent »).
     const brutPoste = String(c[1] || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
     const apresDeuxPoints = (/^[^:]{1,30}\s:\s(.+)$/.exec(brutPoste) || [])[1] || '';
-    const poste = brutPoste.length <= 34 ? brutPoste : apresDeuxPoints && apresDeuxPoints.length <= 34 ? apresDeuxPoints : titreExigence(apresDeuxPoints || brutPoste);
+    // (intitulé de poste jamais coupé dans son complément, imm 1883, T8-CONS-9 : « Chef d'équipe ou agent N1 au poste » sans « de
+    // sécurité » : le poste avant son complément de lieu, « Chef d'équipe ou agent N1 »)
+    const sansLieu = (x: string) => { const m = /^(.{6,34}?)\s+(?:au|aux|à\s+la|à\s+l['’]|du|de\s+la|sur|en)\s/i.exec(x); return m && x.length > 34 && m[1].split(/\s+/).length >= 2 ? m[1] : ''; };
+    const poste = brutPoste.length <= 34 ? brutPoste : apresDeuxPoints && apresDeuxPoints.length <= 34 ? apresDeuxPoints : sansLieu(apresDeuxPoints || brutPoste) || titreExigence(apresDeuxPoints || brutPoste);
     const horaires = texteEtapeEntier(String(c[2] || '').replace(/\*\*/g, ''));
     if (!poste || pleinsDe(poste).length < 1 || !horaires || horaires.split(/\s+/).length < 3 || INTERNE.test(l)) continue;
     // Renfort en option (imm 701 : « Option 1 : 1 SSIAP 1 ») : pas une étape du process de la prestation demandée.
