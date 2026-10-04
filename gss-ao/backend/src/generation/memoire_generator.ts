@@ -26,7 +26,7 @@ import {
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, questionRondes, casPratiqueRepris, type Dimensionnement } from './dimensionnement';
 import { ajoutsAuTexteDeGss,
   type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, phrasesThematiques, completerParThematiques, completerMailUnique, COLONNE_VALEUR, colonneCase, sansPseudoTableau, textesSchemaSvg, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
-  consigneRepartition, lireRepartition, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
+  consigneRepartition, lireRepartition, placeElementRC, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, completerDelaisCadre, ordonnerSelonReponse, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
   controlerFaitsNouveauxCadre, type SourcesFaitsCadre, type CandidatReference, motifRefusHarmonisation, completerSousTitresVides, retablirLignesLibelle, attendusDuChamp, attendusSansReponse,
@@ -1480,13 +1480,13 @@ export function questionAjoutRefuse(phraseIA: string, extrait: string): string {
  * T6N-6) : schéma prévu par le mémoire type, rubrique « besoin » (schéma de process, consigne 3) ou proposition ; la
  * compréhension du besoin en tête. Une rubrique sans schéma prévu (introduction des références) n'est pas comptée.
  */
-export function rubriquesSansSchema(plan: PlanMemoireType, ajouts: Array<{ id: string; title: string }>, textes: Record<string, string>, schemas: Map<string, string>): Array<{ id: string; titre: string; besoin: boolean }> {
+export function rubriquesSansSchema(plan: PlanMemoireType, ajouts: Array<{ id: string; title: string; emplacementRC?: boolean }>, textes: Record<string, string>, schemas: Map<string, string>): Array<{ id: string; titre: string; besoin: boolean }> {
   const out: Array<{ id: string; titre: string; besoin: boolean }> = [];
   for (const r of plan.rubriques) {
     if (!(textes[r.id] || '').trim() || schemas.has(CLE_SCHEMA(r.id))) continue;
     if (r.mode === 'besoin' || r.schema) out.push({ id: r.id, titre: r.titre, besoin: r.mode === 'besoin' });
   }
-  for (const a of ajouts) if ((textes[a.id] || '').trim() && !schemas.has(CLE_SCHEMA(a.id))) out.push({ id: a.id, titre: a.title, besoin: false });
+  for (const a of ajouts) if (!a.emplacementRC && (textes[a.id] || '').trim() && !schemas.has(CLE_SCHEMA(a.id))) out.push({ id: a.id, titre: a.title, besoin: false });
   return out.sort((a, b) => Number(b.besoin) - Number(a.besoin));
 }
 
@@ -1609,6 +1609,32 @@ export function questionOuverte(q: string): string {
  * réponse (D5) est retirée ; deux questions sur le même sujet n'en font qu'une (sources réunies). Les lignes formulées sans
  * modèle et les questions rattachées à un repère du texte sont toujours gardées.
  */
+/**
+ * Question sans citation déjà traitée par le mémoire (T6-CONS-15 : « Quelle sera la fréquence des contrôles sur site ? » alors que
+ * le mémoire imprime « contrôle de fond une fois par mois, contrôles inopinés une à trois fois par mois » ; « Quel plan de
+ * remplacement prévoyez-vous… ? » sous les rubriques « Le remplacement d'un agent absent ») : la donnée qu'elle demande est
+ * cherchée dans les titres et les phrases du mémoire. Fréquence : une phrase qui nomme l'objet avec une fréquence ; donnée
+ * chiffrée (délai, nombre, durée…) : une phrase qui nomme l'objet avec un nombre ; plan, procédure, organisation : un titre
+ * qui nomme l'objet. Jamais pour une personne ou des coordonnées.
+ */
+export function questionCouverteParLeMemoire(q: string, texte: string): boolean {
+  if (/«/.test(q) || !texte) return false;
+  const m = /^(?:Quel(?:le)?s?\s+(?:sera|seront|est|sont)\s+|Quel(?:le)?s?\s+)(.+?)(?:\s+(?:pr[ée]voyez|proposez|mettez|envisagez|comptez|assurez|appliquez|retenez|organisez|utilisez)-vous\b.*)?\s*\?\s*$/i.exec(String(q || '').trim());
+  if (!m) return false;
+  const objet = normaliser(m[1]).replace(/[^a-z0-9 ]+/g, ' ');
+  if (/\b(?:nom|noms|identite|coordonnees|interlocuteur|telephone|adresse|responsable|qui)\b/.test(objet)) return false;
+  const VIDES = new Set(['frequence', 'periodicite', 'plan', 'procedure', 'procedures', 'organisation', 'modalites', 'methode', 'methodologie', 'dispositif', 'nature', 'liste', 'site', 'sites', 'prevue', 'prevu', 'mise', 'place', 'delai', 'delais', 'nombre', 'duree', 'cadre', 'mesures', 'moyens', 'votre', 'notre', 'pour', 'avec', 'dans', 'sera', 'sont']);
+  const mots = objet.split(/\s+/).filter((w) => w.length >= 4 && !VIDES.has(w) && !['des', 'les', 'une', 'aux'].includes(w)).map((w) => w.slice(0, 6));
+  if (!mots.length) return false;
+  const n = (t: string) => normaliser(t).replace(/[^a-z0-9 ]+/g, ' ');
+  const titres = [...String(texte).matchAll(/^#{1,4}\s+(.+)$/gm)].map((x) => n(x[1]));
+  const phrases = String(texte).split(/(?<=[.!?;])\s+|\n+/).map(n);
+  const nomme = (t: string) => mots.every((w) => t.includes(w));
+  if (/\b(?:frequence|periodicite)\b/.test(objet)) return phrases.some((p) => nomme(p) && /\b(?:une?|deux|trois|quatre|cinq|six|\d+)\s+(?:a\s+(?:deux|trois|quatre|cinq|\d+)\s+)?fois\s+par\b|\bchaque\s+(?:jour|nuit|semaine|mois|trimestre|semestre|annee)|\b(?:hebdomadaire|mensuel|trimestriel|semestriel|annuel|quotidien)/.test(p));
+  if (/\b(?:delai|delais|nombre|duree|effectif|montant|taux|date|heure|horaires?)\b/.test(objet)) return phrases.some((p) => nomme(p) && /\d/.test(p));
+  return titres.some(nomme);
+}
+
 export function sansQuestionsRedites<T extends { question: string; sources?: number[] }>(qs: T[], o: { prioritaires?: string[]; exigencesProposees?: string[]; texteMemoire?: string; garder?: (q: T) => boolean } = {}): T[] {
   const prioritaires = (o.prioritaires || []).filter(Boolean);
   const clesPrioritaires = new Set(prioritaires.flatMap(cleDonnee));
@@ -1628,6 +1654,8 @@ export function sansQuestionsRedites<T extends { question: string; sources?: num
       const d = doc ? normaliser(doc[1].replace(/^(?:le|la|les|l['’]|un|une|des)\s*/i, '')).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim() : '';
       if (d && d.split(' ').length >= 3 && memoire.includes(d)) continue;
     }
+    // Question sans citation dont la donnée est déjà dans les titres ou les phrases du mémoire (T6-CONS-15).
+    if (!fixe && !prioritaires.includes(q.question) && o.texteMemoire && questionCouverteParLeMemoire(q.question, o.texteMemoire)) continue;
     // Exigence déjà traitée par un engagement ou une phrase du mémoire (T3N-4, parc_expo 1331 : « Quelle organisation
     // prévoyez-vous pour que l'agent cynophile garde les extérieurs… ? » alors que l'engagement est imprimé).
     if (!fixe && !prioritaires.includes(q.question) && o.texteMemoire) {
@@ -1845,6 +1873,22 @@ export function memeDemande(a: string, b: string): boolean {
  * que GSS ne sous-traite pas) ou exigence conditionnelle qui ne s'applique pas à GSS (« en cas de recours à… »). L'exigence
  * reste alors traitée par les questions à GSS (écart non couvert). Renvoie le motif du refus, ou '' si la puce est gardée.
  */
+/**
+ * Engagement sans les propositions qui renvoient aux sanctions de l'acheteur (T6-CONS-10 : « GSS mobilisera un agent d'astreinte…,
+ * dans un délai de 30 minutes ; au-delà de 30 minutes d'attente, les dispositions des articles 10 et 15 du CCAP s'appliqueront »
+ * → « GSS mobilisera un agent d'astreinte…, dans un délai de 30 minutes. ») : pénalités, carences, sanctions, réfactions,
+ * « au-delà de … », articles du CCAP qui « s'appliqueront », faculté de l'acheteur d'appliquer une sanction. '' s'il ne reste rien.
+ */
+export function sansClauseSanction(x: string): string {
+  const SANCTION = /p[ée]nalit|carences?|sanctions?|r[ée]factions?|retenues? sur|au-del[àa]\s+(?:de|d['’]|du)|s['’]appliquer(?:a|ont)|(?:applique|appliquera|appliquer)\s+(?:les?\s+)?(?:dispositions|p[ée]nalit|sanctions|r[ée]factions)|articles?\s+[\d.,\s]+(?:et\s+[\d.]+\s+)?du\s+C\.?C\.?A\.?P\.?[^.;]{0,40}(?:s['’]appliqu|applicables?)/i;
+  const t = String(x || '').trim();
+  if (!SANCTION.test(t)) return t;
+  const fin = (/[.!]\s*$/.exec(t) || [''])[0].trim() || '.';
+  const props = t.replace(/[.!]\s*$/, '').split(/\s*;\s*|(?<=[.!])\s+(?=[A-ZÀ-Ý])/).filter((p) => p.trim() && !SANCTION.test(p));
+  if (!props.length) return '';
+  return `${props.join(' ; ').replace(/[\s,;:]+$/, '')}${fin}`;
+}
+
 export function motifRefusEngagement(x: string): string {
   const t = String(x || '');
   if (PIECES_OFFRE.test(t)) return 'pièce de l\'offre';
@@ -2921,6 +2965,79 @@ export function questionJalons(questions: Set<string>, exigence: string, section
   questions.add(q);
   return q;
 }
+/**
+ * Suppressions des répétitions entre rubriques désignées par le modèle (dedoublonnerRubriques), appliquées sans modèle :
+ * seuls les extraits retrouvés mot pour mot, jamais une phrase dont la suivante dépend (pronom, possessif, connecteur, groupe
+ * nominal de reprise « L'outil… », T6-CONS-5), jamais une partie d'une énumération (retirée en entier avec son introduction, ou
+ * pas du tout), jamais le texte de référence de GSS. Renvoie le nombre de passages retirés ; `sections` est modifié.
+ */
+export function appliquerSuppressionsRepetitions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, ids: string[], liste: any, intouchables: string[] = [], references: Record<string, string> = {}): number {
+  let n = 0;
+  // Extraits désignés par rubrique : une énumération n'est retirée qu'en entier, avec sa phrase d'introduction (T6-CONS-5).
+  const designes = new Map<string, Set<string>>();
+  for (const s of Array.isArray(liste) ? liste : []) { const id = String(s?.id || ''); if (!designes.has(id)) designes.set(id, new Set()); designes.get(id)!.add(String(s?.extrait || '').trim()); }
+  for (const s of Array.isArray(liste) ? liste : []) {
+    const id = String(s?.id || ''), extrait = String(s?.extrait || '').trim(), garde = String(s?.garde || '');
+    if (!ids.includes(id) || intouchables.includes(id) || id === garde || !ids.includes(garde) || extrait.length < 30 || /⟦AC:|CONSULTATION REQUISE/i.test(extrait)) continue;
+    // Extrait qui traverse une fin de ligne ou un sous-titre en gras : jamais retiré (ifits 171 : sous-titres collés).
+    if (/\n|\*\*/.test(extrait)) continue;
+    const t = sections[id];
+    if (!t.includes(extrait)) continue;
+    // Rubrique « à adapter » : son texte de référence GSS publiposté ne s'élague jamais (D7) ; seuls les ajouts de
+    // l'adaptation et du contrôle de couverture peuvent être retirés (ifits 171 : 42 % du texte de GSS restant).
+    const ref = references[id];
+    if (ref && fidelite(extrait, ref) >= 0.8) continue;
+    // La phrase suivante renvoie à celle-ci (« Ces vacations… », « Elle constitue… ») : on la garde, sinon
+    // la suivante devient orpheline.
+    const suite = t.slice(t.indexOf(extrait) + extrait.length).replace(/^[\s.;:]+/, '');
+    if (/^(?:Ces|Ce|Cet|Cette|Ils|Elles|Il|Elle|Celle|Celui|Ceux|Celles|Lui|Leur|Leurs|Là|Ainsi|De plus|En outre)\b/.test(suite)) continue;
+    // Reprise par un groupe nominal défini (T6-CONS-5 : « GSS organise les vacations avec le logiciel de planification
+    // Comète. » puis « L'outil intègre les obligations… ») : nom générique de reprise, ou nom déjà écrit dans l'extrait.
+    const tete = /^(?:Le|La|Les|L['’])\s*([A-Za-zÀ-ÿ-]+)/.exec(suite);
+    if (tete && (/^(?:outils?|logiciels?|applications?|dispositifs?|syst[èe]mes?|proc[ée]dures?|plateformes?|documents?|registres?|programmes?|d[ée]marches?|m[ée]thodes?|solutions?|modules?|supports?|tableaux?|rapports?|livrets?|guides?|process(?:us)?|[ée]quipes?|agents?|services?|outillages?|mesures?|organisations?|r[ée]unions?|contr[ôo]les?|formations?|partenaires?|prestataires?|actions?|[ée]tapes?)$/i.test(tete[1]) || normaliser(extrait).includes(normaliser(tete[1]).slice(0, 6)))) continue;
+    // Reprise dans la première proposition de la phrase suivante, après un complément (« Pour les sites normands du marché,
+    // son délai d'arrivée… »), ou connecteur dans cette phrase (« Les prestations … sont donc exécutées … ») : la phrase
+    // suivante dépend de celle-ci, elle est gardée (s2e 1501, T5N-4).
+    const phraseSuivante = (suite.split(/(?<=[.!?])\s+/)[0] || '').slice(0, 400);
+    if (/^[^.!?]{0,90}?(?<![\p{L}])(?:son|sa|ses|leur|leurs|il|elle|ils|elles|lui|celui-ci|celle-ci|ceux-ci|celles-ci)(?![\p{L}])/iu.test(phraseSuivante)
+      || /(?<![\p{L}])(?:donc|par cons[ée]quent|en cons[ée]quence|de ce fait|d[èe]s lors)(?![\p{L}])/iu.test(phraseSuivante)) continue;
+    // Phrase qui porte la réponse au sujet de sa rubrique (mots du titre : « GSS n'envisage pas de recourir à la
+    // sous-traitance… » sous « Sous-traitance du service public », T5N-4) : jamais retirée.
+    const titreRub = rubriques.find((x) => x.id === id)?.title || '';
+    const pleinsTitre = normaliser(titreRub).replace(/[^a-z0-9 -]+/g, ' ').split(/\s+/).filter((w) => w.length >= 5 && !/^(?:votre|notre|leurs?|dans|pour|avec|selon|entre)$/.test(w));
+    const ex = normaliser(extrait);
+    if (pleinsTitre.length && (ex.includes(pleinsTitre[0].slice(0, 7)) || pleinsTitre.filter((w) => ex.includes(w.slice(0, 7))).length >= Math.min(2, pleinsTitre.length))) continue;
+    // Retire la puce entière, sinon la phrase seule. Puce d'une énumération introduite par « … : » : jamais une partie des
+    // puces (« une procédure de recrutement en plusieurs étapes : » suivie d'une seule puce) ; l'énumération part en entier,
+    // avec son introduction, seulement si toutes ses puces sont des redites (T6-CONS-5). Introduction seule : gardée.
+    const lignes = t.split('\n');
+    const k = lignes.findIndex((l) => l.replace(/^\s*[-*•]\s*/, '').trim() === extrait);
+    const estPuce = k >= 0 && /^\s*[-*•]\s/.test(lignes[k]);
+    if (!estPuce && /:\s*$/.test(extrait)) continue;
+    let debutListe = k, finListe = k;
+    if (estPuce) { while (debutListe > 0 && /^\s*[-*•]\s/.test(lignes[debutListe - 1])) debutListe--; while (finListe + 1 < lignes.length && /^\s*[-*•]\s/.test(lignes[finListe + 1])) finListe++; }
+    const intro = estPuce && debutListe > 0 && /:\s*$/.test(lignes[debutListe - 1]) ? debutListe - 1 : -1;
+    let nouveau: string;
+    if (estPuce && finListe > debutListe) {
+      const puces = lignes.slice(debutListe, finListe + 1).map((l) => l.replace(/^\s*[-*•]\s*/, '').trim());
+      if (!puces.every((p) => designes.get(id)?.has(p))) continue;
+      const de = intro >= 0 ? intro : debutListe;
+      nouveau = [...lignes.slice(0, de), ...lignes.slice(finListe + 1)].join('\n');
+      for (const p of puces) designes.get(id)?.delete(p);
+    } else if (estPuce) {
+      // Puce unique sous une introduction « … : » : l'introduction part avec elle.
+      nouveau = [...lignes.slice(0, intro >= 0 ? intro : k), ...lignes.slice(k + 1)].join('\n');
+    } else nouveau = t.replace(extrait, '').replace(/ {2,}/g, ' ').replace(/\n[ \t]+\n/g, '\n\n');
+    // Sous-titres restés sans contenu.
+    nouveau = nouveau.replace(/^#{2,4}\s+.+\n+(?=#{2,4}\s|$(?![\s\S]))/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+    if (nouveau.split(/\s+/).length < 120) continue; // jamais au point de vider la rubrique
+    if (ref && fidelite(ref, nouveau) < SEUIL_FIDELITE) continue; // contrôle final de la fidélité (D7)
+    sections[id] = nouveau;
+    n++;
+  }
+  return n;
+}
+
 export class MemoireGenerator {
   private openai: OpenAI;
   private responseDir: string;
@@ -8517,12 +8634,21 @@ RÈGLES DE FORME (rendu Marp) :
     // RC ; chaque rubrique du mémoire type va dans la partie qui la reçoit (répartition du format court, rubriques que le
     // modèle ne place pas gardées dans leur bloc d'origine) ; un élément attendu qu'aucune rubrique ne traite est demandé à GSS.
     const questionsRC: string[] = [];
+    /** Sous-éléments numérotés du RC qu'aucune rubrique ne traite : un emplacement à leur place (T6-CONS-11). */
+    const elementsRCSansRubrique: Array<{ partie: PartieRC; element: string; cle: string; apres: string }> = [];
     if (planImpose?.length) {
       const repRC = lireRepartition((await this.callOpenAI(consigneRepartition(mt, plan, planImpose), 0.1, 'Plan imposé par le RC : répartition du mémoire type', true, 'analyse')) || '', mt, plan, planImpose);
       const secondaires = new Set(repRC.source === 'modele' ? repRC.secondaires : []);
       const parPartie = Object.fromEntries(Object.entries(repRC.parPartie).map(([k, l]) => [k, l.filter((id) => !secondaires.has(id))]));
       Object.assign(plan, planSelonRC(plan, planImpose, parPartie));
-      for (const p of planImpose) for (const e of repRC.nonCouverts[p.id] || []) questionsRC.push(`Pièce attendue par le règlement de consultation (partie « ${p.title} ») qu'aucune rubrique du mémoire type ne traite : « ${e} ». Quelle réponse GSS y apporte-t-elle ?`);
+      for (const p of planImpose) for (const e of repRC.nonCouverts[p.id] || []) {
+        // Sous-élément numéroté du RC sans rubrique : il garde sa place dans la partie, avec son emplacement et sa question
+        // (T6-CONS-11) ; sinon la question seule.
+        const bloc = plan.blocs.find((b) => b.id === `rc_${p.id}`);
+        const apres = bloc ? placeElementRC(mt, p, e, bloc.rubriques) : null;
+        if (bloc && apres) { elementsRCSansRubrique.push({ partie: p, element: e, cle: bloc.cle, apres }); continue; }
+        questionsRC.push(`Pièce attendue par le règlement de consultation (partie « ${p.title} ») qu'aucune rubrique du mémoire type ne traite : « ${e} ». Quelle réponse GSS y apporte-t-elle ?`);
+      }
     }
     const mtParId = new Map(mt.rubriques.map((r) => [r.id, r]));
     console.log(`[MemoireGenerator] Plan v2 : ${plan.blocs.map((b) => `${b.cle} ${b.titre} (${b.rubriques.length})`).join(' | ')} ; ${plan.exclues.length} rubrique(s) écartée(s) par leur condition.`);
@@ -8721,6 +8847,15 @@ RÈGLES DE FORME (rendu Marp) :
       ajouts.push(...propositions.filter((a): a is AjoutLibre => !!a));
       console.log(`[MemoireGenerator] Questions nouvelles : ${ajouts.length} proposition(s) de réponse (${ajouts.map((a) => a.title).join(' ; ')}).`);
     }
+    // Élément attendu par le RC sans rubrique (T6-CONS-11) : rubrique à sa place, réduite à l'emplacement de la donnée et à sa
+    // question ; aucun texte n'est inventé.
+    for (const x of elementsRCSansRubrique) {
+      const idsPris = new Set([...mt.rubriques.map((r) => r.id), ...Object.keys(sections)]);
+      const id = idProposition(`rc ${x.element}`, idsPris);
+      const libelle = x.element.replace(/[\s.;:]+$/, '');
+      sections[id] = `${libelle} : [À COMPLÉTER].\n[CONSULTATION REQUISE : Pièce attendue par le règlement de consultation (partie « ${x.partie.title} ») qu'aucune rubrique du mémoire type ne traite : « ${libelle} ». Quelle réponse GSS y apporte-t-elle ?]`;
+      ajouts.push({ id, chapter: x.cle, title: libelle.charAt(0).toUpperCase() + libelle.slice(1), apres: x.apres, emplacementRC: true });
+    }
 
     // ── 7. Couverture : une exigence qu'une rubrique ne traite pas devient un engagement (puce) ──
     progres(62, 'Contrôle de couverture des exigences du CCTP…');
@@ -8861,7 +8996,8 @@ RÈGLES DE FORME (rendu Marp) :
       prioritaires: enPlace.map((e) => e.question || '').filter(Boolean),
       exigencesProposees: [...enProposition].map((e) => String(e.exigence || '')).filter(Boolean),
       // Texte des réponses de GSS, sans la compréhension du besoin (qui cite le CCTP sans y répondre).
-      texteMemoire: Object.entries(sections).filter(([id]) => !/b1_|comprehension/i.test(id)).map(([, t]) => t).join('\n\n').replace(REPERE_RE, ''),
+      // (titres des rubriques compris : une question sur le remplacement est traitée par « Le remplacement d'un agent absent », T6-CONS-15)
+      texteMemoire: Object.entries(sections).filter(([id]) => !/b1_|comprehension/i.test(id)).map(([id, t]) => `## ${titreDe(id)}\n${t}`).join('\n\n').replace(REPERE_RE, ''),
       garder: (q) => q.sources.some((k) => typeof demandes[k]?.repere === 'number'),
     });
     // Un élément par emplacement « [À COMPLÉTER] » (sa réponse remplace ce seul emplacement), puis les autres questions.
@@ -8933,7 +9069,7 @@ RÈGLES DE FORME (rendu Marp) :
     if (alertePanne) { consultationList.unshift(...alertePanne.split('\n\n')); console.warn(`[MemoireGenerator] ${alertePanne}`); }
     consultationList.push(...avisSecours);
     // Propositions de réponse de l'IA : signalées APRÈS les éléments (jamais envoyées à l'équipe comme des questions).
-    for (const a of ajouts) consultationList.push(`Proposition de réponse à valider (question nouvelle du DCE) : ${a.title}`);
+    for (const a of ajouts.filter((x) => !x.emplacementRC)) consultationList.push(`Proposition de réponse à valider (question nouvelle du DCE) : ${a.title}`);
     // Engagements rédigés par l'IA d'après le CCTP (contrôle de couverture) : signalés à GSS par rubrique, comme en format
     // court (D5, T4C-10 : caen 471, 37 engagements sur 17 rubriques, aucun signalé).
     const engagementsIA = Object.entries(sections).map(([id, t]) => {
@@ -9000,10 +9136,10 @@ RÈGLES DE FORME (rendu Marp) :
       demande: this.demandeParticuliere?.demande || undefined,
       ...(this.dimensionnementEtat ? { dimensionnement: this.dimensionnementEtat } : {}),
     };
-    if (ajouts.length) {
+    if (ajouts.some((x) => !x.emplacementRC)) {
       try {
         const { pageDe } = await import('./assistant_memoire');
-        const texte = messagePropositions(ajouts.map((a) => ({ titre: a.title, page: pageDe(rendu.filePath, a.title) })));
+        const texte = messagePropositions(ajouts.filter((x) => !x.emplacementRC).map((a) => ({ titre: a.title, page: pageDe(rendu.filePath, a.title) })));
         etat.conversation = [{ role: 'assistant', texte, date: new Date().toISOString() }];
       } catch (e: any) {
         console.warn(`[MemoireGenerator] Message des propositions non préparé (${e?.message || e}).`);
@@ -9322,7 +9458,7 @@ RÈGLES DE FORME (rendu Marp) :
     }
     // Contrôle sans modèle : sous-traitance ou intérim (même au conditionnel), amorce « … si : [À COMPLÉTER] », montant
     // de garantie qui n'est pas celui du registre de GSS (parc_expo 202) : phrases retirées, écart demandé à GSS.
-    const ctrl = controlerProposition(texte, montantsRegistre());
+    const ctrl = controlerProposition(texte, montantsRegistre(), o.dce || '');
     if (ctrl.retirees.length) console.log(`[MemoireGenerator] Proposition « ${g.sujet} » : ${ctrl.retirees.length} phrase(s) retirée(s) (sous-traitance, amorce sans objet ou garantie qui n'est pas celle de GSS).`);
     texte = ctrl.texte;
     // Donnée demandée à GSS alors que le DCE l'écrit (T7CS-6) : la référence du DCE à sa place, sinon question à l'acheteur.
@@ -9464,7 +9600,8 @@ RÈGLES DE FORME (rendu Marp) :
       if (svg) schemas.set(CLE_SCHEMA(b1Rendu.id), svg);
     }
     // Rubrique sans schéma prévu par le mémoire type (introduction des références) : pages de texte seules.
-    const aConstruire = presentes.filter((r) => !schemas.has(CLE_SCHEMA(r.id)) && (r.ajout || sourceDe(r.id)) && r.id !== b1Rendu?.id);
+    // (élément attendu par le RC réduit à son emplacement, T6-CONS-11 : jamais de schéma construit sur une ligne)
+    const aConstruire = presentes.filter((r) => !schemas.has(CLE_SCHEMA(r.id)) && ((r.ajout && !r.ajout.emplacementRC) || sourceDe(r.id)) && r.id !== b1Rendu?.id);
     if (aConstruire.length) {
       const pages: PageSchema[] = aConstruire.map((r) => ({ key: `v2_${r.id}`, sectionId: r.id, sectionTitle: r.title, text: sectionsMap[r.id] }));
       const construits = await new SchemaService().construirePourPages(pages, (msg) => onProgress?.(93, msg), { format: 'page', theme, secours: false });
@@ -9516,7 +9653,8 @@ RÈGLES DE FORME (rendu Marp) :
       ], 0.1, `Couverture ${sectionId}`, true);
       // « GSS indiquera / précise dans le mémoire… », sous-traitance, pièces de l'offre : jamais remis (motifRefusEngagement).
       // Une puce qui parle du mémoire au lieu de répondre (« GSS précise le nombre de contrôleurs ») devient une question à GSS.
-      const brutes = (JSON.parse(verif || '{}').puces || []).map((x: any) => String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, '')).filter(Boolean);
+      // Proposition qui renvoie aux sanctions de l'acheteur retirée, l'obligation reste (T6-CONS-10).
+      const brutes = (JSON.parse(verif || '{}').puces || []).map((x: any) => sansClauseSanction(String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, ''))).filter(Boolean);
       for (const x of brutes) if (questions && /sans réponse/.test(motifRefusEngagement(x))) { const q = questionDEngagement(x); questions.add(q); sources?.set(q, x); }
       const puces = brutes.filter((x: string) => !motifRefusEngagement(x));
       if (puces.length) {
@@ -9910,47 +10048,7 @@ Renvoie UNIQUEMENT un objet JSON : {"suppressions": [{"id": "rubrique où retire
       { role: 'user', content: ids.map((id) => `=== ${id} — ${rubriques.find((x) => x.id === id)?.title} ===\n${sections[id]}`).join('\n\n') },
     ], 0.1, 'Répétitions entre rubriques', true);
     let n = 0;
-    try {
-      const liste = JSON.parse(r || '{}').suppressions || [];
-      for (const s of Array.isArray(liste) ? liste : []) {
-        const id = String(s?.id || ''), extrait = String(s?.extrait || '').trim(), garde = String(s?.garde || '');
-        if (!ids.includes(id) || intouchables.includes(id) || id === garde || !ids.includes(garde) || extrait.length < 30 || /⟦AC:|CONSULTATION REQUISE/i.test(extrait)) continue;
-        // Extrait qui traverse une fin de ligne ou un sous-titre en gras : jamais retiré (ifits 171 : sous-titres collés).
-        if (/\n|\*\*/.test(extrait)) continue;
-        const t = sections[id];
-        if (!t.includes(extrait)) continue;
-        // Rubrique « à adapter » : son texte de référence GSS publiposté ne s'élague jamais (D7) ; seuls les ajouts de
-        // l'adaptation et du contrôle de couverture peuvent être retirés (ifits 171 : 42 % du texte de GSS restant).
-        const ref = references[id];
-        if (ref && fidelite(extrait, ref) >= 0.8) continue;
-        // La phrase suivante renvoie à celle-ci (« Ces vacations… », « Elle constitue… ») : on la garde, sinon
-        // la suivante devient orpheline.
-        const suite = t.slice(t.indexOf(extrait) + extrait.length).replace(/^[\s.;:]+/, '');
-        if (/^(?:Ces|Ce|Cet|Cette|Ils|Elles|Il|Elle|Celle|Celui|Ceux|Celles|Lui|Leur|Leurs|Là|Ainsi|De plus|En outre)\b/.test(suite)) continue;
-        // Reprise dans la première proposition de la phrase suivante, après un complément (« Pour les sites normands du marché,
-        // son délai d'arrivée… »), ou connecteur dans cette phrase (« Les prestations … sont donc exécutées … ») : la phrase
-        // suivante dépend de celle-ci, elle est gardée (s2e 1501, T5N-4).
-        const phraseSuivante = (suite.split(/(?<=[.!?])\s+/)[0] || '').slice(0, 400);
-        if (/^[^.!?]{0,90}?(?<![\p{L}])(?:son|sa|ses|leur|leurs|il|elle|ils|elles|lui|celui-ci|celle-ci|ceux-ci|celles-ci)(?![\p{L}])/iu.test(phraseSuivante)
-          || /(?<![\p{L}])(?:donc|par cons[ée]quent|en cons[ée]quence|de ce fait|d[èe]s lors)(?![\p{L}])/iu.test(phraseSuivante)) continue;
-        // Phrase qui porte la réponse au sujet de sa rubrique (mots du titre : « GSS n'envisage pas de recourir à la
-        // sous-traitance… » sous « Sous-traitance du service public », T5N-4) : jamais retirée.
-        const titreRub = rubriques.find((x) => x.id === id)?.title || '';
-        const pleinsTitre = normaliser(titreRub).replace(/[^a-z0-9 -]+/g, ' ').split(/\s+/).filter((w) => w.length >= 5 && !/^(?:votre|notre|leurs?|dans|pour|avec|selon|entre)$/.test(w));
-        const ex = normaliser(extrait);
-        if (pleinsTitre.length && (ex.includes(pleinsTitre[0].slice(0, 7)) || pleinsTitre.filter((w) => ex.includes(w.slice(0, 7))).length >= Math.min(2, pleinsTitre.length))) continue;
-        // Retire la puce entière, sinon la phrase seule.
-        const lignes = t.split('\n');
-        const k = lignes.findIndex((l) => l.replace(/^\s*[-*•]\s*/, '').trim() === extrait);
-        let nouveau = k >= 0 && /^\s*[-*•]\s/.test(lignes[k]) ? [...lignes.slice(0, k), ...lignes.slice(k + 1)].join('\n') : t.replace(extrait, '').replace(/ {2,}/g, ' ').replace(/\n[ \t]+\n/g, '\n\n');
-        // Sous-titres restés sans contenu.
-        nouveau = nouveau.replace(/^#{2,4}\s+.+\n+(?=#{2,4}\s|$(?![\s\S]))/gm, '').replace(/\n{3,}/g, '\n\n').trim();
-        if (nouveau.split(/\s+/).length < 120) continue; // jamais au point de vider la rubrique
-        if (ref && fidelite(ref, nouveau) < SEUIL_FIDELITE) continue; // contrôle final de la fidélité (D7)
-        sections[id] = nouveau;
-        n++;
-      }
-    } catch { /* étape facultative */ }
+    try { n = appliquerSuppressionsRepetitions(sections, rubriques, ids, JSON.parse(r || '{}').suppressions || [], intouchables, references); } catch { /* étape facultative */ }
     if (n) console.log(`[MemoireGenerator] Répétitions entre rubriques : ${n} passage(s) retiré(s).`);
   }
 
@@ -10195,7 +10293,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
             { role: 'user', content: `TEXTE :\n${texte}\n\nEXIGENCES :\n${reqs.map((r: any, k: number) => `${k + 1}. ${r.exigence} (réponse GSS connue : ${r.reponseGss || '—'})`).join('\n')}` },
           ], 0.1, `Couverture ${p.id}`, true);
           // « GSS indiquera / précise dans le mémoire… », sous-traitance, pièces de l'offre : jamais remis (motifRefusEngagement).
-          const puces = (JSON.parse(verif || '{}').puces || []).map((x: any) => String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, '')).filter((x: string) => x && !motifRefusEngagement(x));
+          const puces = (JSON.parse(verif || '{}').puces || []).map((x: any) => sansClauseSanction(String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, ''))).filter((x: string) => x && !motifRefusEngagement(x));
           if (puces.length) texte = `${texte.trim()}\n\n## Engagements sur les exigences du cahier des charges\n\n${puces.map((x: string) => `- ${x.replace(/^[-•]\s*/, '')}`).join('\n')}`;
         } catch { /* contrôle facultatif */ }
       }

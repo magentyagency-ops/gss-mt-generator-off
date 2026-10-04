@@ -14,7 +14,7 @@
 import fs from 'fs';
 import path from 'path';
 import {
-  chargerMemoireType, normaliser, rechercherRubriques, similarite, motsDePhrase, faitsDePhrase, listeFr, cleCommune, delaiImposeNet,
+  chargerMemoireType, normaliser, rechercherRubriques, similarite, motsDePhrase, faitsDePhrase, listeFr, cleCommune, delaiImposeNet, delaisDuDce,
   type DonneesBesoin, type ExigenceMatrice, type MemoireType, type PlanMemoireType, type SchemaRubrique,
 } from './memoire_type';
 import { ZONE_GSS, vocabulaireDuCctp, periodeEnTete, normaliserExpressionsDelai, minutesDe, RX_NOMBRE_LETTRES as RX_NOMBRE_LETTRES_V2, MONTANT_PENALITE } from './base_memoires';
@@ -39,6 +39,8 @@ export interface AjoutLibre {
   sujet?: string;
   /** Date de validation de la proposition par GSS (assistant). */
   valideLe?: string;
+  /** Élément attendu par le RC qu'aucune rubrique ne traite (T6-CONS-11) : emplacement et question, ni proposition ni schéma. */
+  emplacementRC?: boolean;
 }
 
 /**
@@ -133,7 +135,12 @@ export function rubriquesV2(plan: PlanMemoireType, ajouts: AjoutLibre[] = []): A
     for (const a of ajouts.filter((x) => x.chapter === b.cle || (!cles.has(x.chapter) && b.cle === derniere))) {
       const i = a.apres ? liste.findIndex((x) => x.id === a.apres) : -1;
       const r: RubriqueRendue = { id: a.id, chapter: b.cle, title: a.title, ajout: a };
-      if (i >= 0) {
+      // Ajout placé en tête du bloc (élément attendu par le RC avant toute rubrique, T6-CONS-11).
+      if (a.apres === '^') {
+        let j = 0;
+        while (j < liste.length && liste[j].ajout?.apres === '^') j++;
+        liste.splice(j, 0, r);
+      } else if (i >= 0) {
         // Plusieurs ajouts après la même rubrique : dans leur ordre d'ajout.
         let j = i + 1;
         while (j < liste.length && liste[j].ajout && liste[j].ajout!.apres === a.apres) j++;
@@ -3388,9 +3395,22 @@ export function libellesEmplacementsNominaux(texte: string): string {
 /** Négation de la sous-traitance ou de l'intérim dans la phrase (T5N-4). */
 const NEGATION_INTERDIT = /(?:\bne\b|\bn['’])[^.;]{0,80}?\b(?:pas|aucun(?:e)?|jamais|nullement|plus)\b|\baucun(?:e)?\b[^.;]{0,60}?(?:sous[- ]?trait|int[ée]rim)|\bsans (?:recours|recourir|faire appel)\b|\b(?:exclut|exclue?s?|proscri\w*|interdi\w*)\b[^.;]{0,40}?(?:sous[- ]?trait|int[ée]rim)/i;
 
-export function controlerProposition(texte: string, montantsGss: string[] = []): { texte: string; retirees: string[]; questions: string[] } {
+/** Phrase qui commente le DCE (« le DCE exige l'envoi d'un agent… », « le CCTP impose… ») : jamais dans une réponse de GSS. */
+const COMMENTE_DCE = /(?:^|[\s,;:(])(?:le|la|les|l['’]|ce|cette)\s*(?:DCE|CCTP|CCP|RC|CCAP|cahier\s+des\s+(?:charges|clauses)[^,;]{0,40}?|r[èe]glement\s+de\s+(?:la\s+)?consultation|acheteur|pouvoir\s+adjudicateur)\s+(?:exige|impose|pr[ée]voit|demande|requiert|stipule|pr[ée]cise|indique|mentionne|attend)\b|\bcomme\s+l['’]\s*(?:exige|impose|pr[ée]voit|demande)\s+(?:le|la)\s+(?:DCE|CCTP|CCAP|RC)\b/i;
+/** Vérification interne laissée dans le texte (« La conformité de … doit être établie avant son utilisation ») : une question. */
+const VERIFICATION_INTERNE = /\b(?:doit|doivent|devra|devront)\s+(?:encore\s+|toutefois\s+)?(?:[êe]tre\s+)?(?:[ée]tablie?s?|confirm[ée]e?s?|v[ée]rifi[ée]e?s?|valid[ée]e?s?|contr[ôo]l[ée]e?s?|d[ée]montr[ée]e?s?|justifi[ée]e?s?)\s+(?:avant|pr[ée]alablement|lors\s+de|par\s+GSS)\b/i;
+
+export function controlerProposition(texte: string, montantsGss: string[] = [], dce = ''): { texte: string; retirees: string[]; questions: string[] } {
   const retirees: string[] = [];
   const questions: string[] = [];
+  // Délais imposés par le DCE (intervention sur alarme, PTI, remplacement) : publipostés comme engagements de GSS dans ses
+  // rubriques ; jamais reposés en emplacement ni en question dans une proposition (T6-CONS-6).
+  const delaisImposes = new Set<number>((['alarme', 'pti', 'remplacement'] as const).flatMap((s) => (dce ? delaisDuDce(dce, s).map((d) => d.minutes) : [])));
+  const delaiDejaImpose = (ph: string) => {
+    if (!delaisImposes.size) return false;
+    const m = /(\d{1,3})\s*(minutes?|heures?|h)(?![\p{L}])/iu.exec(ph.replace(/\s*\(\s*[a-zà-ÿ-]+\s*\)/gi, ''));
+    return !!m && delaisImposes.has(minutesDe(m[1], m[2]));
+  };
   const montant = (x: string) => x.replace(/[\s\u00a0\u202f.]/g, '').replace(/euros?/i, '€');
   const gss = new Set(montantsGss.map(montant));
   const INTERDIT = /sous[- ]?trait|int[ée]rim/i;
@@ -3411,11 +3431,27 @@ export function controlerProposition(texte: string, montantsGss: string[] = []):
     const gardees = corps.split(/(?<=[.!?])\s+/).map((ph) => ph
       // Procédures ou consignes de l'acheteur laissées en blanc (T1-CONS-3 : « … sont appliquées suivant les procédures de
       // l'EPCF : [À COMPLÉTER]. ») : la phrase est vraie sans l'emplacement, qui n'appelle aucune donnée de GSS.
-      .replace(/((?:suivant|selon|conform[ée]ment\s+aux?)\s+(?:les\s+)?(?:proc[ée]dures|consignes|r[èe]gles|modalit[ée]s|instructions)\s+(?:d[eu]\s+|de\s+la\s+|de\s+l['’]\s*|des\s+)[^:.;]{2,80}?)\s*:\s*\[À COMPLÉTER\](?:⟦AC:\d+⟧)?\s*(?=[.;]?\s*$)/i, '$1')).filter((ph) => {
+      .replace(/((?:suivant|selon|conform[ée]ment\s+aux?)\s+(?:les\s+)?(?:proc[ée]dures|consignes|r[èe]gles|modalit[ée]s|instructions)\s+(?:d[eu]\s+|de\s+la\s+|de\s+l['’]\s*|des\s+)[^:.;]{2,80}?)\s*:\s*\[À COMPLÉTER\](?:⟦AC:\d+⟧)?\s*(?=[.;]?\s*$)/i, '$1')).filter((ph, k, toutes) => {
       // (une phrase qui NIE la sous-traitance ou l'intérim, conforme à faits_gss.md, reste : « GSS n'envisage pas de recourir à
       // la sous-traitance », « Aucune partie … n'est confiée à un sous-traitant », « aucun contrat de sous-traitance n'est
       // établi », s2e 1501, T5N-4)
       if (INTERDIT.test(ph) && !NEGATION_INTERDIT.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion ||= /\[À COMPLÉTER\]/.test(ph); return false; }
+      // Commentaire du DCE (« le DCE exige l'envoi d'un agent sur place en moins de 30 minutes ; GSS intervient… ») : retiré, même
+      // avec un emplacement (T6-CONS-6).
+      if (COMMENTE_DCE.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion ||= /\[À COMPLÉTER\]/.test(ph); return false; }
+      // Vérification interne (« La conformité de l'application Beepiz à cette exigence doit être établie avant son utilisation :
+      // [À COMPLÉTER] ») : retirée, posée à GSS (T6-CONS-6).
+      if (VERIFICATION_INTERNE.test(ph)) {
+        retirees.push(ph.trim());
+        retireAvecQuestion ||= /\[À COMPLÉTER\]/.test(ph);
+        // Démonstratif qui renvoie à la phrase précédente (« cette exigence ») : la phrase précédente est citée avec lui.
+        const avant = /\b(?:cette|ce|cet|ces)\s+(?:exigence|obligation|point|r[èe]gle|condition)s?\b/i.test(ph) && toutes[k - 1] ? `${toutes[k - 1].replace(/[*_]/g, '').trim()} ` : '';
+        questions.push(`Une proposition de réponse laissait ce point à vérifier avant la remise : « ${avant}${ph.replace(/\s*:?\s*\[À COMPLÉTER\](?:⟦AC:\d+⟧)?/g, '').replace(/[*_]/g, '').replace(/[\s.;:]+$/, '').trim()} ». Pouvez-vous le confirmer ?`);
+        return false;
+      }
+      // Délai du DCE laissé en blanc (« Capacité opérationnelle à envoyer un agent sur le site … en moins de 30 minutes :
+      // [À COMPLÉTER] ») alors que le mémoire s'y engage dans la rubrique de GSS : retiré, sans question (T6-CONS-6).
+      if (/\[À COMPLÉTER\]/.test(ph) && delaiDejaImpose(ph)) { retirees.push(ph.trim()); retireAvecQuestion = true; return false; }
       if (/\b(?:si|lorsque|quand|dont|notamment)\s*:?\s*\[À COMPLÉTER\]\s*[.;]?\s*$/i.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion = true; return false; }
       // Engagement réduit à un oui ou non laissé en blanc (ifsem 335 : « Engagement de GSS sur la couverture permanente de ce
       // poste et ces horaires : [À COMPLÉTER]. ») : la proposition est déjà « à valider », la phrase et sa question partent.

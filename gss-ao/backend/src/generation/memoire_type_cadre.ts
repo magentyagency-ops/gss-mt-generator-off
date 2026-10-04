@@ -175,8 +175,42 @@ export function elementsRC(p: PartieRC): string[] {
  * change). Chaque rubrique prend le rang du premier élément dont elle est le plus proche ; une rubrique sans aucun mot
  * commun suit sa voisine dans le mémoire type ; l'ordre du mémoire type départage les égalités. Aucun texte ne change.
  */
+/**
+ * Sous-éléments numérotés d'une partie du RC (T6-CONS-11 : « 2-2a Méthodologie d'intervention en cas d'intrusion, de conflit ou
+ * d'incident ; 2-2b Plan de remplacement… ; … ; 2-2f Tout autre(s) moyen(s) organisationnel(s) mis en place »), entiers et
+ * dans leur ordre ; [] si la partie n'en numérote pas au moins deux.
+ */
+export function sousElementsRC(p: PartieRC): string[] {
+  const a = String(p.attendu || '');
+  const parts = [...a.matchAll(/(?:^|[;\n]\s*)(?:[-•]\s*)?(\d+\s*[-.]\s*\d+\s*[a-z]|[a-z]\s*[).])\s*[)\-–:.]?\s*([^;\n]+)/gi)].map((m) => m[2].trim()).filter((x) => x.length >= 3);
+  return parts.length >= 2 ? parts : [];
+}
+
+/**
+ * Place, dans sa partie du RC, d'un élément attendu qu'aucune rubrique ne traite (T6-CONS-11 : « 2-1c Nombre d'agents présents
+ * au centre de permanence ») : la rubrique après laquelle il vient (dernière rubrique de la partie traitant un sous-élément
+ * antérieur), '^' s'il vient en tête, null si l'élément n'est pas un sous-élément numéroté de la partie.
+ */
+export function placeElementRC(mt: MemoireType, p: PartieRC, element: string, idsPartie: string[]): string | null {
+  const sous = sousElementsRC(p);
+  const n = (x: string) => normaliser(x).replace(/[^a-z0-9]+/g, ' ').trim();
+  const k = sous.findIndex((x) => n(x).includes(n(element)) || n(element).includes(n(x)));
+  if (k < 0) return null;
+  const rangs = idsPartie.map((id) => {
+    let meilleur = 0, rang = sous.length;
+    sous.forEach((e, j) => { if (/^tout(?:e|es|s)?\s*(?:\(s\)\s*)?autres?/i.test(e)) return; const sc = rechercherRubriques(mt, e, 1, [id])[0]?.score || 0; if (sc > meilleur) { meilleur = sc; rang = j; } });
+    return { id, rang };
+  });
+  const avant = rangs.filter((x) => x.rang < k);
+  return avant.length ? avant[avant.length - 1].id : '^';
+}
+
 export function ordonnerSelonRC(mt: MemoireType, p: PartieRC, ids: string[], ordre: string[]): string[] {
-  const elements = elementsRC(p);
+  // Sous-éléments numérotés par le RC (T6-CONS-11) : chaque rubrique prend le rang du sous-élément qu'elle traite (jamais celui
+  // du titre de la partie) ; une rubrique qui n'en traite aucun va en fin de partie, au rang de « Tout autre moyen ».
+  const sous = sousElementsRC(p);
+  const elements = sous.length ? sous : elementsRC(p);
+  const autre = sous.length ? sous.findIndex((e) => /^tout(?:e|es|s)?\s*(?:\(s\)\s*)?autres?/i.test(e)) : -1;
   const rang = new Map<string, number>();
   for (const id of ids) {
     const r = mt.rubriques.find((x) => x.id === id);
@@ -184,9 +218,11 @@ export function ordonnerSelonRC(mt: MemoireType, p: PartieRC, ids: string[], ord
     if (r.mode === 'besoin') { const k = elements.findIndex((e) => PARTIE_COMPREHENSION.test(e)); rang.set(id, k < 0 ? -1 : k); continue; }
     let meilleur = 0;
     elements.forEach((e, k) => {
+      if (k === autre) return;
       const s = rechercherRubriques(mt, e, 1, [id])[0]?.score || 0;
       if (s > meilleur) { meilleur = s; rang.set(id, k); }
     });
+    if (sous.length && !rang.has(id)) rang.set(id, autre >= 0 ? autre : elements.length);
   }
   const selonMT = [...ids].sort((a, b) => ordre.indexOf(a) - ordre.indexOf(b));
   const blocDe = (id: string) => mt.rubriques.find((x) => x.id === id)?.bloc;
