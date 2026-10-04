@@ -2214,6 +2214,15 @@ export function variablesDuMarche(mt: MemoireType, ctx: ContexteMarche, indicate
       out[nom] = { ...gss, aConfirmer: `Le cahier des charges impose pour le contrôle global « ${imp.valeur} » (« ${imp.citation.slice(0, 200)} ») ; le mémoire type de GSS décrit un contrôle global trimestriel du responsable qualité (réunions trimestrielles, bilan du trimestre). Pouvez-vous vous engager sur la fréquence du cahier des charges dans tout le mémoire, ou faut-il garder la pratique de GSS ?` };
       continue;
     }
+    // Contrôles inopinés exigés sans chiffre (« plusieurs fois par mois », « régulièrement ») ou à 3 par mois au plus (T3-CONS-3,
+    // T3N-2, imm : « La fréquence des contrôles sera de plusieurs fois par mois ») : l'engagement de GSS quand le cahier des
+    // charges l'exige (au moins trois fois par mois, réponse de GSS du 1er octobre 2026) remplit l'exigence ; il reste, sans
+    // question ni phrase adaptée. Seule une fréquence chiffrée plus élevée, ou précisée (de nuit, le week-end), la remplace.
+    if ((nom === 'FREQ_CONTROLE_2' || nom === 'CONTROLES_INOPINES_MENSUELS') && imp && valeurPropre(imp.valeur) && frequenceRempliePourGss(String(imp.valeur))) {
+      const def = mt.variables[nom];
+      out[nom] = def?.valeur_si_exige ? { valeur: def.valeur_si_exige, source: `engagement GSS quand le cahier des charges l'exige (exigence du DCE : « ${imp.citation.slice(0, 200)} »)` } : (CALCULS[nom]?.(c) || { valeur: null });
+      continue;
+    }
     if (imp && valeurPropre(imp.valeur)) {
       out[nom] = { valeur: imp.valeur, source: `imposé par le DCE : « ${imp.citation.slice(0, 200)} »` };
       continue;
@@ -2225,7 +2234,9 @@ export function variablesDuMarche(mt: MemoireType, ctx: ContexteMarche, indicate
   }
   // Fréquence des contrôles inopinés imposée par le CCTP (becquerel 591, T5N-4 : « au moins une fois par mois de nuit et au
   // moins une fois par mois le week-end de jour ») : le calendrier type en découle, jamais la pratique de GSS « un à trois ».
-  if (!ctx.choix?.variables?.CONTROLES_INOPINES_MENSUELS && !ctx.imposees?.CONTROLES_INOPINES_MENSUELS && ctx.imposees?.FREQ_CONTROLE_2 && mt.variables.CONTROLES_INOPINES_MENSUELS) {
+  if (!ctx.choix?.variables?.CONTROLES_INOPINES_MENSUELS && !ctx.imposees?.CONTROLES_INOPINES_MENSUELS && ctx.imposees?.FREQ_CONTROLE_2 && mt.variables.CONTROLES_INOPINES_MENSUELS && frequenceRempliePourGss(String(ctx.imposees.FREQ_CONTROLE_2.valeur || ''))) {
+    if (mt.variables.CONTROLES_INOPINES_MENSUELS.valeur_si_exige) out.CONTROLES_INOPINES_MENSUELS = { valeur: mt.variables.CONTROLES_INOPINES_MENSUELS.valeur_si_exige, source: `engagement GSS quand le cahier des charges l'exige (« ${ctx.imposees.FREQ_CONTROLE_2.valeur} »)` };
+  } else if (!ctx.choix?.variables?.CONTROLES_INOPINES_MENSUELS && !ctx.imposees?.CONTROLES_INOPINES_MENSUELS && ctx.imposees?.FREQ_CONTROLE_2 && mt.variables.CONTROLES_INOPINES_MENSUELS) {
     const imposee = String(ctx.imposees.FREQ_CONTROLE_2.valeur || '');
     const derive = controlesInopinesDe(imposee);
     out.CONTROLES_INOPINES_MENSUELS = derive
@@ -2236,7 +2247,38 @@ export function variablesDuMarche(mt: MemoireType, ctx: ContexteMarche, indicate
 }
 
 const NOMBRES_FOIS: Record<string, number> = { une: 1, un: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6 };
+
+/**
+ * Nombre de contrôles (ou de passages) par mois d'une fréquence écrite (« au moins trois fois par mois » → 3, « une fois par
+ * semaine » → 4,3, « deux contrôles inopinés par mois » → 2) ; null si elle n'est pas chiffrée (« plusieurs fois par mois »,
+ * « régulièrement ») ou ne se ramène pas au mois.
+ */
+export function frequenceMensuelle(frequence: string): number | null {
+  const f = normaliser(frequence);
+  const PAR: Record<string, number> = { jour: 30, semaine: 4.33, mois: 1, trimestre: 1 / 3, semestre: 1 / 6, an: 1 / 12, annee: 1 / 12 };
+  let max: number | null = null;
+  for (const m of f.matchAll(/(une|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+(?:fois|controles?|visites?|passages?)(?:\s+inopines?)?\s+(?:par|chaque|tous les)\s+(jour|semaine|mois|trimestre|semestre|an|annee)s?/g)) {
+    const n = (NOMBRES_FOIS[m[1]] ?? (({ sept: 7, huit: 8, neuf: 9, dix: 10 } as Record<string, number>)[m[1]] ?? Number(m[1]))) * PAR[m[2]];
+    if (Number.isFinite(n)) max = Math.max(max ?? 0, n);
+  }
+  if (max === null && /(?:^|\s)(?:mensuel(?:le)?s?|tous les mois|chaque mois)(?:\s|$)/.test(f)) max = 1;
+  if (max === null && /(?:^|\s)(?:hebdomadaires?|toutes les semaines|chaque semaine)(?:\s|$)/.test(f)) max = 4.33;
+  return max;
+}
 const LETTRES_FOIS = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix'];
+/**
+ * Fréquence de contrôles imposée que l'engagement de GSS (au moins trois par mois et par site) remplit déjà : non chiffrée
+ * (« plusieurs fois par mois », « régulièrement », « fréquemment ») ou chiffrée à 3 par mois au plus, sans précision de
+ * moment (« de nuit », « le week-end », « de jour ») que le texte de GSS ne dirait pas.
+ */
+export function frequenceRempliePourGss(frequence: string): boolean {
+  const f = normaliser(frequence);
+  if (!f.trim() || /nuit|week|samedi|dimanche|ferie|de jour|jour et|matin|soir/.test(f)) return false;
+  const n = frequenceMensuelle(f);
+  if (n !== null) return n <= 3;
+  return /plusieurs|regulier|regulierement|frequent|frequemment|periodique|inopine|ponctuel/.test(f);
+}
+
 /** Nombre mensuel de contrôles inopinés d'après une fréquence imposée (« au moins une fois par mois de nuit et au moins une
  *  fois par mois le week-end » → « au moins deux contrôles inopinés ») ; '' si la fréquence ne se ramène pas au mois. */
 export function controlesInopinesDe(frequence: string): string {

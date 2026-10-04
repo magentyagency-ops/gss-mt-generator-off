@@ -13,6 +13,7 @@ import {
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
   type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, harmoniserVariantesAcheteur, formeCourteApresPremiere, phrasesGeneralesProtegees, ajoutContraireAuxDelaisGss,
   variablesDesSchemas, lotsDuMemoire, nomAcheteurAffiche, rubriqueAdmetSujet, rechercherRubriques, rubriqueDuTheme,
+  phrasesDeFrequenceDeControle, frequenceMensuelle,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
@@ -1401,6 +1402,11 @@ export function familleFrequence(t: string): string[] {
 export function frequencesRetirees(extrait: string, remplacement: string): string[] {
   const apres = familleFrequence(remplacement);
   return familleFrequence(extrait).filter((x) => !apres.includes(x));
+}
+
+/** Exigence citée par une correction du modèle, sur une ligne. */
+function exigenceDeCorrection(c: any): string {
+  return String(c?.exigence || '').replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -9430,6 +9436,15 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
         if (!ids.includes(id) || extrait.length < 12 || !remplacement || /⟦AC:|CONSULTATION REQUISE/i.test(extrait) || !sections[id].includes(extrait)) continue;
         // Pratique de GSS gardée quand le DCE n'exige rien (« une à trois fois par mois » : contrôles inopinés non exigés).
         if (proteges.some((x) => extrait.includes(x) && !remplacement.includes(x))) continue;
+        // Fréquence d'un contrôle ou d'une réunion qualité de GSS (T3-CONS-3, imm 1353 : « au moins trois fois par mois »
+        // devenu « plusieurs fois par mois ») : jamais réécrite par cette étape, comme par l'adaptation (T2-CONS-3) ; elle ne
+        // change que par les fréquences imposées du publipostage. Une fréquence du DCE plus élevée est demandée à GSS.
+        if (phrasesDeFrequenceDeControle(sections[id]).some((ph) => ph.includes(extrait.trim().slice(0, 60)) || extrait.includes(ph.slice(0, 60)))) {
+          const avantN = frequenceMensuelle(extrait), apresN = frequenceMensuelle(remplacement);
+          console.warn(`[MemoireGenerator] Cohérence ${id} avec le CCTP : remplacement refusé (fréquence de contrôle de GSS) : « ${extrait.slice(0, 100)} ».`);
+          if (avantN !== null && apresN !== null && apresN > avantN && questions && exigenceDeCorrection(c)) { questions.add(questionAlignementRefuse(exigenceDeCorrection(c), extrait)); refusees?.push(exigenceDeCorrection(c)); }
+          continue;
+        }
         const exigenceC = String(c?.exigence || '').replace(/\s+/g, ' ').trim();
         // Mémoire type (D8, T2-CONS-9 : format court imm 1203, l'étape de mobilisation de l'astreinte remplacée par « Le marché
         // pénalise toute absence… de plus de 60 minutes ») : seulement une contradiction avec une exigence citée mot pour mot
