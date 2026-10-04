@@ -1942,7 +1942,7 @@ export function obligationsChiffrees(dce: string): Array<{ phrase: string; cle: 
   ];
   const unite = (u: string) => UNITES.find(([rx]) => rx.test(u.trim()))?.[1] || '';
   const pieces = piecesTechniques(dce);
-  const HORS_PRESTATION = /p[ée]nalit|€|euros?\b|factur|paiement|mandatement|int[ée]r[êe]ts|avance|acompte|r[ée]vis(?:ion|er)|\bprix\b|actualisation|garantie|r[ée]siliation|reconduction|notifi|litige|tribunal|\boffres?\b|candidat|date limite|remise des plis|questions?\b|d[ée]lai de validit|sous-trait|assurance|ordre de service|admission|r[ée]ception des prestations|v[ée]rifications? (?:quantitative|qualitative)|retenue|variation|dur[ée]e (?:du march|de l.accord)|\bans?\b[^.]{0,20}(?:reconductible|ferme)|prolongation|préavis|pr[ée]avis|cong[ée]s pay|convention collective|code du travail|article [LR]\s?\d/i;
+  const HORS_PRESTATION = /p[ée]nalit|€|euros?\b|factur|paiement|mandatement|int[ée]r[êe]ts|avance|acompte|r[ée]vis(?:ion|er)|\bprix\b|actualisation|garantie (?:[àa] premi[èe]re demande|financi[èe]re|bancaire|de parfait)|r[ée]siliation|reconduction|notifi|litige|tribunal|\boffres?\b|candidat|date limite|remise des plis|questions?\b|d[ée]lai de validit|sous-trait|assurance|ordre de service|admission|r[ée]ception des prestations|v[ée]rifications? (?:quantitative|qualitative)|retenue|variation|dur[ée]e (?:du march|de l.accord)|\bans?\b[^.]{0,20}(?:reconductible|ferme)|prolongation|préavis|pr[ée]avis|cong[ée]s pay|convention collective|code du travail|article [LR]\s?\d/i;
   const ACHETEUR = /\b(?:le pouvoir adjudicateur|l.acheteur|l.administration|la personne publique|le ma[îi]tre d.ouvrage|le client|l.[ée]tablissement)\s+(?:dispose|peut|pourra|notifie|informe|transmet|adresse|communique|se r[ée]serve)/i;
   const out: Array<{ phrase: string; cle: RegExp }> = [];
   const vues = new Set<string>();
@@ -1972,14 +1972,29 @@ export function obligationsChiffrees(dce: string): Array<{ phrase: string; cle: 
         ] : [];
         motifs.push([`\\b(?:${n}${lettres ? `|${lettres}` : ''})\\s*${u}`, ...equivalents].join('|'));
       }
-      const rxFreq = /\b(\d{1,2}|une|deux|trois|quatre)\s*(?:fois|passages?|rondes?|contr[ôo]les?|visites?|r[ée]unions?)\s+(?:au minimum\s+|minimum\s+)?par\s+(jour|nuit|semaine|mois|trimestre|semestre|an|vacation|poste)\b/gi;
+      // Fréquences (T3G-7) : nombre en chiffres ou en lettres, « deux (2) », complément du nom (« 3 rondes de surveillance par
+      // nuit », « 4 contrôles inopinés par mois »), « / » pour « par » (« 2 rondes/nuit »), « au cours de la nuit », « une ronde
+      // par heure », et « Rondes de surveillance : 3 par nuit ».
+      const NB_FREQ = '(\\d{1,2}|une?|deux|trois|quatre|cinq|six|sept|huit|dix|douze)(?:\\s*\\(\\s*\\d{1,2}\\s*\\))?';
+      const OBJET_FREQ = '(?:fois|passages?|rondes?|contr[ôo]les?|visites?|r[ée]unions?)';
+      const PERIODE_FREQ = '(heure|jour|nuit|semaine|mois|trimestre|semestre|an|vacation|poste)';
+      const rxFreq = new RegExp(`\\b${NB_FREQ}\\s*${OBJET_FREQ}(?:\\s+(?:de|d['’])\\s*[a-zà-ÿ]+|\\s+(?!par\\b|au\\b|chaque\\b)[a-zà-ÿ]+(?:e?s)?){0,2}\\s*(?:au minimum\\s+|minimum\\s+)?(?:par|\\/|au cours d(?:e la|u|e l['’])|chaque)\\s*${PERIODE_FREQ}\\b|\\b${OBJET_FREQ}[^:.;]{0,40}:\\s*${NB_FREQ}\\s*(?:par|\\/)\\s*${PERIODE_FREQ}\\b`, 'gi');
+      const CHIFFRE: Record<string, string> = { un: '1', une: '1', deux: '2', trois: '3', quatre: '4', cinq: '5', six: '6', sept: '7', huit: '8', dix: '10', douze: '12' };
       while ((m = rxFreq.exec(ph))) {
-        const n = ({ une: '1', deux: '2', trois: '3', quatre: '4' } as Record<string, string>)[m[1].toLowerCase()] || m[1];
-        const lettres = ({ '1': 'une?', '2': 'deux', '3': 'trois', '4': 'quatre' } as Record<string, string>)[n];
-        motifs.push(`\\b(?:${n}${lettres ? `|${lettres}` : ''})\\s*(?:fois|passages?|rondes?|contr[ôo]les?|visites?|r[ée]unions?)[^.\\n]{0,30}${m[2]}`);
+        const nb = (m[1] || m[3] || '').toLowerCase();
+        const per = m[2] || m[4] || '';
+        const n = CHIFFRE[nb] || nb;
+        const lettres = Object.keys(CHIFFRE).filter((k) => CHIFFRE[k] === n).join('|');
+        motifs.push(`\\b(?:${n}${lettres ? `|${lettres}` : ''})\\s*(?:\\(\\s*\\d+\\s*\\)\\s*)?(?:fois|passages?|rondes?|contr[ôo]les?|visites?|r[ée]unions?)[^.\\n]{0,40}${per}`);
       }
       const rxPer = /\b(?:tous les|toutes les)\s+(\d{1,3})\s*(heures?|h\b|minutes?|min\b|jours?|semaines?|mois\b)/gi;
-      while ((m = rxPer.exec(ph))) { const u = unite(m[2]); if (u) motifs.push(`\\b${m[1]}\\s*${u}`); }
+      // Sur la copie aux nombres chiffrés (« toutes les deux heures » → « toutes les 2 heures »).
+      while ((m = rxPer.exec(phDelai))) { const u = unite(m[2]); if (u) motifs.push(`\\b${m[1]}\\s*${u}`); }
+      // Échéance avant le mois (« dix (10) jours avant le début du mois », « au plus tard le 20 du mois précédent »).
+      const rxAvant = /(?<![\d,])(?:[a-zà-ÿ-]+\s*\(\s*(\d{1,3})\s*\)|(\d{1,3})(?:\s*\(\s*\d+\s*\))?)\s*(jours?(?:\s+ouvr[ée]s?|\s+ouvrables?|\s+calendaires?)?)\s+avant\s+(?:le|la|chaque|toute?)\b/gi;
+      while ((m = rxAvant.exec(phDelai))) { const u = unite(m[3]); if (u) motifs.push(`\\b${m[1] || m[2]}\\s*${u}`); }
+      const rxLe = /au plus tard le (\d{1,2})(?:er)?\s+du mois (?:pr[ée]c[ée]dent|suivant|en cours)/gi;
+      while ((m = rxLe.exec(ph))) motifs.push(`\\b${m[1]}(?:er)?\\s+du mois`);
       if (!motifs.length) continue;
       const cle = ph.toLowerCase().replace(/[^a-z0-9àâçéèêëîïôûùüÿœ]+/g, ' ');
       if (vues.has(cle)) continue;

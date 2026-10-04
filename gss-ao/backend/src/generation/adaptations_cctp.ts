@@ -26,7 +26,7 @@
 // viennent pas du CCTP. Un délai normand retiré hors Normandie est signalé avec son motif (règle de GSS), jamais présenté
 // comme une exigence du CCTP (T6C-10).
 
-import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, variableRenseignee, phraseDelaiDuDce, phrasesDelaisDuDce, sujetDelaiDePhrase, sujetsDelaisDuGabarit, phraseDuDceContenant, phraseFrequenceReunionsDce, envoiPlanningsClientDce, VARIABLES_IMPOSABLES, SUJET_VARIABLE_DELAI, type MemoireType, type ContexteMarche } from './memoire_type';
+import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, variableRenseignee, phraseDelaiDuDce, phrasesDelaisDuDce, sujetDelaiDePhrase, sujetsDelaisDuGabarit, phraseDuDceContenant, phraseFrequenceReunionsDce, envoiPlanningsClientDce, frequenceInopinesDce, VARIABLES_IMPOSABLES, SUJET_VARIABLE_DELAI, type MemoireType, type ContexteMarche } from './memoire_type';
 import { sitesDuMarche, lieuDuMarche, communesParCodePostal, interditPhotosDce, RX_RONDES_A_PIED } from './base_memoires';
 
 export type StatutAdaptation = 'a_valider' | 'validee' | 'modifiee' | 'retablie';
@@ -651,7 +651,8 @@ export function adaptationsDesValeursImposees(mt: MemoireType, ctx: ContexteMarc
       : imposee?.citation ? phraseDuDceContenant(ctx.dce || '', imposee.citation)
       : sujet ? phraseDelaiDuDce(ctx.dce || '', sujet as any)
         : nom === 'FREQ_REUNIONS' ? phraseFrequenceReunionsDce(ctx.dce || '')
-          : nom === 'JALON_ENVOI_CLIENT' ? envoiPlanningsClientDce(ctx.dce || '')?.phrase || '' : '';
+          : nom === 'JALON_ENVOI_CLIENT' ? envoiPlanningsClientDce(ctx.dce || '')?.phrase || ''
+            : nom === 'FREQ_CONTROLE_2' ? frequenceInopinesDce(ctx.dce || '')?.phrase || '' : '';
     if (!exigence) continue;
     const variables = { ...reel.variables, [nom]: g };
     // Contrôles inopinés déduits de la fréquence imposée du contrôle 2 : la valeur de GSS revient avec elle.

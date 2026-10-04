@@ -56,3 +56,11 @@ describe('horaires imposés reconnus par leur forme (T3G-6)', () => {
     expect(horairesImposes(dce('La date et heure limite de remise des offres est fixée au lundi 12 octobre de 12h00 à 14h00 pour la sécurité.'))).toEqual([]);
   });
 });
+
+import { obligationsChiffrees } from '../src/generation/base_memoires';
+describe('obligations chiffrées lues sous toutes leurs formes (T3G-7)', () => {
+  const dce = (ph: string) => `\n\n--- CCTP.pdf ---\nCahier des clauses techniques particulières.\n\nArticle 4.\n\n${ph}\n`;
+  for (const ph of ["L'agent effectue une ronde toutes les deux heures sur l'ensemble du site.", "L'agent effectue deux (2) rondes par nuit sur l'ensemble du site.", "L'agent effectue 2 rondes/nuit sur l'ensemble du site.", "L'agent effectue 3 rondes de surveillance par nuit sur le site.", 'Le titulaire réalise au moins 4 contrôles inopinés par mois sur chaque site.', 'Le titulaire transmet le planning mensuel dix (10) jours avant le début du mois.', 'Le planning est transmis au plus tard le 20 du mois précédent.', 'La garantie de continuité de service impose le remplacement de tout agent absent dans un délai de deux heures.']) {
+    it(ph, () => { expect(obligationsChiffrees(dce(ph)).map((o) => o.phrase).join(' ')).toContain(ph); });
+  }
+});

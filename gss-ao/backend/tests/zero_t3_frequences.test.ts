@@ -50,3 +50,27 @@ describe('cohérence avec le CCTP : fréquence de contrôle de GSS jamais rééc
     expect([...questions]).toEqual([]);
   });
 });
+
+import { frequenceInopinesDce } from '../src/generation/memoire_type';
+describe('fréquence des contrôles inopinés plus élevée lue sans modèle (T3G-7)', () => {
+  it('« au moins quatre contrôles inopinés par mois », « hebdomadaires »', () => {
+    expect(frequenceInopinesDce('CCTP. Le titulaire réalise au moins quatre contrôles inopinés par mois.')).toMatchObject({ valeur: 'au moins quatre fois par mois', mensuels: 'au moins quatre contrôles inopinés' });
+    expect(frequenceInopinesDce('CCTP. Des contrôles inopinés hebdomadaires sont réalisés par le titulaire.')).toMatchObject({ valeur: 'chaque semaine', mensuels: 'au moins quatre contrôles inopinés' });
+    expect(frequenceInopinesDce('La fréquence des contrôles inopinés sera de plusieurs fois par mois.')).toBeNull();
+    expect(frequenceInopinesDce('Le titulaire réalise deux contrôles inopinés par mois.')).toBeNull();
+  });
+  it('publipostage : le CCTP prime, jamais « au moins trois » à côté de l’exigence de quatre', () => {
+    const p: any = preparerMemoireType({ dce: 'CCTP. Le titulaire réalise au moins quatre contrôles inopinés par mois. Site 76000 Rouen.', analyse: { clientName: 'Ville de Rouen' }, cover: { client: 'Ville de Rouen' }, referents: '' } as any, { memoireType: chargerMemoireType() });
+    expect(p.variables.FREQ_CONTROLE_2.valeur).toBe('au moins quatre fois par mois');
+    expect(p.variables.CONTROLES_INOPINES_MENSUELS.valeur).toBe('au moins quatre contrôles inopinés');
+  });
+});
+
+describe('fréquence plus élevée du DCE signalée à GSS (D8, T3G-7)', () => {
+  it('phrase de GSS adaptée et signalée avec l’exigence du DCE', () => {
+    const mt = chargerMemoireType();
+    const ctx: any = { dce: 'CCTP. Le titulaire réalise au moins quatre contrôles inopinés par mois. Site 76000 Rouen.', analyse: { clientName: 'Ville de Rouen' }, cover: { client: 'Ville de Rouen' }, referents: '' };
+    const a = adaptationsDesValeursImposees(mt, ctx, mt.rubriques.map((r: any) => r.id));
+    expect(a.some((x) => /quatre contrôles inopinés par mois/.test(x.exigence))).toBe(true);
+  });
+});

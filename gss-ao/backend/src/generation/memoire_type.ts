@@ -2208,9 +2208,18 @@ const CALCULS: Record<string, Calculateur> = {
   DELAI_COMMANDE_SUPPLEMENTAIRE: (c) => delai(c, 'DELAI_COMMANDE_SUPPLEMENTAIRE', 'commande'),
   DELAI_DEFAILLANCE_SSI: (c) => delai(c, 'DELAI_DEFAILLANCE_SSI', 'ssi'),
   FREQ_CONTROLE_1: (c) => ({ valeur: c.mt.variables.FREQ_CONTROLE_1?.valeur_gss || null, source: 'pratique GSS' }),
-  FREQ_CONTROLE_2: (c) => valeurSiExige(c, 'FREQ_CONTROLE_2') || ({ valeur: c.mt.variables.FREQ_CONTROLE_2?.valeur_gss || null, source: 'pratique GSS (faits_gss.md)' }),
+  FREQ_CONTROLE_2: (c) => {
+    // Fréquence chiffrée plus élevée lue dans le DCE sans modèle (T3G-7) : le CCTP prime, phrase signalée (D8).
+    const d = c.ctx.delaisDuDce !== false ? frequenceInopinesDce(c.ctx.dce || '') : null;
+    if (d) return { valeur: d.valeur, source: `imposé par le DCE : « ${d.phrase.slice(0, 200)} »` };
+    return valeurSiExige(c, 'FREQ_CONTROLE_2') || ({ valeur: c.mt.variables.FREQ_CONTROLE_2?.valeur_gss || null, source: 'pratique GSS (faits_gss.md)' });
+  },
   FREQ_CONTROLE_3: (c) => ({ valeur: c.mt.variables.FREQ_CONTROLE_3?.valeur_gss || null, source: 'pratique GSS' }),
-  CONTROLES_INOPINES_MENSUELS: (c) => valeurSiExige(c, 'CONTROLES_INOPINES_MENSUELS') || ({ valeur: c.mt.variables.CONTROLES_INOPINES_MENSUELS?.valeur_gss || null, source: 'pratique GSS' }),
+  CONTROLES_INOPINES_MENSUELS: (c) => {
+    const d = c.ctx.delaisDuDce !== false ? frequenceInopinesDce(c.ctx.dce || '') : null;
+    if (d) return { valeur: d.mensuels, source: `déduit de la fréquence imposée par le DCE (« ${d.valeur} »)` };
+    return valeurSiExige(c, 'CONTROLES_INOPINES_MENSUELS') || ({ valeur: c.mt.variables.CONTROLES_INOPINES_MENSUELS?.valeur_gss || null, source: 'pratique GSS' });
+  },
   FREQ_REUNIONS: (c) => ({ valeur: frequenceReunionsDce(c.ctx.dce || '') || null, source: 'DCE' }),
   RESPONSABLE_APR: (c) => ({ valeur: c.mt.variables.RESPONSABLE_APR?.valeur_gss || null, source: 'AO RNE p.49-50', aConfirmer: questionParGeneration(c.mt.variables.RESPONSABLE_APR) }),
 };
@@ -2319,9 +2328,9 @@ const NOMBRES_FOIS: Record<string, number> = { une: 1, un: 1, deux: 2, trois: 3,
  */
 export function frequenceMensuelle(frequence: string): number | null {
   const f = normaliser(frequence);
-  const PAR: Record<string, number> = { jour: 30, semaine: 4.33, mois: 1, trimestre: 1 / 3, semestre: 1 / 6, an: 1 / 12, annee: 1 / 12 };
+  const PAR: Record<string, number> = { jour: 30, nuit: 30, semaine: 4.33, mois: 1, trimestre: 1 / 3, semestre: 1 / 6, an: 1 / 12, annee: 1 / 12 };
   let max: number | null = null;
-  for (const m of f.matchAll(/(une|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+(?:fois|controles?|visites?|passages?)(?:\s+inopines?)?\s+(?:par|chaque|tous les)\s+(jour|semaine|mois|trimestre|semestre|an|annee)s?/g)) {
+  for (const m of f.matchAll(/(une|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+(?:fois|controles?|visites?|passages?)(?:\s+inopines?)?\s+(?:par|chaque|tous les|toutes les)\s+(jour|nuit|semaine|mois|trimestre|semestre|an|annee)s?/g)) {
     const n = (NOMBRES_FOIS[m[1]] ?? (({ sept: 7, huit: 8, neuf: 9, dix: 10 } as Record<string, number>)[m[1]] ?? Number(m[1]))) * PAR[m[2]];
     if (Number.isFinite(n)) max = Math.max(max ?? 0, n);
   }
@@ -2330,6 +2339,31 @@ export function frequenceMensuelle(frequence: string): number | null {
   return max;
 }
 const LETTRES_FOIS = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix'];
+/**
+ * Fréquence des contrôles inopinés imposée par le DCE, lue sans modèle (T3G-7 : en mode dégradé, « au moins quatre contrôles
+ * inopinés par mois » laissait « au moins trois fois par mois » imprimé) : seulement une fréquence chiffrée supérieure à 3 par
+ * mois (sinon l'engagement de GSS la remplit). Valeur écrite comme celles de GSS (« au moins quatre fois par mois », « une fois
+ * par semaine ») et nombre mensuel de contrôles inopinés du calendrier type. null sinon.
+ */
+export function frequenceInopinesDce(dce: string): { valeur: string; mensuels: string; phrase: string } | null {
+  const LETTRES = ['', 'une', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix'];
+  for (const ph of String(dce || '').replace(/\s+/g, ' ').split(/(?<=[.;])\s+/)) {
+    if (!/inopin/i.test(ph) || /p[ée]nalit|€/i.test(ph)) continue;
+    const n = frequenceMensuelle(ph);
+    if (n === null || n <= 3) continue;
+    const f = normaliser(ph);
+    const m = /(au moins|au minimum|minimum)?\s*(une|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+(?:fois|controles?|visites?|passages?)(?:\s+inopines?)?\s+(?:par|chaque|tous les|toutes les)\s+(jour|nuit|semaine|mois)/.exec(f);
+    const nb = m ? (NOMBRES_FOIS[m[2]] ?? (Number(m[2]) || ({ sept: 7, huit: 8, neuf: 9, dix: 10 } as Record<string, number>)[m[2]] || 1)) : 1;
+    const per = m ? m[3] : /hebdomadaire|semaine/.test(f) ? 'semaine' : 'mois';
+    const valeur = nb === 1 && !m?.[1] ? `chaque ${per}` : `${m?.[1] ? 'au moins ' : ''}${LETTRES[nb] || nb} fois par ${per}`;
+    // Mois de quatre semaines au moins : « une fois par semaine » donne au moins quatre contrôles par mois.
+    const parMois = per === 'semaine' ? Math.floor(n) : Math.ceil(n);
+    const mensuels = `au moins ${LETTRES[parMois] || parMois} contrôle${parMois > 1 ? 's' : ''} inopiné${parMois > 1 ? 's' : ''}`;
+    return { valeur, mensuels, phrase: ph.trim() };
+  }
+  return null;
+}
+
 /**
  * Fréquence de contrôles imposée que l'engagement de GSS (au moins trois par mois et par site) remplit déjà : non chiffrée
  * (« plusieurs fois par mois », « régulièrement », « fréquemment ») ou chiffrée à 3 par mois au plus, sans précision de
@@ -2987,6 +3021,11 @@ export function questionsDuPubliposte(rubriques: RubriquePubliee[]): string[] {
 const PIECES_OFFRE = /acte d.engagement|bordereau de prix|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?/i;
 
 /** Score lexical d'une rubrique pour un texte (mots-clés et titre). */
+/** Mots d'une expression ramenés au singulier (« rondes techniques » → « ronde technique »), pour une recherche par début de mot. */
+function singulierMots(k: string): string {
+  return k.split(' ').map((w) => (w.length >= 5 ? w.replace(/(?<=[a-z]{3}[^aeiou\s]?[a-z])[sx]$/, '') : w)).join(' ');
+}
+
 function scoreRubrique(r: RubriqueMemoireType, texte: string): number {
   const net = (x: string) => normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
   const t = ` ${net(texte)} `;
@@ -3191,7 +3230,7 @@ export function obligationsPourRubrique(rubrique: RubriqueMemoireType, dce: stri
   // IGN) n'est pas transmise à la rubrique.
   const sujet = sujetDeRubrique(rubrique);
   // Mot-clé au début d'un mot (comme scoreRubrique) : « dati » (DATI) ne se trouve plus dans « dégradation ».
-  const pertinente = (ph: string) => { const t = ` ${normaliser(ph).replace(/[^a-z0-9]+/g, ' ')}`; return cles.some((k) => t.includes(` ${k.replace(/[^a-z0-9]+/g, ' ').trim()}`)) && dansLeSujet(ph, sujet); };
+  const pertinente = (ph: string) => { const t = ` ${normaliser(ph).replace(/[^a-z0-9]+/g, ' ')}`; return cles.some((k) => t.includes(` ${singulierMots(k.replace(/[^a-z0-9]+/g, ' ').trim())}`)) && dansLeSujet(ph, sujet); };
   const vues = new Set<string>();
   const out: string[] = [];
   for (const ph of [...obligationsChiffrees(dce).map((o) => o.phrase), ...horairesImposes(dce)]) {
