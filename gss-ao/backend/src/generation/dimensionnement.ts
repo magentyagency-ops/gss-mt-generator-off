@@ -147,8 +147,24 @@ export function joursDePeriode(texte: string): number | null {
     const mois = [m[1], ...[...(m[2] || '').matchAll(new RegExp(RX_MOIS_B, 'g'))].map((x) => x[1])];
     intervalles.push({ pos: m.index || 0, jours: [...new Set(mois)].reduce((a, x) => a + JOURS_MOIS[MOIS_DIM.indexOf(x)], 0) });
   }
+  // Nombre de semaines de l'année écrit par le DCE (citedia2 1462, T4-CONS-8 : « hors période d'été et fériés, soit 47
+  // semaines ») : N semaines de 7 jours.
+  for (const m of t.matchAll(/(?:(?:soit|sur|pendant|durant)\s+(\d{1,2})\s+semaines\b|(?<![\d,.])(\d{1,2})\s+semaines\s+(?:par an|\/\s?an|dans l'annee|annuelles?))/g)) {
+    const n = Number(m[1] || m[2]);
+    if (n >= 1 && n <= 52) intervalles.push({ pos: m.index || 0, jours: n * 7 });
+  }
   if (!intervalles.length) return null;
   return intervalles.sort((x, y) => x.pos - y.pos)[intervalles.length - 1].jours;
+}
+
+/**
+ * Citation coupée sur une fin de mot, avec « … » (T4-CONS-8 : « délivrés par le C.N. » coupé au milieu de « C.N.A.P.S. ») ;
+ * entière si elle tient dans la longueur.
+ */
+export function citationCourte(c: string, max: number): string {
+  const t = String(c || '').replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max + 1).replace(/\s+\S*$/, '').replace(/[\s,;:–-]+$/, '')}…`;
 }
 
 /** Le poste semble saisonnier (mois, saison, période estivale ou hivernale) : sa période doit être lue. */
@@ -411,7 +427,12 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
       if (jours) x.joursAn = jours;
       else if (SAISONNIER.test(`${citation} ${x.periode || ''}`)) periodeIllisible = true;
     }
-    if (periodeIllisible) sansPeriode.push(citation.replace(/\s+/g, ' ').trim());
+    // Heures de l'année fixées par l'estimation annuelle du DQE (citedia2 1462 : « ESTIMATION ANNUELLE (hors période d'été et
+    // fériés, soit 47 semaines) | 3948 ») : la période ne change pas le calcul, aucune question (jamais « compté sur toute
+    // l'année » alors que le calcul suit le DCE).
+    const haDce = nombre(p?.heures_an);
+    const annuelDuDce = !!haDce && new RegExp(`(?<![\\d,.])${haDce}(?![\\d,.])`).test(dce.replace(/(\d)[\s\u00a0\u202f](?=\d{3}\b)/g, '$1'));
+    if (periodeIllisible && !annuelDuDce) sansPeriode.push(citation.replace(/\s+/g, ' ').trim());
     // Volume du DQE (« TOTAL HEBDOMADAIRE | 84 ») : prioritaire sur les plages (un bordereau liste toutes les plages
     // facturables, le DQE les heures réellement estimées), pris seulement si ce nombre figure dans le DCE.
     const hh = nombre(p?.heures_hebdo);
@@ -563,7 +584,7 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
   }
   // Postes optionnels écartés et postes saisonniers sans période lisible : signalés à GSS, jamais en silence.
   if (optionnels.length) alertes.push(`${optionnels.length > 1 ? `${optionnels.length} postes ont été écartés` : 'un poste a été écarté'} de l'équipe dédiée comme ${optionnels.length > 1 ? 'optionnels ou ponctuels' : 'optionnel ou ponctuel'} (${optionnels.slice(0, 3).map((c) => `« ${c.slice(0, 120)} »`).join(', ')}) : ${optionnels.length > 1 ? 'sont-ils' : 'est-il'} bien hors de l'équipe permanente ?`);
-  if (sansPeriode.length) alertes.push(`la période de l'année de ${sansPeriode.length > 1 ? 'ces postes saisonniers' : 'ce poste saisonnier'} n'a pas pu être lue (${sansPeriode.slice(0, 3).map((c) => `« ${c.slice(0, 120)} »`).join(', ')}) : ${sansPeriode.length > 1 ? 'ils sont comptés' : 'il est compté'} sur toute l'année ; sur combien de semaines par an faut-il ${sansPeriode.length > 1 ? 'les' : 'le'} compter ?`);
+  if (sansPeriode.length) alertes.push(`la période de l'année de ${sansPeriode.length > 1 ? 'ces postes saisonniers' : 'ce poste saisonnier'} n'a pas pu être lue (${sansPeriode.slice(0, 3).map((c) => `« ${citationCourte(c, 120)} »`).join(', ')}) : ${sansPeriode.length > 1 ? 'ils sont comptés' : 'il est compté'} sur toute l'année ; sur combien de semaines par an faut-il ${sansPeriode.length > 1 ? 'les' : 'le'} compter ?`);
   // Rondes ponctuelles écartées : posées à GSS (durée d'une ronde, nombre d'intervenants), jamais converties en heures.
   if (rondes.length) {
     const q = questionRondes({ profils: [], titulaires: 0, suppleants: 0, casPratique: [], rondesSansDuree: rondes });

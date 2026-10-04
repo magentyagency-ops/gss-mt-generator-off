@@ -1,0 +1,51 @@
+{
+ "postes": [
+  {
+   "profil": "AGENT DE SECURITE",
+   "qualification": "CQP APS ou CAP Agent de Sécurité – SSIAP1",
+   "lieu": "",
+   "agents_simultanes": 1,
+   "plages": [
+    {
+     "jours": [
+      "lundi",
+      "mardi",
+      "mercredi",
+      "jeudi",
+      "vendredi",
+      "samedi"
+     ],
+     "debut": "06:00",
+     "fin": "21:00",
+     "periode": "hors période d'été et fériés, soit 47 semaines"
+    },
+    {
+     "jours": [
+      "lundi",
+      "mardi",
+      "mercredi",
+      "jeudi",
+      "vendredi",
+      "samedi"
+     ],
+     "debut": "21:00",
+     "fin": "06:00",
+     "periode": "hors période d'été et fériés, soit 47 semaines"
+    },
+    {
+     "jours": [
+      "dimanche"
+     ],
+     "debut": "21:00",
+     "fin": "06:00",
+     "periode": "hors période d'été et fériés, soit 47 semaines"
+    }
+   ],
+   "heures_hebdo": 84,
+   "heures_an": 3948,
+   "citation": "AGENT DE SECURITE Titulaire d'une carte professionnelle et de l’agrément aux palpations de sécurité délivrés par le C.N.A.P.S., qualification CQP APS ou CAP Agent de Sécurité – SSIAP1\nLundi au samedi 06h00 - 21h00 (jour) | 8\nLundi au samedi 21h00 - 06h00 (nuit) | 66\nDimanche 21h00 - 06h00 (nuit) | 10\nTOTAL HEBDOMADAIRE | 84\nESTIMATION ANNUELLE (hors période d'été et fériés, soit 47 semaines) | 3948"
+  }
+ ],
+ "cas_pratique": null,
+ "mises_en_situation": []
+}
