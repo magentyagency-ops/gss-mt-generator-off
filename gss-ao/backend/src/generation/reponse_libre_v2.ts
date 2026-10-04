@@ -708,6 +708,8 @@ export function specProcessBesoin(etapes: Array<{ titre?: string; texte?: string
     // contractuelles. ») : une phrase ou une proposition entière de 86 caractères au plus, sinon aucun texte (l'étape vide est
     // alors refusée par anomaliesSchemaBloc1 et le schéma passe à la correction ou au secours). Espace insécable entre un
     // nombre et son unité (« 6 h », jamais « 6 / h » coupé par le moteur).
+    // Coquille du DCE sur le sigle de l'autorité de GSS (« agrément préfectoral CNPAS ») : CNAPS, comme dans le texte (T2-CONS-11).
+    .map((e) => ({ titre: String(e?.titre ?? '').replace(/(?<![A-Za-z])CNPAS(?![A-Za-z])/g, 'CNAPS'), texte: String(e?.texte ?? '').replace(/(?<![A-Za-z])CNPAS(?![A-Za-z])/g, 'CNAPS'), role: e?.role }))
     .map((e) => ({ titre: typoSchema(insecablesNombres(titreEtape(e?.titre, gabarit === 'chevrons' ? 26 : 34))), texte: typoSchema(insecablesNombres(texteCarte(typoSchema(String(e?.texte ?? ''))))), role: String(e?.role || '').toLowerCase().split(/[^a-zé]+/)[0] }))
     .filter((e) => e.titre)
     .slice(0, max);
@@ -773,6 +775,18 @@ export function defautsEtapesBesoin(etapes: Array<{ titre?: string; texte?: stri
     const conclusion = norm(libres[libres.length - 1] || '');
     const dans = etapes.filter((e) => { const m = norm(String(e?.texte || '')).split(' ').filter((w) => w.length > 3); return m.length >= 3 && m.filter((w) => conclusion.includes(w)).length / m.length >= 0.8; }).length;
     if (conclusion && dans >= 3) defauts.push(`${dans} étapes recopient la phrase de conclusion du texte ; enchaîne le besoin, les contraintes du DCE, la réponse de GSS puis le résultat, avec des mots des parties « Vos attentes » et « Points de vigilance ».`);
+  }
+  // Process en miroir (5 étapes : besoin, enjeux, dispositif, pilotage, résultat, planche p. 28) : les cartes 03 et 04 disent
+  // les moyens et le pilotage de GSS, jamais une exigence du CCTP recopiée (T2-CONS-11, cstb 1201 : « La qualification
+  // exigée est l'agrément préfectoral… », « Les horaires des rondes doivent varier régulièrement »).
+  if (Array.isArray(etapes) && etapes.length === 5) {
+    const EXIGENCE = /(?<![\p{L}])(?:doi(?:t|vent)|devr(?:a|ont)|exig[ée]e?s?|requise?s?|impos[ée]e?s?|obligatoires?|le CCTP|le cahier des charges|le march[ée] pr[ée]voit|pr[ée]vue?s? par)(?![\p{L}])/iu;
+    const GSS = /(?<![\p{L}])(?:nous|notre|nos|GSS)(?![\p{L}])/iu;
+    [2, 3].forEach((k) => {
+      const e = etapes[k];
+      const t = `${e?.titre || ''} ${e?.texte || ''}`;
+      if (EXIGENCE.test(t) && !GSS.test(t)) defauts.push(`étape ${k + 1} : « ${String(e?.titre || '').trim()} : ${String(e?.texte || '').trim()} » recopie une exigence du CCTP ; l'étape ${k + 1} dit ${k === 2 ? 'le dispositif de GSS (équipe, moyens)' : 'le pilotage de GSS (contrôle, suivi)'} qui y répond.`);
+    });
   }
   // « Pour arriver à ça » : la dernière étape dit le résultat obtenu pour l'acheteur.
   const derniere = Array.isArray(etapes) && etapes.length ? etapes[etapes.length - 1] : null;
@@ -1836,6 +1850,9 @@ export function texteEtapeAvecVerbe(x: string): string {
   for (const m of t.matchAll(/[,;]\s+/g)) {
     const suite = t.slice((m.index || 0) + m[0].length).split(/\s*;\s*/)[0];
     if (!infinitif(suite)) continue;
+    // Infinitif régi par une négation qui le précède (« les agents ne doivent pas divulguer les informations, photographier
+    // les bâtiments… », cstb 1201) : jamais la suite seule, qui dirait l'inverse (« Photographier les bâtiments »).
+    if (/(?:^|\s)(?:ne|n['’]|ni|sans|jamais|aucune?|interdi\S*|proscri\S*|d[ée]fendu\S*)(?=\s|$)/i.test(t.slice(0, m.index || 0))) break;
     const e = texteEtapeCoordination(cap(suite));
     if (e) return e;
   }
@@ -1851,8 +1868,16 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
       // forme écrite par libellesBloc1) : le libellé et sa suite sont l'exigence.
       const nv = /^\s*[-*•]\s+\*\*([^*«»]+)\*\*(?!\s*[:(])([^→\n]*?)\s*→\s*(?:notre réponse\s*:\s*)?(.+)$/i.exec(l);
       if (nv && !/^(?:points? de vigilance|ce que vous attendez|vos attentes|notre réponse)$/i.test(nv[1].trim())) return { brut: nv[0], x: `${nv[1].trim()}${nv[2]}`, y: nv[3], citation: false };
-      const m = /^\s*[-*•]\s+\*\*[^*]+\*\*(?:\s*\([^)]*\))?\s*:\s*(.+?)\s*→\s*notre réponse\s*:\s*(.+)$/.exec(l);
-      if (m) return { brut: m[0], x: m[1], y: m[2], citation: false };
+      const m = /^\s*[-*•]\s+\*\*([^*]+)\*\*(?:\s*\([^)]*\))?\s*:\s*(.+?)\s*→\s*notre réponse\s*:\s*(.+)$/.exec(l);
+      if (m) {
+        // Exigence citée en gras, réponse de GSS avant la flèche, renvois seuls après (« **« une ouverture effective à
+        // 07h20 »** : nous organisons la ronde d'ouverture… → notre réponse : « La planification », développée au bloc 4 »,
+        // cstb 1201, T2N-6) : la citation est l'exigence, la phrase de GSS la réponse.
+        const q = /^«\s*([^»]{3,160}?)\s*»$/.exec(m[1].trim());
+        const renvois = m[3].replace(/«[^»]{3,160}»/g, '').replace(/[\s,.;]+|\b(?:et|ainsi que|d[ée]velopp[ée]e?s?|d[ée]taill[ée]e?s?|aux?|dans|les?|blocs?|\d+)\b/gi, '');
+        if (q && /^\s*nous\s/i.test(m[2]) && !renvois) return { brut: m[0], x: q[1], y: m[2], citation: true };
+        return { brut: m[0], x: m[2], y: m[3], citation: false };
+      }
       // Attente en gras citée du DCE (« **« Aucun poste ne doit être laissé vacant »** : → notre réponse : … », imm 341), ou
       // réponse après la seule flèche (« **« continuité de service »** : organiser … → processus de remplacement… »,
       // citedia 341) : la citation (sinon le texte avant la flèche, sinon le libellé en gras) est l'exigence.
@@ -1867,6 +1892,9 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
       // Attente citée en gras sans flèche (ifsem 335 : « **« délai maximal de deux heures »** : notre procédure de
       // remplacement… ») : ce qui suit les deux-points est la réponse de GSS.
       const sf = /^\s*[-*•]\s+\*\*\s*«\s*([^»]{3,160}?)\s*»\s*\*\*([^:→\n]{0,160}?)\s*:\s*([^→]+)$/.exec(l);
+      // Suite qui redit le besoin (« le CCTP exige que ce délai soit indiqué… », « vous demandez… », cstb 1201) : ce n'est
+      // pas une réponse de GSS, jamais le texte d'une étape.
+      if (sf && /^\s*(?:(?:le|la|les|l['’]|ce|cette|votre)\s*(?:cctp|ccap|cahier|dce|r[èe]glement|march[ée]|acheteur|client|pouvoir adjudicateur|ma[îi]tre d['’]ouvrage)\b|vous\b|il est (?:demand|exig|attendu|pr[ée]vu))/i.test(sf[3])) return null;
       if (sf) return { brut: sf[0], x: sf[1], y: sf[3], citation: true };
       // Attente écrite en citation du DCE (cadre imposé, ca_normandie 241 : « « main courante tenue en temps réel » —
       // réponse : main courante électronique… ») : la citation est l'exigence, la suite la réponse de GSS.
@@ -1883,6 +1911,9 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
       // Réponse sans « ** » ni guillemets autour des titres de rubrique (caen 471 : « **La planification** » imprimé tel
       // quel ; imm 473 : guillemet ouvrant perdu, « Le livre … (LMC) » structure… »).
       .map((m) => ({ x: m.x.replace(/\*\*/g, '').trim(), y: sansRenvoiRedondant(reponsePourSchema(sansRenvoiBloc(sansIncisesRenvoi(m.y).split(/\s*;\s*/)[0]).replace(/\s+(?:est|sont|sera|seront)$/i, '').trim())), citation: m.citation,
+        // Réponse avant la mise en forme du schéma, titres de rubrique encore entre guillemets : le renvoi final (« … selon
+        // « La procédure de contrôle inopiné » ») s'y retire pour garder la phrase entière (ifsem 1001, T2N-6).
+        yCite: sansRenvoiBloc(sansIncisesRenvoi(m.y).split(/\s*;\s*/)[0]).trim(),
         // Titres de rubrique cités dans la réponse (« Le remplacement d'un agent absent : absence non prévue ») : jamais le texte
         // d'une étape (caen 475, T6C-6 : « Nous traitons l'absence non prévue avec le remplacement d'un agent absent »).
         rubriques: [...m.y.matchAll(/«\s*([^»]+?)\s*»/g)].map((r) => r[1]) }))
@@ -1971,6 +2002,13 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
     let titre = titreDe(c);
     let y = c.y;
     let corps = titre ? texteEtapeCoordination(y.charAt(0).toUpperCase() + y.slice(1)) : '';
+    // Réponse trop longue pour la carte à cause du renvoi final à une rubrique (« Les vérifications inopinées et leur suivi
+    // sont organisés selon « La procédure de contrôle inopiné » ») : la phrase sans le renvoi, entière (ifsem 1001, T2N-6).
+    if (titre && !corps && !c.renvoi && c.rubriques.length && /»\s*[.]?$/.test(c.yCite)) {
+      const yc = c.yCite.replace(/^\s*nous\s/i, 'Nous ');
+      corps = texteEtapeCoordination(yc.charAt(0).toUpperCase() + yc.slice(1));
+      if (/«|»/.test(corps)) corps = '';
+    }
     if (c.renvoi) {
       // Process de GSS (titre de la rubrique) en titre, besoin du DCE (exigence) en texte. Titre de rubrique jamais coupé
       // (« La gestion d'une commande » pour « … supplémentaire », cstb 551, T7CS-5) : trop long pour la carte, l'étape n'est

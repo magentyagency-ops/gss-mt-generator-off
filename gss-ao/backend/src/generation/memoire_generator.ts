@@ -1500,6 +1500,22 @@ export function refusAlignementCctp(extrait: string, remplacement: string, exige
   return '';
 }
 
+/**
+ * Schéma de process du bloc 1 construit sans modèle sur son texte (T2N-6) : périmètre et attentes (specSecoursBesoin), puces
+ * des attentes et des points de vigilance, puis obligations chiffrées ; le premier dessin accepté par le moteur. '' si aucun.
+ */
+export async function dessinerProcessSecoursBloc1(texte: string, id: string, titre: string, theme?: string): Promise<string> {
+  for (const f of [specSecoursBesoin, specSecoursPuces, specSecoursObligations]) {
+    const spec = f(String(texte || ''));
+    if (!spec) continue;
+    try {
+      const d = (await dessinerSpecs([{ id, gabarit: spec.gabarit, params: spec.params, source: texte, titre_section: titre }], 'page', theme)).get(id);
+      if (d?.ok && d.svg) return d.svg;
+    } catch { /* moteur indisponible : secours suivant */ }
+  }
+  return '';
+}
+
 export function questionOuverte(q: string): string {
   const t = String(q || '').trim();
   if (!t || LIGNE_DETERMINISTE.test(t) || /^À demander à l.acheteur/i.test(t)) return t;
@@ -8560,10 +8576,11 @@ RÈGLES DE FORME (rendu Marp) :
         console.log(`[MemoireGenerator] Compréhension du besoin : ${r.retirees.length} engagement(s) contraire(s) à une pratique de GSS gardée retiré(s) (${r.retirees.map((x) => x.slice(0, 60)).join(' ; ')}).`);
         const svg = schemasGeneres.get(CLE_SCHEMA(b1.id));
         if (svg && r.marques.some((m) => normaliser(svg.replace(/<[^>]+>/g, ' ')).includes(normaliser(m)))) {
-          const spec = specSecoursPuces(sections[b1.id]) || specSecoursObligations(sections[b1.id]);
-          const d = spec ? (await dessinerSpecs([{ id: b1.id, gabarit: spec.gabarit, params: spec.params, source: sections[b1.id], titre_section: titresSchemas[b1.id] || b1.titre }], 'page')).get(b1.id) : undefined;
-          if (d?.ok && d.svg) schemasGeneres.set(CLE_SCHEMA(b1.id), d.svg);
-          else { schemasGeneres.delete(CLE_SCHEMA(b1.id)); avisSecours.push(`Rubrique « ${b1.titre} » : le schéma de process reprenait une exigence que GSS doit d'abord confirmer ; il est construit au rendu d'après le texte, à relire via l'assistant avant la remise.`); }
+          // Schéma de process reconstruit sur le texte corrigé, avec toute la chaîne de secours du process (T2N-6 : jamais une
+          // grille de cartes construite au rendu sous le titre « en un process »).
+          const nouveau = await dessinerProcessSecoursBloc1(sections[b1.id], b1.id, titresSchemas[b1.id] || b1.titre);
+          if (nouveau) { schemasGeneres.set(CLE_SCHEMA(b1.id), nouveau); titresSchemas[b1.id] = mt.rubriques.find((x) => x.mode === 'besoin')?.schema?.titre || titresSchemas[b1.id]; }
+          else { schemasGeneres.delete(CLE_SCHEMA(b1.id)); avisSecours.push(`Rubrique « ${b1.titre} » : le schéma de process reprenait une exigence que GSS doit d'abord confirmer, et aucun schéma de process n'a pu être construit sur le texte corrigé : la page de schéma n'est pas imprimée. Demandez-le via l'assistant avant la remise.`); }
         }
       }
     }
@@ -9177,8 +9194,15 @@ RÈGLES DE FORME (rendu Marp) :
       const svg = organigrammeSvg('page', theme);
       if (svg) schemas.set(CLE_SCHEMA(r.id), finaliserSvg(svg, `o${r.id}`));
     }
+    // Compréhension du besoin sans schéma (T2N-6) : la chaîne de secours du process, jamais une grille de cartes sans ordre ni
+    // résultat sous le titre « en un process » ; aucun process possible : pas de page de schéma (signalé à la génération).
+    const b1Rendu = presentes.find((r) => plan.rubriques.find((x) => x.id === r.id)?.mode === 'besoin');
+    if (b1Rendu && !schemas.has(CLE_SCHEMA(b1Rendu.id))) {
+      const svg = await dessinerProcessSecoursBloc1(sectionsMap[b1Rendu.id], b1Rendu.id, opts.titresSchemas?.[b1Rendu.id] || b1Rendu.title, theme);
+      if (svg) schemas.set(CLE_SCHEMA(b1Rendu.id), svg);
+    }
     // Rubrique sans schéma prévu par le mémoire type (introduction des références) : pages de texte seules.
-    const aConstruire = presentes.filter((r) => !schemas.has(CLE_SCHEMA(r.id)) && (r.ajout || sourceDe(r.id)));
+    const aConstruire = presentes.filter((r) => !schemas.has(CLE_SCHEMA(r.id)) && (r.ajout || sourceDe(r.id)) && r.id !== b1Rendu?.id);
     if (aConstruire.length) {
       const pages: PageSchema[] = aConstruire.map((r) => ({ key: `v2_${r.id}`, sectionId: r.id, sectionTitle: r.title, text: sectionsMap[r.id] }));
       const construits = await new SchemaService().construirePourPages(pages, (msg) => onProgress?.(93, msg), { format: 'page', theme, secours: false });

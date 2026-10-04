@@ -96,3 +96,55 @@ describe('articles du bloc 1 lus dans le cahier des charges et sur le bon fait (
     expect(articlesBloc1('## Le périmètre de la prestation demandée\nLes prestations ponctuelles peuvent également prévoir une présence d’agent au-delà d’une heure.\n', dce)).toEqual({ '1h': '3.9' });
   });
 });
+
+import { specProcessBesoin, defautsEtapesBesoin } from '../src/generation/reponse_libre_v2';
+
+describe('schéma du bloc 1 : sigle CNAPS et cartes de GSS (T2-CONS-11, cstb 1201)', () => {
+  const etapes = [
+    { titre: 'Rondes du site du CSTB', texte: "Ouverture, fermeture, rondes de jour et de nuit selon le CCTP." },
+    { titre: 'Présence après 19h30', texte: 'Aucun collaborateur ne doit rester sur le site après 19h30.' },
+    { titre: 'Agrément préfectoral CNPAS', texte: "La qualification exigée est l'agrément préfectoral CNPAS." },
+    { titre: 'Horaires variables', texte: 'Les horaires des rondes doivent varier régulièrement.' },
+    { titre: 'Site sécurisé', texte: 'Rondes conformes au CCTP, site sécurisé en continu.' },
+  ];
+  it('« CNPAS » du DCE écrit « CNAPS » dans le schéma', () => {
+    expect(JSON.stringify(specProcessBesoin(etapes))).not.toMatch(/CNPAS/);
+    expect(JSON.stringify(specProcessBesoin(etapes))).toMatch(/CNAPS/);
+  });
+  it('cartes 03 et 04 qui recopient une exigence du CCTP : refusées', () => {
+    const d = defautsEtapesBesoin(etapes);
+    expect(d.filter((x) => /recopie une exigence du CCTP/.test(x))).toHaveLength(2);
+    const bonnes = etapes.map((e, i) => (i === 2 ? { titre: 'Équipe de rondiers dédiée', texte: 'Nos rondiers titulaires de la carte CNAPS, formés au site.' } : i === 3 ? { titre: 'Rondes à horaires variés', texte: 'Nous faisons varier les horaires des rondes chaque semaine.' } : e));
+    expect(defautsEtapesBesoin(bonnes).filter((x) => /recopie une exigence du CCTP/.test(x))).toEqual([]);
+  });
+});
+
+import { etapesDesPuces, texteEtapeAvecVerbe } from '../src/generation/reponse_libre_v2';
+
+describe('process du bloc 1 construit sur le texte, jamais une grille (T2N-6, ifsem 1001 et cstb 1201)', () => {
+  it('attentes citées sans flèche, réponse terminée par un renvoi : phrase de GSS sans le renvoi', () => {
+    const t = [
+      '## Vos attentes et nos engagements',
+      "- **« délai maximal de deux heures à compter du début de la vacation concernée »** : nous organisons le remplacement sans interruption du service selon « Le remplacement d'un agent absent : absence non prévue », développé au bloc 5.",
+      '- **« main courante numérique sécurisée »** : les prises et fins de poste, rondes, incidents et anomalies sont suivis par « La main courante électronique », développée au bloc 4.',
+      '- **« Trois fois par mois au minimum »** : les vérifications inopinées et leur suivi sont organisés selon « La procédure de contrôle inopiné », développée au bloc 5.',
+    ].join('\n');
+    const e = etapesDesPuces(t);
+    expect(e.map((x) => x.titre)).toEqual(['Délai maximal de deux heures', 'Main courante numérique sécurisée', 'Trois fois par mois au minimum']);
+    expect(e[0].texte).toBe('Nous organisons le remplacement sans interruption du service');
+    expect(e.every((x) => !/[«»]/.test(String(x.texte)))).toBe(true);
+  });
+  it('suite qui redit le besoin (« le CCTP exige… ») : jamais le texte d’une étape', () => {
+    const t = "## Vos attentes et nos engagements\n- **« délai moyen maximum pour intervenir sur site »** : le CCTP exige que ce délai soit indiqué pour les levées de doute.\n";
+    expect(etapesDesPuces(t)).toEqual([]);
+  });
+  it('réponse de GSS avant la flèche, renvois seuls après : la citation en titre, la phrase de GSS en texte', () => {
+    const t = "## Vos attentes et nos engagements\n- **« une ouverture effective à 07h20 »** : nous organisons la ronde d’ouverture et la vérification des opérations prescrites → notre réponse : « La planification », développée au bloc 4, et « La mise en place d’une prestation », développée au bloc 5.\n";
+    expect(etapesDesPuces(t)).toEqual([{ titre: 'Une ouverture effective à 07h20', texte: 'Nous organisons la ronde d’ouverture et la vérification des opérations prescrites', role: 'rouge' }]);
+  });
+  it('interdiction : jamais la suite d’une énumération sans sa négation', () => {
+    expect(texteEtapeAvecVerbe('les agents ne doivent pas divulguer les informations, photographier les bâtiments ou divulguer les codes d’accès')).not.toMatch(/^Photographier/);
+    const t = "## Les points de vigilance identifiés et nos réponses\n- **Informations confidentielles** : les agents ne doivent pas divulguer les informations, photographier les bâtiments ou divulguer les codes d’accès → notre réponse : « L’intégration d’un nouvel agent », développé au bloc 5.\n";
+    expect(JSON.stringify(etapesDesPuces(t))).not.toMatch(/"texte":"Photographier/);
+  });
+});
