@@ -33,7 +33,7 @@ import {
 } from './memoire_type_cadre';
 import { articlesBloc1 } from './bloc1_marine';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, fondementDansDce, exigenceDeModification, ETAPE_ADAPTATION_MODELE, type PhraseAdaptee } from './adaptations_cctp';
-import { exigenceDeGrillePenalites, rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
+import { exigenceDeGrillePenalites, estCahierDesChargesParContenu, rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
 import os from 'os';
@@ -2603,17 +2603,24 @@ export function libelleDelaiRetire(analyse: any, dce: string): string {
   return lieuDuMarche(analyse || {}, dce || '').statut === 'inconnu' ? 'Délai retiré faute de lieu du site dans le DCE, à confirmer par GSS : ' : 'Délai proposé hors Normandie, à confirmer par GSS (organisation locale) : ';
 }
 
-export function alerteCadreAbsent(dce: string): string[] {
+export function alerteCadreAbsent(dce: string, cadreFourniAutreFormat = ''): string[] {
   const t = String(dce || '');
+  // Cadre présent parmi les pièces sous un autre format (PDF, tableur) : son alerte propre est posée (T3-COH-5), jamais « n'est
+  // pas parmi les pièces ».
+  if (cadreFourniAutreFormat) return [];
+  const pieces = [...t.matchAll(/\n--- ([^\n]+?) ---\n/g)].map((x) => x[1]);
+  if (pieces.some((f) => /cadre\s*(?:de\s*|du\s*)?(?:r[ée]ponse|m[ée]moire)|m[ée]moire\s*technique|\bcrt\b/i.test(f.replace(/[_-]+/g, ' ')) && !/accord.cadre|candidature/i.test(f))) return [];
   // Nom du document seul (« cadre de réponse technique », « cadre de réponse technique et RSE », « cadre du mémoire
   // technique »), jamais la suite de la phrase (caen : « cadre de réponse technique les délais et conditions de
   // mobilisation des ») ; le plus précis des noms cités, avec la phrase du DCE qui le cite, entière.
-  const occurrences = [...t.matchAll(/cadre\s+(?:de\s+)?(?:r[ée]ponse|du\s+m[ée]moire|de\s+m[ée]moire)(?:\s+technique)?(?:\s+et\s+RSE)?/gi)]
+  const occurrences = [...t.matchAll(/cadre\s+(?:(?:de|du)\s+)?(?:r[ée]ponse|m[ée]moire)(?:\s+technique)?(?:\s+et\s+RSE)?/gi)]
     .filter((x) => !/financi|prix|bordereau/i.test(t.slice(x.index || 0, (x.index || 0) + x[0].length + 20))
       && !/bordereau|financi/i.test(t.slice(Math.max(0, (x.index || 0) - 80), x.index || 0))
       // Locution « dans le cadre du mémoire technique » (« tout autre indicateur prévu dans le cadre du mémoire technique du
       // Titulaire », citedia) : pas un document du DCE.
-      && !(/m[ée]moire/i.test(x[0]) && /\bdans\s+le\s*$/i.test(t.slice(Math.max(0, (x.index || 0) - 12), x.index || 0))));
+      && !(/m[ée]moire/i.test(x[0]) && /\bdans\s+le\s*$/i.test(t.slice(Math.max(0, (x.index || 0) - 12), x.index || 0))
+        // « … dans le cadre mémoire technique joint au DCE » (T3-COH-5) : le document, pas la locution.
+        && !/^\s*(?:\(|,)?\s*(?:joint|ci-joint|fourni|annex|figurant|impos|type|mis\s+[àa]\s+disposition)/i.test(t.slice((x.index || 0) + x[0].length, (x.index || 0) + x[0].length + 40))));
   if (!occurrences.length) return [];
   const m = occurrences.reduce((a, b) => (b[0].replace(/\s+/g, ' ').length > a[0].replace(/\s+/g, ' ').length ? b : a));
   // Nom écrit en capitales dans le DCE (« CADRE DE REPONSE TECHNIQUE ») : en minuscules, jamais « cADRE ».
@@ -2622,7 +2629,9 @@ export function alerteCadreAbsent(dce: string): string[] {
   const i = m.index || 0;
   // Début de la phrase, ou de l'élément de liste en retrait qui la porte (« ⏎   -   Le cadre de réponse par lot », citedia).
   const puces = [...t.slice(Math.max(0, i - 400), i).matchAll(/\n[ \t]*[-•▪●○◦][ \t]+/g)].map((x) => Math.max(0, i - 400) + (x.index || 0) + x[0].length - 1);
-  const debut = Math.max(t.lastIndexOf('.', i), t.lastIndexOf('\n\n', i), t.lastIndexOf('\n-', i), t.lastIndexOf('\n•', i), ...puces) + 1;
+  // Jamais au point d'une extension de fichier de l'en-tête interne d'une pièce (« \n--- RC.pdf ---\n » : « pdf --- … »).
+  const entetes = [...t.slice(0, i).matchAll(/\n--- [^\n]+? ---\n/g)].map((x) => (x.index || 0) + x[0].length - 1);
+  const debut = Math.max(t.lastIndexOf('.', i), t.lastIndexOf('\n\n', i), t.lastIndexOf('\n-', i), t.lastIndexOf('\n•', i), ...puces, ...entetes.slice(-1)) + 1;
   const finPoint = t.indexOf('.', i + m[0].length);
   const finBloc = t.indexOf('\n\n', i + m[0].length);
   // Élément de liste sans point final suivi d'un titre numéroté ou d'un autre élément (« … pour l'exécution du contrat ⏎ 3 -
@@ -2680,9 +2689,12 @@ function alerteCctpAbsentLu(dce: string): string[] {
   const TITRE_CCTP = /^[ \t]*(?:CAHIER DES CLAUSES TECHNIQUES PARTICULI[EÈ]RES|CAHIER DES CLAUSES PARTICULI[EÈ]RES|CAHIER DES CHARGES(?: TECHNIQUES?)?(?: PARTICULI[EÈ]RES)?)[ \t]*(?:\(\s*C\.?\s?C\.?\s?T?\.?\s?P\.?\s*\)[ \t]*)?\.?[ \t]*$/m;
   const ENTETE_CCTP = /^[ \t]*(?:CCTP|C\.C\.T\.P\.?)[ \t]*$/gm;
   const present = pieces.some((p) => {
-    const nom = `${p.nom} ${p.nom.replace(/[_.\s-]+/g, '')}`;
+    // Soulignés lus comme des espaces (T3-COH-6 : « RC_gardiennage_2026.pdf » est le RC, pas le cahier des charges).
+    const nomEsp = p.nom.replace(/_/g, ' ');
+    const nom = `${nomEsp} ${p.nom.replace(/[_.\s-]+/g, '')}`;
     if (((NOM_CCTP.test(nom) || estCahierDesCharges(p.nom)) && !/ccap|clauses\s*administratives/i.test(nom)) || RX_CCATP.test(nom)) return true;
-    if (AUTRE.test(nom)) return false;
+    if (AUTRE.test(nomEsp)) return false;
+    if (estCahierDesChargesParContenu(p.nom, p.corps)) return true;
     return DEBUT_CCTP.test(p.corps.slice(0, 3000)) || TITRE_CCTP.test(p.corps) || (p.corps.match(ENTETE_CCTP) || []).length >= 3;
   });
   if (present) return [];
@@ -2942,6 +2954,8 @@ export class MemoireGenerator {
   private appelsEchoues: string[] = [];
   /** Limite de pages du RC lue sans le modèle, ou non lue (T7CS-1) : alerte en tête des consultations et du premier message. */
   private alertesFormat: string[] = [];
+  /** Cadre imposé présent mais non remplissable (PDF, tableur) : l'alerte « absent des pièces » ne doit pas être posée. */
+  private cadreNonRemplissable: string | null = null;
   /** Pièces du DCE (PDF scannés) dont la transcription a échoué (T10-COH-4). */
   private piecesIllisibles: string[] = [];
   /** Pièces du cahier des charges tronquées ou écartées par le budget de lecture du DCE (T1-COH-3) : signalées à GSS. */
@@ -2989,9 +3003,9 @@ export class MemoireGenerator {
     // (cadre de réponse technique), « CADRE_REP », « Trame mémoire technique », « Questionnaire
     // technique »… Un « accord-cadre », un cadre de réponse « candidatures » ou une pièce DC1/DC2 n'en
     // sont pas. S'il y a plusieurs candidats, on garde le cadre TECHNIQUE (score), puis le .docx.
-    const score = (f: string): number => {
+    const score = (f: string, toutFormat = false): number => {
       const n = `${norm(f)} ${norm(repaired(f))}`;
-      if (!/\.docx?$/i.test(f)) return 0;
+      if (!/\.docx?$/i.test(f) && !(toutFormat && /\.(?:pdf|xlsx?|ods|odt|rtf)$/i.test(f))) return 0;
       if (/candidature|accord[- ]cadre|\bdc ?[1-4]\b|acte d.?engagement|\bbpu\b|\bdpgf\b|\bdqe\b|fiche contact/.test(n)) return 0;
       let sc = 0;
       if (/memoire technique|cadre (de )?(reponse|memoire)|\bcrt\b|cadre rep\b|trame|questionnaire technique|reponse technique/.test(n)) sc = 10;
@@ -3002,7 +3016,19 @@ export class MemoireGenerator {
       return sc;
     };
     const candidats = files.map((f) => ({ f, sc: score(f) })).filter((c) => c.sc > 0).sort((a, b) => b.sc - a.sc);
-    if (!candidats.length) return null;
+    if (!candidats.length) {
+      // Cadre imposé fourni seulement en PDF ou en tableur (T3-COH-5) : impossible à remplir ; le mémoire est rédigé hors de ce
+      // cadre et GSS en est prévenu en tête des consultations et du premier message de l'assistant.
+      const autre = files.map((f) => ({ f, sc: score(f, true) })).filter((c) => c.sc >= 10).sort((a, b) => b.sc - a.sc)[0];
+      if (autre) {
+        const nom = repaired(autre.f);
+        const format = /\.pdf$/i.test(nom) ? 'en PDF' : /\.(?:xlsx?|ods)$/i.test(nom) ? 'en tableur' : 'dans un format que la génération ne remplit pas';
+        this.alertesFormat.push(`Le cadre de réponse imposé « ${nom} » n'est fourni qu'${format.startsWith('en') ? '' : 'e '}${format} : le mémoire a été rédigé hors de ce cadre. Pouvez-vous obtenir sa version Word, l'ajouter au dossier et relancer la génération ?`.replace("n'est fourni qu'en", "n'est fourni qu'en").replace("qu'e dans", 'que dans'));
+        this.cadreNonRemplissable = nom;
+        console.warn(`[MemoireGenerator] Cadre imposé « ${nom} » fourni ${format} : réponse libre, GSS prévenu.`);
+      }
+      return null;
+    }
     if (candidats.length > 1) console.log(`[MemoireGenerator] Plusieurs cadres possibles (${candidats.map((c) => c.f).join(' ; ')}) → « ${candidats[0].f} ».`);
     return this.cadreEnDocx(path.join(dceDir, candidats[0].f));
   }
@@ -3227,8 +3253,10 @@ export class MemoireGenerator {
         // PDF scanné dont la transcription a échoué (T10-COH-4) : nommé à GSS dans les alertes.
         if (ext === '.pdf' && pdfsIllisibles.has(fullPath) && !this.piecesIllisibles.includes(entry.name)) this.piecesIllisibles.push(entry.name);
         if (text.length > 100) {
-          pieces.push({ label: entry.name.replace(/\.(doc|docx|pdf|xlsx)$/i, ''), text, priority: priorityOf(normalized) });
-          console.log(`[MemoireGenerator] DCE chargé: ${entry.name} (${text.length} chars, prio ${priorityOf(normalized)})`);
+          // Cahier des charges reconnu par son contenu quand son nom ne le dit pas (T3G-2) : priorité du CCTP.
+          const prio = priorityOf(normalized) < 100 && estCahierDesChargesParContenu(entry.name, text) ? (/annexe/.test(normalized) ? 95 : 100) : priorityOf(normalized);
+          pieces.push({ label: entry.name.replace(/\.(doc|docx|pdf|xlsx)$/i, ''), text, priority: prio });
+          console.log(`[MemoireGenerator] DCE chargé: ${entry.name} (${text.length} chars, prio ${prio})`);
         }
       }
     };
@@ -8704,7 +8732,7 @@ RÈGLES DE FORME (rendu Marp) :
     progres(80, 'Données à compléter et questions à GSS…');
     const titreDe = (id: string) => rubriquesDoc.find((r) => r.id === id)?.title || id;
     const consultations = new Set<string>([
-      ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext),
+      ...alerteCadreAbsent(dceContext, this.cadreNonRemplissable || ''), ...questionLieuInconnu(analysisData, dceContext),
       ...commentairesRetires,
       ...alertesAcheteurs,
       ...questionsCouverture,
@@ -10397,7 +10425,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     retirerQuestionsCouvertes(questionsCouverture, sourcesCouverture, suivi.exigencesNotees(), Object.values(sections).join('\n\n'));
     const confirmationsAvantSelection = confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie);
     const consultations = new Set<string>([
-      ...alerteCadreAbsent(dceContext), ...questionLieuInconnu(analysisData, dceContext), ...commentairesRetires, ...questionsCouverture, ...formalitesCourt.map(questionFormalite), ...confirmationsAvantSelection,
+      ...alerteCadreAbsent(dceContext, this.cadreNonRemplissable || ''), ...questionLieuInconnu(analysisData, dceContext), ...commentairesRetires, ...questionsCouverture, ...formalitesCourt.map(questionFormalite), ...confirmationsAvantSelection,
       ...publiees.filter((p) => toutesRetenues.includes(p.id)).flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)])
         .flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
     ]);

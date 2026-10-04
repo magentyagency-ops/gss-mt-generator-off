@@ -2013,14 +2013,32 @@ export function estCahierDesCharges(nomPiece: string): boolean {
   const colle = n.replace(/[^a-z0-9]+/g, '');
   if (RX_CCATP.test(n) || RX_CCATP.test(colle)) return true;
   if (/ccap|clauses ?administratives|clausesadministratives/.test(`${n} ${colle}`)) return false;
+  // Dossier technique amiante (DTA), diagnostics, plan de prévention : pas le cahier des charges.
+  if (/amiante|diagnostic|plan de prevention|(?<![a-z])dta(?![a-z])/.test(n)) return false;
   // « Descriptif technique », « Descriptif des prestations » (MAPA, T2-COH-6) : la description technique de la prestation.
-  return /cctp|(?<![a-z])ccp(?![a-z])|(?<![a-z])cdc(?![a-z])|cahier des (?:clauses|charges)|clauses techniques|prescriptions techniques|specifications techniques|programme fonctionnel|descriptif (?:technique|des prestations)/.test(n)
-    || /cctp|cahierdes(?:clauses|charges)|clausestechniques|prescriptionstechniques|specificationstechniques|descriptif(?:technique|desprestations)/.test(colle);
+  // Autres noms courants du cahier des charges (T3G-2) : « Description des prestations », « Dossier technique », « Expression des
+  // besoins », « Cahier technique », « Annexe technique », « Termes de référence », « Spécifications ».
+  return /cctp|(?<![a-z])ccp(?![a-z])|(?<![a-z])cdc(?![a-z])|cahier des (?:clauses|charges)|clauses techniques|prescriptions techniques|specifications techniques|programme fonctionnel|descriptif (?:technique|des prestations)|description (?:technique |detaillee )?des (?:prestations|besoins)|dossier technique|expression des besoins|cahier technique|annexe technique|termes de reference|(?<![a-z])specifications(?![a-z])/.test(n)
+    || /cctp|cahierdes(?:clauses|charges)|clausestechniques|prescriptionstechniques|specificationstechniques|descriptif(?:technique|desprestations)|descriptiondesprestations|dossiertechnique|expressiondesbesoins|cahiertechnique|annexetechnique|termesdereference/.test(colle);
+}
+
+/**
+ * Cahier des charges reconnu par son contenu quand son nom ne le dit pas (T3G-2 : « Pièce 3.pdf » qui commence par
+ * « DESCRIPTION DES PRESTATIONS ») : pièce ni administrative ni bordereau, dont les 3 000 premiers caractères portent un titre de
+ * cahier des charges ou de description des prestations, ou un article d'objet suivi d'obligations du titulaire.
+ */
+export function estCahierDesChargesParContenu(nomPiece: string, corps: string): boolean {
+  if (estCahierDesCharges(nomPiece)) return true;
+  if (estPieceAdministrative(nomPiece) || /annexe|plan|photo|(?<![a-z])bpu(?![a-z])|dpgf|dqe|(?<![a-z])ccap(?![a-z])/i.test(String(nomPiece || '').replace(/_/g, ' '))) return false;
+  const debut = String(corps || '').slice(0, 3000);
+  if (/cahier\s+des\s+(?:clauses\s+techniques|clauses\s+particuli[eè]res|charges)|descri(?:ption|ptif)\s+(?:technique\s+|d[ée]taill[ée]e\s+)?des\s+(?:prestations|besoins)|expression\s+des\s+besoins|dossier\s+technique|termes\s+de\s+r[ée]f[ée]rence|sp[ée]cifications\s+techniques/i.test(debut)) return true;
+  return /article\s*1\b[^\n]{0,60}objet/i.test(debut) && /\ble\s+(?:titulaire|prestataire)\b/i.test(String(corps || '').slice(0, 8000)) && !/r[èe]glement\s+de\s+(?:la\s+)?consultation|acte\s+d.engagement|clauses\s+administratives/i.test(debut);
 }
 
 /** Pièce sans exigence technique (RC, AE, bordereaux, formulaires, cadre de réponse, CCAP…). */
 export function estPieceAdministrative(nomPiece: string): boolean {
-  const brut = String(nomPiece || '');
+  // Soulignés lus comme des espaces (T3-COH-6 : « RC_gardiennage_2026.pdf », « 01_RC.pdf » : « RC » est un mot).
+  const brut = String(nomPiece || '').replace(/_/g, ' ');
   const nom = `${brut} ${brut.replace(/[_.\s-]+/g, '')}`;
   if (RX_CCATP.test(nom)) return false;
   return /\bRC\b|r[èe]glement (?:de (?:la )?)?consultation|acte d.engagement|\bAE\b|DPGF|BPU|DQE|bordereau|\bDC\s?\d|attestation|cadre de r[ée]ponse|m[ée]moire|candidature|lettre|avis|ccap|clauses administratives/i.test(nom);
@@ -2078,7 +2096,9 @@ export function dceCctpDAbord(dce: string, max = 60_000): string {
   if (blocs.length <= 1) return t.slice(0, max);
   const nomDe = (b: string) => (/--- (.+?) ---|===== PIÈCE : (.+?) =====/.exec(b) || [])[1] || (/===== PIÈCE : (.+?) =====/.exec(b) || [])[1] || '';
   // Le CCTP lui-même, puis ses annexes (« Annexe 1 CCTP - Besoin par sites »).
-  const cahiers = [...blocs.filter((b) => estCahierDesCharges(nomDe(b)) && !/annexe/i.test(nomDe(b))), ...blocs.filter((b) => estCahierDesCharges(nomDe(b)) && /annexe/i.test(nomDe(b)))];
+  const corpsDe = (b: string) => b.replace(/^\n*(?:--- .+? ---|===== PIÈCE : .+? =====)\n/, '');
+  const cahier = (b: string) => estCahierDesChargesParContenu(nomDe(b), corpsDe(b));
+  const cahiers = [...blocs.filter((b) => cahier(b) && !/annexe/i.test(nomDe(b))), ...blocs.filter((b) => cahier(b) && /annexe/i.test(nomDe(b)))];
   const reste = blocs.filter((b) => !cahiers.includes(b));
   return [...cahiers, ...reste].join('').slice(0, max);
 }
