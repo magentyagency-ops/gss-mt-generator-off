@@ -3744,6 +3744,9 @@ export function faitsDePhrase(t: string): string[] {
   for (const m of n.matchAll(/(?:^|[^a-z0-9])(deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|quinze|vingt|trente|quarante|cinquante|soixante|cent)(?![a-z0-9-])/g)) out.push(`N:${nombre(m[1])}`);
   for (const m of n.matchAll(/(?:^|[^a-z0-9])(au moins|au plus|au maximum|au minimum|maximum|minimum|maximale?s?|minimale?s?|moins de|plus de|jusqu'a)(?![a-z0-9])/g)) out.push(`L:${m[1].replace(/^au /, '').replace(/ales?$|als?$/, 'um').replace(/^maxim(?:um)?$/, 'maximum').replace(/^minim(?:um)?$/, 'minimum')}`);
   for (const m of n.matchAll(/(sous[ -]?trait|interim|covid)/g)) out.push(`F:${m[1].replace(/[ -]/g, '')}`);
+  // Fréquence « une fois par mois » (« un » n'est pas lu comme un nombre) : retirée par le modèle (« Contrôle 1 — le contrôle
+  // de fond de la prestation, réalisé par le responsable de site », citedia2 1462), ce n'est plus la phrase de GSS.
+  for (const m of n.matchAll(/(?:^|[^a-z0-9])une fois par (jour|nuit|semaine|mois|trimestre|semestre|an)(?![a-z0-9])/g)) out.push(`Q:1/${m[1]}`);
   return out;
 }
 

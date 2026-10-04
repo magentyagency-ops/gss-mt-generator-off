@@ -1794,7 +1794,9 @@ export function nettoyerChampCadre(texte: string): string {
     let l = lignes[i];
     let j = i + 1;
     while (j < lignes.length && !lignes[j].trim()) j++;
-    const suiteListe = j < lignes.length && LISTE.test(lignes[j]);
+    // Amorce d'un tableau de GSS (« Derrière l'équipe dédiée, GSS mobilise l'ensemble de ses ressources : » devant « Catégorie
+    // de personnel : Qualification : Nombre », citedia2 1462, T4-CONS-1) : suivie de son tableau, comme d'une liste.
+    const suiteListe = j < lignes.length && (LISTE.test(lignes[j]) || (lignes[j].match(/\s:\s/g) || []).length >= 2);
     // Sous-titre seul sur sa ligne et suivi, sans ligne vide, de son texte (havre2 341, champ 37 : « Un réel engagement : »,
     // « Le recyclage de nos tenues : » du texte de GSS retirés) : ce n'est pas une étiquette vide, il est gardé.
     const sousTitreSuivi = /^[A-ZÀ-Ý][^.!?:]{1,80}\s?:\s*$/.test(l.trim()) && l.trim().split(/\s+/).length <= 9

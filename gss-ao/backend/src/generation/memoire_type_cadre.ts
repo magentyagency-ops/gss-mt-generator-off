@@ -1346,7 +1346,208 @@ export function ecartEquipeTableau(texte: string): { annonce: number; somme: num
  * n'est jamais remise. Un sous-titre de GSS omis (« Le recyclage de nos tenues : ») n'est remis que devant son contenu.
  * Une phrase courte (moins de 6 mots, souvent un intitulé) n'est rapprochée d'une phrase de GSS qu'à 80 % au moins.
  */
-export function recalerSurReference(reference: string, reponse: string, o: { limite?: boolean; maxMots?: number; seuil?: number; exclure?: (phrase: string) => boolean; dce?: string; attendus?: string[] } = {}): ResultatRecalage {
+/** Première lettre en capitale (après une puce éventuelle). */
+function majusculeInitiale(t: string): string {
+  return String(t || '').replace(/^(\s*(?:[•\-*]|\d+[.)])?\s*)([a-zà-ÿ])/, (_, a: string, c: string) => `${a}${c.toUpperCase()}`);
+}
+
+/**
+ * Ligne de texte rendue après des retraits : une ligne de paragraphe (hors puce) qui finit par « ; » est la fin
+ * d'une phrase dont la suite a été retirée (« … permettent de vérifier la présence sur site ; », citedia2 1462) : elle finit
+ * par un point ; une ligne de paragraphe commence par une capitale.
+ */
+function finirLigne(l: string): string {
+  const t = String(l || '');
+  if (!t.trim() || /^\s*(?:[•\-*]|\d+[.)])\s/.test(t)) return t;
+  return majusculeInitiale(t.replace(/\s*;\s*$/, '.'));
+}
+
+/**
+ * Intitulé d'un élément attendu du cadre écrit par le modèle sur sa propre ligne (« Organisation des plannings »,
+ * « Traçabilité de la prise et de la fin de poste ») : ligne courte sans ponctuation finale, sans « libellé : valeur »,
+ * qui porte sur un attendu. Renvoie l'indice de l'attendu, ou -1.
+ */
+export function intituleAttendu(ligne: string, attendus: string[]): number {
+  const t = String(ligne || '').replace(/\*\*/g, '').replace(/^#{1,4}\s+/, '').trim();
+  if (!t || /^(?:[•\-*]|\d+[.)])\s/.test(t) || /:\s*\S/.test(t) || /[.;:!?,»)]\s*$/.test(t) || !/^[A-ZÀ-Ý]/.test(t)) return -1;
+  if (t.split(/\s+/).length > 25 || /\[À COMPLÉTER\]|\[CONSULTATION/.test(t)) return -1;
+  const net = (x: string) => normaliser(x).replace(/[^a-z0-9]+/g, ' ').trim();
+  const exact = attendus.findIndex((a) => net(a) === net(t));
+  if (exact >= 0) return exact;
+  const proches = attendus.map((a, i) => ({ i, ok: correspondAttendu(t, a), n: [...racinesAttendu(a)].filter((w) => racinesAttendu(t).has(w)).length })).filter((x) => x.ok);
+  if (!proches.length) return -1;
+  proches.sort((a, b) => b.n - a.n || a.i - b.i);
+  return proches[0].i;
+}
+
+/**
+ * Recalage d'une réponse du cadre rédigée sous les intitulés de ses éléments attendus (consigne 5 : « elle restructure… sur
+ * la construction (l'ordre) » ; T4-CONS-1, citedia2 1462 : le recalage global remettait le texte dans l'ordre du mémoire type
+ * de GSS, vidait « Dispositions favorisant la stabilité des équipes… », rangeait le texte de controlmaster sous « Modalités
+ * d'accès… » et coupait un tableau de GSS de son en-tête). L'ordre des intitulés reste celui de la réponse, chacun garde le
+ * passage qu'il contient :
+ *  1. la réponse est découpée en parties, une par intitulé d'attendu (le texte écrit avant le premier intitulé en est une) ;
+ *  2. chaque bloc du texte de GSS (paragraphe, sous-titre et son texte, amorce et son tableau, phrase qui renvoie à la
+ *     précédente comme « Dans les deux cas… ») est rattaché à la partie où la réponse en reprend le plus de phrases ; un
+ *     bloc que la réponse omet rejoint, comme dans le texte de GSS, le bloc voisin dont il partage le plus de mots ;
+ *  3. chaque partie est recalée sur ses seuls blocs de GSS (recalerSurReference sans découpage), dans sa part de la limite de
+ *     mots ; une partie dont le recalage ne laisserait aucun texte garde le texte de la réponse.
+ * La fidélité est la moyenne des parties pondérée par la longueur de leurs blocs de GSS. null quand la réponse ne suit pas
+ * les attendus (moins de deux intitulés) ou ne reprend aucun bloc de GSS : le recalage global s'applique.
+ */
+function recalerParAttendus(reference: string, reponse: string, o: { limite?: boolean; maxMots?: number; seuil?: number; exclure?: (phrase: string) => boolean; dce?: string; attendus?: string[] }): ResultatRecalage | null {
+  const attendus = o.attendus || [];
+  const lignes = String(reponse || '').replace(/\r/g, '').split('\n');
+  const titres: number[] = [];
+  lignes.forEach((l, i) => {
+    // Un intitulé est suivi d'un texte (jamais la dernière ligne, jamais deux intitulés du même attendu de suite).
+    if (intituleAttendu(l, attendus) < 0) return;
+    titres.push(i);
+  });
+  if (titres.length < 2) return null;
+  type Partie = { titre: string | null; corps: string; blocs: number[] };
+  const parties: Partie[] = [];
+  const avant = lignes.slice(0, titres[0]).join('\n').trim();
+  if (avant) parties.push({ titre: null, corps: avant, blocs: [] });
+  titres.forEach((t, n) => parties.push({ titre: lignes[t].trim(), corps: lignes.slice(t + 1, n + 1 < titres.length ? titres[n + 1] : lignes.length).join('\n').replace(/^\n+|\n+$/g, ''), blocs: [] }));
+  // Blocs du texte de GSS (lignes séparées par une ligne vide).
+  const blocsBruts = String(reference || '').replace(/\r/g, '').split(/\n\s*\n/).map((b) => b.replace(/^\n+|\n+$/g, '')).filter((b) => b.trim());
+  const LIGNE_TAB = /^(?![•\-*]\s)[^:\n]{2,}(?:\s:\s[^:\n]+){2,}$/;
+  const estTableau = (b: string) => b.split('\n').every((l) => LIGNE_TAB.test(l.trim()));
+  const RENVOI = /^(?:Dans (?:les|ces) deux cas|Dans ce cas|Dans ces cas|Dans chacun des (?:deux )?cas|Quelle que soit l['’]issue|Elle|Il(?!\s+(?:peut arriver|arrive|est|faut|s['’]agit|existe|convient|y a|importe|appara[iî]t)\b)|Ils|Elles|Celle-ci|Celui-ci|Cela|Ce dernier|Cette derni[èe]re|Ces (?:rapports|données|informations|contrôles|mesures))\b/;
+  // Groupes indivisibles : amorce « … : » et le tableau qui la suit, tableau et suite, bloc qui renvoie au précédent.
+  const blocs: string[] = [];
+  /** Blocs de GSS qui renvoient au précédent (« Dans les deux cas… ») : ils suivent leur antécédent. */
+  const renvois: string[] = [];
+  for (const b of blocsBruts) {
+    const prec = blocs[blocs.length - 1];
+    const derniere = prec ? prec.split('\n').pop() || '' : '';
+    const renvoi = RENVOI.test(b.replace(/^\s*(?:[•\-*]|\d+[.)])\s+/, '').trim());
+    if (prec !== undefined && ((estTableau(b) && /:\s*$/.test(derniere)) || renvoi)) blocs[blocs.length - 1] = `${prec}\n\n${b}`;
+    else blocs.push(b);
+    if (prec !== undefined && renvoi) renvois.push(b);
+  }
+  const phrasesDe = (t: string) => t.split('\n').flatMap((l) => l.split(/(?<=[.!?;])\s+/)).map((p) => motsDePhrase(p)).filter((m) => m.length >= 3);
+  const phrasesParties = parties.map((p) => phrasesDe(p.corps));
+  const repris = (m: string[], c: string[]) => {
+    const jeu = new Set(c);
+    let communs = 0;
+    for (const w of m) if (jeu.has(w)) communs++;
+    if (communs / Math.max(m.length, c.length) < 0.3) return false;
+    const s = similarite(m, c);
+    return s >= 0.8 || (s >= 0.5 && Math.min(m.length, c.length) >= 6);
+  };
+  const partieDe: number[] = blocs.map((b) => {
+    const ph = phrasesDe(b);
+    let meilleure = -1, max = 0;
+    phrasesParties.forEach((pp, i) => {
+      const n = ph.filter((m) => pp.some((c) => repris(m, c))).length;
+      if (n > max) { max = n; meilleure = i; }
+    });
+    return meilleure;
+  });
+  if (partieDe.every((x) => x < 0)) return null;
+  // Blocs omis par la réponse : avec le bloc repris qui les précède ou qui les suit dans le texte de GSS, selon les mots
+  // partagés (coupure optimale d'une suite de blocs omis entre ses deux voisins).
+  const racines = (t: string) => new Set(normaliser(t).replace(/[^a-z ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 5 && !VIDES_ATTENDU.has(w)).map((w) => w.slice(0, 5)));
+  const proximite = (a: string, b: string) => { const x = racines(a), y = racines(b); return x.size ? [...x].filter((w) => y.has(w)).length / x.size : 0; };
+  for (let i = 0; i < blocs.length; i++) {
+    if (partieDe[i] >= 0) continue;
+    let j = i;
+    while (j + 1 < blocs.length && partieDe[j + 1] < 0) j++;
+    const p = i - 1, s = j + 1 < blocs.length ? j + 1 : -1;
+    let coupure = j + 1;
+    if (p < 0) coupure = i;
+    else if (s >= 0) {
+      let best = -1;
+      for (let c = i; c <= j + 1; c++) {
+        let score = 0;
+        for (let k = i; k <= j; k++) score += k < c ? proximite(blocs[k], blocs[p]) : proximite(blocs[k], blocs[s]);
+        if (score > best + 1e-9) { best = score; coupure = c; }
+      }
+    }
+    for (let k = i; k <= j; k++) partieDe[k] = k < coupure ? partieDe[p] : partieDe[s];
+    i = j;
+  }
+  blocs.forEach((_, k) => { if (partieDe[k] >= 0) parties[partieDe[k]].blocs.push(k); });
+  // Limite de mots : chaque partie garde ses mots, et la marge restante sous la limite va aux blocs de GSS à remettre,
+  // partie après partie.
+  let marge = o.maxMots !== undefined ? Math.max(0, o.maxMots - compterMots(reponse)) : 0;
+  let texte: string[] = [];
+  let ordre = 0, ordreAvant = 0, poids = 0;
+  const cumul = { reformulees: 0, reinserees: 0, ajoutsRetires: 0, bribesRetirees: 0 };
+  // Phrase de GSS que la réponse porte sous un autre intitulé (« Pour les rondiers intervenants… l'application Mapo » sous
+  // « Organisation et optimisation des déplacements », hors de la liste des transports) : jamais remise une seconde fois avec
+  // son bloc ; elle reste sous l'intitulé où la réponse l'a écrite.
+  const porteeAilleurs = (ph: string, partie: number) => {
+    const m = motsDePhrase(ph);
+    if (m.length < 3 || phrasesParties[partie].some((c) => repris(m, c))) return false;
+    return phrasesParties.some((pp, i) => i !== partie && pp.some((c) => repris(m, c)));
+  };
+  // Bloc qui renvoie au précédent, remis avec son antécédent et redit par la réponse sous un autre intitulé (« Dans les deux
+  // cas, l'agent rédige un rapport d'incident… » sous « Compte rendu et traçabilité », sans les deux cas) : retiré de
+  // l'autre partie, jamais au point de la laisser sans texte.
+  const phrasesRenvois = renvois.flatMap((b) => b.split('\n').flatMap((l) => l.replace(/^\s*(?:[•\-*]|\d+[.)])\s+/, '').split(/(?<=[.!?])\s+/))).map((x) => motsDePhrase(x)).filter((m) => m.length >= 6);
+  const sansRedites = (corps: string, avecSesRenvois: boolean): { texte: string; retirees: number } => {
+    if (avecSesRenvois || !phrasesRenvois.length) return { texte: corps, retirees: 0 };
+    let retirees = 0;
+    const lignesC = corps.split('\n').map((l) => {
+      const puce = (/^\s*(?:[•\-*]|\d+[.)])\s+/.exec(l) || [''])[0];
+      const phrases = l.slice(puce.length).split(/(?<=[.!?])\s+/).filter((x) => x.trim());
+      const gardees = phrases.filter((ph) => {
+        const m = motsDePhrase(ph);
+        if (m.length < 6 || !phrasesRenvois.some((c) => similarite(c, m) >= 0.9)) return true;
+        retirees++;
+        return false;
+      });
+      if (gardees.length === phrases.length) return l;
+      return gardees.length ? finirLigne(`${puce}${gardees.join(' ')}`) : null;
+    }).filter((l): l is string => l !== null);
+    const texteC = lignesC.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    return texteC ? { texte: texteC, retirees } : { texte: corps, retirees: 0 };
+  };
+  for (const [ip, p] of parties.entries()) {
+    let corps = p.corps;
+    if (p.blocs.length) {
+      const refPartie = p.blocs.map((k) => blocs[k]).join('\n\n');
+      const supplement = Math.min(marge, compterMots(refPartie));
+      marge -= supplement;
+      const maxMots = o.maxMots !== undefined ? compterMots(p.corps) + supplement : undefined;
+      // Marge suffisante pour tout le texte de GSS de la partie : la limite ne joue pas, les blocs omis sont remis.
+      const limite = !!o.limite && (o.maxMots === undefined || supplement < compterMots(refPartie));
+      const exclure = (ph: string) => !!o.exclure?.(ph) || (!RENVOI.test(ph.replace(/^\s*(?:[•\-*]|\d+[.)])\s+/, '').trim()) && porteeAilleurs(ph, ip));
+      const r = recalerSurReference(refPartie, p.corps, { ...o, exclure, limite, maxMots, attendus: undefined, parAttendus: false });
+      // Jamais un intitulé sans texte : la réponse du modèle est gardée si le recalage ne laisse rien.
+      if (r.texte.trim()) corps = r.texte;
+      const w = compterMots(refPartie);
+      ordre += ordreEtSousTitres(refPartie, corps) * w; ordreAvant += ordreEtSousTitres(refPartie, p.corps) * w; poids += w;
+      cumul.reformulees += r.reformulees; cumul.reinserees += r.reinserees; cumul.ajoutsRetires += r.ajoutsRetires; cumul.bribesRetirees += r.bribesRetirees;
+    }
+    const net = sansRedites(corps, p.blocs.some((k) => renvois.some((r) => blocs[k].includes(r))));
+    corps = net.texte;
+    cumul.bribesRetirees += net.retirees;
+    texte.push(p.titre ? `${p.titre}\n${corps}`.trim() : corps.trim());
+  }
+  texte = texte.filter(Boolean);
+  // Fidélité de l'ensemble (mesure de fideliteReponse) : phrases de GSS conservées dans toute la réponse (avec une limite de
+  // longueur, la meilleure des deux mesures), l'ordre et les sous-titres de GSS étant jugés dans chaque partie (l'ordre du
+  // cadre n'est pas celui du mémoire type).
+  const phrasesExclues = String(reference || '').split('\n').flatMap((l) => l.split(/(?<=[.!?;])\s+/)).filter((ph) => o.exclure?.(ph));
+  const applicable = phrasesExclues.length ? phrasesExclues.reduce((t, ph) => t.replace(ph, ''), String(reference || '')) : String(reference || '');
+  const base = (t: string) => {
+    const couverture = fidelite(applicable, t, 0.8, o.dce || '');
+    return o.limite ? Math.max(couverture, fidelite(t, applicable, 0.8, o.dce || '')) : couverture;
+  };
+  const final = texte.join('\n\n');
+  return { texte: final, fideliteAvant: base(reponse) * (poids ? ordreAvant / poids : 1), fidelite: base(final) * (poids ? ordre / poids : 1), ...cumul };
+}
+
+export function recalerSurReference(reference: string, reponse: string, o: { limite?: boolean; maxMots?: number; seuil?: number; exclure?: (phrase: string) => boolean; dce?: string; attendus?: string[]; parAttendus?: boolean } = {}): ResultatRecalage {
+  // Réponse rédigée sous les intitulés des éléments attendus du cadre : recalée partie par partie, dans l'ordre du cadre.
+  if (o.parAttendus !== false && (o.attendus?.length || 0) >= 2) {
+    const r = recalerParAttendus(reference, reponse, o);
+    if (r) return r;
+  }
   const seuil = o.seuil ?? SEUIL_FIDELITE_CADRE;
   type Item = { brut: string; mots: string[]; ref?: number; ajout?: boolean };
   type Ligne = { items: Item[] };
@@ -1501,10 +1702,13 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   // Phrase de GSS rétablie après un « ; » (« …dans la main courante électronique ; Le rapport trimestriel… », citedia2 442,
   // T4N-4) : le déterminant qui suit le point-virgule reprend sa minuscule.
   const APRES_PV = /^(?:Le|La|Les|L['’]|Un|Une|Des|Ce|Cet|Cette|Ces|Nous|Notre|Nos|Chaque|Il|Elle|Ils|Elles|Leur|Leurs|Son|Sa|Ses)(?=[\s'’])/;
-  const rendre = () => sortie.map((l) => l.items.map((x) => x.brut.trim()).reduce((acc, x) => {
+  // Phrase dont la proposition de tête a été retirée (« … d'exécution des missions. le contrôle global donne lieu… », citedia2
+  // 1462, T4-CONS-3) : la liaison restée en tête (« ; », « et », « mais ») est retirée et la phrase reprend sa majuscule.
+  const rendre = () => sortie.map((l) => finirLigne(l.items.map((x) => x.brut.trim()).reduce((acc, x) => {
     if (!acc) return x;
+    if (/[.!?…]\s*$/.test(acc) && /^(?:;\s*|(?:et|mais|ou|puis|or)\s+)?[a-zà-ÿ]/.test(x)) return `${acc} ${majusculeInitiale(x.replace(/^(?:;\s*|(?:et|mais|ou|puis|or)\s+)/, ''))}`;
     return `${acc} ${/;\s*$/.test(acc) && APRES_PV.test(x) ? x.charAt(0).toLowerCase() + x.slice(1) : x}`;
-  }, '')).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }, ''))).join('\n').replace(/\n{3,}/g, '\n\n').trim();
   const compter = (t: string) => (t.match(/[\wÀ-ÿ'’-]+/g) || []).length;
   // Sous-titre de GSS (ligne d'une seule phrase courte terminée par « : ») : remis en second, devant son contenu.
   const sousTitre = (k: number) => lignesRef[ref[k].ligne].length === 1 && /:\s*$/.test(ref[k].brut) && ref[k].mots.length <= 8;
@@ -1744,6 +1948,14 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
           n++;
         }
       }
+      // Reste de ce pseudo-tableau séparé du tableau par le recalage (« Nombre : 3 titulaires » imprimé sous le paragraphe qui
+      // suit le tableau, citedia2 1462, T4-CONS-1) : ligne courte écrite par le modèle, « intitulé de colonne : valeur ».
+      const tableauImprime = sortie.some((l) => l.items.length > 0 && l.items.every((x) => x.ref !== undefined) && estTableauRef(ref[l.items[0].ref!].ligne));
+      for (const l of tableauImprime ? sortie : []) {
+        if (l.items.length !== 1 || !l.items[0].ajout || l.items[0].mots.length > 12) continue;
+        const m = /^\s*([^:]{3,40}?)\s*:\s*\S/.exec(l.items[0].brut);
+        if (m && colonnes.has(normaliser(m[1]).replace(/[^a-z0-9 ]+/g, ' ').trim())) { l.items.shift(); n++; }
+      }
     }
     return n;
   };
@@ -1754,6 +1966,14 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     let n = 0;
     for (const l of sortie) {
       const it = l.items[0];
+      // Élément court d'une énumération de la réponse resté seul en tête de ligne (« problèmes techniques ; », citedia2 1462,
+      // T4-CONS-2) : ni phrase de GSS ni phrase complète ; retiré avec le reste de la ligne s'il n'y a rien de GSS.
+      if (it && it.ref === undefined && !it.ajout && /^[a-zà-ÿ]/.test(it.brut.trim()) && l.items.every((x) => x.ref === undefined)
+        && (/[;,]\s*$/.test(l.items[l.items.length - 1].brut) || l.items.reduce((a, x) => a + x.mots.length, 0) < 4)) {
+        n += l.items.length;
+        l.items.splice(0);
+        continue;
+      }
       if (!it || !it.ajout || !/^[a-zà-ÿ]/.test(it.brut.trim())) continue;
       const jeu = new Set(it.mots);
       const redite = ref.some((p, k) => position.has(k) && [...jeu].filter((w) => p.mots.includes(w)).length / Math.max(1, jeu.size) >= 0.6);
@@ -1915,9 +2135,16 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     for (let li = sortie.length - 1; li >= 0 && mesure(texte) < seuil; li--) {
       const l = sortie[li];
       for (let j = l.items.length - 1; j >= 0 && mesure(texte) < seuil; j--) {
-        if (!l.items[j].ajout || proteges.has(l.items[j])) continue;
-        l.items.splice(j, 1);
-        ajoutsRetires++;
+        if (j >= l.items.length || !l.items[j].ajout || proteges.has(l.items[j])) continue;
+        // Énumération de la réponse découpée aux « ; » (« … selon les catégories suivantes : sécurité incendie ; sûreté et
+        // intrusion ; problèmes techniques ; toute autre thématique… », citedia2 1462, T4-CONS-2) : retirée en entier, jamais
+        // élément par élément (« problèmes techniques ; » restait seul) ; gardée si une phrase de GSS en fait partie.
+        let a = j, b = j;
+        while (a > 0 && /;\s*$/.test(l.items[a - 1].brut)) a--;
+        while (b + 1 < l.items.length && /;\s*$/.test(l.items[b].brut)) b++;
+        const chaine = l.items.slice(a, b + 1);
+        if (chaine.some((x) => x.ref !== undefined || proteges.has(x))) { l.items.splice(j, 1); ajoutsRetires++; }
+        else { l.items.splice(a, b - a + 1); ajoutsRetires += chaine.filter((x) => x.ajout).length; j = a; }
         texte = rendre();
       }
     }
