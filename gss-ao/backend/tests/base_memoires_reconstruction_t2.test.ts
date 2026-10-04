@@ -7,7 +7,7 @@ import { appliquerCorrectionsPassages, correctionsPassages } from '../src/genera
 import { consolider, registrePourConsolidation } from '../src/rag/base_memoires_build';
 
 const DIR = path.resolve(__dirname, '../python/base_memoires');
-const ANCIENS = /Peugeot 3008|RUE D ELBEUF|02\.35\.89\.09\.92|J-15 DES PLANNINGS|Délai max: 30|moins de 20 minutes\.|max: 20 minutes SECOURS/;
+const ANCIENS = /Peugeot 3008|RUE D ELBEUF|02\.35\.89\.09\.92|J-15 DES PLANNINGS|Délai max: 30|moins de 20 minutes\.|max: 20 minutes SECOURS|quart nord-ouest|près de 200/;
 
 describe('base des mémoires et registre : reconstruction (T2-REG-2, T2-COH-3)', () => {
   it('aucun passage versionné ne contient un fait corrigé par GSS', () => {
@@ -17,13 +17,13 @@ describe('base des mémoires et registre : reconstruction (T2-REG-2, T2-COH-3)',
   it('les corrections versionnées, réappliquées à des passages non corrigés, redonnent les passages versionnés', () => {
     const base = JSON.parse(fs.readFileSync(path.join(DIR, 'base_memoires.json'), 'utf-8'));
     const corrections = correctionsPassages();
-    expect(corrections.length).toBe(9);
+    expect(corrections.length).toBe(12); // + 3 lignes du passage « quart nord-ouest » (T3-COH-9)
     // Passage remis dans son état d'avant correction (texte extrait du PDF), puis corrigé.
     const touches = base.passages.filter((p: any) => corrections.some((c) => c.document === p.document && c.page === p.page && p.texte.split('\n').includes(c.nouveau)));
-    expect(touches.length).toBe(8);
+    expect(touches.length).toBe(9);
     const anciens = touches.map((p: any) => ({ ...p, texte: corrections.filter((c) => c.document === p.document && c.page === p.page).reduce((t: string, c) => t.split('\n').map((l) => (l === c.nouveau ? c.ancien : l)).join('\n'), p.texte) }));
     expect(anciens.every((p: any) => ANCIENS.test(p.texte) || /Peugeot 208 aux couleurs de GSS\. Nous/.test(p.texte))).toBe(true);
-    expect(appliquerCorrectionsPassages(anciens, corrections)).toBe(9);
+    expect(appliquerCorrectionsPassages(anciens, corrections)).toBe(12);
     expect(anciens.map((p: any) => p.texte)).toEqual(touches.map((p: any) => p.texte));
   });
   it('reconsolider le registre versionné le redonne à l’identique (valeurs et sources rédigées conservées)', () => {

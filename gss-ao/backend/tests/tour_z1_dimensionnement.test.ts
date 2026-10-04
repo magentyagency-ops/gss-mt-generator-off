@@ -91,7 +91,7 @@ describe('poste permanent dont la citation mentionne une option (T1-GEN-7)', () 
       { profil: 'SSIAP 2', qualification: 'SSIAP 2', plages: [{ jours: TOUS.slice(0, 5), debut: '07:00', fin: '19:00' }], citation: 'Un agent SSIAP 2 est présent du lundi au vendredi de 7h00 à 19h00 sur le site.' },
     ] }, dce)!;
     expect(d.profils.map((x) => x.profil)).toEqual(['SSIAP 2']);
-    expect((d.alertes || []).join(' ')).toMatch(/écarté de l'équipe dédiée comme optionnels ou ponctuels/);
+    expect((d.alertes || []).join(' ')).toMatch(/un poste a été écarté de l'équipe dédiée comme optionnel ou ponctuel/); // accord au nombre de postes (T3G-9)
   });
 });
 

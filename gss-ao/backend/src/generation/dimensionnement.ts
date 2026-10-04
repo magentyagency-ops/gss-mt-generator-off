@@ -102,6 +102,8 @@ function joursDe(jours: unknown): string[] {
 const MOIS_DIM = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin', 'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre'];
 const JOURS_MOIS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 const RX_MOIS_DIM = '(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)';
+/** Mois entier, jamais lu à l'intérieur d'un mot (T3G-1 : « se-mai-nes » lu « mai »). */
+const RX_MOIS_B = `(?<![a-z])${RX_MOIS_DIM}(?![a-z])`;
 /** Jour de l'année (1 à 365) d'une borne de période (« 1er mai », « fin février », « dernier week-end de mars »). */
 function jourDeLAnnee(qualif: string, mois: number, fin: boolean): number {
   const q = String(qualif || '').trim();
@@ -124,11 +126,16 @@ function jourDeLAnnee(qualif: string, mois: number, fin: boolean): number {
  * pas une période.
  */
 export function joursDePeriode(texte: string): number | null {
-  const t = normaliser(String(texte || '')).replace(/\s+/g, ' ');
-  const BORNE = String.raw`(?:(\d{1,2}|1er|premier|debut|mi|fin|la fin|(?:le )?(?:dernier|premier) week-?end)\s*(?:-\s*)?(?:de |d'|du mois de |du mois d')?\s*)?${RX_MOIS_DIM}`;
+  // Dates en chiffres (« du 01/06 au 30/09 », « Du 1/06/2026 au 30/09/2026 », « Du 01.06 au 30.09 ») : « 1 juin », « 30 septembre »
+  // (T3G-1) ; « juillet/août » : « juillet et août ».
+  const t = normaliser(String(texte || '')).replace(/\s+/g, ' ')
+    .replace(/(?<![\d/.])(\d{1,2})\s*[/.]\s*(\d{1,2})(?:\s*[/.]\s*\d{2,4})?(?![\d/.])/g, (m, j: string, mo: string) => (Number(mo) >= 1 && Number(mo) <= 12 && Number(j) >= 1 && Number(j) <= 31 ? `${Number(j)} ${MOIS_DIM[Number(mo) - 1]}` : m))
+    .replace(new RegExp(`${RX_MOIS_B}\\s*/\\s*${RX_MOIS_B}`, 'g'), '$1 et $2');
+  const BORNE = String.raw`(?:(\d{1,2}|1er|premier|debut|mi|fin|la fin|(?:le )?(?:dernier|premier) week-?end)\s*(?:-\s*)?(?:de |d'|du mois de |du mois d')?\s*)?${RX_MOIS_B}`;
   const LIEN = String.raw`(?:[^.;:]{0,50}?)(?:\s(?:au|a|jusqu'au|jusqu'a|et s'acheve(?: le)?|et se termine(?: le)?)\s+|\s?[-–]\s?)(?:la |le )?`;
   const intervalles: Array<{ pos: number; jours: number }> = [];
-  for (const m of t.matchAll(new RegExp(`${BORNE}${LIEN}${BORNE}`, 'g'))) {
+  // « entre le 1er mai et le 30 septembre » (T3G-1) : intervalle aussi.
+  for (const m of [...t.matchAll(new RegExp(`${BORNE}${LIEN}${BORNE}`, 'g')), ...t.matchAll(new RegExp(`(?<=entre (?:le |la )?)${BORNE}\\s+et\\s+(?:le |la )?${BORNE}`, 'g'))]) {
     const m1 = MOIS_DIM.indexOf(m[2]), m2 = MOIS_DIM.indexOf(m[4]);
     if (m1 < 0 || m2 < 0) continue;
     const a = jourDeLAnnee(m[1] || '', m1, false), b = jourDeLAnnee(m[3] || '', m2, true);
@@ -136,8 +143,8 @@ export function joursDePeriode(texte: string): number | null {
     if (jours >= 7 && jours <= 366) intervalles.push({ pos: m.index || 0, jours });
   }
   // Liste de mois sans jour (« les mois d'octobre, mars et avril », « en juillet et août », « en octobre »).
-  for (const m of t.matchAll(new RegExp(String.raw`(?:mois (?:de |d')|(?<![a-z])en |: |; )${RX_MOIS_DIM}((?:\s*,\s*${RX_MOIS_DIM})*(?:\s+et\s+${RX_MOIS_DIM})?)(?![a-z0-9])`, 'g'))) {
-    const mois = [m[1], ...[...(m[2] || '').matchAll(new RegExp(RX_MOIS_DIM, 'g'))].map((x) => x[1])];
+  for (const m of t.matchAll(new RegExp(String.raw`(?:mois (?:de |d')|(?<![a-z])en |: |; )${RX_MOIS_B}((?:\s*,\s*${RX_MOIS_B})*(?:\s+et\s+${RX_MOIS_B})?)(?![a-z0-9])`, 'g'))) {
+    const mois = [m[1], ...[...(m[2] || '').matchAll(new RegExp(RX_MOIS_B, 'g'))].map((x) => x[1])];
     intervalles.push({ pos: m.index || 0, jours: [...new Set(mois)].reduce((a, x) => a + JOURS_MOIS[MOIS_DIM.indexOf(x)], 0) });
   }
   if (!intervalles.length) return null;
@@ -145,7 +152,9 @@ export function joursDePeriode(texte: string): number | null {
 }
 
 /** Le poste semble saisonnier (mois, saison, période estivale ou hivernale) : sa période doit être lue. */
-const SAISONNIER = /(?<![\p{L}])(?:saisons?|saisonni\p{L}*|estivale?s?|hivernale?s?|janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre)(?![\p{L}])/iu;
+// Aussi « en été », « l'hiver », « vacances scolaires », « pendant N semaines » et les dates en chiffres « du 01/06 au 30/09 »
+// (T3G-1) : une période saisonnière illisible donne l'alerte, jamais un comptage silencieux sur 52 semaines.
+const SAISONNIER = /(?<![\p{L}])(?:saisons?|saisonni\p{L}*|estivale?s?|hivernale?s?|[ée]t[ée]|hiver|vacances(?: scolaires)?|\d+\s+semaines|janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre)(?![\p{L}])|(?<![\d/.])(?:du|de|entre le)\s+\d{1,2}\s*[/.]\s*\d{1,2}(?:\s*[/.]\s*\d{2,4})?\s+(?:au|à|et le)\s+\d{1,2}\s*[/.]\s*\d{1,2}/iu;
 
 /**
  * Période de la saison écrite ailleurs dans le DCE (havre1 : « la saison démarre le dernier week-end de mars et s'achève
@@ -255,10 +264,16 @@ const nombre = (x: unknown): number | null => {
  * « vacation », « permanence », « 24h/24 ») : la fenêtre n'est pas une durée de présence.
  */
 const RONDES_PONCTUELLES = /(?<![\p{L}\d])(?:\d{1,2}|une?|deux|trois|quatre|cinq|six)\s+(?:rondes?|passages?)(?![\p{L}])/iu;
-const PRESENCE_CONTINUE = /\bpostes?\b|pr[ée]sence|vacations?|permanence|en continu|24\s*h\s*\/\s*24|\bH24\b/i;
+// Présence d'un agent sur une plage (T3G-10 : « Un agent de sécurité assure la surveillance du site tous les jours de 19h00 à
+// 7h00 et effectue 3 rondes par nuit », « Le gardien est sur site toutes les nuits… », « est présent… ») : un poste, pas des
+// rondes ponctuelles.
+const PRESENCE_CONTINUE = /\bpostes?\b|pr[ée]sen(?:ce|te?s?)\b|vacations?|permanence|en continu|24\s*h\s*\/\s*24|\bH24\b|\bassurent?\b|\bsur (?:le )?site\b|en service|de garde/i;
+const AGENT_SUR_PLAGE = /(?:agents?|gardiens?|veilleurs?|ssiap|aps|rondiers?|ma[îi]tres?[- ]chiens?)\b[^.;]{0,80}?\d{1,2}\s*(?:h|:)\s*\d{0,2}\s*(?:[àa-]|jusqu)\s*\d{1,2}\s*(?:h|:)/i;
 export function citationDeRondes(citation: string): boolean {
   const c = String(citation || '');
-  return RONDES_PONCTUELLES.test(c) && !PRESENCE_CONTINUE.test(c);
+  // Rondes ponctuelles seulement quand les rondes sont le sujet (« 3 rondes, entre 21h30 et 06h30 »), jamais quand un agent est
+  // présent ou assure la surveillance sur la plage horaire.
+  return RONDES_PONCTUELLES.test(c) && !PRESENCE_CONTINUE.test(c) && !AGENT_SUR_PLAGE.test(c);
 }
 
 /** Question exacte posée à GSS pour des rondes ponctuelles sans durée (T9N-1). '' sans rondes. */
@@ -271,6 +286,13 @@ export function questionRondes(d: Dimensionnement | null | undefined): string {
 
 /** Poste qui n'est pas permanent : option, tranche optionnelle, agent supplémentaire, prestation à la demande ou ponctuelle. */
 const POSTE_OPTIONNEL = /(?<![\p{L}])(?:options?|optionnel(?:le)?s?|agents? suppl[ée]mentaires?|[àa] la demande|bons? de commande|ponctuel(?:le)?s?|renforts? ponctuels?)(?![\p{L}])/iu;
+/**
+ * Mot d'option qui qualifie le poste lui-même (T3G-9) : « en option », « Option 1 : », « sur bon de commande », ou le nom du poste
+ * (agent, poste, prestation, vacation, renfort…) suivi de « supplémentaire », « ponctuel », « optionnel », « à la demande (de
+ * l'acheteur) » ; jamais un complément de mission (« l'ouverture des salles à la demande des enseignants », « le contrôle ponctuel
+ * des sacs », « les opérations ponctuelles de livraison »).
+ */
+const OPTION_DU_POSTE = /^\s*(?:en\s+)?options?\b|\boptions?\s*\d*\s*:|(?<![\p{L}])(?:en\s+option|optionnel(?:le)?s?)(?![\p{L}])|bons?\s+de\s+commande|(?<![\p{L}])(?:agents?|postes?|prestations?|vacations?|renforts?|rondiers?|ma[îi]tres?[- ]chiens?|interventions?|dispositifs?)(?:\s+(?!de\b|des\b|du\b)[\p{L}'’-]+){0,3}\s+(?:suppl[ée]mentaires?|ponctuel(?:le)?s?|[àa]\s+la\s+demande(?!\s+des?\s+(?!l['’]acheteur|client))(?:\s+(?:de\s+l['’]acheteur|du\s+client|du\s+pouvoir\s+adjudicateur))?)(?![\p{L}])/iu;
 
 /**
  * Le poste lui-même est-il optionnel (T1-GEN-7) ? Le test porte sur la proposition qui décrit le poste (celle qui porte les
@@ -284,7 +306,7 @@ export function posteOptionnel(citation: string, profil: string): boolean {
   const propositions = c.split(/\s*;\s*|\s*\([^()]*\)\s*|,\s+(?=avec\s)|(?<=[.!?])\s+|\s+(?=(?:ce|le) dispositif pourra|il pourra [êe]tre compl[ée]t[ée])/i).filter((x) => x.trim());
   const HORAIRE = /\d{1,2}\s*(?:h|:)\s*\d{0,2}|24\s*h|7\s*j|jours?|nuits?|semaine|permanent|en continu|vacations?/i;
   const principale = propositions.find((x) => HORAIRE.test(x)) || propositions[0] || c;
-  return POSTE_OPTIONNEL.test(principale);
+  return OPTION_DU_POSTE.test(principale);
 }
 
 /**
@@ -540,7 +562,7 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     return { profils: [...profils.values()], titulaires: t, suppleants: t ? Math.max(2, Math.ceil(t * PART_SUPPLEANTS)) : 0, casPratique, ...(misesEnSituation.length ? { misesEnSituation } : {}) };
   }
   // Postes optionnels écartés et postes saisonniers sans période lisible : signalés à GSS, jamais en silence.
-  if (optionnels.length) alertes.push(`${optionnels.length > 1 ? `${optionnels.length} postes ont été écartés` : 'un poste a été écarté'} de l'équipe dédiée comme optionnels ou ponctuels (${optionnels.slice(0, 3).map((c) => `« ${c.slice(0, 120)} »`).join(', ')}) : ${optionnels.length > 1 ? 'sont-ils' : 'est-il'} bien hors de l'équipe permanente ?`);
+  if (optionnels.length) alertes.push(`${optionnels.length > 1 ? `${optionnels.length} postes ont été écartés` : 'un poste a été écarté'} de l'équipe dédiée comme ${optionnels.length > 1 ? 'optionnels ou ponctuels' : 'optionnel ou ponctuel'} (${optionnels.slice(0, 3).map((c) => `« ${c.slice(0, 120)} »`).join(', ')}) : ${optionnels.length > 1 ? 'sont-ils' : 'est-il'} bien hors de l'équipe permanente ?`);
   if (sansPeriode.length) alertes.push(`la période de l'année de ${sansPeriode.length > 1 ? 'ces postes saisonniers' : 'ce poste saisonnier'} n'a pas pu être lue (${sansPeriode.slice(0, 3).map((c) => `« ${c.slice(0, 120)} »`).join(', ')}) : ${sansPeriode.length > 1 ? 'ils sont comptés' : 'il est compté'} sur toute l'année ; sur combien de semaines par an faut-il ${sansPeriode.length > 1 ? 'les' : 'le'} compter ?`);
   // Rondes ponctuelles écartées : posées à GSS (durée d'une ronde, nombre d'intervenants), jamais converties en heures.
   if (rondes.length) {
