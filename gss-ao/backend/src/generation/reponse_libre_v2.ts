@@ -2905,7 +2905,6 @@ export function libellesEmplacementsNominaux(texte: string): string {
 }
 
 export function controlerProposition(texte: string, montantsGss: string[] = []): { texte: string; retirees: string[]; questions: string[] } {
-  texte = libellesEmplacementsNominaux(texte);
   const retirees: string[] = [];
   const questions: string[] = [];
   const montant = (x: string) => x.replace(/[\s\u00a0\u202f.]/g, '').replace(/euros?/i, '€');
@@ -2963,7 +2962,8 @@ export function controlerProposition(texte: string, montantsGss: string[] = []):
     if (retireAvecQuestion && /^\s*\[CONSULTATION REQUISE\s*:/i.test(lignes[i + 1] || '')) { retirees.push(lignes[i + 1].trim()); i++; }
     if (gardees.length) out.push(`${puce}${gardees.join(' ')}`);
   }
-  return { texte: out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/(^|\n)(#{2,4} [^\n]+)\n+(?=#{2,4} |$)/g, '$1').trim(), retirees, questions };
+  // Consigne restée en libellé d'un emplacement (dans une liste, T3N-9) : nom de la donnée à la voix de GSS.
+  return { texte: libellesEmplacementsNominaux(out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/(^|\n)(#{2,4} [^\n]+)\n+(?=#{2,4} |$)/g, '$1').trim()), retirees, questions };
 }
 
 /**
