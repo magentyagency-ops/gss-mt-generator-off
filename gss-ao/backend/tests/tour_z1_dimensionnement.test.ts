@@ -111,3 +111,33 @@ describe('qualification jamais réduite à l’intitulé du poste (génération 
     expect(calculerDimensionnement({ postes: [ssiap] }, FB)!.profils[0].qualification).toBe('SSIAP 2');
   });
 });
+
+describe('plages tenues chacune par une partie des agents du poste (génération réelle fontainebleau 902)', () => {
+  const CIRCUIT = "Quatre agents dédiés à l'accueil des publics du circuit de visite, tous les jours sauf le mardi : Du 1er avril au 30 septembre : Prévoir deux agents en poste à l'instant T de 9h20 à 17h40 ; Prévoir deux agents en poste à l'instant T de 9h20 à 18h10. Du 1er octobre au 31 mars : Prévoir deux agents en poste à l'instant T de 9h20 à 16h40 ; Prévoir deux agents en poste à l'instant T de 9h20 à 17h40.";
+  const SIX = ['lundi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+  const plage = (debut: string, fin: string, periode: string) => ({ jours: SIX, debut, fin, periode });
+  const ETE = 'Du 1er avril au 30 septembre';
+  const HIVER = 'Du 1er octobre au 31 mars';
+  const plages = [plage('09:20', '17:40', ETE), plage('09:20', '18:10', ETE), plage('09:20', '16:40', HIVER), plage('09:20', '17:40', HIVER)];
+  const poste = (agents_simultanes: number, p = plages) => ({ profil: 'Agent posté dans le circuit de visite', qualification: 'CQP APS', lieu: 'Circuit de visite', agents_simultanes, plages: p, citation: CIRCUIT });
+  it('nombre d’agents écrit devant l’horaire de chaque plage', async () => {
+    const { agentsDeLaPlage } = await import('../src/generation/dimensionnement');
+    expect(agentsDeLaPlage(plage('09:20', '17:40', ETE), CIRCUIT)).toBe(2);
+    expect(agentsDeLaPlage(plage('09:20', '18:10', ETE), CIRCUIT)).toBe(2);
+    expect(agentsDeLaPlage(plage('08:30', '18:10', ETE), CIRCUIT)).toBeNull();
+    expect(agentsDeLaPlage(plage('09:20', '18:10', ''), 'Prévoir un agent habilité de 9h20 à 18h10.')).toBe(1);
+  });
+  it('4 agents simultanés relevés sur chaque plage : heures comptées une fois (≈ 197 h par semaine, comme « 2 agents » par plage)', () => {
+    const quatre = calculerDimensionnement({ postes: [poste(4)] }, CIRCUIT)!.profils[0];
+    const deux = calculerDimensionnement({ postes: [poste(2)] }, CIRCUIT)!.profils[0];
+    expect(Math.abs(quatre.heuresSemaine - 197)).toBeLessThan(5);
+    expect(quatre.heuresSemaine).toBe(deux.heuresSemaine);
+    expect(quatre.titulaires).toBe(7);
+    expect(quatre.simultanes).toBe(4);
+  });
+  it('plages relevées incomplètes (nombres de la citation sans le total relevé) : calcul inchangé', () => {
+    const une = calculerDimensionnement({ postes: [poste(4, [plage('09:20', '18:10', ETE)])] }, CIRCUIT)!.profils[0];
+    expect(une.simultanes).toBe(4);
+    expect(une.heuresSemaine).toBeGreaterThan(100);
+  });
+});

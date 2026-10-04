@@ -213,6 +213,36 @@ export function agentsSimultanes(valeur: unknown, citation: string): number {
   return new RegExp(String.raw`(?:^|\s)${nb}\s+(?:[a-z]+\s+){0,2}?${personnel}(?:\s|$)`).test(` ${c} `) ? n : 1;
 }
 
+/**
+ * Nombre d'agents écrit devant l'horaire d'une plage dans la citation (« Prévoir deux agents en poste à l'instant T de 9h20
+ * à 17h40 » → 2 ; « prévoir un agent habilité de 9h20 à 18h10 » → 1) ; null si l'horaire n'y figure pas, sans nombre
+ * devant lui, ou avec des nombres différents d'une proposition à l'autre.
+ */
+export function agentsDeLaPlage(plage: PlageHoraire, citation: string): number | null {
+  const heure = (h: string): string | null => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(h || '').trim());
+    if (!m) return null;
+    const hh = String(Number(m[1]));
+    return m[2] === '00' ? `0?${hh}\\s*(?:h|:)(?:\\s*00)?` : `0?${hh}\\s*(?:h|:)\\s*${m[2]}`;
+  };
+  const d = heure(plage.debut);
+  const f = heure(plage.fin);
+  if (!d || !f) return null;
+  const rx = new RegExp(`(?<!\\d)${d}\\s*(?:à|a|-|–|—|au|jusqu.à)\\s*${f}(?!\\d)`, 'i');
+  const personnel = String.raw`(?:agents?|ads|ssiap|personnes?|maitres? chiens?|chefs?|operateurs?|hotes(?:ses)?|rondiers?|vigiles?|gardiens?|surveillants?|intervenants?)`;
+  const comptes = new Set<number>();
+  for (const prop of String(citation || '').split(/\s:\s|;|\.\s|\n/)) {
+    const m = rx.exec(prop);
+    if (!m) continue;
+    const avant = ` ${normaliser(prop.slice(0, m.index)).replace(/[^a-z0-9]+/g, ' ').trim()} `;
+    const tous = [...avant.matchAll(new RegExp(String.raw`(?<=\s)(\d{1,2}|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix)\s+(?:[a-z]+\s+){0,2}?${personnel}(?=\s)`, 'g'))];
+    if (!tous.length) return null;
+    const v = tous[tous.length - 1][1];
+    comptes.add(/^\d+$/.test(v) ? Number(v) : NOMBRES_EN_LETTRES[v] ?? 1);
+  }
+  return comptes.size === 1 ? [...comptes][0] : null;
+}
+
 const nombre = (x: unknown): number | null => {
   const n = Number(String(x ?? '').replace(',', '.').replace(/[^\d.]/g, ''));
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -367,7 +397,15 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     const simultanes = agentsSimultanes(p?.agents_simultanes, String(p?.citation || ''));
     // Heures de l'année : chaque plage sur les jours réellement couverts par sa période (52 semaines sans période) ; les
     // heures par semaine affichées sont la moyenne sur l'année.
-    const heuresPlagesAn = plages.reduce((a, x) => a + dureePlage(x.debut, x.fin) * joursDe(x.jours).length * ((x.joursAn ?? 364) / 7), 0) * simultanes;
+    // Plages d'un même poste tenues chacune par une partie des agents (génération réelle fontainebleau 902, circuit de visite :
+    // « Quatre agents … prévoir deux agents de 9h20 à 17h40 ; prévoir deux agents de 9h20 à 18h10 », relevé avec 4 agents
+    // simultanés sur chacune des deux plages, heures comptées deux fois) : chaque plage compte les agents écrits devant son
+    // horaire, quand ces nombres, sur chaque période, font le total d'agents simultanés relevé.
+    const parPlage = plages.map((x) => agentsDeLaPlage(x, citation));
+    const totalParPeriode = new Map<string, number>();
+    plages.forEach((x, i) => totalParPeriode.set(`${x.periode || ''}|${x.joursAn ?? 'an'}`, (totalParPeriode.get(`${x.periode || ''}|${x.joursAn ?? 'an'}`) || 0) + (parPlage[i] || 0)));
+    const agentsParPlage = simultanes > 1 && parPlage.every((n) => !!n) && parPlage.some((n) => n !== simultanes) && [...totalParPeriode.values()].every((t) => t === simultanes);
+    const heuresPlagesAn = plages.reduce((a, x, i) => a + dureePlage(x.debut, x.fin) * joursDe(x.jours).length * ((x.joursAn ?? 364) / 7) * (agentsParPlage ? parPlage[i]! : simultanes), 0);
     let hs = hebdoDuDce ? hh : plages.length ? Math.round((heuresPlagesAn / 52) * 100) / 100 : 0;
     if (!hs || hs > 24 * 7 * 6) continue;
     const ha = nombre(p?.heures_an);
