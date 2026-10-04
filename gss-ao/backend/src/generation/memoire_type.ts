@@ -1469,7 +1469,7 @@ export function casseNomEnCapitales(nom: string, dceBrut: string): { forme: stri
 /** « François 1ER » → « François Ier » (rang d'un souverain après un prénom) ; « 1ER » ailleurs → « 1er » (T7G-5). */
 export function ordinalApresPrenom(t: string): string {
   return String(t || '').replace(/(?<![\p{L}])(\p{L}+)\s+1\s*(?:ER|er|Er)(?![\p{L}])/gu, (m, p: string) => (PRENOMS.has(normaliser(p)) ? `${p} Ier` : m.replace(/1\s*(?:ER|Er)$/, '1er')))
-    .replace(/(?<![\p{L}\d])1\s*ER(?![\p{L}])/g, '1er');
+    .replace(/(?<![\p{L}\d])1\s*ER(?![\p{L}])/gu, '1er');
 }
 
 /**
