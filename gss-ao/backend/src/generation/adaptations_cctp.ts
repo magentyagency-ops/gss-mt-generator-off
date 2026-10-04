@@ -292,10 +292,12 @@ export function exigenceHorsNormandie(dce: string, analyse: any): string {
   // Communes nommées sans code postal (« Métropole de Lyon … Lyon 3e », T7-COH-2) ; lieu introuvable : dit tel quel.
   const lieuMarche = lieuDuMarche(analyse || {}, dce || '');
   const nommees = !hors.length && !commune ? lieuMarche.horsNormandie : [];
-  const lieu = hors.length ? `${hors.length > 1 ? 'sites' : 'site'} ${de(listeFr(hors))}` : commune ? `marché ${de(commune)}` : nommees.length ? `marché ${de(listeFr(nommees))}` : 'site du marché';
+  // Sites mixtes dont le site hors Normandie est nommé sans code postal (T5-COH-3 : « Un second site est situé à Lyon »).
+  const mixteNomme = !hors.length && lieuMarche.statut === 'mixte' && lieuMarche.horsNormandie.length ? lieuMarche.horsNormandie : [];
+  const lieu = hors.length ? `${hors.length > 1 ? 'sites' : 'site'} ${de(listeFr(hors))}` : mixteNomme.length ? `${mixteNomme.length > 1 ? 'sites' : 'site'} ${de(listeFr(mixteNomme))}` : commune ? `marché ${de(commune)}` : nommees.length ? `marché ${de(listeFr(nommees))}` : 'site du marché';
   const motif = lieuMarche.statut === 'inconnu' && !hors.length && !commune
     ? "Lieu du site introuvable dans le DCE : les délais et les moyens de mobilisation que GSS annonce en Normandie ne sont pas promis tant que GSS n'a pas confirmé que le site est en Normandie, et le DCE ne les impose pas"
-    : `${sites.mixte ? 'Marché en partie hors Normandie' : 'Marché hors Normandie'} (${lieu}) : les délais et les moyens de mobilisation que GSS annonce en Normandie ne sont pas promis ici, et le DCE ne les impose pas`;
+    : `${sites.mixte || lieuMarche.statut === 'mixte' ? 'Marché en partie hors Normandie' : 'Marché hors Normandie'} (${lieu}) : les délais et les moyens de mobilisation que GSS annonce en Normandie ne sont pas promis ici, et le DCE ne les impose pas`;
   return citation ? `${motif}. Lieu d'exécution cité par le DCE : « ${citation.length > 220 ? `${citation.slice(0, 220).replace(/\s+\S*$/, '')}…` : citation} »` : `${motif}.`;
 }
 

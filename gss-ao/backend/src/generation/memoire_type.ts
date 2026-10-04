@@ -2167,7 +2167,10 @@ function delai(c: CalculVariables, nom: string, sujet: keyof typeof SUJETS_DELAI
   if (c.horsNormandie && def?.normandie_seulement) {
     const objet = objetDe();
     // Sites mixtes (T4-COH-3) : la question nomme les sites hors Normandie et rappelle le délai normand de GSS.
+    // (sites lus par code postal ou communes nommées comme sites : « Un second site est situé à Lyon », T5-COH-3)
+    const lieu = lieuDuMarche(c.ctx.analyse || {}, c.ctx.dce || '');
     const sites = sitesDuMarche(c.ctx.analyse || {}, c.ctx.dce || '');
+    if (!sites.mixte && lieu.statut === 'mixte' && lieu.horsNormandie.length) { sites.mixte = true; sites.horsNormandie = lieu.horsNormandie; }
     if (sites.mixte) {
       const normand = def.registre ? depuisRegistre(c, def.registre, normaliserDelai).valeur : def.valeur_gss || '';
       return { valeur: null, question: `Marché en partie hors Normandie (${sites.horsNormandie.length > 1 ? 'sites' : 'site'} de ${listeFr(sites.horsNormandie)}) : ${normand ? `GSS annonce ${normand} en Normandie pour ce délai (${objet}) ; ` : ''}quel délai GSS annonce-t-elle pour ${sites.horsNormandie.length > 1 ? 'les sites' : 'le site'} de ${listeFr(sites.horsNormandie)}${normand ? '' : ` (${objet})`} ?` };

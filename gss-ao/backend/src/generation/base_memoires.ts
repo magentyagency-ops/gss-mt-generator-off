@@ -683,15 +683,50 @@ function rxContractees(nom: string): RegExp[] {
 }
 const RX_NORMANDES = COMMUNES_NORMANDES.flatMap((n) => [{ nom: n, rx: rxCommune(n, true) }, ...rxContractees(n).map((rx) => ({ nom: n, rx }))]);
 const RX_HORS = VILLES_HORS_NORMANDIE.flatMap((n) => [{ nom: n, rx: rxCommune(n, true) }, ...rxContractees(n).map((rx) => ({ nom: n, rx }))]);
+/**
+ * Commune nommée comme SITE du marché (T5-COH-3) : dans une phrase ou une ligne qui décrit un site ou le lieu d'exécution
+ * (« Un second site est situé à Lyon », « agence de Lyon », « l'antenne de Paris », « Sites : Caen (Calvados) et … »), ou dans
+ * la colonne « Commune / Ville » d'un tableau des sites. Jamais une adresse administrative (siège déclaré, recours, facturation).
+ */
+const CONTEXTE_SITE = /(?<![\p{L}])(?:sites?|agences?|antennes?|[ée]tablissements?|b[âa]timents?|implantations?|locaux|lieux? d['’]ex[ée]cution|lieux? de (?:la )?prestation|lieux? d['’]intervention|(?:est|sont|sera|seront) (?:situ[ée]e?s?|implant[ée]e?s?|localis[ée]e?s?))(?![\p{L}])/iu;
+function communeCommeSite(texte: string, debut: number, fin: number): boolean {
+  const ligneDebut = texte.lastIndexOf('\n', debut - 1) + 1;
+  const ligneFin = (() => { const k = texte.indexOf('\n', fin); return k < 0 ? texte.length : k; })();
+  const ligne = texte.slice(ligneDebut, ligneFin);
+  // Colonne « Commune / Ville » d'un tableau : la rangée est sous un en-tête qui la nomme.
+  if (ligne.includes('|')) {
+    const lignes = texte.slice(0, ligneDebut).split('\n').reverse().filter((l) => l.trim());
+    const entete = lignes.find((l) => !/^\s*\|?\s*[-:| ]+\s*$/.test(l) && (!l.includes('|') || /(?<![\p{L}])(?:communes?|villes?|localit[ée]s?)(?![\p{L}])/iu.test(l))) || '';
+    if (entete.includes('|') && /(?<![\p{L}])(?:communes?|villes?|localit[ée]s?)(?![\p{L}])/iu.test(entete)) {
+      const cellules = entete.split('|').map((x) => x.trim());
+      const col = cellules.findIndex((x) => /^(?:communes?|villes?|localit[ée]s?)$/i.test(x));
+      const cellule = ligne.slice(0, debut - ligneDebut).split('|').length - 1;
+      if (col >= 0 && cellule === col) return true;
+    }
+  }
+  // Phrase de la commune (bornée par la ponctuation forte et la ligne).
+  const avant = texte.slice(ligneDebut, debut).split(/[.!?]\s+/).pop() || '';
+  const apres = texte.slice(fin, ligneFin).split(/[.!?](?:\s|$)/)[0];
+  const phrase = `${avant}${texte.slice(debut, fin)}${apres}`;
+  if (ROLE_ADMIN.test(phrase) || IDENTIFICATION_ACHETEUR.test(phrase) || /tribunal|cour d.appel|greffe|inspection du travail|CNAPS|pr[ée]fecture|factur/i.test(phrase)) return false;
+  return CONTEXTE_SITE.test(phrase) || PHRASE_SITE.test(phrase);
+}
+
 /** Communes nommées hors adresse postale et hors adresse administrative (tribunal, préfecture…), avec leur nombre de citations. */
-function communesNommees(texte: string): { normands: Map<string, number>; hors: Map<string, number> } {
+function communesNommees(texte: string, filtre?: (texte: string, debut: number, fin: number) => boolean): { normands: Map<string, number>; hors: Map<string, number> } {
   const compter = (liste: Array<{ nom: string; rx: RegExp }>) => {
     const out = new Map<string, number>();
     for (const { nom, rx } of liste) {
       for (const m of texte.matchAll(rx)) {
         if (!/^[A-ZÀ-Ý]/.test(m[0])) continue;                         // nom propre : « Lyon », « LYON », jamais « lyon »
         const debut = m.index || 0;
-        const avant = texte.slice(Math.max(0, debut - 80), debut);
+        if (filtre && !filtre(texte, debut, debut + m[0].length)) continue;
+        // Rangée de tableau ou élément de liste : le contexte est la seule rangée ou le seul élément (jamais le « Siège » de la
+        // rangée du dessus, T5-COH-3).
+        const debutLigne = texte.slice(texte.lastIndexOf('\n', debut - 1) + 1, debut);
+        const avant = /\||^\s*[-•▪●○◦*]\s/.test(debutLigne) ? debutLigne : texte.slice(Math.max(0, debut - 80), debut);
+        // Colonne « Commune / Ville » d'un tableau des sites : un site, quelle que soit l'étiquette de la rangée (« Siège »).
+        if (/\|/.test(debutLigne) && communeCommeSite(texte, debut, debut + m[0].length)) { out.set(nom, (out.get(nom) || 0) + 1); continue; }
         if (/\d{5}\s*[–—,-]?\s*$/.test(avant)) continue;              // adresse postale : déjà lue par code postal
         // Nom de voie (« 12 rue de Paris », « route de Lyon ») : pas une commune.
         if (/\b(?:rue|avenue|av\.|boulevard|bd|route|chemin|place|quai|all[ée]e|cours|impasse|porte|gare|pont|square|esplanade)\s+(?:de\s+(?:la\s+)?|d['’]|du\s+|des\s+)?$/i.test(avant)) continue;
@@ -941,10 +976,22 @@ function calculerLieu(analyse: any, dce: string): LieuMarche {
 }
 function calculerLieuBrut(analyse: any, dce: string): LieuMarche {
   const sites = sitesDuMarche(analyse, dce);
-  if (sites.normands.length || sites.horsNormandie.length) {
-    return { statut: sites.mixte ? 'mixte' : sites.horsNormandie.length ? 'hors' : 'normandie', normands: sites.normands, horsNormandie: sites.horsNormandie, source: 'sites du DCE (codes postaux)' };
-  }
   const texte = `${JSON.stringify(analyse || {})}\n${String(dce || '')}`.replace(/\\n/g, '\n');
+  if (sites.normands.length || sites.horsNormandie.length) {
+    // Communes nommées comme sites sans code postal (T5-COH-3 : « Un second site est situé à Lyon », « agence de Lyon »,
+    // « le siège de Rouen et l'antenne de Paris, … 75015 Paris », « Caen (Calvados) et Paris (75) ») réunies aux sites lus par
+    // code postal : une commune hors Normandie rend le marché mixte, une commune normande aussi pour un marché lu « hors ».
+    const nommes = communesNommees(String(dce || ''), communeCommeSite);
+    // (un département ou une région nommé n'est pas une commune : « Caen (Calvados) »)
+    for (const m of [nommes.normands, nommes.hors]) for (const k of [...m.keys()]) if (DEPARTEMENTS[cleCommune2(k)] || REGIONS.has(cleCommune2(k)) || /^(?:normandie|eure|calvados|manche|orne|seine maritime)$/.test(cleCommune2(k))) m.delete(k);
+    const unir = (a: string[], b: string[]) => [...a, ...b.filter((x) => !a.some((y) => cleCommune2(y) === cleCommune2(x)))];
+    // Seules les communes de l'AUTRE région que celle des sites lus par code postal sont ajoutées (elles rendent le marché
+    // mixte) ; les sites d'un marché déjà lu restent ceux de leur adresse.
+    const normands = sites.normands.length ? sites.normands : unir(sites.normands, [...nommes.normands.keys()]);
+    const horsNormandie = sites.horsNormandie.length ? sites.horsNormandie : unir(sites.horsNormandie, [...nommes.hors.keys()]);
+    const statut = normands.length && horsNormandie.length ? 'mixte' : horsNormandie.length ? 'hors' : 'normandie';
+    return { statut, normands, horsNormandie, source: normands.length + horsNormandie.length > sites.normands.length + sites.horsNormandie.length ? 'sites du DCE (codes postaux et communes nommées comme sites)' : 'sites du DCE (codes postaux)' };
+  }
   // Département nommé entre parenthèses après la commune (« Neuilly-sur-Marne (Seine-Saint-Denis) », « Strasbourg (Bas-Rhin) »).
   const deps: string[] = [];
   for (const m of texte.matchAll(/\(\s*([A-ZÉÈa-zéè][A-Za-zÀ-ÿ' -]{2,30}?)\s*\)/g)) {
@@ -1210,6 +1257,19 @@ export function adresseAdministrative(texte: string, debut: number, fin: number,
   // Paris. Lieu d'exécution : site de Rouen (76000) » : Rouen est un site).
   const avant = String(texte || '').slice(Math.max(0, debut - 200), debut).split('\n').slice(-3).join(' ').slice(-140).split(/(?<![A-Z]\.?[A-Z]?)[.;!?]\s+(?=[A-ZÀ-Ý])/).pop() || '';
   const apres = String(texte || '').slice(fin, fin + 14);
+  // Élément d'une liste des sites (« Les prestations sont réalisées sur les sites suivants : ⏎ - Siège social : 12 rue de
+  // Crosne, 76000 Rouen ; ⏎ - Agence de Lyon … », T5-COH-3) : un site, même étiqueté « Siège », sauf rôle de recours ou de
+  // facturation écrit sur sa ligne.
+  {
+    const t = String(texte || '');
+    const d = t.lastIndexOf('\n', debut - 1) + 1;
+    const ligne = t.slice(d, (() => { const k = t.indexOf('\n', fin); return k < 0 ? t.length : k; })());
+    if (/^\s*[-•▪●○◦*]\s/.test(ligne)) {
+      const intro = t.slice(0, d).split('\n').reverse().find((l) => l.trim() && !/^\s*[-•▪●○◦*]\s/.test(l)) || '';
+      if (/(?<![\p{L}])sites? (?:suivants?|concern[ée]s?|du march[ée])|lieux? d['’]ex[ée]cution|prestations? (?:sont|seront) (?:r[ée]alis|ex[ée]cut|effectu|assur)/iu.test(intro) && /:\s*$/.test(intro.trim())
+        && !/tribunal|recours|factur|comptable|paiement|greffe|cedex|bo[îi]te postale/i.test(ligne)) return false;
+    }
+  }
   // Rôle administratif de l'adresse (recours, facturation, paiement, siège déclaré, identification de l'acheteur) : jamais un
   // site, quelle que soit la phrase.
   if (ROLE_ADMIN.test(apres) || ROLE_ADMIN.test(avant) || IDENTIFICATION_ACHETEUR.test(avant)) return true;

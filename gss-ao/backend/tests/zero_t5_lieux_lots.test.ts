@@ -4,7 +4,7 @@
  * « Article n »), question des lots sans ponctuation double (T5N-15).
  */
 import { describe, it, expect } from 'vitest';
-import { communesParCodePostal, perimetreDuLot, horairesImposes, obligationsChiffrees, numeroDeLot, lotsDuMemoireDce } from '../src/generation/base_memoires';
+import { communesParCodePostal, perimetreDuLot, horairesImposes, obligationsChiffrees, numeroDeLot, lotsDuMemoireDce, lieuDuMarche } from '../src/generation/base_memoires';
 
 const c = (t: string) => communesParCodePostal(t).map((x) => x.commune);
 
@@ -104,5 +104,30 @@ describe('question des lots (T5N-15)', () => {
   it('périmètre sans son point final devant « ; » et « ) »', () => {
     const q = lotsDuMemoireDce({ lots: [{ num: '1', perimetre: 'Hub Expo & congrès et Le Moulin, à Louviers.' }, { num: '2', perimetre: 'Carré Saint Cyr, au Vaudreuil.' }] }, '').question!;
     expect(q).toContain('(1 : Hub Expo & congrès et Le Moulin, à Louviers ; 2 : Carré Saint Cyr, au Vaudreuil)');
+  });
+});
+
+describe('sites mixtes : commune nommée comme site sans code postal (T5-COH-3)', () => {
+  const lieu = (corps: string) => { const l = lieuDuMarche({ clientName: 'Acheteur', projectTitle: 'Gardiennage' }, `\n\n--- CCTP.pdf ---\nCCTP\n${corps}\n`); return [l.statut, l.normands, l.horsNormandie]; };
+  it('site normand par code postal et site hors Normandie nommé : mixte', () => {
+    expect(lieu('Le site principal est situé 12 rue de Crosne, 76000 Rouen. Un second site est situé à Lyon, 5 place Bellecour.')).toEqual(['mixte', ['Rouen'], ['Lyon']]);
+    expect(lieu('Sites : 12 rue de Crosne, 76000 Rouen ; 1 rue X, 14000 Caen ; agence de Lyon, 5 place Bellecour.')).toEqual(['mixte', ['Rouen', 'Caen'], ['Lyon']]);
+    expect(lieu('Les prestations sont réalisées sur les sites suivants :\n- Siège social : 12 rue de Crosne, 76000 Rouen ;\n- Agence de Lyon : 5 place Bellecour.')).toEqual(['mixte', ['Rouen'], ['Lyon']]);
+  });
+  it('site hors Normandie par code postal et site normand nommé : mixte', () => {
+    expect(lieu("Le marché porte sur deux sites : le siège de Rouen et l'antenne de Paris, 3 rue Y, 75015 Paris.")).toEqual(['mixte', ['Rouen'], ['Paris']]);
+    expect(lieu('Sites : Caen (Calvados) et Paris (75).')).toEqual(['mixte', ['Caen'], ['Paris']]);
+  });
+  it('tableau des sites avec une colonne « Commune », sans code postal', () => {
+    expect(lieu('Site | Adresse | Commune\nSiège | 12 rue de Crosne | Rouen\nAgence | 3 rue Nationale | Lille')).toEqual(['mixte', ['Rouen'], ['Lille']]);
+  });
+  it('aucun délai normand publié pour un site à Lyon', async () => {
+    const mt = await import('../src/generation/memoire_type');
+    const dce = '\n\n--- CCTP.pdf ---\nCCTP\nLe site principal est situé 12 rue de Crosne, 76000 Rouen. Un second site est situé à Lyon, 5 place Bellecour. Le titulaire dispose d\'une astreinte.\n';
+    const prep: any = mt.preparerMemoireType({ analyse: { clientName: 'Acheteur', projectTitle: 'Gardiennage' }, dce, referents: '' } as any, { memoireType: mt.chargerMemoireType() } as any);
+    expect(prep.variables.DELAI_PTI.valeur).toBeNull();
+    expect(prep.variables.DELAI_PTI.question).toMatch(/^Marché en partie hors Normandie \(site de Lyon\)/);
+    const pub = mt.publierMemoire(prep).map((r: any) => r.texte).join('\n');
+    expect(pub).not.toMatch(/60 minutes maximum|100 mobilisables en 48 heures/);
   });
 });
