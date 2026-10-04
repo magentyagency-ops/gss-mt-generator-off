@@ -352,6 +352,12 @@ function tableauAttentes(liste: string): string {
     } else if (/^[«"“]/.test(gras)) {
       exigence = besoin || titreRubriqueCitee(reponse);
       demande = joindre(gras, suite);
+    } else if (gras && suite && !besoin) {
+      // Libellé en gras en tête de la phrase du CCTP (« **Réaliser une ronde de fermeture** du lundi au vendredi… → … »,
+      // forme de libellesBloc1) : le libellé est l'exigence, la phrase entière ce que le CCTP demande (jamais la phrase dans
+      // la colonne de l'exigence et la colonne du CCTP vide, rejeu cstb 1201).
+      exigence = gras;
+      demande = joindre(gras, suite);
     } else if (gras) {
       exigence = joindre(gras, suite);
       demande = besoin;

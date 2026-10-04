@@ -156,3 +156,13 @@ describe('texte d’étape : jamais un complément de temps seul (rejeu cstb 120
     expect(etapesDesPuces(t).map((e) => e.texte)).not.toContain('Pendant toute absence du responsable');
   });
 });
+
+import { pageBloc1Marine as pageB1 } from '../src/generation/bloc1_marine';
+
+describe('tableau des attentes : libellé en gras en tête de la phrase du CCTP (rejeu cstb 1201)', () => {
+  it('le libellé dans EXIGENCE, la phrase entière dans CE QUE LE CCTP DEMANDE', () => {
+    const t = "## Vos attentes et nos engagements\n- **Réaliser une ronde de fermeture** du lundi au vendredi, de 19 h 30 à 20 h 30 → notre réponse : « Notre catalogue de prestations », développée au bloc 2.\n";
+    const lignes = pageB1(t, {}, { bandeau: false, sources: false }).split('\n').filter((l) => l.startsWith('|'));
+    expect(lignes[2]).toBe('| Réaliser une ronde de fermeture | Réaliser une ronde de fermeture du lundi au vendredi, de 19 h 30 à 20 h 30 | « Notre catalogue de prestations » <span class="gss-bloc">→ BLOC 2</span> |');
+  });
+});
