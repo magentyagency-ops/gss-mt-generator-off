@@ -769,8 +769,15 @@ export function perimetreDuLot(analyse: any, dce: string): { analyse: any; dce: 
   // de ligne, « pour le lot 2 » / « au titre du lot 2 », et la ligne d'un tableau dont la première colonne est « Lot ».
   const TETE = /(?:^|(?<=[.;]\s{1,3}))(?:[-•▪*]\s*)?lot\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/])\s*(?:[:–—-]|\()/gi;
   const TETE_LIGNE = /^\s*(?:[-•▪*]\s*)?lot\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/])\s*(?:$|[A-ZÉÈ«"(]|[-–—:])/i;
-  const TETE_PHRASE = /(?:pour|au titre du|concernant|s'agissant du)\s+(?:le\s+)?lot\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/])/gi;
-  const RUPTURE = /^\s*(?:--- .+ ---|===== PIÈCE|(?:ARTICLE|Article|CHAPITRE|Chapitre|TITRE|Titre|PARTIE|Partie)\b|\d{1,2}(?:\.\d{1,2})*\.?\s+[A-ZÉÈ])/;
+  // « s’agissant du lot » avec l'apostrophe typographique des PDF (T4-REG-1).
+  const TETE_PHRASE = /(?:pour|au titre du|concernant|s['’]agissant du)\s+(?:le\s+)?lot\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/])/gi;
+  // Passage de plusieurs lots ou de tous les lots (T4-REG-1, citedia2 : « Pour les lots 1 et 2, la phase de préparation
+  // comprendra… » ; havre1 : « Pour chacun des lots, la durée du contrat… ») : commun (« * ») si le lot du mémoire en est,
+  // sinon d'un autre lot.
+  const TETE_PLURIEL = /(?:pour|au titre des|concernant|s['’]agissant des|dans|aux|des)\s+(?:les\s+)?lots\s*(?:n\s*[°ºo.]?\s*)?((?:\d{1,3}|[IVX]{2,4})(?:\s*(?:,|et|&|à|-|ou)\s*(?:n\s*[°ºo.]?\s*)?(?:\d{1,3}|[IVX]{2,4}))+)(?![\wÀ-ÿ°º/])/gi;
+  const TETE_COMMUNE = /(?:pour|à|a|de|dans|sur)\s+(?:chacun\s+des\s+lots|l['’]ensemble\s+des\s+lots|tous\s+les\s+lots|chaque\s+lot)\b|^\s*(?:[-•▪*]\s*)?(?:tous\s+(?:les\s+)?lots|lots?\s+confondus)\b/gi;
+  // Intitulé numéroté (« 3.2 Délais », « 3-3-Modalités », « 6-5-Non-respect des consignes », « 3.2- Délais ») : rupture.
+  const RUPTURE = /^\s*(?:--- .+ ---|===== PIÈCE|(?:ARTICLE|Article|CHAPITRE|Chapitre|TITRE|Titre|PARTIE|Partie)\b|\d{1,2}(?:[-.–]\s?\d{1,2})*(?:[-.–]\s*|\.?\s+)[A-ZÉÈ])/;
   let courant: string | null = null;
   let retire = false;
   let tableauLots = false;
@@ -785,17 +792,24 @@ export function perimetreDuLot(analyse: any, dce: string): { analyse: any; dce: 
       if (!/^\s*\|/.test(ligne)) tableauLots = false; else { lignes.push(ligne); continue; }
     }
     const tl = TETE_LIGNE.exec(ligne);
-    const coupes = tl ? [{ pos: 0, num: numeroDeLot(tl[1]) }] : [...ligne.matchAll(TETE), ...ligne.matchAll(TETE_PHRASE)].sort((a, b) => (a.index || 0) - (b.index || 0)).map((m) => ({ pos: m.index || 0, num: numeroDeLot(m[1]) }));
+    const pluriels = [...ligne.matchAll(TETE_PLURIEL)].map((m) => ({ pos: m.index || 0, num: [...m[1].matchAll(/\d{1,3}|[IVX]{2,4}/gi)].map((x) => numeroDeLot(x[0])).includes(lot) ? '*' : '#' }));
+    const communes = [...ligne.matchAll(TETE_COMMUNE)].map((m) => ({ pos: m.index || 0, num: '*' }));
+    const coupes = tl ? [{ pos: 0, num: numeroDeLot(tl[1]) }] : [...[...ligne.matchAll(TETE), ...ligne.matchAll(TETE_PHRASE)].map((m) => ({ pos: m.index || 0, num: numeroDeLot(m[1]) })), ...pluriels, ...communes]
+      .sort((a, b) => a.pos - b.pos)
+      // Une tête de lot au singulier prise dans une mention plurielle (« lots 1 et 2 ») n'est pas une coupe à part.
+      .filter((c, i, t) => !(c.num !== '*' && c.num !== '#' && t.some((x) => (x.num === '*' || x.num === '#') && x.pos <= c.pos && c.pos - x.pos < 40)));
+    // Ligne sans tête de lot : elle suit le passage en cours (commun, du lot du mémoire, ou d'un autre lot).
+    const autre = (n: string | null) => !!n && n !== lot && n !== '*';
     if (!coupes.length) {
-      if (courant && courant !== lot) { retire = true; continue; }
+      if (autre(courant)) { retire = true; continue; }
       lignes.push(ligne);
       continue;
     }
-    let garde = coupes[0].pos > 0 && (!courant || courant === lot) ? ligne.slice(0, coupes[0].pos) : '';
+    let garde = coupes[0].pos > 0 && !autre(courant) ? ligne.slice(0, coupes[0].pos) : '';
     coupes.forEach((c, i) => {
       courant = c.num;
       const morceau = ligne.slice(c.pos, i + 1 < coupes.length ? coupes[i + 1].pos : ligne.length);
-      if (courant === lot) garde += morceau; else retire = true;
+      if (!autre(courant)) garde += morceau; else retire = true;
     });
     lignes.push(garde);
   }
