@@ -1206,7 +1206,11 @@ function conjuguerApresGss(m: string, rad: string, fin: string): string {
 }
 
 /** Montant de pénalité du CCAP/CCTP : GSS s'engage sur l'obligation, jamais sur le montant de la sanction. */
-const MONTANT_PENALITE = /p[ée]nalit[ée]s?[^.;]{0,120}?\d[\d\s  ]*(?:,\d+)?\s*(?:€|euros?)|\d[\d\s  ]*(?:,\d+)?\s*(?:€|euros?)[^.;]{0,80}?p[ée]nalit/i;
+// Montant en chiffres ou en lettres, en euros ou en pourcentage (T3-CONS-5, havre2 1352 : « une pénalité de 100 % de la
+// prestation commandée », taux de la grille de pénalités du DCE).
+const LETTRES_MONTANT = '(?:un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|quinze|vingt|trente|quarante|cinquante|soixante|cent|mille)(?:[\\s-]+(?:et|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|vingt|trente|quarante|cinquante|soixante|cents?|mille))*';
+const MONTANT_SEUL = `(?:\\d[\\d\\s\u00a0\u202f]*(?:[,.]\\d+)?\\s*(?:€|euros?\\b|%|pour\\s?cents?\\b)|\\b${LETTRES_MONTANT}\\s+(?:euros?|pour\\s?cents?)\\b)`;
+export const MONTANT_PENALITE = new RegExp(`p[ée]nalit[ée]s?[^.;]{0,120}?${MONTANT_SEUL}|${MONTANT_SEUL}[^.;]{0,80}?p[ée]nalit`, 'i');
 
 /**
  * Retire du texte destiné à l'acheteur les phrases de diagnostic interne (« à ce stade, … n'est pas

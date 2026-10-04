@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 import { lignesEquipe, questionDimensionnement, questionRondes, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative, lotsDuMemoireDce, perimetreDuLot, normaliserSsiap, contracterArticlesNomsPropres } from './base_memoires';
+import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative, lotsDuMemoireDce, perimetreDuLot, normaliserSsiap, contracterArticlesNomsPropres, MONTANT_PENALITE } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -3237,7 +3237,7 @@ const INTERDITS_ADAPTATION: Array<[RegExp, string]> = [
   [/OTMANI|MEROUANI|MENDES|HANZAZ|FE Lilian/, 'nom obsolète'],
   [/sous-trait/i, 'sous-traitance'],
   [/\[CONSULTATION REQUISE|⟦|\{\{|\}\}/, 'marqueur interne'],
-  [/p[ée]nalit[ée]s?[^.;\n]{0,120}?\d[\d\s]*(?:,\d+)?\s*(?:€|euros?)/i, 'montant de pénalité'],
+  [MONTANT_PENALITE, 'montant de pénalité'],
 ];
 
 /** Exigence écrite à la voix de l'acheteur (« son remplaçant devra être présent », « quels que soit », « le titulaire »). */
