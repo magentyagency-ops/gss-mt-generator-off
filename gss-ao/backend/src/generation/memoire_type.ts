@@ -2906,7 +2906,18 @@ export interface MemoirePrepare {
 }
 
 /** Indicateurs, plan et variables d'un marché, en une fois. */
-export function preparerMemoireType(ctx: ContexteMarche, options: OptionsPlan & { memoireType?: MemoireType } = {}): MemoirePrepare {
+/**
+ * Contexte réduit au lot du mémoire (T3G-5) : DCE privé des passages des autres lots et analyse réduite à ce lot, quand le DCE a
+ * plusieurs lots et que le mémoire n'en vise qu'un (perimetreDuLot) ; toutes les lectures sans modèle (sites, horaires,
+ * obligations, délais, fréquences, indicateurs) se font alors sur ce lot. Le contexte tel quel sinon.
+ */
+export function contexteDuLot(ctx: ContexteMarche): ContexteMarche {
+  const r = perimetreDuLot(ctx.analyse, ctx.dce || '');
+  return r ? { ...ctx, dce: r.dce, analyse: r.analyse } : ctx;
+}
+
+export function preparerMemoireType(ctxComplet: ContexteMarche, options: OptionsPlan & { memoireType?: MemoireType } = {}): MemoirePrepare {
+  const ctx = contexteDuLot(ctxComplet);
   const mt = options.memoireType || chargerMemoireType();
   const etatsIndicateurs = evaluerIndicateurs(mt, ctx);
   const indicateurs = valeursIndicateurs(etatsIndicateurs);
@@ -2970,7 +2981,8 @@ export function communesDesSites(dce: string, sites: string[], villes: string[])
   return out;
 }
 
-export function donneesBesoin(prep: MemoirePrepare, ctx: ContexteMarche): DonneesBesoin {
+export function donneesBesoin(prep: MemoirePrepare, ctxComplet: ContexteMarche): DonneesBesoin {
+  const ctx = contexteDuLot(ctxComplet);
   const v = prep.variables;
   const texte = (n: string) => (variableRenseignee(v[n]) ? valeurAffichee(n, v[n], prep.mt.variables[n]) : '');
   const liste = (n: string) => (Array.isArray(v[n]?.valeur) ? (v[n].valeur as string[]).filter(Boolean) : texte(n) ? [texte(n)] : []);

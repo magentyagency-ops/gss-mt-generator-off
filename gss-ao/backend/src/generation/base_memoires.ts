@@ -715,14 +715,25 @@ const RX_NON_ALLOTI = /(?<!en cas de )\bnon[- ]allotie?s?\b(?!\s+(?:en|jusqu|dep
  * numéro de lot (cadre de réponse « Lot 1 »), sinon tous les lots de l'analyse avec la question « pour quel lot ce mémoire
  * est-il remis ? ».
  */
+/**
+ * Numéro de lot sous une forme unique (T3G-4) : « 02 », « n° 2 », « II » → « 2 » ; une lettre (« B ») reste une lettre.
+ */
+export function numeroDeLot(v: string): string {
+  const t = String(v || '').trim().toUpperCase();
+  if (/^\d{1,3}$/.test(t)) return String(Number(t));
+  const romains: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10 };
+  if (romains[t] && t.length > 1) return String(romains[t]);
+  return t;
+}
+
 export function lotsDuMemoireDce(analyse: any, dce: string, propre: (v: unknown) => string = textePropre): { lots: string[]; question?: string } {
   const plat = String(dce || '').replace(/\s+/g, ' ');
   const lots: Array<{ num: string; perimetre: string }> = [];
   for (const l of Array.isArray(analyse?.lots) ? analyse.lots : []) {
     // « lot » et « n° / no / n. » facultatifs l'un sans l'autre (T1-COH-2 : « N°1 » lu « lot N ») ; une lettre suivie de
     // « ° » n'est jamais un lot.
-    const m = /^(?:lots?\s*)?(?:n\s*[°ºo.]\s*(?=\d))?(\d{1,3}|[A-Z])(?![\wÀ-ÿ°º/])/i.exec(propre(typeof l === 'object' ? l?.num : l));
-    if (m && !lots.some((x) => x.num === m[1].toUpperCase())) lots.push({ num: m[1].toUpperCase(), perimetre: propre(typeof l === 'object' ? l?.perimetre : '') });
+    const m = /^(?:lots?\s*)?(?:n\s*[°ºo.]\s*(?=\d))?(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/])/i.exec(propre(typeof l === 'object' ? l?.num : l));
+    if (m && !lots.some((x) => x.num === numeroDeLot(m[1]))) lots.push({ num: numeroDeLot(m[1]), perimetre: propre(typeof l === 'object' ? l?.perimetre : '') });
   }
   // Marché déclaré non alloti : aucun lot, même si l'analyse en a relevé plusieurs (seulement sur une affirmation).
   if (RX_NON_ALLOTI.test(plat)) return { lots: [] };
@@ -732,7 +743,7 @@ export function lotsDuMemoireDce(analyse: any, dce: string, propre: (v: unknown)
   const numeros = (nom: string): string[] => {
     // Numéro de lot, jamais une référence de contrat (« lots 54.6.09 et 54.6.10 »).
     const m = /\blots?\s*(?:n\s*[°o.]?\s*)?(\d{1,3})(?!\d|[.,]\d)((?:\s*(?:,|et|&|-|à)\s*(?:(?:lot\s*)?n\s*[°o.]?\s*)?\d{1,3}(?!\d|[.,]\d))*)/i.exec(nom.replace(/_/g, ' '));
-    return m ? [...`${m[1]}${m[2] || ''}`.matchAll(/\d{1,3}/g)].map((x) => x[0]) : [];
+    return m ? [...`${m[1]}${m[2] || ''}`.matchAll(/\d{1,3}/g)].map((x) => numeroDeLot(x[0])) : [];
   };
   const memoireCommun = noms.find((n) => /cadre|m[ée]moire/i.test(n) && numeros(n).length > 1);
   if (memoireCommun) return { lots: numeros(memoireCommun) };
@@ -752,15 +763,28 @@ export function perimetreDuLot(analyse: any, dce: string): { analyse: any; dce: 
   if (!Array.isArray(analyse?.lots) || analyse.lots.length < 2) return null;
   const r = lotsDuMemoireDce(analyse, dce);
   if (r.lots.length !== 1 || r.question) return null;
-  const lot = r.lots[0];
-  const TETE = /(?:^|(?<=[.;]\s{1,3}))(?:[-•▪*]\s*)?lot\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[A-Z])(?![\wÀ-ÿ°º/])\s*(?:[:–—-]|\()/gi;
+  const lot = numeroDeLot(r.lots[0]);
+  // Têtes de lot (T3G-4) : « Lot 2 : », « Lot n° 2 – », « Lot 2 (», mais aussi « LOT 02 » ou « LOT 2 GARDIENNAGE … » seul en tête
+  // de ligne, « pour le lot 2 » / « au titre du lot 2 », et la ligne d'un tableau dont la première colonne est « Lot ».
+  const TETE = /(?:^|(?<=[.;]\s{1,3}))(?:[-•▪*]\s*)?lot\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/])\s*(?:[:–—-]|\()/gi;
+  const TETE_LIGNE = /^\s*(?:[-•▪*]\s*)?lot\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/])\s*(?:$|[A-ZÉÈ«"(]|[-–—:])/i;
+  const TETE_PHRASE = /(?:pour|au titre du|concernant|s'agissant du)\s+(?:le\s+)?lot\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ°º/])/gi;
   const RUPTURE = /^\s*(?:--- .+ ---|===== PIÈCE|(?:ARTICLE|Article|CHAPITRE|Chapitre|TITRE|Titre|PARTIE|Partie)\b|\d{1,2}(?:\.\d{1,2})*\.?\s+[A-ZÉÈ])/;
   let courant: string | null = null;
   let retire = false;
+  let tableauLots = false;
   const lignes: string[] = [];
   for (const ligne of String(dce || '').split('\n')) {
     if (RUPTURE.test(ligne)) courant = null;
-    const coupes = [...ligne.matchAll(TETE)].map((m) => ({ pos: m.index || 0, num: m[1].toUpperCase() }));
+    // Tableau « | Lot | Site | Adresse | » : chaque rangée appartient au lot de sa première cellule.
+    if (/^\s*\|?\s*lots?\s*(?:n\s*[°ºo.]?)?\s*\|/i.test(ligne)) { tableauLots = true; lignes.push(ligne); continue; }
+    if (tableauLots) {
+      const rang = /^\s*\|?\s*(?:lot\s*)?(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[IVX]{2,4}|[A-Z])\s*\|/i.exec(ligne);
+      if (rang) { if (numeroDeLot(rang[1]) === lot) lignes.push(ligne); else retire = true; continue; }
+      if (!/^\s*\|/.test(ligne)) tableauLots = false; else { lignes.push(ligne); continue; }
+    }
+    const tl = TETE_LIGNE.exec(ligne);
+    const coupes = tl ? [{ pos: 0, num: numeroDeLot(tl[1]) }] : [...ligne.matchAll(TETE), ...ligne.matchAll(TETE_PHRASE)].sort((a, b) => (a.index || 0) - (b.index || 0)).map((m) => ({ pos: m.index || 0, num: numeroDeLot(m[1]) }));
     if (!coupes.length) {
       if (courant && courant !== lot) { retire = true; continue; }
       lignes.push(ligne);
@@ -784,7 +808,8 @@ export function perimetreDuLot(analyse: any, dce: string): { analyse: any; dce: 
     const nom = textePropre(site?.name);
     return !nom || texte.toLowerCase().includes(nom.toLowerCase());
   };
-  const a = { ...analyse, lots: analyse.lots.filter((l: any) => String(textePropre(typeof l === 'object' ? l?.num : l)).replace(/\D/g, '') === lot.replace(/\D/g, '') || String(textePropre(typeof l === 'object' ? l?.num : l)).toUpperCase().endsWith(lot)) };
+  const numDe = (l: any) => { const m = /(\d{1,3}|[IVX]{2,4}|[A-Z])(?![\wÀ-ÿ])\s*$/i.exec(String(textePropre(typeof l === 'object' ? l?.num : l)).trim()); return m ? numeroDeLot(m[1]) : ''; };
+  const a = { ...analyse, lots: analyse.lots.filter((l: any) => numDe(l) === lot) };
   if (Array.isArray(analyse.sites)) a.sites = analyse.sites.filter(cite);
   return { analyse: a, dce: texte, lot };
 }

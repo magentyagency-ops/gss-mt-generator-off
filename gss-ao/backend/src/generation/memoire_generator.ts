@@ -33,7 +33,7 @@ import {
 } from './memoire_type_cadre';
 import { articlesBloc1 } from './bloc1_marine';
 import { SuiviAdaptations, adaptationsDuPubliposte, adaptationsDesValeursImposees, consultationsAdaptations, messageAdaptations, aValider, exigenceProche, phraseDuDceProche, phraseLisible, fondementDansDce, exigenceDeModification, ETAPE_ADAPTATION_MODELE, type PhraseAdaptee } from './adaptations_cctp';
-import { exigenceDeGrillePenalites, estCahierDesChargesParContenu, rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
+import { exigenceDeGrillePenalites, estCahierDesChargesParContenu, perimetreDuLot, rechercherMemoires, blocMemoires, blocRegistre, REGLES_REUTILISATION, texteSourcesMemoires, extraireConfirmations, valeurRegistre, personnesDuRole, organigrammeGss, retirerCommentairesInternes, referencesGss, confirmationsRegistreUtilisees, sansRecopieCctp, texteCctp, nettoyerChampCadre, marcheHorsNormandie, limiterReferences, fondementReprise, delaisHorsNormandie, nettoyerStructure, limiterRappelsSite, interditsDce, obligationsChiffrees, obligationsChiffreesAbsentes, horairesImposes, acheteursCites, vocabulaireSchemas, nomsHorsMarche, motifRefusAlignement, jalonsChronologiques, sansDonneesCnapsConnues, questionDonneeGss, montantsRegistre, questionDelaiInapplicable, questionLieuInconnu, lieuDuMarche, alerteHorsZone, estCahierDesCharges, dceCctpDAbord, motifsReferences, sansAnciensAcheteurs, RX_NOMBRE_LETTRES, nombreFr, RX_CCATP } from './base_memoires';
 import fs from 'fs';
 import crypto from 'crypto';
 import os from 'os';
@@ -4657,8 +4657,12 @@ Renvoie un JSON valide :
     }
 
     // 2. Analyse structurée du DCE (contexte unique de rédaction), avant toute manipulation du Word
-    const dceContext = await this.getDceContext(dossierId);
-    const analysisData = await this.analyzeDce(dceContext);
+    const dceComplet = await this.getDceContext(dossierId);
+    const analyseComplete = await this.analyzeDce(dceComplet);
+    // Cadre d'un seul lot (T3G-5) : DCE et analyse réduits à ce lot.
+    const lotReduit = perimetreDuLot(analyseComplete, dceComplet);
+    const dceContext = lotReduit?.dce ?? dceComplet;
+    const analysisData = lotReduit?.analyse ?? analyseComplete;
     const analysisJson = JSON.stringify(analysisData, null, 2);
     if (onProgress) onProgress(12, 'Analyse du DCE terminée');
 
@@ -8094,10 +8098,16 @@ Rends le JSON décrit (profile, stakes, axes, pages[${nZones}]).`;
 
     if (onProgress) onProgress(10, 'Analyse du DCE et lecture du contexte...');
 
-    const dceContext = await this.getDceContext(dossierId);
-    const analysisData = await this.analyzeDce(dceContext);
+    const dceComplet = await this.getDceContext(dossierId);
+    const analyseComplete = await this.analyzeDce(dceComplet);
+    // Mémoire d'un seul lot d'un DCE à plusieurs lots (T3G-5) : le DCE et l'analyse réduits à ce lot (parties communes gardées)
+    // pour toute la rédaction et toutes les lectures du DCE ; la limite de pages du RC reste lue sur le DCE entier.
+    const lotReduit = perimetreDuLot(analyseComplete, dceComplet);
+    if (lotReduit) console.log(`[MemoireGenerator] Mémoire du lot ${lotReduit.lot} : DCE réduit à ce lot (${dceComplet.length} → ${lotReduit.dce.length} car.).`);
+    const dceContext = lotReduit?.dce ?? dceComplet;
+    const analysisData = lotReduit?.analyse ?? analyseComplete;
     // Mémoire limité en pages avec plan imposé par le RC : format court conforme (demande Clarence).
-    const formatImpose = await this.detecterFormatImpose(dceContext);
+    const formatImpose = await this.detecterFormatImpose(dceComplet);
     if (formatImpose) return this.genererFormatCourt(dossierId, dceContext, analysisData, formatImpose, onProgress);
     // Réponse libre v2 (refonte 2026-10) : le mémoire type de GSS en 5 blocs, personnalisé par publipostage et adapté au
     // CCTP. Retour arrière : GSS_MEMOIRE_TYPE=non → rédaction rubrique par rubrique du plan v1 ci-dessous, inchangée.
