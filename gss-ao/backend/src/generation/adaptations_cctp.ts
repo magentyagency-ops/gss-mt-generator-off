@@ -26,7 +26,7 @@
 // viennent pas du CCTP. Un délai normand retiré hors Normandie est signalé avec son motif (règle de GSS), jamais présenté
 // comme une exigence du CCTP (T6C-10).
 
-import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, variableRenseignee, phraseDelaiDuDce, phrasesDelaisDuDce, sujetDelaiDePhrase, sujetsDelaisDuGabarit, phraseDuDceContenant, phraseFrequenceReunionsDce, VARIABLES_IMPOSABLES, SUJET_VARIABLE_DELAI, type MemoireType, type ContexteMarche } from './memoire_type';
+import { motsDePhrase, similarite, normaliser, listeFr, preparerMemoireType, publierRubrique, dureesIntervention, variableRenseignee, phraseDelaiDuDce, phrasesDelaisDuDce, sujetDelaiDePhrase, sujetsDelaisDuGabarit, phraseDuDceContenant, phraseFrequenceReunionsDce, envoiPlanningsClientDce, VARIABLES_IMPOSABLES, SUJET_VARIABLE_DELAI, type MemoireType, type ContexteMarche } from './memoire_type';
 import { sitesDuMarche, lieuDuMarche, communesParCodePostal, interditPhotosDce, RX_RONDES_A_PIED } from './base_memoires';
 
 export type StatutAdaptation = 'a_valider' | 'validee' | 'modifiee' | 'retablie';
@@ -623,7 +623,8 @@ export function adaptationsDesValeursImposees(mt: MemoireType, ctx: ContexteMarc
   const gss = preparerMemoireType({ ...ctx, imposees: undefined, delaisDuDce: false, horsNormandie: false, choix: { ...(ctx.choix || {}), indicateurs: { ...(ctx.choix?.indicateurs || {}), HORS_NORMANDIE: false } } }, { memoireType: mt });
   const out: Array<{ rubrique: string; avant: string; apres: string; exigence: string; etape: string; reference: string }> = [];
   const texte = (v: unknown) => (Array.isArray(v) ? v.join(' ; ') : String(v ?? ''));
-  for (const nom of VARIABLES_IMPOSABLES) {
+  // Jalon d'envoi des plannings au client : lu sans modèle dans le DCE (T3-CONS-4), signalé comme les valeurs imposées.
+  for (const nom of [...VARIABLES_IMPOSABLES, 'JALON_ENVOI_CLIENT']) {
     const r = reel.variables[nom];
     const source = String(r?.source || '');
     // Plusieurs délais imposés par le CCTP (T10C-2) : la phrase de GSS est imprimée sans son délai, signalée avec les
@@ -649,7 +650,8 @@ export function adaptationsDesValeursImposees(mt: MemoireType, ctx: ContexteMarc
     const exigence = plusieurs && sujet ? exigenceDelaisDuSujet(ctx.dce || '', sujet)
       : imposee?.citation ? phraseDuDceContenant(ctx.dce || '', imposee.citation)
       : sujet ? phraseDelaiDuDce(ctx.dce || '', sujet as any)
-        : nom === 'FREQ_REUNIONS' ? phraseFrequenceReunionsDce(ctx.dce || '') : '';
+        : nom === 'FREQ_REUNIONS' ? phraseFrequenceReunionsDce(ctx.dce || '')
+          : nom === 'JALON_ENVOI_CLIENT' ? envoiPlanningsClientDce(ctx.dce || '')?.phrase || '' : '';
     if (!exigence) continue;
     const variables = { ...reel.variables, [nom]: g };
     // Contrôles inopinés déduits de la fréquence imposée du contrôle 2 : la valeur de GSS revient avec elle.

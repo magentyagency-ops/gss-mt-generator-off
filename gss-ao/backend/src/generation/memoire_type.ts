@@ -210,7 +210,7 @@ export const VARIABLES_CALCULEES = new Set<string>([
   'TAUX_REPRISE', 'FONDEMENT_REPRISE_DCE', 'PARTENAIRE_TELESURVEILLANCE', 'ENGAGEMENTS_TELESURVEILLANCE', 'SITES_RONDES',
   'FICHE_POSTE_EXEMPLE', 'DELAI_ASTREINTE', 'DELAI_ASTREINTE_NORMANDIE', 'DELAI_PTI', 'DELAI_INTERVENTION_ALARME',
   'DELAI_ENVOI_PLANNINGS', 'DELAI_COMMANDE_SUPPLEMENTAIRE', 'DELAI_DEFAILLANCE_SSI', 'FREQ_CONTROLE_1', 'FREQ_CONTROLE_2',
-  'FREQ_CONTROLE_3', 'CONTROLES_INOPINES_MENSUELS', 'FREQ_REUNIONS', 'RESPONSABLE_APR',
+  'FREQ_CONTROLE_3', 'CONTROLES_INOPINES_MENSUELS', 'FREQ_REUNIONS', 'RESPONSABLE_APR', 'JALON_ENVOI_CLIENT',
 ]);
 
 /** Variables qu'un CCTP peut imposer (délais, fréquences) : la valeur du CCTP remplace celle de GSS. */
@@ -2187,6 +2187,20 @@ const CALCULS: Record<string, Calculateur> = {
   DELAI_PTI: (c) => delai(c, 'DELAI_PTI', 'pti'),
   DELAI_INTERVENTION_ALARME: (c) => delai(c, 'DELAI_INTERVENTION_ALARME', 'alarme'),
   DELAI_ENVOI_PLANNINGS: (c) => depuisRegistre(c, 'envoi_plannings', (v) => valeurPropre(v).replace(/\s+/g, '')),
+  // Envoi des plannings au client (calendrier de GSS : J-3) : le cahier des charges prime quand il impose un envoi plus tôt
+  // (T3-CONS-4, ign : « au moins sept (7) jours avant le début du mois concerné ») ; avant J-7, le jalon devient J-n (phrase
+  // adaptée, signalée à GSS) ; à J-7 ou plus tôt, le calendrier de GSS (J-10 envoi aux agents, J-7 validation) ne tient plus :
+  // le jalon est demandé à GSS (« [À COMPLÉTER] », jalon retiré du schéma), jamais l'ancien jalon à côté de l'engagement contraire.
+  JALON_ENVOI_CLIENT: (c) => {
+    const gss = c.mt.variables.JALON_ENVOI_CLIENT?.valeur_gss || 'J-3';
+    const k = Number((/J-(\d+)/.exec(gss) || [])[1] || 3);
+    const dce = c.ctx.delaisDuDce !== false ? envoiPlanningsClientDce(c.ctx.dce || '') : null;
+    if (!dce || dce.jours <= k) return { valeur: gss, source: 'pratique GSS (calendrier de planification)' };
+    // Strictement entre la validation par les agents (J-7) et J-3 : le calendrier reste dans l'ordre, chaque jalon à sa date.
+    if (dce.jours < 7) return { valeur: `J-${dce.jours}`, source: `imposé par le DCE : « ${dce.phrase.slice(0, 200)} »` };
+    const exigence = (dce.phrase.split(/(?<=\.)\s+(?=\S)/).pop() || dce.phrase).trim();
+    return { valeur: null, question: `Le cahier des charges impose d'envoyer les plannings au client au moins ${dce.jours} jours avant le début du mois (« ${exigence.length > 220 ? `${exigence.slice(0, 220).replace(/\s+\S*$/, '')}…` : exigence} ») ; votre calendrier prévoit J-10 l'envoi aux agents, J-7 leur validation et J-3 l'envoi au client. Quel jalon faut-il indiquer pour l'envoi des plannings au client ?` };
+  },
   DELAI_COMMANDE_SUPPLEMENTAIRE: (c) => delai(c, 'DELAI_COMMANDE_SUPPLEMENTAIRE', 'commande'),
   DELAI_DEFAILLANCE_SSI: (c) => delai(c, 'DELAI_DEFAILLANCE_SSI', 'ssi'),
   FREQ_CONTROLE_1: (c) => ({ valeur: c.mt.variables.FREQ_CONTROLE_1?.valeur_gss || null, source: 'pratique GSS' }),
@@ -2255,6 +2269,41 @@ export function variablesDuMarche(mt: MemoireType, ctx: ContexteMarche, indicate
       : { valeur: null, question: `Le cahier des charges impose des contrôles inopinés « ${imposee} » : combien de contrôles inopinés par mois et par site faut-il indiquer dans le calendrier type du suivi qualité ?` };
   }
   return out;
+}
+
+/**
+ * Délai d'envoi du planning mensuel au client imposé par le DCE, en jours avant le début du mois (ign : « Le planning mensuel …
+ * est transmis … au moins sept (7) jours avant le début du mois concerné » → 7 ; becquerel : « au moins 10 jours avant le début
+ * du mois considéré » → 10 ; « au plus tard le 20 du mois précédent » → 10 ; « 10 jours ouvrés » → 14). null sinon.
+ */
+export function envoiPlanningsClientDce(dce: string): { jours: number; phrase: string } | null {
+  const t = String(dce || '').replace(/\s+/g, ' ');
+  const phrases = t.split(/(?<=[.;])\s+(?=[A-ZÀ-Ý])/);
+  const LETTRES: Record<string, number> = { trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, neuf: 9, dix: 10, quinze: 15, vingt: 20 };
+  // Phrase citée, avec la dernière phrase précédente quand elle seule ne nomme pas le planning (« Cette transmission se fait… »),
+  // sans le titre numéroté collé (« 6.5 TRANSMISSION DU PLANNING MENSUEL »).
+  const citer = (i: number): string => {
+    if (/plannings?/i.test(phrases[i])) return phrases[i].trim();
+    const prec = (String(phrases[i - 1] || '').split(/(?<=\.)\s+(?=\S)/).pop() || '').replace(/^\d+(?:\.\d+)*\s+[A-ZÀ-Ý'’ ]+?\s+(?=[A-ZÀ-Ý][a-zà-ÿ])/, '');
+    return `${prec} ${phrases[i]}`.trim();
+  };
+  for (let i = 0; i < phrases.length; i++) {
+    const ph = phrases[i];
+    // La phrase du délai ou la précédente nomment le planning et son envoi au client.
+    const avec = `${phrases[i - 1] || ''} ${ph}`;
+    if (!/plannings?/i.test(avec) || !/transm[ie]|envo[yi]|communiqu|remi[st]|remet|adress|fourni/i.test(avec) || /modification|changement/i.test(ph.split(/\d|jours/)[0] || '')) continue;
+    const m = /(?:au moins|au minimum|minimum|au plus tard)?\s*(\d{1,2}|trois|quatre|cinq|six|sept|huit|neuf|dix|quinze|vingt)(?:\s*\(\s*[\da-zé]{1,8}\s*\))?\s+jours?\s*(ouvr[ée]s|ouvrables|calendaires)?\s+avant\s+(?:le\s+d[ée]but\s+d[ue]\s+|la\s+fin\s+d[ue]\s+)?(?:mois|p[ée]riode)/i.exec(ph);
+    if (m) {
+      let n = /^\d+$/.test(m[1]) ? Number(m[1]) : LETTRES[m[1].toLowerCase()];
+      if (m[2] && /ouvr/i.test(m[2])) n = Math.ceil(n * 7 / 5);
+      if (/la\s+fin\s+d/i.test(m[0])) n = Math.max(0, n);
+      // Phrase citée avec la précédente quand elle seule ne nomme pas le planning (« Cette transmission se fait … »).
+      if (n) return { jours: n, phrase: citer(i) };
+    }
+    const d = /au plus tard le (\d{1,2})(?:er)? du mois pr[ée]c[ée]dent/i.exec(ph);
+    if (d) return { jours: Math.max(1, 30 - Number(d[1])), phrase: citer(i) };
+  }
+  return null;
 }
 
 const NOMBRES_FOIS: Record<string, number> = { une: 1, un: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6 };
