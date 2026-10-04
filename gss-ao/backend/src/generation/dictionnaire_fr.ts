@@ -26,6 +26,24 @@ function meilleureForme(formes: string[], k: string): string {
   return premierAccent(accentuee) < accentuee.length - 2 ? accentuee : k;
 }
 
+const COMPLEMENTS = ['médiathèque', 'médiathèques', 'artothèque', 'artothèques', 'ehpad'];
+let formesParCle: Map<string, string[]> | null = null;
+/** Noms communs d'institution dont la forme accentuée est le nom (« CITE SCOLAIRE » → « cité », « MARCHE COUVERT » →
+ *  « marché ») ; dans un nom d'institution, jamais le verbe conjugué sans accent (T7G-5). */
+const NOMS_INSTITUTION_ACCENTUES: Record<string, string> = { cite: 'cité', cites: 'cités', marche: 'marché', marches: 'marchés' };
+/** Forme d'un mot dans un nom d'institution : le nom accentué d'un mot ambigu (« cité »), sinon la forme du dictionnaire. */
+export function motDuDictionnaireInstitution(mot: string): string {
+  return NOMS_INSTITUTION_ACCENTUES[sansAccents(mot)] || motDuDictionnaire(mot);
+}
+/** Le dictionnaire n'a qu'une graphie pour ce mot (sans accent, casse ignorée) : sa graphie n'est pas à confirmer. */
+export function graphieSansAmbiguite(mot: string): boolean {
+  motDuDictionnaire(mot);
+  const k = sansAccents(mot);
+  if (NOMS_INSTITUTION_ACCENTUES[k]) return true;
+  const f = formesParCle?.get(k);
+  return !!f && new Set(f).size === 1;
+}
+
 /** Forme du dictionnaire (en minuscules, accentuée) d'un mot quelconque ; '' s'il n'est pas un mot du dictionnaire. */
 export function motDuDictionnaire(mot: string): string {
   if (!dictionnaireFr) {
@@ -39,7 +57,10 @@ export function motDuDictionnaire(mot: string): string {
         (toutes.get(k) || toutes.set(k, []).get(k)!).push(w);
       }
     } catch { /* dictionnaire absent : noms propres seulement */ }
+    // Noms d'équipements publics absents du dictionnaire (T7G-5 : « MEDIATHEQUE » → « médiathèque »).
+    for (const w of COMPLEMENTS) { const k = sansAccents(w); if (!toutes.has(k)) toutes.set(k, [w]); }
     dictionnaireFr = new Map([...toutes].map(([k, f]) => [k, meilleureForme(f, k)]));
+    formesParCle = toutes;
   }
   return dictionnaireFr.get(sansAccents(mot)) || '';
 }

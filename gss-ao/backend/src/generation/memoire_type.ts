@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { motDuDictionnaire } from './dictionnaire_fr';
+import { motDuDictionnaire, motDuDictionnaireInstitution, graphieSansAmbiguite } from './dictionnaire_fr';
 import { lignesEquipe, questionDimensionnement, questionRondes, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
 import { estNomDeLieu, lieuxConnus, horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, NOMME_DELAI, heureEstUnDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative, lotsDuMemoireDce, perimetreDuLot, normaliserSsiap, contracterArticlesNomsPropres, MONTANT_PENALITE, textePreuvesIndicateurs } from './base_memoires';
 
@@ -916,9 +916,10 @@ export function variableRenseignee(v?: ValeurVariable): boolean {
   return !!x && !!String(x).trim() && String(x).trim() !== '[À COMPLÉTER]';
 }
 
-const ARTICLES_MASCULINS = /^(?:groupe|foyer|haras|hospice|centre|conseil|d[ée]partement|minist[èe]re|mus[ée]e|syndicat|groupement|chu|chr|chb|service|p[ôo]le|parc|port|palais|tribunal|th[ée][âa]tre|lyc[ée]e|coll[èe]ge|rectorat|cr[ée]dit|comit[ée]|campus|grand|bailleur|crous|sdis|march[ée]|conservatoire|stade|ccas|centre-?ville)$/i;
-const INSTITUTION_VOYELLE = /^(?:universit[ée]|[ée]cole|[ée]tablissement|office|institut|institution|h[ôo]tel|h[ôo]pital|agence|op[ée]ra|acad[ée]mie|assembl[ée]e|administration|a[ée]roport|association|entreprise|ehpad|espace|observatoire|union|inspection|organisme|ordre|[ée]tat|[ée]glise|abbaye|amphith[ée][âa]tre|auditorium|arsenal|atelier|[ée]quipement|ensemble|internat|unit[ée]|immeuble)$/i;
-const ARTICLES_FEMININS = /^(?:r[ée]gion|ville|mairie|commune|communaut[ée]|m[ée]tropole|caisse|caf|cpam|chambre|direction|pr[ée]fecture|fondation|banque|cour|mutualit[ée]|maison|cit[ée]|soci[ée]t[ée]|r[ée]gie|r[ée]sidence|clinique|f[ée]d[ée]ration|biblioth[èe]que|m[ée]diath[èe]que|sncf|ratp|direction)$/i;
+// T7G-9 : équipements publics (golf, gymnase, complexe, château, cinéma, casino, camping, parking, domaine, jardin…).
+const ARTICLES_MASCULINS = /^(?:groupe|foyer|haras|hospice|centre|conseil|d[ée]partement|minist[èe]re|mus[ée]e|syndicat|groupement|chu|chr|chb|service|p[ôo]le|parc|port|palais|tribunal|th[ée][âa]tre|lyc[ée]e|coll[èe]ge|rectorat|cr[ée]dit|comit[ée]|campus|grand|bailleur|crous|sdis|march[ée]|conservatoire|stade|ccas|centre-?ville|golf|gymnase|complexe|zoo|ch[âa]teau|cin[ée]ma|casino|camping|parking|domaine|jardin|dojo|boulodrome|v[ée]lodrome|hippodrome|skatepark|square|quai|cimeti[èe]re|cr[ée]matorium|hangar|laboratoire|terrain|plan[ée]tarium|si[èe]ge|b[âa]timent|village|phare|manoir|prieur[ée]|couvent|mus[ée]um|kiosque|stand|pavillon|palais|refuge|bassin|club|cercle)$/i;
+const INSTITUTION_VOYELLE = /^(?:aquarium|a[ée]rodrome|abattoir|entrep[ôo]t|h[ée]liport|hippodrome|ar[èe]ne|universit[ée]|[ée]cole|[ée]tablissement|office|institut|institution|h[ôo]tel|h[ôo]pital|agence|op[ée]ra|acad[ée]mie|assembl[ée]e|administration|a[ée]roport|association|entreprise|ehpad|espace|observatoire|union|inspection|organisme|ordre|[ée]tat|[ée]glise|abbaye|amphith[ée][âa]tre|auditorium|arsenal|atelier|[ée]quipement|ensemble|internat|unit[ée]|immeuble)$/i;
+const ARTICLES_FEMININS = /^(?:r[ée]gion|ville|mairie|commune|communaut[ée]|m[ée]tropole|caisse|caf|cpam|chambre|direction|pr[ée]fecture|fondation|banque|cour|mutualit[ée]|maison|cit[ée]|soci[ée]t[ée]|r[ée]gie|r[ée]sidence|clinique|f[ée]d[ée]ration|biblioth[èe]que|m[ée]diath[èe]que|sncf|ratp|direction|piscine|patinoire|salle|gare|cr[èe]che|galerie|base|ludoth[èe]que|cin[ée]math[èe]que|station|capitainerie|gendarmerie|caserne|chapelle|cath[ée]drale|basilique|citadelle|plage|zone|ferme|forge|serre|villa|manufacture|collectivit[ée]|sous-pr[ée]fecture|scierie|distillerie|brasserie|maladrerie|chartreuse|commanderie|ma[îi]trise|m[ée]diath[èe]que|maternit[ée]|polyclinique|pouponni[èe]re|crèche)$/i;
 
 /** Tête de nom au pluriel (« Archives nationales », « Hospices civils de Lyon », « Hôpitaux de Paris ») : l'acheteur prend « les »,
  *  même sans emploi dans le DCE (T6-COH-4). */
@@ -1125,7 +1126,7 @@ function nomEnIte(mot: string): string {
 /** Graphie usuelle d'un mot écrit en capitales : mot du dictionnaire en minuscules accentuées, sinon nom propre. */
 function graphieUsuelle(mot: string): string {
   if (MOTS_OUTILS.has(normaliser(mot))) return mot.toLowerCase();
-  const d = motDuDictionnaire(mot) || nomEnIte(mot);
+  const d = motDuDictionnaireInstitution(mot) || nomEnIte(mot);
   if (d) return d;
   return mot.split('-').map((x) => (x ? x.charAt(0).toUpperCase() + x.slice(1).toLowerCase() : x)).join('-');
 }
@@ -1173,6 +1174,13 @@ const PRENOMS = new Set(('adrien agathe agnes alain albert alexandre alexis alfr
  * Noms communs qui suivent « de / du / des / d' » dans les noms d'institution (« de l'habitat », « d'action sociale », « de
  * santé mentale ») : jamais un nom propre à faire confirmer par GSS.
  */
+/** Prénoms avec leurs accents (T7G-5 : « ANDRE » → « André », jamais « Andre ») ; clé sans accents. */
+const PRENOMS_ACCENTUES: Record<string, string> = Object.fromEntries(('Agnès Amélie André Andrée Aurélie Cécile Célestin Clément Édith Édouard Élisabeth Élise Émile Émilie Étienne Eugène Eugénie François Françoise Frédéric Frédérique Geneviève Gérard Hélène Honoré Irène Jérôme Jérémie Joël Joséphine Léo Léon Léonard Léonie Michèle Noël René Renée Sébastien Théodore Thérèse Valérie Hervé Benoît Gaëtan Raphaël Mickaël Daniel Désiré Ernestine Félix Hippolyte Ignace Jacqueline Lucienne Maël Mélanie Nathalie Océane Pélagie Régis Rémi Rémy Séverine Stéphane Stéphanie Timothée Zoé').split(' ').map((p) => [p.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(), p]));
+for (const k of Object.keys(PRENOMS_ACCENTUES)) PRENOMS.add(k);
+/** Prénom écrit en capitales, avec ses accents (« FRANCOIS » → « François »). */
+function prenomEnCasse(mot: string): string {
+  return PRENOMS_ACCENTUES[normaliser(mot)] || mot.charAt(0) + mot.slice(1).toLowerCase();
+}
 const NOMS_COMMUNS_INSTITUTION = new Set(('sang action actions agglomeration agriculture amenagement arts artisanat assainissement beaux bassin batiment batiments cancer chambre commerce communes compagnons culture danse defense departement developpement eau eaux education emploi enfance enseignement environnement etudes etudiants familles famille formation france habitat habitation handicapes handicapees incendie industrie insertion jeunesse jeunes justice logement logements lutte metiers metropole musique patrimoine pays personnes police prevention readaptation recherche reeducation region retraite sante secours securite services social sociale soins solidarite sport sports territoire territoires tourisme transport transports travail travailleurs universite ville villes').split(' '));
 
 /** Sigle d'après l'usage du DCE seul (« l'ESID », « le SDIS ») : article en minuscules devant le mot en capitales. */
@@ -1263,7 +1271,7 @@ export function casseDuDceDetail(nom: string, dceBrut: string, intitule = false)
     // D'ARC », T5-COH-2) : un mot, jamais un sigle, sauf emploi de sigle dans le DCE (« l'ART »).
     else if (institutionnel && !premier && mot.length <= 5 && /[AEIOUYÀ-Ý]/.test(mot) && motDuDictionnaire(mot) && !PRENOMS.has(k) && !sigleParArticle(mot, dce)) { r = graphieUsuelle(mot); src = 'dico'; }
     // Prénom écrit en capitales (« ANDRÉ », « JEAN ») : jamais un sigle.
-    else if (institutionnel && !premier && PRENOMS.has(k)) { r = mot.charAt(0) + mot.slice(1).toLowerCase(); src = 'dico'; }
+    else if (institutionnel && !premier && PRENOMS.has(k)) { r = prenomEnCasse(mot); src = 'dico'; }
     // Sigle écrit en capitales dans le DCE : mot court ou sans voyelle (« IGN », « SDIS ») ; un mot plein (« CENTRE », cstb
     // 221 : « Le CENTRE scientifique… ») prend la graphie en minuscules des textes de GSS, sinon le nom reste en capitales.
     else if (f?.has(mot) && (mot.length <= 5 ? sigleProbable(mot, dce) : !/[AEIOUYÀ-Ý]/.test(mot))) { r = mot; src = 'sigle'; }
@@ -1308,7 +1316,7 @@ function revoirNomsPropres(nom: string, mots: Array<{ debut: number; fin: number
   const PREP = /^(?:de|du|des|d|la|le|les|l|et|a|au|aux|sur|sous|en|pour|lez|les)$/;
   const ARTICLE = /^(?:le|la|les|l)$/;
   const revisable = (i: number) => ['dico', 'propre', 'sigle'].includes(mots[i].src) && !(mots[i].src === 'sigle' && !motDuDictionnaire(mots[i].mot) && !PRENOMS.has(k(i)));
-  const cap = (i: number) => { mots[i].r = mots[i].r.charAt(0).toUpperCase() + mots[i].r.slice(1).toLowerCase(); };
+  const cap = (i: number) => { mots[i].r = PRENOMS.has(k(i)) ? prenomEnCasse(mots[i].mot) : mots[i].r.charAt(0).toUpperCase() + mots[i].r.slice(1).toLowerCase(); };
   const estMaj = (i: number) => /^[A-ZÀ-Ý]/.test(mots[i].r) && mots[i].r !== mots[i].r.toUpperCase();
   const tete = (i: number) => ARTICLES_MASCULINS.test(mots[i].mot) || ARTICLES_FEMININS.test(mots[i].mot) || INSTITUTION_VOYELLE.test(mots[i].mot);
   const propre = new Set<number>();
@@ -1322,7 +1330,7 @@ function revoirNomsPropres(nom: string, mots: Array<{ debut: number; fin: number
     if (PRENOMS.has(k(i)) && revisable(i) && !ARTICLE.test(k(i - 1))) {
       let j = i;
       while (j < mots.length && !PREP.test(k(j)) && /^\s+$/.test(j === i ? ' ' : sep(j))) {
-        if (revisable(j) || mots[j].src === 'brut') cap(j);
+        if (revisable(j) || mots[j].src === 'brut' || (mots[j].src === 'sigle' && /[AEIOUYÀ-Ý]/.test(mots[j].mot) && mots[j].mot.length >= 3 && !sigleParArticle(mots[j].mot, dce))) { cap(j); if (mots[j].src === 'sigle') { mots[j].src = 'propre'; incertains.push(mots[j].r); } }
         propre.add(j); j++;
       }
       // Particule de nom de personne (« Jeanne d'Arc », « Charles de Gaulle ») : le mot qui suit prend sa majuscule.
@@ -1444,8 +1452,9 @@ export function casseNomEnCapitales(nom: string, dceBrut: string): { forme: stri
     if (MOTS_OUTILS.has(k) && !premier) r = mot.toLowerCase();
     else if (/^(?:ST|STE)$/.test(mot)) r = mot === 'ST' ? 'Saint' : 'Sainte';
     else if ((mot.length <= 3 && !graphieMinusculeGss(mot) && !motDuDictionnaire(mot)) || (mot.length <= 5 && sigleProbable(mot, dce))) r = mot;
+    else if (!premier && PRENOMS_ACCENTUES[k]) r = PRENOMS_ACCENTUES[k];
     else {
-      const d = motDuDictionnaire(mot) || graphieMinusculeGss(mot) || nomEnIte(mot);
+      const d = motDuDictionnaireInstitution(mot) || graphieMinusculeGss(mot) || nomEnIte(mot);
       if (d) r = d.charAt(0).toUpperCase() + d.slice(1);
       else { r = mot.charAt(0) + mot.slice(1).toLowerCase(); if (mot.length >= 4) incertains.push(r); }
     }
@@ -1453,8 +1462,39 @@ export function casseNomEnCapitales(nom: string, dceBrut: string): { forme: stri
     premier = false;
     return r;
   });
-  const l = lieuxEnGraphieUsuelle(brute);
+  const l = lieuxEnGraphieUsuelle(ordinalApresPrenom(brute));
   return { forme: l.texte, incertains: incertains.filter((w) => !l.reconnus.has(cleCommune(w))) };
+}
+
+/** « François 1ER » → « François Ier » (rang d'un souverain après un prénom) ; « 1ER » ailleurs → « 1er » (T7G-5). */
+export function ordinalApresPrenom(t: string): string {
+  return String(t || '').replace(/(?<![\p{L}])(\p{L}+)\s+1\s*(?:ER|er|Er)(?![\p{L}])/gu, (m, p: string) => (PRENOMS.has(normaliser(p)) ? `${p} Ier` : m.replace(/1\s*(?:ER|Er)$/, '1er')))
+    .replace(/(?<![\p{L}\d])1\s*ER(?![\p{L}])/g, '1er');
+}
+
+/**
+ * Mots du nom de l'acheteur, écrit seulement en capitales dans le DCE, dont la graphie (accents, majuscules) n'est confirmée
+ * ni par le DCE (même mot en casse mêlée ou en minuscules), ni par le dictionnaire sans ambiguïté, ni par la liste des prénoms
+ * ou des lieux connus, et qui pourraient porter un accent (T7G-5 : « Maurois », « Vallès », « Interhospitalier », premier mot
+ * compris) : soumis à GSS dans l'unique question « Est-ce la graphie exacte… ? ». Les sigles restent tels quels.
+ */
+export function motsAConfirmer(forme: string, dceBrut: string): string[] {
+  const dce = sansAdressesWeb(dceBrut);
+  const out: string[] = [];
+  for (const m of String(forme || '').matchAll(/\p{L}+/gu)) {
+    const w = m[0];
+    const k = normaliser(w);
+    if (w.length < 3 || MOTS_OUTILS.has(k) || w === w.toUpperCase()) continue;
+    if (w !== w.toUpperCase() && new RegExp(`(?<![\\p{L}])${echapper(w)}(?![\\p{L}])`, 'u').test(dce)) continue;
+    if (new RegExp(`(?<![\\p{L}])${echapper(w.toLowerCase())}(?![\\p{L}])`, 'u').test(dce) && w.slice(1) === w.slice(1).toLowerCase()) continue;
+    if (PRENOMS_ACCENTUES[k] ? PRENOMS_ACCENTUES[k] === w : PRENOMS.has(k) && w.slice(1) === w.slice(1).toLowerCase()) continue;
+    const d = motDuDictionnaireInstitution(w);
+    if (d && graphieSansAmbiguite(w) && d.toLowerCase() === w.toLowerCase()) continue;
+    if (estNomDeLieu(w) || lieuxConnus().some((x) => x === w)) continue;
+    if (/^ier$/i.test(w) || /^(?:saint|sainte)$/i.test(k)) continue;
+    if (/[aeiouyc]/.test(k)) out.push(w);
+  }
+  return [...new Set(out)];
 }
 
 /**
@@ -1590,7 +1630,9 @@ function formesClientBrut(nom: string, dce = ''): { long: string; court?: { arti
   // Entités coordonnées : séparées après la parenthèse d'un sigle (« (ENPC) et Institut … »), ou par « et » entre deux
   // entités qui commencent par un nom d'institution (« Ville de Rouen et CCAS de Rouen ») ; jamais dans un nom
   // (« Ponts et Chaussées »).
-  const entites = couperHorsParentheses(principal, /(?<=\))\s*(?:,|\s+et)\s+(?=[A-ZÀ-Ý])/)
+  // T7-CONS-3 : « tutelle (SIGLE), Délégation … » : le service d'une même tutelle, jamais une seconde entité (« … (CNRS) et la
+  // Délégation Île-de-France Villejuif lance… »).
+  const entites = couperHorsParentheses(principal, /(?<=\))\s*(?:,(?!\s*(?:[Dd][ée]l[ée]gation|[Dd]irection|[Ss]ous[- ][Dd]irection|[Ss]ervice|[Pp][ôoÔ]le|[Dd][ée]partement|[Bb]ureau|[Mm]ission|[Aa]ntenne|[Dd]ivision|[Uu]nit[ée]|[Ss]ecr[ée]tariat|DÉLÉGATION|DIRECTION|SERVICE|PÔLE)(?![\p{L}]))|\s+et)\s+(?=[A-ZÀ-Ý])/u)
     .flatMap((e) => {
       const parts = couperHorsParentheses(e, /\s+et\s+(?=[A-ZÀ-Ý])/).map((x) => x.trim());
       return parts.length > 1 && parts.every(teteInstitution) ? parts : [e];
@@ -2660,6 +2702,7 @@ const CALCULS: Record<string, Calculateur> = {
     {
       const avant = brut;
       const det = casseDuDceDetail(brut, c.ctx.dce || '');
+      if (det.forme) det.forme = ordinalApresPrenom(det.forme);
       brut = det.forme || casseFormeJuridique(brut, c.ctx.dce || '') || brut;
       if (det.forme && det.incertains.length) graphieIncertaine = `Le DCE n'écrit le nom de l'acheteur qu'en capitales (« ${avant} ») : le mémoire l'écrit « ${det.forme} ». Est-ce la graphie exacte (majuscules, accents) de ${det.incertains.map((w) => `« ${w} »`).join(', ')} ? Sinon, quelle est-elle ?`;
     }
@@ -2672,7 +2715,41 @@ const CALCULS: Record<string, Calculateur> = {
         brut = cap.forme;
       }
     }
+    // Nom écrit seulement en capitales dans le DCE (T7G-5) : tout mot dont la graphie n'est confirmée ni par le DCE, ni par le
+    // dictionnaire sans ambiguïté, ni par les prénoms ou les lieux connus (« Maurois », « Vallès », premier mot compris) est
+    // soumis à GSS, dans la même question.
+    {
+      const lettresAvant = String(couverture || analyse || '').replace(/[^A-Za-zÀ-ÿ]/g, '');
+      const enCapitales = lettresAvant && lettresAvant.replace(/[^A-ZÀ-Ý]/g, '').length / lettresAvant.length > 0.7;
+      if (enCapitales && brut !== brut.toUpperCase()) {
+        const deja = new Set([...(graphieIncertaine.match(/«\s*([^»]+?)\s*»/g) || [])].map((x) => x.replace(/[«»\s]/g, '')));
+        const autres = motsAConfirmer(brut, c.ctx.dce || '').filter((w) => !deja.has(w));
+        if (autres.length || graphieIncertaine) {
+          const tous = [...new Set([...(graphieIncertaine ? [...graphieIncertaine.matchAll(/de ((?:«[^»]+»(?:, )?)+) \?/g)].flatMap((x) => [...x[1].matchAll(/«\s*([^»]+?)\s*»/g)].map((y) => y[1])) : []), ...autres])];
+          if (tous.length) graphieIncertaine = `Le DCE n'écrit le nom de l'acheteur qu'en capitales (« ${String(couverture || analyse).trim()} ») : le mémoire l'écrit « ${brut} ». Est-ce la graphie exacte (accents, majuscules) de ${tous.map((w) => `« ${w} »`).join(', ')} ? Sinon, quelle est-elle ?`;
+        }
+      }
+    }
     let { article, nom } = articleEtNom(brut, c.ctx.dce || '');
+    // T7G-9 : nom commun en tête que ni le DCE ni les listes ne permettent d'accorder (« Bergerie de … ») : jamais imprimé sans
+    // article ; la question unique de l'article est posée à GSS (l'article masculin est mis en attendant sa réponse).
+    let questionArticle = '';
+    {
+      const premierMot = nom.split(/[\s(]/)[0];
+      // (nom d'institution : nom commun suivi d'un adjectif ou d'un complément « de … », jamais une marque d'un mot
+      // « Carrefour » ni « Habitat 76 »)
+      const suite = nom.slice(premierMot.length).trim();
+      const commun = /^[A-ZÀ-Ý][a-zà-ÿ]{2,}$/.test(premierMot) && !!motDuDictionnaire(premierMot) && !estNomDeLieu(premierMot) && !PRENOMS.has(normaliser(premierMot))
+        && /^(?:(?:de|du|des|d['’])\s*\S|[a-zà-ÿ]{4,}(?:\s|$))/.test(suite);
+      if (!article && commun && !FORME_SOCIETE.test(brut)) {
+        questionArticle = `Quel article faut-il employer devant le nom de l'acheteur « ${nom} » (le, la, l' ou aucun) ?`;
+        const m = normaliser(premierMot);
+        article = /^[aeiouyhàâéèêîïôûü]/i.test(premierMot) ? "l'" : /(?:ie|ee|ion|te|ure|ence|ance|ette|elle|erie|ine|ade|iere|ise|ode|ude)$/.test(m) ? 'la' : 'le';
+      }
+    }
+    // Adjectif en capitale après le nom commun de tête (« Gymnase Municipal d'Yvetot », « Piscine Municipale ») : en minuscules.
+    // (adjectif seulement : « municipal », « communale », « olympique », « culturel »… ; jamais un prénom ni un nom propre)
+    nom = nom.replace(/^(\p{Lu}\p{Ll}+\s+)(\p{Lu})(\p{Ll}+(?:al|ale|aux|ales|ique|iques|el|elle|els|elles|if|ive|ifs|ives|aire|aires|ier|i[èe]re|iers|i[èe]res|ien|ienne))(?=\s+\P{Lu}|$)/u, (m, a: string, b: string, c2: string) => (motDuDictionnaire(`${b}${c2}`) && !PRENOMS.has(normaliser(`${b}${c2}`)) && (ARTICLES_MASCULINS.test(a.trim()) || ARTICLES_FEMININS.test(a.trim()) || INSTITUTION_VOYELLE.test(a.trim()) || TETES_PLURIEL.test(a.trim())) && !estNomDeLieu(`${b}${c2}`) ? `${a}${b.toLowerCase()}${c2}` : m));
     const formes = formesClient(nom, c.ctx.dce || '');
     // Groupement de commandes réécrit en ses membres (« Ville de Rouen et le CCAS de Rouen ») : article du premier membre.
     if (formes.articleLong !== undefined) article = formes.articleLong;
@@ -2687,7 +2764,7 @@ const CALCULS: Record<string, Calculateur> = {
       ...(formes.pluriel ? { genre: 'p' as const } : societeDce ? { genre: 'f' as const } : {}),
       ...(elisionDevantNom(formes.long, c.ctx.dce || '') ? { hMuet: true } : {}),
       ...(formes.court && elisionDevantNom(formes.court.nom, c.ctx.dce || '') ? { hMuetCourt: true } : {}),
-      ...(graphieIncertaine ? { aConfirmer: graphieIncertaine } : {}),
+      ...(graphieIncertaine || questionArticle ? { aConfirmer: [graphieIncertaine, questionArticle].filter(Boolean).join('\n') } : {}),
     };
   },
   OBJET_MARCHE: (c) => {
@@ -3249,10 +3326,32 @@ function accorderPronomsClient(t: string, v?: ValeurVariable): string {
  * Groupement d'Intérêt Public », deux acheteurs en tête d'un CCTP commun), avec le sigle entre parenthèses de la ligne
  * suivante (« (Nouvel IMM) »), sinon le sujet de « L'X se réserve… ». '' si rien n'est sûr ; jamais un intitulé de pièce.
  */
+/**
+ * Nom de l'acheteur lu sur une ligne « Acheteur : … » ou « Pouvoir adjudicateur : … » (T7-COH-1) : coupé au premier séparateur
+ * (virgule, tiret, point-virgule) suivi d'une adresse (numéro et voie, code postal, BP ou CS, Cedex, « Hôtel de Ville »,
+ * « Mairie »), d'une représentation (« représenté(e) par », « agissant ») ou d'une forme juridique ; parenthèse finale qui
+ * nomme un service (« (Direction de la commande publique) ») retirée. '' s'il reste un code postal ou un type de voie.
+ */
+export function nomAcheteurSansAdresse(valeur: string): string {
+  let v = String(valeur || '').replace(/\s+/g, ' ').trim();
+  const SUITE = /^(?:\d|BP(?![\p{L}])|B\.P\.|CS(?![\p{L}])|C\.S\.|cedex(?![\p{L}])|h[ôo]tel\s+de\s+(?:ville|r[ée]gion|d[ée]partement)|mairie(?![\p{L}])|si[èe]ge(?![\p{L}])|adresse(?![\p{L}])|t[ée]l(?:[ée]phone)?(?![\p{L}])|repr[ée]sent[ée]e?s?(?![\p{L}])|agissant(?![\p{L}])|pris(?:e)?\s+en\s+la\s+personne(?![\p{L}])|en\s+la\s+personne(?![\p{L}])|(?:rue|avenue|boulevard|bd|place|quai|all[ée]e|chemin|route|impasse|cours|square|esplanade|parvis|rond-point)(?![\p{L}])|(?:soci[ée]t[ée]\s+(?:anonyme|par\s+actions|[àa]\s+responsabilit[ée])|SA|SAS|SARL|SEM|EPIC|EPA|GIP)(?![\p{L}]))/iu;
+  const sep = /\s*(?:,|;|\s[-–—]\s)\s*/g;
+  let m: RegExpExecArray | null;
+  while ((m = sep.exec(v))) {
+    if (SUITE.test(v.slice(m.index + m[0].length))) { v = v.slice(0, m.index); break; }
+  }
+  v = v.replace(/\s*\((?:direction|service|p[ôo]le|bureau|d[ée]partement|sous[- ]direction|mission)\b[^()]*\)\s*$/i, '').replace(/[\s,;:.]+$/, '').trim();
+  if (/\b\d{5}\b|\b(?:rue|avenue|boulevard|impasse|chemin)\s/i.test(v)) return '';
+  return v;
+}
+
 export function acheteurDuDce(dce: string): string {
   const t = String(dce || '').replace(/\r/g, '');
   const label = /(?:^|\n)\s*(?:pouvoir adjudicateur|entit[ée] adjudicatrice|nom de l['’]acheteur|identification de l['’]acheteur|acheteur|ma[îi]tre d['’]ouvrage|personne publique)\s*[:|]\s*([^\n|]{3,140})/i.exec(t);
-  if (label) { const v = label[1].replace(/[.…_]{3,}.*$/, '').replace(/\s+/g, ' ').trim(); if (v.length >= 3 && !/^(?:\(|le |la |les |un |une )/i.test(v) && /[A-Za-zÀ-ÿ]{3}/.test(v)) return v.replace(/[\s,;:.]+$/, ''); }
+  if (label) {
+    const v = nomAcheteurSansAdresse(label[1].replace(/[.…_]{3,}.*$/, '').replace(/\s+/g, ' ').trim());
+    if (v.length >= 3 && !/^(?:\(|le |la |les |un |une )/i.test(v) && /[A-Za-zÀ-ÿ]{3}/.test(v)) return v;
+  }
   const GENERIQUE = /ACTE D.ENGAGEMENT|R[EÈ]GLEMENT|CAHIER DES|CLAUSES|MARCH[EÉ]S?\b|ACCORD[- ]CADRE|CONSULTATION|PROC[EÉ]DURE|PRESTATIONS?|SOMMAIRE|OBJET|MINIST[EÈ]RE DE L.[EÉ]CONOMIE|DIRECTION DES AFFAIRES JURIDIQUES|GARDIENNAGE|S[EÉ]CURIT[EÉ]|S[ÛU]RET[EÉ]|SURVEILLANCE|\bCC[TA]P\b|\bRC\b|ANNEXE|\bLOT\b|DATE LIMITE|R[ÉE]F[ÉE]RENCE|FOURNITURES|SERVICES|ATTRI|DC\d|D[ÉE]CLARATION|CANDIDAT|GROUPEMENT|MEMBRE|FORMULAIRE|CONTRAT|NOTIFI|CADRE R[ÉE]SERV|PR[ÉE]SENTATION|^\W*$|\*{2,}/;
   const majuscules = (l: string) => { const x = l.replace(/[^A-Za-zÀ-ÿ]/g, ''); return x.length >= 4 && x.replace(/[^A-ZÀ-Ý]/g, '').length / x.length > 0.8; };
   const ADRESSE = /\b\d{5}\b|\b(?:rue|avenue|boulevard|bd|place|quai|all[ée]e|chemin|route|impasse|cours)\b|\bBP\s*\d|\bCS\s*\d|groupement d.int[ée]r[êe]t public|association r[ée]gie|[ée]tablissement public|\bSIREN\b|\bSIRET\b/i;
@@ -3288,6 +3387,13 @@ export function acheteurDuDce(dce: string): string {
       if (/\b(?:rue|avenue|boulevard|bd|place|quai|all[ée]e|chemin|route|impasse|cours)\b/i.test(lignes[i + 1]) || /^\d{5}\s/.test(lignes[i + 1])) return l;
     }
   }
+  // Titre en tête d'une pièce principale (T7N-9, caen : « Prestation de gardiennage et de sureté/sécurité des sites de l'ACOSS ») :
+  // le sigle de « des sites de l'X » ou « du site de l'X », quand le DCE l'emploie au moins 5 fois avec l'article défini.
+  {
+    const titre = titreDuMarcheDce(t);
+    const s = /(?:des\s+sites?|du\s+site|des\s+b[âa]timents?|des\s+locaux)\s+(?:de\s+l['’]\s*|du\s+|de\s+la\s+|des\s+)([A-Z][A-Z0-9&]{1,11})(?![\p{L}\d])/u.exec(titre);
+    if (s && (t.match(new RegExp(`(?<![\\p{L}])(?:l['’]\\s*|le\\s+|la\\s+|les\\s+|du\\s+|des\\s+|au\\s+)${s[1]}(?![\\p{L}\\d])`, 'gu')) || []).length >= 5) return s[1];
+  }
   // « L'IFITS se réserve… » : seulement un sigle que le DCE écrit aussi entre parenthèses après le nom complet (« … (IFITS) »).
   const reserve = /(?:^|[.\n]\s*)(?:L['’]|Le |La |Les )\s*([A-Z]{2,10})\s+se\s+r[ée]serve/.exec(t);
   // (le nom complet devant les parenthèses est un nom propre : « Institut de Formation Interhospitalier Théodore Simon (IFITS) »,
@@ -3295,7 +3401,31 @@ export function acheteurDuDce(dce: string): string {
   return reserve && new RegExp(`[A-ZÀ-Ý][\\p{L}'’-]+(?:\\s+(?:(?:de|du|des|d['’]|et|la|le|l['’])\\s*)?[A-ZÀ-Ý][\\p{L}'’-]+){1,6}\\s*\\(\\s*${reserve[1]}\\s*\\)`, 'u').test(t) ? reserve[1].trim() : '';
 }
 
-/** Objet du marché lu sans modèle (T6N-2) : « Le présent marché a pour objet … », sinon la ligne « Objet (du marché) : … ». */
+/**
+ * Titre du marché en tête d'une pièce principale (T7N-9, caen : « Prestation de gardiennage et de sureté/sécurité des sites⏎ de
+ * l'ACOSS », avant le sommaire) : ligne qui commence par « Prestation(s) de », « Marché de », « Mission(s) de » ou « Fourniture
+ * de » et qui nomme la sécurité, la sûreté, le gardiennage, la surveillance ou l'accueil, recollée avec
+ * la ligne suivante quand elle continue le groupe (« de l'ACOSS »). '' sinon.
+ */
+export function titreDuMarcheDce(dce: string): string {
+  const t = String(dce || '').replace(/\r/g, '');
+  const pieces = t.split(/\n(?:===== PIÈCE : .+? =====|--- .+? ---)\n/);
+  for (const corps of pieces.length > 1 ? pieces.slice(1) : pieces) {
+    const lignes = corps.split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 30);
+    for (let i = 0; i < lignes.length; i++) {
+      if (/^(?:sommaire|table des mati[èe]res|article\s+1\b)/i.test(lignes[i])) break;
+      // (jamais « Service de l'accueil », nom d'un service de l'acheteur, ni un libellé de code CPV « Service de sécurité, de police… »)
+      if (!/^(?:prestations?|march[ée]|missions?|fournitures?)\s+(?:de|d['’]|du|des)\s/i.test(lignes[i]) || /cpv/i.test(lignes[i - 1] || '')) continue;
+      let titre = lignes[i];
+      while (i + 1 < lignes.length && !/[.:;!?]$/.test(titre) && /^(?:de|du|des|d['’]|et|ou|à|au|aux|pour|sur)(?![\p{L}])|^[a-zà-ÿ]/u.test(lignes[i + 1]) && titre.length < 200) titre = `${titre} ${lignes[++i]}`;
+      if (/gardiennage|s[ée]curit[ée]|s[ûu]ret[ée]|surveillance|accueil|s[ée]curit[ée]\s+incendie/i.test(titre) && titre.length <= 200) return titre.replace(/[\s.;:]+$/, '');
+    }
+  }
+  return '';
+}
+
+/** Objet du marché lu sans modèle (T6N-2) : « Le présent marché a pour objet … », sinon la ligne « Objet (du marché) : … »,
+ *  sinon le titre du marché en tête d'une pièce principale (T7N-9). */
 export function objetDuDce(dce: string): string {
   const t = String(dce || '').replace(/\r/g, '');
   // (phrase lue jusqu'à son point, même coupée en fin de ligne par l'extraction du PDF ou du Word)
@@ -3306,7 +3436,8 @@ export function objetDuDce(dce: string): string {
   let v = (a ? a[1] : b ? b[1] : '').replace(/\s+/g, ' ').trim().replace(/^[:\s]+/, '')
     .replace(/^(?:(?:de|des|du)\s+|d['’]\s*)(?=\p{L})/iu, '').replace(/^(?:(?:la|le|les)\s+|l['’]\s*)/i, '');
   // Objet écrit comme une action (« de définir les prestations… », « de confier au titulaire… ») : pas un intitulé de marché.
-  if (!v || /^\W*$/.test(v) || /^(?:d[ée]finir|confier|fixer|pr[ée]ciser|d[ée]crire|r[ée]gir|organiser|d[ée]terminer|encadrer)(?![\p{L}])/iu.test(v)) return '';
+  if (!v || /^\W*$/.test(v) || /^(?:d[ée]finir|confier|fixer|pr[ée]ciser|d[ée]crire|r[ée]gir|organiser|d[ée]terminer|encadrer)(?![\p{L}])/iu.test(v)) v = titreDuMarcheDce(t);
+  if (!v) return '';
   if (v.length > 200) v = `${v.slice(0, 200).replace(/\s+\S*$/, '')}…`;
   return v.charAt(0).toUpperCase() + v.slice(1);
 }

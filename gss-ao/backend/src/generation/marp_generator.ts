@@ -543,6 +543,20 @@ export function clientDuPied(cover: CoverInfo): string {
   return nom.length > LONGUEUR_NOM_PIED && court && court.length < nom.length ? court : nom;
 }
 
+/**
+ * Nom de l'acheteur des surtitres en capitales espacées « MÉMOIRE TECHNIQUE · … » (sommaire et ouvertures de bloc, style v3) :
+ * le surtitre de la planche tient sur une ligne (T7-CONS-3, ifsem : « … ÎLE-DE- / FRANCE » coupé sur deux lignes). Capacité en
+ * signes du surtitre entier (7,6 pt, capitales, espacement .14 à .16 em) : 80 sur la largeur de la page de texte (sommaire), 66
+ * sur la colonne de l'ouverture. Au-delà, la forme courte employée dans le texte (« le CNRS ») ; sans forme courte, le nom du
+ * pied de page.
+ */
+export const CAPACITE_SURTITRE = { sommaire: 80, ouverture: 66 };
+export function clientDuSurtitre(cover: CoverInfo, capacite: number): string {
+  const pied = clientDuPied(cover);
+  const court = String(cover.clientCourt || '').replace(/\s+/g, ' ').trim();
+  return `Mémoire technique · ${pied}`.length > capacite && court && court.length < pied.length ? court : pied;
+}
+
 /** Pied de page v3 sur une ligne : taille réduite (6 pt au plus petit) pour un nom long sans forme courte, '' sinon. */
 export function stylePiedV3(texte: string): string {
   const n = texte.length;
@@ -1036,7 +1050,7 @@ export class MarpGenerator {
       }));
       const legende = legendeRoles(Object.fromEntries(Object.entries(st.roles).map(([k, v]: [string, any]) => [k, v.fonce])), pictosLegende(),
         couleurs, st.couleurs.filet_fort);
-      const corps = this.buildChapitres([], chapters, assignments, schemas, theme, { v3, refonte, couleurs, visibles, rangBloc, enteteDe, client: clientPied });
+      const corps = this.buildChapitres([], chapters, assignments, schemas, theme, { v3, refonte, couleurs, visibles, rangBloc, enteteDe, client: clientDuSurtitre(cover, CAPACITE_SURTITRE.ouverture) });
       const pagesOuverture = (avant: number): number[] => {
         const pages: number[] = [];
         let page = avant;
@@ -1047,9 +1061,10 @@ export class MarpGenerator {
         return pages;
       };
       // Couverture (page 1), puis les pages du sommaire : le nombre de pages du sommaire ne dépend pas des numéros.
-      const nSommaire = sommaireV3(blocsSommaire, clientPied, legende).length;
+      const clientSommaire = clientDuSurtitre(cover, CAPACITE_SURTITRE.sommaire);
+      const nSommaire = sommaireV3(blocsSommaire, clientSommaire, legende).length;
       const numeros = pagesOuverture(1 + nSommaire);
-      for (const page of sommaireV3(blocsSommaire.map((b, i) => ({ ...b, page: numeros[i] })), clientPied, legende)) {
+      for (const page of sommaireV3(blocsSommaire.map((b, i) => ({ ...b, page: numeros[i] })), clientSommaire, legende)) {
         lines.push('---');
         lines.push(page);
       }
@@ -1135,7 +1150,7 @@ export class MarpGenerator {
 
     lines.push('');
 
-    return this.buildChapitres(lines, chapters, assignments, schemas, theme, { v3, refonte, couleurs, visibles, rangBloc, enteteDe, client: v3 ? clientPied : cover.client || '' });
+    return this.buildChapitres(lines, chapters, assignments, schemas, theme, { v3, refonte, couleurs, visibles, rangBloc, enteteDe, client: v3 ? clientDuSurtitre(cover, CAPACITE_SURTITRE.ouverture) : cover.client || '' });
   }
 
   /**
