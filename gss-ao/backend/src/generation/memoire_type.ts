@@ -3110,8 +3110,9 @@ export function variablesDuMarche(mt: MemoireType, ctx: ContexteMarche, indicate
  */
 export function envoiPlanningsClientDce(dce: string): { jours: number; phrase: string; libelle: string; ouvres: boolean } | null {
   // Lignes de tableau (« Délai de transmission des plannings | 15 jours avant le mois concerné ») lues comme des phrases.
-  const t = String(dce || '').replace(/\r/g, '').split('\n').map((l) => (/\|/.test(l) ? `${l.replace(/\s*\|\s*/g, ' : ').replace(/[.;]?\s*$/, '')}.` : l)).join('\n').replace(/\s+/g, ' ');
-  const phrases = t.split(/(?<=[.;])\s+(?=[A-ZÀ-Ý])/);
+  // (intitulé d'article séparé de la phrase qui le suit : jamais « Plannings Les plannings mensuels… » cité, T8G-4)
+  const t = separerIntitules(String(dce || '')).split('\n').map((l) => (/\|/.test(l) ? `${l.replace(/\s*\|\s*/g, ' : ').replace(/[.;]?\s*$/, '')}.` : l)).join('\n');
+  const phrases = t.split(/\n\s*\n/).flatMap((b) => b.replace(/\s+/g, ' ').split(/(?<=[.;])\s+(?=[A-ZÀ-Ý])/)).map((x) => x.trim()).filter(Boolean);
   // Nombre en chiffres ou en lettres (T7G-4 : grammaire générale des nombres).
   const NB = `(\\d{1,2}|${RX_NOMBRE_LETTRES})`;
   const nb = (x: string): number => (/^\d+$/.test(x) ? Number(x) : nombreFr(x));

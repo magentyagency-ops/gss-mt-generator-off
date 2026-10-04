@@ -36,3 +36,16 @@ describe('délai d’arrivée du rondier : jamais une levée de doute mesurée d
     expect(String(v.DELAI_INTERVENTION_ALARME?.question || '')).not.toMatch(/plusieurs délais/);
   });
 });
+
+import { sansAncienJalonPlanning } from '../src/generation/reponse_libre_v2';
+import { envoiPlanningsClientDce } from '../src/generation/memoire_type';
+describe('jalon des plannings imposé par le CCTP : ni ancien jalon ni seconde question (T8-CONS-3, T8-CONS-4)', () => {
+  const t = "Notre calendrier de planification :\n- J-10 : envoi des plannings du mois suivant ;\n- [À COMPLÉTER][CONSULTATION REQUISE : Le cahier des charges impose d'envoyer les plannings au client au moins 10 jours avant le début du mois. Quel jalon faut-il indiquer pour l'envoi des plannings au client ?] : envoi des plannings au Centre Henri Becquerel ;\n\nLes plannings du mois suivant sont envoyés aux agents à J-10, validés par les agents à J-7, puis transmis au client à J-3. [CONSULTATION REQUISE : Quel jalon GSS prévoit-elle pour transmettre au responsable sécurité du CHB les plannings mensuels au moins 10 jours avant le début du mois ?]\n\n## Nos engagements\n- GSS transmet au Responsable sécurité les plannings mensuels d’affectation au moins 10 jours avant le début du mois concerné, avec un envoi prévu à J-15.";
+  const r = sansAncienJalonPlanning(t, 'Centre Henri Becquerel', 'au moins 10 jours avant le début du mois considéré');
+  it('calendrier redit et J-15 retirés, question du jalon gardée seule', () => {
+    expect(r.texte).not.toMatch(/J-3|J-15|Quel jalon GSS prévoit/);
+    expect(r.texte).toMatch(/Le cahier des charges impose d'envoyer les plannings/);
+    expect(r.texte).toMatch(/au moins 10 jours avant le début du mois concerné\.$/);
+  });
+  it('citation sans l’intitulé « Plannings »', () => expect(envoiPlanningsClientDce('\n\n--- CCTP ---\nPlannings\nLes plannings mensuels devront être transmis au responsable sécurité du CHB au moins 10 jours avant le début du mois considéré.\n')?.phrase).toMatch(/^Les plannings mensuels/));
+});

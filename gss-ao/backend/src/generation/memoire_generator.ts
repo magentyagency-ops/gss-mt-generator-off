@@ -24,7 +24,7 @@ import {
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
   sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, phraseDeRubriqueGss, alignerSchemaSurTexte, FORMALITES_OFFRE, questionFormalite, formalitesDuBloc1, sansClauseSanction, consultationsDuDce,
   CLAUSE_CONTRACTUELLE, ORGANISATION_ACHETEUR, sansPropositionSurLAcheteur, descriptionDeLieu, ajoutHorsDeListe, engagementSansRedite, reperesDansTableaux, valeursImposeesValides, titreSansPointFinal, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
-  sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, similariteQuestions, recouvrementTextes, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
+  sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, similariteQuestions, recouvrementTextes, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, sansAncienJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, questionRondes, casPratiqueRepris, type Dimensionnement } from './dimensionnement';
 import { ajoutsAuTexteDeGss, retirerEnrobage,
@@ -1498,7 +1498,7 @@ export function rubriquesSansSchema(plan: PlanMemoireType, ajouts: Array<{ id: s
 }
 
 /** Ligne de consultation déjà formulée sans modèle (jamais envoyée à la fusion par le modèle, jamais reformulée). */
-export const LIGNE_DETERMINISTE = /^(?:Proposition à valider|Le cahier des charges prévoit des rondes ponctuelles|Proposition de réponse à valider|Réponse à relire|Réponse «|Réponse du cadre\s*:|Phrases adaptées au cahier des charges|Partie «|Rubrique «|Rédaction automatique indisponible|Phrase proposée par l'IA d'après le cahier des charges|Phrases? ajoutées? au texte de GSS)/;
+export const LIGNE_DETERMINISTE = /^(?:Proposition à valider|Le cahier des charges prévoit des rondes ponctuelles|Le cahier des charges impose d'envoyer les plannings|Proposition de réponse à valider|Réponse à relire|Réponse «|Réponse du cadre\s*:|Phrases adaptées au cahier des charges|Partie «|Rubrique «|Rédaction automatique indisponible|Phrase proposée par l'IA d'après le cahier des charges|Phrases? ajoutées? au texte de GSS)/;
 
 /**
  * Demande écrite à l'impératif ou en question fermée au sens inversé (T2-CONS-7 : « Joindre les CV… » devenu « GSS doit-elle
@@ -9136,6 +9136,14 @@ RÈGLES DE FORME (rendu Marp) :
         if (h.corriges.length) { sections[id] = h.texte; console.log(`[MemoireGenerator] Rubrique ${id} : jalon d'envoi des plannings au client ramené à ${jalon} (${h.corriges.length} phrase(s)).`); }
         // (T7G-4 : jalon qui cite le CCTP ou vaut le délai du DCE, gardé : l'écart est signalé à GSS)
         for (const ph of h.ecarts) questionsJalon.push(`Le jalon d'envoi des plannings au client diffère entre « La planification » (${jalon}) et cette phrase, qui cite le cahier des charges : « ${ph.slice(0, 240)} ». Quel jalon faut-il garder dans tout le mémoire ?`);
+      }
+      // Jalon imposé par le CCTP et laissé à GSS (emplacement et question JALON_ENVOI_CLIENT) : aucun ancien jalon ni autre J-n
+      // redit par un texte de l'IA, aucune seconde question sur le même jalon (T8-CONS-3, T8-CONS-4).
+      if (!jalon && /\[À COMPLÉTER\][^\n]{0,20}:\s*envoi des plannings\s+(?:au|à|aux)\s/.test((sections['b4_planification'] || '').replace(/⟦AC:\d+⟧/g, ''))) {
+        for (const id of Object.keys(sections)) {
+          const s = sansAncienJalonPlanning(sections[id], besoin.client, dceContext);
+          if (s.retires.length) { sections[id] = s.texte; console.log(`[MemoireGenerator] Rubrique ${id} : ${s.retires.length} jalon(s) d'envoi des plannings redit(s) par l'IA retiré(s) (jalon imposé par le CCTP, demandé à GSS).`); }
+        }
       }
     }
 

@@ -4184,6 +4184,41 @@ export function jalonEnvoiClient(planification: string): string | null {
  * le calendrier de GSS imprime « J-3 : envoi des plannings à l'ACOSS ») : le jalon de « La planification » est repris.
  * Seulement une phrase qui parle de planning, d'un envoi et du client (son nom ou « au client »).
  */
+/**
+ * Jalon d'envoi des plannings au client imposé par le cahier des charges et laissé à GSS (« [À COMPLÉTER] : envoi des plannings
+ * à … », question JALON_ENVOI_CLIENT) : aucun texte rédigé par l'IA ne redit l'ancien calendrier de GSS ni un autre jalon
+ * (T8-CONS-3, becquerel 1881 : « … transmis au client à J-3 » et « … avec un envoi prévu à J-15 » à côté de l'emplacement) ; la
+ * consultation du modèle sur le même jalon est retirée (une seule question, celle de JALON_ENVOI_CLIENT, T8-CONS-4).
+ */
+export function sansAncienJalonPlanning(texte: string, client: string, dce = ''): { texte: string; retires: string[] } {
+  const retires: string[] = [];
+  const nomClient = normaliser(String(client || '')).replace(/^(?:l|la|le|les)\s*['’]?\s*/, '').trim();
+  const dceN = normaliser(dce).replace(/\s+/g, '');
+  const SUJET = (ph: string) => { const n = normaliser(ph); return /planning/.test(n) && /transmis|transmet|envoy|envoi|communiqu|remis|remet|adress/.test(n) && ((nomClient && n.includes(nomClient)) || /\bau client\b|responsable (?:de la )?securite|\bacheteur\b|\bpouvoir adjudicateur\b/.test(n)); };
+  let t = String(texte || '').replace(/[ \t]*\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi, (m, q: string) => {
+    // (la question de JALON_ENVOI_CLIENT elle-même, « Le cahier des charges impose d'envoyer les plannings… », reste)
+    if (/plannings?/i.test(q) && /jalon|J\s*-\s*\d|jours?\s+avant|[ée]ch[ée]ance|date|d[ée]lai/i.test(q) && !/^\s*Le cahier des charges impose d['’]envoyer les plannings/i.test(q)) { retires.push(q.trim()); return ''; }
+    return m;
+  });
+  t = t.split('\n').map((l) => {
+    if (/^\s*(?:[-*•]\s*)?(?:J\s*-\s*\d+|\[À COMPLÉTER\])\s*:/.test(l)) return l;
+    const phrases = l.split(/(?<=[.!?])\s+/).map((ph) => {
+      if (!SUJET(ph) || !/\bJ\s*-\s*\d+\b/.test(ph)) return ph;
+      const jalons = ph.match(/\bJ\s*-\s*\d+\b/g) || [];
+      // Calendrier de GSS redit (« envoyés aux agents à J-10, validés à J-7, puis transmis au client à J-3 ») : retiré.
+      if (jalons.length >= 2 || /\bJ\s*-\s*3\b/.test(ph)) { retires.push(ph.trim()); return ''; }
+      // Jalon absent du DCE (« avec un envoi prévu à J-15 ») : retiré, l'engagement du DCE reste.
+      const n = (/\bJ\s*-\s*(\d+)/.exec(ph) || [])[1] || '';
+      if (dceN.includes(`j-${n}`)) return ph;
+      const sans = ph.replace(/,?\s*(?:avec\s+(?:un\s+)?envoi\s+(?:pr[ée]vu\s+)?|soit\s+|c['’]est-[àa]-dire\s+)?(?:[àa]|d[èe]s)\s+J\s*-\s*\d+\b/i, '').replace(/\s+([.,;])/g, '$1');
+      if (sans !== ph) retires.push(ph.trim());
+      return /\bJ\s*-\s*\d+\b/.test(sans) ? '' : sans;
+    }).filter((x) => x.trim());
+    return phrases.join(' ');
+  }).join('\n').replace(/\n{3,}/g, '\n\n');
+  return { texte: t, retires };
+}
+
 export function harmoniserJalonPlanning(texte: string, jalon: string, client: string, joursDce = 0): { texte: string; corriges: string[]; ecarts: string[] } {
   const corriges: string[] = [];
   // T7G-4 : jalon d'une phrase qui cite le cahier des charges (« … à J-15, comme l'exige le CCTP ») ou qui vaut le délai lu dans
