@@ -155,46 +155,102 @@ export function renvoisVersParties(
   const libelle = (idx: number[]) => (idx.length > 1
     ? `${idx.slice(0, -1).map((i) => i + 1).join(', ')} et ${idx[idx.length - 1] + 1}`
     : (parties[idx[0]].title.trim().length <= 60 ? `${idx[0] + 1} « ${parties[idx[0]].title.trim()} »` : `${idx[0] + 1}`));
-  // « bloc 5 », « blocs 3 et 5 », éventuellement suivis des rubriques citées : « bloc 4 : « La planification » et « … » ».
-  const RX = /(,\s*)?(\b(?:d[ée]velopp|d[ée]crit|pr[ée]sent|d[ée]taill|trait)[ée]?e?s?\s+)?\b(au|aux|du|des|le|les|dans les?|en)?\s*\b[Bb]locs?\s+(\d)((?:\s*(?:,|et)\s*\d)*)(?![\d])(\s*:\s*«[^»]{1,120}»(?:\s*(?:,|et|;)\s*«[^»]{1,120}»)*)?/g;
+  // « bloc 5 », « blocs 3 et 5 », éventuellement suivis des rubriques citées : « bloc 4 : « La planification » et « … » »,
+  // « bloc 5 dans « La gestion d'une commande supplémentaire » et « … » » (T2-CONS-10).
+  const RX = /(,\s*)?(\b(?:d[ée]velopp|d[ée]crit|pr[ée]sent|d[ée]taill|trait)[ée]?e?s?\s+)?\b(au|aux|du|des|le|les|dans les?|en)?\s*\b[Bb]locs?\s+(\d)((?:\s*(?:,|et)\s*\d)*)(?![\d])(\s*(:|dans|avec|selon|par)\s*«[^»]{1,120}»(?:\s*(?:,|et|;)\s*«[^»]{1,120}»)*)?/g;
   const SUPPR = '\u0003';
-  const sortie = String(texte || '').replace(RX, (m, virgule: string | undefined, participe: string | undefined, prep: string | undefined, n1: string, suite: string, cites: string | undefined, pos: number, tout: string) => {
+  /** Rubrique du mémoire type citée par son titre, absente des parties du document : jamais nommée. */
+  const estTitre = (c: string) => Object.values(titres).some((t) => norm(t) === norm(c));
+  const presente = (c: string) => !estTitre(c) || partiesDesTitres([c]).length > 0;
+  const prepNouvelle = (prep: string | undefined, pluriel: boolean) => {
+    const p = (prep || '').toLowerCase();
+    return /^(?:au|aux|dans|en)/.test(p) ? (pluriel ? 'dans les parties' : 'dans la partie')
+      : /^(?:du|des)$/.test(p) ? (pluriel ? 'des parties' : 'de la partie')
+        : /^(?:le|les)$/.test(p) ? (pluriel ? 'les parties' : 'la partie')
+          : (pluriel ? 'parties' : 'partie');
+  };
+  const sortie = String(texte || '').replace(RX, (m, virgule: string | undefined, participe: string | undefined, prep: string | undefined, n1: string, suite: string, cites: string | undefined, intro: string | undefined, pos: number, tout: string) => {
     const citations = [...String(cites || '').matchAll(/«\s*([^»]+?)\s*»/g)].map((x) => x[1]);
-    if (citations.length) {
+    const presentes = citations.filter(presente);
+    if (presentes.length && intro === ':') {
       // Rubriques citées : elles restent (titres de sous-parties du mémoire), précédées de leur partie si elle est unique.
-      const idx = partiesDesTitres(citations);
-      const liste = citations.map((c) => `« ${c} »`).join(citations.length > 2 ? ', ' : ' et ');
+      const idx = partiesDesTitres(presentes);
+      const liste = presentes.map((c) => `« ${c} »`).join(presentes.length > 2 ? ', ' : ' et ');
       return `${virgule || ''}${idx.length === 1 ? `partie ${idx[0] + 1} : ` : ''}${liste}`;
+    }
+    if (presentes.length) {
+      // « développé au bloc 5 dans « Rubrique » » : la partie qui reprend la rubrique citée (une ou deux), sans redire le
+      // titre de la rubrique (« dans les parties 2 et 3 dans « … » », T2-CONS-10).
+      const idx = partiesDesTitres(presentes).sort((a, b) => a - b);
+      if (idx.length && idx.length <= 2) return `${virgule || ''}${participe || ''}${prepNouvelle(prep, idx.length > 1)} ${libelle(idx)}`;
     }
     const numeros = [Number(n1), ...[...(suite || '').matchAll(/\d/g)].map((x) => Number(x[0]))];
     // Rubrique citée juste AVANT le renvoi (« → notre réponse : « Le contrôleur de rondes », développée au bloc 4 », forme
     // du bloc 1, imm, T8N-3) : les parties qui reprennent CETTE rubrique, jamais toutes celles du bloc ; rubrique reprise
-    // nulle part : le renvoi est retiré.
+    // nulle part : le renvoi est retiré, et le titre de la rubrique absente aussi (T2-CONS-10).
     const citeeAvant = /«\s*([^«»]{1,160}?)\s*»\s*$/.exec(tout.slice(0, pos));
-    const estRubrique = !!citeeAvant && Object.values(titres).some((t) => norm(t) === norm(citeeAvant[1]));
-    const idx = estRubrique ? partiesDesTitres([citeeAvant![1]]).sort((a, b) => a - b) : [...new Set(numeros.flatMap(partiesDuBloc))].sort((a, b) => a - b);
+    const estRubrique = !!citeeAvant && estTitre(citeeAvant[1]);
+    // Rubriques citées après le renvoi, toutes absentes du document : le renvoi ne vise rien (retiré).
+    const idx = citations.length ? [] : estRubrique ? partiesDesTitres([citeeAvant![1]]).sort((a, b) => a - b) : [...new Set(numeros.flatMap(partiesDuBloc))].sort((a, b) => a - b);
     if (!idx.length || idx.length > 2) {
+      if (estRubrique && !citations.length) return '\u0005';
       // Participe attribut après un auxiliaire (« le processus de reprise est détaillé au bloc 3 ») : retirer seulement
       // le renvoi laisserait « le processus de reprise est. » ; toute la proposition est retirée (marquée ici).
       if (participe && !virgule && /\b(?:est|sont|sera|seront|serait|soit|été|étaient|était)\s+$/i.test(tout.slice(0, pos))) return SUPPR;
       // Incise entre deux virgules (« La procédure, développée au bloc 3, garantit… ») : la virgule fermante part aussi.
       return virgule ? '\u0004' : '';
     }
-    const pluriel = idx.length > 1;
-    const p = (prep || '').toLowerCase();
-    const prepNouvelle = /^(?:au|aux|dans|en)/.test(p) ? (pluriel ? 'dans les parties' : 'dans la partie')
-      : /^(?:du|des)$/.test(p) ? (pluriel ? 'des parties' : 'de la partie')
-        : /^(?:le|les)$/.test(p) ? (pluriel ? 'les parties' : 'la partie')
-          : (pluriel ? 'parties' : 'partie');
-    return `${virgule || ''}${participe || ''}${prepNouvelle} ${libelle(idx)}`;
-  })
-    // Proposition marquée : retirée depuis le « ; » ou le début de phrase qui la précède (« A ; B est détaillé au bloc 3. »
-    // → « A. » ; « Les contrôles sont présentés au bloc 5. » → phrase retirée).
-    .replace(/\s*;\s*[^.;!?\n\u0003]*\u0003/g, '')
-    .replace(/(^|[.!?]\s+|\n)[^.;!?\n\u0003]*\u0003\s*[.!?]?\s*/g, '$1')
-    .split(SUPPR).join('')
+    return `${virgule || ''}${participe || ''}${prepNouvelle(prep, idx.length > 1)} ${libelle(idx)}`;
+  });
+  const nettoyee = retirerPropositionsMarquees(sortie, SUPPR)
+    // Rubrique absente citée comme réponse (« → notre réponse : « Le contrôleur de rondes », développée au bloc 4 ») : la
+    // citation et son introduction partent avec le renvoi.
+    .replace(/\s*(?:→\s*(?:notre r[ée]ponse\s*:\s*)?|,?\s*\b(?:selon|avec|par|dans)\s+)?«[^«»]*»\s*,?\s*\u0005/g, '')
+    .split('\u0005').join('')
     .replace(/\u0004\s*,\s*/g, ' ').split('\u0004').join('');
-  return sortie.replace(/\(\s*[:;,]\s*/g, '(').replace(/[;,]\s*[:;,]\s*/g, '; ').replace(/\(\s*\)/g, '').replace(/ +([,.)])/g, '$1').replace(/ {2,}/g, ' ');
+  return nettoyee.replace(/\(\s*[:;,]\s*/g, '(').replace(/[;,]\s*[:;,]\s*/g, '; ').replace(/\(\s*\)/g, '').replace(/ +([,.)])/g, '$1').replace(/ {2,}/g, ' ')
+    // Ligne au gras déséquilibré après un retrait (« **« … courriel. dans … », T2-CONS-10) : marques retirées de la ligne.
+    .split('\n').map((l) => ((l.match(/\*\*/g) || []).length % 2 ? l.replace(/\*\*/g, '') : l)).join('\n')
+    .replace(/\s*:\s*([.;])/g, '$1');
+}
+
+/**
+ * Proposition marquée par `marque` retirée entière, bornée hors des citations « … » (T2-CONS-10 : le point final d'une
+ * citation, « … courriel. » », n'est pas une fin de phrase) : depuis le « ; » qui la précède (le point final reste), depuis le
+ * « : » d'un libellé (« **« citation »** : le traitement … est développé au bloc 5 » → « **« citation »** »), ou la phrase
+ * entière.
+ */
+export function retirerPropositionsMarquees(texte: string, marque: string): string {
+  let t = String(texte || '');
+  for (let k = t.indexOf(marque); k >= 0; k = t.indexOf(marque)) {
+    let prof = 0;
+    let debut = 0;
+    let sep = '';
+    for (let i = k - 1; i >= 0; i--) {
+      const c = t[i];
+      if (c === '»') { prof++; continue; }
+      if (c === '«') { prof = Math.max(0, prof - 1); continue; }
+      if (prof) continue;
+      if (c === '\n') { debut = i + 1; sep = 'ligne'; break; }
+      if (c === ';') { debut = i; sep = ';'; break; }
+      if (c === ':' && /\s/.test(t[i + 1] || '')) { debut = i; sep = ':'; break; }
+      if (/[.!?]/.test(c) && /\s/.test(t[i + 1] || '')) { debut = i + 1; sep = '.'; break; }
+    }
+    let fin = t.length;
+    prof = 0;
+    for (let i = k + marque.length; i < t.length; i++) {
+      const c = t[i];
+      if (c === '«') { prof++; continue; }
+      if (c === '»') { prof = Math.max(0, prof - 1); continue; }
+      if (prof) continue;
+      if (c === '\n') { fin = i; break; }
+      if (/[.!?;]/.test(c)) { fin = sep === ';' || sep === ':' ? i : i + 1; break; }
+    }
+    // Phrase entière : les espaces qui la suivent partent avec elle.
+    if (sep === '.' || sep === 'ligne' || !sep) while (fin < t.length && t[fin] === ' ') fin++;
+    t = `${t.slice(0, debut)}${t.slice(fin)}`;
+  }
+  return t;
 }
 
 const TITRE_ENGAGEMENTS = '## Nos engagements sur les exigences du cahier des charges';

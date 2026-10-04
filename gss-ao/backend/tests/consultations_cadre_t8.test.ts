@@ -46,8 +46,8 @@ describe('format court : renvoi d’une rubrique citée avant « développée au
     expect(renvoisVersParties(texte, blocs, parties, { c1: [], c2: ['b4_proc_alarme'], c3: ['b4_rondes', 'b4_tenues'] }, titres))
       .toBe("- **La nuit, les rondes s'effectuent entre 20h30 et 6h00 du matin** → notre réponse : « Le contrôleur de rondes », développée dans la partie 3 « Moyens matériels ».");
   });
-  it('rubrique citée reprise nulle part : renvoi retiré', () => {
+  it('rubrique citée reprise nulle part : renvoi retiré, et le titre de la rubrique absente aussi (T2-CONS-10)', () => {
     expect(renvoisVersParties(texte, blocs, parties, { c1: [], c2: ['b4_proc_alarme'], c3: ['b4_tenues'] }, titres))
-      .toBe("- **La nuit, les rondes s'effectuent entre 20h30 et 6h00 du matin** → notre réponse : « Le contrôleur de rondes ».");
+      .toBe("- **La nuit, les rondes s'effectuent entre 20h30 et 6h00 du matin**.");
   });
 });
