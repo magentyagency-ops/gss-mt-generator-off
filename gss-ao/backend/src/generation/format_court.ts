@@ -27,7 +27,16 @@ const valeurNombre = (a?: string, b?: string): number => (b && /^\d+$/.test(b) ?
 const HORS_ANNEXES = /hors\s+annexes?|annexes?\s+(?:non\s+comprises?|exclues?|en\s+sus|non\s+compt[ée]es?)|sans\s+(?:les\s+)?annexes?|(?:non\s+compris|en\s+dehors\s+des?)\s+(?:les\s+)?annexes?/gi;
 
 export interface PartieCourte { id: string; title: string; attendu?: string }
-export interface FormatImpose { pagesMax: number; plan: PartieCourte[]; source: string }
+export interface FormatImpose {
+  pagesMax: number;
+  plan: PartieCourte[];
+  source: string;
+  /** Limite fixée pour CHAQUE critère ou partie (« 5 pages par critère », T2-GEN-9) : contrôlée partie par partie au rendu. */
+  pagesParPartie?: number;
+}
+
+/** Limite qui porte sur chaque critère, sous-critère ou partie, et non sur tout le mémoire (« 5 pages par critère », T2-GEN-9). */
+export const RX_LIMITE_PAR_PARTIE = /^\s*(?:maximum\s+|au\s+maximum\s+|max\.?\s+|au\s+plus\s+)?(?:pour\s+chaque|par)\s+(?:crit[èe]re|sous[- ]crit[èe]re|partie|question|th[èe]me|chapitre|item|rubrique|point|sous[- ]partie)/i;
 
 const MARP_ASSETS = path.resolve(__dirname, 'marp');
 const MOTEUR = path.resolve(__dirname, '../../python/schemas_gss');
@@ -107,7 +116,10 @@ export function limitePagesMemoire(passages: string[]): { pages: number; citatio
       const n = valeurNombre(m[1], m[2]);
       // Distance entre le mémoire et le nombre : même proposition (120 caractères au plus).
       const iMem = ph.search(MEMOIRE);
-      if (!Number.isFinite(n) || n < 2 || n > 40 || Math.abs(m.index - iMem) > 120) continue;
+      // T2-COH-2 : une limite de plus de 40 pages est une vraie limite (un mémoire libre en fait 120 à 145) ; T2-GEN-9 : une
+      // limite « par critère » n'est pas celle de tout le mémoire (le modèle la lit avec le plan, sinon alerte à GSS).
+      if (!Number.isFinite(n) || n < 2 || n > 300 || Math.abs(m.index - iMem) > 120) continue;
+      if (RX_LIMITE_PAR_PARTIE.test(ph.slice(m.index + m[0].length, m.index + m[0].length + 60))) continue;
       // « hors annexes », « annexes non comprises » : la limite porte bien sur le mémoire (T1-GEN-1) ; « renvoyer à des annexes
       // dans la limite de 10 pages » (rouen_univ) : la limite porte sur les annexes.
       const voisinage = ph.slice(Math.max(0, Math.min(iMem, m.index) - 40), Math.max(iMem, m.index) + m[0].length + 20).replace(HORS_ANNEXES, ' ');
@@ -255,6 +267,28 @@ export function nettoyerEngagements(texte: string): string {
     sortie.push(voixDeGss(ligne));
   }
   return `${debut}${sortie.join('\n')}`.replace(/\n{3,}/g, '\n\n');
+}
+
+/**
+ * Pages occupées par chaque partie d'un mémoire au format court (titre « n. Titre » cherché page à page, dans l'ordre) : une
+ * page partagée entre deux parties compte pour les deux. [] si le texte du PDF est illisible (T2-GEN-9).
+ */
+export function pagesDesParties(pdf: string, titres: string[]): number[] {
+  const r = spawnSync('pdftotext', ['-layout', pdf, '-'], { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
+  if (r.status !== 0 || !r.stdout) return [];
+  const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const pages = r.stdout.split('\f').map(norm);
+  if (pages.length && !pages[pages.length - 1]) pages.pop();
+  const debuts: number[] = [];
+  let depuis = 0;
+  for (const [i, t] of titres.entries()) {
+    const cle = norm(`${i + 1} ${t}`).split(' ').slice(0, 8).join(' ');
+    const k = pages.findIndex((p, j) => j >= depuis && p.includes(cle));
+    if (k < 0) return [];
+    debuts.push(k);
+    depuis = k;
+  }
+  return debuts.map((d, i) => (i + 1 < debuts.length ? debuts[i + 1] : pages.length - 1) - d + 1);
 }
 
 /** Nombre de pages d'un PDF (pdfinfo, sinon comptage des objets /Page). */

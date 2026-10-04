@@ -3,7 +3,7 @@ import { ImageLibraryService } from './image_service';
 import { D2Service } from './d2_service';
 import { SchemaService, PageSchema, dessinerSpecs, finaliserSvg } from './schema_service';
 import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce, phraseContraireAuDce } from './visuels_cadre';
-import { FormatImpose, PartieCourte, passagesLimitePages, passagesContenuOffre, limitePagesMemoire, phraseLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss } from './format_court';
+import { FormatImpose, PartieCourte, passagesLimitePages, passagesContenuOffre, limitePagesMemoire, phraseLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss, RX_LIMITE_PAR_PARTIE, pagesDesParties } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque, estRetourArriere } from './themes';
 import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, regrouperQuestions, completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, lireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements } from './completion';
@@ -9508,6 +9508,18 @@ Renvoie UNIQUEMENT un objet JSON : {"impose": true|false, "parties": [{"numero":
   }
 
   /**
+   * Limite du RC par critère ou par partie (T2-GEN-9) : pages de chaque partie mesurées sur le PDF rendu ; chaque partie
+   * qui dépasse est signalée à GSS (consultations et premier message de l'assistant). [] sans limite par partie.
+   */
+  private controlePagesParPartie(pdf: string, format: FormatImpose, plan: PartieCourte[]): string[] {
+    if (!format.pagesParPartie) return [];
+    const pages = pagesDesParties(pdf, plan.map((p) => p.title));
+    if (!pages.length) return [`Le RC limite chaque partie du mémoire technique à ${format.pagesParPartie} pages : vérifiez dans le PDF que chaque partie respecte cette limite avant la remise.`];
+    return plan.map((p, i) => ({ p, n: pages[i] })).filter((x) => x.n > format.pagesParPartie!)
+      .map((x) => `La partie « ${x.p.title} » occupe ${x.n} pages pour ${format.pagesParPartie} autorisées par le RC pour chaque partie : à raccourcir avec l'assistant avant la remise.`);
+  }
+
+  /**
    * Format imposé par le RC : nombre de pages maximum du mémoire technique et plan à suivre. Repérage
    * déterministe des mentions « … pages maximum » puis lecture IA de ces seuls passages (une limite qui
    * vise une autre pièce — CV, lettre, annexe — est écartée). null = pas de limite pour le mémoire.
@@ -9529,7 +9541,8 @@ Renvoie UNIQUEMENT un objet JSON : {"impose": true|false, "parties": [{"numero":
 2. Si oui, le RC impose-t-il un plan / une structure à ce mémoire ? Liste ses parties DANS L'ORDRE du RC : "titre" = intitulé fidèle et court de la partie ; "attendu" = TOUS les éléments que le RC cite pour cette partie (ce qui est entre parenthèses, les sous-points), recopiés fidèlement.
 3. Sans plan imposé, reprends comme plan les sous-critères de la valeur technique s'ils figurent dans les extraits, sinon "plan": [].
 4. "criteres" : chaque sous-critère technique noté (libellé exact, pondération) et l'index (0 = première partie) de la partie du plan où il doit être traité.
-Renvoie UNIQUEMENT un objet JSON : {"limite": true|false, "pagesMax": nombre, "citation": "phrase exacte du RC", "plan": [{"titre": "…", "attendu": "…"}], "criteres": [{"libelle": "…", "poids": "…", "partie": 0}]}`,
+5. Si la limite porte sur CHAQUE critère, sous-critère ou partie (« 5 pages par critère », « 3 pages maximum par sous-critère ») : "pagesParPartie" = ce nombre, le plan = ces critères ou parties, et "pagesMax" = le total que le RC fixe, sinon ce nombre multiplié par le nombre de parties. Sinon "pagesParPartie": null.
+Renvoie UNIQUEMENT un objet JSON : {"limite": true|false, "pagesMax": nombre, "pagesParPartie": nombre|null, "citation": "phrase exacte du RC", "plan": [{"titre": "…", "attendu": "…"}], "criteres": [{"libelle": "…", "poids": "…", "partie": 0}]}`,
       },
       { role: 'user', content: `EXTRAITS QUI MENTIONNENT UN NOMBRE DE PAGES :\n${passages.join('\n---\n')}\n\nEXTRAITS SUR LES CRITÈRES DE JUGEMENT :\n${criteres.join('\n---\n') || '(aucun)'}` },
     ];
@@ -9556,24 +9569,45 @@ Renvoie UNIQUEMENT un objet JSON : {"limite": true|false, "pagesMax": nombre, "c
       return null;
     }
     try {
-      const pagesMax = Number(d.pagesMax);
-      if (!d.limite || !Number.isFinite(pagesMax) || pagesMax < 2 || pagesMax > 40) return null;
+      let pagesMax = Number(d.pagesMax);
+      // T2-COH-2 : une limite de plus de 40 pages est appliquée (le mémoire libre en fait 120 à 145), jusqu'à 300 pages.
+      if (!d.limite || !Number.isFinite(pagesMax) || pagesMax < 2 || pagesMax > 300) return null;
+      // T2-GEN-9 : limite par critère ou par partie (donnée par le modèle, ou écrite ainsi dans la phrase citée) : le total est
+      // le nombre de pages par partie multiplié par le nombre de parties (sauf total fixé par le RC), chaque partie est
+      // contrôlée au rendu.
+      let pagesParPartie = Number(d.pagesParPartie);
+      const citationPages = String(d.citation || '');
+      const mPar = new RegExp(`(\\d{1,3}|${RX_NOMBRE_LETTRES})\\s*(?:\\(\\s*\\d{1,3}\\s*\\)\\s*)?(?:pages?|feuillets?|faces?)`, 'giu');
+      for (const x of citationPages.matchAll(mPar)) {
+        if (RX_LIMITE_PAR_PARTIE.test(citationPages.slice((x.index || 0) + x[0].length, (x.index || 0) + x[0].length + 60))) { pagesParPartie = nombreFr(x[1]); break; }
+      }
+      if (!Number.isFinite(pagesParPartie) || pagesParPartie < 1) pagesParPartie = NaN;
       // Nombre de pages absent des extraits du RC (en chiffres ou en lettres) : jamais une limite inventée (T1-GEN-1).
       const nombresExtraits = new Set([...passages.join(' ').matchAll(new RegExp(`(?<![\\p{L}\\d])(\\d{1,3}|${RX_NOMBRE_LETTRES})(?![\\p{L}\\d])`, 'giu'))].map((x) => nombreFr(x[1])));
-      if (!nombresExtraits.has(pagesMax)) {
+      if (!nombresExtraits.has(pagesMax) && !(Number.isFinite(pagesParPartie) && nombresExtraits.has(pagesParPartie))) {
         console.warn(`[MemoireGenerator] Format imposé par le RC : ${pagesMax} pages annoncées par le modèle, nombre absent des extraits du RC ; ignoré.`);
         return null;
       }
       let plan: PartieCourte[] = (Array.isArray(d.plan) ? d.plan : [])
         .map((p: any, i: number) => ({ id: `c${i + 1}`, title: String(p?.titre || '').trim().replace(/^./, (c) => c.toUpperCase()), attendu: String(p?.attendu || '').trim() }))
         .filter((p: PartieCourte) => p.title);
+      // Plan du RC lu (avant le plan par défaut) : une limite par partie ne vaut que pour les parties du RC.
+      const planDuRc = plan.length >= 2;
       if (plan.length < 2) plan = CHAPTER_ORDER_B.map((ch, i) => ({ id: `c${i + 1}`, title: CHAPTER_TITLES_B[ch], attendu: AI_SECTIONS_B.filter((s) => s.chapter === ch).map((s) => s.title).join(' ; ') }));
       for (const c of Array.isArray(d.criteres) ? d.criteres : []) {
         const p = plan[Number(c?.partie)];
         if (p && c?.libelle) p.attendu = `${p.attendu ? `${p.attendu}. ` : ''}Critère de jugement traité ici : « ${String(c.libelle).trim()} »${c.poids ? ` (${String(c.poids).trim()})` : ''}`;
       }
-      console.log(`[MemoireGenerator] Format imposé par le RC : ${pagesMax} pages maximum, plan en ${plan.length} partie(s) — « ${String(d.citation || '').slice(0, 160)} »`);
-      return { pagesMax, plan, source: String(d.citation || '').trim() };
+      if (Number.isFinite(pagesParPartie)) {
+        if (!planDuRc) {
+          this.alertesFormat.push(`Le RC limite chaque partie du mémoire technique à ${pagesParPartie} pages (« ${citationPages.slice(0, 220)} ») mais son plan n'a pas pu être lu : le mémoire est rédigé sans limite de pages. Vérifiez le plan du RC et relancez la génération avant la remise.`);
+          return null;
+        }
+        // Total fixé par le RC seulement s'il est cohérent (au plus la somme des parties), sinon parties × limite par partie.
+        if (!(pagesMax > pagesParPartie && pagesMax <= pagesParPartie * plan.length && nombresExtraits.has(pagesMax))) pagesMax = pagesParPartie * plan.length;
+      }
+      console.log(`[MemoireGenerator] Format imposé par le RC : ${pagesMax} pages maximum${Number.isFinite(pagesParPartie) ? ` (${pagesParPartie} par partie)` : ''}, plan en ${plan.length} partie(s) — « ${String(d.citation || '').slice(0, 160)} »`);
+      return { pagesMax, plan, source: String(d.citation || '').trim(), ...(Number.isFinite(pagesParPartie) ? { pagesParPartie } : {}) };
     } catch {
       return null;
     }
@@ -9751,6 +9785,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
     const consultationList = questionsUniques(elementsSansDoublon(elements));
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
+    consultationList.push(...this.controlePagesParPartie(rendu.filePath, format, plan));
     console.log(`[MemoireGenerator] Format court : ${rendu.pages} page(s) / ${format.pagesMax} autorisée(s).`);
 
     try {
@@ -10043,7 +10078,9 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     // Le rendu mesuré fait foi : on garde la plus grande part des passages de GSS qui tient dans la limite à la police
     // normale (10 pt), en retirant d'abord les passages de plus faible priorité (jamais de réécriture). Recherche par
     // dichotomie sur la part gardée de chaque partie ; aucune page laissée libre tant qu'un passage retiré y tient.
-    const tientNet = (r: { pages: number; corps: number }) => r.pages <= format.pagesMax && r.corps >= 10;
+    // Limite par critère ou par partie (T2-GEN-9) : chaque partie mesurée sur le rendu doit aussi la tenir.
+    const partiesTiennent = (pdf: string) => !format.pagesParPartie || pagesDesParties(pdf, plan.map((p) => p.title)).every((n) => n <= format.pagesParPartie!);
+    const tientNet = (r: { pages: number; corps: number; filePath: string }) => r.pages <= format.pagesMax && r.corps >= 10 && partiesTiennent(r.filePath);
     if (!tientNet(rendu)) {
       const sectionsAvant = { ...sections };
       const motsAvant: Record<string, number> = Object.fromEntries(plan.map((p) => [p.id, motsPartie([{ titre: '', texte: sectionsAvant[p.id] || '' }])]));
@@ -10203,6 +10240,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     }
     const consultationList = questionsUniques(elementsSansDoublon(elements));
     if (rendu.pages > format.pagesMax) consultationList.push(`Le mémoire fait ${rendu.pages} pages pour ${format.pagesMax} autorisées par le RC : à raccourcir avec l'assistant avant la remise.`);
+    consultationList.push(...this.controlePagesParPartie(rendu.filePath, format, plan));
     const alertePanneCourt = [...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, nonAdapteesCourt)].filter(Boolean).join('\n\n');
     if (alertePanneCourt) { consultationList.unshift(...alertePanneCourt.split('\n\n')); console.warn(`[MemoireGenerator] ${alertePanneCourt}`); }
     consultationList.push(...rubriquesExcluesCourt, ...avisSecours, ...propositions);
