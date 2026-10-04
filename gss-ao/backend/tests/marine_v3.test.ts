@@ -105,3 +105,17 @@ describe('schémas de la v3 (moteur_marine)', () => {
     expect(v1.svg).not.toContain('data-picto="bouclier"');
   });
 });
+
+// Tour 4, correcteur (T4-CONS-10, citedia 1461 p. 7) : un nombre à séparateur de milliers n'est jamais coupé en fin de ligne.
+describe('typoV3 : nombres insécables (T4-CONS-10)', () => {
+  it('groupes de trois chiffres liés par une espace fine insécable, unité liée par une insécable', () => {
+    const t = typoV3('avec un maximum annuel de 200 000 € HT et 1 607 h par an, en 15 minutes ; 12 500 agents');
+    expect(t).toContain('200\u202f000\u00a0€ HT');
+    expect(t).toContain('1\u202f607\u00a0h par an');
+    expect(t).toContain('15\u00a0minutes');
+    expect(t).toContain('12\u202f500 agents');
+    expect(t).not.toMatch(/\d \d{3}/);
+    // Balises et années intactes.
+    expect(typoV3('<span class="x">en 2027</span>')).toBe('<span class="x">en 2027</span>');
+  });
+});

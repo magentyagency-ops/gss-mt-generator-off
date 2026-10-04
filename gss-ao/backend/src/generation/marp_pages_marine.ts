@@ -28,7 +28,12 @@ export function typoV3(texte: string): string {
     .replace(/(?<=[A-Za-zÀ-ÖØ-öø-ÿŒœ])'(?=[A-Za-zÀ-ÖØ-öø-ÿŒœ])/g, '’')
     .replace(/(?<![\w.,])(\d{1,3})(er|re|e|ème)(?=[\s\u00a0.,;:!?)]|$)/g, '$1<sup>$2</sup>')
     // Espace avant « ; : ! ? » insécable (ifits 701 : « … zones industrielles) » puis « ; » seul en début de ligne suivante).
-    .replace(/(?<=[^\s|])[ \t]([;:!?])(?=\s|$)/g, '\u202f$1'))).join('');
+    .replace(/(?<=[^\s|])[ \t]([;:!?])(?=\s|$)/g, '\u202f$1')
+    // Nombre à séparateur de milliers jamais coupé en fin de ligne (citedia 1461, T4-CONS-10 : « 200 » puis « 000 € HT » à
+    // la ligne suivante) : espace fine insécable entre les groupes de trois chiffres ; espace insécable entre un nombre et
+    // son unité (€, %, h, min, jours, km…).
+    .replace(/(?<![\d,.])\d{1,3}(?:[ \u00a0]\d{3})+(?![\d])/g, (n) => n.replace(/[ \u00a0]/g, '\u202f'))
+    .replace(/(\d)[ \t]+(?=(?:€|%|h|min|minutes?|heures?|jours?|km|ans?|mois|semaines?)(?![\p{L}\d]))/gu, '$1\u00a0'))).join('');
 }
 
 /** Intertitres de la colonne de titrage : une ligne entièrement en gras (« **Les transports** ») devient un intertitre
