@@ -970,6 +970,11 @@ export function communeLisible(brut: string, dce = ''): string {
     .replace(/\s+(?:cedex|t[ée]l|tel|fax|courriel|mail|et|pour|france)\b.*$/i, '').replace(/\s+(?:le|la|les)\s+(?=[a-zà-ÿ\d]).*$/, '').replace(/[\s,;:.-]+$/, '').trim();
   const premier = c.split(/[ -]/)[0] || '';
   if (c.replace(/[^A-Za-zÀ-ÿ]/g, '').length < 3 || PAS_COMMUNE.test(premier) || UNITE_CP.test(premier) || /\d/.test(c)) return '';
+  // Commune connue écrite autrement (« Mont Saint Aignan », « Saint Martin d'Hères ») : sa graphie officielle (T4G-2).
+  if (c !== c.toUpperCase()) {
+    const connue = [...COMMUNES_NORMANDES, ...VILLES_HORS_NORMANDIE].find((k) => cleCommune2(k) === cleCommune2(c));
+    if (connue) return connue;
+  }
   if (c === c.toUpperCase()) {
     // Graphie du DCE en casse mixte (« Le Grand-Quevilly »), sinon casse de nom propre.
     // (chaque mot plein avec sa majuscule : jamais « Le grand-quevilly » écrit ainsi par erreur dans le DCE).
@@ -989,11 +994,11 @@ export function communeLisible(brut: string, dce = ''): string {
  */
 export function communesParCodePostal(texte: string, dce = texte): Array<{ code: string; commune: string; debut: number; fin: number }> {
   const out: Array<{ code: string; commune: string; debut: number; fin: number }> = [];
-  const SUITE = String.raw`[A-Za-zÀ-ÿ'’]*(?:[ \t]*[-\u2011][ \t]*[A-Za-zÀ-ÿ'’]+)*`;
+  const SUITE = String.raw`[A-Za-zÀ-ÿ'’]*(?:[ \t\u00a0\u202f]*[-\u2011][ \t\u00a0\u202f]*[A-Za-zÀ-ÿ'’]+)*`;
   const MOT = String.raw`[A-Za-zÀ-ÿ'’]${SUITE}`;
   // Jamais le numéro d'un tri postal (« CS 31402 », « BP 21 », « TSA 70011 », « SP 51000 », T9REG-1) : ce n'est pas un code postal.
   // Code postal collé (« 14460 ») ou espacé (« 14 460 », T1-GEN-4), jamais un groupe de milliers (« 1 214 460 »).
-  const rx = new RegExp(String.raw`(?<![=/?&#.\d])(?<!(?<![A-Za-zÀ-ÿ])(?:CS|C\.S\.|BP|B\.P\.?|TSA|SP|cs|bp|tsa)[ \t]*(?:n°[ \t]*)?)\b(\d{5}|(?<!\d[ \u00a0\u202f])\d{2}[ \u00a0\u202f]\d{3})\b(?![\d]|[ \u00a0\u202f]\d{3}|[,.]\d)[ \t]*(?:[–—,-][ \t]*)?([A-ZÉÈÀÂÎÔÛ]${SUITE}(?:[ \t]+(?!cedex|CEDEX|Cedex)${MOT}){0,4})?`, 'g');
+  const rx = new RegExp(String.raw`(?<![=/?&#.\d])(?<!(?<![A-Za-zÀ-ÿ])(?:CS|C\.S\.|BP|B\.P\.?|TSA|SP|cs|bp|tsa)[ \t]*(?:n°[ \t]*)?)\b(\d{5}|(?<!\d[ \u00a0\u202f])\d{2}[ \u00a0\u202f]\d{3})\b(?![\d]|[ \u00a0\u202f]\d{3}|[,.]\d)[ \t\u00a0\u202f]*(?:(?:[–—,|-]|;[ \t]*(?:[Vv]ille|VILLE|[Cc]ommune|COMMUNE|[Ll]ocalit[ée]|LOCALIT[ÉE])[ \t]*:)[ \t\u00a0\u202f]*)?([A-ZÉÈÀÂÎÔÛ]${SUITE}(?:[ \t\u00a0\u202f]+(?!cedex|CEDEX|Cedex)${MOT}){0,4})?`, 'g');
   for (const m0 of String(texte || '').matchAll(rx)) {
     const espace = /\D/.test(m0[1]);
     const m = [m0[0], m0[1].replace(/\D/g, ''), m0[2]] as unknown as RegExpMatchArray;
@@ -1004,9 +1009,20 @@ export function communesParCodePostal(texte: string, dce = texte): Array<{ code:
     // la cellule suivante.
     const finLigne = String(texte).slice(debut + m0[0].length).split('\n')[0];
     const debutLigne = String(texte).slice(Math.max(0, debut - 80), debut).split('\n').pop() || '';
+    const ligneSuivante = () => (String(texte).slice(debut + m0[0].length + finLigne.length + 1).split('\n').find((l) => l.replace(/[\s|]/g, '')) || '').replace(/^[\s|]+|[\s|]+$/g, '');
     if (!commune && !m[2] && /^[\s|]*$/.test(finLigne) && /^[\s|]*$/.test(debutLigne)) {
-      const suivante = (String(texte).slice(debut + m0[0].length + finLigne.length + 1).split('\n').find((l) => l.replace(/[\s|]/g, '')) || '').replace(/^[\s|]+|[\s|]+$/g, '');
+      const suivante = ligneSuivante();
       if (/^[A-ZÀ-Ý]/.test(suivante) && suivante.split(/\s+/).length <= 5) commune = communeLisible(suivante, dce);
+    }
+    // (trait d'union en fin de ligne : « Saint-Martin- ⏎ d'Hères »)
+    if (commune && m[2] && /^[\s|]*-?[\s|]*$/.test(finLigne)) {
+      const suivante = ligneSuivante();
+      const tiret = /-/.test(finLigne);
+      const dernier = commune.split(/[\s-]+/).pop() || '';
+      const suiteMots = /^((?:d['’]|de\s|du\s|des\s|sur\s|sous\s|lès\s|en\s|-)\S+|[A-ZÀ-Ý][a-zà-ÿ'’-]+)/.exec(suivante);
+      if (suiteMots && (tiret || /^(?:d['’]|de\s|du\s|des\s|sur\s|sous\s|lès\s|en\s|-)/.test(suiteMots[1]) || /^(?:saint|sainte|st|ste|mont|grand|petit|val|port|pont|bois|le|la|les|notre)$/i.test(dernier))) {
+        commune = communeLisible(`${commune}${tiret || /^-/.test(suiteMots[1]) ? '-' : ' '}${suiteMots[1].replace(/^-/, '').replace(/[,.;]+$/, '')}`, dce) || commune;
+      }
     }
 
     if (!commune && !(m[2] && UNITE_CP.test(m[2].split(/\s/)[0]))) {
@@ -1029,10 +1045,24 @@ export function communesParCodePostal(texte: string, dce = texte): Array<{ code:
         const tous = av[1].split(/[ \t]+/);
         const avantMots = `${ligne.slice(0, av.index)}${tous.slice(0, tous.length - mots.length).join(' ')} `;
         const VOIE = /(?:^|[^A-Za-zÀ-ÿ])(?:rue|ruelle|avenue|av\.?|boulevard|bd|bld|place|pl\.|chemin|ch\.|route|rte|all[ée]e|quai|impasse|imp\.|cours|square|esplanade|parvis|passage|sentier|voie|cit[ée]|r[ée]sidence|lotissement|zone|za|zi|zac|rond-point|carrefour|mail|promenade|faubourg|hameau|lieu-dit)\s+(?:(?:de|du|des|la|le|les|d['’]|l['’])\s*)*$/i;
-        if (mots.length && (VOIE.test(avantMots) || /^(?:CS|BP|B\.P\.?|TSA|SP)$/i.test(mots[mots.length - 1]))) mots = [];
+        // Type de voie dans le même segment d'adresse, même séparé des mots retenus par un mot de lieu (« rue du Château Gaillard »,
+        // « avenue du Parc des Sports », « place de l'Hôtel de Ville », « rue du Musée des Beaux-Arts », T4G-2) : pas une commune.
+        const segment = `${ligne.slice(0, av.index)}${av[1]}`.split(/,|\s[–—-]\s/).pop() || '';
+        const VOIE_SEGMENT = /(?:^|[^A-Za-zÀ-ÿ])(?:rue|ruelle|avenue|av\.|boulevard|bd|bld|place|chemin|route|rte|all[ée]e|quai|impasse|cours|square|esplanade|parvis|passage|sentier|lotissement|rond-point|carrefour|promenade|faubourg|hameau|lieu-dit)\s/i;
+        // (« rue X à DIEPPE » : la commune suit « à », elle reste)
+        const apresVoie = segment.split(VOIE_SEGMENT).pop() || '';
+        if (mots.length && (VOIE.test(avantMots) || (VOIE_SEGMENT.test(segment) && !/\s(?:à|a)\s/i.test(` ${apresVoie}`)) || /^(?:CS|BP|B\.P\.?|TSA|SP)$/i.test(mots[mots.length - 1]))) mots = [];
         commune = mots.length ? communeLisible(mots.join(' '), dce) : '';
       }
     }
+    // Adresse coupée après le code, sans commune écrite avant lui (T4G-2 : « 3 rue du Château Gaillard, 27700 ⏎ Les Andelys », « place de l'Hôtel de Ville,
+    // 76000 ⏎ ROUEN ») : la ligne suivante, si elle est une commune (courte, sans intitulé d'article ni deux-points), avant
+    // les mots écrits avant le code.
+    if (!commune && !m[2] && /^[\s|]*$/.test(finLigne)) {
+      const suivante = ligneSuivante().replace(/[\s,.;]+$/, '');
+      if (/^[A-ZÀ-Ý]/.test(suivante) && suivante.split(/\s+/).length <= 4 && !/[:;]|^(?:article|chapitre|titre|partie|annexe|lot|site|tél|tel)\b/i.test(suivante)) commune = communeLisible(suivante, dce);
+    }
+    // Commune coupée en fin de ligne (« 38400 Saint Martin ⏎ d'Hères », « 76821 Mont Saint ⏎ Aignan ») : recollée à la suite.
     // Code espacé : seulement une commune connue, ou écrite après le code dans une adresse (voie, « adresse »), jamais
     // « 15 000 Visiteurs » ni « Total 40 000,00 € ».
     if (espace && commune && !(m[2] && ([...COMMUNES_NORMANDES, ...VILLES_HORS_NORMANDIE].some((k) => cleCommune2(k) === cleCommune2(commune))

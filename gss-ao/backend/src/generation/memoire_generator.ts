@@ -3345,7 +3345,9 @@ export class MemoireGenerator {
         continue;
       }
       const remaining = TOTAL_BUDGET - used;
-      let body = p.text;
+      // Ligatures typographiques de certains PDF (« notiﬁcation », « afﬁchage ») ramenées à leurs lettres, fins de ligne Windows
+      // ramenées à « \n » : les lectures sans modèle (obligations, délais, pièces) lisent le même texte quelle que soit l'extraction.
+      let body = p.text.replace(/\r\n?/g, '\n').replace(/\uFB00/g, 'ff').replace(/\uFB01/g, 'fi').replace(/\uFB02/g, 'fl').replace(/\uFB03/g, 'ffi').replace(/\uFB04/g, 'ffl').replace(/[\uFB05\uFB06]/g, 'st');
       const cap = Math.min(PER_FILE_CAP, remaining);
       if (body.length > cap) body = body.slice(0, cap) + `\n[… document tronqué (${p.text.length - cap} caractères omis) …]`;
       // Pièce du cahier des charges tronquée (T1-COH-3) : GSS est prévenu, rien ne se perd en silence.

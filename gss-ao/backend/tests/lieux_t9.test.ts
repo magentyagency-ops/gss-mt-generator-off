@@ -40,8 +40,9 @@ describe('numéro de tri postal (CS, BP, TSA) jamais lu comme un code postal (T9
 
 describe('nom de voie et fuseau horaire jamais lus comme une commune (T9REG-2, T9-COH-3)', () => {
   it('« 42 boulevard Jourdan, 75014 ⏎ Paris » : jamais « Jourdan »', () => {
-    expect(communesParCodePostal('dont le siège est situé 42 boulevard Jourdan, 75014\nParis')).toEqual([]);
-    expect(communesParCodePostal('12 rue de la Marne 76000\nRouen')).toEqual([]);
+    // Tour 4 (T4G-2) : la commune écrite sur la ligne qui suit le code est lue ; jamais le nom de la voie.
+    expect(communesParCodePostal('dont le siège est situé 42 boulevard Jourdan, 75014\nParis').map((c) => c.commune)).toEqual(['Paris']);
+    expect(communesParCodePostal('12 rue de la Marne 76000\nRouen').map((c) => c.commune)).toEqual(['Rouen']);
     // Commune écrite avant le code, après le nom du site : toujours lue.
     expect(communesParCodePostal('Adresse : Château de Fontainebleau 77300 France').map((c) => c.commune)).toEqual(['Fontainebleau']);
     expect(communesParCodePostal('Adresse | 1 square Carnot à DIEPPE 76200\nClassification').map((c) => c.commune)).toEqual(['Dieppe']);

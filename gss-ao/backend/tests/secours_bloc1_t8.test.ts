@@ -141,3 +141,25 @@ describe('commune du marché lue par code postal (T8CS-2, T8REG-1, T8-COH-3)', (
     expect(phraseSites(['Lycée de Beauvais', 'Lycée du Tréport'], ['Lycée de Beauvais', 'Lycée du Tréport'])).toBe('La prestation porte sur le Lycée de Beauvais et le Lycée du Tréport.');
   });
 });
+
+// Tour 4, correcteur (T4G-2) : commune lue quand l'adresse est coupée après le code, quand le code est suivi d'une espace
+// insécable, ou quand code et ville sont en colonnes ; jamais un mot de la voie.
+describe('commune par code postal, adresses coupées et colonnes (T4G-2)', () => {
+  const c = (t: string) => communesParCodePostal(t).map((x) => x.commune);
+  it('code en fin de ligne : la commune de la ligne suivante, jamais un mot de la voie', () => {
+    expect(c('situé 3 rue du Château Gaillard, 27700\nLes Andelys')).toEqual(['Les Andelys']);
+    expect(c('12 avenue du Parc des Sports, 76300\nSotteville-lès-Rouen')).toEqual(['Sotteville-lès-Rouen']);
+    expect(c("place de l'Hôtel de Ville, 76000\nROUEN")).toEqual(['Rouen']);
+    expect(c('rue du Musée des Beaux-Arts, 76000\nRouen')).toEqual(['Rouen']);
+  });
+  it('commune coupée en fin de ligne : recollée', () => {
+    expect(c("24 rue Joseph Fourier 38400 Saint Martin\nd'Hères.")).toEqual(["Saint-Martin-d'Hères"]);
+    expect(c("24 rue Joseph Fourier, 38400 Saint-Martin-\nd'Hères.")).toEqual(["Saint-Martin-d'Hères"]);
+    expect(c('1 rue Thomas Becket, 76821 Mont Saint\nAignan Cedex')).toEqual(['Mont-Saint-Aignan']);
+  });
+  it('espace insécable après le code, colonnes « Code postal » et « Ville »', () => {
+    expect(c('4 rue Pasteur, 76360 Barentin')).toEqual(['Barentin']);
+    expect(c('Code postal: 05000 ; Ville: Gap')).toEqual(['Gap']);
+    expect(c('Agence | 12 rue Carnot | 05000 | Gap')).toEqual(['Gap']);
+  });
+});

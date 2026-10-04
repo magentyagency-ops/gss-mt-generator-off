@@ -28,7 +28,8 @@ describe('texte de secours du bloc 1 (T7CS-4, T7N-6, T7-COH-3)', () => {
   });
   it('VILLE : une commune écrite de trois façons dans le DCE n’est retenue qu’une fois', () => {
     const prep = preparerMemoireType({ dce: 'Site du CSTB, 38400 Saint Martin d\'Hères. Accès : 38400 St Martin d’Hères. Courrier : 38400 Saint-Martin-d’Hères.', analyse: { clientName: 'le CSTB' } } as any);
-    expect(prep.variables.VILLE.valeur).toEqual(["Saint Martin d'Hères"]);
+    // Tour 4 (T4G-2) : graphie officielle d'une commune connue.
+    expect(prep.variables.VILLE.valeur).toEqual(["Saint-Martin-d'Hères"]);
   });
   it('« doit être précisé par GSS » devient un emplacement [À COMPLÉTER] avec sa question exacte', () => {
     const p = perimetreSecours('- Levée de doute : oui, sur appel de la télésurveillance ; elle comprend vérifications et compte rendu ; le délai d’intervention doit être précisé par GSS.');
