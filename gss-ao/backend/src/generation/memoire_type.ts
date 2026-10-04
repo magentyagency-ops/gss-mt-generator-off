@@ -2508,9 +2508,10 @@ function villesDuMarcheBrut(dce: string, analyse: any): string[] {
   const communes = communesParCodePostal(debutDce, String(dce || ''));
   for (const postale of [true, false]) {
     for (const { commune, debut, fin } of communes) {
-      if (commune.length < 3 || out.some((x) => prefixe(commune, x))) continue;
+      if (commune.length < 2 || out.some((x) => prefixe(commune, x))) continue;
       if (adresseAdministrative(debutDce, debut, fin, { postale })) continue;
-      const k = out.findIndex((x) => prefixe(x, commune));
+      // (jamais une forme plus longue qui n'ajoute qu'une mention postale : « LE HAVRE Cedex », T7G-6)
+      const k = out.findIndex((x) => prefixe(x, commune) && !/^(?:c[ée]dex|\d+|bp|cs)(?:\s|$)/i.test(cleCommune(commune).slice(cleCommune(x).length).trim()));
       if (k >= 0) out[k] = commune; else out.push(commune);
       if (out.length >= 3) break;
     }

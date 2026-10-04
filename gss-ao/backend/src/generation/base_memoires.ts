@@ -742,6 +742,10 @@ function communesNommees(texte: string, filtre?: (texte: string, debut: number, 
         if (/\d{5}\s*[–—,-]?\s*$/.test(avant)) continue;              // adresse postale : déjà lue par code postal
         // Nom de voie (« 12 rue de Paris », « route de Lyon ») : pas une commune.
         if (/\b(?:rue|avenue|av\.|boulevard|bd|route|chemin|place|quai|all[ée]e|cours|impasse|porte|gare|pont|square|esplanade)\s+(?:de\s+(?:la\s+)?|d['’]|du\s+|des\s+)?$/i.test(avant)) continue;
+        // Nom de ville dans le nom d'une voie, après un nom de personne (T7G-7 : « place Isabelle d'Orléans », « rue Louis-Philippe
+        // d'Orléans ») : le segment de la voie va du type de voie jusqu'à la virgule, au code postal ou à « à / au ».
+        { const seg = texte.slice(Math.max(0, debut - 120), debut).split(/[,;:()\n]|\d{5}|\s(?:à|au|aux|a)\s/i).pop() || '';
+          if (/(?:^|\s)(?:rue|ruelle|avenue|av\.|boulevard|bd|route|chemin|place|quai|all[ée]e|cours|impasse|square|esplanade|parvis|passage|promenade|faubourg|voie|sentier)\s/i.test(seg)) continue; }
         // Adresse ou institution administrative (préfecture, siège, tribunal…) : pas le lieu du marché, sauf dans la phrase de
         // l'objet ou du lieu d'exécution, sans rôle administratif (T2-GEN-4 : « gardiennage de l'hôtel de la préfecture de
         // l'Eure … Évreux »).
@@ -758,7 +762,13 @@ function communesNommees(texte: string, filtre?: (texte: string, debut: number, 
     }
     return out;
   };
-  return { normands: compter(RX_NORMANDES), hors: compter(RX_HORS) };
+  const normands = compter(RX_NORMANDES);
+  // Commune normande de deux lettres nommée après « à » (T7G-7 : « … à Eu »), jamais « Château d'Eu » seul.
+  for (const m of texte.matchAll(/(?:^|[\s(])(?:à|a)\s+(Eu|EU)(?![\p{L}'’-])/gu)) {
+    if (filtre && !filtre(texte, (m.index || 0) + m[0].length - m[1].length, (m.index || 0) + m[0].length)) continue;
+    normands.set('Eu', (normands.get('Eu') || 0) + 1);
+  }
+  return { normands, hors: compter(RX_HORS) };
 }
 
 // ─── Lots du mémoire (accord-cadre en plusieurs lots) ─────────────────────────────────────────────────────────
@@ -1170,7 +1180,10 @@ export function questionLieuInconnu(analyse: any, dce: string): string[] {
 const NORMANDIE = ['14', '27', '50', '61', '76'];
 
 /** Mot qui suit ou précède un code postal sans être une commune (pays, mention postale, libellé de tableau, T8CS-2, T8REG-1). */
-const PAS_COMMUNE = /^(?:france|cedex|cs|tsa|b\.?p\.?|t[ée]l\.?|t[ée]l[ée]phone|fax|courriel|e-?mail|mail|classification|adresse|site|lot|code|siret|siren|n°|num[ée]ro|horaires?|surface|superficie|effectifs?|nombre)$/i;
+// (T7G-6 : libellés de formulaire « Commune », « Ville », « Localité », « CP » jamais une commune)
+const PAS_COMMUNE = /^(?:france|c[ée]dex|cs|tsa|b\.?p\.?|t[ée]l\.?|t[ée]l[ée]phone|fax|courriel|e-?mail|mail|classification|adresse|site|lot|code|siret|siren|n°|num[ée]ro|horaires?|surface|superficie|effectifs?|nombre|commune|ville|localit[ée]|cp|postal)$/i;
+/** Communes de deux lettres (T7G-7 : « Eu », 76260) : lues seulement à côté d'un code postal, jamais cherchées dans le texte. */
+const COMMUNES_COURTES = new Set(['eu', 'y']);
 const UNITE_CP = /^(?:m[²³23]?|km|ha|h|heures?|€|eur|euros?|ht|ttc|personnes?|visiteurs?|spectateurs?|places?|agents?|salari[ée]s?|habitants?|usagers?|[ée]l[èe]ves?|[ée]tudiants?|passages?|entr[ée]es?|lits?|logements?|v[ée]hicules?)$/i;
 
 /** Clé d'une commune (accents, tirets, apostrophes, « St ») : même règle que cleCommune de memoire_type.ts. */
@@ -1195,10 +1208,17 @@ function casseCommune(c: string): string {
  * propre. '' si ce n'est pas une commune.
  */
 export function communeLisible(brut: string, dce = ''): string {
-  let c = String(brut || '').replace(/[ \t]*[-\u2011][ \t]*/g, '-').replace(/\s+/g, ' ').trim()
-    .replace(/\s+(?:cedex|t[ée]l|tel|fax|courriel|mail|et|pour|france)\b.*$/i, '').replace(/\s+(?:le|la|les)\s+(?=[a-zà-ÿ\d]).*$/, '').replace(/[\s,;:.-]+$/, '').trim();
+  let c = String(brut || '')
+    // Libellé de formulaire devant la commune (« Commune : ROUEN », « Ville ROUEN », « Localité : Rouen », « Commune de Rouen »).
+    .replace(/^\s*(?:commune|ville|localit[ée]|cp|code\s+postal)\s*(?::\s*|de\s+|d['’]\s*|(?=[A-ZÀ-Ý]{2}))/i, '')
+    // Mention Cedex, quelle que soit sa ponctuation (« LE HAVRE - CEDEX », « EVREUX-CEDEX », « Rouen Cédex », « ROUEN - CEDEX 1 »).
+    .replace(/[\s,;–—-]*c[ée]dex(?:\s*\d{1,2})?(?![\p{L}]).*$/iu, '')
+    .replace(/[ \t]*[-\u2011][ \t]*/g, '-').replace(/\s+/g, ' ').trim()
+    .replace(/\s+(?:t[ée]l|tel|fax|courriel|mail|et|pour|france)\b.*$/i, '').replace(/\s+(?:le|la|les)\s+(?=[a-zà-ÿ\d]).*$/, '').replace(/[\s,;:.-]+$/, '').trim();
   const premier = c.split(/[ -]/)[0] || '';
-  if (c.replace(/[^A-Za-zÀ-ÿ]/g, '').length < 3 || PAS_COMMUNE.test(premier) || UNITE_CP.test(premier) || /\d/.test(c)) return '';
+  const courte = COMMUNES_COURTES.has(cleCommune2(c));
+  if ((c.replace(/[^A-Za-zÀ-ÿ]/g, '').length < 3 && !courte) || PAS_COMMUNE.test(premier) || UNITE_CP.test(premier) || /\d/.test(c)) return '';
+  if (courte) return c.charAt(0).toUpperCase() + c.slice(1).toLowerCase();
   // Commune connue écrite autrement (« Mont Saint Aignan », « Saint Martin d'Hères ») : sa graphie officielle (T4G-2).
   if (c !== c.toUpperCase()) {
     const connue = [...COMMUNES_NORMANDES, ...VILLES_HORS_NORMANDIE].find((k) => cleCommune2(k) === cleCommune2(c));
@@ -1252,13 +1272,21 @@ export function communesParCodePostal(texte: string, dce = texte): Array<{ code:
   const MOT = String.raw`[A-Za-zÀ-ÿ'’]${SUITE}`;
   // Jamais le numéro d'un tri postal (« CS 31402 », « BP 21 », « TSA 70011 », « SP 51000 », T9REG-1) : ce n'est pas un code postal.
   // Code postal collé (« 14460 ») ou espacé (« 14 460 », T1-GEN-4), jamais un groupe de milliers (« 1 214 460 »).
-  const rx = new RegExp(String.raw`(?<![=/?&#.\d])(?<!(?<![A-Za-zÀ-ÿ])(?:CS|C\.S\.|BP|B\.P\.?|TSA|SP|cs|bp|tsa)[ \t]*(?:n°[ \t]*)?)\b(\d{5}|(?<!\d[ \u00a0\u202f])\d{2}[ \u00a0\u202f]\d{3})\b(?![\d]|[ \u00a0\u202f]\d{3}|[,.]\d)[ \t\u00a0\u202f]*(?:(?:[–—,|-]|;[ \t]*(?:[Vv]ille|VILLE|[Cc]ommune|COMMUNE|[Ll]ocalit[ée]|LOCALIT[ÉE])[ \t]*:)[ \t\u00a0\u202f]*)?([A-ZÉÈÀÂÎÔÛ]${SUITE}(?:[ \t\u00a0\u202f]+(?!cedex|CEDEX|Cedex)${MOT}){0,4})?`, 'g');
+  const rx = new RegExp(String.raw`(?<![=/?&#.\d])(?<!(?<![A-Za-zÀ-ÿ])(?:CS|C\.S\.|BP|B\.P\.?|TSA|SP|cs|bp|tsa)[ \t]*(?:n°[ \t]*)?)\b(\d{5}|(?<!\d[ \u00a0\u202f])\d{2}[ \u00a0\u202f]\d{3})\b(?![\d]|[ \u00a0\u202f]\d{3}|[,.]\d)[ \t\u00a0\u202f]*(?:(?:[–—,|;-][ \t\u00a0\u202f]*)?(?:(?:[Vv]ille|VILLE|[Cc]ommune|COMMUNE|[Ll]ocalit[ée]|LOCALIT[ÉE])[ \t]*(?::|de(?=[ \t])|d['’])?[ \t\u00a0\u202f]*)?)?([A-ZÉÈÀÂÎÔÛ]${SUITE}(?:[ \t\u00a0\u202f]+(?!cedex|CEDEX|Cedex)${MOT}){0,4})?`, 'g');
   for (const m0 of String(texte || '').matchAll(rx)) {
     const espace = /\D/.test(m0[1]);
     const m = [m0[0], m0[1].replace(/\D/g, ''), m0[2]] as unknown as RegExpMatchArray;
     m.index = m0.index;
     const debut = m.index || 0;
     let commune = m[2] && !UNITE_CP.test(m[2].split(/\s/)[0]) ? communeLisible(m[2], dce) : '';
+    // Commune coupée après son article (T7G-6 : « 76600 LE⏎HAVRE », « 76120 LE⏎GRAND-QUEVILLY ») : recollée à la ligne suivante,
+    // jamais remplacée par le mot écrit avant le code (« rue du⏎Fort 76600 LE⏎HAVRE » donnait « Fort »).
+    const articleCoupe = !!m[2] && /^(?:le|la|les)$/i.test(m[2].trim()) && /^[\s|]*$/.test(String(texte).slice(debut + m0[0].length).split('\n')[0]);
+    if (articleCoupe) {
+      const suite = (String(texte).slice(debut + m0[0].length).split('\n').slice(1).find((l) => l.trim()) || '').trim();
+      const nom = /^([A-ZÀ-Ý][A-Za-zÀ-ÿ'’]*(?:-[A-Za-zÀ-ÿ'’]+)*(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'’]*(?:-[A-Za-zÀ-ÿ'’]+)*){0,2})/.exec(suite);
+      if (nom) commune = communeLisible(`${m[2].trim()} ${nom[1]}`, dce);
+    }
     // Tableau (une cellule par ligne : « 92230 | ⏎ Gennevilliers | ») : la ligne du code ne porte que lui, la commune est
     // la cellule suivante.
     const finLigne = String(texte).slice(debut + m0[0].length).split('\n')[0];
@@ -1288,7 +1316,7 @@ export function communesParCodePostal(texte: string, dce = texte): Array<{ code:
       }
     }
 
-    if (!commune && !(m[2] && UNITE_CP.test(m[2].split(/\s/)[0]))) {
+    if (!commune && !articleCoupe && !(m[2] && UNITE_CP.test(m[2].split(/\s/)[0]))) {
       // Commune écrite avant le code, sur la même ligne (« Adresse : Fontainebleau 77300 France », « à DIEPPE 76200 »).
       const ligne = String(texte).slice(Math.max(0, debut - 80), debut).split('\n').pop() || '';
       const av = new RegExp(String.raw`([A-ZÀ-Ý]${SUITE}(?:[ \t]+${MOT}){0,3})[ \t,]*$`).exec(ligne);
@@ -2663,7 +2691,28 @@ const POINT = String.raw`(?<=(?:^|[^\p{L}])(?:à|dès|jusqu['’]à|vers|avant|a
 const PLAGE = String.raw`(?<=(?:^|[^\p{L}])(?:de|entre)\s)(?=${HEURE_MOT}\s*(?:à|et|-|–)\s*(?:\d|${LETTRES_HEURE}|midi|minuit))`;
 export const RX_HEURE = new RegExp(String.raw`(?<![\d.,:])(?:[01]?\d|2[0-4])\s*h(?:\s*[0-5]\d)?(?![\d\p{L}])|(?<![\d.,:])(?:[01]?\d|2[0-4]):[0-5]\d(?![\d])|${POINT}${HEURE_MOT}(?!\s*(?:de\s|d['’]|par\s|sur\s|cons[ée]cutives|maxim|minim|au plus|au moins))|${PLAGE}${HEURE_MOT}|(?<![\p{L}-])(?<!apr[èe]s[- ])(?:midi|minuit)(?![\p{L}-])`, 'iu');
 export function contientHeure(t: string): boolean {
-  return RX_HEURE.test(String(t || ''));
+  const x = String(t || '');
+  if (!RX_HEURE.test(x)) return false;
+  // T7G-8 : « N h » est une durée, comme « N heures », quand il suit un mot de durée (« durée (minimale) de 4 h », « pause de
+  // 1 h », « vacations de 12 h », « amplitude horaire de 24 h », « chevauchement de 0 h 15 », « (minimum 4 h) ») ou qu'il est
+  // suivi de « de / par / sur / consécutives / maximum… » (« 24 h de stationnement ») ; il reste une heure dans une plage
+  // (« vacation de 7 h à 19 h »).
+  const DUREE_AVANT = /(?:dur[ée]e(?:\s+(?:minimale|maximale|totale|moyenne|habituelle))?\s+(?:de|d['’])|pauses?\s+(?:de|d['’])|vacations?\s+(?:de|d['’])|amplitude(?:\s+horaire)?\s+(?:de|d['’])|chevauchement\s+(?:de|d['’])|temps\s+de\s+\p{L}+\s+(?:de|d['’])|minimum|maximum|au\s+moins|au\s+plus|environ|soit|pendant|durant)\s*$/iu;
+  // (amplitude « 24 h sur 24 h », « 24h/24 » : jamais une heure)
+  const DUREE_APRES = /^\s*(?:de\s|d['’]|par\s|sur\s|\/\s*24|cons[ée]cutives|maxim|minim|au plus|au moins|pause|de\s+travail)/iu;
+  const AMPLITUDE_AVANT = /\d{1,2}\s*h(?:eures?)?\s*(?:sur|\/)\s*$/iu;
+  const PLAGE_APRES = /^\s*(?:à|a|-|–|—|et|jusqu['’]\s*[àa])\s*(?:\d|midi|minuit)/iu;
+  for (const m of x.matchAll(new RegExp(RX_HEURE.source, 'giu'))) {
+    const v = m[0];
+    if (!/^\d{1,2}\s*h/i.test(v)) return true;
+    const avant = x.slice(Math.max(0, (m.index || 0) - 40), m.index || 0);
+    const apres = x.slice((m.index || 0) + v.length, (m.index || 0) + v.length + 30);
+    if (PLAGE_APRES.test(apres)) return true;
+    if (/(?:de|entre)\s*$/i.test(avant) && /(?:à|-|–|et)\s*\d/.test(x.slice((m.index || 0) + v.length, (m.index || 0) + v.length + 12)) ) return true;
+    if (DUREE_AVANT.test(avant) || DUREE_APRES.test(apres) || AMPLITUDE_AVANT.test(avant)) continue;
+    return true;
+  }
+  return false;
 }
 
 const OBJET_HORAIRE_DEFAUT = /ouvert|ferm|alarme|vacation|ronde|relève|pr[ée]sence|poste|horaire|pause|accueil/i;
