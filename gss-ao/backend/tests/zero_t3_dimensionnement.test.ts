@@ -33,3 +33,14 @@ describe('poste de nuit qui effectue des rondes : un poste, pas des rondes ponct
     expect(citationDeRondes('3 rondes, entre 21h30 et 06h30.')).toBe(true);
   });
 });
+
+import { normaliserExpressionsDelai } from '../src/generation/base_memoires';
+describe('quarts d’heure lus comme des délais (T3G-3)', () => {
+  it('« dans les trois quarts d’heure » = 45 minutes, « dans le quart d’heure » = 15 minutes, « ≤ 2 heures » = dans 2 heures', () => {
+    expect(normaliserExpressionsDelai("Tout agent absent est remplacé dans les trois quarts d'heure.")).toBe('Tout agent absent est remplacé dans 45 minutes.');
+    expect(normaliserExpressionsDelai("le rondier est sur place dans le quart d'heure.")).toBe('le rondier est sur place dans 15 minutes.');
+    expect(normaliserExpressionsDelai("dans un délai d'un quart d'heure")).toBe('dans un délai de 15 minutes');
+    expect(normaliserExpressionsDelai('en un 1/4 d’heure')).toBe('en 15 minutes');
+    expect(normaliserExpressionsDelai('intervention ≤ 2 heures')).toBe('intervention dans 2 heures');
+  });
+});

@@ -1419,6 +1419,13 @@ export function normaliserExpressionsDelai(t: string): string {
     // « dans la demi-heure », « sous la demi-heure » (T2-COH-7) : 30 minutes, comme « d'une demi-heure ».
     .replace(/(?<![\p{L}])(dans|sous|en)\s+la\s+demi-heure(?![\p{L}])/giu, '$1 30 minutes')
     .replace(/(\bd['’]\s*|\bde\s+)?(?<![a-zà-ÿ])une?\s+demi-heure/gi, (_m, de) => `${de ? 'de ' : ''}30 minutes`)
+    // Quarts d'heure (T3G-3 : « remplacé dans les trois quarts d'heure », « sur place dans le quart d'heure ») : 45 et 15 minutes.
+    .replace(/(?<![\p{L}])(dans|sous|en)\s+les\s+trois[\s-]+quarts?\s+d['’]\s*heure(?![\p{L}])/giu, '$1 45 minutes')
+    .replace(/(\bd['’]\s*|\bde\s+)?(?<![\p{L}])trois[\s-]+quarts?\s+d['’]\s*heure(?![\p{L}])/giu, (_m, de) => `${de ? 'de ' : ''}45 minutes`)
+    .replace(/(?<![\p{L}])(dans|sous|en)\s+le\s+quart\s+d['’]\s*heure(?![\p{L}])/giu, '$1 15 minutes')
+    .replace(/(\bd['’]\s*|\bde\s+)?(?<![\p{L}\d])(?:une?\s+(?:quart|1\s*\/\s*4|¼)|1\s*\/\s*4|¼)\s+d['’]\s*heure(?![\p{L}])/giu, (_m, de) => `${de ? 'de ' : ''}15 minutes`)
+    // « ≤ 2 heures », « < 30 min » : un délai maximal (« dans »).
+    .replace(/(?:≤|<|&lt;)\s*(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/gu, 'dans ')
     // Heures suivies de minutes en lettres (« une heure trente », « deux heures quinze », T2-GEN-2) : en minutes, comme
     // « 1h30 » (« une heure » est déjà « 1 heure »). Jamais une plage horaire.
     .replace(/(?<=(?:dans|sous|en|de|d['’]|moins de|plus de|maximum|maximal|tard|délai|delai)\s+(?:un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?(?:de\s+)?)?)(\d{1,2})\s*(?:h|heures?)\s+(?:et\s+)?(quarante-cinq|quarante|trente|quinze|vingt|dix|cinq)(?:\s+minutes?)?(?![\p{L}-])(?!\s*(?:à|-|–)\s*\d)/giu,
