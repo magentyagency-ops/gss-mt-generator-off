@@ -523,7 +523,16 @@ const motsPleins = (t: string) => [...new Set(mots(t).filter((w) => w.length >= 
  * seront organisées… ») ; retrait — la phrase du DCE la plus proche du passage retiré et du motif donné. Jamais la seule
  * justification du modèle.
  */
+/**
+ * Motif d'un retrait fondé sur le silence du CCTP (« Le CCTP ne prévoit pas de contrôle d'accès permanent », « Cette
+ * prestation n'est pas prévue au périmètre du marché », citedia 1461, T4-CONS-7) : le CCTP ne contredit pas la phrase de
+ * GSS, il n'en parle pas ; D8 ne fait primer le CCTP que s'il la contredit.
+ */
+const MOTIF_SILENCE = /\bne (?:pr[ée]voit|mentionne|demande|exige|cite|comporte|impose|requiert|vise|inclut|contient) (?:pas|aucun|aucune|ni)\b|\bn['’](?:est|sont) pas (?:pr[ée]vue?s?|demand[ée]e?s?|exig[ée]e?s?|mentionn[ée]e?s?|vis[ée]e?s?|inclus(?:es?)?|requis(?:es?)?)|\bpas (?:pr[ée]vue?s?|demand[ée]e?s?) (?:au|par le|dans le)|\bnon (?:pr[ée]vue?s?|demand[ée]e?s?|mentionn[ée]e?s?|exig[ée]e?s?)\b|\b(?:absente?s?|absence) (?:du|de la|dans le|au) (?:CCTP|DCE|cahier|march[ée]|p[ée]rim[èe]tre)|\bhors (?:du )?p[ée]rim[èe]tre\b|\bpas (?:dans|au) (?:le )?p[ée]rim[èe]tre\b|\baucune? (?:mention|exigence|demande)\b/i;
+
 export function fondementDansDce(m: { type: string; extrait: string; par?: string; motif?: string }, phrase: string, dce: string): string {
+  // Retrait motivé par le silence du CCTP : jamais fondé (la phrase de GSS reste).
+  if (m.type === 'retrait' && MOTIF_SILENCE.test(String(m.motif || ''))) return '';
   const sentences = phrasesDce(dce).filter((x) => x.length <= 900);
   const nouveaux = m.type === 'remplacement' ? motsPleins(m.par || '').filter((w) => !motsPleins(m.extrait).includes(w)) : [];
   const nombres = m.type === 'remplacement' ? (String(m.par || '').match(/\d+(?:[.,]\d+)?/g) || []).filter((n) => !String(m.extrait).includes(n)) : [];

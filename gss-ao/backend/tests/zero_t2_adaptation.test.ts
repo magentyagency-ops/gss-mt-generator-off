@@ -66,3 +66,22 @@ describe('alignement du texte de GSS sur le CCTP (T2-CONS-9, format court imm 12
     expect(refusAlignementCctp('Nos rondiers effectuent les rondes toutes les trois heures, de jour comme de nuit.', 'Nos rondiers effectuent les rondes toutes les deux heures, de jour comme de nuit.', 'Les rondes de surveillance sont effectuées à pied, toutes les deux heures.', dce)).toBe('');
   });
 });
+
+// Tour 4, correcteur (T4-CONS-7, citedia 1461) : un retrait motivé par le silence du CCTP n'est pas fondé.
+describe('retrait de l’adaptation sans contradiction du CCTP (T4-CONS-7)', () => {
+  const DCE_CITEDIA = "Réalisation de rondes de surveillance et de contrôle, permettant de vérifier systématiquement les équipements et dispositifs concourant à la sécurité, les issues d’évacuation, les accès, ainsi que l’ouverture et la fermeture des rideaux des parcs, des entrées piétonnes.\nS’assurer de la vérification du bon état et du bon fonctionnement des équipements et dispositifs nécessaires à l’exécution des prestations et définis dans le périmètre du présent Marché ou validés par Citédia Métropole.";
+  const T = "**Gestion des entrées** : filtrage des entrées ; refus d'accès aux personnes en état d'ébriété ou au comportement inadapté (énervement excessif, violence…) ; vérification visuelle des sacs et des manteaux ; gestion des flux à l'entrée pour respecter les jauges à l'intérieur.";
+  it('« Le CCTP ne prévoit pas… », « n’est pas prévue au périmètre » : retrait refusé, la phrase de GSS reste', () => {
+    const m = appliquerModifications(T, { retraits: [
+      { extrait: 'filtrage des entrées ;', motif: 'Le CCTP ne prévoit pas de contrôle d’accès permanent.' },
+      { extrait: 'vérification visuelle des sacs et des manteaux ;', motif: 'Cette prestation n’est pas prévue au périmètre du marché.' },
+    ] }, { fondement: (x, ph) => fondementDansDce(x, ph, DCE_CITEDIA) });
+    expect(m.appliquees).toHaveLength(0);
+    expect(m.texte).toBe(T);
+  });
+  it('retrait contredit par le CCTP (rondes à pied) : toujours appliqué', () => {
+    const t = "Les rondes sont faites de jour comme de nuit. Selon le site, nos agents font leurs rondes en voiture ou à vélo.";
+    const ok = appliquerModifications(t, { retraits: [{ extrait: ' Selon le site, nos agents font leurs rondes en voiture ou à vélo.', motif: 'Les rondes de surveillance sont effectuées à pied.' }] }, { fondement: (x, ph) => fondementDansDce(x, ph, DCE_CSTB) });
+    expect(ok.appliquees).toHaveLength(1);
+  });
+});
