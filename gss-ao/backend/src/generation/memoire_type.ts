@@ -1819,13 +1819,16 @@ function fonctionDansAnnuaire(referents: string, nom: string): string {
 /** Lignes « catégorie | qualification » du tableau de l'équipe dédiée quand aucun dimensionnement n'est calculé. */
 function lignesEquipeParQualification(c: CalculVariables): Array<[string, string]> {
   const lignes: Array<[string, string]> = [];
+  // Marché de rondes ponctuelles sans poste (cstb, T2-CONS-6) : les agents sont les rondiers intervenants ; aucune ligne
+  // « Agent de sécurité » en plus (deux effectifs demandés à GSS pour les mêmes agents).
+  const rondesSeules = !!c.ctx.dimensionnement?.rondesSansDuree?.length && !c.ctx.dimensionnement.profils.length;
   if (c.qualifs.includes('SSIAP 3')) lignes.push(['Chef de service de sécurité incendie', 'SSIAP 3']);
   if (c.qualifs.includes('SSIAP 2')) lignes.push(["Chef d'équipe de sécurité incendie", 'SSIAP 2']);
   if (c.qualifs.includes('SSIAP 1')) lignes.push(['Agent de sécurité incendie', 'SSIAP 1']);
   const ads = /(?<![\wÀ-ÿ])ADS(?![\wÀ-ÿ])|agents? de (?:s[ée]curit[ée](?! incendie)|surveillance|s[ûu]ret[ée])/i.test(String(c.ctx.dce || ''));
-  if (!c.ind.SSIAP || ads || c.qualifs.includes('CQP APS')) lignes.push(['Agent de sécurité', 'CQP APS']);
+  if (!rondesSeules && (!c.ind.SSIAP || ads || c.qualifs.includes('CQP APS'))) lignes.push(['Agent de sécurité', 'CQP APS']);
   if (c.ind.CYNOPHILE) lignes.push(['Agent cynophile', 'CQP APS – qualification cynophile']);
-  if (c.ind.TELESURVEILLANCE) lignes.push(['Rondier intervenant', 'CQP APS']);
+  if (c.ind.TELESURVEILLANCE || rondesSeules) lignes.push(['Rondier intervenant', 'CQP APS']);
   return lignes;
 }
 

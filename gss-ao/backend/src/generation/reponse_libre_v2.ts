@@ -363,6 +363,33 @@ export function normaliserVariantesACompleter(texte: string): { texte: string; q
   return { texte: sortie, questions };
 }
 
+/** Mots porteurs d'une question ou d'une phrase (singulier, sans mots outils), pour les rapprocher. */
+const motsQuestion = (t: string) => new Set(normaliser(String(t || '').replace(/\[À COMPLÉTER\]/g, ' ')).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/)
+  .filter((w) => w.length >= 4 && !['combien', 'quel', 'quelle', 'quels', 'quelles', 'compte', 'comptent', 'dans', 'pour', 'avec', 'marche', 'votre', 'notre', 'nous', 'vous', 'cette', 'sont', 'elle', 'elles'].includes(w))
+  .map((w) => (w.length > 4 ? w.replace(/[sx]$/, '') : w)));
+/** Part des mots porteurs de `a` présents dans `b`. */
+const recouvrement = (a: Set<string>, b: Set<string>) => (a.size ? [...a].filter((w) => b.has(w)).length / a.size : 0);
+/** Ressemblance de deux questions (la plus courte dans la plus longue). */
+const similariteQuestions = (a: string, b: string) => { const x = motsQuestion(a), y = motsQuestion(b); return x.size <= y.size ? recouvrement(x, y) : recouvrement(y, x); };
+
+/**
+ * Questions attribuées aux phrases de leurs emplacements (même ordre que `phrases` ; undefined : aucune) : chaque question va
+ * à la phrase qui partage le plus de ses mots porteurs (un tiers au moins), une phrase ne reçoit qu'une question (T2-CONS-6).
+ */
+function rapprocherQuestions(questions: string[], phrases: string[]): Array<string | undefined> {
+  const out: Array<string | undefined> = phrases.map(() => undefined);
+  const scores: Array<{ q: number; p: number; s: number }> = [];
+  questions.forEach((q, i) => phrases.forEach((ph, j) => scores.push({ q: i, p: j, s: recouvrement(motsQuestion(q), motsQuestion(ph)) })));
+  scores.sort((a, b) => b.s - a.s || a.q - b.q || a.p - b.p);
+  const prisesQ = new Set<number>();
+  for (const x of scores) {
+    if (x.s < 0.34 || prisesQ.has(x.q) || out[x.p]) continue;
+    out[x.p] = questions[x.q];
+    prisesQ.add(x.q);
+  }
+  return out;
+}
+
 /**
  * Pose les repères ⟦AC:n⟧ des données à compléter dans les rubriques (après toutes les passes de rédaction et de
  * contrôle), en deux formes :
@@ -388,12 +415,18 @@ export function poserReperes(sections: Record<string, string>, ordre: string[], 
     RX_VARIANTE.lastIndex = 0;
     if (!texte || (!variantes && !texte.includes(PLACEHOLDER_V2) && !/\[CONSULTATION REQUISE/i.test(texte))) continue;
     // Variantes « [À COMPLÉTER : X] » : ramenées à « [À COMPLÉTER] » bloc par bloc, X devient la question de
-    // l'emplacement (questionsVariantes, dans l'ordre des emplacements du bloc).
-    const normalises = texte.split(/\n{2,}/).map((b) => normaliserVariantesACompleter(b));
+    // l'emplacement (questionsVariantes, dans l'ordre des emplacements du bloc). Ligne de consultation suivie d'un texte
+    // ajouté sur la même ligne (adaptation, T2-CONS-6 : « [CONSULTATION REQUISE : …] Les effectifs sont détaillés… ») :
+    // la consultation reste sur sa ligne, le texte devient le paragraphe suivant.
+    const normalises = texte.replace(/^([ \t]*\[CONSULTATION REQUISE\s*:[^\]\n]+\][.;,]?)[ \t]+(?=\S)/gim, '$1\n\n').split(/\n{2,}/).map((b) => normaliserVariantesACompleter(b));
     const questionsVariantes = normalises.map((x) => x.questions);
     const blocs = normalises.map((x) => x.texte.replace(/[ \t]+$/gm, ''));
     const questionsParBloc: Array<Array<string | undefined>> = blocs.map(() => []);
     const lignesConservees: string[][] = blocs.map((b) => b.split('\n'));
+    /** Phrase de chaque emplacement (bloc, rang), pour rapprocher une question de son emplacement. */
+    const phrasesEmplacements: string[][] = blocs.map(() => []);
+    /** Consultations non attribuées (bloc, ligne) : rapprochées ensuite des emplacements restés sans question. */
+    const libres: Array<{ bloc: number; ligne: number; question: string }> = [];
     // Emplacements d'un bloc restés sans question : une ligne de consultation isolée juste après eux leur revient.
     let attente: Array<{ bloc: number; index: number }> = [];
     blocs.forEach((bloc, k) => {
@@ -405,25 +438,55 @@ export function poserReperes(sections: Record<string, string>, ordre: string[], 
         if (questions.length && attente.length && contenu.every((l) => !l.trim())) {
           attente.forEach((a, i) => { questionsParBloc[a.bloc][a.index] = questions[Math.min(i, questions.length - 1)]; });
           lignesConservees[k] = [];
+        } else {
+          lignes.forEach((l, j) => { const q = LIGNE_CONSULTATION.exec(l)?.[1]?.trim(); if (q) libres.push({ bloc: k, ligne: j, question: q }); });
         }
         attente = [];
         return;
       }
+      // Phrase de chaque emplacement du bloc (ligne de tableau entière).
+      const texteBloc = contenu.join('\n');
+      for (const m of texteBloc.matchAll(RX_PLACEHOLDER)) phrasesEmplacements[k].push(phraseAutour(texteBloc, m.index!, m[0].length));
       const qs: Array<string | undefined> = [];
       const propres = questionsVariantes[k] || [];
       // Lignes de consultation réservées aux emplacements sans précision propre.
       const sansPropre = Array.from({ length: nbEmplacements }, (_, i) => i).filter((i) => !propres[i]);
-      for (let i = 0; i < nbEmplacements; i++) {
-        const j = sansPropre.indexOf(i);
-        if (propres[i]) qs.push(propres[i]);
-        else if (!questions.length) qs.push(undefined);
-        else if (questions.length === 1) qs.push(questions[0]);
-        else qs.push(questions[Math.min(j, questions.length - 1)]);
+      const tableau = phrasesEmplacements[k].every((x) => /^\s*\|/.test(x));
+      if (questions.length && questions.length !== sansPropre.length && !(questions.length === 1 && tableau)) {
+        // Moins (ou plus) de questions que d'emplacements (T2-CONS-6, cstb 1201 : la question des titulaires donnée aussi à
+        // l'équipe suppléante) : chaque question va à l'emplacement dont la phrase lui ressemble le plus ; une question sans
+        // emplacement proche attend les emplacements restés sans question.
+        const attribuees = rapprocherQuestions(questions, sansPropre.map((i) => phrasesEmplacements[k][i]));
+        for (let i = 0; i < nbEmplacements; i++) qs.push(propres[i] || attribuees[sansPropre.indexOf(i)]);
+        questions.forEach((q) => { if (!attribuees.includes(q)) libres.push({ bloc: k, ligne: -1, question: q }); });
+      } else {
+        for (let i = 0; i < nbEmplacements; i++) {
+          const j = sansPropre.indexOf(i);
+          if (propres[i]) qs.push(propres[i]);
+          else if (!questions.length) qs.push(undefined);
+          else if (questions.length === 1) qs.push(questions[0]);
+          else qs.push(questions[Math.min(j, questions.length - 1)]);
+        }
       }
       questionsParBloc[k] = qs;
       lignesConservees[k] = contenu;
       attente = questions.length ? [] : qs.map((q, i) => ({ q, bloc: k, index: i })).filter((a) => !a.q).map(({ bloc, index }) => ({ bloc, index }));
     });
+    // Consultations restées libres (séparées de leur paragraphe par un texte ajouté) : rapprochées des emplacements de la
+    // rubrique restés sans question ; une consultation qui redit une question déjà posée à un emplacement est retirée ; les
+    // autres restent au fil du texte (repère en ligne), comme avant.
+    {
+      const vides: Array<{ bloc: number; index: number }> = [];
+      questionsParBloc.forEach((qs, k) => qs.forEach((q, i) => { if (!q) vides.push({ bloc: k, index: i }); }));
+      const attribuees = rapprocherQuestions(libres.map((x) => x.question), vides.map((v) => phrasesEmplacements[v.bloc][v.index] || ''));
+      const posees = questionsParBloc.flat().filter((q): q is string => !!q);
+      vides.forEach((v, i) => { if (attribuees[i]) questionsParBloc[v.bloc][v.index] = attribuees[i]; });
+      for (const l of libres) {
+        const utilisee = attribuees.includes(l.question) || posees.some((q) => similariteQuestions(q, l.question) >= 0.6);
+        if (!utilisee || l.ligne < 0) continue;
+        lignesConservees[l.bloc] = lignesConservees[l.bloc].map((x, j) => (j === l.ligne ? '' : x));
+      }
+    }
     // Chaque emplacement reçoit une marque provisoire (bloc, rang), puis son repère, dans l'ordre du texte.
     const blocsMarques = lignesConservees.map((lignes, k) => {
       let i = 0;

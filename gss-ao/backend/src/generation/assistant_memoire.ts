@@ -603,7 +603,7 @@ Renvoie {"reponse": "message court à l'utilisateur, en français, décrivant ce
       // v2 : le « [À COMPLÉTER] » visible qui précède le repère est noté par la phrase elle-même.
       const t = planMt ? lib.sections[id].split(`${PLACEHOLDER}${REPERE(n)}`).join(REPERE(n)) : lib.sections[id];
       const p = t.indexOf(REPERE(n));
-      return (t.slice(Math.max(0, p - 220), p).split(/[.!?\n]/).pop() || '').replace(/⟦AC:\d+⟧/g, '[…]').replace(/[#*]/g, '').trim() + ` ${PLACEHOLDER}` + (t.slice(p + REPERE(n).length).split(/[.!?\n]/)[0] || '').replace(/⟦AC:\d+⟧/g, '[…]').replace(/[#*]/g, '');
+      return (t.slice(Math.max(0, p - 220), p).split(/[.!?\n]/).pop() || '').replace(/^[^\s⟦]*⟧/, '').replace(/⟦AC:\d+⟧/g, '[…]').replace(/[#*]/g, '').trim() + ` ${PLACEHOLDER}` + (t.slice(p + REPERE(n).length).split(/[.!?\n]/)[0] || '').replace(/⟦AC:\d+⟧/g, '[…]').replace(/[#*]/g, '');
     };
     const qs = await formulerQuestions(nouveaux.map(({ n, id }) => ({
       cle: `A${n}`, contexte: phrase(n, id), environnement: lib.sections[id].replace(/⟦AC:\d+⟧/g, PLACEHOLDER).slice(0, 1200), critere: titreRubrique(etat, id),

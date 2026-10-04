@@ -8046,7 +8046,7 @@ RÈGLES DE FORME (rendu Marp) :
         const t = sectionsReperes[idSection];
         const p = t.indexOf(REPERE(reperes[0]));
         const titre = AI_SECTIONS_B.find((x) => x.id === idSection)?.title || '';
-        contexte = `${titre} — …${t.slice(Math.max(0, p - 220), p).replace(REPERE_RE, '').replace(/[#*]/g, '').replace(/\s+/g, ' ').trim()}`;
+        contexte = `${titre} — …${t.slice(Math.max(0, p - 220), p).replace(REPERE_RE, '').replace(/^[^\s⟦]*⟧/, '').replace(/[#*]/g, '').replace(/\s+/g, ' ').trim()}`;
       }
       return { cle: `Q${i + 1}`, question: q.question, contexte, statut: 'ouvert', reperes, pourAcheteur: /^À demander à l.acheteur/i.test(q.question) };
     });
@@ -8488,7 +8488,7 @@ RÈGLES DE FORME (rendu Marp) :
       if (idSection) {
         const t = sections[idSection];
         const p = t.indexOf(REPERE(reperes[0]));
-        contexte = `${titreDe(idSection)} — …${t.slice(Math.max(0, p - 220), p).replace(REPERE_RE, '').replace(/[#*]/g, '').replace(/\s+/g, ' ').trim()}`;
+        contexte = `${titreDe(idSection)} — …${t.slice(Math.max(0, p - 220), p).replace(REPERE_RE, '').replace(/^[^\s⟦]*⟧/, '').replace(/[#*]/g, '').replace(/\s+/g, ' ').trim()}`;
       }
       return { cle: `Q${enPlace.length + i + 1}`, question: q.question, contexte, statut: 'ouvert', reperes, pourAcheteur: /^À demander à l.acheteur/i.test(q.question) };
     });
