@@ -301,7 +301,9 @@ function celluleReponse(z: string, blocsRubriques: Record<string, number> = {}):
   // Renvoi placé avant le titre de la rubrique (« ce circuit est détaillé au bloc 4, « Notre socle… » ») : « détaillé dans ».
   x = x.replace(/\b(est|sont)\s+((?:d[ée]velopp|d[ée]taill|trait|pr[ée]sent)[ée]e?s?)\s+(?:au|aux)\s+blocs?\s+([1-5])\s*,\s*(?=«)/gi, (_m, v: string, p: string, n: string) => { blocs.push(n); return `${v} ${p} dans `; });
   x = x.replace(RX_RENVOI_BLOC, (m) => { blocs.push(...(m.match(/[1-5]/g) || [])); return ''; });
-  const sans = x.replace(/»\s*,\s+et\s+«/g, '» et «').replace(/\s+([.,;])/g, '$1').replace(/[.,;:\s]+$/, '').replace(/\s{2,}/g, ' ').trim();
+  // Deux citations identiques qui se suivent (« selon « La planification » : « La planification », caen 1501, T5-CONS-1) : une seule.
+  const sans = x.replace(/»\s*,\s+et\s+«/g, '» et «').replace(/(«\s*([^»]{3,200}?)\s*»)(?:\s*[:,;]?\s*(?:→\s*)?(?:notre r[ée]ponse\s*:\s*)?«\s*\2\s*»)+/g, '$1')
+    .replace(/\s+([.,;])/g, '$1').replace(/[.,;:\s]+$/, '').replace(/\s{2,}/g, ' ').trim();
   const uniques = [...new Set(blocs)].sort();
   return `${sans.charAt(0).toUpperCase()}${sans.slice(1)}${uniques.length ? `${sans ? ' ' : ''}<span class="gss-bloc">→ BLOC ${uniques.join(' ET ')}</span>` : ''}`;
 }

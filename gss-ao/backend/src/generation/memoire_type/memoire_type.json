@@ -4627,7 +4627,10 @@
     "poste vide",
     "retard",
     "prise de service",
-    "continuité de service"
+    "continuité de service",
+    "défaillance d'un agent",
+    "agent défaillant",
+    "défaillance de l'agent"
    ],
    "sources": [
     "AO RNE.pdf p.112-113",

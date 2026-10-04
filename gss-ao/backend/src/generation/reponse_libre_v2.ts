@@ -17,7 +17,7 @@ import {
   chargerMemoireType, normaliser, rechercherRubriques, similarite, motsDePhrase, faitsDePhrase, listeFr, cleCommune, delaiImposeNet,
   type DonneesBesoin, type ExigenceMatrice, type MemoireType, type PlanMemoireType, type SchemaRubrique,
 } from './memoire_type';
-import { ZONE_GSS, vocabulaireDuCctp, periodeEnTete, normaliserExpressionsDelai, minutesDe, RX_NOMBRE_LETTRES as RX_NOMBRE_LETTRES_V2 } from './base_memoires';
+import { ZONE_GSS, vocabulaireDuCctp, periodeEnTete, normaliserExpressionsDelai, minutesDe, RX_NOMBRE_LETTRES as RX_NOMBRE_LETTRES_V2, MONTANT_PENALITE } from './base_memoires';
 import { insecablesNombres } from './dimensionnement';
 import { PAS_INFINITIF, questionExacte } from './questions_gss';
 
@@ -309,7 +309,10 @@ function libelleLigneTableau(ligne: string): string {
 export function libelleEmplacementSeul(question: string | undefined, texteAvant: string): string {
   let l = String(question || '')
     .replace(/^\s*à demander à l.acheteur\s*:\s*/i, '')
-    .replace(/^\s*(?:obtenir|demander|fournir|pr[ée]ciser|indiquer|confirmer|communiquer|transmettre|donner|valider|lister|d[ée]crire)\s+(?:(?:de|à|aupr[èe]s de)\s+(?:GSS|l.acheteur)\s*:?\s*)?/i, '')
+    // Consigne à l'infinitif (T5-CONS-4 : « Définir avec GSS le circuit interne… », « Déterminer avec GSS… », « Établir avec
+    // GSS… », « Préciser avec GSS le nom du chef de site ») : verbe et « avec / par / pour / auprès de GSS » retirés.
+    .replace(/^\s*(?:obtenir|demander|fournir|pr[ée]ciser|indiquer|confirmer|communiquer|transmettre|donner|valider|lister|d[ée]crire|d[ée]finir|d[ée]terminer|fixer|arr[êe]ter|choisir|organiser|formaliser|[ée]tablir|identifier|nommer|d[ée]signer|compl[ée]ter|renseigner|d[ée]tailler|r[ée]cup[ée]rer|recueillir)\s+(?:(?:de|à|avec|par|pour|aupr[èe]s de)\s+(?:GSS|l.acheteur)\s*:?\s*)?/i, '')
+    .replace(/\s+(?:avec|par|pour|aupr[èe]s de)\s+GSS\b/gi, '')
     // Question à GSS (« Quel taux de reprise… proposez-vous… ? », « Combien d'agents titulaires compte l'équipe… ? ») :
     // libellé nominal de la donnée (« Taux de reprise du personnel en place », « Nombre d'agents titulaires »).
     .replace(/^\s*pouvez-vous\s+\S+\s+/i, '')
@@ -1384,6 +1387,11 @@ export function completerBesoinMinimum(
   const candidats = sources
     .map((e) => ({ ...e, exigence: String(e.exigence || '').replace(/\s+/g, ' ').trim() }))
     .filter((e) => e.exigence.split(' ').length >= 5 && e.exigence.length <= 330 && !/p[ée]nalit[ée]s?[^.]{0,80}\d[\d\s]*(?:€|euros?)|€/i.test(e.exigence)
+      // Clause qui fixe une pénalité, quelle que soit la forme du montant (« 1/1000 par jour de retard », pourcentage, lettres,
+      // « sans plafond »), ou clause administrative du CCAP (justificatifs d'assurance, mise en demeure) : jamais une attente
+      // ni un point de vigilance (parc_expo, T5-CONS-3).
+      && !(/p[ée]nalit/i.test(e.exigence) && (/\d|par jour|jour de retard|plafon|exon[ée]r/i.test(e.exigence) || MONTANT_PENALITE.test(e.exigence)))
+      && !/(?:souscription|attestations?|justifi\w*)[^.]{0,120}\bassurances?\b|\bassurances?\b[^.]{0,80}(?:attestation|justifi|souscri|responsabilit[ée] civile)|mise en demeure|ordre de service|retenue de garantie|avance forfaitaire|r[ée]vision des prix/i.test(e.exigence)
       // Phrase qui dépend de la précédente (« Dans ce cas, … », « Ce CR devra… ») : incompréhensible seule.
       && !/^(?:dans ce cas|en ce cas|de m[êe]me|ce|cet|cette|ces|il|elle|ils|elles|celui|celle|ceux|ledit|ladite)\b/i.test(e.exigence)
       // Clause contractuelle ou de procédure (confidentialité, litige, forclusion…) : ni une attente ni un point de vigilance
@@ -1738,7 +1746,8 @@ const ACTEUR_SUJET = /^(?:(?:le|la|les|l['’]|chaque|tout|tous|toute|toutes|ces
 /** Verbes faibles suivis d'un objet générique (« se conformer aux dispositions de … quant à la reprise du personnel ») : le
  *  titre est le sujet de ces dispositions. */
 const OBJET_GENERIQUE = /^(?:se\s+conformer|respecter|appliquer|veiller|garantir|assurer|observer|suivre|tenir\s+compte)\b[^.]*?\b(?:dispositions?|r[èe]gles?|obligations?|exigences?|prescriptions?|consignes?|stipulations?)\b[^.]*?\b(?:quant\s+[àa]|relatives?\s+[àa]|concernant|en\s+mati[èe]re\s+de|portant\s+sur|li[ée]e?s?\s+[àa])\s+(.+)$/i;
-const DETERMINANTS_TETE = /^(?:(?:toute?s?|tous|chaque|une?|des|les?|la|l['’]|du|de\s+la|de\s+l['’]|ses?|sa|leurs?|son|ces?|cette|cet)\s*)+/i;
+// Déterminant entier, suivi d'une espace ou élidé (T5-CONS-2 : jamais « le » retiré de « leur » : « Ur prise de fonctions »).
+const DETERMINANTS_TETE = /^(?:(?:toute?s?|tous|chaque|une?|des|les?|la|du|de\s+la|ses?|sa|leurs?|son|ces?|cette|cet)\s+|(?:l|de\s+l)['’]\s*)+/i;
 
 /** Groupe nominal en titre : déterminants de tête retirés, majuscule, coupé à la limite sur un mot plein. */
 function titreNominal(gn: string, max: number): string {
@@ -1774,6 +1783,9 @@ function dureeDe(x: string): string {
 export function titreExigence(x: string, max = 34): string {
   const INCISE = /^(?:(?:quel(?:le)?s?\s+que\s+(?:soit|soient)|constat[ée]e?s?|y\s+compris|notamment|le\s+cas\s+[ée]ch[ée]ant|quelle\s+qu['’]en\s+soit)[^,]*,\s*)+/i;
   let e = String(x || '').replace(/\*\*/g, '').replace(/\s*\[…\]\s*/g, ' ').replace(/\s+/g, ' ').replace(/^[«"“\s]+|[»"”\s.;:]+$/g, '').trim();
+  // Complément de tête qui ne porte pas l'exigence (T5-CONS-2 : « Pour les SSIAP, maintenir à jour le recyclage… », « Selon le
+  // CCAP, justifier… », « Conformément à l'article 5, … ») : la proposition principale.
+  { const r = /^(?:pour|concernant|s['’]agissant\s+d(?:e\s+la|e\s+l['’]|es|u|e)|selon|conform[ée]ment\s+(?:[àa]\s+la|[àa]\s+l['’]|aux?|[àa])|au\s+titre\s+d(?:e\s+la|e\s+l['’]|es|u|e)|en\s+application\s+d(?:e\s+la|e\s+l['’]|es|u|e)|comme\s+pr[ée]vu\s+(?:au|par|dans))\s+[^,]{2,90},\s*(.+)$/i.exec(e); if (r && r[1].length >= 12) e = r[1]; }
   const ct = COMPLEMENT_TETE.exec(e);
   if (ct && INCISE.test(ct[3])) e = `${ct[1]} ${ct[2]}, ${ct[3].replace(INCISE, '')}`;
   const cap = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
@@ -1806,6 +1818,13 @@ export function titreExigence(x: string, max = 34): string {
   // Titre qui commence par une préposition, un verbe conjugué ou une incise : le titre de la proposition principale, sinon
   // le complément de tête, sinon aucun titre (une carte sans titre n'est pas prise ; le libellé du tableau garde son secours).
   for (const alt of [principale !== e ? titreExigenceBase(principale, max) : '', ct ? titreNominal(ct[2], max) : '', max >= 40 ? titreSecours(principale, max) : '']) if (alt && !MAUVAIS_TITRE.test(alt)) return alt;
+  // Libellé d'un tableau (40 signes et plus) : jamais une case vide (T5-CONS-2) ; les premiers mots porteurs, sans la
+  // préposition ni le verbe conjugué de tête.
+  if (max >= 40) {
+    const nu = principale.replace(/^(?:(?:d['’]|de|du|des|à|au|aux|par|pour|sur|sous|avec|sans|dans)\s+|(?:est|sont|doit|doivent|devra|devront|peut|peuvent|a|ont|sera|seront)\s+)+/i, '');
+    const s2 = titreSecours(nu, max);
+    if (s2 && !MAUVAIS_TITRE.test(s2)) return s2;
+  }
   return '';
 }
 
@@ -1825,7 +1844,8 @@ function titreExigenceBase(x: string, max = 34): string {
   const ct = COMPLEMENT_TETE.exec(e);
   if (ct) {
     const action = ct[3].trim();
-    const reprise = /^(?:le|la|les|l['’]|lui|leur|en|y)\s*\S/i.test(action) && !/^(?:le|la|les|l['’])\s*[a-zà-ÿ]+(?:ion|age|ment|ure|ance|ence|té|ée)s?\b/i.test(action) || /^\S+\s+(?:son|sa|ses|leur|leurs)\s/i.test(action);
+    // (jamais un sujet : « les agents doivent effectuer… » n'est pas une reprise du complément, T5-CONS-2)
+    const reprise = !ACTEUR_SUJET.test(action) && (/^(?:le|la|les|l['’]|lui|leur|en|y)\s*\S/i.test(action) && !/^(?:le|la|les|l['’])\s*[a-zà-ÿ]+(?:ion|age|ment|ure|ance|ence|té|ée)s?\b/i.test(action) || /^\S+\s+(?:son|sa|ses|leur|leurs)\s/i.test(action));
     const t = reprise ? titreNominal(ct[2], max) : titreExigence(action, max);
     if (t) return t;
     return titreNominal(ct[2], max);
@@ -1901,15 +1921,24 @@ function titreExigenceBrut(x: string, max = 34): string {
     if (pre.length > max) continue;
     const dernier = mots[i - 1];
     if (MOTS_OUTILS.has(dernier.toLowerCase().replace(/['’]$/, '')) || /['’]$/.test(dernier) || !/[\p{L}\d)]$/u.test(dernier)) continue;
+    // Préposition ou conjonction en fin de libellé (T5N-12 : « Assurer l'égalité des usagers devant ») : jamais.
+    if (/^(?:devant|derri[èe]re|contre|malgr[ée]|parmi|sauf|envers|outre|via|jusqu|quant|ni|mais|car|donc|comme|o[ùu]|apr[èe]s|avant|depuis|pendant|durant|hors|suivant|afin|d[èe]s)$/i.test(dernier)) continue;
     // Nombre séparé de son unité (« … de 30 » pour « 30 minutes ») : jamais.
     if (/^\(?\d+(?:[,.]\d+)?\)?$|^(?:une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|quinze|vingt|trente|quarante|soixante)$/i.test(dernier) && /^(?:minutes?|heures?|h|jours?|semaines?|mois|ans?|m²|m2|km|agents?|personnes?|fois|rondes?)$/i.test(mots[i] || '')) continue;
     // Locution coupée (génération réelle caen 703 : « Assurer la continuité en cas » pour « … en cas de défaillance »).
-    if (/(?:^|\s)(?:en\s+cas|lors|afin|faute|en\s+raison|en\s+vue|au\s+cours|au\s+moyen|en\s+matière|en\s+termes|à\s+compter|en\s+fonction|au\s+titre|à\s+partir|en\s+dehors|au\s+sein|à\s+l['’]issue|mise|mise\s+en|prise|prise\s+en|avant|après|dès|selon|pendant)$/i.test(pre)) continue;
+    if (/(?:^|\s)(?:en\s+cas|lors|afin|faute|en\s+raison|en\s+vue|au\s+cours|au\s+moyen|en\s+matière|en\s+termes|à\s+compter|en\s+fonction|au\s+titre|à\s+partir|en\s+dehors|au\s+sein|à\s+l['’]issue|mise|mise\s+en|prise|prise\s+en|avant|après|dès|selon|pendant|en\s+pr[ée]sence|en\s+doublure|en\s+lien|en\s+liaison|en\s+relation)$/i.test(pre)) continue;
     // Coupe permise devant une préposition, une coordination ou un participe, ou quand le reste n'est qu'une suite
     // d'adjectifs (« interventions successives | habituelles ») ; jamais devant un complément (« … ou agent | N1 au PCS »).
     const reste = mots.slice(i);
     if (reste.length && !COUPE_TITRE.test(reste[0]) && reste.some((w) => COUPE_TITRE.test(w) || !/^[a-zà-ÿ-]+$/.test(w))) continue;
     if (mots.slice(0, i).filter(plein).length < 2) continue;
+    // Verbe et nom coupé de son complément (T5N-12 : « Assurer l'intégralité » pour « … l'intégralité des prestations de
+    // sécurité … ») : le groupe nominal objet (« Intégralité des prestations sécurité incendie »).
+    if (mots.slice(0, i).filter(plein).length === 2 && /^[a-zà-ÿ]+(?:er|ir|re)$/i.test(mots[0]) && /^(?:de|des|du|d['’]\S*)$/i.test(mots[i] || '')) {
+      const objet = titreNominal(mots.slice(1).join(' '), max);
+      if (objet && objet.split(/\s+/).length >= 3) return objet;
+      continue;
+    }
     if ((pre.match(/«/g) || []).length !== (pre.match(/»/g) || []).length || (pre.match(/\(/g) || []).length !== (pre.match(/\)/g) || []).length) continue;
     // Nom générique coupé de son complément (« Ne pas appliquer les opérations » pour « … les opérations d'ouverture ») : le
     // premier complément est gardé, quitte à dépasser la limite de 12 signes (T3N-5).
@@ -2801,8 +2830,9 @@ export function sansBribesApresRenvoi(texte: string, etapes: Array<{ titre?: str
 export function scoresRenvoiBloc1(exigence: string, plan: PlanMemoireType, mt: MemoireType): Map<string, { score: number; position: number; cles: string[] }> {
   // Mots ramenés au singulier (« modifications de plannings » = « modification de planning »).
   const net = (x: string) => normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').map((w) => (w.length > 3 ? w.replace(/(?<!s)[sx]$/, '') : w)).join(' ');
-  const QUALIF = /\b(?:ssiap\s*\d?|cqp(?:\s*ap)?|ap|sst|psc\s*1|h0b0v?|hobo|carte professionnelle(?:\s+cnap)?|cnap|cap agent de securite|qualification)\b/g;
-  const objet = ` ${net(exigence).replace(QUALIF, ' ').replace(/\s+/g, ' ')} `;
+  // (le nom du métier, « agent de sécurité », est un attribut de l'agent, jamais l'objet de l'exigence : T5-CONS-5)
+  const QUALIF = /\b(?:ssiap\s*\d?|cqp(?:\s*ap)?|ap|sst|psc\s*1|h0b0v?|hobo|carte professionnelle(?:\s+cnap)?|cnap|cap agent de securite|qualification|agents? (?:de (?:securite|surete)|de prevention et de securite))\b/g;
+  const objet = ` ${net(exigence).replace(/\bagents? (?:de (?:securite|surete)|de prevention et de securite)\b/g, 'agent').replace(QUALIF, ' ').replace(/\s+/g, ' ')} `;
   const ids = new Set(plan.rubriques.filter((r) => r.mode !== 'besoin' && !/^b2_ref|^b2_references/.test(r.id)).map((r) => r.id));
   const rubs = mt.rubriques.filter((r) => ids.has(r.id));
   // Mots du vocabulaire de tout marché (« titulaire », « agent », « site »…) : jamais un mot-clé distinctif.
@@ -2871,9 +2901,20 @@ export function renvoisManquantsBloc1(texte: string, plan: PlanMemoireType, mt: 
   const lignes = String(texte || '').split('\n').map((l) => {
     if (/^##\s/.test(l)) { partie = l; return l; }
     if (!/^##\s+(?:Vos attentes|Les points de vigilance)/i.test(partie) || !/^\s*[-*•]\s/.test(l) || /→/.test(l) || INTERNE.test(l)) return l;
+    // Renvoi déjà écrit sans flèche (« selon « La planification », développée au bloc 4 », « (bloc 4) ») ou rubrique du plan déjà
+    // citée : jamais un second renvoi (T5-CONS-1).
+    if (/(?:d[ée]velopp|d[ée]taill|d[ée]crit|trait|pr[ée]sent)[ée]*e?s?\s+(?:au|aux|dans les?)\s+blocs?\s+\d|\(\s*blocs?\s+\d/i.test(l)) return l;
+    const titreNet = (x: string) => normaliser(x).replace(/\{\{[^}]*\}\}/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    if ([...l.matchAll(/«\s*([^»]{3,160}?)\s*»/g)].some((m) => plan.rubriques.some((r) => titreNet(r.titre) === titreNet(m[1])))) return l;
     const scores = [...scoresRenvoiBloc1(l.replace(/\*\*/g, ''), plan, mt).entries()].sort((a, b) => b[1].score - a[1].score || a[1].position - b[1].position);
     if (!scores.length) return l;
     const [id, s] = scores[0];
+    // La rubrique doit traiter l'exigence dans son texte ou son titre (T5-CONS-5 : « réversibilité », mot-clé de rattachement
+    // des engagements, n'est pas traitée par « La mise en place d'une prestation ») : sinon la colonne reste sans renvoi.
+    const rubMt = mt.rubriques.find((x) => x.id === id);
+    const netT = (x: string) => ` ${normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').map((w) => (w.length > 3 ? w.replace(/(?<!s)[sx]$/, '') : w)).join(' ')} `;
+    const traite = rubMt ? netT(`${rubMt.titre} ${String(rubMt.texte || '').replace(/\{\{[^}]*\}\}/g, ' ')}`) : '';
+    if (!s.cles.some((k) => traite.includes(` ${k} `))) return l;
     // Colonne vide à remplir : un mot-clé suffit si la rubrique devance nettement les autres.
     if (scores[1] && s.score < 1.5 * scores[1][1].score) return l;
     const r = plan.rubriques.find((x) => x.id === id)!;
