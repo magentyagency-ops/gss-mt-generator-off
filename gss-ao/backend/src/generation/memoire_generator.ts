@@ -12,7 +12,7 @@ import {
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
   type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, harmoniserVariantesAcheteur, formeCourteApresPremiere, phrasesGeneralesProtegees, ajoutContraireAuxDelaisGss,
-  variablesDesSchemas, lotsDuMemoire, nomAcheteurAffiche, rubriqueAdmetSujet, rechercherRubriques, rubriqueDuTheme,
+  variablesDesSchemas, lotsDuMemoire, nomAcheteurAffiche, nomAcheteurCourtAffiche, rubriqueAdmetSujet, rechercherRubriques, rubriqueDuTheme,
   phrasesDeFrequenceDeControle, frequenceMensuelle,
 } from './memoire_type';
 import {
@@ -8470,7 +8470,9 @@ RÈGLES DE FORME (rendu Marp) :
       // 1 à 2 pages d'explication (consigne 3) : la rédaction qui dépasse sa limite de mots est ramenée à 2 pages, sans modèle.
       if (!estRetourArriere(themeActif())) {
         const r = reduireBesoinAPages(sections[b1.id], (t) => decouperPagesTexte(t, false, true).length);
-        if (r.retirees.length) { sections[b1.id] = r.texte; console.log(`[MemoireGenerator] Compréhension du besoin : ${r.retirees.length} ligne(s) retirée(s) pour tenir en 2 pages de texte.`); }
+        if (r.texte !== sections[b1.id]) { sections[b1.id] = r.texte; console.log(`[MemoireGenerator] Compréhension du besoin : ${r.retirees.length} ligne(s) retirée(s)${r.depasse ? ', toujours plus de 2 pages de texte' : ' et texte resserré pour tenir en 2 pages de texte'}.`); }
+        // Consigne 3 (1 à 2 pages d'explication) non tenue malgré la réduction (T3N-1) : GSS est prévenu.
+        if (r.depasse) avisSecours.unshift(`Rubrique « ${b1.titre} » : le texte occupe plus de 2 pages avant son schéma (consigne : 1 à 2 pages d'explication) ; à raccourcir via l'assistant avant la remise.`);
       }
       titresSchemas[b1.id] = c.titre;
       if (c.svg) schemasGeneres.set(CLE_SCHEMA(b1.id), c.svg);
@@ -8736,6 +8738,8 @@ RÈGLES DE FORME (rendu Marp) :
     progres(90, 'Assemblage final du mémoire…');
     // Nom de l'acheteur affiché (couverture, sommaire, ouvertures, pieds de page) : forme corrigée de CLIENT (T1-COH-6).
     cover.client = nomAcheteurAffiche(prep.variables.CLIENT, cover.client);
+    // Forme courte (« ENPC et IGN ») pour le pied de page d'un nom long (T3-CONS-1).
+    cover.clientCourt = nomAcheteurCourtAffiche(prep.variables.CLIENT);
     // Intitulé du marché affiché : celui du mémoire, mis en casse normale s'il était en capitales (T2-CONS-14).
     if (typeof prep.variables.OBJET_MARCHE?.valeur === 'string' && prep.variables.OBJET_MARCHE.valeur.trim() && cover.title && cover.title === cover.title.toUpperCase()) cover.title = prep.variables.OBJET_MARCHE.valeur.trim();
     // Articles du CCTP des chiffres du bloc 1 (style « marine » v3 : bandeau des chiffres clés et lignes de source, T1-CONS-5).
@@ -8744,6 +8748,13 @@ RÈGLES DE FORME (rendu Marp) :
     // Page de schéma prévue et absente du document rendu (moteur de schémas indisponible ou hors délai, schéma refusé :
     // T6-COH-4, T6N-6) : signalée à GSS, compréhension du besoin en tête (consigne 3, D4). Rien n'est imprimé dans le mémoire.
     const alertesSchemas = rubriquesSansSchema(plan, ajouts, propres, rendu.schemas).map((r) => `Rubrique « ${r.titre} » : le schéma${r.besoin ? ' de process' : ''} n'a pas pu être dessiné (moteur de schémas indisponible ou schéma refusé) ; la page de schéma manque dans le mémoire. Relancez la génération, ou demandez le schéma via l'assistant, avant la remise.`);
+    // Rubrique imprimée sur plus de 2 pages de texte avant son schéma (consignes 3 et 6, T3-CONS-1) : signalée à GSS (le bloc 1
+    // l'est déjà s'il dépassait avant le rendu).
+    for (const titre of rendu.rubriquesLongues || []) {
+      const r = plan.rubriques.find((x) => normaliser(x.titre).replace(/[^a-z0-9]+/g, ' ').trim() === normaliser(titre).replace(/[^a-z0-9]+/g, ' ').trim());
+      const nom = r?.titre || titre;
+      if (!consultationList.some((x) => x.startsWith(`Rubrique « ${nom} » : le texte occupe plus de 2 pages`))) consultationList.unshift(`Rubrique « ${nom} » : le texte occupe plus de 2 pages avant son schéma (consigne : 1 à 2 pages d'explication) ; à raccourcir via l'assistant avant la remise.`);
+    }
     if (alertesSchemas.length) {
       console.warn(`[MemoireGenerator] ${alertesSchemas.length} rubrique(s) sans page de schéma dans le document rendu.`);
       // L'avis « schéma construit au rendu d'après le texte » du bloc 1 est faux si le rendu n'a rien construit : remplacé.
@@ -9170,7 +9181,7 @@ RÈGLES DE FORME (rendu Marp) :
     plan: PlanMemoireType,
     opts: { onProgress?: (progress: number, message: string) => void; schemas?: Map<string, string>; cover?: any; ajouts?: AjoutLibre[]; photos?: Record<string, Array<{ chemin: string; legende?: string }>>; titresSchemas?: Record<string, string>; articlesBloc1?: Record<string, string> },
     theme: string,
-  ): Promise<{ filePath: string; schemas: Map<string, string>; cover: any }> {
+  ): Promise<{ filePath: string; schemas: Map<string, string>; cover: any; rubriquesLongues?: string[] }> {
     this.verifierCredit();
     const onProgress = opts.onProgress;
     const blocs = rubriquesV2(plan, opts.ajouts || []);
@@ -9241,7 +9252,7 @@ RÈGLES DE FORME (rendu Marp) :
     onProgress?.(95, `Rendu du PDF (${schemas.size} page(s) de schéma)…`);
     const generator = new MarpGenerator(this.responseDir);
     const result = await generator.generatePdf(chapters, cover, new Map(), new Map(), { theme });
-    return { filePath: result.filePath, schemas, cover };
+    return { filePath: result.filePath, schemas, cover, rubriquesLongues: result.rubriquesLongues || [] };
   }
 
   /**
@@ -10296,6 +10307,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const schemas: Record<string, string> = Object.fromEntries(choixSchemas.map((c) => [c.id === 'organigramme' ? `${c.cle}#court#organigramme` : c.id === 'comprehension' ? `${c.cle}#court#process` : `${c.cle}#court`, c.svg]));
     // Nom de l'acheteur affiché (couverture, en-têtes) : forme corrigée de CLIENT (T1-COH-6).
     cover.client = nomAcheteurAffiche(prep.variables.CLIENT, cover.client);
+    // Forme courte (« ENPC et IGN ») pour le pied de page d'un nom long (T3-CONS-1).
+    cover.clientCourt = nomAcheteurCourtAffiche(prep.variables.CLIENT);
     // Intitulé du marché affiché : celui du mémoire, mis en casse normale s'il était en capitales (T2-CONS-14).
     if (typeof prep.variables.OBJET_MARCHE?.valeur === 'string' && prep.variables.OBJET_MARCHE.valeur.trim() && cover.title && cover.title === cover.title.toUpperCase()) cover.title = prep.variables.OBJET_MARCHE.valeur.trim();
     let rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
@@ -10739,7 +10752,7 @@ FORME : sous-titres « ## » courts (un par élément), paragraphes courts et li
   }
 
   /** Récupère client / titre / référence pour la page de garde (base puis analyse DCE). */
-  private async getCoverInfo(dossierId: string, analyseConnue?: any): Promise<{ client: string; title: string; ref: string }> {
+  private async getCoverInfo(dossierId: string, analyseConnue?: any): Promise<{ client: string; title: string; ref: string; clientCourt?: string }> {
     // Le client affiché est l'ACHETEUR : jamais GSS. Inconnu → ligne omise sur la page de garde.
     const fallback = { client: '', title: 'Mémoire technique', ref: '' };
     // Mentions de remplissage (« Non spécifié », « Acheteur inconnu »…) : ce ne sont pas des valeurs.
@@ -10833,7 +10846,7 @@ FORME : sous-titres « ## » courts (un par élément), paragraphes courts et li
       /** Style « marine » v3 : articles du CCTP des chiffres du bloc 1 (bandeau des chiffres clés, sources), T1-CONS-5. */
       articlesBloc1?: Record<string, string>;
     } = {},
-  ): Promise<{ filePath: string; schemas: Map<string, string>; cover: any }> {
+  ): Promise<{ filePath: string; schemas: Map<string, string>; cover: any; rubriquesLongues?: string[] }> {
     this.verifierCredit();
     const onProgress = opts.onProgress;
     const theme = themeActif(opts.theme);

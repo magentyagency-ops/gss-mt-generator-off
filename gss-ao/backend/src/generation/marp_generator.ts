@@ -471,21 +471,81 @@ const reductionsLignes = new WeakMap<AssembleSection, number>();
  * texte du PDF est illisible (pdftotext absent).
  */
 export function pagesQuiDebordent(pdf: string): number[] {
-  const r = spawnSync('pdftotext', ['-bbox', pdf, '-'], { encoding: 'utf-8', maxBuffer: 256 * 1024 * 1024 });
+  const r = spawnSync('pdftotext', ['-bbox-layout', pdf, '-'], { encoding: 'utf-8', maxBuffer: 256 * 1024 * 1024 });
   if (r.status !== 0 || !r.stdout) return [];
+  return pagesQuiDebordentDuLayout(r.stdout);
+}
+
+/**
+ * Même contrôle sur la sortie de « pdftotext -bbox-layout » : le pied de page est le bloc qui contient « Mémoire technique »
+ * en bas de page ; ses lignes (le nom de l'acheteur qui passe à la ligne, à la même marge gauche, et le numéro de page) ne
+ * sont jamais prises pour du texte qui déborde (T3-CONS-1, T3-COH-8 : nom d'acheteur de 129 caractères, pied sur 2 lignes vu
+ * comme un débordement sur chaque page et tout le mémoire repaginé deux fois).
+ */
+export function pagesQuiDebordentDuLayout(layout: string): number[] {
   const out: number[] = [];
   const decode = (t: string) => t.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
-  r.stdout.split(/<page /).slice(1).forEach((p, i) => {
-    const H = Number((/height="([\d.]+)"/.exec(p) || [])[1] || 0);
+  const nombre = (m: string | undefined) => Number(m || 0);
+  layout.split(/<page /).slice(1).forEach((p, i) => {
+    const H = nombre((/height="([\d.]+)"/.exec(p) || [])[1]);
     if (!H) return;
-    const mots = [...p.matchAll(/<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)<\/word>/g)]
-      .map((m) => ({ y0: Number(m[2]), y1: Number(m[4]), t: decode(m[5]) }));
-    const pied = mots.filter((m, k) => m.t === 'Mémoire' && m.y0 > H * 0.9 && mots[k + 1]?.t === 'technique');
-    if (!pied.length) return;
-    const yp = Math.min(...pied.map((m) => m.y0));
-    if (mots.some((m) => m.y0 > H * 0.85 && m.y1 > yp - 1 && Math.abs(m.y0 - yp) > 1.5)) out.push(i + 1);
+    type Ligne = { x0: number; y0: number; y1: number; mots: Array<{ y0: number; y1: number; t: string }> };
+    const blocs: Ligne[][] = p.split(/<block /).slice(1).map((b) => b.split(/<line /).slice(1).map((l) => {
+      const mots = [...l.matchAll(/<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)<\/word>/g)]
+        .map((m) => ({ y0: Number(m[2]), y1: Number(m[4]), t: decode(m[5]) }));
+      return { x0: nombre((/xMin="([\d.]+)"/.exec(l) || [])[1]), y0: nombre((/yMin="([\d.]+)"/.exec(l) || [])[1]), y1: nombre((/yMax="([\d.]+)"/.exec(l) || [])[1]), mots };
+    }));
+    const lignes = blocs.flat();
+    const tete = lignes.find((l) => l.y0 > H * 0.9 && l.mots.some((m, k) => m.t === 'Mémoire' && l.mots[k + 1]?.t === 'technique'));
+    if (!tete) return;
+    const yp = tete.y0;
+    const hauteur = Math.max(4, tete.y1 - tete.y0);
+    // Lignes du pied : la ligne « Mémoire technique · … », celles qui la suivent à la même marge gauche (nom qui passe à la
+    // ligne) et le numéro de page seul.
+    const pied = new Set<Ligne>([tete]);
+    let derniere = tete;
+    for (const l of lignes.filter((x) => x.y0 > tete.y0).sort((a, b) => a.y0 - b.y0)) {
+      if (Math.abs(l.x0 - tete.x0) <= 2 && l.y0 - derniere.y0 <= hauteur * 1.6) { pied.add(l); derniere = l; }
+    }
+    for (const l of lignes) if (l.y0 > H * 0.9 && l.mots.length && l.mots.every((m) => /^\d{1,4}$/.test(m.t))) pied.add(l);
+    if (lignes.some((l) => !pied.has(l) && l.mots.some((m) => m.y0 > H * 0.85 && m.y1 > yp - 1))) out.push(i + 1);
   });
   return out;
+}
+
+/**
+ * Nom de l'acheteur du pied de page, du surtitre du sommaire et des ouvertures de bloc (style v3) : le pied de la planche
+ * tient sur une ligne. Au-delà de 95 signes (T3-CONS-1 : ENPC et IGN, 190 signes ; T3-COH-8 : groupement de 129 signes, pied
+ * sur 2 lignes touchant le numéro de page), la forme courte employée dans le texte (« ENPC et IGN ») ; sans forme courte, le
+ * nom entier, dont la taille du pied est réduite (piedV3).
+ */
+export const LONGUEUR_NOM_PIED = 95;
+export function clientDuPied(cover: CoverInfo): string {
+  const nom = String(cover.client || '').replace(/\s+/g, ' ').trim();
+  const court = String(cover.clientCourt || '').replace(/\s+/g, ' ').trim();
+  return nom.length > LONGUEUR_NOM_PIED && court && court.length < nom.length ? court : nom;
+}
+
+/** Pied de page v3 sur une ligne : taille réduite (6 pt au plus petit) pour un nom long sans forme courte, '' sinon. */
+export function stylePiedV3(texte: string): string {
+  const n = texte.length;
+  const CAPACITE = 115; // signes du pied à 7,5 pt sur la largeur utile, numéro de page réservé
+  if (n <= CAPACITE) return '';
+  const pt = Math.max(6, Math.floor((7.5 * CAPACITE / n) * 10) / 10);
+  return `<style>footer{font-size:${pt}pt}</style>`;
+}
+
+/**
+ * Rubriques imprimées sur plus de 2 pages de texte avant leur schéma (consignes 3 et 6 : 1 à 2 pages d'explication, puis 1
+ * page de schéma ; T3-CONS-1) : titres lus dans le Markdown rendu (pages de texte marquées par leur rubrique).
+ */
+export function rubriquesDePlusDeDeuxPages(markdown: string): string[] {
+  const compte = new Map<string, number>();
+  for (const d of markdown.replace(/^---\n[\s\S]*?\n---\n/, '').split(/\n---\n/)) {
+    const t = /<!-- rubrique: "([^"]*)" -->/.exec(d);
+    if (t && /<!-- _class: (?:[^>]*\s)?texte\b/.test(d)) compte.set(t[1], (compte.get(t[1]) || 0) + 1);
+  }
+  return [...compte].filter(([, n]) => n > 2).map(([titre]) => titre);
 }
 
 /** Découpage du texte d'une rubrique : pages plus pleines quand son schéma a sa propre page (ou qu'elle n'en a pas,
@@ -553,6 +613,8 @@ export interface AssembleChapter {
 
 export interface CoverInfo {
   client?: string;
+  /** Forme courte de l'acheteur (« ENPC et IGN ») : pied de page, surtitre du sommaire et ouvertures quand le nom est long. */
+  clientCourt?: string;
   title?: string;
   ref?: string;
   objet?: string;
@@ -598,7 +660,7 @@ export class MarpGenerator {
     assignments: SlideAssignments = new Map(),
     schemas: SlideSchemas = new Map(),
     opts: { theme?: string } = {},
-  ): Promise<{ filePath: string; markdownPath: string }> {
+  ): Promise<{ filePath: string; markdownPath: string; rubriquesLongues?: string[] }> {
     // Thème de style (themes.ts) : celui du mémoire déjà rendu s'il est fourni, sinon GSS_THEME / style par défaut.
     const theme = themeActif(opts.theme);
     // Write markdown + copy assets to a temp working directory
@@ -745,6 +807,7 @@ export class MarpGenerator {
       }
     };
     rendre();
+    let rubriquesLongues: string[] = [];
     // Style « marine » v3 : contrôle mesuré du PDF rendu (T2-CONS-2) : une page de texte dont un mot passe sous le haut du pied
     // de page fait raccourcir les pages de sa rubrique, puis le mémoire est rendu de nouveau (deux reprises au plus).
     if (pagesMarineV3(theme)) {
@@ -773,6 +836,8 @@ export class MarpGenerator {
       }
       const restent = pagesQuiDebordent(pdfPath);
       if (restent.length) console.warn(`[MarpGenerator] Page(s) ${restent.join(', ')} : texte encore sous le pied de page après repagination.`);
+      rubriquesLongues = rubriquesDePlusDeDeuxPages(markdown);
+      if (rubriquesLongues.length) console.warn(`[MarpGenerator] Rubrique(s) de plus de 2 pages de texte avant leur schéma : ${rubriquesLongues.join(' ; ')}.`);
     }
 
     console.log(`[MarpGenerator] PDF generated successfully: ${pdfPath}`);
@@ -782,7 +847,7 @@ export class MarpGenerator {
       fs.rmSync(workDir, { recursive: true, force: true });
     } catch { /* ignore cleanup errors */ }
 
-    return { filePath: pdfPath, markdownPath: mdPath };
+    return { filePath: pdfPath, markdownPath: mdPath, rubriquesLongues };
   }
 
   /**
@@ -916,9 +981,12 @@ export class MarpGenerator {
     lines.push('paginate: true');
     lines.push("header: 'GLOBAL SECURITY SERVICES'");
     // Style « marine » v3 : pied de page « Mémoire technique · acheteur ».
-    if (v3) lines.push(`footer: '${`Mémoire technique${cover.client ? ` · ${cover.client}` : ''}`.replace(/[\r\n]+/g, ' ').replace(/'/g, "''")}'`);
+    const clientPied = clientDuPied(cover);
+    const textePied = `Mémoire technique${clientPied ? ` · ${clientPied}` : ''}`.replace(/[\r\n]+/g, ' ');
+    if (v3) lines.push(`footer: '${textePied.replace(/'/g, "''")}'`);
     lines.push('---');
     lines.push('');
+    if (v3 && stylePiedV3(textePied)) { lines.push(stylePiedV3(textePied)); lines.push(''); }
     if (v3 && couleurs) {
       lines.push(styleParcours(visibles.length, couleurs.structure2, couleurs.accent));
       lines.push('');
@@ -947,7 +1015,7 @@ export class MarpGenerator {
       }));
       const legende = legendeRoles(Object.fromEntries(Object.entries(st.roles).map(([k, v]: [string, any]) => [k, v.fonce])), pictosLegende(),
         couleurs, st.couleurs.filet_fort);
-      const corps = this.buildChapitres([], chapters, assignments, schemas, theme, { v3, refonte, couleurs, visibles, rangBloc, enteteDe, client: cover.client || '' });
+      const corps = this.buildChapitres([], chapters, assignments, schemas, theme, { v3, refonte, couleurs, visibles, rangBloc, enteteDe, client: clientPied });
       const pagesOuverture = (avant: number): number[] => {
         const pages: number[] = [];
         let page = avant;
@@ -958,9 +1026,9 @@ export class MarpGenerator {
         return pages;
       };
       // Couverture (page 1), puis les pages du sommaire : le nombre de pages du sommaire ne dépend pas des numéros.
-      const nSommaire = sommaireV3(blocsSommaire, cover.client || '', legende).length;
+      const nSommaire = sommaireV3(blocsSommaire, clientPied, legende).length;
       const numeros = pagesOuverture(1 + nSommaire);
-      for (const page of sommaireV3(blocsSommaire.map((b, i) => ({ ...b, page: numeros[i] })), cover.client || '', legende)) {
+      for (const page of sommaireV3(blocsSommaire.map((b, i) => ({ ...b, page: numeros[i] })), clientPied, legende)) {
         lines.push('---');
         lines.push(page);
       }
@@ -1044,7 +1112,7 @@ export class MarpGenerator {
 
     lines.push('');
 
-    return this.buildChapitres(lines, chapters, assignments, schemas, theme, { v3, refonte, couleurs, visibles, rangBloc, enteteDe, client: cover.client || '' });
+    return this.buildChapitres(lines, chapters, assignments, schemas, theme, { v3, refonte, couleurs, visibles, rangBloc, enteteDe, client: v3 ? clientPied : cover.client || '' });
   }
 
   /**

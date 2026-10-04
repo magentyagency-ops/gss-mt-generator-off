@@ -238,7 +238,12 @@ export function sommaireV3(blocs: Array<{ numero: number; titre: string; rubriqu
     pages[pages.length - 1].push(b);
     cumul += h(b);
   }
-  if (cumul + 36 > place) pages.push([]);
+  // Légende des schémas (36 mm) : jamais seule sur une page « Sommaire (suite) » (T3-CONS-1) ; s'il n'y a plus la place, le
+  // dernier bloc passe avec elle sur la page suivante.
+  if (cumul + 36 > place) {
+    const derniere = pages[pages.length - 1];
+    pages.push(derniere.length >= 2 ? [derniere.pop()!] : []);
+  }
   return pages.map((p, i) => {
     const compact = p.reduce((n, b) => n + h(b), 0) > place * 0.92;
     // Page de l'ouverture du bloc à droite de l'entrée, comme la planche (T2-CONS-12).

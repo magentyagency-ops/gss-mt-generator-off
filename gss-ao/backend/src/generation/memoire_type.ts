@@ -804,6 +804,17 @@ export function nomAcheteurAffiche(v: ValeurVariable | undefined, brut: string):
   return nom ? nom.charAt(0).toUpperCase() + nom.slice(1) : brut;
 }
 
+/**
+ * Forme courte de l'acheteur pour le pied de page et les surtitres (« ENPC et IGN » pour « l'ENPC et l'IGN ») : la forme
+ * courte de la variable CLIENT sans ses articles, majuscule initiale ; '' sans forme courte.
+ */
+export function nomAcheteurCourtAffiche(v: ValeurVariable | undefined): string {
+  const court = typeof (v as any)?.court === 'string' ? String((v as any).court).replace(/\*\*/g, '').replace(/\s+/g, ' ').trim() : '';
+  if (!court) return '';
+  const sans = court.replace(/(^|\s)(?:l['’]|le |la |les )(?=[A-ZÀ-Ý0-9])/g, '$1').trim();
+  return sans.charAt(0).toUpperCase() + sans.slice(1);
+}
+
 /** Vrai si la variable a une valeur exploitable. */
 export function variableRenseignee(v?: ValeurVariable): boolean {
   if (!v) return false;

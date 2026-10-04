@@ -980,7 +980,54 @@ export function plafonnerEngagementsPages(texte: string, pages: (t: string) => n
  * longue à la plus courte), puis les puces au-delà du minimum (4 attentes, 3 points de vigilance, en partant de la fin),
  * enfin les lignes du contexte au-delà des deux premières. Le tableau, les sous-titres et l'amorce restent.
  */
-export function reduireBesoinAPages(texte: string, pages: (t: string) => number, maxPages = 2, minimum = { attentes: 4, vigilance: 3 }): { texte: string; retirees: string[] } {
+export function reduireBesoinAPages(texte: string, pages: (t: string) => number, maxPages = 2, minimum = { attentes: 4, vigilance: 3 }): { texte: string; retirees: string[]; depasse: boolean } {
+  if (pages(texte) <= maxPages) return { texte, retirees: [], depasse: false };
+  const r = reduireBesoinParLignes(texte, pages, maxPages, minimum);
+  if (pages(r.texte) <= maxPages) return { ...r, depasse: false };
+  // Lignes retirables épuisées (T3N-1, parc_expo 1331 : 3 pages de texte, dont une pour le seul tableau des points de
+  // vigilance) : cellules du tableau du périmètre et citations des attentes resserrées, puis attentes et points de
+  // vigilance sous le minimum (2 de chaque au moins) ; si le bloc dépasse encore 2 pages, GSS est prévenu (depasse).
+  let t = resserrerBesoin(r.texte);
+  if (pages(t) <= maxPages) return { texte: t, retirees: r.retirees, depasse: false };
+  const r2 = reduireBesoinParLignes(t, pages, maxPages, { attentes: 2, vigilance: 2 });
+  t = r2.texte;
+  return { texte: t, retirees: [...r.retirees, ...r2.retirees], depasse: pages(t) > maxPages };
+}
+
+/** Coupe une cellule ou une citation trop longue à sa première phrase, sinon à la dernière virgule avant la limite (sans
+ *  ponctuation finale). */
+function couperA(texte: string, max: number): string {
+  const t = texte.trim();
+  if (t.length <= max) return t;
+  const phrase = /^(.{20,}?[.;])\s/.exec(t)?.[1];
+  if (phrase && phrase.length <= max) return phrase.replace(/\s*[.;]$/, '').trim();
+  const avant = t.slice(0, max);
+  const k = Math.max(avant.lastIndexOf(', '), avant.lastIndexOf(' ; '), avant.lastIndexOf(' et '));
+  return k > max * 0.5 ? avant.slice(0, k).trim() : avant.replace(/\s+\S*$/, '').trim();
+}
+
+/**
+ * Bloc 1 resserré sans rien retirer de son contenu porteur : cellules de plus de 70 signes du tableau du périmètre ramenées
+ * à leur première phrase (ou coupées à la dernière virgule), citations du DCE de plus de 110 signes des attentes et des
+ * points de vigilance abrégées par « […] ».
+ */
+export function resserrerBesoin(texte: string): string {
+  let section = '';
+  return String(texte || '').split('\n').map((l) => {
+    const h = /^##\s+(.+)$/.exec(l);
+    if (h) { section = h[1]; return l; }
+    if (/^Le périmètre/i.test(section) && /^\s*\|/.test(l) && !/^\s*\|?\s*:?-{3,}/.test(l)) {
+      const cellules = l.split('|');
+      return cellules.map((c, i) => (i === 0 || i === cellules.length - 1 || c.trim().length <= 70 ? c : ` ${couperA(c, 70)} `)).join('|');
+    }
+    if (/^(?:Vos attentes|Les points de vigilance)/i.test(section) && /^\s*[-*•]\s/.test(l)) {
+      return l.replace(/«\s*([^«»]{111,}?)\s*»/g, (_m, c: string) => `« ${couperA(c, 100).replace(/\s*[.;,:]$/, '')} […] »`);
+    }
+    return l;
+  }).join('\n');
+}
+
+function reduireBesoinParLignes(texte: string, pages: (t: string) => number, maxPages: number, minimum: { attentes: number; vigilance: number }): { texte: string; retirees: string[] } {
   if (pages(texte) <= maxPages) return { texte, retirees: [] };
   const lignes = texte.split('\n');
   const section = (k: number) => {

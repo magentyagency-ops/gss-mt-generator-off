@@ -48,6 +48,8 @@ footer {
   position: absolute; left: 15mm; right: 15mm; bottom: 8mm; top: auto; height: auto; padding: 2.2mm 0 0 0;
   border-top: .3mm solid var(--gss-filet); text-align: left;
   font: 400 var(--gss-pied-taille)/1 var(--gss-police-texte); color: var(--gss-encre-3); letter-spacing: 0;
+  /* Une seule ligne, jamais sous le numéro de page (T3-CONS-1, T3-COH-8 : nom d'acheteur long). */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 12mm;
 }
 section::after {
   content: attr(data-marpit-pagination); position: absolute; right: 15mm; bottom: 8mm; padding: 0;
