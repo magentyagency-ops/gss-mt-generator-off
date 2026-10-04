@@ -61,3 +61,15 @@ describe('phrases de GSS adaptées au CCTP signalées à GSS (T4C-13, D8)', () =
     expect(r[0].exigence).toBe('au moins 3 visites ; inopinés');
   });
 });
+
+// Tour 4, correcteur (T4-CONS-14, citedia2 1462) : la grille de pénalités du CCAP n'est jamais citée comme exigence d'une phrase
+// adaptée ; le motif du retrait est le lieu hors Normandie.
+import { exigenceDuFiltre as exigenceDuFiltreT4c } from '../src/generation/adaptations_cctp';
+describe('phrase adaptée du cadre : jamais une grille de pénalités citée (T4-CONS-14)', () => {
+  it('délai de mise à disposition retiré hors Normandie : motif du lieu', () => {
+    const dce = "\n\n--- CCTP ---\nArticle 1 - Objet : surveillance des parcs, 37 boulevard Solférino 35000 RENNES.\n\n--- CCAP ---\nPénalités pour non-respect des délais de mise à disposition :\n200 € par agent demandé pour une mise à disposition urgente attendue dans un délai de 2 heures et non réalisée.\n100 € par agent demandé pour une mise à disposition attendue dans un délai de 24 heures et non réalisée.\n";
+    const e = exigenceDuFiltreT4c({ origine: "Selon l'urgence, les agents sont en place dans un délai de 1 h à 24 h.", adaptee: '' } as any, dce, true, { sites: [] });
+    expect(e).not.toMatch(/€|200|100/);
+    expect(e).toMatch(/hors Normandie/);
+  });
+});

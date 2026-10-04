@@ -305,7 +305,10 @@ export function exigenceHorsNormandie(dce: string, analyse: any): string {
  */
 export function exigenceDelaisDuSujet(dce: string, sujet: string | null): string {
   if (!sujet) return '';
-  return phrasesDelaisDuDce(dce, sujet as any).map((p) => (p.length > 300 ? `${p.slice(0, 300).replace(/\s+\S*$/, '')}…` : p)).join(' […] ');
+  // Jamais une ligne de grille de pénalités (montant, « € », « pénalité ») citée comme exigence (T4-CONS-14, citedia2 1462 :
+  // « 200 € par agent demandé pour une mise à disposition urgente attendue dans un délai de 2 heures ») : le motif du retrait
+  // est alors celui du lieu (hors Normandie).
+  return phrasesDelaisDuDce(dce, sujet as any).filter((p) => !/€|\beuros?\b|p[ée]nalit|\bHT\b/i.test(p)).map((p) => (p.length > 300 ? `${p.slice(0, 300).replace(/\s+\S*$/, '')}…` : p)).join(' […] ');
 }
 
 /**
