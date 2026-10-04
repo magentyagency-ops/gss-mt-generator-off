@@ -155,3 +155,24 @@ describe('contrôles inopinés faits par l’acheteur : jamais un engagement de 
     }
   });
 });
+
+import { categorieDe, qualificationParDefaut, profilSansNombre } from '../src/generation/dimensionnement';
+
+describe('intitulés SSIAP écrits autrement dans le dimensionnement (T2-GEN-7)', () => {
+  it.each([
+    ["Chef d'équipe SSIAP II", "Chef d'équipe de sécurité incendie", 'SSIAP 2'],
+    ["Chef d'équipe SSIAP niveau 2", "Chef d'équipe de sécurité incendie", 'SSIAP 2'],
+    ["Chef d'équipe S.S.I.A.P. 2", "Chef d'équipe de sécurité incendie", 'SSIAP 2'],
+    ['Agent SSIAP I', 'Agent de sécurité incendie', 'SSIAP 1'],
+    ['Agent de sécurité incendie SSIAP de niveau 1', 'Agent de sécurité incendie', 'SSIAP 1'],
+    ['Chef de service SSIAP III', 'Chef de service de sécurité incendie', 'SSIAP 3'],
+    ["Chef d'équipe SSIAP 2", "Chef d'équipe de sécurité incendie", 'SSIAP 2'],
+  ])('%s', (profil, categorie, qualification) => {
+    expect(categorieDe(profil)).toBe(categorie);
+    expect(qualificationParDefaut(profil, ' ')).toBe(qualification);
+  });
+  it('profil relevé : forme unique', () => {
+    expect(profilSansNombre('2 Agents SSIAP II')).toBe('Agents SSIAP 2');
+    expect(profilSansNombre('SSIAP1')).toBe('SSIAP 1');
+  });
+});

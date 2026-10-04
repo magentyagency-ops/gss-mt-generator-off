@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 import { lignesEquipe, questionDimensionnement, questionRondes, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative, lotsDuMemoireDce, perimetreDuLot } from './base_memoires';
+import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative, lotsDuMemoireDce, perimetreDuLot, normaliserSsiap } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -1668,10 +1668,7 @@ export function qualificationsDuDce(dce: string, analyse?: any): string[] {
   const incendie = texteDce.replace(/\s+/g, ' ').length < 2000 || PREUVE_INCENDIE.test(texteDce.replace(/\s+/g, ' '));
   // Écritures ramenées à une forme unique (T1-GEN-10) : « S.S.I.A.P. » → « SSIAP » ; « SSIAP (de) niveau 2 » → « SSIAP 2 » ;
   // « SSIAP2 » → « SSIAP 2 ».
-  const t = `${texteDce} ${incendie ? an : an.replace(/S\.?S\.?I\.?A\.?P\.?(?:\s*(?:[123]|I{1,3})(?![\wÀ-ÿ]))?/gi, '')}`.replace(/\s+/g, ' ')
-    .replace(/(?<![\wÀ-ÿ])S\.\s?S\.\s?I\.\s?A\.\s?P\.?/gi, 'SSIAP')
-    .replace(/SSIAP\s*(?:\(\s*)?(?:de\s+)?niveau\s*(?:n°\s*)?([123]|I{1,3})(?![\wÀ-ÿ])\s*\)?/gi, (_m, n: string) => `SSIAP ${({ I: '1', II: '2', III: '3' } as Record<string, string>)[n.toUpperCase()] || n}`)
-    .replace(/SSIAP(?=[123](?!\d))/gi, 'SSIAP ');
+  const t = normaliserSsiap(`${texteDce} ${incendie ? an : an.replace(/S\.?S\.?I\.?A\.?P\.?(?:\s*(?:[123]|I{1,3})(?![\wÀ-ÿ]))?/gi, '')}`.replace(/\s+/g, ' '));
   const out: string[] = [];
   if (/SSIAP\s*(?:3|III)(?![\wÀ-ÿ])/i.test(t)) out.push('SSIAP 3');
   if (/SSIAP\s*(?:2|II)(?![\wÀ-ÿ])/i.test(t)) out.push('SSIAP 2');

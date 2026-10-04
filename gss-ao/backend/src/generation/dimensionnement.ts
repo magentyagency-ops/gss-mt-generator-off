@@ -9,6 +9,7 @@
  * message de l'assistant).
  */
 import { normaliser } from './memoire_type';
+import { normaliserSsiap } from './base_memoires';
 
 /** Heures travaillées par an pour un équivalent temps plein. */
 export const BASE_ETP = 1607;
@@ -311,7 +312,8 @@ export function profilAgentSecurite(profil: string, qualification: string): stri
  * sinon (rien d'inventé).
  */
 export function qualificationParDefaut(profil: string, dceMots: string): string {
-  const p = normaliser(profil);
+  // Intitulé écrit autrement (« Chef d'équipe SSIAP II », « SSIAP niveau 2 », « S.S.I.A.P. 2 », T2-GEN-7) : forme unique.
+  const p = normaliser(normaliserSsiap(profil));
   const ssiap = /ssiap\s*([123])/.exec(p);
   if (ssiap) return `SSIAP ${ssiap[1]}`;
   if (categorieDe(profil) === 'Agent cynophile') return 'CQP APS – qualification cynophile';
@@ -329,7 +331,7 @@ export function qualificationParDefaut(profil: string, dceMots: string): string 
  * Un « agent » sans autre précision, dans un relevé de gardiennage, est un agent de sécurité (CQP APS).
  */
 export function profilSansNombre(profil: string): string {
-  let t = String(profil || '').replace(/\s+/g, ' ').trim().replace(/^\d+\s+(?=\S)/, '').replace(/\bSSIAP\s*([123])\b/gi, 'SSIAP $1');
+  let t = normaliserSsiap(String(profil || '').replace(/\s+/g, ' ').trim().replace(/^\d+\s+(?=\S)/, '')).replace(/\bSSIAP\s*([123])\b/gi, 'SSIAP $1');
   if (/^agent(?:e)?s?$/i.test(t)) t = 'Agent de sécurité';
   return t;
 }
@@ -649,7 +651,7 @@ const pluriel = (n: number, s: string, p = `${s}s`) => `${n} ${n > 1 ? p : s}`;
 
 /** Catégorie de personnel du tableau de l'équipe dédiée (vocabulaire du mémoire type), d'après le profil du DCE. */
 export function categorieDe(profil: string): string {
-  const p = normaliser(profil);
+  const p = normaliser(normaliserSsiap(profil));
   // « Agent conducteur de chien » (ifits 701) : un agent cynophile.
   if (/cynophil|maitre.chien|conducteurs? (?:de )?chiens?/.test(p)) return 'Agent cynophile';
   if (/ssiap\s*3/.test(p)) return 'Chef de service de sécurité incendie';

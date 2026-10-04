@@ -1985,6 +1985,19 @@ export function obligationsChiffrees(dce: string): Array<{ phrase: string; cle: 
  * CCTP absent (T1-COH-3, T1-GEN-13). Le nom est comparé avec et sans séparateurs.
  */
 /**
+ * Écriture unique des qualifications SSIAP (T1-GEN-10, T2-GEN-7) : « S.S.I.A.P. » → « SSIAP » ; « SSIAP (de) niveau 2 » →
+ * « SSIAP 2 » ; « SSIAP II » → « SSIAP 2 » ; « SSIAP2 » → « SSIAP 2 ». Partagée par la lecture des qualifications du DCE et par
+ * le dimensionnement (intitulés de poste).
+ */
+export function normaliserSsiap(t: string): string {
+  return String(t || '')
+    .replace(/(?<![\wÀ-ÿ])S\.\s?S\.\s?I\.\s?A\.\s?P\.?/gi, 'SSIAP')
+    .replace(/SSIAP\s*(?:\(\s*)?(?:de\s+)?niveau\s*(?:n°\s*)?([123]|I{1,3})(?![\wÀ-ÿ])\s*\)?/gi, (_m, n: string) => `SSIAP ${({ I: '1', II: '2', III: '3' } as Record<string, string>)[n.toUpperCase()] || n}`)
+    .replace(/SSIAP\s*(I{1,3})(?![\wÀ-ÿ])/g, (_m, n: string) => `SSIAP ${({ I: '1', II: '2', III: '3' } as Record<string, string>)[n]}`)
+    .replace(/SSIAP(?=[123](?!\d))/gi, 'SSIAP ');
+}
+
+/**
  * Cahier des clauses administratives ET techniques particulières (CCATP, courant dans les MAPA, T2-COH-6) : un cahier des
  * charges, jamais un CCAP.
  */
