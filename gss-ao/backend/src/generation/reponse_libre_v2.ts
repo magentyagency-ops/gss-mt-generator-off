@@ -735,11 +735,21 @@ export function sansPropositionSurLAcheteur(x: string): string {
 
 export function sansClauseSanction(x0: string): string {
   const x = sansPropositionSurLAcheteur(x0);
-  const SANCTION = /p[ée]nalit|carences?|sanctions?|r[ée]factions?|retenues? sur|au-del[àa]\s+(?:de|d['’]|du)|s['’]appliquer(?:a|ont)|(?:applique|appliquera|appliquer)\s+(?:les?\s+)?(?:dispositions|p[ée]nalit|sanctions|r[ée]factions)|articles?\s+[\d.,\s]+(?:et\s+[\d.]+\s+)?du\s+C\.?C\.?A\.?P\.?[^.;]{0,40}(?:s['’]appliqu|applicables?)/i;
+  // (T8N-7, T8-CONS-18 : faculté coercitive de l'acheteur « aux frais de GSS / du prestataire / du titulaire », « se réserve le
+  // droit », « le CHB peut remplacer / faire intervenir une société de nettoyage… »)
+  const SANCTION = /p[ée]nalit|carences?|sanctions?|r[ée]factions?|retenues? sur|au-del[àa]\s+(?:de|d['’]|du)|s['’]appliquer(?:a|ont)|(?:applique|appliquera|appliquer)\s+(?:les?\s+)?(?:dispositions|p[ée]nalit|sanctions|r[ée]factions)|articles?\s+[\d.,\s]+(?:et\s+[\d.]+\s+)?du\s+C\.?C\.?A\.?P\.?[^.;]{0,40}(?:s['’]appliqu|applicables?)|aux\s+frais\s+(?:de\s+GSS|du\s+(?:prestataire|titulaire)|et\s+risques)|se\s+r[ée]serve(?:nt)?\s+le\s+droit/i;
+  const faculte = (p: string) => /(?<![\p{L}])(?:peut|pourra|pourront|peuvent)\s+(?:proc[ée]der|faire\s+intervenir|faire\s+appel|remplacer|confier|substituer)/iu.test(p) && !/(?<![\p{L}])(?:GSS|nous|notre|nos)(?![\p{L}])/u.test(p);
   const t = String(x || '').trim();
-  if (!SANCTION.test(t)) return t;
+  if (!SANCTION.test(t) && !faculte(t)) return t;
   const fin = (/[.!]\s*$/.exec(t) || [''])[0].trim() || '.';
-  const props = t.replace(/[.!]\s*$/, '').split(/\s*;\s*|(?<=[.!])\s+(?=[A-ZÀ-Ý])/).filter((p) => p.trim() && !SANCTION.test(p));
+  // Proposition de GSS suivie de la sanction qu'elle évite (« GSS veille au maintien de leur propreté afin d'éviter que le CHB ait à
+  // faire intervenir une société de nettoyage aux frais du prestataire ») : l'engagement est gardé, la sanction retirée.
+  const sansBut = (p: string) => {
+    if (!SANCTION.test(p) && !faculte(p)) return p;
+    const c = p.replace(/,?\s+(?:afin\s+(?:d['’]\s*|de\s+ne\s+pas\s+)[ée]viter|pour\s+(?:ne\s+pas\s+)?[ée]viter|sous\s+peine|faute\s+de\s+quoi)(?![\p{L}]).*$/iu, '');
+    return c !== p && !SANCTION.test(c) && !faculte(c) && c.trim().split(/\s+/).length >= 4 ? c : '';
+  };
+  const props = t.replace(/[.!]\s*$/, '').split(/\s*;\s*|(?<=[.!])\s+(?=[A-ZÀ-Ý])/).map(sansBut).filter((p) => p.trim());
   if (!props.length) return '';
   return `${props.join(' ; ').replace(/[\s,;:.!]+$/, '')}${fin}`;
 }
@@ -1285,7 +1295,7 @@ export function exigenceTraitee(exigence: string, texte: string): boolean {
 }
 
 /** Clause contractuelle ou de procédure du DCE (confidentialité, litiges, forclusion, résiliation…) : pas un besoin de prestation. */
-export const CLAUSE_CONTRACTUELLE = /confidentialit|divulgation|diff[ée]rend|litiges?\b|forclusion|contentieux|tribunal|recours (?:gracieux|contentieux)|r[ée]siliation|reconduction|avenant|factur\w*|paiement|r[ée]examen|r[ée]pond(?:ra)?\s+des\s+(?:d[ée]t[ée]riorations|dommages|d[ée]gradations|d[ée]g[âa]ts)|(?:[àa]\s+ses|aux)\s+frais\s+et\s+risques|r[èe]glement des (?:litiges|comptes)|cautionnement|garantie financi|sous peine de/i;
+export const CLAUSE_CONTRACTUELLE = /confidentialit|divulgation|diff[ée]rend|litiges?\b|forclusion|contentieux|tribunal|recours (?:gracieux|contentieux)|r[ée]siliation|reconduction|avenant|factur\w*|paiement|r[ée]examen|r[ée]pond(?:ra)?\s+des\s+(?:d[ée]t[ée]riorations|dommages|d[ée]gradations|d[ée]g[âa]ts)|(?:[àa]\s+ses|aux)\s+frais\s+et\s+risques|aux\s+frais\s+(?:de\s+GSS|du\s+(?:prestataire|titulaire))|se\s+r[ée]serve(?:nt)?\s+le\s+droit|r[èe]glement des (?:litiges|comptes)|cautionnement|garantie financi|sous peine de/i;
 
 /**
  * Phrase du CCTP citée dans le texte de secours du bloc 1 (horaire ou obligation chiffrée), nettoyée de ce que la
@@ -3812,7 +3822,12 @@ export function controlerProposition(texte: string, montantsGss: string[] = [], 
     const gardees = corps.split(/(?<=[.!?])\s+/).map((ph) => ph
       // Procédures ou consignes de l'acheteur laissées en blanc (T1-CONS-3 : « … sont appliquées suivant les procédures de
       // l'EPCF : [À COMPLÉTER]. ») : la phrase est vraie sans l'emplacement, qui n'appelle aucune donnée de GSS.
-      .replace(/((?:suivant|selon|conform[ée]ment\s+aux?)\s+(?:les\s+)?(?:proc[ée]dures|consignes|r[èe]gles|modalit[ée]s|instructions)\s+(?:d[eu]\s+|de\s+la\s+|de\s+l['’]\s*|des\s+)[^:.;]{2,80}?)\s*:\s*\[À COMPLÉTER\](?:⟦AC:\d+⟧)?\s*(?=[.;]?\s*$)/i, '$1')).filter((ph, k, toutes) => {
+      .replace(/((?:suivant|selon|conform[ée]ment\s+aux?)\s+(?:les\s+)?(?:proc[ée]dures|consignes|r[èe]gles|modalit[ée]s|instructions)\s+(?:d[eu]\s+|de\s+la\s+|de\s+l['’]\s*|des\s+)[^:.;]{2,80}?)\s*:\s*\[À COMPLÉTER\](?:⟦AC:\d+⟧)?\s*(?=[.;]?\s*$)/i, '$1'))
+      // Faculté coercitive ou sanction de l'acheteur (« le CHB peut faire intervenir une société de nettoyage aux frais de GSS »,
+      // « … afin d'éviter que le CHB ait à … aux frais du prestataire ») : retirée, l'engagement de GSS gardé (T8N-7, T8-CONS-18).
+      .map((ph) => { const s = sansClauseSanction(ph); if (ph.trim() && s !== ph.trim()) retirees.push(ph.trim()); return s; })
+      .filter((ph, k, toutes) => {
+      if (!ph.trim()) return false;
       // (une phrase qui NIE la sous-traitance ou l'intérim, conforme à faits_gss.md, reste : « GSS n'envisage pas de recourir à
       // la sous-traitance », « Aucune partie … n'est confiée à un sous-traitant », « aucun contrat de sous-traitance n'est
       // établi », s2e 1501, T5N-4)
@@ -4027,7 +4042,15 @@ export function phraseSites(sites: string[], villes: string[], communes: Record<
  */
 export function perimetreSecours(perimetre: string): string {
   const FEMININ = /^(?:dur[ée]e|fr[ée]quence|p[ée]riodicit[ée]|modalit[ée]|organisation|proc[ée]dure|m[ée]thode|composition|qualification|date|heure|r[ée]ponse|capacit[ée]|liste)s?\b/i;
-  return String(perimetre || '').split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+  // Consignes de cadrage du modèle, jamais imprimées (imm 1883, texte de secours : « Hors périmètre : aucun autre site identifié ;
+  // ne pas présenter les options ou renforts BPU comme des effectifs de base », « Aucune télésurveillance à distance par GSS
+  // n'est décrite ») : la ligne « Hors périmètre » et les phrases qui commentent le DCE sont retirées.
+  const COMMENTAIRE = /(?<![\p{L}])(?:ne\s+pas\s+(?:pr[ée]senter|d[ée]crire|mentionner|introduire|inventer)|(?:n['’]est|ne\s+sont|n['’]y\s+est)\s+(?:pas\s+)?(?:d[ée]crite?s?|sp[ée]cifi[ée]e?s?|identifi[ée]e?s?|mentionn[ée]e?s?)|ne\s+doi(?:t|vent)\s+pas\s+[êe]tre\s+d[ée]crite?s?|aucun(?:e)?\s+autre\s+site\s+identifi)/iu;
+  const lignes = String(perimetre || '').split('\n').map((l) => l.trim()).filter(Boolean)
+    .filter((l) => !/^[-*•]?\s*hors\s+p[ée]rim[èe]tre\b/i.test(l))
+    .map((l) => { const puce = (/^[-*•]\s*/.exec(l) || [''])[0]; const ph = l.slice(puce.length).split(/(?<=[.;])\s+/).filter((x) => !COMMENTAIRE.test(x)); return ph.length ? `${puce}${ph.join(' ').replace(/;\s*$/, '.')}` : ''; })
+    .filter(Boolean);
+  return lignes.map((l) => {
     const libelle = (/^[-*•]?\s*([^:;.]{3,60}?)\s*:/.exec(l) || [])[1]?.trim() || '';
     const ligne = l.replace(/([,;]\s*|\.\s+|\s)(?:(?:le|la|les|l['’])\s*)?([^,;.:]{3,80}?)\s+(?:doit|doivent|devra|devront|reste|restent)\s+(?:être\s+)?(?:à\s+)?(?:précisée?s?|préciser|indiquée?s?|indiquer|fixée?s?|fixer|définie?s?|définir|proposée?s?|proposer)\s+par\s+(?:GSS|le titulaire|le candidat|le prestataire|l['’]entreprise)(?=\s*[.;]|\s*$)/i,
       (_m: string, sep: string, objet: string) => {
@@ -4270,6 +4293,45 @@ export function engagementSansRedite(puce: string, texte: string): string {
   return [premiere, ...gardees.slice(1)].join(', et ').replace(/[\s.;]*$/, '.');
 }
 
+/**
+ * Description d'un lieu, sans action de GSS (T8-CONS-6, becquerel : « Au Centre Henri Becquerel, le site existant de 22 520 m²
+ * comprend… », « Le PC sécurité et l'accueil sont au RDC… ») : jamais imprimée comme phrase ajoutée par l'adaptation.
+ */
+export function descriptionDeLieu(phrase: string): boolean {
+  const t = String(phrase || '').replace(/^\s*[-•*]\s*/, '').trim();
+  if (/(?<![\p{L}])(?:GSS|nous|nos|notre|agents?|gardiens?|rondiers?|ssiap|titulaire|prestataire|personnel)(?![\p{L}])/iu.test(t)) return false;
+  // (jamais une consigne à l'infinitif : « Effectuer la levée de doute…, mettre en sécurité les bâtiments, rendre compte au PCS »)
+  if (/^[A-ZÀ-Ý][a-zà-ÿ]+(?:er|ir|re)\s/u.test(t)) return false;
+  // (le lieu en tête de phrase, puis son verbe d'état ; « compte » suivi d'un nombre : jamais « rendre compte »)
+  return /^[^.]{0,70}?(?<![\p{L}])(?:site|sites|locaux|b[âa]timents?|[ée]tablissement|campus|parking|parc|immeuble|ensemble|pc\s+s[ée]curit[ée]|accueil|ERP)(?![\p{L}])[^.]{0,120}?(?<![\p{L}])(?:comprend|comprennent|compte(?:nt)?\s+(?:\d|un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|plusieurs)|s['’][ée]tend|s['’][ée]tendent|se\s+compose|est\s+compos[ée]|dispose|disposent|est\s+situ[ée]e?|sont\s+situ[ée]e?s|se\s+situe|se\s+trouvent?|sont\s+(?:au|aux|en|class[ée]s)|est\s+(?:au|class[ée]e?)|accueille|accueillent|repr[ée]sente)(?![\p{L}])|\d[\d\s\u00a0\u202f]*m²|(?<![\p{L}])(?:RDC|rez-de-chauss[ée]e)(?![\p{L}])[^.]{0,40}(?<![\p{L}])(?:sont|est)(?![\p{L}])/iu.test(t);
+}
+
+/**
+ * Phrase ajoutée placée entre une amorce (« … sont les suivantes. », « … : ») et sa liste (T8-CONS-6) : déplacée après la liste,
+ * dans son propre paragraphe. Texte inchangé sinon.
+ */
+export function ajoutHorsDeListe(texte: string, phrase: string): string {
+  const lignes = String(texte || '').split('\n');
+  const k = lignes.findIndex((l) => l.includes(phrase));
+  if (k < 0 || !phrase.trim()) return texte;
+  const PUCE = /^\s*(?:[-•*]|\d+[.)])\s+/;
+  const AMORCE = /(?::|suivant(?:e)?s\s*[.:]?)\s*$/i;
+  const avantDansLigne = lignes[k].slice(0, lignes[k].indexOf(phrase)).trim();
+  let prec = k - 1;
+  while (prec >= 0 && !lignes[prec].trim()) prec--;
+  const amorce = avantDansLigne ? AMORCE.test(avantDansLigne) : prec >= 0 && AMORCE.test(lignes[prec].trim());
+  let suiv = k + 1;
+  while (suiv < lignes.length && !lignes[suiv].trim()) suiv++;
+  if (!amorce || suiv >= lignes.length || !PUCE.test(lignes[suiv])) return texte;
+  const reste = lignes[k].replace(phrase, '').replace(/[ \t]{2,}/g, ' ').trimEnd();
+  const out = [...lignes];
+  if (reste.trim()) out[k] = reste; else out.splice(k, 1);
+  let fin = out.findIndex((l, i) => i >= (reste.trim() ? k + 1 : k) && PUCE.test(l));
+  while (fin + 1 < out.length && PUCE.test(out[fin + 1])) fin++;
+  out.splice(fin + 1, 0, '', phrase.trim());
+  return out.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
 export function phraseAjouteeConjuguee(phrase: string): string {
   // T7-CONS-2 : phrase du cahier des charges à la voix de l'acheteur (« La réunion de démarrage devra avoir lieu… », « Les agents
   // devront être… », « GSS devra transmettre… ») : au présent, à la voix de GSS.
@@ -4278,7 +4340,8 @@ export function phraseAjouteeConjuguee(phrase: string): string {
     .replace(/(?<![\p{L}])(?:devra|doit)\s+[êe]tre(?![\p{L}])/giu, 'est').replace(/(?<![\p{L}])(?:devront|doivent)\s+[êe]tre(?![\p{L}])/giu, 'sont')
     .replace(/(?<![\p{L}])(GSS|Nous)\s+(?:devra|doit|devons)\s+(?=[a-zà-ÿ]+(?:er|ir|re)(?![\p{L}]))/gu, (_m, s: string) => (s === 'Nous' ? 'Nous nous engageons à ' : "GSS s'engage à "));
   const t = voix;
-  const m = /^(\s*(?:[-*•]\s+)?)((?:(?:Avant|Après|Dès|Lors|Pendant|En cas|Au|À|Pour|Sur|Dans|Chaque|Tous|Toutes)\b[^,.;:]{0,70},\s*)?)([A-ZÀ-Ýa-zà-ÿ][a-zà-ÿ]+)(\s+.*)$/su.exec(t);
+  // (jusqu'à deux compléments de tête : « À l'échéance, en cas de résiliation ou de changement de prestataire, garantir… », T8-CONS-8)
+  const m = /^(\s*(?:[-*•]\s+)?)((?:(?:Avant|Après|Dès|Lors|Pendant|En cas|Au|À|Pour|Sur|Dans|Chaque|Tous|Toutes|avant|après|dès|lors|pendant|en cas|au|à|pour|sur|dans|chaque)(?![\p{L}])[^,.;:]{0,70},\s*){0,2})([A-ZÀ-Ýa-zà-ÿ][a-zà-ÿ]+)(\s+.*)$/su.exec(t);
   if (!m) return t;
   const mot = normaliser(m[3]);
   if (!/(?:er|ir|re|oir)$/.test(mot) || PAS_INFINITIF.has(mot) || mot.length < 4) return t;

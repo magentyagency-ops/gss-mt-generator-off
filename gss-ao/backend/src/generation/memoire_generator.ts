@@ -23,7 +23,7 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
   sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, phraseDeRubriqueGss, alignerSchemaSurTexte, FORMALITES_OFFRE, questionFormalite, formalitesDuBloc1, sansClauseSanction, consultationsDuDce,
-  CLAUSE_CONTRACTUELLE, ORGANISATION_ACHETEUR, sansPropositionSurLAcheteur, engagementSansRedite, reperesDansTableaux, valeursImposeesValides, titreSansPointFinal, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
+  CLAUSE_CONTRACTUELLE, ORGANISATION_ACHETEUR, sansPropositionSurLAcheteur, descriptionDeLieu, ajoutHorsDeListe, engagementSansRedite, reperesDansTableaux, valeursImposeesValides, titreSansPointFinal, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, similariteQuestions, recouvrementTextes, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, questionRondes, casPratiqueRepris, type Dimensionnement } from './dimensionnement';
@@ -1946,7 +1946,18 @@ export function motifRefusEngagement(x: string): string {
   // logistique soit l'interlocuteur privilégié des campus ») : l'organisation de l'acheteur, jamais un engagement de GSS.
   if (new RegExp(`^(?:GSS|le titulaire|nous)\\s+(?:s['’]engage(?:ra)?\\s+)?(?:[àa]\\s+)?(?:ce\\s+qu(?:e|['’])|veille(?:ra)?\\s+[àa]\\s+ce\\s+qu(?:e|['’]))\\s*(?:le|la|les|l['’])\\s*[^,;.]{0,80}?${ORGANISATION_ACHETEUR.source}`, 'iu').test(sansPropositionSurLAcheteur(t).replace(/^[-•]\s*/, ''))) return 'organisation de l\'acheteur, pas un engagement de GSS';
   // Clause de prix ou de facturation (T3N-10 : « GSS applique la valorisation des heures de nuit… ») : pas un engagement technique.
-  if (CLAUSE_PRIX.test(t)) return 'clause de prix ou de facturation';
+  // (T8-CONS-7 : « GSS chiffrera les prestations ponctuelles … selon les périodes du BPU … ces taux serviront… », « … avec BPU
+  // jour/nuit/week-end »)
+  // (un engagement de service qui cite le BPU reste : « renfort commandé sur la base du BPU avec un délai de prévenance de 48 h »)
+  if (CLAUSE_PRIX.test(t) || /(?<![\p{L}])(?:avec|selon)\s+(?:un\s+|le\s+)?BPU\s+(?:jour|nuit|week|dimanche|f[ée]ri)|(?<![\p{L}])taux(?![\p{L}])|(?<![\p{L}])chiffr(?:e|er|era|eront|ent|age|é|ée|és|ées)(?![\p{L}])/iu.test(t)) return 'clause de prix ou de facturation';
+  // Rôles inversés (T8-CONS-7, imm : « GSS réalisera un contrôle contradictoire…, désignera le site contrôlé la veille…, remettra
+  // immédiatement une copie au Titulaire ») : GSS est le titulaire ; la phrase décrit l'action de l'acheteur.
+  if (/^(?:GSS|nous)(?![\p{L}])/iu.test(t.replace(/^[-•]\s*/, '').trim()) && /(?<![\p{L}])(?:au|du|le|par le|[àa] l['’]|pour le)\s+titulaire(?![\p{L}])/iu.test(t)) return 'rôles inversés (action de l\'acheteur), pas un engagement de GSS';
+  // Faculté de l'acheteur (T8-CONS-6, becquerel : « Le CHB peut augmenter la fréquence des réunions ») : sujet qui n'est pas GSS.
+  if (/^(?:(?:[Ll]e|[Ll]a|[Ll]es|[Ll]['’])\s*)?(?:[A-Z][A-Z0-9&]{1,10}|acheteur|client|pouvoir adjudicateur|ma[îi]tre d['’]ouvrage|ville|commune|[ée]tablissement|administration|personne publique|centre|institut|universit[ée]|direction|responsable s[ée]curit[ée] d[eu] [A-Z]{2,})(?![\p{L}])[^.;]{0,80}?(?<![\p{L}])(?:peut|peuvent|pourra|pourront|se r[ée]serve(?:nt)?|d[ée]cide(?:ra)?)(?![\p{L}])/u.test(t.replace(/^[-•]\s*/, '').trim()) && !/^(?:GSS|nous)(?![\p{L}])/iu.test(t.replace(/^[-•]\s*/, '').trim())) return 'faculté de l\'acheteur, pas un engagement de GSS';
+  // Description d'un lieu ou de son classement (T8-CONS-7 : « GSS prendra en compte le classement de l'établissement en 2e
+  // catégorie », « … les catégories suivantes : bâtiment principal ERP U de 2e catégorie… ») : sans action de GSS.
+  if (/^(?:GSS|le titulaire|nous)\s+(?:prendra|prend|prendront|tiendra|tient)\s+en (?:compte|consid[ée]ration)\s+(?:le|la|les|l['’])\s*(?:classement|cat[ée]gories?|caract[ée]ristiques|configuration|superficie|surface|nature|typologie|implantation|composition)(?![\p{L}])/iu.test(t.replace(/^[-•]\s*/, '').trim())) return 'description d\'un lieu, sans action de GSS';
   // Délai annoncé sans sa valeur (cstb 551, T5CP-7 : « dans un délai moyen maximum après l'appel de la télésurveillance… »,
   // « le délai d'intervention de levée de doute indiqué pour le marché » alors qu'aucun délai n'est indiqué).
   if (/d[ée]lai (?:moyen )?(?:maximum|maximal|minimum)(?! de\s*\d)\s+(?:apr[èe]s|[àa] compter|suivant|pour|d['’]intervention)|d[ée]lai[^.;]{0,60}\b(?:indiqu[ée]|pr[ée]vu|fix[ée]|demand[ée]|propos[ée])\s+(?:pour|dans|par|au)\s+(?:le|ce|la) (?:march[ée]|CCTP|contrat)/i.test(t) && !/\d/.test(t)) return 'délai sans valeur, sans réponse';
@@ -1967,6 +1978,9 @@ export function motifRefusEngagement(x: string): string {
   // délai contractuel », alors que le CCTP ne fixe aucun délai de remplacement) : renvoi à un délai qui n'existe pas.
   if (/d[ée]lais? contractuels?|d[ée]lais? (?:pr[ée]vus?|fix[ée]s?) (?:au|par le) (?:contrat|march[ée]|CCTP|CCAP)/i.test(t) && !/\d/.test(t)) return 'renvoi à un délai que le DCE ne fixe pas';
   if (/\ben cas de recours\b|\bsi (?:GSS|le titulaire) (?:recourt|fait appel)/i.test(t)) return 'exigence conditionnelle qui ne s\'applique pas à GSS';
+  // Scénario soumis à GSS et non validé (synthèse, question 28 : agents non maintenus « affectés sur un autre site ») : jamais
+  // imprimé tant que GSS ne l'a pas validé (T8-CONS-8).
+  if (/(?:affect\w*|r[ée]affect\w*|reclass\w*|red[ée]ploy\w*)\s+(?:sur|vers|dans|à)\s+(?:un|d['’]autres?)\s+(?:autres?\s+)?sites?/i.test(t)) return 'scénario non validé par GSS (agents affectés sur un autre site)';
   // Faculté de l'acheteur, clause administrative ou simple description d'un lieu, écrites comme un engagement de GSS (s2e 1501,
   // T5N-6) : prestations similaires ou nouveaux accords-cadres confiés par l'acheteur (R2122-7), langue et traduction des
   // documents, notifications par le profil d'acheteur, « GSS prendra en compte le Hub Expo …, situé … » ; jamais imprimées.
@@ -8944,37 +8958,55 @@ RÈGLES DE FORME (rendu Marp) :
       // Phrases ajoutées au texte de GSS par l'adaptation (becquerel 591, T5N-5) : refusées quand elles promettent un autre délai
       // que celui de GSS écrit dans le mémoire (question à GSS), sinon signalées à GSS comme les engagements rédigés par l'IA.
       for (const m of res.appliquees.filter((x) => x.type === 'ajout' && x.par)) {
-        const contraire = ajoutContraireAuxDelaisGss(m.par!, texteGssPublie);
-        if (contraire && sections[rp.id].includes(m.par!)) {
-          sections[rp.id] = sections[rp.id].replace(m.par!, '').replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;])/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+        let par = m.par!;
+        // Faculté ou action de l'acheteur, clause de prix ou administrative, description d'un lieu (T8-CONS-6 : « Le CHB peut
+        // augmenter la fréquence des réunions », « Au Centre Henri Becquerel, le site existant de 22 520 m² comprend… ») : ce n'est
+        // pas un engagement de GSS ; la phrase est retirée de l'ajout (C5), les autres phrases de l'ajout restent.
+        {
+          const RETIRE = /^(?:faculté de l'acheteur|rôles inversés|description d'un lieu|clause de prix|clause administrative|organisation de l'acheteur|pénalité)/;
+          const morceaux = par.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«])/);
+          const gardes = morceaux.filter((ph) => !(RETIRE.test(motifRefusEngagement(ph)) || descriptionDeLieu(ph)));
+          if (gardes.length < morceaux.length && sections[rp.id].includes(par)) {
+            const reste = gardes.join(' ');
+            sections[rp.id] = sections[rp.id].replace(par, reste).replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;])/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+            console.warn(`[MemoireGenerator] Adaptation ${rp.id} : ajout retiré (faculté ou action de l'acheteur, clause, description d'un lieu) : « ${morceaux.filter((x) => !gardes.includes(x)).join(' ').slice(0, 100)} ».`);
+            if (!reste.trim()) continue;
+            par = reste;
+          }
+        }
+        const contraire = ajoutContraireAuxDelaisGss(par, texteGssPublie);
+        if (contraire && sections[rp.id].includes(par)) {
+          sections[rp.id] = sections[rp.id].replace(par, '').replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;])/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
           // Exigence citée : la phrase du DCE qui fonde l'ajout, jamais la justification du modèle (m.motif, T6C-2).
-          const fondement = phraseDuDceProche(m.par!, dceContext);
-          questionsAjoutsRefuses.push(fondement ? questionAlignementRefuse(fondement, contraire) : questionAjoutRefuse(m.par!, contraire));
-          ajoutsRefusesExigences.push(fondement || m.par!);
-          console.warn(`[MemoireGenerator] Adaptation ${rp.id} : ajout refusé, contraire au délai de GSS (« ${m.par!.slice(0, 100)} »).`);
+          const fondement = phraseDuDceProche(par, dceContext);
+          questionsAjoutsRefuses.push(fondement ? questionAlignementRefuse(fondement, contraire) : questionAjoutRefuse(par, contraire));
+          ajoutsRefusesExigences.push(fondement || par);
+          console.warn(`[MemoireGenerator] Adaptation ${rp.id} : ajout refusé, contraire au délai de GSS (« ${par.slice(0, 100)} »).`);
           continue;
         }
         // Phrase qui parle du mémoire au lieu de répondre (ifits 701 : « Les CV et attestations de formation des équipes… sont
         // présentés dans le mémoire », alors qu'aucun CV n'y figure) : retirée, la donnée est demandée à GSS.
-        const motifAjout = motifRefusEngagement(m.par!);
-        if (/^(?:phrase sur le mémoire|renvoi à un document|engagement futur|plan du mémoire)/.test(motifAjout) && sections[rp.id].includes(m.par!)) {
-          sections[rp.id] = sections[rp.id].replace(m.par!, '').replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;])/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
-          questionsAjoutsRefuses.push(questionDEngagement(m.par!));
-          console.warn(`[MemoireGenerator] Adaptation ${rp.id} : ajout refusé (${motifAjout}) : « ${m.par!.slice(0, 100)} ».`);
+        const motifAjout = motifRefusEngagement(par);
+        if (/^(?:phrase sur le mémoire|renvoi à un document|engagement futur|plan du mémoire)/.test(motifAjout) && sections[rp.id].includes(par)) {
+          sections[rp.id] = sections[rp.id].replace(par, '').replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;])/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+          questionsAjoutsRefuses.push(questionDEngagement(par));
+          console.warn(`[MemoireGenerator] Adaptation ${rp.id} : ajout refusé (${motifAjout}) : « ${par.slice(0, 100)} ».`);
           continue;
         }
         // Phrase recopiée du CCTP à l'infinitif (« Effectuer la ronde d'ouverture… ») : engagement de GSS (« GSS s'engage à… »).
-        const conjuguee = phraseAjouteeConjuguee(m.par!);
-        if (conjuguee !== m.par && sections[rp.id].includes(m.par!)) sections[rp.id] = sections[rp.id].replace(m.par!, conjuguee);
+        const conjuguee = phraseAjouteeConjuguee(par);
+        if (conjuguee !== par && sections[rp.id].includes(par)) sections[rp.id] = sections[rp.id].replace(par, conjuguee);
         // Phrase hors du sujet de la rubrique (becquerel 1401, T4N-6 : confidentialité ajoutée sous « La reprise du personnel en
         // place ») : déplacée dans la rubrique de son sujet après toutes les adaptations, sinon retirée.
-        const phraseAjoutee = sections[rp.id].includes(conjuguee) ? conjuguee : m.par!;
+        const phraseAjoutee = sections[rp.id].includes(conjuguee) ? conjuguee : par;
         const cibleAjout = rubriqueDeLAjout(mt, plan.rubriques.map((x) => x.id), rp.id, phraseAjoutee);
         if (cibleAjout !== rp.id && sections[rp.id].includes(phraseAjoutee)) {
           sections[rp.id] = sections[rp.id].replace(phraseAjoutee, '').replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;])/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
           deplacementsAjouts.push({ de: rp.id, vers: cibleAjout, phrase: phraseAjoutee });
           continue;
         }
+        // Jamais entre une amorce (« … sont les suivantes. », « … : ») et sa liste : après la liste (T8-CONS-6).
+        sections[rp.id] = ajoutHorsDeListe(sections[rp.id], phraseAjoutee);
         ajoutsAdaptation.push({ id: rp.id, titre: r.titre, phrase: phraseAjoutee });
       }
       adaptees++;
@@ -10520,15 +10552,19 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
         const t = await this.callOpenAI([{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], 0.4, `Format court ${p.id}${essai > 1 ? ` (essai ${essai})` : ''}`, false);
         if (t && (!texte || t.length > texte.length)) texte = t;
       }
-      // Contrôle de couverture : une exigence oubliée est ajoutée en une ligne, avec son chiffre.
-      if (texte && reqs.length) {
+      // Contrôle de couverture : une exigence oubliée est ajoutée en une ligne, avec son chiffre. Jamais sous la décomposition du
+      // prix (T8-CONS-7, imm : « GSS couvrira le périmètre… » et le classement de l'établissement imprimés sous le prix).
+      if (texte && reqs.length && !prix) {
         try {
           const verif = await this.callOpenAI([
             { role: 'system', content: `On te donne une partie de mémoire technique et une liste numérotée d'exigences du CCTP. Pour chaque exigence qui n'est PAS traitée explicitement dans le texte (avec son chiffre s'il y en a un), rédige UNE puce d'engagement de GSS, courte et factuelle, avec le chiffre exact (sans pénalité, sans inventer de moyen absent de la « réponse GSS connue » ; si GSS n'a pas de réponse connue, engage GSS à respecter l'exigence telle qu'écrite). Jamais « s'engage à confirmer » ni « s'engage à formaliser » : écris l'engagement lui-même. Une exigence déjà traitée dans le texte, même formulée autrement, n'est PAS reprise. Ne cite jamais le numéro d'une exigence. Ignore les exigences qui portent sur la composition du dossier de l'offre (pièces à remettre, nombre de pages du mémoire, visite, signature) : elles ne s'écrivent pas dans le mémoire. Pas de numéro en tête de puce. Renvoie UNIQUEMENT un objet JSON : {"puces": ["…"]} (liste vide si tout est couvert).` },
             { role: 'user', content: `TEXTE :\n${texte}\n\nEXIGENCES :\n${reqs.map((r: any, k: number) => `${k + 1}. ${r.exigence} (réponse GSS connue : ${r.reponseGss || '—'})`).join('\n')}` },
           ], 0.1, `Couverture ${p.id}`, true);
           // « GSS indiquera / précise dans le mémoire… », sous-traitance, pièces de l'offre : jamais remis (motifRefusEngagement).
-          const puces = (JSON.parse(verif || '{}').puces || []).map((x: any) => sansClauseSanction(String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, ''))).filter((x: string) => x && !motifRefusEngagement(x));
+          // Engagement déjà écrit dans une partie précédente ou dans une autre puce (même objet) : jamais en double (T8-CONS-7).
+          const dejaEcrit: string[] = [];
+          const puces = (JSON.parse(verif || '{}').puces || []).map((x: any) => sansClauseSanction(String(x).trim().replace(/^(?:[-•]\s*)?\d+[.)]\s+/, ''))).filter((x: string) => x && !motifRefusEngagement(x))
+            .map((x: string) => engagementSansRedite(x, `${precedentes}\n${texte}\n${dejaEcrit.join('\n')}`)).filter((x: string) => { if (!x) return false; dejaEcrit.push(x); return true; });
           if (puces.length) texte = `${texte.trim()}\n\n## Engagements sur les exigences du cahier des charges\n\n${puces.map((x: string) => `- ${x.replace(/^[-•]\s*/, '')}`).join('\n')}`;
         } catch { /* contrôle facultatif */ }
       }
@@ -10783,6 +10819,9 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     };
     const toutesRetenues = plan.flatMap((p) => retenues[p.id]);
     const rubriquesExcluesCourt: string[] = [];
+    /** Phrases ajoutées au texte de GSS par l'adaptation (format court, T8-CONS-8) : signalées à GSS ; questions des ajouts refusés. */
+    const ajoutsAdaptationCourt: Array<{ id: string; titre: string; phrase: string }> = [];
+    const questionsAjoutsCourt: string[] = [];
     const nonAdapteesCourt: string[] = [];
     const aAdapter = toutesRetenues.map((id) => planMT.rubriques.find((r) => r.id === id)!).filter((r) => r && (r.mode === 'adapte' || (r.mode === 'fixe' && repartition?.parRubrique[r.id]?.length)));
     let adaptees = 0;
@@ -10802,6 +10841,34 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       });
       textes[rp.id] = res.texte;
       suivi.noter(rp.id, avantAdaptation, res.texte, (c) => exigenceDeModification(c, res.appliquees), ETAPE_ADAPTATION_MODELE);
+      // Phrases ajoutées au texte de GSS par l'adaptation (T8-CONS-8, imm 1883 : « Effectuer sans délai la levée de doute… »,
+      // « Préparer la transition… », « Si le client ne souhaite pas maintenir les agents en place, GSS les reprend et les affecte
+      // sur un autre site ») : mêmes contrôles qu'en réponse libre (faculté ou action de l'acheteur, clause, description d'un
+      // lieu, scénario non validé retirés ; phrase sur le mémoire retirée et demandée ; voix de GSS) et signalées à GSS.
+      for (const m of res.appliquees.filter((x) => x.type === 'ajout' && x.par)) {
+        let par = m.par!;
+        if (!textes[rp.id].includes(par)) continue;
+        const RETIRE = /^(?:faculté de l'acheteur|rôles inversés|description d'un lieu|clause de prix|clause administrative|organisation de l'acheteur|pénalité|scénario non validé)/;
+        const morceaux = par.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«])/);
+        const gardes = morceaux.filter((ph) => !(RETIRE.test(motifRefusEngagement(ph)) || descriptionDeLieu(ph)));
+        if (gardes.length < morceaux.length) {
+          const reste = gardes.join(' ');
+          textes[rp.id] = textes[rp.id].replace(par, reste).replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;])/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+          console.warn(`[MemoireGenerator] Adaptation ${rp.id} : ajout retiré (${morceaux.filter((x) => !gardes.includes(x)).map((x) => motifRefusEngagement(x) || 'description d\'un lieu').join(' ; ')}) : « ${morceaux.filter((x) => !gardes.includes(x)).join(' ').slice(0, 100)} ».`);
+          if (!reste.trim()) continue;
+          par = reste;
+        }
+        const motifAjout = motifRefusEngagement(par);
+        if (/^(?:phrase sur le mémoire|renvoi à un document|engagement futur|plan du mémoire)/.test(motifAjout)) {
+          textes[rp.id] = textes[rp.id].replace(par, '').replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;])/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+          questionsAjoutsCourt.push(questionDEngagement(par));
+          continue;
+        }
+        const conjuguee = par.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«])/).map((ph) => phraseAjouteeConjuguee(ph)).join(' ');
+        if (conjuguee !== par) textes[rp.id] = textes[rp.id].replace(par, conjuguee);
+        textes[rp.id] = ajoutHorsDeListe(textes[rp.id], conjuguee);
+        ajoutsAdaptationCourt.push({ id: rp.id, titre: r.titre, phrase: conjuguee });
+      }
       // Mission niée par le cahier des charges : rubrique non reprise, signalée (T5CP-1) ; échec du modèle signalé (T5-COH-2).
       if (res.missionExclue) { textes[rp.id] = ''; rubriquesExcluesCourt.push(`Rubrique « ${r.titre} » non reprise : le cahier des charges exclut la mission qu'elle décrit (à la place de « ${phraseLisible(res.missionExclue.extrait, 160)} », le modèle proposait « ${phraseLisible(res.missionExclue.par, 160)} »). Si GSS assure bien cette mission sur ce marché, demandez via l'assistant de la rétablir.`); }
       if (res.repli && /appel au modèle impossible|réponse du modèle illisible/.test(res.raison || '')) nonAdapteesCourt.push(r.titre);
@@ -11116,7 +11183,10 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     consultationList.push(...this.controlePagesParPartie(rendu.filePath, format, plan));
     const alertePanneCourt = [...alerteCctpAbsent(dceContext, this.piecesIllisibles, this.piecesPartielles, this.piecesNonLues), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext), ...this.alertesFormat, alerteRedactionIndisponible(this.appelsEchoues, nonAdapteesCourt)].filter(Boolean).join('\n\n');
     if (alertePanneCourt) { consultationList.unshift(...alertePanneCourt.split('\n\n')); console.warn(`[MemoireGenerator] ${alertePanneCourt}`); }
-    consultationList.push(...rubriquesExcluesCourt, ...avisSecours, ...propositions);
+    consultationList.push(...rubriquesExcluesCourt, ...avisSecours, ...propositions, ...questionsAjoutsCourt);
+    // Phrases ajoutées au texte de GSS d'après le CCTP (T8-CONS-8) : seulement celles qui sont imprimées.
+    const ajoutsCourtImprimes = ajoutsAdaptationCourt.filter((a) => Object.values(sections).some((t) => t.replace(/⟦AC:\d+⟧/g, '').includes(a.phrase.slice(0, 60))));
+    for (const a of ajoutsCourtImprimes) consultationList.push(`Phrase ajoutée au texte de GSS d'après le cahier des charges (rédigée par l'IA), à valider : « ${a.titre} » — « ${a.phrase.replace(/\s+/g, ' ').trim()} »`);
     // Phrases de GSS adaptées au CCTP (D8) : une ligne par phrase à valider (aucune s'il n'y en a pas).
     consultationList.push(...consultationsAdaptations(adaptations));
     console.log(`[MemoireGenerator] Format court (mémoire type) : ${rendu.pages} page(s) / ${format.pagesMax} autorisée(s) ; ${toutesRetenues.length} rubrique(s) du mémoire type reprise(s), ${propositions.length} proposition(s).`);
@@ -11156,6 +11226,14 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       const texteDim = messageDimensionnement(ctxBase.dimensionnement);
       if (conversation?.length) conversation[0].texte = `${conversation[0].texte}\n\n${texteDim}`;
       else conversation = [{ role: 'assistant', texte: texteDim, date: new Date().toISOString() }];
+    }
+    // Phrases ajoutées au texte de GSS d'après le CCTP (T8-CONS-8) : annoncées dans le premier message, comme en réponse libre.
+    {
+      const texteAjouts = messageAjoutsAdaptation(ajoutsCourtImprimes.map((a) => ({ titre: a.titre, phrase: a.phrase })));
+      if (texteAjouts) {
+        if (conversation?.length) conversation[0].texte = `${conversation[0].texte}\n\n${texteAjouts}`;
+        else conversation = [{ role: 'assistant', texte: texteAjouts, date: new Date().toISOString() }];
+      }
     }
     // Phrases de GSS adaptées au CCTP (D8) : annoncées dans le premier message, à valider, modifier ou rétablir.
     const texteAdaptations = messageAdaptations(adaptations);
