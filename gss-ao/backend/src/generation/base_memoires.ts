@@ -1543,7 +1543,11 @@ export function normaliserExpressionsDelai(t: string): string {
     .replace(/\bdans l['’]heure(?![a-zà-ÿ])/gi, 'dans 1 heure')
     .replace(/\bd['’]\s*une?\s+(?=(?:heures?|h)(?![a-zà-ÿ]))/gi, 'de 1 ')
     .replace(/(d[ée]lai(?:\s+maxim(?:al|um))?)\s+(?:n['’]exc[ée]dant pas|ne d[ée]passant pas|ne pouvant (?:pas )?exc[ée]der|inf[ée]rieure?\s+(?:ou\s+[ée]gale?\s+)?[àa]|maximum de)\s+/gi, '$1 de ')
-    .replace(/\bau plus tard\s+(?=(?:\d|une?\s|deux|trois|quatre|cinq|six|dix|douze|quinze|vingt|trente)\S*\s*(?:\(\s*\d+\s*\)\s*)?(?:minutes?|mn|min|heures?|h)(?![a-zà-ÿ]))/gi, 'au plus tard dans ');
+    .replace(/\bau plus tard\s+(?=(?:\d|une?\s|deux|trois|quatre|cinq|six|dix|douze|quinze|vingt|trente)\S*\s*(?:\(\s*\d+\s*\)\s*)?(?:minutes?|mn|min|heures?|h)(?![a-zà-ÿ]))/gi, 'au plus tard dans ')
+    // Formes rencontrées hors corpus (T4G-3) : « 2 hrs », « a 2 heures pour… », « 20 minutes au plus tard après ».
+    .replace(/(?<![\d.,])(\d{1,3})\s*hrs?\.?(?![\p{L}])/giu, '$1 heures')
+    .replace(/(?<![\p{L}])a\s+(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}])\s+pour\s)/giu, 'dispose dans ')
+    .replace(/(?<![\p{L}\d])(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)\s+au\s+plus\s+tard\s+apr[èe]s)/giu, 'dans ');
 }
 
 /** Durée en minutes (« 1 heure » → 60, « 45 minutes » → 45) ; NaN si illisible. */

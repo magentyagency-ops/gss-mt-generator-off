@@ -1741,8 +1741,56 @@ const SUJETS_DELAI: Record<string, { sujet: RegExp; exclure?: RegExp; objet?: Re
  */
 export function delaisDuDce(dce: string, sujet: keyof typeof SUJETS_DELAI): Array<{ valeur: string; minutes: number; phrase: string }> {
   const out: Array<{ valeur: string; minutes: number; phrase: string }> = [];
-  for (const ph of phrasesEntieresDuDce(dce)) for (const d of delaisDePhrase(ph, sujet)) out.push({ ...d, phrase: ph });
+  for (const { lu, cite } of phrasesDuDcePourDelais(dce)) for (const d of delaisDePhrase(lu, sujet)) out.push({ ...d, phrase: cite });
   return out;
+}
+
+/**
+ * Phrases du DCE lues pour les délais (T4G-3), chacune avec le texte cité à GSS : chaque ligne de tableau (« Intervention sur
+ * déclenchement d'alarme | 20 minutes », « … — Délai maximal: 20 minutes ») et chaque puce d'une liste est une phrase à part,
+ * lue avec son contexte (intitulé de l'article, phrase d'introduction terminée par « : », ligne d'en-tête du tableau :
+ * « DÉLAIS D'INTERVENTION … délais maximaux suivants : ») mais citée seule ; « Délai maximum : 20 minutes. » est lue avec la
+ * phrase qui la précède (son sujet). Les autres phrases restent celles de phrasesEntieresDuDce.
+ */
+function phrasesDuDcePourDelais(dce: string): Array<{ lu: string; cite: string }> {
+  const out: Array<{ lu: string; cite: string }> = [];
+  let titre = '', intro = '', entete = '';
+  let tampon: string[] = [];
+  const net = (x: string) => x.replace(/\s+/g, ' ').trim();
+  const vider = () => {
+    const phrases = phrasesEntieresDuDce(tampon.join('\n'));
+    tampon = [];
+    phrases.forEach((ph, i) => {
+      // « Délai maximum : 20 minutes. » : le sujet est dans la phrase précédente.
+      if (i > 0 && /^d[ée]lais?(?:\s+(?:maxim(?:al|um)|d['’]intervention|d['’]arriv[ée]e))?\s*:\s*\S/i.test(ph)) out.push({ lu: `${phrases[i - 1]} ${ph}`, cite: `${phrases[i - 1]} ${ph}` });
+      else out.push({ lu: ph, cite: ph });
+    });
+  };
+  const contexte = () => net(`${titre} ${intro} ${entete}`);
+  // Durée seule après le libellé (« intervention sur alarme : 20 minutes ») sous une introduction qui parle de délais : un délai.
+  const avecDelai = (ctx: string, x: string) => (/d[ée]lai/i.test(ctx) ? x.replace(/:\s*(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/u, ': dans ') : x);
+  for (const brute of String(dce || '').replace(/\r/g, '').split('\n')) {
+    const l = brute.trim();
+    if (!l) { vider(); tampon.push(''); entete = ''; continue; }
+    if (/^(?:ARTICLE|Article|CHAPITRE|Chapitre)\b|^\d{1,2}(?:[.\-–]\s?\d{1,2})*[.\-–]?\s+[A-ZÉÈ]/.test(l) && l.length <= 120) { vider(); titre = l; intro = ''; entete = ''; tampon.push(l); continue; }
+    if (/^=+\s*TABLEAUX/i.test(l)) { vider(); entete = ''; continue; }
+    // Ligne de tableau : la première ligne d'un tableau est son en-tête.
+    if (/\|/.test(l)) {
+      vider();
+      if (!entete) { entete = l; if (!/\d/.test(l)) continue; }
+      out.push({ lu: `${contexte()} ${l}`, cite: net(l) });
+      continue;
+    }
+    // Ligne étiquetée par l'en-tête de colonne (« Déclenchement d'un PTI — Délai maximal: 10 minutes »).
+    if (/\s[—–]\s[^:|]{2,60}:\s*\S/.test(l)) { vider(); out.push({ lu: `${net(`${titre} ${intro}`)} ${avecDelai(l, l)}`, cite: net(l) }); continue; }
+    // Puce d'une liste introduite par « … : » : lue avec l'introduction.
+    if (/^(?:[-•▪●○◦−*]|\d+[.)])\s+/.test(l) && intro) { vider(); const item = l.replace(/^(?:[-•▪●○◦−*]|\d+[.)])\s+/, ''); out.push({ lu: `${net(`${titre} ${intro}`)} ${avecDelai(`${titre} ${intro}`, item)}`, cite: net(item) }); continue; }
+    entete = '';
+    if (/:\s*$/.test(l)) intro = l; else if (!/^(?:[-•▪●○◦−*]|\d+[.)])\s+/.test(l)) intro = intro && /:\s*$/.test(tampon[tampon.length - 1] || '') ? intro : '';
+    tampon.push(brute);
+  }
+  vider();
+  return out.filter((x) => x.cite.length >= 12 && !LIGNE_SOMMAIRE.test(x.cite));
 }
 
 /** Phrases entières du DCE (coupées sur « . ! ? » et les puces, jamais sur « ; ») : le sujet d'un délai peut précéder le « ; ». */
@@ -2554,7 +2602,10 @@ const LETTRES_FOIS = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept'
  */
 export function frequenceInopinesDce(dce: string): { valeur: string; mensuels: string; phrase: string } | null {
   const LETTRES = ['', 'une', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix'];
-  for (const ph of String(dce || '').replace(/\s+/g, ' ').split(/(?<=[.;])\s+/)) {
+  // Ligne de tableau, une phrase à part (T4G-3 : « Contrôle inopiné des agents sur site | 4 par mois ») ; « N par mois » dans une
+  // ligne qui nomme les contrôles inopinés compte N contrôles par mois.
+  const lignes = String(dce || '').replace(/\r/g, '').split('\n').map((l) => (/\|/.test(l) || /\s[—–]\s[^:|]{2,60}:\s*\S/.test(l) ? `\n${/inopin/i.test(l) ? l.replace(/(?<![\p{L}\d])(\d+|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix)\s+(?:fois\s+)?par\s+(mois|semaine)(?![\p{L}])/giu, '$1 contrôles par $2') : l}.\n` : l)).join('\n');
+  for (const ph of lignes.replace(/\s+/g, ' ').split(/(?<=[.;])\s+/)) {
     if (!/inopin/i.test(ph) || /p[ée]nalit|€/i.test(ph)) continue;
     const n = frequenceMensuelle(ph);
     if (n === null || n <= 3) continue;
