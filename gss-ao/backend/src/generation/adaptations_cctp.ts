@@ -31,6 +31,24 @@ import { sitesDuMarche, lieuDuMarche, communesParCodePostal, interditPhotosDce, 
 
 export type StatutAdaptation = 'a_valider' | 'validee' | 'modifiee' | 'retablie';
 
+/** Valeur chiffrée ou fréquence d'une phrase (délai, fréquence, jalon). */
+const RX_VALEUR_PHRASE = /(?:tous les|toutes les|chaque)\s+(?:\d+|deux|trois|quatre|six|quinze)?\s*(?:jours?|semaines?|mois|trimestres?|semestres?|ans?)|(?:une|deux|trois|quatre|\d+)\s+fois\s+par\s+(?:jour|semaine|mois|trimestre|semestre|an)|(?:bi|tri|se)?mensuel\w*|trimestriel\w*|semestriel\w*|bimestriel\w*|annuel\w*|hebdomadaire\w*|\d+\s*(?:minutes?|heures?|h(?![a-z])|jours?(?:\s+ouvr[ée]s)?)|j\s*-\s*\d+/gi;
+const valeursDe = (t: string) => new Set([...normaliser(String(t || '')).matchAll(RX_VALEUR_PHRASE)].map((m) => m[0].replace(/\s+/g, ' ').trim()));
+
+/**
+ * Phrases d'un texte qui redisent la valeur du cahier des charges que GSS a refusée en rétablissant sa phrase d'origine
+ * (T7N-10, ign : phrase rétablie « les réunions de suivi sont mensuelles ou trimestrielles… », engagement ajouté d'après le
+ * CCTP « Nous assistons aux réunions de suivi organisées dès le démarrage, tous les deux mois… » dans la même rubrique) :
+ * phrases (hors la phrase rétablie) qui portent une valeur de la phrase adaptée absente de la phrase d'origine.
+ */
+export function phrasesContrairesAuChoix(texte: string, origine: string, adaptee: string): string[] {
+  const vo = valeursDe(origine);
+  const propres = [...valeursDe(adaptee)].filter((v) => !vo.has(v));
+  if (!propres.length) return [];
+  const co = cle(origine);
+  return unites(texte).filter((u) => cle(u) !== co && !/^\s*#/.test(u) && propres.some((v) => valeursDe(u).has(v)));
+}
+
 export interface PhraseAdaptee {
   /** Numéro montré à GSS (1, 2…), dans l'ordre du mémoire. */
   n: number;
@@ -55,6 +73,8 @@ export interface PhraseAdaptee {
   /** Texte présent dans le mémoire pour cette phrase depuis le choix de GSS (sinon la phrase adaptée). */
   actuelle?: string;
   decideLe?: string;
+  /** Phrases ajoutées d'après le CCTP retirées parce qu'elles redisaient la valeur refusée par GSS (phrase rétablie, T7N-10). */
+  contrairesRetirees?: string[];
 }
 
 /** Changement d'une phrase entre deux versions d'un texte. */
@@ -380,6 +400,21 @@ export class SuiviAdaptations {
     this.decisions = (o.decisions || []).filter((d) => d && d.statut && d.statut !== 'a_valider');
   }
 
+  /**
+   * Phrase d'origine rétablie par GSS (T7N-10) : les phrases ajoutées d'après le CCTP qui redisent la valeur refusée dans la
+   * même rubrique sont retirées (jamais une phrase du texte de GSS), et notées sur la décision pour être montrées à GSS.
+   */
+  private retirerContraires(sections: Record<string, string>, a: PhraseAdaptee): void {
+    const t = sections[a.rubrique];
+    if (!t || !a.adaptee) return;
+    const contraires = phrasesContrairesAuChoix(t, a.origine, a.adaptee).filter((u) => !this.estDeGss(u));
+    if (!contraires.length) return;
+    let r = t;
+    for (const u of contraires) r = r.split('\n').map((l) => (l.trim() === u.trim() ? null : l.replace(u, '').replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;])/g, '$1'))).filter((l): l is string => l !== null).join('\n');
+    sections[a.rubrique] = r.replace(/\n{3,}/g, '\n\n');
+    a.contrairesRetirees = [...new Set([...(a.contrairesRetirees || []), ...contraires])];
+  }
+
   /** Vrai si la phrase vient du texte de GSS (ressemblance de 80 % au moins avec une phrase du mémoire type publiposté). */
   estDeGss(phrase: string): boolean {
     if (!this.reference.length) return true;
@@ -502,6 +537,7 @@ export class SuiviAdaptations {
         if (r.ok) {
           sections[x.rubrique] = r.texte;
           Object.assign(x, { statut: d.statut, texteGss: d.texteGss, decideLe: d.decideLe, actuelle: cible ? localiser(r.texte, cible) || cible : '' });
+          if (d.statut === 'retablie') this.retirerContraires(sections, x);
           continue;
         }
       }
@@ -513,7 +549,9 @@ export class SuiviAdaptations {
         const loc = localiser(texte, d.origine, 0.9);
         if (loc) sections[d.rubrique] = texte.replace(loc, forme(loc, cible));
       }
-      reportes.push({ ...d, n: 0, titre: titreDe(d.rubrique) || d.titre, actuelle: cible ? localiser(sections[d.rubrique], cible) || undefined : '' });
+      const reporte: PhraseAdaptee = { ...d, n: 0, titre: titreDe(d.rubrique) || d.titre, actuelle: cible ? localiser(sections[d.rubrique], cible) || undefined : '' };
+      if (d.statut === 'retablie') this.retirerContraires(sections, reporte);
+      reportes.push(reporte);
     }
     const tous = [...liste, ...reportes];
     tous.sort((a, b) => ordre.indexOf(a.rubrique) - ordre.indexOf(b.rubrique));
@@ -744,7 +782,10 @@ const libelleExigence = (a: PhraseAdaptee, max: number, majuscule = false) => (e
 /** Lignes des consultations (une par phrase adaptée à valider) ; aucune s'il n'y en a pas. */
 export function consultationsAdaptations(liste: PhraseAdaptee[] | undefined): string[] {
   const l = aValider(liste);
-  return l.map((a) => { const [o, ad] = pairesLisibles(a.origine, a.adaptee); return `${TITRE_ADAPTATIONS} (${l.length}) — n° ${a.n}, « ${a.titre} » : phrase d'origine de GSS : « ${o} » ; phrase adaptée : ${a.adaptee ? `« ${ad} »` : '(phrase retirée)'} ; ${libelleExigence(a, 500)}. À valider, modifier ou rétablir via l'assistant avant la remise.`; });
+  // (T7N-10 : phrase rétablie par GSS, phrases ajoutées d'après le CCTP qui la contredisaient retirées : GSS en est informé)
+  const contraires = (liste || []).filter((a) => a.statut === 'retablie' && a.contrairesRetirees?.length)
+    .map((a) => `Phrase d'origine de GSS rétablie à votre demande (« ${a.titre} ») : ${a.contrairesRetirees!.length > 1 ? 'les phrases ajoutées' : 'la phrase ajoutée'} d'après le cahier des charges qui la ${a.contrairesRetirees!.length > 1 ? 'contredisaient ont été retirées' : 'contredisait a été retirée'} : ${a.contrairesRetirees!.map((x) => `« ${x.replace(/\s+/g, ' ').trim().slice(0, 300)} »`).join(' ; ')}. Pour ${a.contrairesRetirees!.length > 1 ? 'les garder' : 'la garder'}, demandez-le à l'assistant avant la remise.`);
+  return [...contraires, ...l.map((a) => { const [o, ad] = pairesLisibles(a.origine, a.adaptee); return `${TITRE_ADAPTATIONS} (${l.length}) — n° ${a.n}, « ${a.titre} » : phrase d'origine de GSS : « ${o} » ; phrase adaptée : ${a.adaptee ? `« ${ad} »` : '(phrase retirée)'} ; ${libelleExigence(a, 500)}. À valider, modifier ou rétablir via l'assistant avant la remise.`; })];
 }
 
 /** Paragraphe du premier message de l'assistant ; '' s'il n'y a aucune phrase adaptée à valider. */
@@ -795,8 +836,12 @@ export function deciderAdaptation(texte: string, a: PhraseAdaptee, choix: string
   a.decideLe = new Date().toISOString();
   a.actuelle = cible ? localiser(r.texte, cible) || cible.trim() : '';
   const change = r.texte !== texte;
+  // T7N-10 : phrase rétablie dont la valeur contredit une autre phrase de la rubrique ajoutée d'après le CCTP : signalé à GSS,
+  // qui choisit de la garder ou de la retirer avant la remise.
+  const contraires = statut === 'retablie' && a.adaptee ? phrasesContrairesAuChoix(r.texte, a.origine, a.adaptee) : [];
+  const avertissement = contraires.length ? ` Attention : ${contraires.length > 1 ? 'ces phrases de la rubrique reprennent' : 'cette phrase de la rubrique reprend'} encore la valeur du cahier des charges : ${contraires.map((x) => `« ${x.replace(/\s+/g, ' ').trim().slice(0, 300)} »`).join(' ; ')}. Faut-il ${contraires.length > 1 ? 'les garder ou les retirer' : 'la garder ou la retirer'} ?` : '';
   const message = statut === 'validee' ? `Phrase adaptée n° ${a.n} validée (« ${a.titre} »).`
-    : statut === 'retablie' ? `Phrase d'origine de GSS rétablie pour la phrase n° ${a.n} (« ${a.titre} »).`
+    : statut === 'retablie' ? `Phrase d'origine de GSS rétablie pour la phrase n° ${a.n} (« ${a.titre} »).${avertissement}`
       : `Phrase n° ${a.n} remplacée par votre texte (« ${a.titre} »).`;
   return { texte: r.texte, ok: true, change, message };
 }
