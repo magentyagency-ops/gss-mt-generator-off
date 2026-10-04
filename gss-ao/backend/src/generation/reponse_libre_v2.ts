@@ -1991,7 +1991,7 @@ function titreExigenceSansControle(x: string, max = 34): string {
   // Proposition principale (après un complément de tête) : c'est elle qui porte l'exigence.
   const principale = ct ? e.replace(COMPLEMENT_TETE, '$3') : e;
   // « <sujet> devra être présent(e) … dans les deux (2) heures » → « Remplaçant présent sous 2 heures ».
-  const attribut = /^(?:(?:le|la|les|l['’]|son|sa|ses|leur|leurs|tout|toute|chaque|un|une)\s*)?([a-zà-ÿ'’-]{3,}(?:\s+[a-zà-ÿ'’-]{3,})?)\s+(?:doit|doivent|devra|devront)\s+[êe]tre\s+([a-zà-ÿ]+(?:é|ée|és|ées|ent|ente|ents|entes|t|te|ts|tes|s|e)?)\b/i.exec(principale);
+  const attribut = /^(?:(?:le|la|les|l['’]|son|sa|ses|leur|leurs|tout|toute|chaque|un|une)\s*)?([a-zà-ÿ'’-]{3,}(?:\s+[a-zà-ÿ'’-]{3,})?)\s+(?:doit|doivent|devra|devront)\s+[êe]tre\s+(?!(?:en|de|du|des|dans|sur|sous|à|au|aux|par|pour|avec|entre)\s)([a-zà-ÿ]+(?:é|ée|és|ées|ent|ente|ents|entes|t|te|ts|tes|s|e)?)(?![\p{L}])/iu.exec(principale);
   if (attribut && duree) {
     const t = cap(`${attribut[1]} ${attribut[2]} sous ${duree}`);
     if (ok(t)) return t;

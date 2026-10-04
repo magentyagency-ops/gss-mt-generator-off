@@ -90,3 +90,13 @@ describe('schéma de secours du bloc 1 (T7-CONS-4, T7N-5)', () => {
     expect(r).toMatch(/365[^\n]*→ notre réponse : « Notre socle de procédures/);
   });
 });
+
+describe('libellé EXIGENCE : jamais une préposition prise pour l’attribut (T7N-1)', () => {
+  it('« le titulaire doit être en capacité d’envoyer… en moins de 30 minutes »', () => {
+    const c = "En cas de déclenchement de l’alarme intrusion du bâtiment principal, à un moment sans présence du personnel de l’IFITS et/ou de l’agent conducteur de chien, le titulaire doit être en capacité d’envoyer sur le site un agent pour intervention en moins de 30 minutes";
+    const t = titreExigence(c, 46);
+    expect(t).not.toMatch(/en sous|Titulaire en/);
+    expect(libelleBloc1Valide(t, 46)).toBe(true);
+    expect(libelleExigenceBloc1('', c, MAX_LIBELLE_EXIGENCE)).not.toMatch(/Titulaire en/);
+  });
+});
