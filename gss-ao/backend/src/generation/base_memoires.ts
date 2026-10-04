@@ -1696,8 +1696,9 @@ export function normaliserExpressionsDelai(t: string): string {
     // « dispose de 2 heures pour assurer son remplacement » (T2-GEN-2) : « dispose dans 2 heures pour… ».
     .replace(/(?<![\p{L}])(dispos\p{L}*)\s+(?:d['’]un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?de\s+|de\s+)(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}])\s+pour\s)/giu, '$1 dans ')
     // Cellule de tableau qui ne porte que la durée (« Levée de doute sur alarme | 30 minutes », T2-GEN-2) : « | dans 30 minutes ».
-    .replace(/\|\s*(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}\/])\s*(?:\||$))/gimu, '| dans ')
-    .replace(/(d[ée]lais?(?:\s+maxim(?:al|um))?\b[^.;:]{0,90}?)\s*:\s*(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/giu, '$1 dans ')
+    // (durée écrite en heures et minutes, « 0h20 », « 2h00 », « 01h00 », « 0 h 20 », T5G-1 : convertie plus bas)
+    .replace(/\|\s*(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}\/])\s*(?:\||$)|\d{1,2}\s*(?:h|:)\s*[0-5]\d(?![\d\p{L}])\s*(?:\||$))/gimu, '| dans ')
+    .replace(/(d[ée]lais?(?:\s+maxim(?:al|um))?\b[^.;:]{0,90}?)\s*:\s*(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}\d])|\d{1,2}\s*(?:h|:)\s*[0-5]\d(?![\d\p{L}])(?!\s*(?:à|a|-|–)\s*\d))/giu, '$1 dans ')
     .replace(/(?<![\p{L}])au\s+maximum\s+(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/giu, 'dans ')
     .replace(/\bdans l['’]heure(?![a-zà-ÿ])/gi, 'dans 1 heure')
     .replace(/\bd['’]\s*une?\s+(?=(?:heures?|h)(?![a-zà-ÿ]))/gi, 'de 1 ')
@@ -1706,7 +1707,13 @@ export function normaliserExpressionsDelai(t: string): string {
     // Formes rencontrées hors corpus (T4G-3) : « 2 hrs », « a 2 heures pour… », « 20 minutes au plus tard après ».
     .replace(/(?<![\d.,])(\d{1,3})\s*hrs?\.?(?![\p{L}])/giu, '$1 heures')
     .replace(/(?<![\p{L}])a\s+(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}])\s+pour\s)/giu, 'dispose dans ')
-    .replace(/(?<![\p{L}\d])(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)\s+au\s+plus\s+tard\s+apr[èe]s)/giu, 'dans ');
+    .replace(/(?<![\p{L}\d])(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)\s+au\s+plus\s+tard\s+apr[èe]s)/giu, 'dans ')
+    // Heures et minutes après « dans » inséré ci-dessus (T5G-1 : « Délai … : 0h20 », « | 2h00 ») : en minutes, ou en heures
+    // pleines (« 2h00 » → « 2 heures »). Jamais une plage horaire.
+    .replace(/(?<=(?<![\p{L}])dans\s+)(\d{1,2})\s*(?:h|:)\s*([0-5]\d)(?![\d\p{L}])(?!\s*(?:à|a|-|–)\s*\d)/giu, (_m, h: string, mm: string) => {
+      const total = Number(h) * 60 + Number(mm);
+      return Number(mm) === 0 && Number(h) > 0 ? `${Number(h)} ${Number(h) > 1 ? 'heures' : 'heure'}` : `${total} minutes`;
+    });
 }
 
 /** Durée en minutes (« 1 heure » → 60, « 45 minutes » → 45) ; NaN si illisible. */
@@ -2284,7 +2291,9 @@ export function normaliserSsiap(t: string): string {
  * Cahier des clauses administratives ET techniques particulières (CCATP, courant dans les MAPA, T2-COH-6) : un cahier des
  * charges, jamais un CCAP.
  */
-export const RX_CCATP = /c\.?\s?c\.?\s?a\.?\s?t\.?\s?p(?![a-z])|clauses\s*administratives\s*et\s*techniques|clausesadministrativesettechniques/i;
+// Pièce unique CCAP et CCTP (T5G-10 : « CCAP-CCTP », « CCAP valant CCTP », « CCAP et CCTP », « CCTP-CCAP », « CCAP_CCTP_… ») :
+// un cahier des charges, comme le CCATP.
+export const RX_CCATP = /c\.?\s?c\.?\s?a\.?\s?t\.?\s?p(?![a-z])|clauses\s*administratives\s*et\s*techniques|clausesadministrativesettechniques|c\.?\s?c\.?\s?a\.?\s?p\.?[\s_.\-–—+&/]*(?:et|valant|vaut|faisant\s*office\s*de|tenant\s*lieu\s*de)?[\s_.\-–—+&/]*c\.?\s?c\.?\s?t\.?\s?p(?![a-z])|c\.?\s?c\.?\s?t\.?\s?p\.?[\s_.\-–—+&/]*(?:et|valant|vaut)?[\s_.\-–—+&/]*c\.?\s?c\.?\s?a\.?\s?p(?![a-z])|valant\s*c\.?\s?c\.?\s?t\.?\s?p(?![a-z])/i;
 export function estCahierDesCharges(nomPiece: string): boolean {
   const n = String(nomPiece || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/_/g, ' ');
   const colle = n.replace(/[^a-z0-9]+/g, '');
