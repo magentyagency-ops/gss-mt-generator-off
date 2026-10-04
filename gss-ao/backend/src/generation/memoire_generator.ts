@@ -6,7 +6,7 @@ import { insererSchemasReponses, choisir as choisirSchemasGss, schemasSelonDce, 
 import { FormatImpose, PartieCourte, passagesLimitePages, passagesContenuOffre, limitePagesMemoire, phraseLimitePages, rendreFormatCourt, renvoisVersParties, nettoyerEngagements, voixDeGss, RX_LIMITE_PAR_PARTIE, pagesDesParties } from './format_court';
 import { actualiserOrganigramme, organigrammeSvg } from './organigramme';
 import { themeActif, schemasBibliotheque, estRetourArriere } from './themes';
-import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, regrouperQuestions, completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, lireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements } from './completion';
+import { poserSignets, poserSignetsChamps, preciserQuestionsCadre, regrouperQuestions, completerGrilleCandidature, CHAMP_GRILLE_CANDIDATURE, DEBUT_CHAMP, FIN_CHAMP, formulerQuestions, ecrireEtat, lireEtat, integrerDansRubrique, REPERE, REPERE_RE, MARQUE_CHAMP, ElementACompleter, EtatCompletion, REPERE_TECHNIQUE, questionsDesEmplacements, libelleDuRepere } from './completion';
 import {
   chargerMemoireType, preparerMemoireType, reinitialiserJournalIndicateurs, publierMemoire, exigencesParRubrique, extraireValeursImposees, adapterRubrique,
   obligationsPourRubrique, donneesBesoin, themesPourMatrice, lireJson, estPlanV2, fidelite, SEUIL_FIDELITE,
@@ -6946,7 +6946,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       }));
       for (const el of elementsACompleter) { const q = precises.get(el.cle); if (q) { el.question = q.question; el.groupe = q.groupe; } }
       // Aucune question ne cite un repère technique (« le champ GSS_AC_3 ») : question d'après la phrase de l'emplacement.
-      for (const el of elementsACompleter) if (REPERE_TECHNIQUE.test(el.question)) el.question = `Information à fournir pour compléter : « ${el.contexte.replace(REPERE_TECHNIQUE, '').trim()} »`;
+      for (const el of elementsACompleter) if (REPERE_TECHNIQUE.test(el.question)) el.question = `Information à fournir pour compléter : « ${(el.contexte.includes('[À COMPLÉTER]') ? libelleDuRepere(el.contexte.replace(REPERE_TECHNIQUE, '')) : '') || el.contexte.replace(REPERE_TECHNIQUE, '').trim()} »`;
       // Question générique (« Quelle donnée précise doit figurer dans le passage laissé vide… ? », « … la partie manquante du
       // mémoire technique relative au site concerné ? », havre1 21) : elle cite la question du cadre et la phrase exacte.
       for (const el of elementsACompleter) {
@@ -8633,7 +8633,7 @@ RÈGLES DE FORME (rendu Marp) :
       } catch (e: any) {
         console.warn(`[MemoireGenerator] Questions des emplacements à compléter non formulées (${e?.message || e}).`);
       }
-      for (const e of sansQuestion) e.question ||= `Information à fournir pour compléter : « ${e.contexte} »`;
+      for (const e of sansQuestion) e.question ||= `Information à fournir pour compléter : « ${libelleDuRepere(e.contexte) || e.contexte} »`;
     }
     const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
     for (const r of enLigne) demandes.push({ texte: r.question, repere: r.n });

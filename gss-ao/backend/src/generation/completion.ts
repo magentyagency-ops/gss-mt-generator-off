@@ -61,6 +61,17 @@ export interface ElementACompleter {
  * la question a disparu à la fusion des consultations reçoit une question tirée de son libellé. Un paragraphe dont un
  * repère ⟦AC:n⟧ est déjà couvert par une question est laissé tel quel. Renvoie les éléments à ajouter.
  */
+/**
+ * Libellé de la donnée attendue à un emplacement « [À COMPLÉTER] » : la phrase qui le contient, sans ce qui suit le repère ni
+ * le verbe d'état final (« Le chef de poste sur le terrain est [À COMPLÉTER]. » → « Le chef de poste sur le terrain »).
+ */
+export function libelleDuRepere(texte: string): string {
+  const t = String(texte || '').replace(/\*\*/g, '').replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '');
+  const phrases = t.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«])/);
+  const ph = phrases.find((x) => x.includes('[À COMPLÉTER]')) || t;
+  return ph.split('[À COMPLÉTER]')[0].replace(/[\s:,;–—-]+$/, '').replace(/\s+(?:est|sont|sera|seront|serait|reste|restent)$/i, '').trim();
+}
+
 export function questionsDesEmplacements(sections: Record<string, string>, elements: ElementACompleter[], titreDe: (id: string) => string = () => ''): ElementACompleter[] {
   const couverts = new Set(elements.flatMap((e) => e.reperes || []));
   const ajouts: ElementACompleter[] = [];
@@ -71,7 +82,9 @@ export function questionsDesEmplacements(sections: Record<string, string>, eleme
       if (reperes.some((r) => couverts.has(r))) continue;
       for (const ligne of bloc.split('\n').filter((l) => l.includes('[À COMPLÉTER]'))) {
         const propre = ligne.replace(REPERE_RE, '').trim();
-        const libelle = propre.replace(/\*\*/g, '').replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').split('[À COMPLÉTER]')[0].replace(/[\s:,;–—-]+$/, '').trim();
+        // Libellé tiré de la phrase qui porte l'emplacement, jamais du début du paragraphe (T3-CONS-13, imm 1353 : « Nous vous
+        // présentons les collaborateurs… » pour « Le chef de poste sur le terrain est [À COMPLÉTER]. »).
+        const libelle = libelleDuRepere(propre);
         const lib = (libelle || propre).replace(/\s+/g, ' ').trim();
         const question = `Information à fournir pour compléter le mémoire : « ${lib.length <= 160 ? lib : `${lib.slice(0, 161).replace(/\s+\S*$/, '').replace(/[\s,;:]+$/, '')}…`} ».`;
         if ([...elements, ...ajouts].some((e) => e.question === question)) continue;
