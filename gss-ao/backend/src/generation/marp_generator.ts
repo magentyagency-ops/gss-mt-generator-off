@@ -277,6 +277,8 @@ export function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots
   }
 
   const chunks: string[] = [];
+  /** Suites de tableaux coupés entre deux rangs (style v3) : seules elles peuvent être réunies à leur début (T2-REG-1). */
+  const continuationsTableau = new Set<string>();
   let current = '';
   let currentWords = 0;
   // Style « marine » v3 : la première page de la rubrique porte le surtitre et le titre (lignes réservées).
@@ -321,7 +323,9 @@ export function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots
         if (k >= 2 && rangs.length - k >= 1) {
           current += `\n\n${[tete, sep, ...rangs.slice(0, k)].join('\n')}`;
           flush();
-          paragraphs.splice(i + 1, 0, [tete, sep, ...rangs.slice(k)].join('\n'));
+          const suite = [tete, sep, ...rangs.slice(k)].join('\n');
+          continuationsTableau.add(suite.trim());
+          paragraphs.splice(i + 1, 0, suite);
           continue;
         }
       }
@@ -392,12 +396,13 @@ export function splitIntoSlideChunks(text: string, limites: LimitesPage = { mots
     }
   }
 
-  // Tableau coupé puis réuni sur une même page (dernière page regroupée) : un seul tableau, sans en-tête répété.
-  for (let k = 0; k < chunks.length; k++) {
+  // Tableau coupé puis réuni sur une même page (dernière page regroupée) : un seul tableau, sans en-tête répété. Seule la
+  // suite d'une coupe est réunie : deux tableaux distincts de même en-tête restent deux tableaux (T2-REG-1).
+  for (let k = 0; continuationsTableau.size && k < chunks.length; k++) {
     const ps = chunks[k].split(/\n{2,}/);
     for (let j = ps.length - 1; j > 0; j--) {
       const a = ps[j - 1].split('\n'), b = ps[j].split('\n');
-      if (tableauSecable(ps[j - 1]) || (a.length >= 3 && a.every((x) => /^\s*\|/.test(x)))) {
+      if (continuationsTableau.has(ps[j].trim()) && (tableauSecable(ps[j - 1]) || (a.length >= 3 && a.every((x) => /^\s*\|/.test(x))))) {
         if (b.length >= 3 && b.every((x) => /^\s*\|/.test(x)) && a[0].trim() === b[0].trim() && /^\s*\|[\s:|-]+\|\s*$/.test(b[1])) {
           ps.splice(j - 1, 2, [...a, ...b.slice(2)].join('\n'));
         }
