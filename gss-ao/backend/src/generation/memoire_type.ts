@@ -3182,6 +3182,10 @@ const THEMES_EXIGENCE: Array<{ sujet: RegExp; rubriques: string[] }> = [
   // Réunions et rencontres de suivi du contrat, point intermédiaire, comité de pilotage : « Les réunions de suivi » (T2-CONS-13 :
   // le point intermédiaire à mi-année du CSTB écrit aussi sous « Le contrôleur de rondes » et « L'équipe de contrôle »).
   { sujet: /r[ée]unions? de suivi|rencontres? (?:annuelles?|trimestrielles?|mensuelles?|semestrielles?|de suivi|p[ée]riodiques?)|point interm[ée]diaire|comit[ée]s? de (?:pilotage|suivi)/iu, rubriques: ['b5_reunions_indicateurs'] },
+  // Confidentialité des informations du site (becquerel 1401, T4N-6 : « L'ensemble du personnel maintient confidentielles les
+  // données médicales… » ajouté sous « La reprise du personnel en place ») : les consignes du site, le livre des missions et
+  // consignes.
+  { sujet: /confidenti|secret professionnel|(?:ne|jamais)\s+(?:divulgu|communiqu)\w*/iu, rubriques: ['b4_lmc'] },
   // Délai d'intervention sur une alarme (citedia 1461, T4-CONS-13 : « Alarme technique : intervenir en 30 minutes maximum, sauf
   // bouton anti-agression en 15 minutes… (HO/BE) » sous « Habilitation électrique, SST et PSC1 ») : la procédure d'intervention
   // sur alarme, jamais une rubrique de formation rattachée sur un mot secondaire.
@@ -3191,6 +3195,20 @@ const THEMES_EXIGENCE: Array<{ sujet: RegExp; rubriques: string[] }> = [
   // moyens humains, sinon la planification.
   { sujet: /\b(?:second|deuxi[èe]me)s? agents?\b|\bagents? suppl[ée]mentaires?\b|\b(?:mobilis|sollicit)[\wéè]*\b[^.]{0,60}\bagents?\b[^.]{0,120}\b(?:\d{1,2}\s?h|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|24\s?h)/iu, rubriques: ['b3_adequation', 'b4_planification'] },
 ];
+
+/**
+ * Rubrique où va une phrase ajoutée par l'adaptation d'une rubrique au CCTP (T4N-6) : la rubrique elle-même si la phrase
+ * relève de son sujet ; sinon la rubrique du plan du thème net de la phrase (THEMES_EXIGENCE), ou celle qui la traite
+ * nettement (mots-clés) ; '' si aucune ne convient (la phrase est retirée, l'exigence reste au contrôle de couverture).
+ */
+export function rubriqueDeLAjout(mt: MemoireType, ids: string[], id: string, phrase: string): string {
+  const r = mt.rubriques.find((x) => x.id === id);
+  const theme = rubriqueDuTheme(phrase, ids);
+  if (theme && theme !== id) return theme;
+  if (!r || dansLeSujet(phrase, sujetDeRubrique(r))) return id;
+  const best = rechercherRubriques(mt, phrase, 1, ids.filter((x) => x !== id && dansLeSujet(phrase, sujetDeRubrique(mt.rubriques.find((y) => y.id === x)!))))[0];
+  return best && best.score >= 1 ? best.id : '';
+}
 
 /** Rubrique du plan qui traite le thème net d'une exigence (THEMES_EXIGENCE), parmi `ids` ; '' sinon. */
 export function rubriqueDuTheme(texte: string, ids: string[]): string {

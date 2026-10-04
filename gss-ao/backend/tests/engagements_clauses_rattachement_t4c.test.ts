@@ -46,3 +46,16 @@ describe('rattachement des engagements à la rubrique de leur objet (T4-CONS-13)
     expect(ou("Attester l'absence des interdictions de soumissionner prévues aux articles L.2141-1 à L.2141-5.", 'b5_remplacement_prevu')).toBe('');
   });
 });
+
+// Tour 4, correcteur (T4N-6, becquerel 1401) : phrase ajoutée par l'adaptation hors du sujet de sa rubrique.
+import { rubriqueDeLAjout } from '../src/generation/memoire_type';
+describe('phrase ajoutée par l\'adaptation rangée dans la rubrique de son sujet (T4N-6)', () => {
+  const mt = chargerMemoireType();
+  const ids = mt.rubriques.map((r) => r.id);
+  it('confidentialité ajoutée sous « La reprise du personnel en place » : livre des missions et consignes', () => {
+    expect(rubriqueDeLAjout(mt, ids, 'b3_reprise_personnel', "L'ensemble du personnel maintient confidentielles les données médicales, scientifiques, professionnelles et de sûreté ; il ne divulgue pas la présence de patients ni les protocoles de sûreté, notamment attentat.")).toBe('b4_lmc');
+  });
+  it('phrase du sujet de la rubrique : reste', () => {
+    expect(rubriqueDeLAjout(mt, ids, 'b3_reprise_personnel', 'Le personnel en place repris conserve son ancienneté et ses avantages acquis.')).toBe('b3_reprise_personnel');
+  });
+});

@@ -13,7 +13,7 @@ import {
   type MemoireType, type MemoirePrepare, type ContexteMarche, type AppelModele, type PlanMemoireType, type ExigenceMatrice,
   type DonneesBesoin, type RubriquePubliee, normaliser, formesClient, indicateursVrais, harmoniserNomClient, harmoniserVariantesAcheteur, formeCourteApresPremiere, phrasesGeneralesProtegees, ajoutContraireAuxDelaisGss,
   variablesDesSchemas, lotsDuMemoire, nomAcheteurAffiche, nomAcheteurCourtAffiche, rubriqueAdmetSujet, rechercherRubriques, rubriqueDuTheme,
-  phrasesDeFrequenceDeControle, frequenceMensuelle, CLAUSE_PRIX,
+  phrasesDeFrequenceDeControle, frequenceMensuelle, CLAUSE_PRIX, rubriqueDeLAjout,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
@@ -8567,6 +8567,8 @@ RÈGLES DE FORME (rendu Marp) :
     const ajoutsAdaptation: Array<{ id: string; titre: string; phrase: string }> = [];
     const questionsAjoutsRefuses: string[] = [];
     const ajoutsRefusesExigences: string[] = [];
+    /** Phrases ajoutées hors du sujet de leur rubrique, à placer dans la rubrique de leur sujet (T4N-6). */
+    const deplacementsAjouts: Array<{ de: string; vers: string; phrase: string }> = [];
     const texteGssPublie = Object.values(sections).join('\n');
     let adaptees = 0;
     await enParallele(aAdapter, 4, async (rp) => {
@@ -8618,13 +8620,33 @@ RÈGLES DE FORME (rendu Marp) :
         // Phrase recopiée du CCTP à l'infinitif (« Effectuer la ronde d'ouverture… ») : engagement de GSS (« GSS s'engage à… »).
         const conjuguee = phraseAjouteeConjuguee(m.par!);
         if (conjuguee !== m.par && sections[rp.id].includes(m.par!)) sections[rp.id] = sections[rp.id].replace(m.par!, conjuguee);
-        ajoutsAdaptation.push({ id: rp.id, titre: r.titre, phrase: sections[rp.id].includes(conjuguee) ? conjuguee : m.par! });
+        // Phrase hors du sujet de la rubrique (becquerel 1401, T4N-6 : confidentialité ajoutée sous « La reprise du personnel en
+        // place ») : déplacée dans la rubrique de son sujet après toutes les adaptations, sinon retirée.
+        const phraseAjoutee = sections[rp.id].includes(conjuguee) ? conjuguee : m.par!;
+        const cibleAjout = rubriqueDeLAjout(mt, plan.rubriques.map((x) => x.id), rp.id, phraseAjoutee);
+        if (cibleAjout !== rp.id && sections[rp.id].includes(phraseAjoutee)) {
+          sections[rp.id] = sections[rp.id].replace(phraseAjoutee, '').replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;])/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+          deplacementsAjouts.push({ de: rp.id, vers: cibleAjout, phrase: phraseAjoutee });
+          continue;
+        }
+        ajoutsAdaptation.push({ id: rp.id, titre: r.titre, phrase: phraseAjoutee });
       }
       adaptees++;
       progres(18 + Math.round((30 * adaptees) / Math.max(1, aAdapter.length)), `Adaptation au CCTP : ${adaptees}/${aAdapter.length} rubrique(s)…`);
       console.log(`[MemoireGenerator] Adaptation ${rp.id} : ${res.appliquees.length} modification(s) appliquée(s), ${res.refusees.length} refusée(s), fidélité ${res.fidelite.toFixed(2)}${res.repli ? ` — texte de référence conservé (${res.raison})` : ''}.`);
     });
 
+    // Phrases ajoutées hors du sujet de leur rubrique (T4N-6) : à la fin du texte de la rubrique de leur sujet (avant ses
+    // engagements), signalées à GSS comme phrases ajoutées de cette rubrique ; sans rubrique de leur sujet, retirées.
+    for (const d of deplacementsAjouts) {
+      const rv = plan.rubriques.find((x) => x.id === d.vers);
+      if (!rv || !sections[d.vers]) { console.warn(`[MemoireGenerator] Adaptation ${d.de} : phrase ajoutée hors sujet retirée (aucune rubrique de son sujet) : « ${d.phrase.slice(0, 100)} ».`); continue; }
+      const t = sections[d.vers];
+      const k = t.indexOf('\n## Nos engagements');
+      sections[d.vers] = k >= 0 ? `${t.slice(0, k).trimEnd()}\n\n${d.phrase}\n${t.slice(k)}` : `${t.trimEnd()}\n\n${d.phrase}`;
+      ajoutsAdaptation.push({ id: d.vers, titre: rv.titre, phrase: d.phrase });
+      console.log(`[MemoireGenerator] Adaptation ${d.de} : phrase ajoutée hors du sujet de la rubrique placée dans « ${rv.titre} » : « ${d.phrase.slice(0, 100)} ».`);
+    }
     // Rubrique dont la mission est exclue par le cahier des charges : retirée du plan et du mémoire, signalée (T5CP-1).
     for (const x of rubriquesExclues) {
       delete sections[x.id];
