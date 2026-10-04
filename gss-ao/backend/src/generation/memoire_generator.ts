@@ -22,7 +22,7 @@ import {
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
-  sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, phraseDeRubriqueGss, alignerSchemaSurTexte, FORMALITES_OFFRE, questionFormalite, formalitesDuBloc1, consultationsDuDce,
+  sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, phraseDeRubriqueGss, alignerSchemaSurTexte, FORMALITES_OFFRE, questionFormalite, formalitesDuBloc1, sansClauseSanction, consultationsDuDce,
   CLAUSE_CONTRACTUELLE, valeursImposeesValides, titreSansPointFinal, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, similariteQuestions, recouvrementTextes, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
@@ -1623,19 +1623,34 @@ export function questionOuverte(q: string): string {
 export function questionCouverteParLeMemoire(q: string, texte: string): boolean {
   if (/«/.test(q) || !texte) return false;
   const m = /^(?:Quel(?:le)?s?\s+(?:sera|seront|est|sont)\s+|Quel(?:le)?s?\s+)(.+?)(?:\s+(?:pr[ée]voyez|proposez|mettez|envisagez|comptez|assurez|appliquez|retenez|organisez|utilisez)-vous\b.*)?\s*\?\s*$/i.exec(String(q || '').trim());
-  if (!m) return false;
-  const objet = normaliser(m[1]).replace(/[^a-z0-9 ]+/g, ' ');
-  if (/\b(?:nom|noms|identite|coordonnees|interlocuteur|telephone|adresse|responsable|qui)\b/.test(objet)) return false;
-  const VIDES = new Set(['informations', 'information', 'presenter', 'sujet', 'elements', 'donnees', 'points', 'frequence', 'periodicite', 'plan', 'procedure', 'procedures', 'organisation', 'modalites', 'methode', 'methodologie', 'dispositif', 'nature', 'liste', 'site', 'sites', 'prevue', 'prevu', 'mise', 'place', 'delai', 'delais', 'nombre', 'duree', 'cadre', 'mesures', 'moyens', 'votre', 'notre', 'pour', 'avec', 'dans', 'sera', 'sont']);
-  const mots = objet.split(/\s+/).filter((w) => w.length >= 4 && !VIDES.has(w) && !['des', 'les', 'une', 'aux'].includes(w)).map((w) => w.slice(0, 6));
+  return !!m && objetTraiteParLeMemoire(m[1], texte);
+}
+
+/**
+ * La donnée nommée par `objet` (« la fréquence des contrôles sur site », « Plan de remplacement en cas d'absence de l'agent »,
+ * « Nombre d'agents présents au centre de permanence ») est-elle déjà traitée par le mémoire (T6-CONS-15, T6-CONS-11) ?
+ * Fréquence : une phrase qui nomme l'objet avec une fréquence ; donnée chiffrée : une phrase qui nomme l'objet avec un nombre ;
+ * plan, procédure, organisation : un titre qui nomme la tête de l'objet. Jamais une personne, des coordonnées ni des pièces.
+ */
+export function objetTraiteParLeMemoire(objetBrut: string, texte: string): boolean {
+  if (!texte) return false;
+  const objet = normaliser(objetBrut).replace(/[^a-z0-9 ]+/g, ' ');
+  if (/\b(?:nom|noms|identite|coordonnees|interlocuteur|telephone|adresse|responsable|qui|cv|attestations?|certificats?|copies?|justificatifs?)\b/.test(objet)) return false;
+  const VIDES = new Set(['informations', 'information', 'presenter', 'sujet', 'elements', 'donnees', 'points', 'frequence', 'periodicite', 'plan', 'procedure', 'procedures', 'organisation', 'modalites', 'methode', 'methodologie', 'dispositif', 'nature', 'liste', 'site', 'sites', 'prevue', 'prevu', 'mise', 'place', 'delai', 'delais', 'nombre', 'duree', 'cadre', 'mesures', 'moyens', 'votre', 'notre', 'pour', 'avec', 'dans', 'sera', 'sont', 'affecte', 'affectes', 'affectee', 'affectees', 'assurant', 'mis', 'utilises']);
+  const chiffre = /\b(?:delai|delais|nombre|duree|effectif|montant|taux|date|heure|horaires?)\b/.test(objet);
+  const frequence = /\b(?:frequence|periodicite)\b/.test(objet);
+  // Tête de l'objet (avant son premier complément « en cas de », « pour », « sur », « avec »…) pour un plan ou une procédure ;
+  // l'objet entier pour une donnée chiffrée (« … au centre de permanence » est la donnée elle-même).
+  const tete = chiffre || frequence ? objet : objet.split(/\s(?:en cas|pour|sur|avec|dans|lors|aupres|aux?|selon)\s/)[0];
+  const mots = tete.split(/\s+/).filter((w) => w.length >= 4 && !VIDES.has(w) && !['des', 'les', 'une', 'aux'].includes(w)).map((w) => w.replace(/s$/, '').slice(0, 6));
   if (!mots.length) return false;
   const n = (t: string) => normaliser(t).replace(/[^a-z0-9 ]+/g, ' ');
   // Titres Markdown, et sous-titres en ligne seule d'une réponse de cadre (« Écogestes »).
   const titres = [...String(texte).matchAll(/^(?:#{1,4}\s+(.+)|([A-ZÀ-Ý][^.!?;:\n]{2,80}))$/gm)].map((x) => n(x[1] || x[2]));
   const phrases = String(texte).split(/(?<=[.!?;])\s+|\n+/).map(n);
   const nomme = (t: string) => mots.every((w) => t.includes(w));
-  if (/\b(?:frequence|periodicite)\b/.test(objet)) return phrases.some((p) => nomme(p) && /\b(?:une?|deux|trois|quatre|cinq|six|\d+)\s+(?:a\s+(?:deux|trois|quatre|cinq|\d+)\s+)?fois\s+par\b|\bchaque\s+(?:jour|nuit|semaine|mois|trimestre|semestre|annee)|\b(?:hebdomadaire|mensuel|trimestriel|semestriel|annuel|quotidien)/.test(p));
-  if (/\b(?:delai|delais|nombre|duree|effectif|montant|taux|date|heure|horaires?)\b/.test(objet)) return phrases.some((p) => nomme(p) && /\d/.test(p));
+  if (frequence) return phrases.some((p) => nomme(p) && /\b(?:une?|deux|trois|quatre|cinq|six|\d+)\s+(?:a\s+(?:deux|trois|quatre|cinq|\d+)\s+)?fois\s+par\b|\bchaque\s+(?:jour|nuit|semaine|mois|trimestre|semestre|annee)|\b(?:hebdomadaire|mensuel|trimestriel|semestriel|annuel|quotidien)/.test(p));
+  if (chiffre) return phrases.some((p) => nomme(p) && /\d/.test(p));
   return titres.some(nomme);
 }
 
@@ -1849,7 +1864,7 @@ export function cleDonnee(question: string): string[] {
   if (/plannings?/i.test(q) && /J\s?-\s?\d|[ée]ch[ée]ances?|jours? ouvr|calendrier/i.test(q)) out.push('echeances_planning');
   // Couverture horaire du cas pratique (etampes2 553 : « 48 heures annoncées / 39 heures détaillées », « 9 heures non décrites »).
   // (« … la couverture des postes entre 21 h 00 et 22 h 30 », T6-CONS-4 : la même donnée)
-  if (/cas pratique|plages?|intitul|non d[ée]crites|entre\s+\d{1,2}\s*h/i.test(q) && /\d+\s*h(?:eures)?\b[^?]{0,160}\d+\s*h(?:eures)?\b/i.test(q) && /couvr|couverture|intitul|non d[ée]crites|clarifi/i.test(q)) out.push('couverture_cas_pratique');
+  if (/cas pratique|plages?|intitul|non d[ée]crites|entre\s+\d{1,2}\s*h/i.test(q) && /\d+\s*h(?:eures)?(?:\s*\d{2})?\b[^?]{0,160}\d+\s*h(?:eures)?(?:\s*\d{2})?\b/i.test(q) && /couvr|couverture|intitul|non d[ée]crites|clarifi/i.test(q)) out.push('couverture_cas_pratique');
   // Liste nominative des agents et dates de leurs formations (havre2, T5N-14 : cases « SST » / « C.Q.P.A.D.S. » × « NOM / Prénom /
   // Date » du tableau du cadre, « Transmettre … les noms, prénoms et dates de formation SST … », « la liste nominative des agents …
   // et les dates de leurs formations ») : une seule donnée ; l'autorisation CNAPS en est une autre.
@@ -1884,21 +1899,7 @@ export function memeDemande(a: string, b: string): boolean {
  * que GSS ne sous-traite pas) ou exigence conditionnelle qui ne s'applique pas à GSS (« en cas de recours à… »). L'exigence
  * reste alors traitée par les questions à GSS (écart non couvert). Renvoie le motif du refus, ou '' si la puce est gardée.
  */
-/**
- * Engagement sans les propositions qui renvoient aux sanctions de l'acheteur (T6-CONS-10 : « GSS mobilisera un agent d'astreinte…,
- * dans un délai de 30 minutes ; au-delà de 30 minutes d'attente, les dispositions des articles 10 et 15 du CCAP s'appliqueront »
- * → « GSS mobilisera un agent d'astreinte…, dans un délai de 30 minutes. ») : pénalités, carences, sanctions, réfactions,
- * « au-delà de … », articles du CCAP qui « s'appliqueront », faculté de l'acheteur d'appliquer une sanction. '' s'il ne reste rien.
- */
-export function sansClauseSanction(x: string): string {
-  const SANCTION = /p[ée]nalit|carences?|sanctions?|r[ée]factions?|retenues? sur|au-del[àa]\s+(?:de|d['’]|du)|s['’]appliquer(?:a|ont)|(?:applique|appliquera|appliquer)\s+(?:les?\s+)?(?:dispositions|p[ée]nalit|sanctions|r[ée]factions)|articles?\s+[\d.,\s]+(?:et\s+[\d.]+\s+)?du\s+C\.?C\.?A\.?P\.?[^.;]{0,40}(?:s['’]appliqu|applicables?)/i;
-  const t = String(x || '').trim();
-  if (!SANCTION.test(t)) return t;
-  const fin = (/[.!]\s*$/.exec(t) || [''])[0].trim() || '.';
-  const props = t.replace(/[.!]\s*$/, '').split(/\s*;\s*|(?<=[.!])\s+(?=[A-ZÀ-Ý])/).filter((p) => p.trim() && !SANCTION.test(p));
-  if (!props.length) return '';
-  return `${props.join(' ; ').replace(/[\s,;:]+$/, '')}${fin}`;
-}
+export { sansClauseSanction } from './reponse_libre_v2';
 
 export function motifRefusEngagement(x: string): string {
   const t = String(x || '');
@@ -8727,7 +8728,11 @@ RÈGLES DE FORME (rendu Marp) :
       const secondaires = new Set(repRC.source === 'modele' ? repRC.secondaires : []);
       const parPartie = Object.fromEntries(Object.entries(repRC.parPartie).map(([k, l]) => [k, l.filter((id) => !secondaires.has(id))]));
       Object.assign(plan, planSelonRC(plan, planImpose, parPartie));
+      // Texte du mémoire type publié pour ce plan (titres compris) : un élément que le RC attend et qu'il traite déjà n'est ni
+      // une question ni un emplacement (T6-CONS-15, T6-CONS-11).
+      const publieMT = publierMemoire(prep).map((r) => `## ${plan.rubriques.find((x) => x.id === r.id)?.titre || ''}\n${r.texte || ''}`).join('\n\n');
       for (const p of planImpose) for (const e of repRC.nonCouverts[p.id] || []) {
+        if (objetTraiteParLeMemoire(e, publieMT)) { console.log(`[MemoireGenerator] Plan imposé par le RC : « ${e} » déjà traité par le mémoire type (ni question ni emplacement).`); continue; }
         // Sous-élément numéroté du RC sans rubrique : il garde sa place dans la partie, avec son emplacement et sa question
         // (T6-CONS-11) ; sinon la question seule.
         const bloc = plan.blocs.find((b) => b.id === `rc_${p.id}`);

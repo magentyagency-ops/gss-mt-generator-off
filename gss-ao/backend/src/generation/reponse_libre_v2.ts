@@ -677,6 +677,22 @@ export function formalitesDuBloc1(texte: string): { texte: string; formalites: s
   return { texte: lignes.join('\n'), formalites };
 }
 
+/**
+ * Engagement sans les propositions qui renvoient aux sanctions de l'acheteur (T6-CONS-10 : « GSS mobilisera un agent d'astreinte…,
+ * dans un délai de 30 minutes ; au-delà de 30 minutes d'attente, les dispositions des articles 10 et 15 du CCAP s'appliqueront »
+ * → « GSS mobilisera un agent d'astreinte…, dans un délai de 30 minutes. ») : pénalités, carences, sanctions, réfactions,
+ * « au-delà de … », articles du CCAP qui « s'appliqueront », faculté de l'acheteur d'appliquer une sanction. '' s'il ne reste rien.
+ */
+export function sansClauseSanction(x: string): string {
+  const SANCTION = /p[ée]nalit|carences?|sanctions?|r[ée]factions?|retenues? sur|au-del[àa]\s+(?:de|d['’]|du)|s['’]appliquer(?:a|ont)|(?:applique|appliquera|appliquer)\s+(?:les?\s+)?(?:dispositions|p[ée]nalit|sanctions|r[ée]factions)|articles?\s+[\d.,\s]+(?:et\s+[\d.]+\s+)?du\s+C\.?C\.?A\.?P\.?[^.;]{0,40}(?:s['’]appliqu|applicables?)/i;
+  const t = String(x || '').trim();
+  if (!SANCTION.test(t)) return t;
+  const fin = (/[.!]\s*$/.exec(t) || [''])[0].trim() || '.';
+  const props = t.replace(/[.!]\s*$/, '').split(/\s*;\s*|(?<=[.!])\s+(?=[A-ZÀ-Ý])/).filter((p) => p.trim() && !SANCTION.test(p));
+  if (!props.length) return '';
+  return `${props.join(' ; ').replace(/[\s,;:]+$/, '')}${fin}`;
+}
+
 /** Question exacte posée à GSS pour une formalité de l'offre (hors mémoire technique). */
 export function questionFormalite(e: { sujet?: string; exigence: string }): string {
   const x = String(e.exigence || '').replace(/\s+/g, ' ').trim().replace(/[.;:\s]+$/, '');
@@ -1437,7 +1453,9 @@ export function completerBesoinMinimum(
   const sanctionnee = (e: string) => /p[ée]nalit|sanctionn|manquement/i.test(e) || chiffres(e).some((x) => x.length >= 1 && new RegExp(`(?<![\\d,.])${x}\\s*(?:\\(\\d+\\)\\s*)?(?:h\\b|heures?|min|jours?|mois|semaines?)`, 'i').test(sanctions));
   const rang = (e: { exigence: string; criticite?: string }) => (sanctionnee(e.exigence) ? 0 : 2) + (/bloqu/i.test(e.criticite || '') ? 0 : 1) + (chiffres(e.exigence).length ? 0 : 2);
   const candidats = sources
-    .map((e) => ({ ...e, exigence: String(e.exigence || '').replace(/\s+/g, ' ').trim() }))
+    // Proposition qui renvoie aux sanctions de l'acheteur (« au-delà de 30 minutes, les dispositions des articles 10 et 15 du CCAP
+    // s'appliquent ») retirée de l'attente, l'obligation reste (T6-CONS-10).
+    .map((e) => ({ ...e, exigence: sansClauseSanction(String(e.exigence || '').replace(/\s+/g, ' ').trim()) }))
     .filter((e) => e.exigence.split(' ').length >= 5 && e.exigence.length <= 330 && !/p[ée]nalit[ée]s?[^.]{0,80}\d[\d\s]*(?:€|euros?)|€/i.test(e.exigence)
       // Clause qui fixe une pénalité, quelle que soit la forme du montant (« 1/1000 par jour de retard », pourcentage, lettres,
       // « sans plafond »), ou clause administrative du CCAP (justificatifs d'assurance, mise en demeure) : jamais une attente
@@ -3414,6 +3432,8 @@ export function controlerProposition(texte: string, montantsGss: string[] = [], 
   const montant = (x: string) => x.replace(/[\s\u00a0\u202f.]/g, '').replace(/euros?/i, '€');
   const gss = new Set(montantsGss.map(montant));
   const INTERDIT = /sous[- ]?trait|int[ée]rim/i;
+  // Marqueur de consultation sur un délai déjà engagé, au milieu d'une ligne : retiré aussi.
+  texte = String(texte || '').replace(/[ \t]*\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi, (m, q: string) => { if (!delaiDejaImpose(q)) return m; retirees.push(m.trim()); return ''; });
   const lignes = String(texte || '').split('\n');
   const out: string[] = [];
   for (let i = 0; i < lignes.length; i++) {
@@ -3421,6 +3441,9 @@ export function controlerProposition(texte: string, montantsGss: string[] = [], 
     const consultation = /^\s*\[CONSULTATION REQUISE\s*:/i.exec(l);
     if (consultation) {
       if (INTERDIT.test(l)) { retirees.push(l.trim()); continue; }
+      // Consultation sur un délai que le DCE impose et que le mémoire publie déjà comme engagement (« confirmer la capacité
+      // opérationnelle à envoyer un agent … en moins de 30 minutes, comme l'exige le DCE », T6-CONS-6) : jamais posée.
+      if (delaiDejaImpose(l)) { retirees.push(l.trim()); continue; }
       out.push(l);
       continue;
     }

@@ -1597,7 +1597,12 @@ export function ajoutsAuTexteDeGss(texte: string, reference: string, dce = '', a
   const PUCE = /^\s*(?:[•\-*]|\d+[.)])\s+/;
   // Texte de GSS : la référence du champ et les autres textes du mémoire type (une rubrique reprise ailleurs reste le texte de GSS).
   const refs = [String(reference || ''), ...autresTextesGss.map((x) => texteBrut(String(x || '')))].join('\n').replace(/\r/g, '').split('\n').flatMap((l) => l.replace(PUCE, '').split(/(?<=[.!?;])\s+/)).map((x) => motsDePhrase(x)).filter((m) => m.length >= 3);
-  const deGss = (ph: string) => { const m = motsDePhrase(ph); return refs.some((r) => similarite(r, m) >= 0.5); };
+  // (phrase de GSS reprise en partie : « Nous budgétons le remplacement… » pour « Nos rondiers…, puisque… : nous budgétons le
+  // remplacement… » — ses mots pleins figurent presque tous dans une phrase de GSS)
+  const deGss = (ph: string) => {
+    const m = motsDePhrase(ph);
+    return refs.some((r) => similarite(r, m) >= 0.5 || (m.length >= 6 && m.filter((w) => r.includes(w)).length / m.length >= 0.85));
+  };
   const retirees: string[] = [];
   const signalees: string[] = [];
   const lignes = String(texte || '').split('\n').map((l) => {

@@ -26,6 +26,12 @@ describe('proposition : commentaire du DCE, vérification interne, délai du DCE
     expect(c.texte).not.toMatch(/doit être établie|le DCE exige|Capacité opérationnelle|CONSULTATION REQUISE/);
     expect(c.texte).toContain('Le PTI homologué est obligatoire.');
   });
+  it('consultation seule sur le délai engagé : jamais posée', () => {
+    const c2 = controlerProposition("À chaque vacation, l’agent consigne les rondes dans la main courante.\n[CONSULTATION REQUISE : confirmer la capacité opérationnelle à envoyer un agent sur le site en moins de 30 minutes, comme l’exige le DCE.]", [], dce);
+    expect(c2.texte).not.toMatch(/CONSULTATION REQUISE/);
+    const c3 = controlerProposition("L’agent consigne les rondes. [CONSULTATION REQUISE : confirmer l'envoi d'un agent en moins de 30 minutes.] Il rend compte.", [], dce);
+    expect(c3.texte).not.toMatch(/CONSULTATION REQUISE/);
+  });
   it('la vérification devient une question citée avec la phrase à laquelle elle renvoie ; le délai engagé n\'est pas redemandé', () => {
     expect(c.questions).toEqual(['Une proposition de réponse laissait ce point à vérifier avant la remise : « Le PTI homologué est obligatoire. La conformité de l’application Beepiz à cette exigence doit être établie avant son utilisation ». Pouvez-vous le confirmer ?']);
   });
