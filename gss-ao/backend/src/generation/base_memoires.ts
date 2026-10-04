@@ -637,6 +637,26 @@ const VILLES_HORS_NORMANDIE = ['Paris', 'Marseille', 'Lyon', 'Toulouse', 'Nice',
   'Douai', 'Valenciennes', 'Compiègne', 'Soissons', 'Châlons-en-Champagne', 'Charleville-Mézières', 'Bayonne', 'Tarbes', 'Ajaccio', 'Bastia', 'Villejuif',
   'Thiais', 'Saint-Mandé', 'Neuilly-sur-Marne', 'Neuilly-sur-Seine', "Saint-Martin-d'Hères", 'Montrouge', 'Vincennes', 'Issy-les-Moulineaux', 'Puteaux',
   'Massy', 'Palaiseau', 'Saclay'];
+/** Lieux composés et noms de territoires de la zone de GSS, dans leur graphie usuelle (mise en casse des noms en capitales). */
+const LIEUX_COMPOSES = ["Côte d'Albâtre", 'Porte Océane', 'Pays de Caux', 'Pays de Bray', "Pays d'Auge", 'Côte Fleurie', 'Mont-Saint-Michel', 'Seine-Maritime', 'Seine-Eure', 'Normandie', 'Île-de-France', 'Hauts-de-France', 'Val-de-Marne', "Val-d'Oise", 'Seine-Saint-Denis', 'Hauts-de-Seine', 'Seine-et-Marne', 'Eure-et-Loir', 'Ille-et-Vilaine', 'Saint-Étienne-du-Rouvray', 'Mont-Saint-Aignan', 'Bois-Guillaume', 'Le Havre', 'Rouen', 'Caen', 'Évreux', 'Dieppe', 'Fécamp', 'Elbeuf', 'Eure', 'Calvados', 'Manche', 'Orne'];
+/** Lieux connus (communes, territoires, lieux composés) dans leur graphie usuelle. */
+export function lieuxConnus(): string[] {
+  return [...new Set([...LIEUX_COMPOSES, ...COMMUNES_NORMANDES, ...VILLES_HORS_NORMANDIE])];
+}
+
+/** Régions françaises (nom sans accents, tirets lus comme des espaces). */
+const REGIONS = new Set(['normandie', 'bretagne', 'ile de france', 'hauts de france', 'grand est', 'nouvelle aquitaine', 'occitanie', 'auvergne rhone alpes', 'bourgogne franche comte', 'centre val de loire', 'pays de la loire', 'provence alpes cote d azur', 'corse']);
+
+/**
+ * Nom de lieu seul (département, région, commune connue) : jamais l'entité d'un acheteur écrite après un tiret (T4G-1 :
+ * « Caisse primaire d'assurance maladie de Rouen-Elbeuf-Dieppe – Seine-Maritime » ne s'appelle pas « Seine-Maritime »).
+ */
+export function estNomDeLieu(x: string): boolean {
+  const k = String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/['’`\u2011-]/g, ' ').replace(/^(?:la|le|les|l)\s+/, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!k) return false;
+  const cle = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/['’`\u2011-]/g, ' ').replace(/^(?:la|le|les|l)\s+/, '').replace(/\s+/g, ' ').trim();
+  return k in DEPARTEMENTS || REGIONS.has(k) || COMMUNES_NORMANDES.some((c) => cle(c) === k) || VILLES_HORS_NORMANDIE.some((c) => cle(c) === k);
+}
 const ADMIN_LIEU = /cedex|\bB\.?P\.?\s*\d|bo[îi]te postale|si[èe]ge|DREETS|DIRECCTE|DDETS|DRFIP|DGFIP|finances publiques|tribunal|cour administrative|cour d.appel|pr[ée]fecture|CNAPS|inspection du travail|URSSAF|tr[ée]sor|paierie|comptable|greffe|minist[èe]re/i;
 /**
  * Expression d'une commune : accents et tirets libres, jamais le début d'un nom composé (« Saint-Étienne-du-Rouvray »).

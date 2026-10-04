@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 import { lignesEquipe, questionDimensionnement, questionRondes, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative, lotsDuMemoireDce, perimetreDuLot, normaliserSsiap, contracterArticlesNomsPropres, MONTANT_PENALITE, textePreuvesIndicateurs } from './base_memoires';
+import { estNomDeLieu, lieuxConnus, horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative, lotsDuMemoireDce, perimetreDuLot, normaliserSsiap, contracterArticlesNomsPropres, MONTANT_PENALITE, textePreuvesIndicateurs } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -896,7 +896,7 @@ export function articleEtNom(brut: string, dce = ''): { article: string; nom: st
 /** Forme juridique d'une société (« S.P.L. », « SAS », « SEM »…) : l'acheteur est une société, donc féminin. */
 // Forme juridique écrite en entier, jamais coupée (T9-COH-1 : « Société publique locale Citédia Métropole » donnait
 // « locale Citédia Métropole »).
-const FORME_SOCIETE = /^(?:s\.?\s?p\.?\s?l\.?\s?a?\.?|s\.?\s?e\.?\s?m\.?\s?l?\.?|s\.?\s?a\.?\s?s?\.?\s?u?\.?(?:\s+d['’]\s*HLM)?|s\.?\s?a\.?\s?r\.?\s?l\.?|soci[ée]t[ée]\s+(?:publique\s+locale(?:\s+d['’]am[ée]nagement)?|d['’][ée]conomie\s+mixte(?:\s+locale)?|anonyme(?:\s+d['’]HLM)?|par\s+actions\s+simplifi[ée]e(?:\s+unipersonnelle)?))(?=\s)/i;
+const FORME_SOCIETE = /^(?:s\.?\s?p\.?\s?l\.?\s?a?\.?|s\.?\s?e\.?\s?m\.?\s?l?\.?|s\.?\s?a\.?\s?s?\.?\s?u?\.?(?:\s+(?:d['’]\s*)?HLM)?|s\.?\s?a\.?\s?r\.?\s?l\.?|soci[ée]t[ée]\s+(?:publique\s+locale(?:\s+d['’]am[ée]nagement)?|d['’][ée]conomie\s+mixte(?:\s+locale)?|anonyme(?:\s+d['’]HLM)?|par\s+actions\s+simplifi[ée]e(?:\s+unipersonnelle)?))(?=\s)/i;
 
 /** Article d'un sigle : « l' » devant une voyelle, sinon celui de l'entité (« le CHU ») ; '' si inconnu. */
 function articleSigle(sigle: string, articleEntite: string): string {
@@ -1066,10 +1066,15 @@ function motDuDictionnaire(mot: string): string {
   return dictionnaireFr.get(normaliser(mot)) || '';
 }
 
+/** Nom commun en « -ité » absent du dictionnaire (« ATTRACTIVITE » → « attractivité », T4-COH-8) ; '' sinon. */
+function nomEnIte(mot: string): string {
+  return mot.length >= 7 && /^[A-ZÀ-Ý]+ITE(S?)$/.test(mot) ? mot.toLowerCase().replace(/ite(s?)$/, 'ité$1') : '';
+}
+
 /** Graphie usuelle d'un mot écrit en capitales : mot du dictionnaire en minuscules accentuées, sinon nom propre. */
 function graphieUsuelle(mot: string): string {
   if (MOTS_OUTILS.has(normaliser(mot))) return mot.toLowerCase();
-  const d = motDuDictionnaire(mot);
+  const d = motDuDictionnaire(mot) || nomEnIte(mot);
   if (d) return d;
   return mot.split('-').map((x) => (x ? x.charAt(0).toUpperCase() + x.slice(1).toLowerCase() : x)).join('-');
 }
@@ -1084,8 +1089,13 @@ function sigleProbable(mot: string, dce: string): boolean {
   if (!/[AEIOUYÀ-Ý]/.test(mot)) return true;
   // 3 lettres : sigle, sauf mot courant des textes de GSS (« PAR », « SUR », « LES »).
   if (mot.length <= 3) return !graphieMinusculeGss(mot);
-  if (new RegExp(`(?:^|[^A-Za-zÀ-ÿ])(?:l['’]|le |la |les |du |des |au |aux )${echapper(mot)}(?![A-Za-zÀ-ÿ])`).test(dce)) return true;
+  // Mot écrit en capitales par le DCE au milieu d'un texte en casse mêlée, après un article ou devant « de … » (T4G-8 :
+  // « L'ESID de Rennes ») : un sigle, article en capitale compris.
+  if (new RegExp(`(?:^|[^A-Za-zÀ-ÿ])(?:[Ll]['’]|[Ll]e |[Ll]a |[Ll]es |[Dd]u |[Dd]es |[Aa]u |[Aa]ux )${echapper(mot)}(?![A-Za-zÀ-ÿ])`).test(dce)) return true;
+  if (new RegExp(`(?<![A-Za-zÀ-ÿ])${echapper(mot)}\\s+(?:de|du|des|d['’])\\s*[A-ZÀ-Ý][a-zà-ÿ]`).test(dce)) return true;
   if (motDuDictionnaire(mot)) return false;
+  // Mot court hors dictionnaire suivi de « DE <Lieu> » (« ESID DE RENNES », T4G-8) : un sigle d'établissement, jamais un nom de lieu.
+  if (!estNomDeLieu(mot) && new RegExp(`(?<![A-Za-zÀ-ÿ])${echapper(mot)}\\s+(?:DE|DU|DES|D['’]|de|du|des|d['’])\\s*[A-ZÀ-Ý]`).test(dce)) return true;
   if (/[^AEIOUYÀ-Ý]{3}/.test(mot)) return true;
   return /^[^AEIOUYÀ-Ý]{2}/.test(mot) && !/^(?:BL|BR|CH|CL|CR|DR|FL|FR|GL|GR|PH|PL|PR|TR|VR|ST|SC|SP|TH|GN)/.test(mot);
 }
@@ -1147,6 +1157,8 @@ export function casseDuDce(nom: string, dce: string, intitule = false): string {
     // COMMANDE ») ; un intitulé ou un nom ne porte jamais le verbe « a ».
     if (/^[AÀ]$/.test(mot)) r = 'à';
     else if (MOTS_OUTILS.has(k) && !premier) r = mot.toLowerCase();
+    // Gentilé après un nom commun (« L'AGGLOMERATION ROUENNAISE » → « l'agglomération rouennaise », T4-COH-9) : en minuscules.
+    else if (institutionnel && !premier && GENTILES[k] && !minuscules.length && !capitalises.length) r = GENTILES[k];
     else if (nbCap && nbCap > 2 * nbMin) r = capitalises[0][0];
     else if (nbMin) r = minuscules[0][0];
     else if (nbCap) r = capitalises[0][0];
@@ -1166,7 +1178,72 @@ export function casseDuDce(nom: string, dce: string, intitule = false): string {
     premier = premier && /^(?:le|la|les|l)$/.test(k);
     return r;
   });
-  return ok && sortie !== nom ? sortie : '';
+  // Lieux connus dans leur graphie usuelle (« porte Oceane » → « Porte Océane », « ST Étienne du Rouvray » →
+  // « Saint-Étienne-du-Rouvray », T4-COH-9).
+  const finale = institutionnel ? lieuxEnGraphieUsuelle(sortie).texte : sortie;
+  return ok && finale !== nom ? finale : '';
+}
+
+/** Gentilés de la zone de GSS (adjectifs, en minuscules après un nom commun : « l'agglomération rouennaise »). */
+const GENTILES: Record<string, string> = {
+  rouennais: 'rouennais', rouennaise: 'rouennaise', rouennaises: 'rouennaises', havrais: 'havrais', havraise: 'havraise', havraises: 'havraises',
+  caennais: 'caennais', caennaise: 'caennaise', ebroicien: 'ébroïcien', ebroicienne: 'ébroïcienne', ebroiciens: 'ébroïciens', ebroiciennes: 'ébroïciennes',
+  dieppois: 'dieppois', dieppoise: 'dieppoise', fecampois: 'fécampois', fecampoise: 'fécampoise', elbeuvien: 'elbeuvien', elbeuvienne: 'elbeuvienne',
+  normand: 'normand', normande: 'normande', normands: 'normands', normandes: 'normandes', parisien: 'parisien', parisienne: 'parisienne',
+  cauchois: 'cauchois', cauchoise: 'cauchoise', brayon: 'brayon', brayonne: 'brayonne', augeron: 'augeron', augeronne: 'augeronne',
+};
+
+/**
+ * Lieux connus remis dans leur graphie usuelle dans un nom ou un intitulé déjà mis en casse (T4-COH-9 : « … de la porte
+ * Oceane » → « … de la Porte Océane », « côte d'albâtre » → « Côte d'Albâtre », « ST Étienne du Rouvray » →
+ * « Saint-Étienne-du-Rouvray ») ; mots reconnus renvoyés pour ne pas être signalés comme incertains.
+ */
+export function lieuxEnGraphieUsuelle(t: string): { texte: string; reconnus: Set<string> } {
+  const reconnus = new Set<string>();
+  let texte = String(t || '');
+  const cle = (v: string) => cleCommune(v);
+  const lieux = lieuxConnus().filter((l) => l.split(/[\s'’-]+/).length >= 1).sort((a, b) => b.length - a.length);
+  for (const lieu of lieux) {
+    const mots = cle(lieu).split(' ').filter(Boolean);
+    if (!mots.length) continue;
+    // Mots du lieu, séparés par des espaces, tirets ou apostrophes, « St »/« Ste » pour « Saint »/« Sainte ».
+    const rx = new RegExp(`(?<![\\p{L}])${mots.map((w) => (w === 'saint' ? '(?:saint|st)' : w === 'sainte' ? '(?:sainte|ste)' : w.split('').map((ch) => ({ a: '[aàâä]', e: '[eéèêë]', i: '[iîï]', o: '[oôö]', u: '[uùûü]', c: '[cç]' } as Record<string, string>)[ch] || ch).join(''))).join("[\\s'’-]+")}(?![\\p{L}])`, 'giu');
+    texte = texte.replace(rx, (m0) => { cle(m0).split(' ').forEach((w) => reconnus.add(w)); return lieu; });
+  }
+  return { texte, reconnus };
+}
+
+/**
+ * Nom de l'acheteur écrit seulement en capitales, sans graphie en casse mêlée dans le DCE (T4-COH-8 : « ROUEN NORMANDIE
+ * AMENAGEMENT », « LE HAVRE SEINE METROPOLE », « SEINE-MARITIME ATTRACTIVITE », « LOGEO SEINE ») : chaque mot plein avec sa
+ * majuscule (« Le Havre » garde son article), accents rétablis par le dictionnaire (« Aménagement », « Métropole »), lieux
+ * connus dans leur graphie usuelle, sigles gardés. Les mots ni du dictionnaire ni lieux connus (« Logeo ») sont renvoyés
+ * comme incertains (graphie à confirmer par GSS). '' si le nom n'est pas en capitales.
+ */
+export function casseNomEnCapitales(nom: string, dce: string): { forme: string; incertains: string[] } {
+  const lettres = String(nom || '').replace(/[^A-Za-zÀ-ÿ]/g, '');
+  if (!lettres || lettres.replace(/[^A-ZÀ-Ý]/g, '').length / lettres.length <= 0.7) return { forme: '', incertains: [] };
+  // Nom d'un seul mot en capitales (« ACOSS ») : un sigle, gardé tel quel.
+  if ((String(nom).match(/[A-Za-zÀ-ÿ]+/g) || []).filter((w) => !MOTS_OUTILS.has(normaliser(w))).length < 2) return { forme: '', incertains: [] };
+  const incertains: string[] = [];
+  let premier = true;
+  const brute = String(nom).replace(/[A-Za-zÀ-ÿ]+/g, (mot) => {
+    const k = normaliser(mot);
+    let r: string;
+    if (MOTS_OUTILS.has(k) && !premier) r = mot.toLowerCase();
+    else if (/^(?:ST|STE)$/.test(mot)) r = mot === 'ST' ? 'Saint' : 'Sainte';
+    else if ((mot.length <= 3 && !graphieMinusculeGss(mot) && !motDuDictionnaire(mot)) || (mot.length <= 5 && sigleProbable(mot, dce))) r = mot;
+    else {
+      const d = motDuDictionnaire(mot) || graphieMinusculeGss(mot) || nomEnIte(mot);
+      if (d) r = d.charAt(0).toUpperCase() + d.slice(1);
+      else { r = mot.charAt(0) + mot.slice(1).toLowerCase(); if (mot.length >= 4) incertains.push(r); }
+    }
+    if (premier) r = r.charAt(0).toUpperCase() + r.slice(1);
+    premier = false;
+    return r;
+  });
+  const l = lieuxEnGraphieUsuelle(brute);
+  return { forme: l.texte, incertains: incertains.filter((w) => !l.reconnus.has(cleCommune(w))) };
 }
 
 /**
@@ -1402,6 +1479,16 @@ function formesClientBrut(nom: string, dce = ''): { long: string; court?: { arti
       const art = articleEtNom(initiales, dce).article || articleSigle(initiales, '');
       if (art && nLieu >= 2) return { long, court: { article: art, nom: avecLieu, genre: '' } };
       if (art && nSigle >= 3) return { long, court: { article: art, nom: initiales, genre: '' } };
+    }
+    // Complément de lieu après le tiret (T4G-1 : « Caisse primaire d'assurance maladie de Rouen-Elbeuf-Dieppe – Seine-Maritime »,
+    // « … – Normandie ») : ce n'est pas l'entité de l'acheteur ; la forme courte est le sigle que le DCE emploie (« la CPAM »),
+    // sinon il n'y en a pas (forme longue).
+    if (estNomDeLieu(entite) && !teteInstitution(entite)) {
+      const tutelle = morceaux.slice(0, -1).join(' - ').trim();
+      // Sigle du nom entier, sinon de sa tête sans son complément de lieu (« Caisse primaire d'assurance maladie » → CPAM).
+      const sigle = sigleDuDce(tutelle, dce) || sigleDuDce(tutelle.replace(/\s+(?:de|du|des|d['’])\s*[A-ZÀ-Ý].*$/, ''), dce);
+      const art = sigle ? articleEtNom(sigle, dce).article || articleSigle(sigle, '') : '';
+      return sigle && art ? { long, court: { article: art, nom: sigle, genre: '' } } : { long, pluriel };
     }
     // Tutelle (ou entité) de plus de 8 mots (T4-COH-4 : « Établissement public de coopération culturelle et
     // environnementale du Grand Paris Sud - Direction des moyens généraux… », 29 fois en entier) : sa tête nominale.
@@ -2062,6 +2149,16 @@ const CALCULS: Record<string, Calculateur> = {
     // Nom resté en capitales (page de garde et analyse en capitales) : graphie du DCE, mot par mot ; à défaut, forme
     // juridique écrite dans sa graphie usuelle et nom d'usage dans la graphie du DCE (T9-COH-2).
     brut = casseDuDce(brut, c.ctx.dce || '') || casseFormeJuridique(brut, c.ctx.dce || '') || brut;
+    // Nom resté en capitales, sans autre graphie dans le DCE (T4-COH-8 : « ROUEN NORMANDIE AMENAGEMENT ») : mots pleins avec leur
+    // majuscule, accents du dictionnaire, lieux connus ; un mot incertain (« Logeo ») est soumis à GSS.
+    let graphieIncertaine = '';
+    {
+      const cap = casseNomEnCapitales(brut, c.ctx.dce || '');
+      if (cap.forme && cap.forme !== brut) {
+        if (cap.incertains.length) graphieIncertaine = `Le DCE n'écrit le nom de l'acheteur qu'en capitales (« ${brut} ») : le mémoire l'écrit « ${cap.forme} ». Est-ce la graphie exacte (accents, majuscules) de ${cap.incertains.map((w) => `« ${w} »`).join(', ')} ? Sinon, quelle est-elle ?`;
+        brut = cap.forme;
+      }
+    }
     let { article, nom } = articleEtNom(brut, c.ctx.dce || '');
     const formes = formesClient(nom, c.ctx.dce || '');
     // Groupement de commandes réécrit en ses membres (« Ville de Rouen et le CCAS de Rouen ») : article du premier membre.
@@ -2077,6 +2174,7 @@ const CALCULS: Record<string, Calculateur> = {
       ...(formes.pluriel ? { genre: 'p' as const } : societeDce ? { genre: 'f' as const } : {}),
       ...(elisionDevantNom(formes.long, c.ctx.dce || '') ? { hMuet: true } : {}),
       ...(formes.court && elisionDevantNom(formes.court.nom, c.ctx.dce || '') ? { hMuetCourt: true } : {}),
+      ...(graphieIncertaine ? { aConfirmer: graphieIncertaine } : {}),
     };
   },
   OBJET_MARCHE: (c) => {

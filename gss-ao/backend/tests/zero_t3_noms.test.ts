@@ -70,7 +70,7 @@ describe('capitales : « A » préposition, mots du dictionnaire et sigles (T3-C
     expect(casseDuDce('SURVEILLANCE DU CHATEAU - ACCORD-CADRE A BONS DE COMMANDE', 'Le château.', true)).toBe('Surveillance du château - accord-cadre à bons de commande');
   });
   it('nom en capitales seulement : mots du dictionnaire en minuscules, nom de lieu, sigle gardé', () => {
-    expect(casseDuDce('SYNDICAT MIXTE A VOCATION MULTIPLE DU PAYS DE CAUX', 'LE SYNDICAT MIXTE A VOCATION MULTIPLE DU PAYS DE CAUX')).toBe('Syndicat mixte à vocation multiple du pays de Caux');
+    expect(casseDuDce('SYNDICAT MIXTE A VOCATION MULTIPLE DU PAYS DE CAUX', 'LE SYNDICAT MIXTE A VOCATION MULTIPLE DU PAYS DE CAUX')).toBe('Syndicat mixte à vocation multiple du Pays de Caux');
     expect(casseDuDce("OFFICE PUBLIC DE L'HABITAT DE ROUEN", "OFFICE PUBLIC DE L'HABITAT DE ROUEN")).toBe("Office public de l'habitat de Rouen");
     expect(casseDuDce("SERVICE DEPARTEMENTAL D'INCENDIE ET DE SECOURS DE LA SEINE-MARITIME (SDIS 76)", 'le SDIS 76')).toBe("Service départemental d'incendie et de secours de la Seine-Maritime (SDIS 76)");
     expect(casseDuDce('SURVEILLANCE DU LYCEE ET DU PORT DE PECHE', 'X', true)).toBe('Surveillance du lycée et du port de pêche');
