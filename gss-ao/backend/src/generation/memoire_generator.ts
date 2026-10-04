@@ -19,7 +19,7 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
   sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, phraseDeRubriqueGss, alignerSchemaSurTexte, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
-  valeursImposeesValides, titreSansPointFinal, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
+  CLAUSE_CONTRACTUELLE, valeursImposeesValides, titreSansPointFinal, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, similariteQuestions, recouvrementTextes, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, questionRondes, casPratiqueRepris, type Dimensionnement } from './dimensionnement';
@@ -1669,6 +1669,15 @@ export function sansQuestionsRedites<T extends { question: string; sources?: num
  * Description factuelle du site tirée du DCE (site, adresse, surface, horaires d'ouverture, bâtiments), sans obligation du
  * titulaire : jamais une question à GSS (T5-CONS-9).
  */
+/**
+ * Clause contractuelle ou de durée du marché (CLAUSE_CONTRACTUELLE, durée, reconduction, notification, prise d'effet), T5N-5 :
+ * ni une question nouvelle à proposer, ni une question à GSS.
+ */
+export function clauseContractuelleOuDuree(e: string): boolean {
+  const t = String(e || '');
+  return CLAUSE_CONTRACTUELLE.test(t) || /\bdur[ée]e (?:du march[ée]|de l['’]accord[- ]cadre|du contrat|de validit[ée])|\breconductible|\breconduit|\bnotification du (?:march[ée]|contrat)\b|\bprise d['’]effet\b|\bp[ée]riode (?:initiale|de reconduction)\b/i.test(t);
+}
+
 export function faitDuDce(e: string): boolean {
   const t = String(e || '').replace(/\s+/g, ' ').trim();
   const DESCRIPTION = /^(?:(?:le |la |les |l['’])?(?:sites?|lieux?|adresses?|surfaces?|superficies?|horaires? d['’]ouverture|b[âa]timents?|locaux|localisation|implantation|p[ée]rim[èe]tre g[ée]ographique|effectif du site))\b[^:;]{0,80}:/i;
@@ -1878,6 +1887,13 @@ export function motifRefusEngagement(x: string): string {
   // délai contractuel », alors que le CCTP ne fixe aucun délai de remplacement) : renvoi à un délai qui n'existe pas.
   if (/d[ée]lais? contractuels?|d[ée]lais? (?:pr[ée]vus?|fix[ée]s?) (?:au|par le) (?:contrat|march[ée]|CCTP|CCAP)/i.test(t) && !/\d/.test(t)) return 'renvoi à un délai que le DCE ne fixe pas';
   if (/\ben cas de recours\b|\bsi (?:GSS|le titulaire) (?:recourt|fait appel)/i.test(t)) return 'exigence conditionnelle qui ne s\'applique pas à GSS';
+  // Faculté de l'acheteur, clause administrative ou simple description d'un lieu, écrites comme un engagement de GSS (s2e 1501,
+  // T5N-6) : prestations similaires ou nouveaux accords-cadres confiés par l'acheteur (R2122-7), langue et traduction des
+  // documents, notifications par le profil d'acheteur, « GSS prendra en compte le Hub Expo …, situé … » ; jamais imprimées.
+  if (/prestations? similaires|nouveaux? (?:accords?[- ]cadres?|march[ée]s?)|R\.?\s?2122-7|march[ée]s? subs[ée]quents?\s+(?:qui lui|confi)/i.test(t)) return 'faculté de l\'acheteur, pas un engagement de GSS';
+  if (/\b(?:r[ée]dig[ée]e?s?|[ée]crite?s?) en (?:langue )?fran[çc]aise?|traduction (?:en fran[çc]ais|certifi[ée]e)|traducteur asserment[ée]/i.test(t)) return 'clause administrative (langue des documents), pas un engagement de GSS';
+  if (/profil d['’]acheteur|plateforme (?:de d[ée]mat[ée]rialisation|des march[ée]s)|faisant courir un d[ée]lai/i.test(t)) return 'clause administrative (notifications), pas un engagement de GSS';
+  if (/^(?:GSS|le titulaire|nous)\s+(?:prendra|prend|prendront|tiendra|tient)\s+en (?:compte|consid[ée]ration)\s+(?:le|la|les|l['’])\s*[^,.;]{2,80},\s*(?:situ[ée]e?s?|sis|implant[ée]e?s?|localis[ée]e?s?)(?=[\s,]|$)/i.test(t.replace(/^[-•]\s*/, ''))) return 'description d\'un lieu, sans action de GSS';
   return '';
 }
 
@@ -8484,7 +8500,12 @@ RÈGLES DE FORME (rendu Marp) :
       if (plan.rubriques.some((r) => r.id === 'b3_adequation')) (parRubrique.b3_adequation ||= []).push(...postesDimensionnes);
       console.log(`[MemoireGenerator] ${postesDimensionnes.length} exigence(s) de poste déjà dimensionné rattachée(s) à l'équipe dédiée, sans proposition à part.`);
     }
-    const { groupes, ecartees } = grouperNouvelles(tri.nouvelles.filter((e) => !formalitesOffre.includes(e) && !postesDimensionnes.includes(e)), 6);
+    // Clause contractuelle ou de durée du marché (durée, reconduction, notification, résiliation, confidentialité, litiges,
+    // facturation : s2e 1501, « Durée et reconduction de l'accord-cadre », T5N-5) : jamais une proposition de réponse ; elle reste
+    // dans la matrice et le bloc 1.
+    const clausesContrat = tri.nouvelles.filter((e) => !formalitesOffre.includes(e) && clauseContractuelleOuDuree(`${e.sujet || ''} ${e.exigence}`));
+    if (clausesContrat.length) console.log(`[MemoireGenerator] ${clausesContrat.length} clause(s) contractuelle(s) ou de durée du marché sans proposition de réponse.`);
+    const { groupes, ecartees } = grouperNouvelles(tri.nouvelles.filter((e) => !formalitesOffre.includes(e) && !postesDimensionnes.includes(e) && !clausesContrat.includes(e)), 6);
     const besoin = donneesBesoin(prep, ctxBase);
 
     // ── 4. Adaptation ciblée des rubriques « adapte » (et des rubriques fixes visées par la demande particulière) ──
@@ -8758,7 +8779,7 @@ RÈGLES DE FORME (rendu Marp) :
     for (const r of matrice) {
       // Description du site tirée du DCE (« Site de Caen : 20 rue Alfred Kastler… ; surface utile brute de 2 820 m² ; horaires
       // d'ouverture… », caen 1501, T5-CONS-9) : un fait du DCE, déjà imprimé au bloc 1, jamais une question à GSS.
-      if (r.exigence && faitDuDce(r.exigence)) continue;
+      if (r.exigence && (faitDuDce(r.exigence) || clauseContractuelleOuDuree(r.exigence))) continue;
       if ((r.couverture || '').toLowerCase().includes('écart') && r.exigence && !PIECES_OFFRE.test(r.exigence) && !enProposition.has(r)
         && !exigenceTraitee(r.exigence, Object.values(sections).join('\n\n'))) consultations.add(FORMALITES_OFFRE.test(r.exigence) ? questionFormalite(r) : r.exigence.trim());
     }
@@ -9845,6 +9866,18 @@ Renvoie UNIQUEMENT un objet JSON : {"suppressions": [{"id": "rubrique où retire
         // la suivante devient orpheline.
         const suite = t.slice(t.indexOf(extrait) + extrait.length).replace(/^[\s.;:]+/, '');
         if (/^(?:Ces|Ce|Cet|Cette|Ils|Elles|Il|Elle|Celle|Celui|Ceux|Celles|Lui|Leur|Leurs|Là|Ainsi|De plus|En outre)\b/.test(suite)) continue;
+        // Reprise dans la première proposition de la phrase suivante, après un complément (« Pour les sites normands du marché,
+        // son délai d'arrivée… »), ou connecteur dans cette phrase (« Les prestations … sont donc exécutées … ») : la phrase
+        // suivante dépend de celle-ci, elle est gardée (s2e 1501, T5N-4).
+        const phraseSuivante = (suite.split(/(?<=[.!?])\s+/)[0] || '').slice(0, 400);
+        if (/^[^.!?]{0,90}?(?<![\p{L}])(?:son|sa|ses|leur|leurs|il|elle|ils|elles|lui|celui-ci|celle-ci|ceux-ci|celles-ci)(?![\p{L}])/iu.test(phraseSuivante)
+          || /(?<![\p{L}])(?:donc|par cons[ée]quent|en cons[ée]quence|de ce fait|d[èe]s lors)(?![\p{L}])/iu.test(phraseSuivante)) continue;
+        // Phrase qui porte la réponse au sujet de sa rubrique (mots du titre : « GSS n'envisage pas de recourir à la
+        // sous-traitance… » sous « Sous-traitance du service public », T5N-4) : jamais retirée.
+        const titreRub = rubriques.find((x) => x.id === id)?.title || '';
+        const pleinsTitre = normaliser(titreRub).replace(/[^a-z0-9 -]+/g, ' ').split(/\s+/).filter((w) => w.length >= 5 && !/^(?:votre|notre|leurs?|dans|pour|avec|selon|entre)$/.test(w));
+        const ex = normaliser(extrait);
+        if (pleinsTitre.length && (ex.includes(pleinsTitre[0].slice(0, 7)) || pleinsTitre.filter((w) => ex.includes(w.slice(0, 7))).length >= Math.min(2, pleinsTitre.length))) continue;
         // Retire la puce entière, sinon la phrase seule.
         const lignes = t.split('\n');
         const k = lignes.findIndex((l) => l.replace(/^\s*[-*•]\s*/, '').trim() === extrait);

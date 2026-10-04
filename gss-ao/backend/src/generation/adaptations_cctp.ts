@@ -533,12 +533,15 @@ const motsPleins = (t: string) => [...new Set(mots(t).filter((w) => w.length >= 
  * prestation n'est pas prévue au périmètre du marché », citedia 1461, T4-CONS-7) : le CCTP ne contredit pas la phrase de
  * GSS, il n'en parle pas ; D8 ne fait primer le CCTP que s'il la contredit.
  */
-const MOTIF_SILENCE = /\bne (?:pr[ée]voit|mentionne|demande|exige|cite|comporte|impose|requiert|vise|inclut|contient) (?:pas|aucun|aucune|ni)\b|\bn['’](?:est|sont) pas (?:pr[ée]vue?s?|demand[ée]e?s?|exig[ée]e?s?|mentionn[ée]e?s?|vis[ée]e?s?|inclus(?:es?)?|requis(?:es?)?)|\bpas (?:pr[ée]vue?s?|demand[ée]e?s?) (?:au|par le|dans le)|\bnon (?:pr[ée]vue?s?|demand[ée]e?s?|mentionn[ée]e?s?|exig[ée]e?s?)\b|\b(?:absente?s?|absence) (?:du|de la|dans le|au) (?:CCTP|DCE|cahier|march[ée]|p[ée]rim[èe]tre)|\bhors (?:du )?p[ée]rim[èe]tre\b|\bpas (?:dans|au) (?:le )?p[ée]rim[èe]tre\b|\baucune? (?:mention|exigence|demande)\b/i;
+// (aussi « ne précise / détaille / fixe / indique / spécifie / définit / prescrit pas », « aucune … n'est précisée », s2e 1501, T5N-2)
+const MOTIF_SILENCE = /\bne (?:pr[ée]voi(?:t|ent)|mentionnen?t?|demanden?t?|exigen?t?|citen?t?|comporten?t?|imposen?t?|requi[eè]r(?:t|ent)|visen?t?|inclu(?:t|ent)|contien(?:t|nent)|pr[ée]cisen?t?|d[ée]taillen?t?|fixen?t?|indiquen?t?|sp[ée]cifien?t?|d[ée]fini(?:t|ssent)|prescri(?:t|vent)|[ée]voquen?t?|traiten?t?|abordent?|fait|font) (?:pas|aucun|aucune|ni|nullement|aucunement)\b|\baucune?s?\b[^.;]{0,80}?\bn['’](?:est|sont) (?:pr[ée]cis[ée]e?s?|indiqu[ée]e?s?|mentionn[ée]e?s?|pr[ée]vue?s?|exig[ée]e?s?|impos[ée]e?s?|d[ée]finie?s?|fix[ée]e?s?|sp[ée]cifi[ée]e?s?|demand[ée]e?s?)\b|\bn['’](?:est|sont) pas (?:pr[ée]cis[ée]e?s?|indiqu[ée]e?s?|d[ée]finie?s?|fix[ée]e?s?|sp[ée]cifi[ée]e?s?|[ée]voqu[ée]e?s?)|\bsans (?:pr[ée]cision|mention|exigence)\b|\bn['’](?:est|sont) pas (?:pr[ée]vue?s?|demand[ée]e?s?|exig[ée]e?s?|mentionn[ée]e?s?|vis[ée]e?s?|inclus(?:es?)?|requis(?:es?)?)|\bpas (?:pr[ée]vue?s?|demand[ée]e?s?) (?:au|par le|dans le)|\bnon (?:pr[ée]vue?s?|demand[ée]e?s?|mentionn[ée]e?s?|exig[ée]e?s?)\b|\b(?:absente?s?|absence) (?:du|de la|dans le|au) (?:CCTP|DCE|cahier|march[ée]|p[ée]rim[èe]tre)|\bhors (?:du )?p[ée]rim[èe]tre\b|\bpas (?:dans|au) (?:le )?p[ée]rim[èe]tre\b|\baucune? (?:mention|exigence|demande)\b/i;
 
 export function fondementDansDce(m: { type: string; extrait: string; par?: string; motif?: string }, phrase: string, dce: string): string {
   // Retrait motivé par le silence du CCTP : jamais fondé (la phrase de GSS reste).
   if (m.type === 'retrait' && MOTIF_SILENCE.test(String(m.motif || ''))) return '';
-  const sentences = phrasesDce(dce).filter((x) => x.length <= 900);
+  // Jamais un titre, une page de garde ou un bloc d'adresse comme exigence (T5N-2 : « CAHIER DES CLAUSES PARTICULIÈRES … Tél :
+  // 0276460330 ») : une phrase avec un verbe conjugué, en casse mêlée.
+  const sentences = phrasesDce(dce).filter((x) => x.length <= 900 && phraseExigible(x)).map(sansTitresEnTete);
   const nouveaux = m.type === 'remplacement' ? motsPleins(m.par || '').filter((w) => !motsPleins(m.extrait).includes(w)) : [];
   const nombres = m.type === 'remplacement' ? (String(m.par || '').match(/\d+(?:[.,]\d+)?/g) || []).filter((n) => !String(m.extrait).includes(n)) : [];
   const contexte = motsPleins(m.type === 'retrait' ? `${m.extrait} ${m.motif || ''}` : `${phrase} ${m.par || ''}`);
@@ -553,6 +556,30 @@ export function fondementDansDce(m: { type: string; extrait: string; par?: strin
     if (ok && total > score) { score = total; meilleure = x; }
   }
   return meilleure ? phraseLisible(meilleure, 420) : '';
+}
+
+/** Verbe conjugué courant (une exigence en porte un ; un titre ou une page de garde n'en a pas). */
+const VERBE_EXIGENCE = /(?:^|[^\p{L}])(?:est|sont|sera|seront|doit|doivent|devra|devront|peut|peuvent|pourra|pourront|a|ont|aura|auront|assure\p{L}*|effectu\p{L}*|r[ée]alis\p{L}*|met|mettent|mettra|porte\p{L}*|dispose\p{L}*|fourni\p{L}*|transmet\p{L}*|pr[ée]voi\p{L}*|comprend\p{L}*|comporte\p{L}*|garanti\p{L}*|veille\p{L}*|organis\p{L}*|intervien\p{L}*|exige\p{L}*|impose\p{L}*|conclu|remet\p{L}*|tien(?:t|nent|dra|dront)|respecte\p{L}*|s['’]engage\p{L}*|s['’]effectue\p{L}*)(?![\p{L}])/iu;
+/** Phrase qui peut fonder une adaptation : un verbe conjugué, en casse mêlée, sans numéro de téléphone (page de garde). */
+export function phraseExigible(x: string): boolean {
+  const lettres = String(x || '').replace(/[^A-Za-zÀ-ÿ]/g, '');
+  if (!lettres || lettres.replace(/[^A-ZÀ-Ý]/g, '').length / lettres.length > 0.5) return false;
+  if (/\bT[ée]l(?:[ée]phone)?\.?\s*:?\s*\+?\d|\b0\d(?:[\s.]?\d{2}){4}\b/.test(x)) return false;
+  return VERBE_EXIGENCE.test(x);
+}
+/**
+ * Exigence ramenée à la phrase qui la porte (T5N-13 : « Lieux d'exécution : 35000 RENNES 1.2 Durée - Délais d'exécution -
+ * Reconduction Le Marché est conclu… » → « Le Marché est conclu… ») : sans les intitulés numérotés ni les lignes « libellé :
+ * valeur » sans verbe qui la précèdent.
+ */
+export function sansTitresEnTete(x: string): string {
+  const morceaux = String(x || '').split(/\s+(?=\d{1,2}(?:\.\d{1,2})+\.?\s+[A-ZÀ-Ý])/);
+  let t = morceaux.filter((m) => VERBE_EXIGENCE.test(m.replace(/^\d{1,2}(?:\.\d{1,2})+\.?\s+/, ''))).join(' ') || String(x || '');
+  t = t.replace(/^\d{1,2}(?:\.\d{1,2})+\.?\s+/, '');
+  // Intitulé sans verbe collé devant la phrase (« Durée - Délais d'exécution - Reconduction Le Marché est conclu… »).
+  const m = /^(.{3,120}?)\s+((?:Le|La|Les|L['’]|Un|Une|Ce|Cette|Ces|Chaque|Tout|Toute|Tous|Toutes|En|Pour|Dans|Il|Elle|Ils|Elles|Au|Aux|Du|Des)\s.+)$/.exec(t);
+  if (m && !VERBE_EXIGENCE.test(m[1]) && /\s[-–—]\s|:|^[A-ZÀ-Ý][^a-z]*$|^(?:[A-ZÀ-Ý][\p{L}'’-]*\s*){1,6}$/u.test(m[1]) && VERBE_EXIGENCE.test(m[2])) t = m[2];
+  return t.trim();
 }
 
 /** Étape des modifications de l'adaptation au CCTP par le modèle (D8, T2-CONS-3). */

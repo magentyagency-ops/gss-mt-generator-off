@@ -2926,6 +2926,45 @@ export function renvoisManquantsBloc1(texte: string, plan: PlanMemoireType, mt: 
   return { texte: lignes.join('\n'), ajoutes };
 }
 
+/** Commentaire sur les pièces du DCE reçues (« Le CCP transmis ne détaille pas… », « … à partir de cette pièce »), T5N-3. */
+const COMMENTAIRE_PIECES = /\b(?:CC[TA]?P|CCATP|BPU|DPGF|DQE|RC|DCE|cahier des charges|dossier de consultation)\s+(?:transmis|fourni|re[çc]u|communiqu[ée])e?s?\b|\bcette pi[èe]ce\b|\bpi[èe]ces? (?:transmises?|fournies?|re[çc]ues?|analys[ée]es?)\b|\bne (?:peu(?:t|vent)|pourr(?:a|ont)) (?:donc )?pas [êe]tre (?:[ée]tablie?s?|d[ée]termin[ée]e?s?|fix[ée]e?s?|pr[ée]cis[ée]e?s?|d[ée]finie?s?|chiffr[ée]e?s?) (?:[àa] partir|sur la base|d['’]apr[èe]s)/i;
+export function sansCommentairesPiecesBloc1(texte: string): { texte: string; retirees: string[] } {
+  const retirees: string[] = [];
+  const lignes = String(texte || '').split('\n');
+  const out: string[] = [];
+  let partie = '';
+  for (let i = 0; i < lignes.length; i++) {
+    const l = lignes[i];
+    if (/^##\s/.test(l)) partie = l;
+    const dansListe = /^##\s+(?:Vos attentes|Les points de vigilance)/i.test(partie);
+    if (!dansListe) { out.push(l); continue; }
+    // Flèche de réponse sur sa propre ligne (après une consultation ou une ligne vide) : rattachée à la dernière puce.
+    if (/^\s*→\s*notre r[ée]ponse/i.test(l)) {
+      const k = [...out.keys()].reverse().find((j) => /^\s*[-*•]\s/.test(out[j]));
+      if (k !== undefined && !/→/.test(out[k])) out[k] = `${out[k].replace(/\s*\[À COMPLÉTER\]\s*$/, '').replace(/[\s.;]+$/, '')} ${l.trim()}`;
+      else retirees.push(l.trim());
+      continue;
+    }
+    if (!/^\s*[-*•]\s/.test(l)) { out.push(l); continue; }
+    const corps = l.replace(/\*\*[^*]+\*\*\s*:?\s*/, '');
+    if (COMMENTAIRE_PIECES.test(corps)) {
+      retirees.push(l.trim());
+      // Consultation de la puce (sur sa ligne ou la suivante) gardée seule ; ce qui suit son crochet (« . → notre réponse… ») retiré.
+      const cons = [...l.matchAll(/\[CONSULTATION REQUISE\s*:[^\]]+\]/gi)].map((m) => m[0]);
+      for (const c of cons) out.push(c);
+      while (i + 1 < lignes.length && (/^\s*\[CONSULTATION REQUISE\s*:/i.test(lignes[i + 1]) || /^\s*→/.test(lignes[i + 1]) || (!lignes[i + 1].trim() && /^\s*→/.test(lignes[i + 2] || '')))) {
+        i++;
+        const c = /\[CONSULTATION REQUISE\s*:[^\]]+\]/i.exec(lignes[i]);
+        if (c) out.push(c[0]); else if (lignes[i].trim()) retirees.push(lignes[i].trim());
+      }
+      continue;
+    }
+    // « [À COMPLÉTER] » laissé seul après une phrase complète (sans donnée à remplir) : retiré, la consultation reste.
+    out.push(l.replace(/([.!?»])\s*\[À COMPLÉTER\]\s*(?=\s*$|\s*→)/, '$1'));
+  }
+  return { texte: out.join('\n'), retirees };
+}
+
 export function nettoyerBloc1(texte: string, plan: PlanMemoireType | undefined, duree: string, etapes: Array<{ titre?: string; texte?: string }> = []): { texte: string; retirees: string[]; renvois: number } {
   const retirees: string[] = [];
   let t = String(texte || '');
@@ -2937,6 +2976,15 @@ export function nettoyerBloc1(texte: string, plan: PlanMemoireType | undefined, 
     const b = sansBribesApresRenvoi(t, etapes);
     t = b.texte;
     retirees.push(...b.retirees);
+  }
+  // 0 ter. Attentes et points de vigilance (T5N-3, s2e 1501) : puce qui commente les pièces reçues (« Le CCP transmis ne détaille
+  //    pas le dispositif… ; … ne peuvent donc pas être établis à partir de cette pièce. [À COMPLÉTER] ») retirée, sa consultation
+  //    gardée seule (question à GSS, jamais imprimée) ; « [À COMPLÉTER] » laissé seul après une phrase complète retiré ; flèche
+  //    « → notre réponse » écrite sur une ligne à part rattachée à sa puce.
+  {
+    const r = sansCommentairesPiecesBloc1(t);
+    t = r.texte;
+    retirees.push(...r.retirees);
   }
   // 1. Durée inconnue du DCE.
   if (!String(duree || '').trim()) {
@@ -3212,6 +3260,9 @@ export function libellesEmplacementsNominaux(texte: string): string {
   }).join('\n');
 }
 
+/** Négation de la sous-traitance ou de l'intérim dans la phrase (T5N-4). */
+const NEGATION_INTERDIT = /(?:\bne\b|\bn['’])[^.;]{0,80}?\b(?:pas|aucun(?:e)?|jamais|nullement|plus)\b|\baucun(?:e)?\b[^.;]{0,60}?(?:sous[- ]?trait|int[ée]rim)|\bsans (?:recours|recourir|faire appel)\b|\b(?:exclut|exclue?s?|proscri\w*|interdi\w*)\b[^.;]{0,40}?(?:sous[- ]?trait|int[ée]rim)/i;
+
 export function controlerProposition(texte: string, montantsGss: string[] = []): { texte: string; retirees: string[]; questions: string[] } {
   const retirees: string[] = [];
   const questions: string[] = [];
@@ -3236,7 +3287,10 @@ export function controlerProposition(texte: string, montantsGss: string[] = []):
       // Procédures ou consignes de l'acheteur laissées en blanc (T1-CONS-3 : « … sont appliquées suivant les procédures de
       // l'EPCF : [À COMPLÉTER]. ») : la phrase est vraie sans l'emplacement, qui n'appelle aucune donnée de GSS.
       .replace(/((?:suivant|selon|conform[ée]ment\s+aux?)\s+(?:les\s+)?(?:proc[ée]dures|consignes|r[èe]gles|modalit[ée]s|instructions)\s+(?:d[eu]\s+|de\s+la\s+|de\s+l['’]\s*|des\s+)[^:.;]{2,80}?)\s*:\s*\[À COMPLÉTER\](?:⟦AC:\d+⟧)?\s*(?=[.;]?\s*$)/i, '$1')).filter((ph) => {
-      if (INTERDIT.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion ||= /\[À COMPLÉTER\]/.test(ph); return false; }
+      // (une phrase qui NIE la sous-traitance ou l'intérim, conforme à faits_gss.md, reste : « GSS n'envisage pas de recourir à
+      // la sous-traitance », « Aucune partie … n'est confiée à un sous-traitant », « aucun contrat de sous-traitance n'est
+      // établi », s2e 1501, T5N-4)
+      if (INTERDIT.test(ph) && !NEGATION_INTERDIT.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion ||= /\[À COMPLÉTER\]/.test(ph); return false; }
       if (/\b(?:si|lorsque|quand|dont|notamment)\s*:?\s*\[À COMPLÉTER\]\s*[.;]?\s*$/i.test(ph)) { retirees.push(ph.trim()); retireAvecQuestion = true; return false; }
       // Engagement réduit à un oui ou non laissé en blanc (ifsem 335 : « Engagement de GSS sur la couverture permanente de ce
       // poste et ces horaires : [À COMPLÉTER]. ») : la proposition est déjà « à valider », la phrase et sa question partent.

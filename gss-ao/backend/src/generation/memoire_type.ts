@@ -3651,6 +3651,9 @@ export function rubriqueDuTheme(texte: string, ids: string[]): string {
  */
 export const CLAUSE_PRIX = /\bvaloris(?:e|é|ée|ées|és|er|ation)\b|\bmajor(?:é|ée|ées|és|ation)s?\b|\bprix\b|\btarif|\bfactur|r[ée]vision (?:des |du )?prix|\bbordereau\b|(?:€|euros?)\s*(?:HT|TTC|hors taxes?|toutes taxes)\b|\bplafonn[ée]|\b(?:maximum|minimum|montant) (?:annuel|global|total)|\bmontants? (?:maximum|minimum|estimatif|annuel)|\bsans (?:montant )?minimum\b|\bni (?:sur )?un minimum\b|\b(?:volumes?|quantit[ée]s?) (?:pr[ée]visionnel|estimatif|indicatif)|\bquantit[ée]s? r[ée]ellement (?:ex[ée]cut|command|r[ée]alis)|\bmontant de l.accord-cadre/i;
 
+/** Énoncé général du périmètre du marché (T5N-6). */
+const PERIMETRE_GENERAL = /\bint[ée]gralit[ée] des prestations\b|\bl['’]ensemble des prestations (?:de|du|objet)\b|\bprestations? (?:objet|faisant l['’]objet) du (?:pr[ée]sent )?(?:march[ée]|accord[- ]cadre|contrat)\b|\b(?:march[ée]|accord[- ]cadre|contrat|CC[TA]?P)\s+a pour objet\b/i;
+
 export function exigencesParRubrique(mt: MemoireType, plan: PlanMemoireType, matrice: ExigenceMatrice[]): { parRubrique: Record<string, ExigenceMatrice[]>; nouvelles: ExigenceMatrice[] } {
   const ids = plan.rubriques.map((r) => r.id);
   const parRubrique: Record<string, ExigenceMatrice[]> = {};
@@ -3676,6 +3679,10 @@ export function exigencesParRubrique(mt: MemoireType, plan: PlanMemoireType, mat
     // Clause de prix ou de facturation (T3N-10, parc_expo 1331 : « les heures de nuit seront valorisées… » rattachée au contrôle
     // des vacations de nuit) : pas une exigence de prestation, jamais un engagement technique.
     if (!e?.exigence || PIECES_OFFRE.test(e.exigence) || CLAUSE_PRIX.test(e.exigence)) continue;
+    // Énoncé général du périmètre (« assurer l'intégralité des prestations de sécurité incendie et de sûreté… », « Le présent
+    // marché a pour objet… », s2e 1501, T5N-6) : l'objet du marché, déjà présenté au bloc 1, jamais un engagement d'une rubrique
+    // de formation ou d'outils de contrôle.
+    if (PERIMETRE_GENERAL.test(e.exigence)) continue;
     // Thème net de l'exigence (cstb 551, T5CP-7 : assurance sous « La gestion d'un incendie », alcool et tabac sous « Nos
     // valeurs », congés et effectif sous « Un interlocuteur unique », rondes d'ouverture sous « L'ordre d'alerte ») : la
     // rubrique de GSS qui traite ce thème, si elle est au plan et l'admet.
