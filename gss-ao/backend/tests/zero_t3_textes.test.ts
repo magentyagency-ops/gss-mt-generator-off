@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { retirerCommentairesInternes } from '../src/generation/base_memoires';
 import { appliquerModifications, phraseAutonome, chargerMemoireType } from '../src/generation/memoire_type';
 import { alignerSchemaSurTexte } from '../src/generation/reponse_libre_v2';
+import { corrigerFormeSpec, pictogrammesGrille } from '../src/generation/schema_service';
 
 describe('montant de pénalité en pourcentage ou en lettres (T3-CONS-5)', () => {
   it('phrase du Havre : la proposition qui cite le taux de pénalité est retirée, le reste gardé', () => {
@@ -50,5 +51,22 @@ describe('schéma aligné sur la phrase adaptée au CCTP (T3-CONS-11)', () => {
   });
   it('texte non adapté : schéma inchangé', () => {
     expect(alignerSchemaSurTexte(r.schema.params, r.texte, r.texte).changees).toEqual([]);
+  });
+});
+
+describe('schéma refusé pour une erreur de forme : corrigé sans repli en grille (T3-CONS-14)', () => {
+  const spec = { gabarit: 'flux', params: { etapes: [{ titre: 'alarme', texte: "Effectuer la levée de doute sur place avec l'agent de sécurité présent et prévenir le client", role: 'rouge' }, { titre: 'Compte rendu', texte: 'Rapport écrit', role: 'vert' }] } };
+  it('majuscule initiale et texte coupé à la limite sur un mot plein', () => {
+    const c = corrigerFormeSpec(spec, ['« alarme » doit commencer par une majuscule.', `« etapes[0].texte » est trop long (88 caractères, maximum 60) : « ${spec.params.etapes[0].texte} ».`]);
+    expect(c.params.etapes[0].titre).toBe('Alarme');
+    expect(c.params.etapes[0].texte.length).toBeLessThanOrEqual(60);
+    expect(c.params.etapes[0].texte).toBe("Effectuer la levée de doute sur place avec l'agent");
+  });
+  it('erreur de fond : pas de correction automatique', () => {
+    expect(corrigerFormeSpec(spec, ['Le mot « Zorglub » ne figure ni dans la page ni dans le vocabulaire GSS validé.'])).toBeNull();
+  });
+  it('grille : un pictogramme par carte', () => {
+    const g = pictogrammesGrille({ gabarit: 'grille', params: { cartes: [{ titre: 'Alarme', texte: 'Effectuer la levée de doute' }, { titre: 'Victime', texte: 'Porter secours' }, { titre: 'Individu perturbateur', texte: 'Raisonner' }, { titre: 'Compte rendu', texte: 'Rapport' }] } });
+    expect(g.params.cartes.map((c: any) => c.icone)).toEqual(['sirene', 'coeur', 'personne', 'document']);
   });
 });

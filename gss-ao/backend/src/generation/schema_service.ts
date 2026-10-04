@@ -103,6 +103,72 @@ PICTOGRAMMES : n'utilise QUE ces noms exacts (champ "icone", facultatif) : __ICO
 
 Varie les formats d'une page à l'autre. Réponds UNIQUEMENT par un objet JSON {"sujet": "...", "gabarit": "...", "params": {...}}.`;
 
+/**
+ * Corrections de forme d'une spécification refusée, faites sans modèle (T3-CONS-14 : 5 essais refusés pour « trop long » et
+ * « doit commencer par une majuscule », puis une grille de cartes presque vides) : majuscule initiale, texte coupé à la limite
+ * du moteur sur un mot plein, accent de la majuscule. null si aucune erreur n'est une erreur de forme.
+ */
+const MOTS_OUTILS_FIN = /^(?:de|du|des|d|l|la|le|les|et|ou|à|au|aux|en|pour|par|avec|sur|sous|dans|un|une|nos|vos|son|sa|ses|leur|leurs|ce|cette|ces|qui|que|selon|sans|entre)$/i;
+export function corrigerFormeSpec(spec: any, erreurs: string[]): any | null {
+  const longs = new Map<string, number>();
+  const accents = new Map<string, string>();
+  let majuscule = false;
+  for (const e of erreurs) {
+    const l = /est trop long \(\d+ caractères, maximum (\d+)\) : « ([\s\S]+) »\.?$/.exec(e);
+    if (l) { longs.set(l[2], Number(l[1])); continue; }
+    const a = /^« ([^»]+) » : accent manquant sur la majuscule \(écris « ([^»]+) »\)/.exec(e);
+    if (a) { accents.set(a[1], a[2]); continue; }
+    if (/doit commencer par une majuscule/.test(e)) { majuscule = true; continue; }
+    return null; // erreur de fond : le modèle corrige
+  }
+  const couper = (v: string, max: number): string => {
+    let mots = v.slice(0, max + 1).split(/\s+/);
+    if (v.length > max) mots = mots.slice(0, -1);
+    while (mots.length > 1 && MOTS_OUTILS_FIN.test(mots[mots.length - 1].replace(/['’]$/, '').replace(/^(?:l|d)['’]$/i, 'l'))) mots.pop();
+    let t = mots.join(' ').replace(/[\s,;:(«–-]+$/, '');
+    if ((t.match(/\(/g) || []).length !== (t.match(/\)/g) || []).length) t = t.replace(/\s*\([^)]*$/, '');
+    if ((t.match(/«/g) || []).length !== (t.match(/»/g) || []).length) t = t.replace(/\s*«[^»]*$/, '');
+    return t.trim();
+  };
+  const visiter = (o: any, cle = ''): any => {
+    if (typeof o === 'string') {
+      if (/^(?:icone|role|gabarit|unite|valeur|date)$/.test(cle)) return o;
+      let t = o.trim();
+      if (longs.has(o) || longs.has(t)) t = couper(t, longs.get(o) ?? longs.get(t)!);
+      for (const [w, x] of accents) t = t.replace(new RegExp(`(?<![\\p{L}])${w}(?![\\p{L}])`, 'gu'), x);
+      if (majuscule && /^[a-zà-ÿ]/.test(t)) t = t.charAt(0).toUpperCase() + t.slice(1);
+      return t;
+    }
+    if (Array.isArray(o)) return o.map((x) => visiter(x, cle));
+    if (o && typeof o === 'object') return Object.fromEntries(Object.entries(o).map(([k, v]) => [k, visiter(v, k)]));
+    return o;
+  };
+  const corrige = visiter(spec);
+  return JSON.stringify(corrige) === JSON.stringify(spec) ? null : corrige;
+}
+
+/** Pictogramme d'une carte de grille sans pictogramme (T3-CONS-14) : d'après ses mots, sinon « check ». */
+const PICTOS_MOTS: Array<[RegExp, string]> = [
+  [/alarme|alerte|sir[èe]ne/i, 'sirene'], [/incendie|feu|fum[ée]e/i, 'feu'], [/victime|secours|bless|malaise|sant[ée]/i, 'coeur'],
+  [/perturbat|individu|intrus|agress|conflit/i, 'personne'], [/compte[- ]rendu|rapport|main courante|document/i, 'document'],
+  [/lev[ée]e de doute|v[ée]rifi|contr[ôo]l|inspect/i, 'loupe'], [/appel|t[ée]l[ée]phone|pr[ée]ven|inform/i, 'tel'],
+  [/ronde|parcours|patrouill/i, 'route'], [/cl[ée]|badge|acc[èe]s|porte/i, 'cle'], [/planning|horaire|d[ée]lai/i, 'horloge'],
+  [/r[ée]union|[ée]change|client/i, 'reunion'], [/agent|[ée]quipe|personnel/i, 'groupe'], [/v[ée]hicule|voiture/i, 'voiture'],
+  [/cam[ée]ra|vid[ée]o/i, 'camera'], [/formation|dipl[ôo]me/i, 'diplome'],
+];
+export function pictogrammesGrille(spec: any): any {
+  if (spec?.gabarit !== 'grille' || !Array.isArray(spec?.params?.cartes)) return spec;
+  const pris = new Set<string>(spec.params.cartes.map((c: any) => c?.icone).filter(Boolean));
+  const cartes = spec.params.cartes.map((c: any) => {
+    if (c?.icone) return c;
+    const texte = `${c?.titre || ''} ${c?.texte || ''}`;
+    const icone = PICTOS_MOTS.find(([rx, i]) => rx.test(texte) && !pris.has(i))?.[1] || PICTOS_MOTS.find(([rx]) => rx.test(texte))?.[1] || 'check';
+    pris.add(icone);
+    return { ...c, icone };
+  });
+  return { ...spec, params: { ...spec.params, cartes } };
+}
+
 const ICONES = ['alerte', 'ampoule', 'ascenseur', 'badge', 'ballon', 'banque', 'batiment', 'bouclier', 'caddie', 'cadeau', 'cadenas',
   'calendrier', 'camera', 'camion', 'carte_pro', 'casque', 'chaussure', 'check', 'chien', 'cible', 'cle', 'coeur', 'compteur', 'croix',
   'detecteur', 'diplome', 'document', 'drone', 'echange', 'echelle', 'eclair', 'ecole', 'escalier', 'etoile', 'euro', 'extincteur', 'feu',
@@ -339,13 +405,24 @@ export class SchemaService {
         }
       }
       if (spec === null) return null;
+      // Grille de cartes sans pictogramme (T3-CONS-14) : chaque carte reçoit le sien (planche Marine v3 : plaque de pictogramme).
+      spec = pictogrammesGrille(spec);
       let r: Resultat | undefined;
+      const rendre = async (sp: any): Promise<Resultat | undefined> => (await appelMoteur(this.python!, {
+        mode: 'rendre',
+        format,
+        schemas: [{ id: page.key, gabarit: sp?.gabarit, params: sp?.params, source: page.text, titre_section: page.sectionTitle }],
+      }, theme))[0];
       try {
-        [r] = await appelMoteur(this.python, {
-          mode: 'rendre',
-          format,
-          schemas: [{ id: page.key, gabarit: spec?.gabarit, params: spec?.params, source: page.text, titre_section: page.sectionTitle }],
-        }, theme);
+        r = await rendre(spec);
+        // Erreurs de forme seulement (majuscule, longueur, accent) : corrigées sans modèle, jusqu'à deux fois, avant tout nouvel
+        // essai (T3-CONS-14 : jamais un repli en grille pour une majuscule ou un texte trop long).
+        for (let k = 0; k < 2 && !(r?.ok && r.svg); k++) {
+          const corrige = corrigerFormeSpec(spec, r?.erreurs || []);
+          if (!corrige) break;
+          spec = corrige;
+          r = await rendre(spec);
+        }
       } catch (e: any) {
         console.error(`[SchemaService] ${page.key} : moteur de schémas en échec (${e?.message || e}).`);
         return null;
