@@ -2169,7 +2169,7 @@
    "longueur_mots": 463,
    "sujet_ajouts": {
     "exige": "formation|form[ée]e?s?\\b|qualifi|cqp|carte professionnelle|cnaps|dipl[ôo]me|certifica|recyclage|comp[ée]tence|d[ée]ontolog|palpation|gestion des conflits|aptitude|habilit|sst\\b|secourisme",
-    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis",
+    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis|\\b(?:intervenir|intervention|arriv[ée]e?|se rendre)\\b[^.;]{0,60}\\b\\d+\\s*(?:minutes?|min|mn|heures?|h)\\b|d[ée]lai (?:d.intervention|maximum|maximal)",
     "motif": "Rubrique des formations et qualifications de l'agent : une exigence de présence, d'horaires, d'effectif ou de prise de poste sur le site relève de l'adéquation des moyens humains, des postes ou de l'intégration d'un nouvel agent (T3N-10, T3-CONS-1 : ign 1351, « À Carnot-Cassini, du samedi 19h00 au lundi 7h00, seul un SSIAP 2 sera présent » sous la formation SSIAP 1)."
    }
   },
@@ -2231,7 +2231,7 @@
    "longueur_mots": 330,
    "sujet_ajouts": {
     "exige": "formation|form[ée]e?s?\\b|qualifi|dipl[ôo]me|certifica|recyclage|comp[ée]tence|aptitude|habilit|connaissance|ma[îi]tris|incendie|[ée]vacuation|d[ée]senfumage|extincteur|\\bria\\b|moyens de secours|erp\\b|igh\\b",
-    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis",
+    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis|\\b(?:intervenir|intervention|arriv[ée]e?|se rendre)\\b[^.;]{0,60}\\b\\d+\\s*(?:minutes?|min|mn|heures?|h)\\b|d[ée]lai (?:d.intervention|maximum|maximal)",
     "motif": "Rubrique des formations et qualifications de l'agent : une exigence de présence, d'horaires, d'effectif ou de prise de poste sur le site relève de l'adéquation des moyens humains, des postes ou de l'intégration d'un nouvel agent (T3N-10, T3-CONS-1 : ign 1351, « À Carnot-Cassini, du samedi 19h00 au lundi 7h00, seul un SSIAP 2 sera présent » sous la formation SSIAP 1)."
    }
   },
@@ -2294,7 +2294,7 @@
    "longueur_mots": 740,
    "sujet_ajouts": {
     "exige": "formation|form[ée]e?s?\\b|qualifi|dipl[ôo]me|certifica|recyclage|comp[ée]tence|aptitude|habilit|connaissance|ma[îi]tris|\\bssi\\b|syst[èe]me de s[ée]curit[ée] incendie|installations? techniques?|registre de s[ée]curit[ée]|accueil des secours",
-    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis",
+    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis|\\b(?:intervenir|intervention|arriv[ée]e?|se rendre)\\b[^.;]{0,60}\\b\\d+\\s*(?:minutes?|min|mn|heures?|h)\\b|d[ée]lai (?:d.intervention|maximum|maximal)",
     "motif": "Rubrique des formations et qualifications de l'agent : une exigence de présence, d'horaires, d'effectif ou de prise de poste sur le site relève de l'adéquation des moyens humains, des postes ou de l'intégration d'un nouvel agent (T3N-10, T3-CONS-1 : ign 1351, « À Carnot-Cassini, du samedi 19h00 au lundi 7h00, seul un SSIAP 2 sera présent » sous la formation SSIAP 1)."
    }
   },
@@ -2335,7 +2335,7 @@
    "longueur_mots": 203,
    "sujet_ajouts": {
     "exige": "formation|form[ée]e?s?\\b|qualifi|dipl[ôo]me|certifica|recyclage|comp[ée]tence|aptitude|habilit|connaissance|ma[îi]tris|ma[îi]tre[- ]chien|\\bchiens?\\b|cynotechni",
-    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis",
+    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis|\\b(?:intervenir|intervention|arriv[ée]e?|se rendre)\\b[^.;]{0,60}\\b\\d+\\s*(?:minutes?|min|mn|heures?|h)\\b|d[ée]lai (?:d.intervention|maximum|maximal)",
     "motif": "Rubrique des formations et qualifications de l'agent : une exigence de présence, d'horaires, d'effectif ou de prise de poste sur le site relève de l'adéquation des moyens humains, des postes ou de l'intégration d'un nouvel agent (T3N-10, T3-CONS-1 : ign 1351, « À Carnot-Cassini, du samedi 19h00 au lundi 7h00, seul un SSIAP 2 sera présent » sous la formation SSIAP 1)."
    }
   },
@@ -2409,7 +2409,7 @@
    "longueur_mots": 193,
    "sujet_ajouts": {
     "exige": "formation|form[ée]e?s?\\b|qualifi|dipl[ôo]me|certifica|recyclage|comp[ée]tence|aptitude|habilit|connaissance|ma[îi]tris|protection rapproch[ée]e|garde du corps|\\bapr\\b|a3p|escorte",
-    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis",
+    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis|\\b(?:intervenir|intervention|arriv[ée]e?|se rendre)\\b[^.;]{0,60}\\b\\d+\\s*(?:minutes?|min|mn|heures?|h)\\b|d[ée]lai (?:d.intervention|maximum|maximal)",
     "motif": "Rubrique des formations et qualifications de l'agent : une exigence de présence, d'horaires, d'effectif ou de prise de poste sur le site relève de l'adéquation des moyens humains, des postes ou de l'intégration d'un nouvel agent (T3N-10, T3-CONS-1 : ign 1351, « À Carnot-Cassini, du samedi 19h00 au lundi 7h00, seul un SSIAP 2 sera présent » sous la formation SSIAP 1)."
    }
   },
@@ -2467,7 +2467,7 @@
    "longueur_mots": 262,
    "sujet_ajouts": {
     "exige": "formation|form[ée]e?s?\\b|qualifi|dipl[ôo]me|certifica|recyclage|comp[ée]tence|aptitude|habilit|connaissance|ma[îi]tris|\\bsst\\b|psc ?1|secouris|premiers secours|habilitation [ée]lectrique|h0b0|d[ée]fibrillat",
-    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis",
+    "exclut": "pr[ée]sente?s?\\b|pr[ée]sence|rel[èe]ve|\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|effectifs?\\b|vacations?|bin[ôo]me|doublure|prise de (?:poste|fonction)|valoris|\\bprix\\b|tarif|factur|mobilis|\\b(?:intervenir|intervention|arriv[ée]e?|se rendre)\\b[^.;]{0,60}\\b\\d+\\s*(?:minutes?|min|mn|heures?|h)\\b|d[ée]lai (?:d.intervention|maximum|maximal)",
     "motif": "Rubrique des formations et qualifications de l'agent : une exigence de présence, d'horaires, d'effectif ou de prise de poste sur le site relève de l'adéquation des moyens humains, des postes ou de l'intégration d'un nouvel agent (T3N-10, T3-CONS-1 : ign 1351, « À Carnot-Cassini, du samedi 19h00 au lundi 7h00, seul un SSIAP 2 sera présent » sous la formation SSIAP 1)."
    }
   },
@@ -3199,6 +3199,10 @@
    "id": "b4_main_courante",
    "bloc": "materiels",
    "titre": "La main courante électronique",
+   "sujet_ajouts": {
+    "exclut": "\\bdu (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\b|\\d{1,2}\\s?h(?:\\d{2})?\\s*(?:[àa]|-|–|jusqu)|24\\s?h\\s?/\\s?24|sollicit|mobilis|mise? [àa] disposition|(?:second|deuxi[èe]me|nouvel|autre)s? agents?|agents? suppl[ée]mentaires?",
+    "motif": "Rubrique de la main courante électronique (traçabilité, rapports) : la mobilisation d'un agent, un poste ou ses horaires relèvent de l'adéquation des moyens humains ou de la planification (T4-CONS-13 : citedia 1461, « un second agent SSIAP 1/CQP APS… sollicitable du lundi au samedi de 22h à 6h » sous la main courante)."
+   },
    "mode": "fixe",
    "condition": "toujours",
    "condition_texte": "toujours (photos et vidéos citées seulement si le DCE ne les interdit pas)",

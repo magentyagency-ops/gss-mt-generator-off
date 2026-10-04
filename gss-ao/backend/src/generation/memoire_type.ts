@@ -3054,7 +3054,7 @@ export function questionsDuPubliposte(rubriques: RubriquePubliee[]): string[] {
 // ─── Exigences, recherche de rubriques, correspondance v1 ────────────────────────────────────────
 
 /** Copie de PIECES_OFFRE (memoire_generator.ts) : exigence sur la composition de l'offre, pas sur la prestation. */
-const PIECES_OFFRE = /acte d.engagement|bordereau de prix|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?/i;
+const PIECES_OFFRE = /acte d.engagement|bordereau de prix|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?|interdictions? de soumissionner|\bL\.?\s?(?:21[34]\d|52\d\d)-\d|\b(?:DC[124]|DUME)\b|(?:attestations?|d[ée]clarations?) sur l.honneur|obligations? (?:sociales et fiscales|fiscales et sociales)|obligations? relatives? [àa] l.emploi des travailleurs handicap/i;
 
 /** Score lexical d'une rubrique pour un texte (mots-clés et titre). */
 /** Mots d'une expression ramenés au singulier (« rondes techniques » → « ronde technique »), pour une recherche par début de mot. */
@@ -3172,6 +3172,14 @@ const THEMES_EXIGENCE: Array<{ sujet: RegExp; rubriques: string[] }> = [
   // Réunions et rencontres de suivi du contrat, point intermédiaire, comité de pilotage : « Les réunions de suivi » (T2-CONS-13 :
   // le point intermédiaire à mi-année du CSTB écrit aussi sous « Le contrôleur de rondes » et « L'équipe de contrôle »).
   { sujet: /r[ée]unions? de suivi|rencontres? (?:annuelles?|trimestrielles?|mensuelles?|semestrielles?|de suivi|p[ée]riodiques?)|point interm[ée]diaire|comit[ée]s? de (?:pilotage|suivi)/iu, rubriques: ['b5_reunions_indicateurs'] },
+  // Délai d'intervention sur une alarme (citedia 1461, T4-CONS-13 : « Alarme technique : intervenir en 30 minutes maximum, sauf
+  // bouton anti-agression en 15 minutes… (HO/BE) » sous « Habilitation électrique, SST et PSC1 ») : la procédure d'intervention
+  // sur alarme, jamais une rubrique de formation rattachée sur un mot secondaire.
+  { sujet: /\b(?:alarmes?|t[ée]l[ée]surveillance|lev[ée]e de doute|bouton anti-agression)\b[^.]{0,160}\b(?:intervenir|intervention|se rendre|arriv[ée]e)\b[^.]{0,60}\b\d+\s*(?:minutes?|min|mn|heures?|h)\b|\b(?:intervenir|intervention)\b[^.]{0,60}\b\d+\s*(?:minutes?|min|mn)\b[^.]{0,80}\balarmes?\b/iu, rubriques: ['b4_proc_alarme'] },
+  // Mobilisation d'un agent supplémentaire et ses horaires (citedia 1461 : « un second agent SSIAP 1/CQP APS… sollicitable du
+  // lundi au samedi de 22h à 6h » sous « La main courante électronique », rattaché sur « traçabilité ») : l'adéquation des
+  // moyens humains, sinon la planification.
+  { sujet: /\b(?:second|deuxi[èe]me)s? agents?\b|\bagents? suppl[ée]mentaires?\b|\b(?:mobilis|sollicit)[\wéè]*\b[^.]{0,60}\bagents?\b[^.]{0,120}\b(?:\d{1,2}\s?h|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|24\s?h)/iu, rubriques: ['b3_adequation', 'b4_planification'] },
 ];
 
 /** Rubrique du plan qui traite le thème net d'une exigence (THEMES_EXIGENCE), parmi `ids` ; '' sinon. */
@@ -3187,8 +3195,14 @@ export function rubriqueDuTheme(texte: string, ids: string[]): string {
  * reçoit jamais une exigence hors de son sujet (sujet_ajouts : « absence imprévue » refusée dans la rubrique de l'absence
  * prévue ; bloc de présentation : seulement ses sujets) ; l'exigence va alors à la rubrique admise la plus proche.
  */
-/** Clause de prix, de facturation ou de révision du DCE (« les heures de nuit seront valorisées », « majoration de 10 % »). */
-export const CLAUSE_PRIX = /\bvaloris(?:e|é|ée|ées|és|er|ation)\b|\bmajor(?:é|ée|ées|és|ation)s?\b|\bprix\b|\btarif|\bfactur|r[ée]vision (?:des |du )?prix|\bbordereau\b/i;
+/**
+ * Clause de prix, de facturation ou de révision du DCE (« les heures de nuit seront valorisées », « majoration de 10 % »),
+ * clause de volume ou de montant de l'acheteur (citedia 1461 et 1462, T4-CONS-5 : « par bons de commande au BPU, selon les
+ * quantités réellement exécutées ; l'accord-cadre sera sans minimum et plafonné à 200 000 € HT par an », « un volume
+ * prévisionnel de 360 heures par an… sans minimum ni maximum ») : jamais un engagement de GSS. Le BPU seul n'en fait pas une
+ * clause (« renforts commandés sur la base du BPU avec un délai de prévenance de 48 heures » est un engagement de service).
+ */
+export const CLAUSE_PRIX = /\bvaloris(?:e|é|ée|ées|és|er|ation)\b|\bmajor(?:é|ée|ées|és|ation)s?\b|\bprix\b|\btarif|\bfactur|r[ée]vision (?:des |du )?prix|\bbordereau\b|(?:€|euros?)\s*(?:HT|TTC|hors taxes?|toutes taxes)\b|\bplafonn[ée]|\b(?:maximum|minimum|montant) (?:annuel|global|total)|\bmontants? (?:maximum|minimum|estimatif|annuel)|\bsans (?:montant )?minimum\b|\bni (?:sur )?un minimum\b|\b(?:volumes?|quantit[ée]s?) (?:pr[ée]visionnel|estimatif|indicatif)|\bquantit[ée]s? r[ée]ellement (?:ex[ée]cut|command|r[ée]alis)|\bmontant de l.accord-cadre/i;
 
 export function exigencesParRubrique(mt: MemoireType, plan: PlanMemoireType, matrice: ExigenceMatrice[]): { parRubrique: Record<string, ExigenceMatrice[]>; nouvelles: ExigenceMatrice[] } {
   const ids = plan.rubriques.map((r) => r.id);

@@ -1304,7 +1304,7 @@ export function sansBarresTableau(texte: string): string {
     return cellules.join(' : ');
   }).filter((l): l is string => l !== null).join('\n');
 }
-export const PIECES_OFFRE = /acte d.engagement|bordereau de prix|\b(?:compl[èée]t|rempli|renseign|chiffr|fourni)[a-zé]*\s+(?:aussi\s+|également\s+)?(?:les |le |des )?prix\b|(?:compl[ée]t|rempli|renseign|chiffr|joindr|fourni)[^.]{0,40}(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)|(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)[^.]{0,30}(?:compl[ée]t|rempli|renseign)|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?/i;
+export const PIECES_OFFRE = /acte d.engagement|bordereau de prix|\b(?:compl[èée]t|rempli|renseign|chiffr|fourni)[a-zé]*\s+(?:aussi\s+|également\s+)?(?:les |le |des )?prix\b|(?:compl[ée]t|rempli|renseign|chiffr|joindr|fourni)[^.]{0,40}(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)|(?:\b(?:BPU|DPGF|DQE)\b|bordereaux? (?:de|des) prix)[^.]{0,30}(?:compl[ée]t|rempli|renseign)|m[ée]moire technique (?:de|d.une?|limit)|pages? maximum|pi[èe]ces? (?:de l.offre|à (?:remettre|fournir|joindre))|dossier de (?:candidature|l.offre)|paraph[ée]s?|interdictions? de soumissionner|\bL\.?\s?(?:21[34]\d|52\d\d)-\d|\b(?:DC[124]|DUME)\b|(?:attestations?|d[ée]clarations?) sur l.honneur|obligations? (?:sociales et fiscales|fiscales et sociales)|obligations? relatives? [àa] l.emploi des travailleurs handicap/i;
 /**
  * Forme de comparaison d'un texte (cadre : garde-fous et libellés) : minuscules, sans accents, apostrophes typographiques
  * (’ ‘ ʼ) ramenées à « ' » et espaces insécables à l'espace (rouen_univ 472 : « Prime de fin d’année » rédigée avec ’ était
