@@ -169,9 +169,24 @@ export function localiser(texte: string, phrase: string, seuil = 0.8): string | 
 }
 
 /** Écrit `cible` à la place de l'unité `loc`, avec sa puce s'il en avait une. */
-function forme(loc: string, cible: string): string {
+function forme(loc: string, cible: string, texte = ''): string {
   const puce = (/^\s*(?:[-*•]|\d+[.)])\s+/.exec(loc) || [''])[0];
-  const c = String(cible || '').trim();
+  let c = String(cible || '').trim();
+  // Ponctuation finale d'une puce remise dans une liste (T6N-8 : phrase d'origine rétablie dans une liste du cadre dont les
+  // puces finissent par un point, jamais « ; » au milieu) : celle des puces voisines quand elles s'accordent, sinon celle de la
+  // place occupée, comme la génération suivante l'écrit.
+  const fin = (x: string) => /[.;]\s*$/.exec(String(x || '').trim())?.[0].trim();
+  let attendue = fin(loc);
+  if (puce && texte) {
+    const lignes = texte.split('\n');
+    const k = lignes.findIndex((l) => l.includes(loc.trim()));
+    const estPuce = (l?: string) => !!l && /^\s*(?:[-*•]|\d+[.)])\s+/.test(l);
+    const av = k > 0 && estPuce(lignes[k - 1]) ? fin(lignes[k - 1]) : undefined;
+    const ap = k >= 0 && estPuce(lignes[k + 1]) ? fin(lignes[k + 1]) : undefined;
+    if (av && ap && av === ap) attendue = av;
+  }
+  const finC = fin(c);
+  if (attendue && finC && attendue !== finC) c = `${c.replace(/\s*[.;]\s*$/, '')}${attendue === ';' ? ' ;' : '.'}`;
   return puce && !/^\s*(?:[-*•]|\d+[.)])\s+/.test(c) ? `${puce}${c}` : c;
 }
 
@@ -185,7 +200,7 @@ export function appliquerChoix(texte: string, a: PhraseAdaptee, cible: string): 
   if (actuelle) {
     const loc = localiser(texte, actuelle);
     if (!loc) return { texte, ok: false };
-    const nouveau = cible.trim() ? forme(loc, cible) : '';
+    const nouveau = cible.trim() ? forme(loc, cible, texte) : '';
     if (cle(nouveau) === cle(loc)) return { texte, ok: true };
     if (nouveau) return { texte: texte.replace(loc, nouveau), ok: true };
     // Phrase retirée par GSS : la ligne disparaît si elle ne contenait que la phrase.

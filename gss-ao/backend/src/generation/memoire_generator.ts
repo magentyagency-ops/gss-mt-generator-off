@@ -15,6 +15,7 @@ import {
   variablesDesSchemas, lotsDuMemoire, nomAcheteurAffiche, nomAcheteurCourtAffiche, rubriqueAdmetSujet, rechercherRubriques, rubriqueDuTheme,
   phrasesDeFrequenceDeControle, frequenceMensuelle, CLAUSE_PRIX, rubriqueDeLAjout,
   intituleSansRedite,
+  motsDePhrase, similarite, lireRegistre,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
@@ -1623,11 +1624,12 @@ export function questionCouverteParLeMemoire(q: string, texte: string): boolean 
   if (!m) return false;
   const objet = normaliser(m[1]).replace(/[^a-z0-9 ]+/g, ' ');
   if (/\b(?:nom|noms|identite|coordonnees|interlocuteur|telephone|adresse|responsable|qui)\b/.test(objet)) return false;
-  const VIDES = new Set(['frequence', 'periodicite', 'plan', 'procedure', 'procedures', 'organisation', 'modalites', 'methode', 'methodologie', 'dispositif', 'nature', 'liste', 'site', 'sites', 'prevue', 'prevu', 'mise', 'place', 'delai', 'delais', 'nombre', 'duree', 'cadre', 'mesures', 'moyens', 'votre', 'notre', 'pour', 'avec', 'dans', 'sera', 'sont']);
+  const VIDES = new Set(['informations', 'information', 'presenter', 'sujet', 'elements', 'donnees', 'points', 'frequence', 'periodicite', 'plan', 'procedure', 'procedures', 'organisation', 'modalites', 'methode', 'methodologie', 'dispositif', 'nature', 'liste', 'site', 'sites', 'prevue', 'prevu', 'mise', 'place', 'delai', 'delais', 'nombre', 'duree', 'cadre', 'mesures', 'moyens', 'votre', 'notre', 'pour', 'avec', 'dans', 'sera', 'sont']);
   const mots = objet.split(/\s+/).filter((w) => w.length >= 4 && !VIDES.has(w) && !['des', 'les', 'une', 'aux'].includes(w)).map((w) => w.slice(0, 6));
   if (!mots.length) return false;
   const n = (t: string) => normaliser(t).replace(/[^a-z0-9 ]+/g, ' ');
-  const titres = [...String(texte).matchAll(/^#{1,4}\s+(.+)$/gm)].map((x) => n(x[1]));
+  // Titres Markdown, et sous-titres en ligne seule d'une réponse de cadre (« Écogestes »).
+  const titres = [...String(texte).matchAll(/^(?:#{1,4}\s+(.+)|([A-ZÀ-Ý][^.!?;:\n]{2,80}))$/gm)].map((x) => n(x[1] || x[2]));
   const phrases = String(texte).split(/(?<=[.!?;])\s+|\n+/).map(n);
   const nomme = (t: string) => mots.every((w) => t.includes(w));
   if (/\b(?:frequence|periodicite)\b/.test(objet)) return phrases.some((p) => nomme(p) && /\b(?:une?|deux|trois|quatre|cinq|six|\d+)\s+(?:a\s+(?:deux|trois|quatre|cinq|\d+)\s+)?fois\s+par\b|\bchaque\s+(?:jour|nuit|semaine|mois|trimestre|semestre|annee)|\b(?:hebdomadaire|mensuel|trimestriel|semestriel|annuel|quotidien)/.test(p));
@@ -1638,12 +1640,15 @@ export function questionCouverteParLeMemoire(q: string, texte: string): boolean 
 export function sansQuestionsRedites<T extends { question: string; sources?: number[] }>(qs: T[], o: { prioritaires?: string[]; exigencesProposees?: string[]; texteMemoire?: string; garder?: (q: T) => boolean } = {}): T[] {
   const prioritaires = (o.prioritaires || []).filter(Boolean);
   const clesPrioritaires = new Set(prioritaires.flatMap(cleDonnee));
+  const clesFixes = new Set(qs.filter((q) => LIGNE_DETERMINISTE.test(q.question) || /^Proposition à valider/i.test(q.question)).flatMap((q) => cleDonnee(q.question)));
   const memoire = normaliser(o.texteMemoire || '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ');
   const out: T[] = [];
   for (const q of qs) {
     const fixe = LIGNE_DETERMINISTE.test(q.question) || !!o.garder?.(q);
     if (!fixe && !prioritaires.includes(q.question)) {
       const cles = cleDonnee(q.question);
+      // Même donnée qu'une question fixe (proposition de dimensionnement, emplacement…) de la liste : la question fixe suffit (T6-CONS-4).
+      if (cles.length && clesFixes.size && cles.every((k) => clesFixes.has(k))) continue;
       // Donnée déjà demandée par un emplacement (délais du cadre, remplacement d'un chien…) ou même demande.
       if (cles.length && cles.every((k) => clesPrioritaires.has(k))) continue;
       if (prioritaires.some((p) => memeDemande(p, q.question))) continue;
@@ -1827,6 +1832,9 @@ export function cleDonnee(question: string): string[] {
   if (delai && /mise en place (?:d['’]une |de la |des )?(?:commande|demande|prestation)|intervention courante|commande suppl[ée]mentaire|r[ée]ception du bon de commande/i.test(q)) out.push('delai_mise_en_place');
   if (delai && /urgen/i.test(q)) out.push('delai_urgence');
   if (delai && /\bSSI\b/.test(q)) out.push('delai_ssi');
+  // Délai d'intervention ou de mobilisation sans autre précision (etampes2 1661, T6-CONS-4 : « Quels sont le délai d'intervention
+  // et le délai de mobilisation de l'équipe… ? » à côté de « … pour une intervention courante ») : la même donnée.
+  if (delai && !out.length && /d[ée]lais?\s+(?:d['’]\s*intervention|de\s+mobilisation|de\s+mise\s+en\s+place|d['’]\s*arriv[ée]e)/i.test(q)) out.push('delai_mise_en_place');
   if (/\b(?:heure|horaire)s?\b/i.test(q) && /ronde d['’]ouverture|ouverture effective|d[ée]part (?:de la ronde|permettant)/i.test(q)) out.push('horaire_ronde_ouverture');
   // Validation du dimensionnement proposé (etampes1 594 : « GSS valide-t-elle le dimensionnement proposé… » à côté de la
   // proposition à valider formulée sans modèle).
@@ -1838,7 +1846,8 @@ export function cleDonnee(question: string): string[] {
   // « le calendrier proposé — envoi des plannings à J-10… »).
   if (/plannings?/i.test(q) && /J\s?-\s?\d|[ée]ch[ée]ances?|jours? ouvr|calendrier/i.test(q)) out.push('echeances_planning');
   // Couverture horaire du cas pratique (etampes2 553 : « 48 heures annoncées / 39 heures détaillées », « 9 heures non décrites »).
-  if (/cas pratique|plages?|intitul|non d[ée]crites/i.test(q) && /\d+\s*h(?:eures)?\b[^?]{0,160}\d+\s*h(?:eures)?\b/i.test(q) && /couvr|couverture|intitul|non d[ée]crites|clarifi/i.test(q)) out.push('couverture_cas_pratique');
+  // (« … la couverture des postes entre 21 h 00 et 22 h 30 », T6-CONS-4 : la même donnée)
+  if (/cas pratique|plages?|intitul|non d[ée]crites|entre\s+\d{1,2}\s*h/i.test(q) && /\d+\s*h(?:eures)?\b[^?]{0,160}\d+\s*h(?:eures)?\b/i.test(q) && /couvr|couverture|intitul|non d[ée]crites|clarifi/i.test(q)) out.push('couverture_cas_pratique');
   // Liste nominative des agents et dates de leurs formations (havre2, T5N-14 : cases « SST » / « C.Q.P.A.D.S. » × « NOM / Prénom /
   // Date » du tableau du cadre, « Transmettre … les noms, prénoms et dates de formation SST … », « la liste nominative des agents …
   // et les dates de leurs formations ») : une seule donnée ; l'autorisation CNAPS en est une autre.
@@ -3036,6 +3045,41 @@ export function appliquerSuppressionsRepetitions(sections: Record<string, string
     n++;
   }
   return n;
+}
+
+/**
+ * Phrases signalées à GSS telles qu'elles sont imprimées dans le texte final d'une réponse (T6-CONS-2, T6-COH-1) : la phrase
+ * retrouvée mot pour mot, sinon la phrase du texte final la plus proche (corrigée par la relecture, nom de l'acheteur
+ * normalisé) ; une phrase absente du texte final n'est jamais signalée. Sans doublon ni entrée vide.
+ */
+export function phrasesImprimees(phrases: string[], final: string): string[] {
+  const n = (x: string) => String(x || '').replace(/\s+/g, ' ').trim();
+  const t = n(final);
+  const candidates = String(final || '').replace(/\r/g, '').split('\n').flatMap((l) => l.replace(/^\s*(?:[•\-*]|\d+[.)])\s+/, '').split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«])/)).map(n).filter((x) => x.length >= 12);
+  const out: string[] = [];
+  for (const ph of phrases.map(n).filter((x) => x.length >= 12)) {
+    let retenue = t.includes(ph) ? ph : '';
+    if (!retenue) {
+      const m = motsDePhrase(ph);
+      let meilleur = 0;
+      for (const c of candidates) { const s = similarite(m, motsDePhrase(c)); if (s > meilleur) { meilleur = s; retenue = c; } }
+      if (meilleur < 0.7) retenue = '';
+    }
+    if (retenue && !out.includes(retenue)) out.push(retenue);
+  }
+  return out;
+}
+
+/** Premier message de l'assistant, cadre imposé (T6N-5) : phrases ajoutées par l'IA au texte de GSS, par réponse, à valider. */
+export function messageAjoutsCadre(ajouts: Array<{ libelle: string; phrases: string[] }>): string {
+  const n = ajouts.reduce((t, a) => t + a.phrases.length, 0);
+  if (!n) return '';
+  return [
+    `J'ai ajouté au texte de GSS ${n === 1 ? 'une phrase rédigée' : `${n} phrases rédigées`} par l'IA dans les réponses du cadre. À relire avant la remise :`,
+    ...ajouts.flatMap((a) => a.phrases.map((ph) => `- « ${libelleQuestionCadre(a.libelle)} » : « ${ph} »`)),
+    '',
+    "Pour chacune, vous pouvez la valider telle quelle, la modifier (« Dans la réponse sur …, remplace … par … ») ou la supprimer (« Dans la réponse sur …, supprime la phrase … »).",
+  ].join('\n');
 }
 
 export class MemoireGenerator {
@@ -5580,6 +5624,15 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const alertesComprehension = new Set<string>();
     // Phrases ajoutées par l'IA au texte de GSS d'une réponse du cadre (consigne 5, T5-CONS-6) : signalées à GSS.
     const ajoutsCadreIA = new Set<string>();
+    /** Phrases ajoutées par l'IA au texte de GSS, par réponse du cadre (T5-CONS-6) : rapprochées du texte final avant d'être
+     *  signalées (T6-CONS-2, T6-COH-1, T6-COH-5 : jamais une phrase qui n'est pas imprimée). */
+    const ajoutsParChamp = new Map<number, { libelle: string; phrases: string[] }>();
+    // Texte de GSS au sens large (T6-COH-5) : toutes les rubriques du mémoire type, même celles que le marché n'a pas
+    // publiées (b2_identite), et les valeurs retenues du registre ; une phrase qui les reprend n'est jamais « ajoutée par l'IA ».
+    const textesGssComplets = (() => {
+      const mtx = this.memoireTypeV2();
+      return [...(mtx?.rubriques || []).map((r: any) => String(r.texte || '').replace(/\{\{[^}]*\}\}/g, ' ')), ...lireRegistre().map((e) => String(e.valeur_retenue || ''))].filter((x) => x.trim());
+    })();
     /** Champs dont la rédaction automatique a échoué (OpenAI en panne, réponse illisible) : intitulé, et si le texte du
      *  mémoire type de GSS a été repris tel quel (T4-COH-1). */
     const echecsRedaction = new Map<number, { libelle: string; reference: boolean; developpee: boolean }>();
@@ -6091,6 +6144,13 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
                   // Première réponse gardée : mêmes nettoyages que ci-dessous (etampes1 594, T6N-2 : sans eux, « CV détaillés,
                   // agréments, certificats et cartes professionnelles » restait un intitulé sans texte).
                   if (k >= 0) replacements[k].value = completerSousTitresVides(retablirLignesLibelle(nettoyerReponseCadre(rec.texte), retenus.map((c) => c.texte).join('\n\n')), [...retenus, ...renvois], phrasesThematiques(repriseMT!.textes), `${questionMT || ''}\n${f.context}`).texte;
+                  // Première réponse gardée : ses phrases ajoutées au texte de GSS sont retirées (enrobage) ou signalées, et le
+                  // signalement de l'essai écarté est remplacé (T6-CONS-2, T6-COH-1).
+                  if (k >= 0) {
+                    const aj1 = ajoutsAuTexteDeGss(String(replacements[k].value ?? ''), retenus.map((c) => c.texte).join('\n\n'), dceContext, [...Object.values(repriseMT!.textes || {}), ...textesGssComplets]);
+                    if (aj1.texte.trim()) replacements[k].value = aj1.texte;
+                    if (aj1.signalees.length) ajoutsParChamp.set(f.id, { libelle, phrases: aj1.signalees }); else ajoutsParChamp.delete(f.id);
+                  }
                   repriseParChamp.set(f.id, { ids: retenus.map((c) => c.id), fidelite: rec.fidelite, brute: rec.fideliteAvant });
                   if (rec.fidelite < SEUIL_FIDELITE_CADRE) propositionsCadre.set(f.id, `Réponse à relire (mémoire type de GSS repris en partie, fidélité ${Math.round(rec.fidelite * 100)} %) : ${libelle}`);
                   else propositionsCadre.delete(f.id);
@@ -6109,12 +6169,11 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
             // plus. », T5-CONS-6) : l'enrobage sans donnée propre retiré ; toute autre phrase absente du texte de GSS et du DCE
             // signalée à GSS (rubrique, phrase), comme en réponse libre ; rien de ce signalement n'est imprimé.
             {
-              const aj = ajoutsAuTexteDeGss(rec.texte, retenus.map((c) => c.texte).join('\n\n'), dceContext, Object.values(repriseMT!.textes || {}));
+              const aj = ajoutsAuTexteDeGss(rec.texte, retenus.map((c) => c.texte).join('\n\n'), dceContext, [...Object.values(repriseMT!.textes || {}), ...textesGssComplets]);
               if (aj.retirees.length) console.log(`[MemoireGenerator] ${label} : ${aj.retirees.length} phrase(s) d'enrobage ajoutée(s) par l'IA retirée(s) (${aj.retirees.map((x) => x.slice(0, 60)).join(' ; ')}).`);
               if (aj.texte.trim()) rec.texte = aj.texte;
-              // Une ligne par réponse (jamais une consultation par phrase).
-              if (aj.signalees.length === 1) ajoutsCadreIA.add(`Phrase ajoutée au texte de GSS (rédigée par l'IA), à valider : « ${libelle} » — « ${phraseLisible(aj.signalees[0], 600)} »`);
-              else if (aj.signalees.length > 1) ajoutsCadreIA.add(`Phrases ajoutées au texte de GSS (rédigées par l'IA), à valider : « ${libelle} » — ${aj.signalees.map((ph) => `« ${phraseLisible(ph, 300)} »`).join(' ; ')}`);
+              // Signalement rapproché du texte final plus bas (une ligne par réponse, jamais une consultation par phrase).
+              if (aj.signalees.length) ajoutsParChamp.set(f.id, { libelle, phrases: aj.signalees }); else ajoutsParChamp.delete(f.id);
             }
             if (rec.texte !== String(value)) {
               console.log(`[MemoireGenerator] ${label} : réponse recalée sur le mémoire type (${retenus.map((c) => c.id).join(', ')}), fidélité ${rec.fideliteAvant.toFixed(2)} → ${rec.fidelite.toFixed(2)} (${rec.reformulees} phrase(s) reformulée(s) rétablie(s), ${rec.reinserees} remise(s), ${rec.bribesRetirees} bribe(s) et ${rec.ajoutsRetires} ajout(s) retiré(s)).`);
@@ -7382,6 +7441,24 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       if (!reponsesAvecSchema.length) alertesSchemasCadre.push(`Schémas GSS du cadre non insérés (rendu des schémas indisponible : ${String(e?.message || e).slice(0, 120)}) ; relancez la génération avant la remise.`);
     }
     for (const q of alertesSchemasCadre) confirmationsGss.add(q);
+    // Phrases ajoutées par l'IA au texte de GSS (T5-CONS-6), rapprochées du texte FINAL de leur réponse (après la relecture, la
+    // normalisation du nom de l'acheteur et les limites de pages) : seule une phrase imprimée est signalée, telle qu'imprimée
+    // (T6-CONS-2, T6-COH-1, T6-COH-5) ; jamais une entrée vide (T6N-4). En tête des consultations, comme avant.
+    const ajoutsFinaux: Array<{ libelle: string; phrases: string[] }> = [];
+    for (const [id, a] of ajoutsParChamp) {
+      const k = replacements.map((x) => x.id).lastIndexOf(id);
+      const final = k >= 0 ? String(replacements[k].value ?? '') : '';
+      const phrases = phrasesImprimees(a.phrases, final);
+      if (phrases.length) ajoutsFinaux.push({ libelle: a.libelle, phrases });
+    }
+    {
+      const lignesAjouts = ajoutsFinaux.map((a) => (a.phrases.length === 1
+        ? `Phrase ajoutée au texte de GSS (rédigée par l'IA), à valider : « ${a.libelle} » — « ${phraseLisible(a.phrases[0], 600)} »`
+        : `Phrases ajoutées au texte de GSS (rédigées par l'IA), à valider : « ${a.libelle} » — ${a.phrases.map((ph) => `« ${phraseLisible(ph, 300)} »`).join(' ; ')}`));
+      const autres = [...confirmationsGss].filter((c) => !alertesComprehension.has(c));
+      confirmationsGss.clear();
+      [...alertesComprehension, ...lignesAjouts, ...autres].forEach((c) => confirmationsGss.add(c));
+    }
 
     // Contrôle final des parties limitées en pages, sur le document complet (réponses et schémas insérés).
     try {
@@ -7446,7 +7523,9 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       // premier message, à valider, modifier ou rétablir.
       adaptationsCadre = adaptationsCadre.filter((a) => champsEtat.some((c) => c.cle === a.rubrique));
       adaptationsCadre.forEach((a, i) => { a.n = i + 1; });
-      const texteAdaptations = messageAdaptations(adaptationsCadre);
+      // Phrases ajoutées par l'IA au texte de GSS (T6N-5) : annoncées dans le premier message, comme en réponse libre.
+      const texteAjoutsCadre = messageAjoutsCadre(ajoutsFinaux);
+      const texteAdaptations = [messageAdaptations(adaptationsCadre), texteAjoutsCadre].filter(Boolean).join('\n\n');
       let conversationFinale = texteAdaptations
         ? (conversation?.length ? [{ ...conversation[0], texte: `${conversation[0].texte}\n\n${texteAdaptations}` }] : [{ role: 'assistant' as const, date: new Date().toISOString(), texte: texteAdaptations }])
         : conversation;
@@ -9740,7 +9819,9 @@ Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "tex
           const k = a.apres ? lignes.findIndex((l) => l.trim() === a.apres) : -1;
           // Sans rattachement : à la fin, séparée par une ligne vide quand la réponse finit par une liste de GSS (havre2 341 :
           // « GSS n'autorise pas l'accès des véhicules… » imprimée comme une puce du « Numérique »).
-          if (k < 0) { const fin = v.trimEnd(); v = `${fin}\n${/(?:^|\n)\s*(?:[•\-*]|\d+[.)])\s[^\n]*$/.test(fin) ? '\n' : ''}• ${a.texte}`; n++; continue; }
+          // Jamais après une ligne d'annonce terminée par « : » restée sans sa liste (etampes2 1661, T6-CONS-4) : l'annonce orpheline
+          // est retirée, l'ajout suit le paragraphe précédent.
+          if (k < 0) { let fin = v.trimEnd(); if (/(?:^|\n)(?!\s*(?:[•\-*]|\d+[.)])\s)[^\n]*:\s*$/.test(fin)) fin = fin.replace(/\n?[^\n]*:\s*$/, '').trimEnd(); v = `${fin}\n${/(?:^|\n)\s*(?:[•\-*]|\d+[.)])\s[^\n]*$/.test(fin) ? '\n' : ''}• ${a.texte}`; n++; continue; }
           // Fin du paragraphe (et de la liste) qui suit le sous-titre.
           let fin = k + 1;
           while (fin < lignes.length && lignes[fin].trim()) fin++;

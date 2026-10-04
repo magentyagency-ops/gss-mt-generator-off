@@ -3001,6 +3001,17 @@ export function extraireConfirmations(texte: string): { texte: string; confirmat
   const confirmations: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(texte)) !== null) confirmations.push(m[1].trim());
+  // Phrase d'annonce terminée par « : » dont le marqueur était la seule suite (etampes2 1661, T6-CONS-4 : « Le délai de
+  // mobilisation et de mise en place applicable à Étampes : [CONSULTATION REQUISE : …] ») : retirée avec lui, sauf si une liste
+  // la suit à la ligne suivante.
+  const lignesAnnonce = String(texte || '').split('\n');
+  texte = lignesAnnonce.map((l, i) => {
+    const m = /^(.*?)((?:^|(?<=[.!?]\s))[^.!?\n]*:\s*)\[CONSULTATION REQUISE\s*:\s*[^\]]+\][ \t]*[.;,]?[ \t]*$/i.exec(l);
+    if (!m) return l;
+    const suivante = lignesAnnonce.slice(i + 1).find((x) => x.trim()) || '';
+    if (/^\s*(?:[-•▪*]|\d+[.)])\s/.test(suivante)) return l;
+    return m[1].trim() ? m[1].replace(/\s+$/, '') : '\u0000';
+  }).filter((l) => l !== '\u0000').join('\n');
   // Retrait du marqueur ET de la ponctuation qui le suivait : aucun « . » orphelin ne reste dans le texte.
   const nettoye = texte
     .replace(/\[CONSULTATION REQUISE\s*:\s*[^\]]+\][ \t]*[.;,]?/gi, '')

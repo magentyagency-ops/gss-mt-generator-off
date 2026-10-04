@@ -1590,6 +1590,9 @@ const ENROBAGE_EXPLICITE = /(?<![\p{L}])(?:est|sont) (?:ainsi |parfaitement |ple
  * du DCE. Une phrase d'enrobage sans donnée propre est retirée ; les autres restent et sont signalées à GSS (consultations,
  * comme en réponse libre), jamais imprimées comme signalement.
  */
+/** Verbe conjugué dans une ligne (une ligne qui n'en a pas est un intitulé : « Recours à la sous-traitance et à l'intérim »). */
+const VERBE_CONJUGUE_INTITULE = /(?<![\p{L}])(?:est|sont|sera|seront|a|ont|peut|peuvent|doit|doivent|fait|font|assure|assurent|met|mettent|dispose|disposent|garantit|garantissent|permet|permettent|prévoit|prévoient|intervient|interviennent|organise|organisent|réalise|réalisent|effectue|effectuent|applique|appliquent|reste|restent|suit|suivent|veille|veillent|s['’]\p{L}+|nous\s+\p{L}+ons|vous\s+\p{L}+ez|(?:il|elle|ils|elles|GSS|qui)\s+\p{L}+(?:e|ent|it|issent|ra|ront))(?![\p{L}])/iu;
+
 export function ajoutsAuTexteDeGss(texte: string, reference: string, dce = '', autresTextesGss: string[] = []): { texte: string; retirees: string[]; signalees: string[] } {
   const PUCE = /^\s*(?:[•\-*]|\d+[.)])\s+/;
   // Texte de GSS : la référence du champ et les autres textes du mémoire type (une rubrique reprise ailleurs reste le texte de GSS).
@@ -1604,6 +1607,10 @@ export function ajoutsAuTexteDeGss(texte: string, reference: string, dce = '', a
     const gardees = phrases.filter((ph) => {
       const m = motsDePhrase(ph);
       if (m.length < 6 || deGss(ph) || (dce && recopieDuDce(ph, dce, 0.8))) return true;
+      // Jamais signalés ni retirés (T6N-4) : un marqueur de consultation, un emplacement ou une ligne « libellé : [À COMPLÉTER] /
+      // [à renseigner] » (la donnée est demandée par ailleurs), un intitulé (ligne sans verbe conjugué ni ponctuation finale).
+      if (/\[CONSULTATION REQUISE|\[À COMPLÉTER\]|\[[àa] renseigner\]|⟦AC:\d+⟧|\[CHAMP_\d+\]/i.test(ph)) return true;
+      if (!/[.!?;:]\s*$/.test(ph.trim()) && !VERBE_CONJUGUE_INTITULE.test(ph)) return true;
       // Enrobage : évaluation explicite (« … est adapté aux enjeux de ce marché », « … renforce la fiabilité / la traçabilité »), ou
       // cadre évaluatif sans donnée propre (ni chiffre ni nom propre) ; sinon la phrase reste, signalée à GSS.
       const sansDonnee = !/\d/.test(ph) && !/\s[A-ZÀ-Ý][\p{L}]/u.test(ph.trim().slice(1));
@@ -1655,6 +1662,14 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   // Phrase du modèle collée après l'amorce d'une liste de GSS (havre2 341 : « …les recycle selon trois filières : Ces
   // dispositions associent… ») : l'amorce et la phrase ajoutée sont deux phrases (six mots au moins de part et d'autre).
   const separerAmorce = (brut: string): string[] => {
+    // Amorce de GSS et sa liste fondues en une phrase (etampes2 1661, T6-CONS-3 : « Nous veillons au respect de bonnes
+    // pratiques dans nos locaux : éteindre les lumières… ; ne pas allumer… ; fermer les robinets… ») : l'amorce et chaque
+    // élément redeviennent des phrases, pour retrouver chacune sa place dans la liste de GSS.
+    const liste = /^((?:[•\-*]\s+)?.*\S)\s:\s+([a-zà-ÿ].*;.*)$/.exec(brut);
+    if (liste && motsDePhrase(liste[1]).length >= 6) {
+      const elements = liste[2].split(/(?<=;)\s+/).map((x) => x.trim()).filter(Boolean);
+      if (elements.length >= 1 && elements.every((x) => motsDePhrase(x).length >= 3)) return [`${liste[1]} :`, ...elements];
+    }
     const m = /^(.*\S)\s:\s+([A-ZÀ-Ý].*[.!?])$/.exec(brut);
     if (!m || motsDePhrase(m[1]).length < 6 || motsDePhrase(m[2]).length < 6) return [brut];
     return [`${m[1]} :`, m[2]];
@@ -1853,6 +1868,8 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
       return j;
     };
     const presents = (i: number) => ref.map((_, k) => k).filter((k) => ref[k].ligne === i && position.has(k));
+    // Ligne qui ouvre un bloc de GSS (jamais une puce au milieu d'une liste ni juste après son amorce « … : »).
+    const ouvreBlocRef = (x: number) => !(estPuce(x) && x > 0 && (estPuce(x - 1) || /:\s*$/.test((lignesRef[x - 1] || [])[(lignesRef[x - 1] || []).length - 1] || '')));
     const nouvelle: Ligne[] = [];
     const aPlacer = new Map<number, Morceau[]>();
     // Ajouts écrits avant une amorce de tableau (sous-titres et textes du cadre) : placés devant l'amorce, qui reste collée
@@ -1861,6 +1878,22 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     const enTete: Morceau[] = [];
     const aLaFin: Morceau[] = [];
     for (const m of morceaux) {
+      // Sous-titre du cadre écrit par le modèle, suivi dans la réponse d'un texte de GSS (T6-CONS-3 : « Écogestes » puis les
+      // économies d'énergie de GSS) : devant le bloc de GSS qui contient ce texte (son sous-titre de GSS, sinon l'amorce de sa
+      // liste), même quand le texte de GSS est remis en entier (fidélité faible) ; jamais en fin de réponse, vide.
+      if (m.titre && m.suivant !== undefined && m.suivantEnTete) {
+        const i0 = m.ancre < 0 ? -1 : ref[m.ancre].ligne;
+        let cible = ref[m.suivant].ligne;
+        let x = cible;
+        while (x > 0 && !ligneSousTitre(x) && (lignesRef[x - 1] || []).length) x--;
+        if (ligneSousTitre(x)) cible = x;
+        else { while (cible > 0 && !ouvreBlocRef(cible) && (lignesRef[cible - 1] || []).length) cible--; }
+        if (cible > i0 && !estTableauRef(cible)) {
+          if (!avantLigne.has(cible)) avantLigne.set(cible, []);
+          avantLigne.get(cible)!.push({ ...m, dansLaLigne: false, deplace: true });
+          continue;
+        }
+      }
       if (m.ancre < 0) { enTete.push(m); continue; }
       const i = ref[m.ancre].ligne;
       // Ajout qui prolonge la ligne de GSS dans la réponse : gardé dans la ligne s'il ne suit pas une amorce « … : » ; sur
@@ -2425,13 +2458,23 @@ export function controlerFaitsNouveauxCadre(valeur: string, contexte: string, s:
   if (s.interlocuteurNom && s.telephoneUnique) {
     const champContact = /personne (?:a|à) contacter|interlocut|correspondant|contact (?:du|pour le) (?:titulaire|candidat|march)/.test(ctxN);
     const admis = [s.telephoneUnique, s.telephoneFixe].filter(Boolean).map((t) => String(t).replace(/\D/g, ''));
+    // Seul le segment qui présente la personne comme contact est concerné (T6-CONS-1 : « interlocuteur unique », « personne à
+    // contacter », « contact », un numéro de téléphone, ou une ligne « Nom : » d'un champ de contact) ; jamais un nom de
+    // l'organigramme présenté avec une autre fonction (« Les responsables d'exploitation LEMELE Fabrice, PORCHAIRE Laurent et DA
+    // SILVA Luis… ») ; jamais le même nom deux fois dans une énumération.
+    const CONTACT = /interlocut(?:eur|rice)|personne (?:a|à) contacter|(?<![\p{L}])contact(?![\p{L}])|correspondant|r[ée]f[ée]rent/iu;
+    const TELEPHONE = /(?<!\d)0[1-9](?:[\s.\-]?\d{2}){4}(?!\d)/;
+    const AUTRE_FONCTION = /responsables?\s+(?:d['’]exploitation|qualit[ée]|rh|des ressources|administratif|commercial|technique|de site|d['’][ée]quipe)|directeurs?\s+(?:g[ée]n[ée]ral|des op[ée]rations|administratif|financier)|charg[ée]e?s?\s+de|chefs?\s+d['’][ée]quipe|contr[ôo]leurs?|formateurs?|g[ée]rants?|dirigeants?/i;
     v = v.split('\n').map((ligne) => ligne.split(/(?<=;)/).map((seg) => {
-      if (!champContact && !/interlocut(?:eur|rice) unique/i.test(seg)) return seg;
+      const nomSeul = champContact && /^\s*(?:[-•*]\s*)?(?:nom|nom et pr[ée]nom|identit[ée])\s*:/i.test(seg);
+      if (!CONTACT.test(seg) && !TELEPHONE.test(seg) && !nomSeul) return seg;
+      if (AUTRE_FONCTION.test(seg) && !/interlocut(?:eur|rice) unique|personne (?:a|à) contacter/i.test(seg)) return seg;
       let x = seg;
       for (const m of [...x.matchAll(/(?:\b(?:M(?:me|lle)?\.?|Madame|Monsieur)\s+)?\b([A-ZÀ-ÖØ-Þ]{2,}(?:[ -][A-ZÀ-ÖØ-Þ]{2,})*)\s+([A-ZÀ-ÖØ-Þ][a-zà-ÿ][\wà-ÿ'’-]*)/g)]) {
         if (SIGLES_ADMIS.has(normaliser(m[1].split(/[ -]/)[0])) || normaliser(m[0]).includes(normaliser(s.interlocuteurUnique || '§'))) continue;
         x = x.replace(m[0], s.interlocuteurNom!);
       }
+      if ((x.split(s.interlocuteurNom!).length - 1) > 1) return seg;
       x = x.replace(/(?<!\d)0[1-9](?:[\s.\-]?\d{2}){4}(?!\d)/g, (num) => (admis.includes(num.replace(/\D/g, '')) ? num : s.telephoneUnique!));
       return x.replace(/\binterlocutrice unique\b/gi, 'interlocuteur unique');
     }).join('')).join('\n');
