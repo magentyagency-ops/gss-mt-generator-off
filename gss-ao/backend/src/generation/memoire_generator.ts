@@ -1569,16 +1569,69 @@ export function sansQuestionsRedites<T extends { question: string; sources?: num
       const d = doc ? normaliser(doc[1].replace(/^(?:le|la|les|l['’]|un|une|des)\s*/i, '')).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim() : '';
       if (d && d.split(' ').length >= 3 && memoire.includes(d)) continue;
     }
+    // Exigence déjà traitée par un engagement ou une phrase du mémoire (T3N-4, parc_expo 1331 : « Quelle organisation
+    // prévoyez-vous pour que l'agent cynophile garde les extérieurs… ? » alors que l'engagement est imprimé).
+    if (!fixe && !prioritaires.includes(q.question) && o.texteMemoire) {
+      const contenu = citationDe(q.question) || ((/\b(?:pour que|afin que)\s+(.+?)\s*\?\s*$/i.exec(q.question) || [])[1] || '');
+      if (contenu && (exigenceTraitee(contenu, o.texteMemoire) || couvertParLeTexte(contenu, o.texteMemoire))) continue;
+    }
+    // Même phrase du DCE citée deux fois (T3N-6, mode dégradé : « … sur ce point : « Ne facturer qu'après… » » et « … que le
+    // mémoire ne traite pas : « Ne facturer qu'après… » ») : une seule question, la forme « que le mémoire ne traite pas ».
+    const cq = citationDe(q.question);
+    const memeCitation = (x: T) => { const cx = citationDe(x.question); return !!cq && !!cx && (normaliser(cx) === normaliser(cq) || recouvrementTextes(cx, cq) >= 0.6); };
     const double = LIGNE_DETERMINISTE.test(q.question) ? undefined : out.find((x) => !LIGNE_DETERMINISTE.test(x.question) && (memeDemande(x.question, q.question)
-      || (cleDonnee(x.question).length > 0 && cleDonnee(x.question).join() === cleDonnee(q.question).join())));
+      || (cleDonnee(x.question).length > 0 && cleDonnee(x.question).join() === cleDonnee(q.question).join()) || memeCitation(x)));
+    // Deux clauses du DCE sur le même sujet, chacune citée (T3N-6 : réversibilité au CCTP et au CCAP, confidentialité et données)
+    // : une seule question qui cite les deux.
+    const theme = !double && !fixe && cq && /^Quelle réponse GSS apporte-t-elle sur ce point/.test(q.question) ? THEMES_CLAUSES.find((rx) => rx.test(cq)) : undefined;
+    const memeTheme = theme ? out.find((x) => /^Quelle réponse GSS apporte-t-elle sur ces? points?/.test(x.question) && theme.test(citationDe(x.question)) && !o.garder?.(x) && !prioritaires.includes(x.question)) : undefined;
+    if (memeTheme) {
+      const citations = [...memeTheme.question.matchAll(/«\s*([^«»]{20,}?)\s*»/g)].map((m) => m[1]);
+      if (citations.length < 3) memeTheme.question = `Quelle réponse GSS apporte-t-elle sur ces points du DCE, que le mémoire ne traite pas : ${[...citations, cq].map((c) => `« ${c} »`).join(' ; ')} ?`;
+      if (memeTheme.sources && q.sources) memeTheme.sources = [...new Set([...memeTheme.sources, ...q.sources])];
+      continue;
+    }
     if (double) {
       if (double.sources && q.sources) double.sources = [...new Set([...double.sources, ...q.sources])];
-      if (q.question.length > double.question.length && !o.garder?.(double) && !prioritaires.includes(double.question)) double.question = q.question;
+      const preferee = /que le mémoire ne traite pas/.test(q.question) && !/que le mémoire ne traite pas/.test(double.question);
+      if ((preferee || (q.question.length > double.question.length && !memeCitation(double))) && !o.garder?.(double) && !prioritaires.includes(double.question)) double.question = q.question;
       continue;
     }
     out.push(q);
   }
+  // Assurance : la question de l'attestation Hiscox la couvre ; une exigence d'assurance citée du DCE n'est pas redemandée (T3N-6).
+  if (out.some((x) => /Hiscox/i.test(x.question))) return out.filter((x) => !(/\bassuranc/i.test(citationDe(x.question)) && !/Hiscox/i.test(x.question) && !LIGNE_DETERMINISTE.test(x.question) && !o.garder?.(x) && !prioritaires.includes(x.question)));
   return out;
+}
+
+/**
+ * Exigence couverte par un paragraphe du mémoire, à la conjugaison près (« garde, effectue, prévienne, dissuade » / « assurera
+ * la garde, effectuera, préviendra, dissuadera ») : 70 % au moins de ses mots porteurs (racines de 5 lettres) et tous ses
+ * chiffres dans un même paragraphe.
+ */
+function couvertParLeTexte(exigence: string, texte: string): boolean {
+  const racines = (t: string) => normaliser(t).split(/[^a-z0-9]+/).filter((w) => w.length >= 4).map((w) => w.slice(0, 5));
+  const mots = [...new Set(racines(exigence))];
+  if (mots.length < 5) return false;
+  const chiffres = normaliser(exigence).match(/\d+/g) || [];
+  return String(texte || '').split(/\n{2,}|\n(?=\s*[-*•]\s)/).some((p) => {
+    if (!chiffres.every((c) => new RegExp(`(?<!\\d)${c}(?!\\d)`).test(normaliser(p)))) return false;
+    const pr = new Set(racines(p));
+    return mots.filter((w) => pr.has(w)).length / mots.length >= 0.7;
+  });
+}
+
+/** Sujets de clauses du DCE réunies en une seule question quand deux pièces les écrivent (T3N-6). */
+const THEMES_CLAUSES: RegExp[] = [
+  /r[ée]versibilit|passation|changement de prestataire|fin (?:du|de) (?:march|contrat)|[àa] l['’]\s*[ée]ch[ée]ance/i,
+  /visite (?:obligatoire|du site|des lieux)|attestation de visite/i,
+  /factur/i,
+  /confidentialit|secret professionnel|donn[ée]es (?:personnelles|du client)|\brgpd\b/i,
+];
+
+/** Première citation du DCE (« … », 20 signes au moins) d'une question ; '' sinon. */
+function citationDe(q: string): string {
+  return ((/«\s*([^«»]{20,}?)\s*»/.exec(String(q || '')) || [])[1] || '').trim();
 }
 
 /** Question en clair sur une case de tableau du cadre (même forme que les cartes de l'assistant, T8CS-4). */
@@ -8630,6 +8683,12 @@ RÈGLES DE FORME (rendu Marp) :
       try {
         const qs = await formulerQuestions(sansQuestion.map((e) => ({ cle: `A${e.n}`, contexte: e.contexte, environnement: e.environnement, critere: titreDe(e.id) })));
         for (const e of sansQuestion) e.question = qs.get(`A${e.n}`)?.question;
+        // Deux emplacements de libellés différents avec la même question (T3N-4, parc_expo 1331 : « Modalités d'évaluation des
+        // réparations » et « Délai de prise en charge ») : chacun sa question, tirée de son libellé.
+        for (const e of sansQuestion) {
+          const memes = sansQuestion.filter((x) => x.question && x.question === e.question);
+          if (memes.length > 1 && new Set(memes.map((x) => normaliser(libelleDuRepere(x.contexte)))).size === memes.length) for (const x of memes) x.question = questionExacte(`Information à fournir pour compléter : « ${libelleDuRepere(x.contexte)} »`);
+        }
       } catch (e: any) {
         console.warn(`[MemoireGenerator] Questions des emplacements à compléter non formulées (${e?.message || e}).`);
       }
@@ -8641,6 +8700,8 @@ RÈGLES DE FORME (rendu Marp) :
     const questionsGss = sansQuestionsRedites(await this.consoliderAvecSources(demandes.map((d) => d.texte), { dce: dceContext, horsNormandie: horsNormandie }), {
       prioritaires: enPlace.map((e) => e.question || '').filter(Boolean),
       exigencesProposees: [...enProposition].map((e) => String(e.exigence || '')).filter(Boolean),
+      // Texte des réponses de GSS, sans la compréhension du besoin (qui cite le CCTP sans y répondre).
+      texteMemoire: Object.entries(sections).filter(([id]) => !/b1_|comprehension/i.test(id)).map(([, t]) => t).join('\n\n').replace(REPERE_RE, ''),
       garder: (q) => q.sources.some((k) => typeof demandes[k]?.repere === 'number'),
     });
     // Un élément par emplacement « [À COMPLÉTER] » (sa réponse remplace ce seul emplacement), puis les autres questions.
@@ -10434,6 +10495,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     }
     // Deux questions sur le même sujet n'en font qu'une (T2N-7) ; une question rattachée à un repère du texte est gardée.
     const questionsGss = sansQuestionsRedites(await this.consoliderAvecSources(demandes.map((d) => d.texte), { dce: dceContext, horsNormandie: horsNormandie }), {
+      // Texte des réponses de GSS, sans la compréhension du besoin (qui cite le CCTP sans y répondre).
+      texteMemoire: Object.entries(sections).filter(([id]) => !/b1_|comprehension/i.test(id)).map(([, t]) => t).join('\n\n').replace(REPERE_RE, ''),
       garder: (q) => q.sources.some((k) => typeof demandes[k]?.repere === 'number'),
     });
     const elements: ElementACompleter[] = questionsGss.map((q, i) => {
