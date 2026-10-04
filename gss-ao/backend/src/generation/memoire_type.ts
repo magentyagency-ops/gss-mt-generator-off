@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 import { lignesEquipe, questionDimensionnement, questionRondes, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative } from './base_memoires';
+import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative, lotsDuMemoireDce, perimetreDuLot } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -190,31 +190,8 @@ let cacheMemoireType: { chemin: string; mt: MemoireType } | null = null;
  * les lots du DCE et l'exigence d'une offre distincte par lot quand le RC l'impose.
  */
 export function lotsDuMemoire(analyse: any, dce: string): { lots: string[]; question?: string } {
-  const plat = String(dce || '').replace(/\s+/g, ' ');
-  // « (en cas de non allotissement) » des formulaires DC1/ATTRI1 n'est pas un marché non alloti.
-  if (/\bnon[- ]allotie?s?\b|(?<!en cas de )\bnon[- ]allotissement\b|\blot unique\b|\bmarch[ée] unique\b|n.est pas allotie?\b|ne fait pas l.objet d.un allotissement|pas d.allotissement|sans allotissement/i.test(plat)) return { lots: [] };
-  const lots: Array<{ num: string; perimetre: string }> = [];
-  for (const l of Array.isArray(analyse?.lots) ? analyse.lots : []) {
-    // « lot » et « n° / no / n. » facultatifs l'un sans l'autre (T1-COH-2 : « N°1 » lu « lot N ») ; une lettre suivie de
-    // « ° » n'est jamais un lot.
-    const m = /^(?:lots?\s*)?(?:n\s*[°ºo.]\s*(?=\d))?(\d{1,3}|[A-Z])(?![\wÀ-ÿ°º/])/i.exec(valeurPropre(typeof l === 'object' ? l?.num : l));
-    if (m && !lots.some((x) => x.num === m[1].toUpperCase())) lots.push({ num: m[1].toUpperCase(), perimetre: valeurPropre(typeof l === 'object' ? l?.perimetre : '') });
-  }
-  if (lots.length <= 1) return { lots: lots.map((x) => x.num) };
-  // Pièces du DCE : numéros de lot écrits dans leur nom.
-  const noms = [...String(dce || '').matchAll(/\n\n--- (.+?) ---\n|===== PIÈCE : (.+?) =====/g)].map((m) => m[1] || m[2] || '');
-  const numeros = (nom: string): string[] => {
-    // Numéro de lot, jamais une référence de contrat (« lots 54.6.09 et 54.6.10 »).
-    const m = /\blots?\s*(?:n\s*[°o.]?\s*)?(\d{1,3})(?!\d|[.,]\d)((?:\s*(?:,|et|&|-|à)\s*(?:(?:lot\s*)?n\s*[°o.]?\s*)?\d{1,3}(?!\d|[.,]\d))*)/i.exec(nom.replace(/_/g, ' '));
-    return m ? [...`${m[1]}${m[2] || ''}`.matchAll(/\d{1,3}/g)].map((x) => x[0]) : [];
-  };
-  const memoireCommun = noms.find((n) => /cadre|m[ée]moire/i.test(n) && numeros(n).length > 1);
-  if (memoireCommun) return { lots: numeros(memoireCommun) };
-  const seuls = [...new Set(noms.map(numeros).filter((x) => x.length === 1).map((x) => x[0]))];
-  if (seuls.length === 1) return { lots: seuls };
-  const parLot = /offre distincte pour chaque lot|offres? s[ée]par[ée]es? pour chacun des lots|m[ée]moire technique distinct[^.]{0,40}chaque lot|cadre de r[ée]ponse par lot|un m[ée]moire (?:technique )?par lot/i.test(plat);
-  const liste = lots.map((x) => `${x.num}${x.perimetre ? ` : ${x.perimetre.length > 90 ? `${x.perimetre.slice(0, 90).replace(/\s+\S*$/, '')}…` : x.perimetre}` : ''}`).join(' ; ');
-  return { lots: lots.map((x) => x.num), question: `Le DCE comporte ${lots.length} lots (${liste})${parLot ? ' et le RC demande une offre distincte par lot' : ''} : pour quel lot ce mémoire est-il remis ?` };
+  // Règle partagée avec le lieu du marché (base_memoires, T2-GEN-5) ; marché non alloti seulement sur une affirmation (T2-COH-5).
+  return lotsDuMemoireDce(analyse, dce, valeurPropre);
 }
 
 /** Variables que ce module sait calculer (une variable déclarée dans le JSON sans calcul est signalée). */
@@ -1687,6 +1664,15 @@ export function cleCommune(v: string): string {
  * postal : les communes nommées dans le DCE (lieuDuMarche), jamais un nom de site (« Parc des Expositions de Rouen »).
  */
 function villesDuMarche(dce: string, analyse: any): string[] {
+  // Mémoire d'un seul lot (T2-GEN-5) : les communes de ce lot, si elles sont lisibles.
+  const lot = perimetreDuLot(analyse, dce);
+  if (lot) {
+    const v = villesDuMarcheBrut(lot.dce, lot.analyse);
+    if (v.length) return v;
+  }
+  return villesDuMarcheBrut(dce, analyse);
+}
+function villesDuMarcheBrut(dce: string, analyse: any): string[] {
   const out: string[] = [];
   const prefixe = (a: string, b: string) => `${cleCommune(b)} `.startsWith(`${cleCommune(a)} `);
   const debutDce = String(dce || '').slice(0, 30000);

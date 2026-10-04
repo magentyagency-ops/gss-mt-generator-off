@@ -649,8 +649,18 @@ function rxCommune(nom: string, elision = false): RegExp {
   const avant = elision ? "(?<![\\wÀ-ÿ-])(?<!(?<!(?:^|[^\\wÀ-ÿ'’-])[dDlL])['’])" : "(?<![\\wÀ-ÿ'’-])";
   return new RegExp(`${avant}${corps}(?![\\wÀ-ÿ]|[-\u2011'’][A-Za-zÀ-ÿ]|[-\u2011 ]+(?:du|de|des|sur|sous|lès|les|lez|en)[- ][A-ZÀ-Ýa-zà-ÿ])`, 'gi');
 }
-const RX_NORMANDES = COMMUNES_NORMANDES.map((n) => ({ nom: n, rx: rxCommune(n, true) }));
-const RX_HORS = VILLES_HORS_NORMANDIE.map((n) => ({ nom: n, rx: rxCommune(n, true) }));
+/**
+ * Formes contractées d'une commune à article (T2-COH-4) : « du Havre », « au Havre » pour « Le Havre » ; « des Andelys »,
+ * « aux Andelys » pour « Les Andelys » ; « du Grand-Quevilly ». La commune est lue sans son article, après la contraction.
+ */
+function rxContractees(nom: string): RegExp[] {
+  const m = /^(Le|Les)\s+(.+)$/.exec(nom);
+  if (!m) return [];
+  const corps = rxCommune(m[2]).source.replace(/^\(\?<!\[[^\]]*\]\)/, '');
+  return [new RegExp(`(?<=(?<![\\wÀ-ÿ])(?:${m[1] === 'Le' ? 'du|au|Du|Au|DU|AU' : 'des|aux|Des|Aux|DES|AUX'})\\s+)${corps}`, 'g')];
+}
+const RX_NORMANDES = COMMUNES_NORMANDES.flatMap((n) => [{ nom: n, rx: rxCommune(n, true) }, ...rxContractees(n).map((rx) => ({ nom: n, rx }))]);
+const RX_HORS = VILLES_HORS_NORMANDIE.flatMap((n) => [{ nom: n, rx: rxCommune(n, true) }, ...rxContractees(n).map((rx) => ({ nom: n, rx }))]);
 /** Communes nommées hors adresse postale et hors adresse administrative (tribunal, préfecture…), avec leur nombre de citations. */
 function communesNommees(texte: string): { normands: Map<string, number>; hors: Map<string, number> } {
   const compter = (liste: Array<{ nom: string; rx: RegExp }>) => {
@@ -663,7 +673,13 @@ function communesNommees(texte: string): { normands: Map<string, number>; hors: 
         if (/\d{5}\s*[–—,-]?\s*$/.test(avant)) continue;              // adresse postale : déjà lue par code postal
         // Nom de voie (« 12 rue de Paris », « route de Lyon ») : pas une commune.
         if (/\b(?:rue|avenue|av\.|boulevard|bd|route|chemin|place|quai|all[ée]e|cours|impasse|porte|gare|pont|square|esplanade)\s+(?:de\s+(?:la\s+)?|d['’]|du\s+|des\s+)?$/i.test(avant)) continue;
-        if (ADMIN_LIEU.test(avant.slice(-60)) || ADMIN_LIEU.test(texte.slice(debut + m[0].length, debut + m[0].length + 14))) continue;
+        // Adresse ou institution administrative (préfecture, siège, tribunal…) : pas le lieu du marché, sauf dans la phrase de
+        // l'objet ou du lieu d'exécution, sans rôle administratif (T2-GEN-4 : « gardiennage de l'hôtel de la préfecture de
+        // l'Eure … Évreux »).
+        if (ADMIN_LIEU.test(avant.slice(-60)) || ADMIN_LIEU.test(texte.slice(debut + m[0].length, debut + m[0].length + 14))) {
+          const phrase = (texte.slice(Math.max(0, debut - 240), debut).split(/[.!?\n]\s*/).pop() || '') + texte.slice(debut, debut + m[0].length + 60).split(/[.!?\n]/)[0];
+          if (!PHRASE_SITE.test(phrase) || ROLE_ADMIN.test(phrase) || IDENTIFICATION_ACHETEUR.test(phrase) || /tribunal|cour d.appel|greffe|inspection du travail|CNAPS/i.test(phrase)) continue;
+        }
         // Heure légale ou fuseau horaire (T9REG-2, T9-COH-3 : « heure de Paris », « (GMT+01:00) Paris, Bruxelles, Copenhague,
         // Madrid » des plateformes de dématérialisation) : pas le lieu du marché.
         if (/\b(?:heures?|fuseau(?:\s+horaire)?)(?:\s+(?:l[ée]gale|locale|officielle|de\s+r[ée]f[ée]rence))?\s+(?:de\s+)?$/i.test(avant)
@@ -674,6 +690,103 @@ function communesNommees(texte: string): { normands: Map<string, number>; hors: 
     return out;
   };
   return { normands: compter(RX_NORMANDES), hors: compter(RX_HORS) };
+}
+
+// ─── Lots du mémoire (accord-cadre en plusieurs lots) ─────────────────────────────────────────────────────────
+
+/** Valeur texte d'un champ de l'analyse (jamais un objet, ni une mention « non renseigné »). */
+function textePropre(v: unknown): string {
+  if (v === null || v === undefined || typeof v === 'object') return '';
+  const t = String(v).replace(/\s+/g, ' ').trim();
+  if (!t || t.length > 400 || /^\s*(?:non[\s-]+(?:communiqu|pr[ée]cis|d[ée]termin|renseign|disponible|identifi|mentionn|indiqu|connu|sp[ée]cifi|fourni|trouv)|inconnu|ind[ée]termin|undefined|null|[-—–?]+\s*$)/i.test(t)) return '';
+  return t;
+}
+
+/**
+ * Marché déclaré non alloti (T2-COH-5) : seulement par une AFFIRMATION (« le marché n'est pas alloti », « marché non alloti »,
+ * « Lot unique : … », « consultation à lot unique », « justification du non-allotissement »), jamais par une mention dans un
+ * autre sens (« une offre pour un lot unique, pour plusieurs lots ou pour l'ensemble des lots », « chaque lot fera l'objet
+ * d'un marché unique », « non allotie en 2022 »).
+ */
+const RX_NON_ALLOTI = /(?<!en cas de )\bnon[- ]allotie?s?\b(?!\s+(?:en|jusqu|depuis|lors|avant)\b)|(?:n['’]est|ne sera)\s+pas\s+(?:d[ée]compos[ée]e?|divis[ée]e?|r[ée]partie?|scind[ée]e?)\s+en\s+lots|(?:fait|font)\s+l['’]objet\s+d['’]un\s+lot\s+unique|lot\s*(?:n\s*[°o.]?\s*)?1\s*[-–—:]\s*lot\s+unique|structure\s*:?\s+lot\s+unique|(?:march[ée]|accord[- ]cadre|consultation|proc[ée]dure)\s+(?:n['’]est|ne sera|ne fait l['’]objet d['’]aucun)\s+(?:pas\s+)?allot|(?<!en cas de )(?<!en cas d['’])\bnon[- ]allotissement\b|ne fait pas l.objet d.un allotissement|(?:il n['’]y a )?pas d.allotissement|sans allotissement|(?:^|[\s(])lot unique\s*:|(?:comporte|comprend|compos[ée]e?\s+d['’]|constitu[ée]e?\s+d['’]|en|[àa])\s+(?:un\s+)?lot unique(?![^.;]{0,30}(?:plusieurs lots|ensemble des lots))/i;
+
+/**
+ * Lots du mémoire (règle partagée par la question à GSS et par le lieu du marché) : pièces du DCE dont le nom porte un seul
+ * numéro de lot (cadre de réponse « Lot 1 »), sinon tous les lots de l'analyse avec la question « pour quel lot ce mémoire
+ * est-il remis ? ».
+ */
+export function lotsDuMemoireDce(analyse: any, dce: string, propre: (v: unknown) => string = textePropre): { lots: string[]; question?: string } {
+  const plat = String(dce || '').replace(/\s+/g, ' ');
+  const lots: Array<{ num: string; perimetre: string }> = [];
+  for (const l of Array.isArray(analyse?.lots) ? analyse.lots : []) {
+    // « lot » et « n° / no / n. » facultatifs l'un sans l'autre (T1-COH-2 : « N°1 » lu « lot N ») ; une lettre suivie de
+    // « ° » n'est jamais un lot.
+    const m = /^(?:lots?\s*)?(?:n\s*[°ºo.]\s*(?=\d))?(\d{1,3}|[A-Z])(?![\wÀ-ÿ°º/])/i.exec(propre(typeof l === 'object' ? l?.num : l));
+    if (m && !lots.some((x) => x.num === m[1].toUpperCase())) lots.push({ num: m[1].toUpperCase(), perimetre: propre(typeof l === 'object' ? l?.perimetre : '') });
+  }
+  // Marché déclaré non alloti : aucun lot, même si l'analyse en a relevé plusieurs (seulement sur une affirmation).
+  if (RX_NON_ALLOTI.test(plat)) return { lots: [] };
+  if (lots.length <= 1) return { lots: lots.map((x) => x.num) };
+  // Pièces du DCE : numéros de lot écrits dans leur nom.
+  const noms = [...String(dce || '').matchAll(/\n\n--- (.+?) ---\n|===== PIÈCE : (.+?) =====/g)].map((m) => m[1] || m[2] || '');
+  const numeros = (nom: string): string[] => {
+    // Numéro de lot, jamais une référence de contrat (« lots 54.6.09 et 54.6.10 »).
+    const m = /\blots?\s*(?:n\s*[°o.]?\s*)?(\d{1,3})(?!\d|[.,]\d)((?:\s*(?:,|et|&|-|à)\s*(?:(?:lot\s*)?n\s*[°o.]?\s*)?\d{1,3}(?!\d|[.,]\d))*)/i.exec(nom.replace(/_/g, ' '));
+    return m ? [...`${m[1]}${m[2] || ''}`.matchAll(/\d{1,3}/g)].map((x) => x[0]) : [];
+  };
+  const memoireCommun = noms.find((n) => /cadre|m[ée]moire/i.test(n) && numeros(n).length > 1);
+  if (memoireCommun) return { lots: numeros(memoireCommun) };
+  const seuls = [...new Set(noms.map(numeros).filter((x) => x.length === 1).map((x) => x[0]))];
+  if (seuls.length === 1) return { lots: seuls };
+  const parLot = /offre distincte pour chaque lot|offres? s[ée]par[ée]es? pour chacun des lots|m[ée]moire technique distinct[^.]{0,40}chaque lot|cadre de r[ée]ponse par lot|un m[ée]moire (?:technique )?par lot/i.test(plat);
+  const liste = lots.map((x) => `${x.num}${x.perimetre ? ` : ${x.perimetre.length > 90 ? `${x.perimetre.slice(0, 90).replace(/\s+\S*$/, '')}…` : x.perimetre}` : ''}`).join(' ; ');
+  return { lots: lots.map((x) => x.num), question: `Le DCE comporte ${lots.length} lots (${liste})${parLot ? ' et le RC demande une offre distincte par lot' : ''} : pour quel lot ce mémoire est-il remis ?` };
+}
+
+/**
+ * Périmètre du seul lot du mémoire (T2-GEN-5) : quand l'analyse relève plusieurs lots et que le mémoire n'en vise qu'un, le
+ * DCE privé des passages propres aux autres lots (de « Lot n : » au lot suivant, à l'article ou à la pièce suivante) et
+ * l'analyse privée des autres lots et de leurs sites. null : marché non alloti, lot du mémoire inconnu, ou rien à retirer.
+ */
+export function perimetreDuLot(analyse: any, dce: string): { analyse: any; dce: string; lot: string } | null {
+  if (!Array.isArray(analyse?.lots) || analyse.lots.length < 2) return null;
+  const r = lotsDuMemoireDce(analyse, dce);
+  if (r.lots.length !== 1 || r.question) return null;
+  const lot = r.lots[0];
+  const TETE = /(?:^|(?<=[.;]\s{1,3}))(?:[-•▪*]\s*)?lot\s*(?:n\s*[°ºo.]?\s*)?(\d{1,3}|[A-Z])(?![\wÀ-ÿ°º/])\s*(?:[:–—-]|\()/gi;
+  const RUPTURE = /^\s*(?:--- .+ ---|===== PIÈCE|(?:ARTICLE|Article|CHAPITRE|Chapitre|TITRE|Titre|PARTIE|Partie)\b|\d{1,2}(?:\.\d{1,2})*\.?\s+[A-ZÉÈ])/;
+  let courant: string | null = null;
+  let retire = false;
+  const lignes: string[] = [];
+  for (const ligne of String(dce || '').split('\n')) {
+    if (RUPTURE.test(ligne)) courant = null;
+    const coupes = [...ligne.matchAll(TETE)].map((m) => ({ pos: m.index || 0, num: m[1].toUpperCase() }));
+    if (!coupes.length) {
+      if (courant && courant !== lot) { retire = true; continue; }
+      lignes.push(ligne);
+      continue;
+    }
+    let garde = coupes[0].pos > 0 && (!courant || courant === lot) ? ligne.slice(0, coupes[0].pos) : '';
+    coupes.forEach((c, i) => {
+      courant = c.num;
+      const morceau = ligne.slice(c.pos, i + 1 < coupes.length ? coupes[i + 1].pos : ligne.length);
+      if (courant === lot) garde += morceau; else retire = true;
+    });
+    lignes.push(garde);
+  }
+  if (!retire) return null;
+  const texte = lignes.join('\n');
+  // Sites de l'analyse : ceux que le périmètre du lot cite (code postal ou nom), et les lots réduits au lot du mémoire.
+  const cite = (site: any) => {
+    const t = `${textePropre(site?.name)} ${textePropre(site?.address)}`;
+    const codes = t.match(/\b\d{5}\b/g);
+    if (codes) return codes.some((c) => texte.includes(c));
+    const nom = textePropre(site?.name);
+    return !nom || texte.toLowerCase().includes(nom.toLowerCase());
+  };
+  const a = { ...analyse, lots: analyse.lots.filter((l: any) => String(textePropre(typeof l === 'object' ? l?.num : l)).replace(/\D/g, '') === lot.replace(/\D/g, '') || String(textePropre(typeof l === 'object' ? l?.num : l)).toUpperCase().endsWith(lot)) };
+  if (Array.isArray(analyse.sites)) a.sites = analyse.sites.filter(cite);
+  return { analyse: a, dce: texte, lot };
 }
 
 const cacheLieux = new Map<string, LieuMarche>();
@@ -693,6 +806,15 @@ export function lieuDuMarche(analyse: any, dce: string): LieuMarche {
   return r;
 }
 function calculerLieu(analyse: any, dce: string): LieuMarche {
+  // Mémoire d'un seul lot d'un accord-cadre (T2-GEN-5) : le lieu de ce lot, s'il est lisible ; sinon celui de tout le marché.
+  const lot = perimetreDuLot(analyse, dce);
+  if (lot) {
+    const l = calculerLieuBrut(lot.analyse, lot.dce);
+    if (l.statut !== 'inconnu') return { ...l, source: `${l.source}, lot ${lot.lot}` };
+  }
+  return calculerLieuBrut(analyse, dce);
+}
+function calculerLieuBrut(analyse: any, dce: string): LieuMarche {
   const sites = sitesDuMarche(analyse, dce);
   if (sites.normands.length || sites.horsNormandie.length) {
     return { statut: sites.mixte ? 'mixte' : sites.horsNormandie.length ? 'hors' : 'normandie', normands: sites.normands, horsNormandie: sites.horsNormandie, source: 'sites du DCE (codes postaux)' };
@@ -723,10 +845,15 @@ function calculerLieu(analyse: any, dce: string): LieuMarche {
   // Rouen, site écrit autrement à Gennevilliers) : seulement si sa commune est aussi celle nommée dans l'objet du marché
   // (etampes1 : « … de la Ville d'Étampes », adresse « 91152 ETAMPES CEDEX »).
   const objet = cleCommune2(`${analyse?.projectTitle || ''} ${analyse?.objet || ''} ${(/objet[^\n]{0,200}/i.exec(String(dce || '')) || [''])[0]}`);
-  const retenu = (m: RegExpMatchArray, commune: string) => !adresseAdministrative(debut, m.index || 0, (m.index || 0) + m[0].length)
-    || (!!commune && commune.length >= 3 && ` ${objet} `.includes(` ${cleCommune2(commune)} `));
+  // Commune entière (« 76084 LE HAVRE CEDEX » → « LE HAVRE »), comparée à l'objet avec et sans son article (T2-COH-4 : « Ville
+  // du Havre »).
+  const retenu = (m: RegExpMatchArray, commune: string) => {
+    if (!adresseAdministrative(debut, m.index || 0, (m.index || 0) + m[0].length)) return true;
+    const k = cleCommune2(commune);
+    return k.length >= 3 && [k, k.replace(/^(?:le|la|les) /, '')].some((v) => v.length >= 3 && ` ${objet} `.includes(` ${v} `));
+  };
   const codes = [
-    ...[...debut.matchAll(/\b(\d{2})\d{3}\s*(?:[–—,-]\s*)?([A-ZÉÈÀÂÎÔÛ][\wÀ-ÿ²³]*)/g)].filter((m) => !UNITE.test(m[2]) && retenu(m, m[2])).map((m) => m[1]),
+    ...[...debut.matchAll(/\b(\d{2})\d{3}\s*(?:[–—,-]\s*)?([A-ZÉÈÀÂÎÔÛ][\wÀ-ÿ²³'’-]*(?:[ \t]+(?!CEDEX\b|Cedex\b|cedex\b)(?:[A-ZÉÈÀÂÎÔÛ][\wÀ-ÿ'’-]*|sur|sous|en|de|du|des|l[èe]s|la|le))*)/g)].filter((m) => !UNITE.test(m[2].split(/\s/)[0]) && retenu(m, m[2].replace(/\s+(?:sur|sous|en|de|du|des|l[èe]s|la|le)$/i, ''))).map((m) => m[1]),
     ...[...debut.matchAll(/\(\s*(\d{2})\d{3}\s*\)/g)].filter((m) => retenu(m, '')).map((m) => m[1]),
   ].filter((d) => Number(d) >= 1 && Number(d) <= 95);
   if (codes.length) {
@@ -875,7 +1002,15 @@ const IDENTIFICATION_ACHETEUR = /(?:pouvoir adjudicateur|acheteur|ma[îi]tre d.o
 // Un numéro CS ou TSA accompagne souvent l'adresse même du site (« Hôtel de Ville … CS 31402 76037 Rouen », T9REG-1) : seuls
 // Cedex et la boîte postale marquent une adresse postale.
 const ADMIN_POSTALE = /cedex|(?<![A-Za-zÀ-ÿ])(?:BP|B\.P\.?)\s*(?:n°\s*)?\d|bo[îi]te postale/i;
-const ADMIN_RECOURS = /si[èe]ge|tribunal administratif|cour administrative|voies? de recours|introduction des recours|instance charg[ée]e des proc[ée]dures de recours|greffe du tribunal administratif|factur|comptable|(?<![A-Za-z])SGC(?![A-Za-z])|paiements?|mandatement|ordonnateur|tr[ée]sor(?:erie)?|paierie|finances publiques|DGFIP|DRFIP/i;
+/** Rôle administratif d'une adresse (recours, facturation, paiement, siège déclaré) : jamais un site (T2-GEN-4). */
+const ROLE_ADMIN = /tribunal administratif|cour administrative|voies? de recours|introduction des recours|instance charg[ée]e des proc[ée]dures de recours|greffe du tribunal administratif|factur|comptable|(?<![A-Za-z])SGC(?![A-Za-z])|paiements?|mandatement|ordonnateur|tr[ée]sor(?:erie)?|paierie|dont le si[èe]ge|ayant (?:son|leur) si[èe]ge|si[èe]ge(?:\s+social|\s+administratif)?\s*:|domicili[ée]/i;
+/** Nom d'une institution qui a d'ordinaire une adresse administrative (communes imprimées des sites, hors phrase de site). */
+const INSTITUTION_ADMIN = /si[èe]ge|finances publiques|DGFIP|DRFIP/i;
+/**
+ * Phrase qui décrit l'objet ou le lieu d'exécution du marché (T2-GEN-4) : l'adresse qu'elle cite est celle d'un site, même
+ * quand le site est un siège ou une administration.
+ */
+const PHRASE_SITE = /a pour objet|porte sur|objet du march[ée]|(?<![\p{L}])objet\s*:|lieux? d['’]ex[ée]cution|lieux? de (?:la )?prestation|lieux? d['’]intervention|gardiennage|surveillance|s[ée]curit[ée] (?:des|du|de la|de l['’])|s[ûu]ret[ée] (?:des|du|de la|de l['’])|accueil (?:des|du|de la|de l['’])|(?<![\p{L}])sites? (?:concern[ée]s?|du march[ée]|gard[ée]s?|surveill[ée]s?|[àa] surveiller|suivants?)|prestations? (?:sont|seront|est|sera) (?:ex[ée]cut|r[ée]alis|effectu|assur)/iu;
 /**
  * `strict` (sites du lieu du marché, avec les administrations : tribunal, ministère, DREETS…) ; sinon (communes des sites
  * imprimées) seulement le siège, les recours, la facturation, le comptable et l'identification de l'acheteur, et, avec
@@ -886,10 +1021,17 @@ export function adresseAdministrative(texte: string, debut: number, fin: number,
   // Paris. Lieu d'exécution : site de Rouen (76000) » : Rouen est un site).
   const avant = String(texte || '').slice(Math.max(0, debut - 200), debut).split('\n').slice(-3).join(' ').slice(-140).split(/(?<![A-Z]\.?[A-Z]?)[.;!?]\s+(?=[A-ZÀ-Ý])/).pop() || '';
   const apres = String(texte || '').slice(fin, fin + 14);
-  const rx = opts.strict ? ADMIN_ADRESSE : null;
-  if (rx && (rx.test(apres) || rx.test(avant))) return true;
+  // Rôle administratif de l'adresse (recours, facturation, paiement, siège déclaré, identification de l'acheteur) : jamais un
+  // site, quelle que soit la phrase.
+  if (ROLE_ADMIN.test(apres) || ROLE_ADMIN.test(avant) || IDENTIFICATION_ACHETEUR.test(avant)) return true;
+  // T2-GEN-4 : une adresse est administrative par son RÔLE dans la phrase, jamais par le seul nom de l'institution : le siège,
+  // la préfecture, l'URSSAF ou le site d'un ministère GARDÉS (phrase de l'objet ou du lieu d'exécution : « gardiennage du siège
+  // de la CAF … 50000 Saint-Lô », « Les prestations sont exécutées à l'Hôtel de Ville, … 76084 LE HAVRE CEDEX ») sont le site.
+  if (PHRASE_SITE.test(avant)) return false;
+  const rx = opts.strict ? ADMIN_ADRESSE : INSTITUTION_ADMIN;
+  if (rx.test(apres) || rx.test(avant)) return true;
   if ((opts.strict || opts.postale) && (ADMIN_POSTALE.test(apres) || ADMIN_POSTALE.test(avant))) return true;
-  return ADMIN_RECOURS.test(apres) || ADMIN_RECOURS.test(avant) || IDENTIFICATION_ACHETEUR.test(avant);
+  return false;
 }
 
 /** Commune suivie de son département en chiffres entre parenthèses (« Colombelles (14) », « Aubagne (13) »), T1-GEN-4. */
@@ -911,6 +1053,15 @@ export function communesParDepartement(texte: string): Array<{ dep: string; comm
 
 /** Sites du marché (sitesDuMarche) avec le code postal de chaque site hors Normandie. */
 function sitesParCodePostal(analyse: any, dce: string): { normands: string[]; horsNormandie: string[]; mixte: boolean; codesHors: Array<{ code: string; commune: string }> } {
+  // Mémoire d'un seul lot (T2-GEN-5) : les sites de ce lot (sites et alerte hors zone d'un autre lot jamais repris).
+  const lot = perimetreDuLot(analyse, dce);
+  if (lot) {
+    const r = sitesParCodePostalBrut(lot.analyse, lot.dce);
+    if (r.normands.length || r.horsNormandie.length) return r;
+  }
+  return sitesParCodePostalBrut(analyse, dce);
+}
+function sitesParCodePostalBrut(analyse: any, dce: string): { normands: string[]; horsNormandie: string[]; mixte: boolean; codesHors: Array<{ code: string; commune: string }> } {
   const texte = `${JSON.stringify(analyse || {})} ${String(dce || '').slice(0, 40000)}`.replace(/\\n/g, '\n');
   const normands = new Map<string, string>();
   const hors = new Map<string, string>();
