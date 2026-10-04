@@ -230,3 +230,14 @@ describe('intitulé des propositions D5 (T4-CONS-12)', () => {
     expect(long.charAt(s.length - 1)).toMatch(/\s|,/);
   });
 });
+
+// Tour 4, correcteur (T4G-9) : site nommé par une commune à article.
+import { phraseSites as phraseSitesT4c } from '../src/generation/reponse_libre_v2';
+describe('sites nommés par une commune à article (T4G-9)', () => {
+  it('« le site du Havre », « les sites de Rouen et du Havre », « des Andelys »', () => {
+    expect(phraseSitesT4c(['LE HAVRE — 20 rue de Paris'], ['Le Havre'], { 'LE HAVRE — 20 rue de Paris': 'Le Havre' })).toBe('La prestation porte sur le site du Havre — 20 rue de Paris.');
+    expect(phraseSitesT4c(['Rouen', 'Le Havre'], ['Rouen', 'Le Havre'], { Rouen: 'Rouen', 'Le Havre': 'Le Havre' })).toBe('La prestation porte sur les sites de Rouen et du Havre.');
+    expect(phraseSitesT4c(['Évreux', 'Les Andelys'], ['Évreux', 'Les Andelys'], { 'Évreux': 'Évreux', 'Les Andelys': 'Les Andelys' })).toBe('La prestation porte sur les sites d’Évreux et des Andelys.');
+    expect(phraseSitesT4c(['CAEN — 20 rue Saint-Pierre'], ['Caen'], {})).toBe('La prestation porte sur le site de Caen — 20 rue Saint-Pierre.');
+  });
+});

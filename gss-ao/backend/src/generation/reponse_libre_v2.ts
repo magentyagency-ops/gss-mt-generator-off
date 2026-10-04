@@ -3305,7 +3305,12 @@ export function consigneProposition(groupe: GroupeNouveau, o: { client?: string;
  */
 const ARTICLE_NOM_COMMUN: Record<string, string> = { site: 'le', sites: 'les', batiment: 'le', batiments: 'les', campus: 'le', siege: 'le', locaux: 'les', parking: 'le', parkings: 'les', immeuble: "l'", residence: 'la', etablissement: "l'", etablissements: 'les', ensemble: "l'", parc: 'le', parcs: 'les', equipement: "l'", equipements: 'les', bureaux: 'les', entrepot: "l'", entrepots: 'les' };
 const ARTICLE_NOM_PROPRE: Record<string, string> = { centre: 'le', hotel: "l'", universite: "l'", mairie: 'la', hopital: "l'", musee: 'le', institut: "l'", theatre: 'le', stade: 'le', palais: 'le', maison: 'la', cite: 'la', domaine: 'le', chateau: 'le', gare: 'la', port: 'le', mediatheque: 'la', bibliotheque: 'la', ecole: "l'", college: 'le', lycee: 'le', piscine: 'la', salle: 'la', agence: "l'", direction: 'la', prefecture: 'la', tribunal: 'le', archives: 'les', campus: 'le', complexe: 'le', espace: "l'", pole: 'le', base: 'la', caserne: 'la', jardin: 'le', jardins: 'les' };
-const deCommune = (v: string) => (/^[aeiouyàâéèêëîïôöûüh]/i.test(v) ? `d’${v}` : `de ${v}`);
+// Commune à article (T4G-9) : « du Havre », « des Andelys », « du Tréport » ; « de La Rochelle » (article féminin gardé).
+const deCommune = (v: string) => {
+  const a = /^(Le|Les)\s+(.+)$/.exec(v);
+  if (a) return `${a[1] === 'Le' ? 'du' : 'des'} ${a[2]}`;
+  return /^[aeiouyàâéèêëîïôöûüh]/i.test(v) ? `d’${v}` : `de ${v}`;
+};
 /**
  * Site du marché écrit dans une phrase (« La prestation porte sur le site du CSTB Grenoble — 24 rue… », T7CS-4, T7N-6) :
  * article et minuscule pour un nom commun (« Site du CSTB » → « le site du CSTB »), article pour un nom propre (« le
@@ -3314,6 +3319,13 @@ const deCommune = (v: string) => (/^[aeiouyàâéèêëîïôöûüh]/i.test(v) 
 export function siteDansPhrase(nom: string, villes: string[] = []): string {
   const n = String(nom || '').replace(/\s+/g, ' ').trim();
   if (!n) return '';
+  // Commune à article nommée comme site (« LE HAVRE — 20 rue de Paris », « Les Andelys », T4G-9) : « le site du Havre — … »,
+  // reconnue avant la règle de l'article.
+  {
+    const [t0, ...r0] = n.split(/\s+[—–-]\s+/);
+    const v0 = /^(?:le|la|les)\s+\S/i.test(t0) ? villes.find((v) => cleCommune(v) === cleCommune(t0)) : undefined;
+    if (v0) return `le site ${deCommune(v0)}${r0.length ? ` — ${r0.join(' — ')}` : ''}`;
+  }
   // Article entier en minuscules, nom gardé tel quel (« LES LICES » → « les LICES », jamais « lES LICES », T9-COH-4).
   if (/^(?:le|la|les)\s+\S|^l['’]\s*\S/i.test(n)) return n.replace(/^(?:les|le|la)(?=\s)|^l(?=['’])/i, (a) => a.toLowerCase());
   const [tete, ...reste] = n.split(/\s+[—–-]\s+/);
@@ -3339,12 +3351,18 @@ export function phraseSites(sites: string[], villes: string[], communes: Record<
   const vues = new Set<string>();
   const manquantes = villes.filter((v) => {
     const c = cleCommune(v);
-    if (!c || vues.has(c) || ` ${ecrit} `.includes(` ${c} `)) return false;
+    // Commune à article écrite contractée (« du Havre », « des Andelys ») : déjà écrite.
+    const sansArticle = c.replace(/^(?:le|la|les)\s+/, '');
+    if (!c || vues.has(c) || ` ${ecrit} `.includes(` ${c} `) || (sansArticle !== c && new RegExp(`(?:^| )(?:du|des|de la|le|la|les) ${sansArticle}(?: |$)`).test(ecrit))) return false;
     vues.add(c);
     return true;
   });
   // Plusieurs sites (T10-COH-5) : chaque commune manquante est écrite après SON site (« l'Hôpital Nord (Marseille) et le
   // Centre hospitalier de Gap »), jamais après la liste entière ; une commune qui ne se rattache à aucun site n'est pas écrite.
+  // Plusieurs sites nommés chacun par sa commune (« Rouen », « Le Havre ») : « les sites de Rouen et du Havre » (T4G-9).
+  if (sites.length > 1 && liste.length === sites.length && liste.every((x) => /^le site (?:de |d’|du |des )/.test(x) && !/ — /.test(x))) {
+    return `La prestation porte sur les sites ${listeFr(liste.map((x) => x.replace(/^le site /, '')))}.`;
+  }
   if (sites.length > 1) {
     const avec = sites.map((x) => {
       const t = siteDansPhrase(x, villes);
