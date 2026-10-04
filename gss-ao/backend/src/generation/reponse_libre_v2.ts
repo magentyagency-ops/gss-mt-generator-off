@@ -1023,6 +1023,50 @@ function couperA(texte: string, max: number): string {
 }
 
 /**
+ * Citation d'une attente du CCTP abrégée sans perdre l'exigence (T4-COH-2, ign : « En cas d'absence imprévue… quels que soit
+ * son niveau de qualification […] » sans « son remplaçant devra être présent sur site dans les deux (2) heures », « … sous
+ * 15 […] » sans « jours ») : la proposition qui porte l'obligation (verbe d'obligation, délai, nombre et son unité) est gardée
+ * entière, le début et le reste sont élidés par « […] » ; un nombre n'est jamais séparé de son unité. null si l'exigence ne
+ * tient pas dans la longueur : la citation reste entière (la ligne est retirée, ou GSS est prévenu du dépassement).
+ */
+export function abregerCitationAttente(c: string, max = 110): string | null {
+  const t = String(c || '').replace(/\s+/g, ' ').trim().replace(/[.;]\s*$/, '');
+  if (t.length <= max) return t;
+  const DUREE = /(?:\(\s*)?\d+(?:[,.]\d+)?\s*\)?\s*(?:minutes?|min|mn|heures?|h|jours?(?:\s+(?:ouvr[ée]s|ouvrables|calendaires))?|semaines?|mois|ans?|%|€)(?![\p{L}\d])/iu;
+  const OBLIGATION = /\b(?:doit|doivent|devra|devront|est tenue?|sont tenus|s['’]engage|assure|assurent|met en place|mettra|dispose|disposent|interv\w*|rempla\w*|transm\w*|pr[ée]sente?s?|mobilis\w*|sous \d|dans (?:les?|un d[ée]lai)|au plus tard|au moins|au minimum|maximum)\b/i;
+  // Propositions (virgules, « ; », « : ») avec leur position dans la citation.
+  const props: Array<{ debut: number; texte: string }> = [];
+  let pos = 0;
+  for (const p of t.split(/(?<=[,;:])\s+|\s+(?=et\s)/)) { props.push({ debut: t.indexOf(p, pos), texte: p.replace(/^et\s+(?=(?:au|à|dans|sous|en|avant|apr[èe]s|le|la|les|l['’]|un|une)\b)/i, '') }); pos = t.indexOf(p, pos) + p.length; }
+  const score = (p: string) => (DUREE.test(p) ? 2 : 0) + (OBLIGATION.test(p) ? 1 : 0);
+  let meilleure = -1, best = 0;
+  props.forEach((p, i) => { const s = score(p.texte); if (s > best) { best = s; meilleure = i; } });
+  if (meilleure < 0) return null;
+  // Proposition porteuse, prolongée par les suivantes tant qu'elle tient (le complément du délai : « … dans les deux (2)
+  // heures suivant l'heure normale… »), sans jamais finir sur une virgule pendante.
+  let j = meilleure, extrait = props[meilleure].texte;
+  while (j + 1 < props.length && `${extrait} ${props[j + 1].texte}`.length <= max - 6) { j++; extrait = `${extrait} ${props[j].texte}`; }
+  extrait = extrait.replace(/[\s,;:]+$/, '');
+  if (extrait.length > max - 6) {
+    // Proposition trop longue : coupée sur une fin de mot après le nombre et son unité, jamais avant.
+    const d = DUREE.exec(extrait);
+    if (!d) return null;
+    const finUnite = d.index + d[0].length;
+    if (finUnite > max - 6) return null;
+    // Fin de la proposition qui dit ce qu'il faut faire (« … pour faire intervenir les agents sur le site ») : gardée après
+    // « […] » ; sinon la proposition s'arrête après la valeur et son unité.
+    const but = /\s(?:pour|afin d['’e])\s[^,;]*$/i.exec(extrait.slice(finUnite));
+    const tete = extrait.slice(0, finUnite);
+    if (but && `${tete} […]${but[0]}`.length <= max - 6) return `${meilleure > 0 ? '[…] ' : ''}${tete} […]${but[0]}`;
+    extrait = tete;
+  }
+  const avant = meilleure > 0 ? '[…] ' : '';
+  const apres = j + 1 < props.length || extrait.length < props.slice(meilleure, j + 1).map((p) => p.texte).join(' ').replace(/[\s,;:]+$/, '').length ? ' […]' : '';
+  const r = `${avant}${extrait}${apres}`;
+  return avant ? r : r.charAt(0).toUpperCase() + r.slice(1);
+}
+
+/**
  * Bloc 1 resserré sans rien retirer de son contenu porteur : cellules de plus de 70 signes du tableau du périmètre ramenées
  * à leur première phrase (ou coupées à la dernière virgule), citations du DCE de plus de 110 signes des attentes et des
  * points de vigilance abrégées par « […] ».
@@ -1058,7 +1102,8 @@ export function resserrerBesoin(texte: string): string {
       return cellules.map((c, i) => (i === 0 || i === cellules.length - 1 || c.trim().length <= 70 ? c : ` ${couperA(c, 70)} `)).join('|');
     }
     if (/^(?:Vos attentes|Les points de vigilance)/i.test(section) && /^\s*[-*•]\s/.test(l)) {
-      return l.replace(/«\s*([^«»]{111,}?)\s*»/g, (_m, c: string) => `« ${couperA(c, 100).replace(/\s*[.;,:]$/, '')} […] »`);
+      // Citation abrégée sans perdre l'exigence ni l'unité de sa valeur (T4-COH-2) ; gardée entière sinon.
+      return l.replace(/«\s*([^«»]{111,}?)\s*»/g, (m, c: string) => { const a = abregerCitationAttente(c, 110); return a ? `« ${a} »` : m; });
     }
     return l;
   }).filter((l): l is string => l !== null).join('\n').replace(/\n*Horaires imposés par le cahier des charges :\s*(?=\n\n|\n##|$)/g, '')
@@ -1495,7 +1540,10 @@ function texteEtapeCoupe(y: string, max: number): string {
     // Jamais à l'intérieur d'une énumération « X, Y et Z » (« en octobre, mars et avril »).
     const reste = t.slice(k + 2).split(/\s*[;.]\s*/)[0];
     const enumeration = /^[^,]{1,40}?\s(?:et|ou)\s/i.test(reste) && !/\s(?:et|ou)\s/i.test(f.split(/[;,]/).pop() || '') && !/[A-ZÀ-Ý]/.test(reste.charAt(0));
-    if (!MOTS_OUTILS.has(dernier) && !enumeration && !f.includes(';')) return f;
+    // Incise ouverte après un verbe sans son complément (becquerel 1401, T4N-1 : « Le CCTP exige, pour le personnel affecté aux
+    // prestations incendie » sans « SSIAP 1 et SSIAP 2… ») : jamais un texte de carte.
+    const inciseOuverte = /\b(?:exige|exigent|impose|imposent|demande|demandent|pr[ée]voit|pr[ée]voient|requiert|attend|fixe|fixent|confie|confient|pr[ée]cise|indique|pr[ée]cisent|indiquent)\s*,\s*[^,]*$/i.test(f);
+    if (!MOTS_OUTILS.has(dernier) && !enumeration && !f.includes(';') && !inciseOuverte) return f;
   }
   return '';
 }
@@ -1598,6 +1646,10 @@ export function anomaliesSchemaBloc1(spec: { gabarit?: string; params?: any } | 
     if (/\*\*|__|(?:^|\s)#{1,4}\s|`/.test(`${ti0} ${tx0}`)) out.push(`${n0} : marque de mise en forme imprimée (« ** », « __ », « # »)`);
     for (const x of [ti0, tx0]) if ((x.match(/«/g) || []).length !== (x.match(/»/g) || []).length || (x.match(/\(/g) || []).length !== (x.match(/\)/g) || []).length) out.push(`${n0} : guillemet ou parenthèse non refermé (« ${x} »)`);
     if (/\b(?:est|sont|sera|seront|a été|ont été)\s+[a-zà-ÿ]+(?:é|ée|és|ées|i|ie|is|ies|u|ue|us|ues)(?![a-zà-ÿ])/i.test(ti0)) out.push(`${n0} : le titre est une phrase, pas un titre nominal`);
+    // Titre qui a l'acheteur pour sujet (becquerel 1401, T4N-1 : « Le CCTP confie les rondes ») : une phrase, jamais un titre.
+    else if (/^(?:le|la|les|l['’])\s?(?:cctp|ccap|dce|cahier des charges|r[èe]glement|acheteur|client|march[ée])\s+[a-zà-ÿ]{3,}(?:e|ent|t)\b/i.test(ti0)) out.push(`${n0} : le titre est une phrase, pas un titre nominal`);
+    // Texte coupé dans une incise ouverte après un verbe (« Le CCTP exige, pour le personnel affecté aux prestations incendie »).
+    if (/\b(?:exige|exigent|impose|imposent|demande|demandent|pr[ée]voit|pr[ée]voient|requiert|attend|fixe|fixent|confie|confient|pr[ée]cise|indique)\s*,\s*[^,]*$/i.test(tx0)) out.push(`${n0} : texte coupé dans une incise (« ${tx0.slice(-40)} »)`);
     if (/^[A-ZÀ-Ý][a-zà-ÿ]+(?:ée?s?|ie?s?|ue?s?|ite?s?)\s+(?:par|avec|selon)\b/.test(tx0) && !/^(?:Une?|Les?|La|Chaque|Toute?s?)\b/.test(tx0)) out.push(`${n0} : texte sans sujet (« ${tx0.slice(0, 30)}… »)`);
     {
       const PLURIELS = /^(?:organisent|encadrent|structurent|soutiennent|permettent|assurent|suivent|garantissent|pilotent|couvrent|cadrent|traitent|r[ée]pondent|accompagnent|s[ée]curisent|compl[èe]tent|d[ée]finissent|fixent|distinguent|tracent|g[èe]rent)$/;
@@ -1695,7 +1747,72 @@ function titreNominal(gn: string, max: number): string {
   return titreExigenceBrut(t, max);
 }
 
+/** Durée d'une exigence (« deux (2) heures », « 15 jours », « 30 minutes ») : texte de la durée en chiffres, '' sinon. */
+function dureeDe(x: string): string {
+  const NB: Record<string, number> = { une: 1, un: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, huit: 8, dix: 10, quinze: 15, vingt: 20, trente: 30, quarante: 40, soixante: 60 };
+  const m = /(?<![\p{L}\d])(?:(\d{1,3})|(une?|deux|trois|quatre|cinq|six|huit|dix|quinze|vingt|trente|quarante|soixante))\s*(?:\(\s*(\d{1,3})\s*\)\s*)?(minutes?|heures?|jours?(?:\s+ouvr[ée]s|\s+ouvrables|\s+calendaires)?|semaines?|mois)(?![\p{L}])/iu.exec(String(x || ''));
+  if (!m) return '';
+  const n = Number(m[1] || m[3] || NB[(m[2] || '').toLowerCase()] || 0);
+  if (!n) return '';
+  const u = m[4].toLowerCase();
+  return `${n} ${n > 1 ? u.replace(/^(minute|heure|jour|semaine)(?!s)/, '$1s') : u.replace(/^(minute|heure|jour|semaine)s/, '$1')}`;
+}
+
+/**
+ * Titre d'une exigence du bloc 1 (libellé EXIGENCE, carte de schéma), sur les tournures du CCTP que le groupe nominal de tête
+ * ne résume pas (T4-COH-3, ign) :
+ *  - citation abrégée (« […] son remplaçant… ») : sans les « […] » ;
+ *  - incise après un complément de tête (« En cas d'absence imprévue…, quels que soit son niveau de qualification et son poste,
+ *    constatée le jour même…, son remplaçant devra… ») : la proposition principale, jamais l'incise ;
+ *  - « <sujet> devra être <attribut> … dans les deux (2) heures » → « Remplaçant présent sous 2 heures » ;
+ *  - « disposer d'un délai de N … pour faire X » → « Faire X en N … » ;
+ *  - « mettre en place un plan d'action sous 15 jours » → « Plan d'action sous 15 jours » ;
+ *  - « Les agents ne doivent en aucun cas quitter leur poste… » → « Ne jamais quitter leur poste… ».
+ * Jamais un titre qui commence par une préposition, un verbe conjugué ou « Quel(s) que » ; la valeur chiffrée garde son unité.
+ */
 export function titreExigence(x: string, max = 34): string {
+  const INCISE = /^(?:(?:quel(?:le)?s?\s+que\s+(?:soit|soient)|constat[ée]e?s?|y\s+compris|notamment|le\s+cas\s+[ée]ch[ée]ant|quelle\s+qu['’]en\s+soit)[^,]*,\s*)+/i;
+  let e = String(x || '').replace(/\*\*/g, '').replace(/\s*\[…\]\s*/g, ' ').replace(/\s+/g, ' ').replace(/^[«"“\s]+|[»"”\s.;:]+$/g, '').trim();
+  const ct = COMPLEMENT_TETE.exec(e);
+  if (ct && INCISE.test(ct[3])) e = `${ct[1]} ${ct[2]}, ${ct[3].replace(INCISE, '')}`;
+  const cap = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
+  const ok = (t: string) => !!t && t.length <= max && !MAUVAIS_TITRE.test(t);
+  const duree = dureeDe(e);
+  // Proposition principale (après un complément de tête) : c'est elle qui porte l'exigence.
+  const principale = ct ? e.replace(COMPLEMENT_TETE, '$3') : e;
+  // « <sujet> devra être présent(e) … dans les deux (2) heures » → « Remplaçant présent sous 2 heures ».
+  const attribut = /^(?:(?:le|la|les|l['’]|son|sa|ses|leur|leurs|tout|toute|chaque|un|une)\s*)?([a-zà-ÿ'’-]{3,}(?:\s+[a-zà-ÿ'’-]{3,})?)\s+(?:doit|doivent|devra|devront)\s+[êe]tre\s+([a-zà-ÿ]+(?:é|ée|és|ées|ent|ente|ents|entes|t|te|ts|tes|s|e)?)\b/i.exec(principale);
+  if (attribut && duree) {
+    const t = cap(`${attribut[1]} ${attribut[2]} sous ${duree}`);
+    if (ok(t)) return t;
+  }
+  // « disposer d'un délai de N … pour faire X » → « Faire X en N … ».
+  const delai = /\bdispose(?:nt|ra|ront)?\s+d['’]un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?de\s+[^.]*?\b(?:pour|afin\s+de)\s+([^,.;]+)/i.exec(principale);
+  if (delai && duree) {
+    const action = delai[1].replace(/\s+(?:sur|dans|au|aux|à)\s+(?:le|la|les|l['’])?\s*(?:site|sites|lieux?)\b.*$/i, '').trim();
+    for (const a of [action, titreExigenceBrut(action, max - duree.length - 4)]) { const t = a ? cap(`${a} en ${duree}`) : ''; if (ok(t)) return t; }
+  }
+  // « mettre en place / en œuvre <objet> sous N … » → « <Objet> sous N … ».
+  const place = /\bmet(?:tent|tra|tront)?\s+en\s+(?:place|œuvre|oeuvre)\s+(?:(?:un|une|des|le|la|les|l['’])\s*)?([^,.;]+?)\s+(?:sous|dans|en)\s+/i.exec(principale);
+  if (place && duree) { const t = cap(`${place[1]} sous ${duree}`); if (ok(t)) return t; }
+  // Négation du sujet générique (« Les agents ne doivent en aucun cas quitter leur poste sans être relevés »).
+  const neg = /^(?:(?:le|la|les|l['’]|chaque|tout|tous|toute|toutes)\s*)?(?:titulaire|prestataire|agents?|personnels?|intervenants?|salari[ée]s?)\s+(?:ne|n['’])\s*(?:doit|doivent|devra|devront|peut|peuvent|pourra|pourront)\s+(?:en\s+aucun\s+cas|jamais|pas|sous\s+aucun\s+pr[ée]texte)\s+(.+)$/i.exec(e);
+  if (neg) {
+    for (const s of [neg[1], neg[1].replace(/\s+(?:sans|hors|sauf)\b.*$/i, '')]) { const t = cap(`ne jamais ${s}`); if (ok(t)) return t; }
+  }
+  const t = titreExigenceBase(e, max);
+  if (!MAUVAIS_TITRE.test(t)) return t;
+  // Titre qui commence par une préposition, un verbe conjugué ou une incise : le titre de la proposition principale, sinon
+  // le complément de tête, sinon aucun titre (une carte sans titre n'est pas prise ; le libellé du tableau garde son secours).
+  for (const alt of [principale !== e ? titreExigenceBase(principale, max) : '', ct ? titreNominal(ct[2], max) : '', max >= 40 ? titreSecours(principale, max) : '']) if (alt && !MAUVAIS_TITRE.test(alt)) return alt;
+  return '';
+}
+
+/** Titre refusé : commence par une préposition, un verbe conjugué ou « Quel(s) que » (« D'un délai de 2 heures », « Doivent
+ *  en aucun cas quitter leur poste », « Quels que soit son niveau de qualification », « Connaissances s'avèrent insuffisantes »). */
+const MAUVAIS_TITRE = /^(?:d['’]|de\s|du\s|des\s|à\s|au\s|aux\s|par\s|pour\s|sur\s|sous\s|avec\s|sans\s|dans\s|quel(?:le)?s?\s+que\b)|^(?:est|sont|doit|doivent|devra|devront|peut|peuvent|a|ont|sera|seront)\b|^\S+\s+s['’]av[èe]r(?:ent|e|era|eront)\s/i;
+
+function titreExigenceBase(x: string, max = 34): string {
   // « dans un délai maximal de 30 minutes » → « en 30 minutes » : la valeur reste dans le titre (« Présent sur site en 30
   // minutes », jamais « … dans un délai maximal de 30 » coupé avant son unité).
   const e = String(x || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').replace(/^[«"“\s]+|[»"”\s.;:]+$/g, '').trim()
@@ -2368,6 +2485,37 @@ export function alignerSchemaSurTexte(params: any, textePublie: string, texteFin
   return { params: visiter(params), changees };
 }
 
+/**
+ * Schéma de process du bloc 1 sans ses cartes fautives (T4-COH-7, ign 1351 : la carte « Rondes » dont le texte redit le titre
+ * faisait refuser tout le schéma ; T4N-1, becquerel 1401 : carte « Le CCTP confie les rondes », texte coupé « Le CCTP exige,
+ * pour le personnel… ») : chaque carte signalée par le contrôle du schéma (anomaliesSchemaBloc1) est retirée, puis le schéma
+ * est recontrôlé ; null s'il reste moins de deux cartes avant « Votre résultat », ou si le résultat lui-même est fautif.
+ */
+export function specSansEtapesFautives(etapes: Array<{ titre: string; texte?: string; role?: string }>, gabarit: 'flux' | 'chevrons' = 'flux'): { gabarit: string; params: any } | null {
+  let l = [...etapes];
+  for (let essai = 0; essai < 8; essai++) {
+    if (l.length < 3) return null;
+    const spec = specProcessBesoin(l, gabarit);
+    if (!spec) return null;
+    const an = anomaliesSchemaBloc1(spec);
+    if (!an.length) return spec;
+    const n = spec.params.etapes.length;
+    // Cartes de la spécification et de la liste dans le même ordre (aucune carte sans titre retirée en route).
+    if (n !== Math.min(l.length, gabarit === 'chevrons' ? 4 : 5)) return null;
+    const fautives = new Set<number>();
+    for (const a of an) {
+      const deux = /^étapes (\d+) et (\d+)/.exec(a);
+      const une = /^étape (\d+)/.exec(a);
+      if (deux) fautives.add(Number(deux[2]) - 1);
+      else if (une) fautives.add(Number(une[1]) - 1);
+      else return null;
+    }
+    if (fautives.has(n - 1)) return null;
+    l = l.filter((_, i) => !fautives.has(i));
+  }
+  return null;
+}
+
 /** Étapes tirées des attentes et des points de vigilance du texte du bloc 1 (secours des schémas), sans le résultat. */
 export function specSecoursPuces(texte: string, phraseDe?: (titreRubrique: string) => string): { gabarit: string; params: any } | null {
   const etapes = etapesDesPuces(texte, phraseDe);
@@ -2377,8 +2525,7 @@ export function specSecoursPuces(texte: string, phraseDe?: (titreRubrique: strin
   const resultat = resultatBesoin(texte, etapes.map((e) => String(e.texte || '')), RESULTAT_MEMOIRE_TYPE);
   if (!resultat) return null;
   etapes.push({ titre: 'Votre résultat', texte: resultat, role: 'vert' });
-  const spec = specProcessBesoin(etapes, 'flux');
-  return spec && !anomaliesSchemaBloc1(spec).length ? spec : null;
+  return specSansEtapesFautives(etapes as Array<{ titre: string; texte?: string; role?: string }>, 'flux');
 }
 
 /**
@@ -2426,7 +2573,14 @@ export function etapesDuPerimetre(partie: string): Array<{ titre: string; texte:
         const texte = tetes.length ? cap(listeFr(tetes)) : '';
         if (texte && texte.length <= 86 && texte.split(/\s+/).length >= 2) out.push({ titre: cap(libelle), texte });
       } else if (/^oui\b/i.test(valeur)) {
-        const suite = valeur.replace(/^oui\s*[,;:]?\s*/i, '').split(/\s*;\s*/)[0];
+        let suite = valeur.replace(/^oui\s*[,;:]?\s*/i, '').split(/\s*;\s*/)[0];
+        // Suite qui redit le libellé (ign 1351, T4-COH-7 : « Rondes : oui, rondes intérieures/extérieures, techniques et de
+        // sûreté… ») : la suite seulement, qui apporte l'information.
+        const nl = normaliser(libelle).replace(/[^a-z0-9 ]+/g, ' ').trim();
+        if (nl && normaliser(suite).replace(/[^a-z0-9 ]+/g, ' ').trim().startsWith(`${nl} `)) {
+          const reste = suite.replace(/^\s*\S+(?:\s+\S+)*?/, (x) => x).slice(libelle.length).replace(/^[\s,;:]+/, '');
+          if (reste.split(/\s+/).length >= 3 && !/^(?:de|du|des|d['’]|à|au|aux|et)\b/i.test(reste)) suite = reste;
+        }
         const texte = suite ? texteEtapeEntier(cap(suite)) || texteEtapeCoordination(cap(suite)) : '';
         if (texte && texte.split(/\s+/).length >= 3) out.push({ titre: cap(libelle), texte });
       }
@@ -2475,8 +2629,7 @@ export function specSecoursBesoin(texte: string, phraseDe?: (titreRubrique: stri
   if (etapes.length < 2) return null;
   const resultat = resultatBesoin(t, etapes.map((e) => e.texte), RESULTAT_MEMOIRE_TYPE);
   if (!resultat) return null;
-  const spec = specProcessBesoin([...etapes.slice(0, 4), { titre: 'Votre résultat', texte: resultat, role: 'vert' }], 'flux');
-  return spec && !anomaliesSchemaBloc1(spec).length ? spec : null;
+  return specSansEtapesFautives([...etapes.slice(0, 4), { titre: 'Votre résultat', texte: resultat, role: 'vert' }], 'flux');
 }
 
 /**
@@ -2645,12 +2798,15 @@ export function sansBribesApresRenvoi(texte: string, etapes: Array<{ titre?: str
  * qualifications des agents (SSIAP, CQP APS, SST…) sont des attributs, jamais l'objet de l'exigence. Calcul sans modèle.
  */
 export function scoresRenvoiBloc1(exigence: string, plan: PlanMemoireType, mt: MemoireType): Map<string, { score: number; position: number; cles: string[] }> {
-  const net = (x: string) => normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
-  const QUALIF = /\b(?:ssiap\s*\d?|cqp(?:\s*aps)?|aps|sst|psc\s*1|h0b0v?|hobo|carte professionnelle(?:\s+cnaps)?|cnaps|cap agent de securite|qualification)\b/g;
+  // Mots ramenés au singulier (« modifications de plannings » = « modification de planning »).
+  const net = (x: string) => normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').map((w) => (w.length > 3 ? w.replace(/(?<!s)[sx]$/, '') : w)).join(' ');
+  const QUALIF = /\b(?:ssiap\s*\d?|cqp(?:\s*ap)?|ap|sst|psc\s*1|h0b0v?|hobo|carte professionnelle(?:\s+cnap)?|cnap|cap agent de securite|qualification)\b/g;
   const objet = ` ${net(exigence).replace(QUALIF, ' ').replace(/\s+/g, ' ')} `;
   const ids = new Set(plan.rubriques.filter((r) => r.mode !== 'besoin' && !/^b2_ref|^b2_references/.test(r.id)).map((r) => r.id));
   const rubs = mt.rubriques.filter((r) => ids.has(r.id));
-  const cles = new Map(rubs.map((r) => [r.id, [...new Set([...r.mots_cles.map(net), ...net(r.titre).split(' ').filter((w) => w.length >= 6)])].filter((k) => k && !new RegExp(`^(?:${QUALIF.source})$`).test(k))]));
+  // Mots du vocabulaire de tout marché (« titulaire », « agent », « site »…) : jamais un mot-clé distinctif.
+  const GENERIQUES = /^(?:titulaire|prestataire|candidat|agent|personnel|site|marche|prestation|client|acheteur|securite|surete|service|equipe|mission|moyen|besoin|votre|notre)$/;
+  const cles = new Map(rubs.map((r) => [r.id, [...new Set([...r.mots_cles.map(net), ...net(r.titre).split(' ').filter((w) => w.length >= 6)])].filter((k) => k && !new RegExp(`^(?:${QUALIF.source})$`).test(k) && !GENERIQUES.test(k))]));
   const df = new Map<string, number>();
   for (const l of cles.values()) for (const k of l) df.set(k, (df.get(k) || 0) + 1);
   const out = new Map<string, { score: number; position: number; cles: string[] }>();
@@ -2658,7 +2814,7 @@ export function scoresRenvoiBloc1(exigence: string, plan: PlanMemoireType, mt: M
     let score = 0, position = Infinity;
     const trouvees: string[] = [];
     for (const k of l) {
-      const m = new RegExp(`\\s${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:s|x)?(?=\\s)`).exec(objet);
+      const m = new RegExp(`\\s${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s)`).exec(objet);
       if (!m) continue;
       score += Math.log((rubs.length + 1) / (df.get(k) || 1)) * (k.includes(' ') ? 1.5 : 1);
       position = Math.min(position, m.index);
@@ -2701,6 +2857,31 @@ export function renvoisBloc1Pertinents(texte: string, plan: PlanMemoireType, mt:
     return `${m[1]} → ${m[2]}« ${r.titre.replace(/\{\{[^}]*\}\}/g, '').replace(/\s*:\s*$/, '').trim()} »${m[4]}${b.numero}${m[6]}`;
   });
   return { texte: lignes.join('\n'), corriges };
+}
+
+/**
+ * Attentes et points de vigilance sans réponse (texte de secours : « - « citation du CCTP » », colonne « NOTRE RÉPONSE » vide,
+ * T4-COH-2) : la rubrique du plan qui traite nettement l'exigence est citée (« → notre réponse : « Titre », développée au bloc
+ * n »), par le même calcul que le contrôle des renvois ; sans rubrique nette, la puce reste telle quelle.
+ */
+export function renvoisManquantsBloc1(texte: string, plan: PlanMemoireType, mt: MemoireType = chargerMemoireType()): { texte: string; ajoutes: number } {
+  let ajoutes = 0;
+  let partie = '';
+  const lignes = String(texte || '').split('\n').map((l) => {
+    if (/^##\s/.test(l)) { partie = l; return l; }
+    if (!/^##\s+(?:Vos attentes|Les points de vigilance)/i.test(partie) || !/^\s*[-*•]\s/.test(l) || /→/.test(l) || INTERNE.test(l)) return l;
+    const scores = [...scoresRenvoiBloc1(l.replace(/\*\*/g, ''), plan, mt).entries()].sort((a, b) => b[1].score - a[1].score || a[1].position - b[1].position);
+    if (!scores.length) return l;
+    const [id, s] = scores[0];
+    // Colonne vide à remplir : un mot-clé suffit si la rubrique devance nettement les autres.
+    if (scores[1] && s.score < 1.5 * scores[1][1].score) return l;
+    const r = plan.rubriques.find((x) => x.id === id)!;
+    const b = plan.blocs.find((x) => x.id === r.bloc || x.rubriques.includes(r.id));
+    if (!b) return l;
+    ajoutes++;
+    return `${l.replace(/[\s.;]+$/, '')} → notre réponse : « ${r.titre.replace(/\{\{[^}]*\}\}/g, '').replace(/\s*:\s*$/, '').trim()} », développée au bloc ${b.numero}.`;
+  });
+  return { texte: lignes.join('\n'), ajoutes };
 }
 
 export function nettoyerBloc1(texte: string, plan: PlanMemoireType | undefined, duree: string, etapes: Array<{ titre?: string; texte?: string }> = []): { texte: string; retirees: string[]; renvois: number } {
@@ -2749,6 +2930,9 @@ export function nettoyerBloc1(texte: string, plan: PlanMemoireType | undefined, 
     const rp = renvoisBloc1Pertinents(t, plan);
     t = rp.texte;
     renvois += rp.corriges;
+    const rm = renvoisManquantsBloc1(t, plan);
+    t = rm.texte;
+    renvois += rm.ajoutes;
   }
   if (plan) {
     const blocDe = new Map<string, number>();

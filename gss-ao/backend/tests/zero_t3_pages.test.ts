@@ -52,7 +52,9 @@ describe('bloc 1 tenu en 2 pages de texte (T3N-1)', () => {
     const t = `## Le périmètre de la prestation demandée\n| Site | Missions |\n|---|---|\n| A | Coordonner l’équipe, diriger le poste de sécurité lors des sinistres et assurer les missions SSIAP 2 prévues au CCTP. |\n\n## Vos attentes et nos engagements\n- **« ${'mot '.repeat(40)}fin »** : nous → notre réponse : « X ».`;
     const r = resserrerBesoin(t);
     expect(r).toContain('| Coordonner l’équipe, diriger le poste de sécurité lors des sinistres |');
-    expect(r).toMatch(/« (?:mot ){10,}mot \[…\] »/);
+    // Tour 4 (T4-COH-2) : une citation sans exigence lisible (ni obligation, ni délai) n'est plus coupée sur sa fin : elle
+    // reste entière (la ligne peut être retirée ensuite, ou GSS prévenu du dépassement).
+    expect(r).toContain(`« ${'mot '.repeat(40)}fin »`);
   });
   it('texte de secours de cstb 1201 (périmètre en puces, horaires cités deux fois) : 2 pages', () => {
     const t = fs.readFileSync(path.join(__dirname, 'fixtures', 'bloc1_cstb_secours.md'), 'utf-8');

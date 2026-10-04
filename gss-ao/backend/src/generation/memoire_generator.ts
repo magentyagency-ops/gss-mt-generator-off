@@ -1543,14 +1543,29 @@ export function refusAlignementCctp(extrait: string, remplacement: string, exige
 /**
  * Schéma de process du bloc 1 construit sans modèle sur son texte (T2N-6) : périmètre et attentes (specSecoursBesoin), puces
  * des attentes et des points de vigilance, puis obligations chiffrées ; le premier dessin accepté par le moteur. '' si aucun.
+ * La phrase de GSS d'une autre rubrique reprise pour la carte « nous » (phraseDe, T3-CONS-2) est une source autorisée du
+ * contrôle du schéma, comme le texte du bloc 1 (T4N-1, becquerel 1401 : « Nous privilégions la stabilité sur les sites fixes »
+ * refusé, aucun schéma de process) ; après un refus, les mêmes schémas sont reconstruits sur le seul texte du bloc 1.
  */
 export async function dessinerProcessSecoursBloc1(texte: string, id: string, titre: string, theme?: string, phraseDe?: (titreRubrique: string) => string): Promise<string> {
-  for (const f of [(t: string) => specSecoursBesoin(t, phraseDe), (t: string) => specSecoursPuces(t, phraseDe), specSecoursObligations]) {
+  const phrasesGss: string[] = [];
+  const phraseNotee = phraseDe ? (x: string) => { const p = phraseDe(x); if (p) phrasesGss.push(p); return p; } : undefined;
+  const essais: Array<(t: string) => { gabarit: string; params: any } | null> = [
+    (t) => specSecoursBesoin(t, phraseNotee), (t) => specSecoursPuces(t, phraseNotee),
+    ...(phraseDe ? [(t: string) => specSecoursBesoin(t), (t: string) => specSecoursPuces(t)] : []),
+    specSecoursObligations,
+  ];
+  const vus = new Set<string>();
+  for (const f of essais) {
+    phrasesGss.length = 0;
     const spec = f(String(texte || ''));
-    if (!spec) continue;
+    if (!spec || vus.has(JSON.stringify(spec))) continue;
+    vus.add(JSON.stringify(spec));
+    const source = [texte, ...phrasesGss].join('\n');
     try {
-      const d = (await dessinerSpecs([{ id, gabarit: spec.gabarit, params: spec.params, source: texte, titre_section: titre }], 'page', theme)).get(id);
+      const d = (await dessinerSpecs([{ id, gabarit: spec.gabarit, params: spec.params, source, titre_section: titre }], 'page', theme)).get(id);
       if (d?.ok && d.svg) return d.svg;
+      if (d?.erreurs?.length) console.warn(`[MemoireGenerator] Schéma de secours du bloc 1 refusé (${d.erreurs.slice(0, 2).join(' ; ')}) : secours suivant.`);
     } catch { /* moteur indisponible : secours suivant */ }
   }
   return '';
@@ -8901,10 +8916,15 @@ RÈGLES DE FORME (rendu Marp) :
       const nom = r?.titre || titre;
       if (!consultationList.some((x) => x.startsWith(`Rubrique « ${nom} » : le texte occupe plus de 2 pages`))) consultationList.unshift(`Rubrique « ${nom} » : le texte occupe plus de 2 pages avant son schéma (consigne : 1 à 2 pages d'explication) ; à raccourcir via l'assistant avant la remise.`);
     }
+    // Une seule alerte par page de schéma du bloc 1 (T4N-1, becquerel 1401 : deux alertes pour la même page manquante) : les
+    // avis émis avant le rendu sur le schéma de process du bloc 1 sont retirés ; celui du rendu (page absente) reste seul, et
+    // aucun n'est gardé quand le rendu a construit la page.
+    if (b1) for (let i = consultationList.length - 1; i >= 0; i--) {
+      if (consultationList[i].startsWith(`Rubrique « ${b1.titre} » : le schéma de process reprenait une exigence`)
+        || (!rendu.schemas.has(CLE_SCHEMA(b1.id)) && consultationList[i].startsWith(`Rubrique « ${b1.titre} » : le schéma de process n'a pas pu être construit`))) consultationList.splice(i, 1);
+    }
     if (alertesSchemas.length) {
       console.warn(`[MemoireGenerator] ${alertesSchemas.length} rubrique(s) sans page de schéma dans le document rendu.`);
-      // L'avis « schéma construit au rendu d'après le texte » du bloc 1 est faux si le rendu n'a rien construit : remplacé.
-      if (b1 && !rendu.schemas.has(CLE_SCHEMA(b1.id))) for (let i = consultationList.length - 1; i >= 0; i--) if (consultationList[i].startsWith(`Rubrique « ${b1.titre} » : le schéma de process n'a pas pu être construit`)) consultationList.splice(i, 1);
       consultationList.unshift(...alertesSchemas);
     }
 
