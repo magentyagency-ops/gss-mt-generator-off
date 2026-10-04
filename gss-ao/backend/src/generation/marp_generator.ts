@@ -203,7 +203,7 @@ function debutTableau(p: string): string {
 }
 
 /** Lignes estimées d'un texte (somme de ses paragraphes). */
-function lignesTexte(texte: string, limites: LimitesPage): number {
+export function lignesTexte(texte: string, limites: LimitesPage): number {
   return texte.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).reduce((n, p) => n + lignesParagraphe(p, limites), 0);
 }
 
@@ -437,7 +437,7 @@ function sectionsAPaginer(chapter: AssembleChapter, theme: string): Array<{ sect
     // tient pas (citedia 703 : 3 pages avec le bandeau et les sources).
     if (pagesMarineV3(theme) && estBloc1(section)) {
       const variantes = [{}, { sources: false }, { sources: false, bandeau: false }].map((o) => intertitresV3(cleanTextForMarp(pageBloc1Marine(section.text, section.articlesBloc1, o))));
-      texte = variantes.find((v) => splitIntoSlideChunks(v, LIMITES_MARINE_V3 as LimitesPage).length <= 2) || variantes[0];
+      texte = variantes.find((v) => splitIntoSlideChunks(v, limitesSection(section, theme) || (LIMITES_MARINE_V3 as LimitesPage)).length <= 2) || variantes[0];
     }
     if (chapeau) { texte = `${chapeau}\n\n${texte}`; chapeau = ''; }
     const limites = limitesSection(section, theme);
@@ -462,11 +462,41 @@ function slideKeyOf(chapterIdx: number, sectionIdx: number, chunkIdx: number): s
   return `${chapterIdx}_${sectionIdx}_${chunkIdx}`;
 }
 
+/** Lignes retirées à la page de texte d'une rubrique dont le rendu a débordé sur le pied de page (style v3, T2-CONS-2). */
+const reductionsLignes = new WeakMap<AssembleSection, number>();
+
+/**
+ * Pages d'un PDF du style v3 dont un mot passe sous le haut du pied de page « Mémoire technique · … » (T2-CONS-2 : cstb 1201
+ * p. 20, dernière ligne barrée par le filet du pied et intertitre sous le pied). Numéros de page à partir de 1 ; [] si le
+ * texte du PDF est illisible (pdftotext absent).
+ */
+export function pagesQuiDebordent(pdf: string): number[] {
+  const r = spawnSync('pdftotext', ['-bbox', pdf, '-'], { encoding: 'utf-8', maxBuffer: 256 * 1024 * 1024 });
+  if (r.status !== 0 || !r.stdout) return [];
+  const out: number[] = [];
+  const decode = (t: string) => t.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  r.stdout.split(/<page /).slice(1).forEach((p, i) => {
+    const H = Number((/height="([\d.]+)"/.exec(p) || [])[1] || 0);
+    if (!H) return;
+    const mots = [...p.matchAll(/<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)<\/word>/g)]
+      .map((m) => ({ y0: Number(m[2]), y1: Number(m[4]), t: decode(m[5]) }));
+    const pied = mots.filter((m, k) => m.t === 'Mémoire' && m.y0 > H * 0.9 && mots[k + 1]?.t === 'technique');
+    if (!pied.length) return;
+    const yp = Math.min(...pied.map((m) => m.y0));
+    if (mots.some((m) => m.y0 > H * 0.85 && m.y1 > yp - 1 && Math.abs(m.y0 - yp) > 1.5)) out.push(i + 1);
+  });
+  return out;
+}
+
 /** Découpage du texte d'une rubrique : pages plus pleines quand son schéma a sa propre page (ou qu'elle n'en a pas,
  *  dans la mise en page « 1 à 2 pages de texte, puis 1 page de schéma »). */
 function limitesSection(section: AssembleSection, theme: string): LimitesPage | undefined {
   if (!section.schemaPleinePage && !section.texteSeul) return undefined;
-  if (pagesMarineV3(theme)) return LIMITES_MARINE_V3;
+  if (pagesMarineV3(theme)) {
+    // Rubrique dont une page de texte a débordé sur le pied de page au rendu (contrôle mesuré, T2-CONS-2) : pages plus courtes.
+    const r = reductionsLignes.get(section);
+    return r ? { ...LIMITES_MARINE_V3, lignes: LIMITES_MARINE_V3.lignes - r } : LIMITES_MARINE_V3;
+  }
   return estRetourArriere(theme) ? LIMITES_TEXTE_SEUL.ancienThemeV2 : LIMITES_TEXTE_SEUL.refonte;
 }
 
@@ -610,7 +640,7 @@ export class MarpGenerator {
     // Traitement et compilation des schémas D2 pour chaque section (doit être fait AVANT buildMarkdown)
     await this.processD2Diagrams(chapters, mediaDst, cover.client || 'Client');
 
-    const markdown = this.buildMarkdown(chapters, cover, assignments, schemas, theme);
+    let markdown = this.buildMarkdown(chapters, cover, assignments, schemas, theme);
     const mdPath = path.join(workDir, 'memoire_template.md');
     fs.writeFileSync(mdPath, markdown, 'utf-8');
 
@@ -679,38 +709,70 @@ export class MarpGenerator {
       ? baseArgs
       : ['-y', '@marp-team/marp-cli@latest', ...baseArgs];
 
-    const result = spawnSync(
-      cmd,
-      args,
-      {
-        cwd: workDir,
-        // 15 min max : un mémoire de ~180 pages avec un schéma par page peut dépasser 5 min de rendu
-        // (machine chargée, rendus simultanés) — l'ancienne limite faisait échouer la génération à la toute fin.
-        timeout: 900_000,
-        stdio: 'pipe',
-        encoding: 'utf-8',
-        shell: isWin,
-        // Marp/Puppeteer abandonne la conversion après 30 s par défaut : insuffisant
-        // pour un mémoire volumineux illustré d'images (base de données). On aligne
-        // ce délai interne sur le timeout du process (cause du « Timed out after 30000ms »).
-        env: { 
-          ...process.env, 
-          PUPPETEER_TIMEOUT: '900000',
-          PUPPETEER_PROTOCOL_TIMEOUT: '900000',
-          CHROME_PATH: lanceur || chromePath || '',
-          ...(lanceur ? { GSS_CHROME_REEL: chromePath } : {}),
-        },
+    const rendre = () => {
+      const result = spawnSync(
+        cmd,
+        args,
+        {
+          cwd: workDir,
+          // 15 min max : un mémoire de ~180 pages avec un schéma par page peut dépasser 5 min de rendu
+          // (machine chargée, rendus simultanés) — l'ancienne limite faisait échouer la génération à la toute fin.
+          timeout: 900_000,
+          stdio: 'pipe',
+          encoding: 'utf-8',
+          shell: isWin,
+          // Marp/Puppeteer abandonne la conversion après 30 s par défaut : insuffisant
+          // pour un mémoire volumineux illustré d'images (base de données). On aligne
+          // ce délai interne sur le timeout du process (cause du « Timed out after 30000ms »).
+          env: { 
+            ...process.env, 
+            PUPPETEER_TIMEOUT: '900000',
+            PUPPETEER_PROTOCOL_TIMEOUT: '900000',
+            CHROME_PATH: lanceur || chromePath || '',
+            ...(lanceur ? { GSS_CHROME_REEL: chromePath } : {}),
+          },
+        }
+      );
+
+      if (result.error) {
+        console.error('[MarpGenerator] marp-cli spawn error:', result.error);
+        throw new Error(`Marp CLI failed to start: ${result.error.message}`);
       }
-    );
 
-    if (result.error) {
-      console.error('[MarpGenerator] marp-cli spawn error:', result.error);
-      throw new Error(`Marp CLI failed to start: ${result.error.message}`);
-    }
-
-    if (result.status !== 0) {
-      console.error('[MarpGenerator] marp-cli stderr:', result.stderr);
-      throw new Error(`Marp CLI exited with code ${result.status}: ${result.stderr?.slice(0, 500)}`);
+      if (result.status !== 0) {
+        console.error('[MarpGenerator] marp-cli stderr:', result.stderr);
+        throw new Error(`Marp CLI exited with code ${result.status}: ${result.stderr?.slice(0, 500)}`);
+      }
+    };
+    rendre();
+    // Style « marine » v3 : contrôle mesuré du PDF rendu (T2-CONS-2) : une page de texte dont un mot passe sous le haut du pied
+    // de page fait raccourcir les pages de sa rubrique, puis le mémoire est rendu de nouveau (deux reprises au plus).
+    if (pagesMarineV3(theme)) {
+      for (let reprise = 1; reprise <= 2; reprise++) {
+        const debords = pagesQuiDebordent(pdfPath);
+        if (!debords.length) break;
+        const diapos = markdown.replace(/^---\n[\s\S]*?\n---\n/, '').split(/\n---\n/);
+        const titres = new Set<string>();
+        for (const p of debords) {
+          const d = diapos[p - 1] || '';
+          const t = /<!-- rubrique: "([^"]*)" -->/.exec(d);
+          if (t && /<!-- _class: (?:[^>]*\s)?texte\b/.test(d)) titres.add(t[1]);
+        }
+        if (!titres.size) { console.warn(`[MarpGenerator] Page(s) ${debords.join(', ')} : texte sous le pied de page hors d'une page de texte de rubrique.`); break; }
+        let n = 0;
+        for (const ch of chapters) for (const sec of ch.sections || []) {
+          if (!titres.has(String(sec.title || '').replace(/["\r\n]+/g, ' ').trim().toUpperCase())) continue;
+          reductionsLignes.set(sec, (reductionsLignes.get(sec) || 0) + 3);
+          n++;
+        }
+        if (!n) break;
+        console.log(`[MarpGenerator] Page(s) ${debords.join(', ')} : texte sous le pied de page ; ${n} rubrique(s) repaginée(s), nouveau rendu (reprise ${reprise}).`);
+        markdown = this.buildMarkdown(chapters, cover, assignments, schemas, theme);
+        fs.writeFileSync(mdPath, markdown, 'utf-8');
+        rendre();
+      }
+      const restent = pagesQuiDebordent(pdfPath);
+      if (restent.length) console.warn(`[MarpGenerator] Page(s) ${restent.join(', ')} : texte encore sous le pied de page après repagination.`);
     }
 
     console.log(`[MarpGenerator] PDF generated successfully: ${pdfPath}`);
@@ -875,17 +937,34 @@ export class MarpGenerator {
       // Style « marine » v3 : couverture, puis sommaire (une entrée par bloc, légende des schémas), comme la planche.
       lines.push(couvertureV3(cover, couleurs));
       lines.push('');
+      // Sommaire comme la planche (T2-CONS-12) : le bloc 1 liste les sous-parties de son ouverture, chaque bloc porte la page
+      // de son ouverture (connue une fois les pages des blocs écrites : une diapositive Marp = une page).
       const blocsSommaire = visibles.map((chapter) => ({
         numero: this.romanToNumber(chapter.key), titre: chapter.title,
-        rubriques: [...chapter.sections.map((sec) => sec.title), ...(avecPagesReferences(chapter) && this.getReferencesSlides().length ? ['Ils nous font confiance'] : [])],
+        rubriques: chapter.sections.length === 1 && estBloc1(chapter.sections[0])
+          ? sousPartiesBloc1(chapter.sections[0].text, !!chapter.sections[0].schemaPleinePage)
+          : [...chapter.sections.map((sec) => sec.title), ...(avecPagesReferences(chapter) && this.getReferencesSlides().length ? ['Ils nous font confiance'] : [])],
       }));
       const legende = legendeRoles(Object.fromEntries(Object.entries(st.roles).map(([k, v]: [string, any]) => [k, v.fonce])), pictosLegende(),
         couleurs, st.couleurs.filet_fort);
-      for (const page of sommaireV3(blocsSommaire, cover.client || '', legende)) {
+      const corps = this.buildChapitres([], chapters, assignments, schemas, theme, { v3, refonte, couleurs, visibles, rangBloc, enteteDe, client: cover.client || '' });
+      const pagesOuverture = (avant: number): number[] => {
+        const pages: number[] = [];
+        let page = avant;
+        for (const l of corps.split('\n')) {
+          if (l === '---') page++;
+          else if (l === '<!-- _class: intercalaire -->') pages.push(page);
+        }
+        return pages;
+      };
+      // Couverture (page 1), puis les pages du sommaire : le nombre de pages du sommaire ne dépend pas des numéros.
+      const nSommaire = sommaireV3(blocsSommaire, cover.client || '', legende).length;
+      const numeros = pagesOuverture(1 + nSommaire);
+      for (const page of sommaireV3(blocsSommaire.map((b, i) => ({ ...b, page: numeros[i] })), cover.client || '', legende)) {
         lines.push('---');
         lines.push(page);
       }
-      return this.buildChapitres(lines, chapters, assignments, schemas, theme, { v3, refonte, couleurs, visibles, rangBloc, enteteDe, client: cover.client || '' });
+      return `${lines.join('\n')}\n${corps}`;
     }
     lines.push('# GLOBAL SECURITY SERVICES');
     lines.push('## VOTRE PARTENAIRE SÉCURITÉ');

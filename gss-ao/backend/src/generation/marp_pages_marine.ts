@@ -222,11 +222,11 @@ export function legendeRoles(roles: Record<string, string>, pictos: Record<strin
 
 /** Sommaire : une entrée par bloc (numéro, titre, rubriques sur deux colonnes), réparti sur autant de pages que nécessaire
  *  (hauteur estimée), la légende des schémas sur la dernière page. Renvoie le Markdown des pages (sans séparateur initial). */
-export function sommaireV3(blocs: Array<{ numero: number; titre: string; rubriques: string[] }>, client: string, legende: string): string[] {
-  // Hauteur d'une entrée (mm) : marges et titre (15,5 mm), puis les rubriques sur deux colonnes de 76 mm (8,8 pt :
-  // environ 40 signes par ligne, 4,35 mm par ligne et 1,1 mm entre rubriques).
+export function sommaireV3(blocs: Array<{ numero: number; titre: string; rubriques: string[]; page?: number }>, client: string, legende: string): string[] {
+  // Hauteur d'une entrée (mm) : marges et titre (15,5 mm), puis les rubriques sur deux colonnes de 68 mm (colonne de la page
+  // du bloc à droite ; 8,8 pt : environ 35 signes par ligne, 4,35 mm par ligne et 1,1 mm entre rubriques).
   const h = (b: { rubriques: string[] }) => {
-    const lignes = b.rubriques.map((r) => Math.max(1, Math.ceil(r.length / 40)) * 4.35 + 1.1);
+    const lignes = b.rubriques.map((r) => Math.max(1, Math.ceil(r.length / 35)) * 4.35 + 1.1);
     const total = lignes.reduce((a, x) => a + x, 0);
     return 15.5 + Math.max(total / 2 + 4.4, Math.max(0, ...lignes));
   };
@@ -241,8 +241,10 @@ export function sommaireV3(blocs: Array<{ numero: number; titre: string; rubriqu
   if (cumul + 36 > place) pages.push([]);
   return pages.map((p, i) => {
     const compact = p.reduce((n, b) => n + h(b), 0) > place * 0.92;
+    // Page de l'ouverture du bloc à droite de l'entrée, comme la planche (T2-CONS-12).
     const entrees = p.map((b) => `<div class="entree"><div class="n">${String(b.numero).padStart(2, '0')}</div><div><div class="t">`
-      + `${echapper(apostrophes(b.titre))}</div><ul>${b.rubriques.map((r) => `<li>${echapper(apostrophes(r))}</li>`).join('')}</ul></div></div>`).join('');
+      + `${echapper(apostrophes(b.titre))}</div><ul>${b.rubriques.map((r) => `<li>${echapper(apostrophes(r))}</li>`).join('')}</ul></div>`
+      + `<div class="p">${b.page ? b.page : ''}</div></div>`).join('');
     return [`<!-- _class: sommaire${compact ? ' compact' : ''} -->`, '<!-- _header: "Mémoire technique" -->', '',
       surtitre(`Mémoire technique${client ? ` · ${client}` : ''}`), '', `# Sommaire${i ? ' (suite)' : ''}`, '',
       entrees + (i === pages.length - 1 ? legende : ''), ''].join('\n');

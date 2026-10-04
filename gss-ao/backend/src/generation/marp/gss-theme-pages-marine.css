@@ -149,7 +149,8 @@ section.lead footer { display: none; }
 .gss-couv .bas b { font: 600 7.6pt/1 var(--gss-police-texte); letter-spacing: .2em; color: var(--gss-structure); }
 
 /* Sommaire : une entrée par bloc (numéro, titre, rubriques sur deux colonnes), légende des schémas une seule fois. */
-section.sommaire .entree { display: grid; grid-template-columns: 20mm 1fr; gap: 0 3mm; padding: 3.6mm 0 3.8mm; border-top: .3mm solid var(--gss-filet); }
+section.sommaire .entree { display: grid; grid-template-columns: 20mm 1fr 12mm; gap: 0 3mm; padding: 3.6mm 0 3.8mm; border-top: .3mm solid var(--gss-filet); }
+section.sommaire .entree .p { font: 600 13pt/1 var(--gss-police-numero); color: var(--gss-structure); text-align: right; align-self: center; }
 section.sommaire .entree:last-of-type { border-bottom: .3mm solid var(--gss-filet); }
 section.sommaire .n { font: 600 24pt/1 var(--gss-police-numero); color: var(--gss-structure); letter-spacing: -.02em; }
 section.sommaire .t { font: 700 15pt/1.12 var(--gss-police-titre); color: var(--gss-titre); margin: 0 0 2.2mm; }
