@@ -1972,12 +1972,19 @@ export function sansConsultationsDelaiHorsNormandie(texte: string, horsNormandie
   const DELAI = /d[ée]lais?|r[ée]activit[ée]|temps d['’]intervention|sous\s+\d|en\s+moins\s+de/i;
   const PRESENCE = /interven|mobilis|mise en place|mettre en place|arriv|rempla[cç]|astreinte|sur (?:site|place)|d[ée]plac|demandes? urgentes?|urgence|commandes?/i;
   const lignes = String(texte || '').split('\n');
-  const out = lignes.map((l, i) => l.replace(/\s*\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi, (m, q: string) => {
-    if (!DELAI.test(q) || !PRESENCE.test(q)) return m;
-    if (/\[À COMPLÉTER\]|⟦AC:\d+⟧/.test(l.replace(m, '')) || (!l.replace(m, '').trim() && /\[À COMPLÉTER\]|⟦AC:\d+⟧/.test(lignes[i - 1] || ''))) return m;
-    retires.push(q.trim());
-    return '';
-  }));
+  const out = lignes.map((l, i) => {
+    let retiree = false;
+    const r = l.replace(/\s*\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi, (m, q: string) => {
+      if (!DELAI.test(q) || !PRESENCE.test(q)) return m;
+      if (/\[À COMPLÉTER\]|⟦AC:\d+⟧/.test(l.replace(m, '')) || (!l.replace(m, '').trim() && /\[À COMPLÉTER\]|⟦AC:\d+⟧/.test(lignes[i - 1] || ''))) return m;
+      retires.push(q.trim());
+      retiree = true;
+      return '';
+    });
+    // Annonce laissée sans suite (T8-CONS-15, imm : « … le délai d'intervention est : ») : la phrase de l'annonce part avec la
+    // consultation.
+    return retiree && /:\s*$/.test(r) ? r.replace(/(?:^|(?<=[.!?]\s))[^.!?]*:\s*$/, '').trimEnd() : r;
+  });
   return { texte: out.filter((l, i) => l.trim() || !lignes[i].trim()).join('\n').replace(/\n{3,}/g, '\n\n'), retires };
 }
 

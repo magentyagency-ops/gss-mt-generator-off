@@ -164,9 +164,14 @@ export function questionExacte(q: string): string {
   }
   // Complément de tête avant la consigne (« Pour l'agent cynophile, garder les extérieurs… », « Lot 1, préparation : raccorder… »,
   // T5N-9) : la consigne est mise en question, le complément gardé en tête.
-  if (/^(?:Pour|Concernant|S['’]agissant d[eu]|Au titre d[eu]|En cas d['’]|En cas de|Lors d[eu]|Avant|Après|Dès|Pendant|Lot\s*\d+)(?![\p{L}])/iu.test(t)) {
+  // Reconnu par sa forme, quel que soit le complément (T8N-6 : « À la demande du service bénéficiaire et pour la date qu'il
+  // indique, rédiger… », « Sur demande du CNRS, transmettre… », « En début de marché, fournir… », « Chaque mois, transmettre… »,
+  // « Au plus tard 72 heures avant la prise de service, transmettre… ») : un premier segment de 110 signes au plus sans verbe
+  // conjugué, suivi d'une virgule ou d'un deux-points et d'un infinitif.
+  {
     for (const m of t.matchAll(/\s*([,:])\s+([a-zà-ÿ][a-zà-ÿ'’-]+)/g)) {
       if (m.index! > 110) break;
+      if (/(?<![\p{L}])(?:est|sont|sera|seront|doit|doivent|devra|devront|peut|peuvent|pourra|a|ont|fait|font)(?![\p{L}])/iu.test(t.slice(0, m.index!))) break;
       const reste = t.slice(m.index! + m[0].length);
       if (!estInfinitif(m[2], reste)) continue;
       const suite = questionExacte(`${maj(m[2])}${reste}`);
@@ -292,6 +297,12 @@ export function estInfinitif(mot: string, suite: string): boolean {
  * T5-CONS-9) : deux questions correctes (« … ? Confirmez-vous l'engagement à … ? »).
  */
 function scinderCoordination(t: string): string {
+  // Infinitif coordonné à une question (T8-CONS-17 : « Validez-vous l'organisation…, soit 16,35 ETP… et préciser comment ces
+  // ressources permettront… ? ») : deux questions, la seconde à la deuxième personne.
+  const inf = /^(.+?),?\s+et\s+(pr[ée]ciser|indiquer|confirmer|d[ée]tailler|justifier|expliquer|fournir|transmettre|d[ée]crire)\s+([^?]+?)\s*\?(.*)$/i.exec(t);
+  if (inf && /^(?:Validez|Confirmez|Pouvez|Quel|Quelle|Combien|Comment|Faut-il|GSS|Est-ce|Avez|Disposez|Souhaitez|Prévoyez)/i.test(inf[1])) {
+    return `${inf[1].replace(/\s*[,;]\s*$/, '')} ? Pouvez-vous ${inf[2].toLowerCase()} ${inf[3]} ?${inf[4]}`.replace(/\s+$/, '');
+  }
   const coord = /^(.+?),?\s+et\s+(confirmation|pr[ée]cision|indication)\s+(de la|de l['’]|du|des|de|d['’])\s*([^?]+?)\s*\?(.*)$/i.exec(t);
   if (!coord) return t;
   const art = /^de la$/i.test(coord[3]) ? 'la ' : /^(?:de l['’]|d['’])$/i.test(coord[3]) ? "l'" : /^du$/i.test(coord[3]) ? 'le ' : /^des$/i.test(coord[3]) ? 'les ' : '';

@@ -2664,14 +2664,22 @@ function depuisRegistre(c: CalculVariables, cle: string, transformer: (v: string
 /** Délai : DCE (imposé) d'abord ; sinon valeur GSS (registre ou valeur_gss), seulement en Normandie. */
 function delai(c: CalculVariables, nom: string, sujet: keyof typeof SUJETS_DELAI | null): ValeurVariable {
   const def = c.mt.variables[nom];
-  const duDce = sujet && c.ctx.delaisDuDce !== false ? delaiDuDce(c.ctx.dce || '', sujet) : '';
+  // Délai d'arrivée sur alarme (rondier envoyé après l'appel de la télésurveillance, T8N-10) : seulement un délai d'intervention,
+  // de déplacement ou d'arrivée sur site ; jamais une levée de doute mesurée depuis le PCS ou le poste du site (imm : « Levée
+  // de doute sur alarme incendie : moins de cinq minutes après déclenchement », délais appréciés à la réception par le PCS).
+  const deplacement = sujet === 'alarme' && /arriv[ée]e|rondier|d[ée]placement|intervention sur/i.test(String(def?.description || ''));
+  const DEPLACEMENT = /interven|d[ée]plac|arriv|se\s+rend|sur\s+(?:site|place)|rondier|patrouill|mobile|d[ée]p[êe]ch/i;
+  const delaisFiltres = deplacement ? delaisDuDce(c.ctx.dce || '', 'alarme').filter((d) => DEPLACEMENT.test(d.phrase)) : null;
+  const duDce = !sujet || c.ctx.delaisDuDce === false ? ''
+    : delaisFiltres ? (new Set(delaisFiltres.map((d) => d.minutes)).size === 1 ? delaisFiltres[0].valeur : '')
+    : delaiDuDce(c.ctx.dce || '', sujet);
   if (duDce) return { valeur: duDce, source: 'délai imposé par le DCE' };
   const objetDe = () => `${(def?.description || nom).charAt(0).toLowerCase()}${(def?.description || nom).slice(1).replace(/[.\s]+$/, '')}`;
   // Plusieurs délais imposés par le CCTP pour ce point (citedia : 15 minutes pour une alarme incendie ou un bouton
   // anti-agression, 30 minutes pour une alarme technique ou intrusion, T10C-2) : le délai de GSS reste s'il les respecte
   // tous (Normandie) ; sinon la phrase est imprimée sans délai et la question cite les phrases du CCTP (jamais « le DCE n'en
   // impose aucun », jamais un délai normand hors Normandie).
-  const imposes = sujet && c.ctx.delaisDuDce !== false ? delaisDuDce(c.ctx.dce || '', sujet) : [];
+  const imposes = sujet && c.ctx.delaisDuDce !== false ? (delaisFiltres || delaisDuDce(c.ctx.dce || '', sujet)) : [];
   if (new Set(imposes.map((d) => d.minutes)).size > 1) {
     const plusCourt = Math.min(...imposes.map((d) => d.minutes));
     if (!(c.horsNormandie && def?.normandie_seulement)) {
@@ -2682,7 +2690,7 @@ function delai(c: CalculVariables, nom: string, sujet: keyof typeof SUJETS_DELAI
       const plusLong = Math.max(...imposes.map((d) => d.minutes));
       if (durees.length && (Math.max(...durees) <= plusCourt || (durees.length > 1 && Math.min(...durees) <= plusCourt && Math.max(...durees) <= plusLong))) return g;
     }
-    const citations = phrasesDelaisDuDce(c.ctx.dce || '', sujet!).map((p) => `« ${p.length > 260 ? `${p.slice(0, 260).replace(/\s+\S*$/, '')}…` : p} »`).join(' ; ');
+    const citations = (delaisFiltres ? [...new Set(delaisFiltres.map((d) => d.phrase))] : phrasesDelaisDuDce(c.ctx.dce || '', sujet!)).map((p) => `« ${p.length > 260 ? `${p.slice(0, 260).replace(/\s+\S*$/, '')}…` : p} »`).join(' ; ');
     return { valeur: null, question: `Le CCTP impose plusieurs délais pour ce point (${objetDe()}) : ${citations}. La phrase de GSS est imprimée sans délai : quel délai GSS y écrit-elle ?` };
   }
   if (c.horsNormandie && def?.normandie_seulement) {

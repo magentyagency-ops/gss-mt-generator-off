@@ -10573,7 +10573,9 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
         texte = nettoye.texte;
         nettoye.retires.forEach((x) => commentairesRetires.add(`À confirmer : ${x}`));
         const delais = delaisHorsNormandie(texte, dceContext, horsNormandie);
-        texte = delais.texte;
+        // Consultation du modèle sur un délai de présence hors Normandie : la question est posée une seule fois à GSS
+        // (questions_gss_une_fois), jamais reposée à chaque génération, au format court comme ailleurs (T8-CONS-15).
+        texte = sansConsultationsDelaiHorsNormandie(delais.texte, horsNormandie).texte;
         delais.retires.forEach((x) => commentairesRetires.add(`${libelleDelaiRetire(analysisData, dceContext)}${x}`));
       }
       sections[p.id] = (texte || '').replace(/^#\s+[^\n]*\n+/, '').trim();
