@@ -3362,6 +3362,22 @@ function touchePhraseProtegee(t: string, pos: { debut: number; fin: number }, ph
   return false;
 }
 
+/**
+ * Texte ajouté écrit comme une phrase entière (T3-CONS-10, T3N-3 : le modèle propose « ; le plan de prévention sera
+ * transmis… » ou « ; l'organisation garantit… » pour continuer une phrase de GSS, imprimé en paragraphe qui commençait par
+ * « ; ») : ponctuation et mot de liaison de tête retirés (« ; », « , », « : », « – », « et », « ainsi que »), majuscule
+ * initiale et point final. Une puce de liste reste une puce.
+ */
+export function phraseAutonome(texte: string): string {
+  const t = String(texte || '').trim();
+  if (!t || /^\s*(?:\d+[.)]|[-•*])\s+/.test(t)) return t;
+  let x = t.replace(/^(?:[;,:–—-]\s*)+/, '').replace(/^(?:et|ainsi que|puis|mais|ou|de plus)(?:\s*,)?\s+/i, '').trim();
+  if (!x) return '';
+  if (/^[a-zà-ÿ]/.test(x)) x = x.charAt(0).toUpperCase() + x.slice(1);
+  if (!/[.!?»)\]]$/.test(x)) x = `${x.replace(/[;,:]\s*$/, '')}.`;
+  return x;
+}
+
 export function appliquerModifications(texte: string, mods: ModificationsProposees, options: OptionsModifications = {}): { texte: string; appliquees: ModificationTraitee[]; refusees: ModificationTraitee[] } {
   const o = { maxModifications: 12, maxAjouts: 3, motsParAjout: 60, ...options };
   const appliquees: ModificationTraitee[] = [];
@@ -3433,7 +3449,7 @@ export function appliquerModifications(texte: string, mods: ModificationsPropose
   }
   let nAjouts = 0;
   for (const a of mods.ajouts || []) {
-    const m: ModificationTraitee = { type: 'ajout', extrait: String(a?.apres || ''), par: sansCovidEnumere(String(a?.texte || '').trim()), motif: a?.motif };
+    const m: ModificationTraitee = { type: 'ajout', extrait: String(a?.apres || ''), par: phraseAutonome(sansCovidEnumere(String(a?.texte || '').trim())), motif: a?.motif };
     if (plafond()) { refusees.push({ ...m, raison: 'plafond de modifications atteint' }); continue; }
     if (o.titresTraites?.length && m.par) {
       const garde = sansACompleterTraite(m.par, o.titresTraites);
