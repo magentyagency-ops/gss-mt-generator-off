@@ -22,7 +22,8 @@ describe('lieu du marché (T7-COH-2)', () => {
       expect(marcheHorsNormandie(c.analyse, c.dce)).toBe(true);
       const { texte, questions } = publie(c);
       expect(texte).not.toMatch(/60 minutes maximum|100 mobilisables en 48 heures|moins de 2 heures/);
-      expect(questions.some((q: string) => /^Marché hors Normandie : quel délai/.test(q))).toBe(true);
+      // Délais hors Normandie : question posée une seule fois à GSS (questions_gss_une_fois, T3-CONS-12), jamais par marché.
+      expect(questions.some((q: string) => /hors Normandie : quel délai/i.test(q))).toBe(false);
     }
   });
   it('Strasbourg (Bas-Rhin) : hors Normandie', () => {

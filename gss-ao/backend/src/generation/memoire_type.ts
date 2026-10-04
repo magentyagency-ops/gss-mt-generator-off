@@ -1979,7 +1979,11 @@ function delai(c: CalculVariables, nom: string, sujet: keyof typeof SUJETS_DELAI
       const normand = def.registre ? depuisRegistre(c, def.registre, normaliserDelai).valeur : def.valeur_gss || '';
       return { valeur: null, question: `Le DCE ne donne pas la commune du site : quel délai GSS annonce-t-elle (${objet}) ?${normand ? ` Si le site est en Normandie, GSS annonce ${normand}.` : ''}` };
     }
-    return { valeur: null, question: `Marché hors Normandie : quel délai GSS annonce-t-elle (${objet}) ?` };
+    // Marché entièrement hors Normandie (T3-CONS-12) : la phrase au délai normand est retirée (signalée à GSS) ; la question
+    // des délais hors Normandie ne dépend pas du marché : posée une seule fois (questions_gss_une_fois), jamais à chaque
+    // génération. Un délai imposé par le DCE est repris plus haut.
+    void objet;
+    return { valeur: null };
   }
   if (def?.registre) {
     const v = depuisRegistre(c, def.registre, normaliserDelai);

@@ -279,11 +279,13 @@ describe('Indicateurs, plan et variables', () => {
     expect(tout).not.toMatch(/L\.?\s?1224/);
     expect(prep.variables.FONDEMENT_REPRISE_DCE.valeur).toContain('annexe VII');
     expect(prep.variables.DELAI_ASTREINTE.valeur).toBeNull();
-    expect(prep.variables.DELAI_ASTREINTE.question).toMatch(/hors Normandie/);
-    // Délai retiré du texte : la question est quand même posée à GSS (sans repère dans le texte).
+    // Tour 3 (T3-CONS-12) : les délais hors Normandie ne dépendent pas du marché : question posée une seule fois
+    // (questions_gss_une_fois), jamais à chaque génération ; le délai est retiré du texte, sans repère.
+    expect(prep.variables.DELAI_ASTREINTE.question).toBeUndefined();
     const pti = rubriques.find((x) => x.id === 'b4_pti')!;
     expect(pti.texte).toContain('le rondier d\'astreinte se rend sur place.');
-    expect(pti.manquantes).toEqual([expect.objectContaining({ variable: 'DELAI_PTI', repere: false })]);
+    expect((pti.manquantes || []).filter((m: any) => m.question)).toEqual([]);
+    expect(JSON.stringify(mt.questions_gss_une_fois)).toMatch(/Hors Normandie : quels délais GSS annonce-t-elle/);
     expect(prep.plan.blocs.map((b) => b.cle)).toEqual(['I', 'II', 'III', 'IV', 'V']);
     for (const b of prep.plan.blocs) expect(b.rubriques.length, b.id).toBeGreaterThan(0);
     expect(anomalies(tout, DCE_HORS_NORMANDIE)).toEqual([]);
