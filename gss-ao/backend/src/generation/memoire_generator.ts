@@ -18,7 +18,7 @@ import {
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
-  sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
+  sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, phraseDeRubriqueGss, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, similariteQuestions, recouvrementTextes, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
@@ -1510,8 +1510,8 @@ export function refusAlignementCctp(extrait: string, remplacement: string, exige
  * Schéma de process du bloc 1 construit sans modèle sur son texte (T2N-6) : périmètre et attentes (specSecoursBesoin), puces
  * des attentes et des points de vigilance, puis obligations chiffrées ; le premier dessin accepté par le moteur. '' si aucun.
  */
-export async function dessinerProcessSecoursBloc1(texte: string, id: string, titre: string, theme?: string): Promise<string> {
-  for (const f of [specSecoursBesoin, specSecoursPuces, specSecoursObligations]) {
+export async function dessinerProcessSecoursBloc1(texte: string, id: string, titre: string, theme?: string, phraseDe?: (titreRubrique: string) => string): Promise<string> {
+  for (const f of [(t: string) => specSecoursBesoin(t, phraseDe), (t: string) => specSecoursPuces(t, phraseDe), specSecoursObligations]) {
     const spec = f(String(texte || ''));
     if (!spec) continue;
     try {
@@ -8588,7 +8588,7 @@ RÈGLES DE FORME (rendu Marp) :
         if (svg && r.marques.some((m) => normaliser(svg.replace(/<[^>]+>/g, ' ')).includes(normaliser(m)))) {
           // Schéma de process reconstruit sur le texte corrigé, avec toute la chaîne de secours du process (T2N-6 : jamais une
           // grille de cartes construite au rendu sous le titre « en un process »).
-          const nouveau = await dessinerProcessSecoursBloc1(sections[b1.id], b1.id, titresSchemas[b1.id] || b1.titre);
+          const nouveau = await dessinerProcessSecoursBloc1(sections[b1.id], b1.id, titresSchemas[b1.id] || b1.titre, undefined, (x) => phraseDeRubriqueGss(this.memoireTypeV2(), x));
           if (nouveau) { schemasGeneres.set(CLE_SCHEMA(b1.id), nouveau); titresSchemas[b1.id] = mt.rubriques.find((x) => x.mode === 'besoin')?.schema?.titre || titresSchemas[b1.id]; }
           else { schemasGeneres.delete(CLE_SCHEMA(b1.id)); avisSecours.push(`Rubrique « ${b1.titre} » : le schéma de process reprenait une exigence que GSS doit d'abord confirmer, et aucun schéma de process n'a pu être construit sur le texte corrigé : la page de schéma n'est pas imprimée. Demandez-le via l'assistant avant la remise.`); }
         }
@@ -8966,7 +8966,7 @@ RÈGLES DE FORME (rendu Marp) :
     // quasi identiques, renvoi « bloc n ») ; une dernière étape qui dit un moyen est complétée d'une étape « Votre
     // résultat » tirée du texte au lieu de refuser tout le schéma (génération réelle cstb 221).
     const etapesRecevables = (etapes: any): { etapes: any; defauts: string[] } => {
-      let d = defautsEtapesBesoin(etapes, { texte, sites: besoin.sites });
+      let d = defautsEtapesBesoin(etapes, { texte, sites: besoin.sites, dce: String(ctx.dce || '') });
       const completees = completerResultatBesoin(etapes, texte, d);
       // (seul défaut des étapes du modèle : la dernière étape ; l'étape ajoutée « Votre résultat » est le vocabulaire du moteur)
       if (completees) { etapes = completees; d = []; }
@@ -9019,8 +9019,8 @@ RÈGLES DE FORME (rendu Marp) :
     // (« Des rondes suivies, des alarmes tracées… » au-dessus de cartes qui n'en parlaient pas).
     if (!schema.svg) {
       titreFinal = titreDefaut;
-      schema = await dessiner(specSecoursBesoin(texte));
-      if (!schema.svg) schema = await dessiner(specSecoursPuces(texte));
+      schema = await dessiner(specSecoursBesoin(texte, (x) => phraseDeRubriqueGss(this.memoireTypeV2(), x)));
+      if (!schema.svg) schema = await dessiner(specSecoursPuces(texte, (x) => phraseDeRubriqueGss(this.memoireTypeV2(), x)));
       // Dernier secours (T10C-4) : les obligations chiffrées citées dans « Vos attentes », sinon les prestations du périmètre.
       if (!schema.svg) schema = await dessiner(specSecoursObligations(texte));
     }
@@ -9217,7 +9217,7 @@ RÈGLES DE FORME (rendu Marp) :
     // résultat sous le titre « en un process » ; aucun process possible : pas de page de schéma (signalé à la génération).
     const b1Rendu = presentes.find((r) => plan.rubriques.find((x) => x.id === r.id)?.mode === 'besoin');
     if (b1Rendu && !schemas.has(CLE_SCHEMA(b1Rendu.id))) {
-      const svg = await dessinerProcessSecoursBloc1(sectionsMap[b1Rendu.id], b1Rendu.id, opts.titresSchemas?.[b1Rendu.id] || b1Rendu.title, theme);
+      const svg = await dessinerProcessSecoursBloc1(sectionsMap[b1Rendu.id], b1Rendu.id, opts.titresSchemas?.[b1Rendu.id] || b1Rendu.title, theme, (x) => phraseDeRubriqueGss(this.memoireTypeV2(), x));
       if (svg) schemas.set(CLE_SCHEMA(b1Rendu.id), svg);
     }
     // Rubrique sans schéma prévu par le mémoire type (introduction des références) : pages de texte seules.
@@ -9246,6 +9246,7 @@ RÈGLES DE FORME (rendu Marp) :
           id: r.id,
           photos: opts.photos?.[r.id],
           ...(r.id === 'b1_comprehension' && opts.articlesBloc1 ? { articlesBloc1: opts.articlesBloc1 } : {}),
+          ...(r.id === 'b1_comprehension' ? { blocsRubriques: Object.fromEntries(blocs.flatMap((b, i) => b.rubriques.map((x) => [x.title, Number((plan.blocs.find((y) => y.cle === b.cle) as any)?.numero) || i + 1] as [string, number]))) } : {}),
           ...(svg ? { schemaPleinePage: { titre: titreSchema(r), svg } } : { texteSeul: true }),
         };
       }),

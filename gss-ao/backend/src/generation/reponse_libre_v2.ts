@@ -740,7 +740,7 @@ const INTITULE_POSTE = /\b(?:tienn?ent|occupent|occupe|assurent|assure|tient)\s+
 /** Étape de résultat (« Site sécurisé sans interruption », « Continuité de service garantie »…). */
 const RESULTAT = /s[ée]curis|s[ûu]ret[ée] (?:assur|garanti)|continuit|garanti|conform|ma[îi]tris|fiab|s[ée]r[ée]nit|r[ée]sultat|z[ée]ro|sans (?:interruption|rupture|incident|carence)|prot[ée]g|tranquill|qualit[ée]|respect|confian|trac[ée]|r[ée]activ|disponib|s[ée]curit[ée] (?:des|du)|assur[ée]e?s?\b/i;
 
-export function defautsEtapesBesoin(etapes: Array<{ titre?: string; texte?: string }> | undefined, contexte: { texte?: string; sites?: string[] } = {}): string[] {
+export function defautsEtapesBesoin(etapes: Array<{ titre?: string; texte?: string }> | undefined, contexte: { texte?: string; sites?: string[]; dce?: string } = {}): string[] {
   const GENERIQUE = /^(?:(?:votre|vos|notre|nos|le|la|les)\s+)?(?:besoins?|enjeux?|dispositifs?|pilotages?|r[ée]sultats?|attentes?|r[ée]ponses?|process(?:us)?)$/i;
   const FORMULE = /nous consulte|consult\w* (?:GSS )?pour (?:le|ce|un) march[ée]|^(?:vos|nos) enjeux (?:comprennent|sont|portent)|^notre dispositif s.appuie|^notre pilotage (?:s.appuie|repose)|^votre besoin porte sur|blocs? cit[ée]s?/i;
   const POSTE_ACTEUR = /^(?:le|la|l['’])\s*(?:PC|PCS|poste(?: central| de s[ée]curit[ée])?|accueil|loge)\s+(?!(?:de|du|des|d['’])\s)(?:r[ée]alis|effectu|assur|g[èe]r|surveill|contr[ôo]l|accueill|alert|fai[ts])/i;
@@ -785,7 +785,11 @@ export function defautsEtapesBesoin(etapes: Array<{ titre?: string; texte?: stri
     [2, 3].forEach((k) => {
       const e = etapes[k];
       const t = `${e?.titre || ''} ${e?.texte || ''}`;
-      if (EXIGENCE.test(t) && !GSS.test(t)) defauts.push(`étape ${k + 1} : « ${String(e?.titre || '').trim()} : ${String(e?.texte || '').trim()} » recopie une exigence du CCTP ; l'étape ${k + 1} dit ${k === 2 ? 'le dispositif de GSS (équipe, moyens)' : 'le pilotage de GSS (contrôle, suivi)'} qui y répond.`);
+      // Texte d'une carte « nous » contenu mot pour mot dans le DCE (T3-CONS-2, ign 1351 : « Les chercheurs accèdent à
+      // Carnot-Cassini 24h/24 et 7j/7 ») : c'est l'exigence, pas la réponse de GSS.
+      const tx = norm(String(e?.texte || ''));
+      const recopie = !!contexte.dce && tx.split(' ').length >= 6 && norm(contexte.dce).includes(tx);
+      if ((EXIGENCE.test(t) && !GSS.test(t)) || recopie) defauts.push(`étape ${k + 1} : « ${String(e?.titre || '').trim()} : ${String(e?.texte || '').trim()} » recopie une exigence du CCTP ; l'étape ${k + 1} dit ${k === 2 ? 'le dispositif de GSS (équipe, moyens)' : 'le pilotage de GSS (contrôle, suivi)'} qui y répond.`);
     });
   }
   // « Pour arriver à ça » : la dernière étape dit le résultat obtenu pour l'acheteur.
@@ -1638,7 +1642,7 @@ export function anomaliesSchemaBloc1(spec: { gabarit?: string; params?: any } | 
 /** Verbes conjugués qui terminent le groupe nominal d'une exigence (titre d'étape, libellé d'un point de vigilance). */
 const VERBE_TITRE = /^(?:est|sont|doit|doivent|devra|devront|peut|peuvent|a|ont|exigen?t?|exige|cessen?t?|cesse|restent|reste|varien?t?|varie|imposen?t?|impose|prévoi(?:t|ent)|porten?t?|porte|assuren?t?|assure|se|s['’]\S*|fai(?:t|s)|font|demanden?t?|demande|nécessiten?t?|nécessite|impliquen?t?|implique|sera|seront|intervien(?:t|nent)|requiert|requièrent|associen?t?|associe|comprend|comprennent|comporten?t?|comporte|accueillen?t?|accueille|comptent|compte|dispose|disposent|couvren?t?|couvre|regroupen?t?|regroupe|concernen?t?|concerne|inclut|incluent|ouvren?t?|ouvre|fermen?t?|ferme|fonctionnen?t?|fonctionne|reçoi(?:t|vent)|abriten?t?|abrite|représenten?t?|représente|dépend(?:ent)?|accèdent|accède|circulen?t?|circule|travaillen?t?|travaille|nécessitera|fixe|fixent|attend|attendent|souhaite|souhaitent|veut|veulent|mentionnen?t?|combinen?t?|indiquen?t?|constituen?t?|pourr(?:a|ont)|risquen?t?|possèdent|possède|encadren?t?|encadre|donnen?t?|donne|ont lieu|a lieu|permet|permettent|engendren?t?|entraînen?t?|obligen?t?)$/i;
 /** Mots après lesquels un titre peut s'arrêter sans couper un groupe : prépositions, coordinations, participe présent. */
-const COUPE_TITRE = /^(?:à|au|aux|dans|sur|pour|avec|par|en|sous|après|avant|entre|hors|selon|suivant|lors|dès|depuis|vers|chez|et|ou|de|du|des|d['’]\S*|pendant|durant|afin|sans|y|[a-zà-ÿ]{3,}ant)$/i;
+const COUPE_TITRE = /^(?:à|au|aux|dans|sur|pour|avec|par|en|sous|après|avant|entre|hors|selon|suivant|lors|dès|depuis|vers|chez|et|ou|de|du|des|d['’]\S*|pendant|durant|afin|sans|y|chaque|tous|toutes|tout|toute|quotidiennement|[a-zà-ÿ]{3,}ant)$/i;
 
 /**
  * Titre d'une exigence au sujet négatif (« Aucun poste ne doit être laissé vacant ») : le groupe nominal seul (« Aucun
@@ -1660,9 +1664,101 @@ export function titreNegatif(x: string, max = 34): string {
  * sur site dans les UNE (1) heure… » → « Remplacement sur site »), jamais au milieu d'un groupe (« chef d'équipe ou
  * agent »). '' si aucun titre propre n'est possible.
  */
+/** Complément de tête d'une exigence (temps, condition, demande) suivi de l'action : « Pendant toute absence du responsable, le
+ *  remplacer… », « Lors de la ronde de fermeture, vérifier… », « Sur demande écrite de la Direction…, réaliser… ». */
+const COMPLEMENT_TETE = /^(pendant|durant|lors\s+d(?:e\s+la|e\s+l['’]|es|u|e)|en\s+cas\s+d(?:e\s+la|e\s+l['’]|es|u|e|['’])|sur\s+(?:simple\s+)?demande|[àa]\s+la\s+demande|avant|apr[èe]s|d[èe]s|au\s+cours\s+d(?:e\s+la|e\s+l['’]|es|u|e)|en\s+dehors\s+d(?:e\s+la|e\s+l['’]|es|u|e)|chaque\s+fois\s+que|lorsqu['’]?|quand|si)\s*([^,]{3,90}),\s*(.+)$/i;
+/** Acteur générique en sujet (« Le titulaire transmet… », « Chaque agent doit être… », « Les agents en charge de … devront… ») :
+ *  le titre se tire de ce que l'acteur doit faire ou avoir, jamais de l'acteur. */
+const ACTEUR_SUJET = /^(?:(?:le|la|les|l['’]|chaque|tout|tous|toute|toutes|ces|ce|cet|un|une|des)\s*)?(?:titulaire|prestataire|candidat|soumissionnaire|attributaire|agents?|personnels?|intervenants?|rondiers?|collaborateurs?|soci[ée]t[ée]|entreprise|[ée]quipes?|salari[ée]s?|gardiens?|op[ée]rateurs?|responsables?)\b/i;
+/** Verbes faibles suivis d'un objet générique (« se conformer aux dispositions de … quant à la reprise du personnel ») : le
+ *  titre est le sujet de ces dispositions. */
+const OBJET_GENERIQUE = /^(?:se\s+conformer|respecter|appliquer|veiller|garantir|assurer|observer|suivre|tenir\s+compte)\b[^.]*?\b(?:dispositions?|r[èe]gles?|obligations?|exigences?|prescriptions?|consignes?|stipulations?)\b[^.]*?\b(?:quant\s+[àa]|relatives?\s+[àa]|concernant|en\s+mati[èe]re\s+de|portant\s+sur|li[ée]e?s?\s+[àa])\s+(.+)$/i;
+const DETERMINANTS_TETE = /^(?:(?:toute?s?|tous|chaque|une?|des|les?|la|l['’]|du|de\s+la|de\s+l['’]|ses?|sa|leurs?|son|ces?|cette|cet)\s*)+/i;
+
+/** Groupe nominal en titre : déterminants de tête retirés, majuscule, coupé à la limite sur un mot plein. */
+function titreNominal(gn: string, max: number): string {
+  const t = String(gn || '').replace(DETERMINANTS_TETE, '').replace(/^[«"“\s]+|[»"”\s.;:,]+$/g, '').trim();
+  if (!t) return '';
+  if (t.length <= max) return t.charAt(0).toUpperCase() + t.slice(1);
+  return titreExigenceBrut(t, max);
+}
+
 export function titreExigence(x: string, max = 34): string {
-  const e = String(x || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').replace(/^[«"“\s]+|[»"”\s.;:]+$/g, '').trim();
+  // « dans un délai maximal de 30 minutes » → « en 30 minutes » : la valeur reste dans le titre (« Présent sur site en 30
+  // minutes », jamais « … dans un délai maximal de 30 » coupé avant son unité).
+  const e = String(x || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').replace(/^[«"“\s]+|[»"”\s.;:]+$/g, '').trim()
+    .replace(/(?<=\S\s)dans\s+un\s+d[ée]lai\s+(?:moyen\s+)?(?:maxim(?:al|um)\s+)?(?:de\s+|d['’]\s*)(?=(?:\(?\d|une?\b|deux|trois|quatre|cinq|six|dix|quinze|vingt|trente|quarante|soixante))/i, 'en ');
   if (!e) return '';
+  // 1. Complément de tête (T3N-5, T3-COH-7 : « Pendant toute absence », « Lors de la ronde de fermeture ») : l'action qui suit
+  //    (« Réaliser une ronde supplémentaire ») ; si elle reprend le complément par un pronom (« le remplacer », « assurer son
+  //    remplacement »), le complément sans sa préposition (« Absence du responsable », « Ronde de fermeture »).
+  const ct = COMPLEMENT_TETE.exec(e);
+  if (ct) {
+    const action = ct[3].trim();
+    const reprise = /^(?:le|la|les|l['’]|lui|leur|en|y)\s*\S/i.test(action) && !/^(?:le|la|les|l['’])\s*[a-zà-ÿ]+(?:ion|age|ment|ure|ance|ence|té|ée)s?\b/i.test(action) || /^\S+\s+(?:son|sa|ses|leur|leurs)\s/i.test(action);
+    const t = reprise ? titreNominal(ct[2], max) : titreExigence(action, max);
+    if (t) return t;
+    return titreNominal(ct[2], max);
+  }
+  // 2. Objet générique (« se conformer aux dispositions de l'Accord du 5 mars 2002 … quant à la reprise du personnel »).
+  const og = OBJET_GENERIQUE.exec(e);
+  if (og) { const t = titreNominal(og[1].split(/[,;:]/)[0], max); if (t) return t; }
+  if (/^(?:aucune?|nulle?)\s/i.test(e)) return titreNegatif(e, max) || titreNegatifCourt(e, max);
+  // Verbe suivi d'une énumération (« garantir : sa réactivité ; la continuité du service ; … ») : le premier objet.
+  const en = /^([a-zà-ÿ]+(?:er|ir|re))\s*:\s*(.+)$/i.exec(e);
+  if (en) { const t = titreNominal(en[2].split(/\s*[;,]\s*/)[0], max); if (t) return t; }
+  // 3. Acteur générique en sujet, suivi de son verbe : ce qu'il doit faire ou avoir (« Le titulaire transmet le planning
+  //    mensuel… » → « Planning mensuel » ; « Chaque agent doit être titulaire de la carte professionnelle… » → « Carte
+  //    professionnelle » ; « les agents en charge de la vigilance devront être titulaires du diplôme SSIAP 1 » → « Diplôme SSIAP 1 »).
+  if (ACTEUR_SUJET.test(e)) {
+    const mots = e.split(' ');
+    const k = mots.findIndex((m, i) => i > 0 && (VERBE_TITRE.test(m) || /^(?:ne|n['’]\S*|transmet(?:tent)?|remet(?:tent)?|fournit|fournissent|tient|tiennent|effectue(?:nt)?|r[ée]alise(?:nt)?|v[ée]rifie(?:nt)?|veille(?:nt)?|informe(?:nt)?|signale(?:nt)?|pr[ée]vient|pr[ée]viennent|met(?:tent)?|organise(?:nt)?)$/i.test(m)));
+    if (k > 0) {
+      let suite = mots.slice(k + 1).join(' ').replace(/^(?:pas\s+|jamais\s+)?(?:(?:[êe]tre|avoir|rester|faire)\s+)?/i, '')
+        .replace(/^(?:titulaires?|d[ée]tenteurs?|porteurs?|en\s+possession|munie?s?|[ée]quip[ée]e?s?|dot[ée]e?s?|tenue?s?|charg[ée]e?s?|capables?|en\s+mesure)\s+(?:de\s+la|de\s+l['’]|des|du|de|d['’])\s*/i, '');
+      // Ce qu'il doit faire : l'infinitif et son objet (« doit transmettre le planning » → « Transmettre le planning »).
+      if (/^(?:[àa]\s+)?[a-zà-ÿ]+(?:er|ir|re)\b/i.test(suite) && /^(?:doit|doivent|devra|devront|peut|peuvent|pourra|pourront)$/i.test(mots[k])) {
+        const t = titreExigenceBrut(suite.replace(/^[àa]\s+/, ''), max);
+        if (t) return t;
+      }
+      const objet = suite.split(/\s+(?:au\s+plus\s+tard|avant|apr[èe]s|d[èe]s|chaque|tous|toutes|dans\s+un|sous|entre|selon|afin|pour|par)\b|[,;:(]/i)[0].replace(/\s+(?:d[ée]livr[ée]e?s?|pr[ée]vue?s?|exig[ée]e?s?|vis[ée]e?s?|mentionn[ée]e?s?)$/i, '');
+      const t = titreNominal(objet, max);
+      if (t && t.split(/\s+/).filter((w) => w.replace(/^(?:l|d)['’]/i, '').length >= 3).length >= 1) return t;
+    }
+  }
+  // Libellé d'un tableau (40 signes et plus) : jamais une case vide ; carte de schéma : pas de titre plutôt qu'un titre vague.
+  return titreExigenceBrut(e, max) || (max >= 40 ? titreSecours(e, max) : '');
+}
+
+/** Longueur maximale du libellé EXIGENCE du tableau du bloc 1 (colonne étroite, 2 à 3 lignes). */
+export const MAX_LIBELLE_EXIGENCE = 46;
+
+/** Négation trop longue (« Aucun collaborateur CSTB ne doit rester sur le site après 19 h 30, sauf accord écrit ») : « Aucun »
+ *  + le nom + l'horaire ou le lieu (« Aucun collaborateur après 19 h 30 »). '' sinon. */
+function titreNegatifCourt(e: string, max: number): string {
+  const m = /^(Aucune?|Nulle?)\s+(\S+)[^,]*?\s(?:ne|n['’])\s*\S*\s*(?:pas\s+)?(?:\S+\s+)?(.*?)(?:,|$)/i.exec(e);
+  if (!m) return '';
+  const heure = /(?:apr[èe]s|avant|entre|au-del[àa] de|pass[ée])\s+\d{1,2}\s*h(?:\s*\d{2})?(?:\s+et\s+\d{1,2}\s*h(?:\s*\d{2})?)?/i.exec(m[3]);
+  for (const t of [heure ? `${m[1]} ${m[2]} ${heure[0]}` : '', `${m[1]} ${m[2]} ${m[3]}`.trim()]) if (t && t.length <= max) return t.charAt(0).toUpperCase() + t.slice(1);
+  return '';
+}
+
+/** Dernier recours (jamais une case EXIGENCE vide) : les premiers mots porteurs de l'exigence, coupés sur un mot plein. */
+function titreSecours(e: string, max: number): string {
+  const sans = e.replace(ACTEUR_SUJET, '').replace(/^\s*(?:doit|doivent|devra|devront)\s+/i, '').trim() || e;
+  const mots = sans.split(' ');
+  let t = '';
+  for (const w of mots) { if (`${t} ${w}`.trim().length > max) break; t = `${t} ${w}`.trim(); }
+  while (t.includes(' ') && MOTS_OUTILS.has(t.split(' ').pop()!.toLowerCase().replace(/['’]$/, ''))) t = t.slice(0, t.lastIndexOf(' '));
+  t = t.replace(/[,;:(]+$/, '').trim();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+}
+
+function titreExigenceBrut(x: string, max = 34): string {
+  let e = String(x || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').replace(/^[«"“\s]+|[»"”\s.;:]+$/g, '').trim();
+  if (!e) return '';
+  // Complément de fréquence (« … chaque jour d'ouverture du site ») : jamais dans le titre (« Réaliser une ronde d'ouverture »).
+  { const j = e.split(' ').findIndex((w, i) => i >= 2 && /^(?:chaque|tous|toutes|quotidiennement)$/i.test(w)); if (j >= 2) e = e.split(' ').slice(0, j).join(' '); }
   if (/^(?:aucune?|nulle?)\s/i.test(e)) return titreNegatif(e, max);
   if (/^(?:il|elle|ils|elles|on|nous|vous|cela|ceci|celui-ci|celle-ci)\s/i.test(e)) return '';
   const mots0 = e.split(' ');
@@ -1675,6 +1771,8 @@ export function titreExigence(x: string, max = 34): string {
     if (pre.length > max) continue;
     const dernier = mots[i - 1];
     if (MOTS_OUTILS.has(dernier.toLowerCase().replace(/['’]$/, '')) || /['’]$/.test(dernier) || !/[\p{L}\d)]$/u.test(dernier)) continue;
+    // Nombre séparé de son unité (« … de 30 » pour « 30 minutes ») : jamais.
+    if (/^\(?\d+(?:[,.]\d+)?\)?$|^(?:une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|quinze|vingt|trente|quarante|soixante)$/i.test(dernier) && /^(?:minutes?|heures?|h|jours?|semaines?|mois|ans?|m²|m2|km|agents?|personnes?|fois|rondes?)$/i.test(mots[i] || '')) continue;
     // Locution coupée (génération réelle caen 703 : « Assurer la continuité en cas » pour « … en cas de défaillance »).
     if (/(?:^|\s)(?:en\s+cas|lors|afin|faute|en\s+raison|en\s+vue|au\s+cours|au\s+moyen|en\s+matière|en\s+termes|à\s+compter|en\s+fonction|au\s+titre|à\s+partir|en\s+dehors|au\s+sein|à\s+l['’]issue|mise|mise\s+en|prise|prise\s+en|avant|après|dès|selon|pendant)$/i.test(pre)) continue;
     // Coupe permise devant une préposition, une coordination ou un participe, ou quand le reste n'est qu'une suite
@@ -1683,6 +1781,13 @@ export function titreExigence(x: string, max = 34): string {
     if (reste.length && !COUPE_TITRE.test(reste[0]) && reste.some((w) => COUPE_TITRE.test(w) || !/^[a-zà-ÿ-]+$/.test(w))) continue;
     if (mots.slice(0, i).filter(plein).length < 2) continue;
     if ((pre.match(/«/g) || []).length !== (pre.match(/»/g) || []).length || (pre.match(/\(/g) || []).length !== (pre.match(/\)/g) || []).length) continue;
+    // Nom générique coupé de son complément (« Ne pas appliquer les opérations » pour « … les opérations d'ouverture ») : le
+    // premier complément est gardé, quitte à dépasser la limite de 12 signes (T3N-5).
+    if (/^(?:op[ée]rations?|dispositions?|mesures?|r[èe]gles?|modalit[ée]s?|prestations?|missions?|actions?|conditions?|obligations?|proc[ée]dures?|consignes?)$/i.test(dernier) && /^(?:d['’]\S+|de|des|du)$/i.test(mots[i] || '')) {
+      const avecComplement = mots.slice(0, /^d['’]/i.test(mots[i]) ? i + 1 : i + 2).join(' ').replace(/[,;:]+$/, '');
+      if (avecComplement.length <= max) return avecComplement.charAt(0).toUpperCase() + avecComplement.slice(1);
+      continue;
+    }
     return pre.charAt(0).toUpperCase() + pre.slice(1);
   }
   return '';
@@ -1782,11 +1887,14 @@ export function libellesBloc1(texte: string): string {
       const iFleche = gen[1].search(/\s*→/);
       const exigence = (iFleche >= 0 ? gen[1].slice(0, iFleche) : gen[1]).trim();
       const suite = iFleche >= 0 ? gen[1].slice(iFleche) : '';
-      const nom = titreExigence(exigence);
+      const nom = titreExigence(exigence, MAX_LIBELLE_EXIGENCE);
       const debut = normaliser(exigence.slice(0, nom.length));
+      // Libellé en tête de la phrase quand il en est le début ; sinon (« Absence du responsable » pour « Pendant toute
+      // absence du responsable, le remplacer… », T3N-5) libellé en gras puis la phrase entière.
       corps = nom && debut === normaliser(nom)
         ? `**${nom}**${exigence.slice(nom.length)}${suite}`
-        : `${exigence.charAt(0).toUpperCase()}${exigence.slice(1)}${suite}`;
+        : nom ? `**${nom}** : ${exigence.charAt(0).toUpperCase()}${exigence.slice(1)}${suite}`
+          : `${exigence.charAt(0).toUpperCase()}${exigence.slice(1)}${suite}`;
     }
     // Gras de tête gardé ; ensuite, un titre en gras devient un titre entre guillemets.
     const tete = (/^\*\*[^*]+\*\*/.exec(corps) || [''])[0];
@@ -1901,6 +2009,29 @@ export function rubriqueDePresentation(titre: string): boolean {
  * certifications : l'agent SSIAP 1 » → « L'agent SSIAP 1 ») ; ou arrêté avant un complément ou une coordination (« L'adéquation
  * de nos moyens humains avec votre besoin » → « L'adéquation de nos moyens humains »). '' sinon : l'étape n'est pas prise.
  */
+/**
+ * Phrase du texte de GSS d'une rubrique du mémoire type nommée par son titre (« La gestion d'une commande supplémentaire »,
+ * « Notre socle de procédures : l'intervention sur alarme… »), pour la carte « nous » d'un schéma de secours (T3-CONS-2) :
+ * la première phrase entière sans variable ni repère interne. '' si la rubrique est inconnue.
+ */
+export function phraseDeRubriqueGss(mt: MemoireType | null | undefined, titre: string): string {
+  if (!mt) return '';
+  const cle = (x: string) => normaliser(x).replace(/\s*\([^)]*\)\s*/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+  const c = cle(titre);
+  const r = mt.rubriques.find((x) => cle(x.titre) === c) || mt.rubriques.find((x) => c.length >= 12 && (cle(x.titre).startsWith(c) || c.startsWith(cle(x.titre))));
+  if (!r?.texte) return '';
+  const lignes = String(r.texte).split('\n').map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').replace(/\*\*/g, '').trim()).filter((l) => l && !/^#|^\||^\{\{/.test(l));
+  const phrases = lignes.flatMap((l) => l.replace(/\{\{[^}]*\}\}[^{]*?\{\{\/si\}\}/g, '').split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý])/))
+    // Partie avant les deux-points d'une longue phrase (« … selon un rétroplanning … : il nous faut … ») ; jamais un libellé de
+    // tête (« Sélection du profil : après avoir… »).
+    .map((p) => p.trim()).filter((p) => !/^[^.:]{2,45}\s:\s/.test(p)).map((p) => p.split(/\s:\s/)[0].replace(/[.!?]$/, '').trim())
+    .filter((p) => p.length >= 30 && p.length <= 220 && !/\{\{|\}\}|\[À COMPLÉTER\]|⟦|«|:\s*$|\bpour cela\b|^(?:ainsi|cela|ceci|de ce fait)\b/i.test(p) && /\b(?:nous|est|sont|permet|garanti|dispose|assure|organis|met|veill|proc[èe]d|repose|s['’]appuie)/i.test(p));
+  // Jamais une phrase qui redit le titre de la rubrique (« L'intégration d'un nouvel agent sur un site est une étape… »).
+  const sansArt = (x: string) => cle(x).replace(/^(?:le|la|les|l|un|une|des|du)\s+/, '');
+  const utiles = phrases.filter((x) => !sansArt(x).startsWith(sansArt(r.titre).split(' ').slice(0, 4).join(' ')));
+  return utiles.find((x) => /^(?:Nous|Notre|Nos|GSS|Chaque)\b/.test(x)) || utiles.find((x) => /\b(?:nous|notre|nos|GSS)\b/i.test(x)) || utiles[0] || '';
+}
+
 export function titreRubriqueEtape(rubrique: string): string {
   const pleins = (x: string) => normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 3 && !MOTS_OUTILS.has(w)).length;
   const cap = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
@@ -1935,7 +2066,7 @@ export function texteEtapeAvecVerbe(x: string): string {
   return '';
 }
 
-export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: string; role?: string }> {
+export function etapesDesPuces(texte: string, phraseDe?: (titreRubrique: string) => string, dejaVous = 0): Array<{ titre: string; texte?: string; role?: string; besoin?: boolean }> {
   const puces = (titre: RegExp) => {
     // Toutes les parties de ce titre (texte rédigé puis puces ajoutées pour le minimum, format court hors ligne imm).
     const partie = String(texte || '').split(/^(?=##\s)/m).filter((p) => titre.test(p)).join('\n');
@@ -2045,7 +2176,7 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
   };
   // Trois étapes distinctes : titre nominal, texte entier (fin de phrase ou de proposition) qui ne redit pas le titre,
   // titres jamais quasi identiques (le moteur refuse un élément en double ; le lecteur ne voit pas deux fois la même idée).
-  const etapes: Array<{ titre: string; texte?: string; role?: string }> = [];
+  const etapes: Array<{ titre: string; texte?: string; role?: string; besoin?: boolean }> = [];
   // « On pense à ça, puis à ça, pour arriver à ça » (consigne 6, T5CP-12) : le besoin (attentes) avant les points de vigilance,
   // le pilotage (réunions, indicateurs, reporting) en dernier avant le résultat.
   const PILOTAGE = /r[ée]unions?|pilotage|indicateurs?|reporting|comit[ée]|bilan|tableau de bord/i;
@@ -2086,19 +2217,51 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
       if (/«|»/.test(corps)) corps = '';
     }
     if (c.renvoi) {
-      // Process de GSS (titre de la rubrique) en titre, besoin du DCE (exigence) en texte. Titre de rubrique jamais coupé
-      // (« La gestion d'une commande » pour « … supplémentaire », cstb 551, T7CS-5) : trop long pour la carte, l'étape n'est
-      // pas prise ; jamais une rubrique de présentation de GSS (« Notre catalogue de prestations ») comme étape du process.
-      const rubrique = c.y.replace(/[.;:!?\s]+$/, '').replace(/^«\s*|\s*»$/g, '').trim();
-      titre = rubriqueDePresentation(rubrique) ? '' : titreRubriqueEtape(rubrique);
-      if (!titre) continue;
+      // Réponse réduite au titre d'une rubrique : l'étape est un BESOIN du DCE (carte « vous »), titrée par l'exigence et non par
+      // la rubrique de GSS (T3-CONS-2, T3-COH-7 : « Un interlocuteur unique » sur l'obligation du CCTP, cartes 03 et 04
+      // « nous » qui recopiaient la colonne du CCTP) ; jamais une carte « nous » (besoin).
       const x = c.x.replace(/\s+/g, ' ').trim();
       // Texte avec son verbe : jamais un complément seul (« Pour une ronde supplémentaire commandée par écrit… »).
       corps = texteEtapeAvecVerbe(x);
+      titre = titre || titreExigence(x);
       const sansArt = (v: string) => normaliser(v).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^(?:le|la|les|l|un|une|des|du)\s+/, '');
-      // Besoin qui redit le titre du process (« La reprise du personnel en place » / « Reprise du personnel en place… ») : l'étape
-      // n'apporte rien.
-      if (!titre || !corps || sansArt(corps).startsWith(sansArt(titre))) continue;
+      // Cartes « nous » (3e et 4e) : le process de GSS nommé (titre de la rubrique) et une phrase de son texte, jamais le
+      // besoin du DCE (T3-CONS-2) ; sans phrase de GSS, l'étape n'est pas prise.
+      const rubriqueCitee = String((c as any).rubriques?.[0] || c.y).replace(/[.;:!?\s]+$/, '').replace(/^«\s*|\s*»$/g, '').trim();
+      // Carte « vous » titrée par le process de GSS qui répond, le besoin entier en texte (T5CP-12) : pour un besoin sans verbe ou
+      // dont le titre tiré de l'exigence redirait le texte.
+      const carteVousProcess = (): boolean => {
+        const tr = rubriqueDePresentation(rubriqueCitee) ? '' : titreRubriqueEtape(rubriqueCitee);
+        const besoinTexte = texteEtapeEntier(x.charAt(0).toUpperCase() + x.slice(1));
+        const sa = (v: string) => normaliser(v).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^(?:le|la|les|l|un|une|des|du)\s+/, '');
+        if (!tr || !besoinTexte || COMPLEMENT_TETE.test(`${besoinTexte}, x`) || sa(besoinTexte).startsWith(sa(tr)) || etapes.some((d) => procheDe(d.titre, tr))) return false;
+        etapes.push({ titre: tr, texte: besoinTexte, role: 'rouge', besoin: true });
+        return true;
+      };
+      const carteNous = (): boolean => {
+        const rubrique = rubriqueCitee;
+        const tr = rubriqueDePresentation(rubrique) ? '' : titreRubriqueEtape(rubrique);
+        const brute = tr && phraseDe ? phraseDe(rubrique) : '';
+        let ph = brute ? texteEtapeEntier(brute) || texteEtapeEntier(brute.split(/,\s+(?:tout en|afin|pour|et|qui)\b/)[0]) : '';
+        // Complément seul en tête (« Dans le cadre de l'intégration d'un nouveau marché ») : jamais le texte d'une carte.
+        if (/^(?:dans|pour|afin|en|lors|avant|apr[èe]s|d[èe]s|selon|sur)\b/i.test(ph) && !/\b(?:nous|est|sont|assure|garanti|dispose|organis|met|veill|permet)/i.test(ph)) ph = '';
+        if (!tr || !ph || etapes.some((d) => procheDe(d.titre, tr) || normaliser(String(d.texte || '')) === normaliser(ph))) return false;
+        etapes.push({ titre: tr, texte: ph, role: 'bleu' });
+        return true;
+      };
+      if (etapes.length + dejaVous >= 2) { carteNous(); continue; }
+      // Besoin sans verbe (« poste permanent de sécurité incendie et de sûreté 24 h/24, 7 j/7 ») : carte « vous » titrée par le
+      // process de GSS qui y répond, le besoin en texte (T5CP-12).
+      if (!corps && !COMPLEMENT_TETE.test(`${x}, x`)) { if (!carteVousProcess()) carteNous(); continue; }
+      // Complément de temps ou de condition seul (« Sur demande écrite de la Direction précisant les jours ») : jamais le texte
+      // d'une carte (T2N-6) ; la carte « nous » du process nommé est prise à la place.
+      if (!titre || !corps || COMPLEMENT_TETE.test(`${corps}, x`)) { carteNous(); continue; }
+      // Besoin qui commence par son titre : la suite seulement (3 mots au moins), sinon l'étape n'apporte rien.
+      if (sansArt(corps).startsWith(sansArt(titre))) {
+        const reste = corps.replace(/^\s*(?:le|la|les|l['’]|un|une|des|du)?\s*/i, '').slice(titre.replace(/^\s*(?:le|la|les|l['’]|un|une|des|du)?\s*/i, '').length).replace(/^[\s,;:]+/, '').trim();
+        corps = reste.split(/\s+/).length < 3 ? '' : texteEtapeAvecVerbe(reste.charAt(0).toUpperCase() + reste.slice(1)) || '';
+        if (!corps || /^(?:de|du|des|d['’]|à|au|aux|en|et)\b/i.test(corps)) { if (!carteVousProcess()) carteNous(); continue; }
+      }
     }
     // Sans titre tiré de l'exigence, ou réponse trop longue pour la carte : tête de la réponse comme titre, sa suite
     // comme texte (ca_normandie 241 : « Intégration du marché » / « Mise en place de la prestation… »).
@@ -2130,14 +2293,14 @@ export function etapesDesPuces(texte: string): Array<{ titre: string; texte?: st
     // Texte qui redit le titre (« Reprise du personnel en place » / « La reprise du personnel en place ») : l'étape
     // n'apporte rien, elle serait refusée par le contrôle du schéma.
     { const ti = pleinsDe(titre), tx = pleinsDe(corps); if (ti.length && ti.every((w) => tx.includes(w)) && tx.filter((w) => !ti.includes(w)).length <= 2) continue; }
-    etapes.push({ titre: titre.charAt(0).toUpperCase() + titre.slice(1), texte: corps, role: etapes.length < 2 ? 'rouge' : 'bleu' });
+    etapes.push({ titre: titre.charAt(0).toUpperCase() + titre.slice(1), texte: corps, role: etapes.length + dejaVous < 2 ? 'rouge' : 'bleu', ...(c.renvoi ? { besoin: true } : {}) });
   }
   return etapes;
 }
 
 /** Étapes tirées des attentes et des points de vigilance du texte du bloc 1 (secours des schémas), sans le résultat. */
-export function specSecoursPuces(texte: string): { gabarit: string; params: any } | null {
-  const etapes = etapesDesPuces(texte);
+export function specSecoursPuces(texte: string, phraseDe?: (titreRubrique: string) => string): { gabarit: string; params: any } | null {
+  const etapes = etapesDesPuces(texte, phraseDe);
   // « On pense à ça, puis à ça, pour arriver à ça » : deux étapes au moins avant le résultat.
   if (etapes.length < 2) return null;
   // Résultat : une phrase entière du texte qui dit le résultat (jamais une étape verte vide) ; sinon secours suivant.
@@ -2202,7 +2365,7 @@ export function etapesDuPerimetre(partie: string): Array<{ titre: string; texte:
   return out.slice(0, 4);
 }
 
-export function specSecoursBesoin(texte: string): { gabarit: string; params: any } | null {
+export function specSecoursBesoin(texte: string, phraseDe?: (titreRubrique: string) => string): { gabarit: string; params: any } | null {
   const t = String(texte || '');
   const partie = (titre: RegExp) => t.split(/^(?=##\s)/m).find((p) => titre.test(p)) || '';
   const pleinsDe = (x: string) => normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 3 && !MOTS_OUTILS.has(w));
@@ -2232,10 +2395,12 @@ export function specSecoursBesoin(texte: string): { gabarit: string; params: any
     etapes.push({ ...e, role: etapes.length < 2 ? 'rouge' : 'bleu' });
   }
   // 2. Attentes et points de vigilance : exigence → réponse de GSS.
-  for (const e of etapesDesPuces(t)) {
+  for (const e of etapesDesPuces(t, phraseDe, Math.min(2, etapes.length))) {
     if (etapes.length >= 4) break;
     if (!e.texte || etapes.some((d) => proches(d.titre, e.titre) || normaliser(d.texte) === normaliser(String(e.texte)))) continue;
-    etapes.push({ titre: e.titre, texte: String(e.texte), role: etapes.length < 2 ? 'rouge' : 'bleu' });
+    // Carte « nous » (3e et 4e) : la réponse de GSS, jamais un besoin du DCE (T3-CONS-2).
+    if (e.besoin && etapes.length >= 2) continue;
+    etapes.push({ titre: e.titre, texte: String(e.texte), role: e.role === 'bleu' || etapes.length >= 2 ? 'bleu' : 'rouge' });
   }
   if (etapes.length < 2) return null;
   const resultat = resultatBesoin(t, etapes.map((e) => e.texte), RESULTAT_MEMOIRE_TYPE);

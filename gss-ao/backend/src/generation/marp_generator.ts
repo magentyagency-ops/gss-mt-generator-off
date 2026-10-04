@@ -450,7 +450,7 @@ function sectionsAPaginer(chapter: AssembleChapter, theme: string): Array<{ sect
     // Bloc 1 en 2 pages au plus (consigne 3) : sans les lignes de source, puis sans le bandeau, si la maquette complète ne
     // tient pas (citedia 703 : 3 pages avec le bandeau et les sources).
     if (pagesMarineV3(theme) && estBloc1(section)) {
-      const variantes = [{}, { sources: false }, { sources: false, bandeau: false }].map((o) => intertitresV3(cleanTextForMarp(pageBloc1Marine(section.text, section.articlesBloc1, o))));
+      const variantes = [{}, { sources: false }, { sources: false, bandeau: false }].map((o) => intertitresV3(cleanTextForMarp(pageBloc1Marine(section.text, section.articlesBloc1, { ...o, blocsRubriques: section.blocsRubriques }))));
       texte = variantes.find((v) => splitIntoSlideChunks(v, limitesSection(section, theme) || (LIMITES_MARINE_V3 as LimitesPage)).length <= 2) || variantes[0];
     }
     if (chapeau) { texte = `${chapeau}\n\n${texte}`; chapeau = ''; }
@@ -614,6 +614,8 @@ export interface AssembleSection {
   /** Bloc 1 du style « marine » v3 : articles du CCTP de ses chiffres (relevés à la génération), pour la mise en page de
    *  la maquette (bandeau des chiffres clés, lignes de source). */
   articlesBloc1?: Record<string, string>;
+  /** Bloc 1 : numéro du bloc de chaque rubrique du plan (titre → bloc), pour le renvoi « → BLOC n » de la colonne NOTRE RÉPONSE. */
+  blocsRubriques?: Record<string, number>;
 }
 
 export interface AssembleChapter {

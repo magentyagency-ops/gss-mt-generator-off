@@ -35,9 +35,10 @@ describe('attentes et points de vigilance toujours en tableau (T2-CONS-5, T2N-1)
     ].join('\n');
     const r = rangs(t);
     expect(r).toEqual([
-      '| Le remplacement d\'un agent absent | « délai maximal de deux heures à compter du début de la vacation concernée » | Nous organisons le remplacement sans interruption du service selon « Le remplacement d\'un agent absent : absence non prévue » <span class="gss-bloc">→ BLOC 5</span> |',
-      '| La main courante électronique | « main courante numérique sécurisée » | Les prises et fins de poste, rondes, incidents et anomalies sont suivis par « La main courante électronique » <span class="gss-bloc">→ BLOC 4</span> |',
-      '| La planification | « présent sur site dans un délai maximal de 30 minutes » | Nous planifions l’intervention sur alarme, avec « La planification » et « Notre socle de procédures : l\'intervention sur alarme et la télésurveillance » <span class="gss-bloc">→ BLOC 4</span> |',
+      // Colonne EXIGENCE tirée de la citation du CCTP, jamais du titre d'une rubrique de GSS (T3N-5).
+      '| Délai maximal de deux heures | « délai maximal de deux heures à compter du début de la vacation concernée » | Nous organisons le remplacement sans interruption du service selon « Le remplacement d\'un agent absent : absence non prévue » <span class="gss-bloc">→ BLOC 5</span> |',
+      '| Main courante numérique sécurisée | « main courante numérique sécurisée » | Les prises et fins de poste, rondes, incidents et anomalies sont suivis par « La main courante électronique » <span class="gss-bloc">→ BLOC 4</span> |',
+      '| Présent sur site en 30 minutes | « présent sur site dans un délai maximal de 30 minutes » | Nous planifions l’intervention sur alarme, avec « La planification » et « Notre socle de procédures : l\'intervention sur alarme et la télésurveillance » <span class="gss-bloc">→ BLOC 4</span> |',
       '| Ouverture avant vacation | À Villejuif et Thiais, les vacations commencent à 7h, mais les portails doivent ouvrir dès 6h30 | Cette articulation est à cadrer au démarrage selon « La mise en place d\'une prestation » <span class="gss-bloc">→ BLOC 5</span> |',
       '| Rondes et présence au PC | Les missions prévoient à la fois des rondes du SSIAP 1 et la surveillance du PC |  |',
     ]);

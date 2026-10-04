@@ -11,6 +11,7 @@
 // (relevés à la génération). Rien n'est ajouté pour les autres styles.
 
 import { normaliserExpressionsDelai, nombreFr, RX_NOMBRE_LETTRES, estCahierDesCharges, estPieceAdministrative } from './base_memoires';
+import { titreExigence, MAX_LIBELLE_EXIGENCE } from './reponse_libre_v2';
 
 const echapper = (t: string) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const norm = (t: string) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’`]/g, "'").toLowerCase();
@@ -255,9 +256,17 @@ const RX_RENVOI_BLOC = /\s*,?\s*\(?\s*(?:(?:d[ée]velopp[ée]e?s?|d[ée]taill[é
 const aRenvoi = (t: string) => new RegExp(RX_RENVOI_BLOC.source, 'i').test(t);
 
 /** Cellule « Notre réponse » : chaque renvoi au bloc retiré du texte, tous les numéros gardés en « → BLOC n ET m ». */
-function celluleReponse(z: string): string {
+function celluleReponse(z: string, blocsRubriques: Record<string, number> = {}): string {
   let x = String(z || '');
   const blocs: string[] = [];
+  // Renvoi au bloc omis par la rédaction (T3N-5, parc_expo 1331 : « « L'intégration d'un nouvel agent » » seul) : le bloc de la
+  // rubrique citée, d'après le plan du mémoire.
+  if (!RX_RENVOI_BLOC.test(x) && !/\bblocs?\s+[1-5]\b/i.test(x)) {
+    const cle = (t: string) => norm(t).replace(/[^a-z0-9]+/g, ' ').trim();
+    const plan = new Map(Object.entries(blocsRubriques).map(([t, n]) => [cle(t), n]));
+    for (const q of x.matchAll(/«\s*([^»]{3,200}?)\s*»/g)) { const n = plan.get(cle(q[1])); if (n) blocs.push(String(n)); }
+  }
+  RX_RENVOI_BLOC.lastIndex = 0;
   // Renvoi placé avant le titre de la rubrique (« ce circuit est détaillé au bloc 4, « Notre socle… » ») : « détaillé dans ».
   x = x.replace(/\b(est|sont)\s+((?:d[ée]velopp|d[ée]taill|trait|pr[ée]sent)[ée]e?s?)\s+(?:au|aux)\s+blocs?\s+([1-5])\s*,\s*(?=«)/gi, (_m, v: string, p: string, n: string) => { blocs.push(n); return `${v} ${p} dans `; });
   x = x.replace(RX_RENVOI_BLOC, (m) => { blocs.push(...(m.match(/[1-5]/g) || [])); return ''; });
@@ -309,7 +318,7 @@ function titreRubriqueCitee(reponse: string): string {
  * articulation relève de « Rubrique », développée au bloc n », ou une puce sans réponse (colonne NOTRE RÉPONSE vide). Le
  * tableau n'est jamais abandonné pour une seule puce d'une autre forme.
  */
-function tableauAttentes(liste: string): string {
+function tableauAttentes(liste: string, blocsRubriques: Record<string, number> = {}): string {
   const lignes = liste.split('\n').filter((l) => l.trim());
   const rangs: string[] = [];
   const GENERIQUE = /^(?:ce que vous attendez|vos attentes|attente|exigence|point de vigilance|points de vigilance)$/i;
@@ -350,7 +359,10 @@ function tableauAttentes(liste: string): string {
       exigence = GENERIQUE.test(gras) ? besoin : gras;
       demande = GENERIQUE.test(gras) ? parenthese : (besoin ? `${parenthese} : ${besoin}` : parenthese);
     } else if (/^[«"“]/.test(gras)) {
-      exigence = besoin || titreRubriqueCitee(reponse);
+      // Libellé de l'exigence tiré de la citation du CCTP (T3N-5 : jamais le titre d'une rubrique de GSS, « L'adéquation de nos
+      // moyens humains avec votre besoin », ni une case vide).
+      const citation = (/«\s*([^»]{3,300}?)\s*»/.exec(gras) || [])[1] || gras;
+      exigence = besoin || titreExigence(citation, MAX_LIBELLE_EXIGENCE);
       demande = joindre(gras, suite);
     } else if (gras && suite && !besoin) {
       // Libellé en gras en tête de la phrase du CCTP (« **Réaliser une ronde de fermeture** du lundi au vendredi… → … »,
@@ -362,10 +374,10 @@ function tableauAttentes(liste: string): string {
       exigence = joindre(gras, suite);
       demande = besoin;
     } else {
-      exigence = '';
+      exigence = titreExigence(besoin, MAX_LIBELLE_EXIGENCE);
       demande = besoin;
     }
-    rangs.push(`| ${cellule(exigence)} | ${cellule(demande)} | ${celluleReponse(reponse).replace(/\|/g, '\\|')} |`);
+    rangs.push(`| ${cellule(exigence)} | ${cellule(demande)} | ${celluleReponse(reponse, blocsRubriques).replace(/\|/g, '\\|')} |`);
   }
   return rangs.length ? ['| Exigence | Ce que le CCTP demande | Notre réponse |', '|---|---|---|', ...rangs].join('\n') : liste;
 }
@@ -374,11 +386,11 @@ function tableauAttentes(liste: string): string {
  * Texte du bloc 1 mis en page comme la maquette validée (style « marine » v3 seulement) : bandeau des chiffres clés après
  * l'amorce, lignes de source, attentes et points de vigilance en tableaux. Le texte n'est pas changé : seule sa forme.
  */
-export function pageBloc1Marine(texte: string, articles: Record<string, string> = {}, o: { sources?: boolean; bandeau?: boolean } = {}): string {
+export function pageBloc1Marine(texte: string, articles: Record<string, string> = {}, o: { sources?: boolean; bandeau?: boolean; blocsRubriques?: Record<string, number> } = {}): string {
   let t = String(texte || '');
   const bandeau = o.bandeau === false ? '' : bandeauChiffres(chiffresCles(t, articles));
   // Listes des attentes et des points de vigilance : en tableaux.
-  t = t.replace(/(^##\s+(?:Vos attentes|Les points de vigilance)[^\n]*\n+)((?:[ \t]*[-*•]\s[^\n]*(?:\n|$))+)/gim, (_m, titre: string, liste: string) => `${titre}${tableauAttentes(liste.trimEnd())}\n`);
+  t = t.replace(/(^##\s+(?:Vos attentes|Les points de vigilance)[^\n]*\n+)((?:[ \t]*[-*•]\s[^\n]*(?:\n|$))+)/gim, (_m, titre: string, liste: string) => `${titre}${tableauAttentes(liste.trimEnd(), o.blocsRubriques)}\n`);
   // Lignes de source sous le contexte et sous le périmètre.
   t = t.replace(/(^##\s+(?:Votre contexte|Le p[ée]rim[èe]tre)[^\n]*\n)([\s\S]*?)(?=^##\s|(?![\s\S]))/gim, (_m, titre: string, corps: string) => {
     const s = o.sources === false ? '' : ligneSource(corps, articles);
