@@ -10276,6 +10276,8 @@ Renvoie UNIQUEMENT un objet JSON : {"limite": true|false, "pagesMax": nombre, "p
       if (!Number.isFinite(pagesParPartie) || pagesParPartie < 1) pagesParPartie = NaN;
       // Nombre de pages absent des extraits du RC (en chiffres ou en lettres) : jamais une limite inventée (T1-GEN-1).
       const nombresExtraits = new Set([...passages.join(' ').matchAll(new RegExp(`(?<![\\p{L}\\d])(\\d{1,3}|${RX_NOMBRE_LETTRES})(?![\\p{L}\\d])`, 'giu'))].map((x) => nombreFr(x[1])));
+      // (« 10 feuillets recto-verso » : 20 pages, T7G-1)
+      for (const x of passages.join(' ').matchAll(new RegExp(`(?<![\\p{L}\\d])(\\d{1,3}|${RX_NOMBRE_LETTRES})\\s*(?:feuillets?|feuilles?)\\s+recto[\\s-]*(?:\\/|et|-)?\\s*verso`, 'giu'))) nombresExtraits.add(2 * nombreFr(x[1]));
       if (!nombresExtraits.has(pagesMax) && !(Number.isFinite(pagesParPartie) && nombresExtraits.has(pagesParPartie))) {
         console.warn(`[MemoireGenerator] Format imposé par le RC : ${pagesMax} pages annoncées par le modèle, nombre absent des extraits du RC ; ignoré.`);
         return null;

@@ -19,12 +19,19 @@ import { RX_NOMBRE_LETTRES, nombreFr } from './base_memoires';
  * Nombre de pages écrit en chiffres ou en lettres (T1-GEN-1 : « dix pages », « vingt (20) pages », « 10 p. », « 10 feuilles
  * A4 », « 15 feuillets », « 10 faces ») ; groupe 1 : le nombre, groupe 2 : le chiffre entre parenthèses éventuel.
  */
-const RX_PAGES = String.raw`\(?(?<![\p{L}\d])(\d{1,3}|${RX_NOMBRE_LETTRES})\)?\s*(?:\(\s*(\d{1,3})\s*\)\s*)?(?:pages?(?![\p{L}])|p\.(?=\s|$)|feuillets?(?![\p{L}])|feuilles?(?![\p{L}])|faces?(?![\p{L}]))`;
-/** « Le nombre de pages du mémoire technique est limité à 10 » : forme inverse ; groupe 1 : le nombre. */
-const RX_PAGES_INVERSE = String.raw`nombre\s+(?:maxim(?:al|um)\s+)?de\s+(?:pages|feuillets|feuilles|faces)[^.;]{0,90}?(?:limit[ée]e?|fix[ée]e?|plafonn[ée]e?|maxim\p{L}*|ne\s+(?:doit|peut|devra|pourra)\s+(?:pas\s+)?(?:d[ée]passer|exc[ée]der)|est\s+de)\s*(?:[àa]\s+)?(\d{1,3}|${RX_NOMBRE_LETTRES})(?![\p{L}\d])`;
+// T7G-1 : « p. », « p », « pp. » (« 20 p. max », « (20 p.) », « 20 pp. maximum ») comme « pages ».
+const RX_PAGES = String.raw`\(?(?<![\p{L}\d])(\d{1,3}|${RX_NOMBRE_LETTRES})\)?\s*(?:\(\s*(\d{1,3})\s*\)\s*)?(?:pages?(?![\p{L}])|pp?\.?(?=[\s)\],;:]|$)|feuillets?(?![\p{L}])|feuilles?(?![\p{L}])|faces?(?![\p{L}]))`;
+/** « Le nombre de pages du mémoire technique est limité à 10 », « Nombre de pages maximum du mémoire technique : 20 », colonne
+ *  « Nombre de pages » d'un tableau (« … | 20 maximum ») : forme inverse ; groupe 1 : le nombre. */
+const RX_PAGES_INVERSE = String.raw`nombre\s+(?:(?:maxim(?:al|um)|total)\s+)?de\s+(?:pages|feuillets|feuilles|faces)(?:\s+maxim(?:al|um))?[^.;]{0,90}?(?:limit[ée]e?|fix[ée]e?|plafonn[ée]e?|maxim\p{L}*|ne\s+(?:doit|peut|devra|pourra)\s+(?:pas\s+)?(?:d[ée]passer|exc[ée]der)|est\s+de|:|\|)\s*(?:[àa]\s+)?(\d{1,3}|${RX_NOMBRE_LETTRES})(?![\p{L}\d])`;
+/** Marque de limite (T7G-1) : « maximum », « maxi », « max. », « limité », « au plus », « n'excède », « ne … pas dépasser »,
+ *  « plafonné », et le libellé « nombre (maximum) de pages ». Une seule expression pour tous les repérages. */
+export const RX_MARQUE_LIMITE = /maxim|(?<![\p{L}])maxi?(?![\p{L}])|limit|d[ée]pass|exc[èé]d|au\s+plus|plafon|nombre\s+(?:(?:maxim(?:al|um)|total)\s+)?de\s+(?:pages|feuillets|feuilles|faces)/iu;
+/** Feuillet ou feuille « recto-verso » : deux pages (T7G-1 : « 10 feuillets recto-verso » = 20 pages). */
+const pagesReelles = (n: number, unite: string, phrase: string): number => (/^feuil/i.test(unite) && /recto[\s-]*(?:\/|et|-)?\s*verso/i.test(phrase) ? 2 * n : n);
 const valeurNombre = (a?: string, b?: string): number => (b && /^\d+$/.test(b) ? Number(b) : nombreFr(String(a || '')));
 /** Durée ou mention de forme qui n'est jamais une limite : « hors annexes », « annexes non comprises ». */
-const HORS_ANNEXES = /hors\s+annexes?|(?:les\s+)?annexes?\s+(?:non\s+comprises?|exclues?|en\s+sus|non\s+compt(?:[ée]es?|abilis[ée]es?)|n['’]\s*[ée]tant\s+pas\s+(?:compt[ée]es?|comptabilis[ée]es?|comprises?|incluses?)|ne\s+(?:sont|seront)\s+pas\s+(?:compt[ée]es?|comptabilis[ée]es?|comprises?|incluses?))|sans\s+(?:les\s+)?annexes?|(?:non\s+compris|en\s+dehors\s+des?)\s+(?:les\s+)?annexes?/gi;
+const HORS_ANNEXES = /hors\s+(?:CV\s+et\s+)?annexes?|hors\s+CV|(?:les\s+)?annexes?\s+(?:comprises?|incluses?)|y\s+compris\s+(?:les\s+)?annexes?|(?:les\s+)?annexes?\s+(?:non\s+comprises?|exclues?|en\s+sus|non\s+compt(?:[ée]es?|abilis[ée]es?)|n['’]\s*[ée]tant\s+pas\s+(?:compt[ée]es?|comptabilis[ée]es?|comprises?|incluses?)|ne\s+(?:sont|seront)\s+pas\s+(?:compt[ée]es?|comptabilis[ée]es?|comprises?|incluses?))|sans\s+(?:les\s+)?annexes?|(?:non\s+compris|en\s+dehors\s+des?)\s+(?:les\s+)?annexes?/gi;
 
 export interface PartieCourte { id: string; title: string; attendu?: string }
 export interface FormatImpose {
@@ -47,7 +54,7 @@ export function passagesLimitePages(dce: string): string[] {
   // « 12 pages », « (12) pages », « vingt (20) pages », « 15 feuillets », « 10 faces » … accompagné, à
   // proximité, d'un terme de limite (maximum, limité, ne pas dépasser, au plus…).
   const re = new RegExp(`${RX_PAGES}|${RX_PAGES_INVERSE}`, 'giu');
-  const limite = /maxim|limit|d[ée]pass|exc[èé]d|au plus|plafon|n.exc[èé]d/i;
+  const limite = RX_MARQUE_LIMITE;
   const out: Array<{ pos: number; texte: string }> = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(dce)) && out.length < 8) {
@@ -81,7 +88,7 @@ export function passagesContenuOffre(dce: string): string[] {
     const zone = t.slice(Math.max(0, m.index! - 300), m.index! + 500)
       .replace(/\bpages?\s*(?:n[°o]\s*)?\d+\s*(?:\/|sur)\s*\d+/gi, ' ')
       .replace(/(?:dates?|heures?|d[ée]lais?)\s+(?:et\s+heures?\s+)?limites?|limites?\s+(?:de\s+|d['’]\s*)?(?:r[ée]ception|remise|d[ée]p[ôo]t|validit[ée]|ex[ée]cution)/gi, ' ');
-    if (!/pages?|feuillets?|feuilles?|limit|n.exc[èé]d|ne\s+(?:doit|devra|pourra)\s+pas\s+(?:d[ée]passer|exc[èé]der)/i.test(zone)) continue;
+    if (!/pages?|(?<![\p{L}])pp?\.?(?=[\s)\],;:]|$)|feuillets?|feuilles?|limit|n.exc[èé]d|ne\s+(?:doit|devra|pourra)\s+pas\s+(?:d[ée]passer|exc[èé]der)|(?<![\p{L}])maxi?(?![\p{L}])|maxim/iu.test(zone)) continue;
     if (out.some((o) => o.includes(t.slice(m.index!, m.index! + 40)))) continue;
     out.push(t.slice(Math.max(0, m.index! - 700), m.index! + 1300));
     if (out.length >= 4) break;
@@ -94,10 +101,43 @@ export function passagesContenuOffre(dce: string): string[] {
  * GSS (T9CS-2 : jamais le début du passage de 2 000 caractères, en-tête d'une autre pièce compris). '' si aucune.
  */
 export function phraseLimitePages(passage: string): string {
-  const LIMITE = /maxim|limit|d[ée]pass|exc[èé]d|au plus|plafon|n.exc[èé]d/i;
-  const phrases = String(passage || '').replace(/\s+/g, ' ').split(/(?<=[.;!?])\s+(?=[A-ZÀ-Ý•–—-])|\s+[–—•|]\s+/);
-  const ph = phrases.find((x) => new RegExp(`${RX_PAGES}|${RX_PAGES_INVERSE}`, 'iu').test(x) && LIMITE.test(x.replace(/(?:dates?|heures?|d[ée]lais?)\s+limites?/gi, ' ')));
-  return ph ? ph.replace(/^\s*[–—•-]\s*/, '').trim() : '';
+  const phrases = phrasesDuPassage(passage);
+  const ph = phrases.find((x) => new RegExp(`${RX_PAGES}|${RX_PAGES_INVERSE}`, 'iu').test(x) && RX_MARQUE_LIMITE.test(x.replace(/(?:dates?|heures?|d[ée]lais?)\s+limites?/gi, ' ')));
+  return ph ? autourDuNombre(ph.replace(/^\s*[–—•-]\s*/, '').trim()) : '';
+}
+
+/**
+ * Phrases d'un passage du RC (T7-COH-3) : coupées aux fins de phrase, aux fins de ligne (titres, lignes sans ponctuation, lignes
+ * d'un tableau), aux séparateurs de pièce (« --- X --- », « ===== PIÈCE : X ===== ») et aux puces, avant de réunir les espaces :
+ * jamais l'en-tête d'une pièce, son titre ou l'adresse de l'acheteur dans la citation. Une ligne de tableau qui ne porte que le
+ * nombre (« Mémoire technique | … | 20 maximum ») est lue avec la ligne d'en-tête qui la précède (« … | Nombre de pages »).
+ */
+function phrasesDuPassage(passage: string): string[] {
+  const lignes = String(passage || '').replace(/\r/g, '').split(/\n+/)
+    .map((l) => l.replace(/^\s*={3,}\s*PI[ÈE]CE\s*:.*?={3,}\s*/i, '').replace(/^\s*-{3}\s.+?\s-{3}\s*/, '').replace(/^\s*(?:-{3,}|={3,})\s*$/, '').trim()).filter(Boolean);
+  const out: string[] = [];
+  for (let i = 0; i < lignes.length; i++) {
+    const l = lignes[i].replace(/\s+/g, ' ');
+    // Ligne de tableau : avec la ligne d'en-tête du tableau (colonne « Nombre de pages »).
+    if (/\|/.test(l) && i > 0 && /\|/.test(lignes[i - 1]) && /nombre\s+(?:maxim\w+\s+)?de\s+pages/i.test(lignes[i - 1])) {
+      const tetes = lignes[i - 1].split('|').map((x) => x.trim());
+      const cells = l.split('|').map((x) => x.trim());
+      out.push(cells.map((c, k) => (/nombre\s+(?:maxim\w+\s+)?de\s+pages/i.test(tetes[k] || '') ? `${tetes[k]} : ${c}` : c)).join(' | '));
+      continue;
+    }
+    for (const ph of l.replace(/^\s*[-–—•*]\s+/, '').split(/(?<=[.;!?])\s+(?=[A-ZÀ-Ý•–—-])|\s+[–—•]\s+/)) if (ph.trim()) out.push(ph.trim());
+  }
+  return out;
+}
+
+/** Citation centrée sur le nombre de pages (220 signes au plus) : le nombre et son unité restent cités (T7-COH-3). */
+function autourDuNombre(ph: string, max = 220): string {
+  if (ph.length <= max) return ph;
+  const m = new RegExp(`${RX_PAGES}|${RX_PAGES_INVERSE}`, 'iu').exec(ph);
+  const i = m ? m.index : 0;
+  const debut = Math.max(0, Math.min(i - 100, ph.length - max));
+  const morceau = ph.slice(debut, debut + max).replace(/^\S*\s/, debut > 0 ? '' : '$&').replace(/\s\S*$/, debut + max < ph.length ? '' : '$&');
+  return `${debut > 0 ? '… ' : ''}${morceau.trim()}${debut + max < ph.length ? ' …' : ''}`;
 }
 
 /**
@@ -107,17 +147,20 @@ export function phraseLimitePages(passage: string): string {
  * phrase ne le dit clairement, ou si la phrase porte aussi sur une autre pièce (CV, annexe, lettre).
  */
 export function limitePagesMemoire(passages: string[]): { pages: number; citation: string } | null {
-  const MEMOIRE = /m[ée]moire\s+(?:technique|justificatif|m[ée]thodologique)|offre\s+technique|note\s+m[ée]thodologique|r[ée]ponse\s+technique|proposition\s+technique/i;
-  const LIMITE = /maxim|limit|d[ée]pass|exc[èé]d|au plus|plafon|n.exc[èé]d/i;
+  // (« le mémoire » seul et « dossier technique » aussi, T7G-1)
+  const MEMOIRE = /m[ée]moire\s+(?:technique|justificatif|m[ée]thodologique)|offre\s+technique|note\s+m[ée]thodologique|r[ée]ponse\s+technique|proposition\s+technique|dossier\s+technique|(?:^|[\s(])(?:le|du|au)\s+m[ée]moire(?![\p{L}])/iu;
+  const LIMITE = RX_MARQUE_LIMITE;
   const AUTRE = /\bCV\b|curriculum|annexe|lettre|fiche|attestation|bordereau|DPGF|BPU/i;
   for (const passage of passages) {
-    // Phrases et éléments de liste (« – un mémoire technique (douze (12) pages maximum) … ») : jamais un pied de page collé.
-    const phrases = String(passage || '').replace(/\s+/g, ' ').split(/(?<=[.;])\s+(?=[A-ZÀ-Ý•–—-])|\s+[–—•]\s+/);
+    // Phrases et éléments de liste (« – un mémoire technique (douze (12) pages maximum) … ») : jamais un pied de page collé,
+    // jamais l'en-tête de la pièce ni son titre (T7-COH-3).
+    const phrases = phrasesDuPassage(passage);
     for (const ph of phrases) {
       if (!MEMOIRE.test(ph) || !LIMITE.test(ph)) continue;
       const m = new RegExp(RX_PAGES, 'iu').exec(ph) || new RegExp(RX_PAGES_INVERSE, 'iu').exec(ph);
       if (!m) continue;
-      const n = valeurNombre(m[1], m[2]);
+      const unite = (/(pages?|pp?\.?|feuillets?|feuilles?|faces?)\s*$/i.exec(m[0]) || [''])[0];
+      const n = pagesReelles(valeurNombre(m[1], m[2]), unite, ph);
       // Distance entre le mémoire et le nombre : même proposition (120 caractères au plus).
       const iMem = ph.search(MEMOIRE);
       // T2-COH-2 : une limite de plus de 40 pages est une vraie limite (un mémoire libre en fait 120 à 145) ; T2-GEN-9 : une
@@ -131,7 +174,7 @@ export function limitePagesMemoire(passages: string[]): { pages: number; citatio
       const sansHors = ph.replace(HORS_ANNEXES, (x) => ' '.repeat(x.length));
       const voisinage = sansHors.slice(Math.max(0, Math.min(iMem, m.index) - 40), Math.max(iMem, m.index) + m[0].length + 20);
       if (AUTRE.test(voisinage)) continue;
-      return { pages: n, citation: ph.replace(/^\s*[–—•-]\s*/, '').trim().slice(0, 300) };
+      return { pages: n, citation: autourDuNombre(ph.replace(/^\s*[–—•-]\s*/, '').trim()) };
     }
   }
   return null;
