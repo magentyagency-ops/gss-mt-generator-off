@@ -365,12 +365,14 @@ export function normaliserVariantesACompleter(texte: string): { texte: string; q
 
 /** Mots porteurs d'une question ou d'une phrase (singulier, sans mots outils), pour les rapprocher. */
 const motsQuestion = (t: string) => new Set(normaliser(String(t || '').replace(/\[À COMPLÉTER\]/g, ' ')).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/)
-  .filter((w) => w.length >= 4 && !['combien', 'quel', 'quelle', 'quels', 'quelles', 'compte', 'comptent', 'dans', 'pour', 'avec', 'marche', 'votre', 'notre', 'nous', 'vous', 'cette', 'sont', 'elle', 'elles'].includes(w))
+  .filter((w) => w.length >= 4 && !['combien', 'quel', 'quelle', 'quels', 'quelles', 'compte', 'comptent', 'dans', 'pour', 'avec', 'marche', 'votre', 'notre', 'nous', 'vous', 'cette', 'sont', 'elle', 'elles', 'pouvez', 'preciser', 'fournir', 'indiquer', 'validez', 'valider', 'confirmer', 'faut', 'doit', 'peut', 'annonce', 'apporte', 'reponse', 'question', 'point', 'ville', 'acheteur'].includes(w))
   .map((w) => (w.length > 4 ? w.replace(/[sx]$/, '') : w)));
 /** Part des mots porteurs de `a` présents dans `b`. */
 const recouvrement = (a: Set<string>, b: Set<string>) => (a.size ? [...a].filter((w) => b.has(w)).length / a.size : 0);
+/** Part des mots porteurs du texte `a` présents dans le texte `b`. */
+export const recouvrementTextes = (a: string, b: string) => recouvrement(motsQuestion(a), motsQuestion(b));
 /** Ressemblance de deux questions (la plus courte dans la plus longue). */
-const similariteQuestions = (a: string, b: string) => { const x = motsQuestion(a), y = motsQuestion(b); return x.size <= y.size ? recouvrement(x, y) : recouvrement(y, x); };
+export const similariteQuestions = (a: string, b: string) => { const x = motsQuestion(a), y = motsQuestion(b); return x.size <= y.size ? recouvrement(x, y) : recouvrement(y, x); };
 
 /**
  * Questions attribuées aux phrases de leurs emplacements (même ordre que `phrases` ; undefined : aucune) : chaque question va

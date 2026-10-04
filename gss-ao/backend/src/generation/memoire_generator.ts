@@ -19,7 +19,7 @@ import {
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
   sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
-  sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
+  sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, similariteQuestions, recouvrementTextes, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, questionRondes, casPratiqueRepris, type Dimensionnement } from './dimensionnement';
 import {
@@ -1443,6 +1443,97 @@ export function rubriquesSansSchema(plan: PlanMemoireType, ajouts: Array<{ id: s
 /** Ligne de consultation déjà formulée sans modèle (jamais envoyée à la fusion par le modèle, jamais reformulée). */
 export const LIGNE_DETERMINISTE = /^(?:Proposition à valider|Le cahier des charges prévoit des rondes ponctuelles|Proposition de réponse à valider|Réponse à relire|Réponse «|Réponse du cadre\s*:|Phrases adaptées au cahier des charges|Partie «|Rubrique «|Rédaction automatique indisponible|Phrase proposée par l'IA d'après le cahier des charges|Phrase ajoutée au texte de GSS)/;
 
+/**
+ * Demande écrite à l'impératif ou en question fermée au sens inversé (T2-CONS-7 : « Joindre les CV… » devenu « GSS doit-elle
+ * joindre les CV… ? », alors que le cadre les exige) : question ouverte à GSS (« Pouvez-vous fournir les CV… ? »).
+ */
+/** Sous-titre (ligne courte sans point final) écrit juste avant le `rang`-ième « [À COMPLÉTER] » d'une réponse du cadre ; '' sinon. */
+export function sousTitreDeLEmplacement(valeur: string, rang: number): string {
+  const morceaux = String(valeur || '').split('[À COMPLÉTER]');
+  if (rang >= morceaux.length - 1) return '';
+  const avant = morceaux.slice(0, rang + 1).join('[À COMPLÉTER]');
+  const lignes = avant.split('\n');
+  // L'emplacement est seul sur sa ligne : le sous-titre est la dernière ligne non vide qui le précède.
+  if (lignes[lignes.length - 1].trim()) return '';
+  const l = lignes.slice(0, -1).map((x) => x.trim()).filter(Boolean).pop() || '';
+  const t = l.replace(/^[#*\s•-]+|[*\s:]+$/g, '').trim();
+  return t && t.split(/\s+/).length <= 10 && !/[.;!?]$/.test(t) ? t : '';
+}
+
+/**
+ * Pièces que la question du cadre demande pour une partie (« … encadrants, CV détaillés des encadrants, cartes professionnelles
+ * CNAPS des agents… ») : morceaux de la question qui citent une pièce (CV, carte, attestation, certificat, agrément…), d'abord
+ * ceux qui partagent un mot avec le sous-titre ; '' s'il n'y en a pas.
+ */
+export function piecesDemandeesParLeCadre(question: string, sousTitre: string): string {
+  const PIECE = /(?<![\p{L}])(?:CV|curriculum|cartes?\s+professionnelles?|attestations?|certificats?|agr[ée]ments?|justificatifs?|dipl[ôo]mes?|habilitations?|pi[èe]ces?|copies?)(?![\p{L}])/iu;
+  const morceaux = String(question || '').split(/\s*[;:()]\s*|,\s+(?=\p{Lu}|\p{Ll}{3,}\s)/u).map((x) => x.replace(/\s+/g, ' ').replace(/,?\s*etc\.?$/i, '').trim()).filter((x) => x.length >= 3 && PIECE.test(x));
+  if (!morceaux.length) return '';
+  const motsTitre = new Set(normaliser(sousTitre).split(/[^a-z]+/).filter((w) => w.length >= 5).map((w) => w.slice(0, 6)));
+  const proches = morceaux.filter((m) => normaliser(m).split(/[^a-z]+/).some((w) => motsTitre.has(w.slice(0, 6))));
+  const l = [...new Set([...proches, ...morceaux])].slice(0, 3).map((x) => `« ${x.length > 120 ? `${x.slice(0, 120).replace(/\s+\S*$/, '')}…` : x} »`);
+  return l.join(', ');
+}
+
+export function questionOuverte(q: string): string {
+  const t = String(q || '').trim();
+  if (!t || LIGNE_DETERMINISTE.test(t) || /^À demander à l.acheteur/i.test(t)) return t;
+  const VERBES: Array<[RegExp, string]> = [
+    [/^(?:joindre|fournir|transmettre|communiquer|remettre|produire|annexer)$/i, 'Pouvez-vous fournir'],
+    [/^(?:pr[ée]ciser|indiquer|d[ée]crire|d[ée]tailler|expliquer|d[ée]finir|fixer)$/i, 'Pouvez-vous préciser'],
+    [/^(?:valider|confirmer)$/i, 'Validez-vous'],
+  ];
+  const reformuler = (verbe: string, reste: string) => {
+    const r = reste.replace(/[.?!\s]+$/, '').trim();
+    const v = VERBES.find(([rx]) => rx.test(verbe));
+    return v ? `${v[1]} ${r} ?` : `Pouvez-vous ${verbe.toLowerCase()} ${r} ?`;
+  };
+  let m = /^(?:GSS|la soci[ée]t[ée]|l['’]entreprise|le titulaire|le candidat)\s+(?:doit|devra|peut|pourra)-(?:t-)?(?:elle|il)\s+(\p{L}+)\s+(.+)$/iu.exec(t);
+  if (m) return reformuler(m[1], m[2]);
+  m = /^(?:GSS|le titulaire|le candidat)\s+(?:doit|devra)\s+(\p{L}+)\s+(.+)$/iu.exec(t);
+  if (m && !/\?\s*$/.test(t)) return reformuler(m[1], m[2]);
+  m = /^(joindre|fournir|transmettre|communiquer|remettre|produire|annexer|pr[ée]ciser|indiquer|d[ée]crire|d[ée]tailler|d[ée]finir|fixer)\s+(.+)$/iu.exec(t);
+  if (m && !/\?\s*$/.test(t)) return reformuler(m[1], m[2]);
+  return t;
+}
+
+/**
+ * Questions à GSS sans redite (T2-CONS-7, T2N-7) : une question qui redit celle d'un emplacement à compléter est retirée
+ * (l'emplacement la pose déjà) ; une question qui ne fait que reprendre une exigence déjà traitée par une proposition de
+ * réponse (D5) est retirée ; deux questions sur le même sujet n'en font qu'une (sources réunies). Les lignes formulées sans
+ * modèle et les questions rattachées à un repère du texte sont toujours gardées.
+ */
+export function sansQuestionsRedites<T extends { question: string; sources?: number[] }>(qs: T[], o: { prioritaires?: string[]; exigencesProposees?: string[]; texteMemoire?: string; garder?: (q: T) => boolean } = {}): T[] {
+  const prioritaires = (o.prioritaires || []).filter(Boolean);
+  const clesPrioritaires = new Set(prioritaires.flatMap(cleDonnee));
+  const memoire = normaliser(o.texteMemoire || '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ');
+  const out: T[] = [];
+  for (const q of qs) {
+    const fixe = LIGNE_DETERMINISTE.test(q.question) || !!o.garder?.(q);
+    if (!fixe && !prioritaires.includes(q.question)) {
+      const cles = cleDonnee(q.question);
+      // Donnée déjà demandée par un emplacement (délais du cadre, remplacement d'un chien…) ou même demande.
+      if (cles.length && cles.every((k) => clesPrioritaires.has(k))) continue;
+      if (prioritaires.some((p) => memeDemande(p, q.question))) continue;
+      // Exigence déjà traitée par une proposition de réponse (D5).
+      if ((o.exigencesProposees || []).some((e) => recouvrementTextes(q.question, e) >= 0.6)) continue;
+      // Document que le mémoire contient déjà (« Pouvez-vous fournir au mémoire le modèle de rapport journalier ? »).
+      const doc = /^Pouvez-vous fournir\s+(?:au mémoire\s+)?(.+?)\s*\?$/i.exec(q.question);
+      const d = doc ? normaliser(doc[1].replace(/^(?:le|la|les|l['’]|un|une|des)\s*/i, '')).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim() : '';
+      if (d && d.split(' ').length >= 3 && memoire.includes(d)) continue;
+    }
+    const double = LIGNE_DETERMINISTE.test(q.question) ? undefined : out.find((x) => !LIGNE_DETERMINISTE.test(x.question) && (memeDemande(x.question, q.question)
+      || (cleDonnee(x.question).length > 0 && cleDonnee(x.question).join() === cleDonnee(q.question).join())));
+    if (double) {
+      if (double.sources && q.sources) double.sources = [...new Set([...double.sources, ...q.sources])];
+      if (q.question.length > double.question.length && !o.garder?.(double) && !prioritaires.includes(double.question)) double.question = q.question;
+      continue;
+    }
+    out.push(q);
+  }
+  return out;
+}
+
 /** Question en clair sur une case de tableau du cadre (même forme que les cartes de l'assistant, T8CS-4). */
 export function questionCaseTableau(ligne: string, colonne: string): string {
   const l = String(ligne || '').split('|')[0].replace(/\[CHAMP_\d+\]/g, '').replace(/\s+/g, ' ').trim();
@@ -1661,6 +1752,12 @@ export function cleDonnee(question: string): string[] {
   // Validation du dimensionnement proposé (etampes1 594 : « GSS valide-t-elle le dimensionnement proposé… » à côté de la
   // proposition à valider formulée sans modèle).
   if (/dimensionnement/i.test(q) && /valid/i.test(q)) out.push('validation_dimensionnement');
+  // Remplacement d'un chien indisponible (etampes1 1202, T2-CONS-7 : « dispositif de remplacement d'un chien ne pouvant
+  // exercer » et « En cas d'indisponibilité du chien… quelle solution de remplacement… »).
+  if (/chiens?\b|cynophil|ma[îi]tres?[- ]chiens?/i.test(q) && /rempla|indisponib|absen|ne pouvant/i.test(q)) out.push('remplacement_chien');
+  // Échéances d'envoi des plannings (ifsem 1001, T2N-7 : « échéances applicables à l'envoi du planning… J-10, J-7 et J-3 » et
+  // « le calendrier proposé — envoi des plannings à J-10… »).
+  if (/plannings?/i.test(q) && /J\s?-\s?\d|[ée]ch[ée]ances?|jours? ouvr|calendrier/i.test(q)) out.push('echeances_planning');
   // Couverture horaire du cas pratique (etampes2 553 : « 48 heures annoncées / 39 heures détaillées », « 9 heures non décrites »).
   if (/cas pratique|plages?|intitul|non d[ée]crites/i.test(q) && /\d+\s*h(?:eures)?\b[^?]{0,160}\d+\s*h(?:eures)?\b/i.test(q) && /couvr|couverture|intitul|non d[ée]crites|clarifi/i.test(q)) out.push('couverture_cas_pratique');
   return out.sort();
@@ -3645,7 +3742,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
       const u = uniques.find((x) => norm(x.texte) === norm(t));
       if (u) u.origines.push(i); else uniques.push({ texte: t, origines: [i] });
     });
-    const brut = () => uniques.map((u) => ({ question: u.texte, sources: u.origines }));
+    const brut = () => uniques.map((u) => ({ question: questionOuverte(u.texte), sources: u.origines }));
     // Lignes déjà formulées sans modèle (proposition de dimensionnement, de mise en situation ou de couverture, phrase de GSS
     // retirée par un garde-fou, réponse à relire, phrases adaptées au CCTP, alertes) : jamais réécrites par la fusion, qui en
     // faisait une « Exigence du DCE » (etampes1 592 : « GSS doit valider ou modifier dans l'assistant le dimensionnement… ») ou
@@ -3671,7 +3768,7 @@ Génère une réponse JSON valide respectant EXACTEMENT cette structure :
 - Les références de GSS (dénomination de l'établissement client, contact, montant), son chiffre d'affaires, ses effectifs et ses cadres sont des questions pour GSS, jamais « à demander à l'acheteur ».
 - Les fiches techniques, notices ou documentations des moyens du soumissionnaire (« insérer ici les fiches techniques » : moyens de communication, contrôle de rondes, main courante) sont celles de GSS : question pour GSS, jamais « à demander à l'acheteur ».
 - Ne redemande jamais une donnée déjà écrite dans une demande ou connue de GSS (numéro d'autorisation AUT ou d'agrément AGD du CNAPS) : en fusionnant, reprends seulement les données réellement demandées.
-- Une phrase par question, sans Markdown.
+- Une phrase par question, sans Markdown. Une demande se pose en question ouverte (« Quel(le)s … ? », « Pouvez-vous fournir … ? », « Pouvez-vous préciser … ? ») ; jamais en question fermée « GSS doit-elle … ? », qui en changerait le sens (le cadre exige déjà la pièce : GSS doit la fournir).
 - Pour chaque question, indique dans "sources" les numéros des demandes qu'elle regroupe.
 Renvoie UNIQUEMENT un objet JSON : {"questions": [{"question": "...", "sources": [1, 4]}]}`,
       },
@@ -3686,7 +3783,8 @@ Renvoie UNIQUEMENT un objet JSON : {"questions": [{"question": "...", "sources":
             sources: (Array.isArray(q?.sources) ? q.sources : []).map(Number)
               .filter((n: number) => n >= 1 && n <= aFusionner.length).flatMap((n: number) => aFusionner[n - 1].origines),
           }))
-          .filter((q: { question: string }) => q.question);
+          .filter((q: { question: string }) => q.question)
+          .map((q: { question: string; sources: number[] }) => ({ ...q, question: questionOuverte(q.question) }));
         if (out.length && out.length <= aFusionner.length) {
           console.log(`[MemoireGenerator] Consultations : ${liste.length} demande(s) → ${out.length + fixes.length} question(s) après fusion des doublons (${fixes.length} déjà formulée(s), gardée(s) telle(s) quelle(s)).`);
           return avecFixes(out);
@@ -6819,7 +6917,17 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
           continue;
         }
         if (!contexteVide && !/laiss[ée]e? vide|partie manquante|passage manquant|donn[ée]e pr[ée]cise (?:doit figurer|manque)|emplacement [àa] compl[ée]ter|information manquante/i.test(el.question)) continue;
-        const libelleCadre = libelleQuestionCadre((ctxChamp.match(/Question:\s*"([^"]*)"/) || [])[1] || '');
+        const questionDuCadre = (ctxChamp.match(/Question:\s*"([^"]*)"/) || [])[1] || '';
+        const libelleCadre = libelleQuestionCadre(questionDuCadre);
+        // Emplacement seul sous un sous-titre de la réponse (etampes1 1202, T2-CONS-7 : « Agrément et pièces justificatives »
+        // puis « [À COMPLÉTER] ») : la question cite ce sous-titre et les pièces que le cadre demande (CV, cartes…).
+        const rang = elementsACompleter.filter((x) => signets.find((y) => y.cle === x.cle)?.champ === champ).findIndex((x) => x.cle === el.cle);
+        const sousTitre = contexteVide ? sousTitreDeLEmplacement(String(replacements.find((r: any) => r.id === champ)?.value ?? ''), Math.max(0, rang)) : '';
+        if (sousTitre) {
+          const pieces = piecesDemandeesParLeCadre(questionDuCadre, sousTitre);
+          el.question = `Réponse à « ${libelleCadre || sousTitre} », partie « ${sousTitre} » : ${pieces ? `le cadre demande ${pieces} ; quelles informations ou quelles pièces GSS fournit-elle ici ?` : 'quelle information faut-il écrire ici ?'}`;
+          continue;
+        }
         el.question = `Quelle information faut-il écrire${libelleCadre ? ` dans la réponse à « ${libelleCadre} »` : ''}${contexteVide ? '' : `, à la place de « [À COMPLÉTER] » dans la phrase « ${el.contexte.replace(REPERE_TECHNIQUE, '').replace(/\s+/g, ' ').trim().slice(0, 220)} »`} ?`;
       }
     } catch (e: any) {
@@ -7048,7 +7156,8 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         ...alerteCctpAbsent(dceContext, this.piecesIllisibles), ...this.alertesDceTronque, ...alerteLots(analysisData, dceContext), ...alerteHorsZone(analysisData, dceContext),
         ...alertesRubriquesCadre,
         // Même donnée inconnue (partenaire de télésurveillance, sa station, sa certification) : une seule question (T1-COH-8).
-        ...regrouperQuestionsTelesurveillance([...new Set([
+        // Questions sans redite (T2-CONS-7) : une question qui redit celle d'un emplacement à compléter est retirée.
+        ...sansQuestionsRedites(regrouperQuestionsTelesurveillance([...new Set([
           ...(descriptors.some((d) => d.grille)
             ? await this.consoliderConsultations([...aCompleter.flatMap((q) => {
               // Question générique d'un critère : les questions précises de ses emplacements, une fois chacune. Champ hors
@@ -7066,7 +7175,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
               const precises = [...new Set(elementsACompleter.filter((el) => el.statut === 'ouvert' && signets.find((x) => x.cle === el.cle)?.champ === champ).map((el) => el.question).filter(Boolean).map((x) => questionAvecLibelle(x, champsEtatLibelle(champ))))];
               return precises.length ? precises : [q];
             }), ...[...confirmationsGss].filter((c) => !aCompleter.includes(c))]),
-        ].map((c) => (!LIGNE_DETERMINISTE.test(c) && /p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(c) ? 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».' : c).replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean).map(questionDonneeGss).map(questionExacte))]),
+        ].map((c) => (!LIGNE_DETERMINISTE.test(c) && /p[ée]riodes? neutralis|fermeture (?:de l.)?entreprise/i.test(c) ? 'Périodes neutralisées (fermeture de l\'entreprise) : GSS a-t-elle des périodes de fermeture à déclarer pour ce marché ? Si GSS assure la prestation sans interruption, la réponse est « Aucune ».' : c).replace(/\s*\[CHAMP_\d+\]\s*\|?/g, ' ').replace(/«\s*»|\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean).map(questionDonneeGss).map(questionExacte))]).map((question) => ({ question })), { prioritaires: elementsACompleter.filter((e) => e.statut === 'ouvert').map((e) => e.question), texteMemoire: replacements.map((r: any) => String(r.value ?? '')).join('\n') }).map((q) => q.question),
         // Lieu du site introuvable dans le DCE (T7-COH-2) : une seule question, aucun délai normand promis en attendant.
         ...questionLieuInconnu(analysisData, dceContext),
         // Grille de candidature : une question exacte par donnée de GSS (effectif, cadres, chiffre d'affaires, référence).
@@ -8476,7 +8585,12 @@ RÈGLES DE FORME (rendu Marp) :
     }
     const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
     for (const r of enLigne) demandes.push({ texte: r.question, repere: r.n });
-    const questionsGss = await this.consoliderAvecSources(demandes.map((d) => d.texte), { dce: dceContext, horsNormandie: horsNormandie });
+    // Questions sans redite (T2-CONS-7, T2N-7) : rien de ce qu'un emplacement ou une proposition de réponse (D5) pose déjà.
+    const questionsGss = sansQuestionsRedites(await this.consoliderAvecSources(demandes.map((d) => d.texte), { dce: dceContext, horsNormandie: horsNormandie }), {
+      prioritaires: enPlace.map((e) => e.question || '').filter(Boolean),
+      exigencesProposees: [...enProposition].map((e) => String(e.exigence || '')).filter(Boolean),
+      garder: (q) => q.sources.some((k) => typeof demandes[k]?.repere === 'number'),
+    });
     // Un élément par emplacement « [À COMPLÉTER] » (sa réponse remplace ce seul emplacement), puis les autres questions.
     const elementsLibres: ElementACompleter[] = enPlace.map((e, i) => ({
       cle: `Q${i + 1}`, question: e.question!, contexte: `${titreDe(e.id)} — ${e.contexte}`, statut: 'ouvert' as const, reperes: [e.n],
@@ -9803,7 +9917,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       if (id) {
         const t = sections[id];
         const pos = t.indexOf(REPERE(reperes[0]));
-        contexte = `${plan.find((x) => x.id === id)?.title || ''} — …${t.slice(Math.max(0, pos - 220), pos).replace(REPERE_RE, '').replace(/[#*]/g, '').replace(/\s+/g, ' ').trim()}`;
+        contexte = `${plan.find((x) => x.id === id)?.title || ''} — …${t.slice(Math.max(0, pos - 220), pos).replace(REPERE_RE, '').replace(/^[^\s⟦]*⟧/, '').replace(/[#*]/g, '').replace(/\s+/g, ' ').trim()}`;
       }
       return { cle: `Q${i + 1}`, question: q.question, contexte, statut: 'ouvert', reperes, pourAcheteur: /^À demander à l.acheteur/i.test(q.question) };
     });
@@ -10220,7 +10334,10 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       demandes.splice(0, demandes.length, ...gardees);
       if (demandes.length < avant) console.log(`[MemoireGenerator] Format court : ${avant - demandes.length} question(s) d'un passage non repris retirée(s).`);
     }
-    const questionsGss = await this.consoliderAvecSources(demandes.map((d) => d.texte), { dce: dceContext, horsNormandie: horsNormandie });
+    // Deux questions sur le même sujet n'en font qu'une (T2N-7) ; une question rattachée à un repère du texte est gardée.
+    const questionsGss = sansQuestionsRedites(await this.consoliderAvecSources(demandes.map((d) => d.texte), { dce: dceContext, horsNormandie: horsNormandie }), {
+      garder: (q) => q.sources.some((k) => typeof demandes[k]?.repere === 'number'),
+    });
     const elements: ElementACompleter[] = questionsGss.map((q, i) => {
       const reperes = [...new Set(q.sources.map((k) => demandes[k]?.repere).filter((x): x is number => typeof x === 'number'))];
       const id = reperes.length ? Object.keys(sections).find((k) => sections[k].includes(REPERE(reperes[0]))) : undefined;
