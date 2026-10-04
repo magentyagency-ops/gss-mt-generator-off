@@ -1331,6 +1331,40 @@ export function nomClientCourtApresPremiere(sections: Record<string, string>, cl
   const sorties = formeCourteApresPremiere(textes, long, { article: cl.articleCourt ?? '', nom: String(cl.court) }, cl.article || '');
   ids.forEach((id, i) => { sections[id] = sorties[i]; });
 }
+/** Activité de l'autorisation CNAPS de GSS (même libellé dans le tableau des autorisations et dans le texte des cadres). */
+const ACTIVITE_CNAPS_GSS = 'Surveillance humaine et gardiennage (activités privées de sécurité, livre VI du CSI)';
+
+/**
+ * Identité CNAPS de GSS écrite d'une seule source dans les réponses d'un cadre (T3-CONS-6, havre2 1352 : tableau des autorisations
+ * rempli, puis plus bas « • Activité : [À COMPLÉTER]. • Agrément de l'entreprise : [À COMPLÉTER]. ») : un libellé d'identité CNAPS
+ * suivi de « [À COMPLÉTER] » reçoit la valeur connue (activité, autorisation d'exercer AUT-…, sa date, agrément dirigeant AGD-…) ;
+ * les dates encore inconnues (fins de validité) restent à compléter, demandées par la question unique de questions_gss_une_fois.
+ */
+export function completerIdentiteCnaps(texte: string): string {
+  const date = (v: string) => v.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$3/$2/$1');
+  const valeur = (libelle: string): string => {
+    const l = normaliser(libelle).replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (/validit|expir|echeance/.test(l)) return /dirigeant/.test(l) ? valeurRegistre('fin_validite_agrement_dirigeant') : valeurRegistre('fin_validite_autorisation_cnaps');
+    if (/^activit(?:e|es)(?: autorisee?s?| exercee?s?| de l'entreprise| cnaps| de l'autorisation)?$/.test(l)) return ACTIVITE_CNAPS_GSS;
+    if (/dirigeant/.test(l) && /agrement|autorisation/.test(l) && !/date/.test(l)) return valeurRegistre('agrement_dirigeant');
+    if (/date/.test(l) && /(?:autorisation|agrement)/.test(l) && /(?:obtention|delivrance)/.test(l) && !/dirigeant/.test(l)) return date(valeurRegistre('date_autorisation_cnaps'));
+    if (/^(?:agrement|autorisation)(?: d'exercer)?(?: de l'entreprise| cnaps| de gss)?(?: n ?°?| numero)?$|^(?:n ?°?|numero) d'(?:autorisation|agrement)(?: de l'entreprise| cnaps)?$/.test(l)) return valeurRegistre('autorisation_cnaps');
+    return '';
+  };
+  return String(texte || '').replace(/^(\s*(?:[•\-*]\s+)?)([^:\n\[]{3,80}?)\s*:\s*\[À COMPLÉTER\]/gm, (m, puce: string, libelle: string) => {
+    const v = valeur(libelle.replace(/\*\*/g, ''));
+    return v ? `${puce}${libelle} : ${v}` : m;
+  });
+}
+
+/** Question unique des dates CNAPS (questions_gss_une_fois, rubrique b2_identite) ; '' si la liste ne la porte plus. */
+function questionDatesCnaps(): string {
+  try {
+    const q = (((chargerMemoireType() as any).questions_gss_une_fois?.questions || []) as any[]).find((x: any) => /Autorisation CNAPS et agr[ée]ment dirigeant/.test(String(x?.question || '')));
+    return String(q?.question || '');
+  } catch { return ''; }
+}
+
 /** Libellés écrits sans modèle dans les cellules d'identité d'un cadre (tableau des autorisations CNAPS, signataire). */
 const LIBELLES_IDENTITE_DETERMINISTES = 'Surveillance humaine et gardiennage (activités privées de sécurité, livre VI du CSI, Code de la sécurité intérieure) ; Dirigeant d\u2019entreprise de surveillance et de gardiennage ; Dirigeant de GLOBAL SECURITY SERVICES';
 
@@ -6206,7 +6240,7 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     for (const r of replacements) {
       const d = descriptors.find((x) => x.id === r.id);
       if (!d || d.kind === 'checkbox') continue;
-      const { texte, retires } = retirerCommentairesInternes(String(r.value ?? ''));
+      const { texte, retires } = retirerCommentairesInternes(completerIdentiteCnaps(String(r.value ?? '')));
       // Exigence du CCTP recopiée à la voix de l'acheteur (« Le Titulaire doit… », « Elle ne devra pas… ») : retirée ;
       // le reste à la voix de GSS (« le titulaire » → « GSS »).
       const recopie = sansRecopieCctp(texte, dceContext);
@@ -6999,6 +7033,15 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       }));
       for (const el of elementsACompleter) { const q = precises.get(el.cle); if (q) { el.question = q.question; el.groupe = q.groupe; } }
       // Aucune question ne cite un repère technique (« le champ GSS_AC_3 ») : question d'après la phrase de l'emplacement.
+      // Dates CNAPS (fin de validité de l'autorisation, dates de l'agrément du dirigeant) : la question unique de
+      // questions_gss_une_fois, une seule carte pour toutes ces cases, jamais une question nouvelle à chaque cadre ni la question
+      // des agents pour les cases du dirigeant (T3-CONS-6).
+      const qCnaps = questionDatesCnaps();
+      for (const el of elementsACompleter) {
+        const champ = signets.find((x) => x.cle === el.cle)?.champ;
+        const ctx = `${el.contexte} ${descriptors.find((x) => x.id === champ)?.context || ''}`;
+        if (qCnaps && /\[À COMPLÉTER\]/.test(el.contexte) && /(?:validit[ée]|expiration|obtention|d[ée]livrance)/i.test(el.contexte) && /autorisation|agr[ée]ment|cnaps|dirigeant/i.test(ctx) && !/agents?\b(?! de s)/i.test(el.contexte)) { el.question = qCnaps; el.groupe = 'dates_cnaps'; }
+      }
       for (const el of elementsACompleter) if (REPERE_TECHNIQUE.test(el.question)) el.question = `Information à fournir pour compléter : « ${(el.contexte.includes('[À COMPLÉTER]') ? libelleDuRepere(el.contexte.replace(REPERE_TECHNIQUE, '')) : '') || el.contexte.replace(REPERE_TECHNIQUE, '').trim()} »`;
       // Question générique (« Quelle donnée précise doit figurer dans le passage laissé vide… ? », « … la partie manquante du
       // mémoire technique relative au site concerné ? », havre1 21) : elle cite la question du cadre et la phrase exacte.
