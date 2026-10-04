@@ -18,7 +18,7 @@ import {
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
-  sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, phraseDeRubriqueGss, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
+  sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, phraseDeRubriqueGss, alignerSchemaSurTexte, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
   valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, similariteQuestions, recouvrementTextes, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
@@ -9120,7 +9120,13 @@ RÈGLES DE FORME (rendu Marp) :
     const presentes = plan.rubriques.filter((r) => (textes[r.id] || '').trim() && !schemas.has(CLE_SCHEMA(r.id)));
     const schemaDe = (id: string) => publiees.find((p) => p.id === id)?.schema || null;
     // Spécifications du mémoire type.
-    const specs = presentes.map((r) => ({ r, s: schemaDe(r.id) })).filter((x) => x.s?.source === 'spec' && x.s.gabarit && x.s.params);
+    const specs = presentes.map((r) => ({ r, s: schemaDe(r.id) })).filter((x) => x.s?.source === 'spec' && x.s.gabarit && x.s.params)
+      // Schéma aligné sur la phrase adaptée au CCTP (T3-CONS-11) : jamais une durée du texte de GSS que le texte final a remplacée.
+      .map(({ r, s }) => {
+        const a = alignerSchemaSurTexte(s!.params, publiees.find((p) => p.id === r.id)?.texte || '', textes[r.id] || '');
+        if (a.changees.length) console.log(`[MemoireGenerator] Schéma de ${r.id} aligné sur le texte adapté : ${a.changees.map((c) => `« ${c.avant} » → « ${c.apres} »`).join(' ; ')}.`);
+        return { r, s: a.changees.length ? { ...s!, params: a.params } : s };
+      });
     const dessins = await dessinerSpecs(specs.map(({ r, s }) => ({ id: r.id, gabarit: s!.gabarit, params: s!.params, source: textes[r.id], titre_section: r.titre })), 'page', theme);
     const remplacements: Array<{ id: string; ref: string }> = [];
     for (const { r, s } of specs) {

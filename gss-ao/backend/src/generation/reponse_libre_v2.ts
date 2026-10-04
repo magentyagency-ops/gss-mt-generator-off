@@ -2298,6 +2298,64 @@ export function etapesDesPuces(texte: string, phraseDe?: (titreRubrique: string)
   return etapes;
 }
 
+/**
+ * Schéma « spec » du mémoire type aligné sur le texte final de sa rubrique (T3-CONS-11, ign 1351 : texte adapté au CCTP
+ * « pendant au minimum 2 vacations consécutives de jour et 2 vacations de nuit », carte du schéma restée « 1 à 3 jours avec le
+ * chef de site ») : une durée ou une fréquence d'une carte, écrite dans le texte de GSS et absente du texte final, est remplacée
+ * par la valeur qui l'a remplacée dans la phrase adaptée (même amorce) ; à défaut, elle est retirée de la carte. Renvoie les
+ * paramètres (copie) et les valeurs changées.
+ */
+export function alignerSchemaSurTexte(params: any, textePublie: string, texteFinal: string): { params: any; changees: Array<{ avant: string; apres: string }> } {
+  const QUANTITE = /(?<![\p{L}\d])(?:\d+\s*(?:à|-|–)\s*)?\d+\s*(?:jours?|heures?|h|minutes?|mn|semaines?|mois|vacations?|nuits?)(?![\p{L}])|(?<![\p{L}])J\s?[+-]\s?\d+(?!\d)/giu;
+  const plat = (x: string) => normaliser(String(x || '').replace(/\*\*/g, '')).replace(/\s+/g, ' ');
+  const pub = plat(textePublie), fin = plat(texteFinal);
+  const changees: Array<{ avant: string; apres: string }> = [];
+  if (!pub || !fin) return { params, changees };
+  const phrases = (t: string) => String(t || '').replace(/\*\*/g, '').split(/\n+|(?<=[.!?])\s+(?=[A-ZÀ-Ý])/).map((x) => x.trim()).filter(Boolean);
+  const nouvelleValeur = (q: string): string => {
+    const s0 = phrases(textePublie).find((p) => plat(p).includes(plat(q)));
+    if (!s0) return '';
+    const i0 = plat(s0).indexOf(plat(q));
+    const motsAvant = plat(s0).slice(0, i0).replace(/[^a-z0-9' ]+/g, ' ').trim().split(/\s+/);
+    const mots0 = new Set(plat(s0).replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 4));
+    // Phrase adaptée : celle du texte final qui partage le plus de mots avec la phrase de GSS (la moitié au moins).
+    const proches = phrases(texteFinal).filter((p) => { const m = plat(p).replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 4); return m.length && m.filter((w) => mots0.has(w)).length / Math.min(m.length, mots0.size) >= 0.5; });
+    for (const n of [3, 2, 1]) for (const s1 of proches) {
+      const amorce = motsAvant.slice(-n).join(' ');
+      if (amorce.length < 4) continue;
+      const p1 = plat(s1).replace(/[^a-z0-9' ]+/g, (x) => ' '.repeat(x.length));
+      const k = p1.indexOf(` ${amorce} `) >= 0 ? p1.indexOf(` ${amorce} `) + 1 : p1.startsWith(`${amorce} `) ? 0 : -1;
+      if (k < 0) continue;
+      // Même position dans le texte d'origine : la suite de l'amorce, jusqu'à la première virgule ou deux-points.
+      const debut = k + amorce.length + 1;
+      // Positions dans la phrase d'origine (mêmes longueurs : normaliser ne change que les accents et la casse).
+      const brut = s1.slice(debut).split(/\s*[,;:]\s+|\s+selon\s+/)[0].replace(/[.\s]+$/, '').trim();
+      if (brut && plat(brut) !== plat(q) && QUANTITE.test(brut) && brut.length <= 80) { QUANTITE.lastIndex = 0; return brut; }
+      QUANTITE.lastIndex = 0;
+    }
+    return '';
+  };
+  const visiter = (o: any): any => {
+    if (typeof o === 'string') {
+      let t = o;
+      for (const m of [...o.matchAll(QUANTITE)]) {
+        const q = m[0];
+        if (!pub.includes(plat(q)) || fin.includes(plat(q))) continue;
+        const nv = nouvelleValeur(q);
+        const remplace = nv ? t.replace(q, nv) : t.replace(new RegExp(`\\s*(?:pendant|durant|sous|en|de)?\\s*${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`), ' ').replace(/\s+/g, ' ').trim();
+        t = nv && remplace.length > 86 ? nv : remplace;
+        t = t.charAt(0).toUpperCase() + t.slice(1);
+        changees.push({ avant: q, apres: nv || '(retiré)' });
+      }
+      return t;
+    }
+    if (Array.isArray(o)) return o.map(visiter);
+    if (o && typeof o === 'object') return Object.fromEntries(Object.entries(o).map(([k, v]) => [k, k === 'icone' || k === 'role' || k === 'date' ? v : visiter(v)]));
+    return o;
+  };
+  return { params: visiter(params), changees };
+}
+
 /** Étapes tirées des attentes et des points de vigilance du texte du bloc 1 (secours des schémas), sans le résultat. */
 export function specSecoursPuces(texte: string, phraseDe?: (titreRubrique: string) => string): { gabarit: string; params: any } | null {
   const etapes = etapesDesPuces(texte, phraseDe);

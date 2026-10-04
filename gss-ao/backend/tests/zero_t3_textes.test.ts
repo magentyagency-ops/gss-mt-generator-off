@@ -1,7 +1,8 @@
 // Campagne « zéro défaut », tour 3 : textes remis (T3-CONS-5).
 import { describe, it, expect } from 'vitest';
 import { retirerCommentairesInternes } from '../src/generation/base_memoires';
-import { appliquerModifications, phraseAutonome } from '../src/generation/memoire_type';
+import { appliquerModifications, phraseAutonome, chargerMemoireType } from '../src/generation/memoire_type';
+import { alignerSchemaSurTexte } from '../src/generation/reponse_libre_v2';
 
 describe('montant de pénalité en pourcentage ou en lettres (T3-CONS-5)', () => {
   it('phrase du Havre : la proposition qui cite le taux de pénalité est retirée, le reste gardé', () => {
@@ -36,5 +37,18 @@ describe('phrase ajoutée qui commence par « ; » (T3-CONS-10, T3N-3)', () => {
   it('phraseAutonome', () => {
     expect(phraseAutonome(', et les agents sont équipés')).toBe('Les agents sont équipés.');
     expect(phraseAutonome('- puce de liste')).toBe('- puce de liste');
+  });
+});
+
+describe('schéma aligné sur la phrase adaptée au CCTP (T3-CONS-11)', () => {
+  const r: any = chargerMemoireType().rubriques.find((x: any) => x.id === 'b5_nouvel_agent');
+  it('« 1 à 3 jours » remplacé par la valeur de la phrase adaptée (ign 1351)', () => {
+    const fin = r.texte.replace('chef de site, pendant 1 à 3 jours selon les besoins du site', 'chef de poste, pendant au minimum 2 vacations consécutives de jour et 2 vacations de nuit, dont une de jour ouvré et une de week-end,');
+    const a = alignerSchemaSurTexte(r.schema.params, r.texte, fin);
+    expect(a.params.etapes[2].texte).toBe('Au minimum 2 vacations consécutives de jour et 2 vacations de nuit');
+    expect(JSON.stringify(a.params)).not.toMatch(/1 à 3 jours/);
+  });
+  it('texte non adapté : schéma inchangé', () => {
+    expect(alignerSchemaSurTexte(r.schema.params, r.texte, r.texte).changees).toEqual([]);
   });
 });
