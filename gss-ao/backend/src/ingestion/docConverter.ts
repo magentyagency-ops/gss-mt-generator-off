@@ -4,7 +4,7 @@ import { execSync, spawnSync } from 'child_process';
 import AdmZip from 'adm-zip';
 import { XMLParser } from 'fast-xml-parser';
 import pdf from 'pdf-parse';
-import { texteTropPauvre, transcrirePdf } from './ocr_pdf';
+import { texteTropPauvre, transcrirePdf, pagesNonTranscrites } from './ocr_pdf';
 import { getSettings } from '../core/config';
 import { ExtractionMethod } from '../schemas/common';
 
@@ -439,6 +439,8 @@ function rendrePagePdf(pageData: any): Promise<string> {
  * n'a pas pu être lue (jamais « aucun cahier des charges n'a été trouvé » quand le fichier est dans le dossier).
  */
 export const pdfsIllisibles = new Set<string>();
+/** PDF sans couche texte transcrits en partie (REG6-3) : chemin → pages non lues (« 13-16 », « 29-30 »), nommées à GSS. */
+export const pdfsPartiels = new Map<string, string[]>();
 
 export async function extractPdfText(filePath: string): Promise<string> {
   if (!fs.existsSync(filePath)) {
@@ -455,8 +457,14 @@ export async function extractPdfText(filePath: string): Promise<string> {
   // CCTP / RC n'était pas lu du tout (quelques centaines de caractères pour 30 pages).
   if (texteTropPauvre(data.text || '', data.numpages || 0)) {
     try {
+      pdfsPartiels.delete(filePath);
       const transcrit = await transcrirePdf(filePath);
-      if (transcrit.replace(/\s+/g, '').length > (data.text || '').replace(/\s+/g, '').length) { pdfsIllisibles.delete(filePath); return transcrit; }
+      const nonLues = pagesNonTranscrites.get(filePath);
+      if (transcrit.replace(/\s+/g, '').length > (data.text || '').replace(/\s+/g, '').length) {
+        pdfsIllisibles.delete(filePath);
+        if (nonLues?.length) pdfsPartiels.set(filePath, nonLues);
+        return transcrit;
+      }
     } catch (e: any) {
       console.warn(`[docConverter] Transcription du PDF ${path.basename(filePath)} impossible : ${e?.message || e}`);
     }
