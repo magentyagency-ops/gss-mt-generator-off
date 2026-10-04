@@ -43,3 +43,11 @@ describe('nom court suivi de son sigle (T2-GEN-8)', () => {
     expect((texte(nom, dce).match(new RegExp(`\\(${sigle}\\)`, 'g')) || []).length).toBe(0);
   });
 });
+
+describe('intitulé du marché en capitales mis en casse normale (T2-CONS-14)', () => {
+  it('graphie du DCE mot par mot, sigles gardés', () => {
+    const dce = "Le Centre scientifique et technique du bâtiment (CSTB) confie des prestations de rondes de surveillance du site du CSTB à Grenoble. Le CSTB précise les rondes.";
+    const prep: any = preparerMemoireType({ dce, analyse: { clientName: 'CSTB', projectTitle: 'PRESTATIONS DE RONDES DE SURVEILLANCE DU SITE DU CSTB GRENOBLE' }, referents: '' } as any, { memoireType: chargerMemoireType() });
+    expect(prep.variables.OBJET_MARCHE.valeur).toBe('Prestations de rondes de surveillance du site du CSTB Grenoble');
+  });
+});

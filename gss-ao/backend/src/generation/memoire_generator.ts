@@ -8548,6 +8548,8 @@ RÈGLES DE FORME (rendu Marp) :
     progres(90, 'Assemblage final du mémoire…');
     // Nom de l'acheteur affiché (couverture, sommaire, ouvertures, pieds de page) : forme corrigée de CLIENT (T1-COH-6).
     cover.client = nomAcheteurAffiche(prep.variables.CLIENT, cover.client);
+    // Intitulé du marché affiché : celui du mémoire, mis en casse normale s'il était en capitales (T2-CONS-14).
+    if (typeof prep.variables.OBJET_MARCHE?.valeur === 'string' && prep.variables.OBJET_MARCHE.valeur.trim() && cover.title && cover.title === cover.title.toUpperCase()) cover.title = prep.variables.OBJET_MARCHE.valeur.trim();
     // Articles du CCTP des chiffres du bloc 1 (style « marine » v3 : bandeau des chiffres clés et lignes de source, T1-CONS-5).
     const articlesB1 = articlesBloc1(propres.b1_comprehension || '', dceContext);
     const rendu = await this.rendreDepuisSections(propres, dossierId, { onProgress, cover, schemas: schemasGeneres, ajouts, theme, plan, titresSchemas, articlesBloc1: articlesB1 });
@@ -10074,6 +10076,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const schemas: Record<string, string> = Object.fromEntries(choixSchemas.map((c) => [c.id === 'organigramme' ? `${c.cle}#court#organigramme` : c.id === 'comprehension' ? `${c.cle}#court#process` : `${c.cle}#court`, c.svg]));
     // Nom de l'acheteur affiché (couverture, en-têtes) : forme corrigée de CLIENT (T1-COH-6).
     cover.client = nomAcheteurAffiche(prep.variables.CLIENT, cover.client);
+    // Intitulé du marché affiché : celui du mémoire, mis en casse normale s'il était en capitales (T2-CONS-14).
+    if (typeof prep.variables.OBJET_MARCHE?.valeur === 'string' && prep.variables.OBJET_MARCHE.valeur.trim() && cover.title && cover.title === cover.title.toUpperCase()) cover.title = prep.variables.OBJET_MARCHE.valeur.trim();
     let rendu = await this.rendreCourtDepuisSections(sections, { pagesMax: format.pagesMax, plan }, cover, schemas);
     // Le rendu mesuré fait foi : on garde la plus grande part des passages de GSS qui tient dans la limite à la police
     // normale (10 pt), en retirant d'abord les passages de plus faible priorité (jamais de réécriture). Recherche par

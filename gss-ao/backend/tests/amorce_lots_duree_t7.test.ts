@@ -15,7 +15,8 @@ describe('amorce du bloc 1 : lot et durée (T7-COH-1)', () => {
     }
   });
   it('DCE « non alloti » (cstb 221 : « lot 1 » donné par l’analyse) : aucun lot', () => {
-    expect(amorce({ clientName: 'le CSTB', projectTitle: 'PRESTATIONS DE RONDES', lots: [{ num: '1' }] }, 'Le présent marché est non alloti. Site de Grenoble (38400).')).toBe('Le CSTB lance le marché « PRESTATIONS DE RONDES ».');
+    // Intitulé en capitales mis en casse normale (T2-CONS-14).
+    expect(amorce({ clientName: 'le CSTB', projectTitle: 'PRESTATIONS DE RONDES', lots: [{ num: '1' }] }, 'Le présent marché est non alloti. Site de Grenoble (38400).')).toBe('Le CSTB lance le marché « Prestations de rondes ».');
   });
   it('« Lot 2 » → « (lot 2) » ; plusieurs lots ; lot déjà dans l’intitulé (caen 475) : pas répété', () => {
     expect(amorce({ clientName: 'la Ville', projectTitle: 'Gardiennage', lots: [{ num: 'Lot 2' }] })).toBe('La Ville lance le marché « Gardiennage » (lot 2).');
@@ -42,7 +43,7 @@ describe('amorce du bloc 1 : lot et durée (T7-COH-1)', () => {
     expect(amorce({ clientName: 'la Ville', projectTitle: { titre: 'x' } })).toBe('');
   });
   it.skipIf(!aCorpus('cstb', 'ifits'))('DCE du corpus : cstb « non alloti », ifits « non allotissement »', () => {
-    expect(amorce({ clientName: 'le CSTB', projectTitle: 'PRESTATIONS DE RONDES', lots: [{ num: 'Unique' }] }, DCE('cstb'))).toBe('Le CSTB lance le marché « PRESTATIONS DE RONDES ».');
+    expect(amorce({ clientName: 'le CSTB', projectTitle: 'PRESTATIONS DE RONDES', lots: [{ num: 'Unique' }] }, DCE('cstb'))).toBe('Le CSTB lance le marché « Prestations de rondes ».');
     expect(amorce({ clientName: "l'IFITS", projectTitle: 'Gardiennage', lots: [{ num: '1' }] }, DCE('ifits'))).toBe("L'IFITS lance le marché « Gardiennage ».");
   });
 });

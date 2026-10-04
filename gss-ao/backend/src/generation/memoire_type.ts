@@ -1023,12 +1023,12 @@ function graphieUsuelle(mot: string): string {
   return mot.split('-').map((x) => (x ? x.charAt(0).toUpperCase() + x.slice(1).toLowerCase() : x)).join('-');
 }
 
-export function casseDuDce(nom: string, dce: string): string {
+export function casseDuDce(nom: string, dce: string, intitule = false): string {
   // Nom avec une parenthèse (imm : « ASSOCIATION NOUVEL INSTITUT MÉDICO-CHIRURGICAL MONTSOURIS (Nouvel IMM) ») : la partie
   // hors parenthèse prend la graphie du DCE, la parenthèse (nom d'usage, sigle) reste telle quelle.
   const par = /^([^()]+?)(\s*\([^()]*\).*)$/.exec(nom);
   if (par) {
-    const tete = casseDuDce(par[1], dce);
+    const tete = casseDuDce(par[1], dce, intitule);
     return tete ? `${tete}${par[2]}` : '';
   }
   const lettres = nom.replace(/[^A-Za-zÀ-ÿ]/g, '');
@@ -1049,7 +1049,8 @@ export function casseDuDce(nom: string, dce: string): string {
   let premier = true;
   // Nom de lieu composé en capitales (« GRAND-QUEVILLY ») dont une partie n'est pas un mot du dictionnaire : nom propre,
   // chaque partie prend sa majuscule (« Grand-Quevilly », jamais « GRAND-Quevilly » ni « grand-Quevilly »).
-  const institutionnel = teteInstitution(nom.replace(/^(?:l['’]\s*|le\s+|la\s+|les\s+)/i, ''));
+  // Intitulé du marché (T2-CONS-14) : mêmes règles qu'un nom d'institution (mot du dictionnaire en minuscules, nom propre).
+  const institutionnel = intitule || teteInstitution(nom.replace(/^(?:l['’]\s*|le\s+|la\s+|les\s+)/i, ''));
   const composes: Array<[number, number]> = [];
   for (const m of nom.matchAll(/[A-ZÀ-Ý]+(?:-[A-ZÀ-Ý]+)+/g)) {
     const parts = m[0].split('-');
@@ -1958,8 +1959,11 @@ const CALCULS: Record<string, Calculateur> = {
   OBJET_MARCHE: (c) => {
     const titre = valeurPropre(c.ctx.cover?.title);
     const v = titre && !/^m[ée]moire technique$/i.test(titre) ? titre : valeurPropre(c.ctx.analyse?.projectTitle);
-    // Un intitulé contient au moins un mot (jamais un nombre seul, T7-COH-1).
-    return { valeur: textePropre(v) ? v.replace(/\.$/, '') : null, source: 'analyse du DCE (projectTitle)' };
+    // Un intitulé contient au moins un mot (jamais un nombre seul, T7-COH-1). Intitulé en capitales (T2-CONS-14 : « PRESTATIONS
+    // DE RONDES DE SURVEILLANCE DU SITE DU CSTB GRENOBLE ») : graphie du DCE mot par mot, sigles gardés (« Prestations de
+    // rondes de surveillance du site du CSTB Grenoble »), comme le nom de l'acheteur.
+    const intitule = textePropre(v) ? v.replace(/\.$/, '') : '';
+    return { valeur: intitule ? casseDuDce(intitule, c.ctx.dce || '', true) || intitule : null, source: 'analyse du DCE (projectTitle)' };
   },
   REF_MARCHE: (c) => ({ valeur: valeurPropre(c.ctx.cover?.ref) || valeurPropre(c.ctx.analyse?.marketRef) || null }),
   LOTS: (c) => {
