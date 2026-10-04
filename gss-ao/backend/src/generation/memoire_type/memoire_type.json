@@ -110,6 +110,7 @@
   "VACATIONS_NUIT": {
    "description": "Le marché comporte des vacations de nuit.",
    "dce": "(?<![\\wÀ-ÿ])nuit(?![\\wÀ-ÿ])|nocturnes?|24\\s*h\\s*/\\s*24|(?<![\\wÀ-ÿ])H24(?![\\wÀ-ÿ])|de (?:19|20|21|22)\\s*h(?:00)?\\s*(?:à|-)\\s*(?:5|6|7)\\s*h",
+   "dce_ignorer": "ferm[ée]e?s?(?:\\s+\\S+){0,3}?\\s+(?:la\\s+|de\\s+)?nuit|(?:la|de)\\s+nuit[^.;]{0,60}?(?:ferm[ée]e?s?|sous\\s+alarme|plac[ée]e?s?\\s+sous|mise?s?\\s+sous|en\\s+alarme)|fermeture[^.;]{0,30}?(?:avant\\s+)?la\\s+nuit|hors\\s+(?:de\\s+la\\s+)?nuit",
    "matrice": [
     "b5_controle_nuit"
    ]
@@ -130,13 +131,14 @@
   "TELESURVEILLANCE": {
    "description": "Le marché prévoit de la télésurveillance ou de la télésécurité (intervention d'un rondier sur alarme), ou la surveillance à distance de l'alarme ou des caméras (ifits : « contrôle de surveillance à distance des locaux »).",
    "dce": "t[ée]l[ée]\\s?-?surveillance|t[ée]l[ée]\\s?-?s[ée]curit[ée]|station de surveillance|(?<!activit[ée]s\\s+de\\s+)surveillance\\s+[àa]\\s+distance|(?:contr[ôo]le|gestion)\\s+[àa]\\s+distance\\s+(?:de\\s+l['’]\\s*|des?\\s+)?(?:alarmes?|cam[ée]ras?)",
+   "auteur": "titulaire",
    "matrice": [
     "b4_proc_alarme"
    ]
   },
   "TELESURVEILLANCE_HORS_MARCHE": {
    "description": "La télésurveillance du site est assurée par un autre prestataire, hors du marché (cstb : « alarmes gérées par une entreprise de télésurveillance (hors marché) ») : le partenaire de télésurveillance de GSS n'intervient pas, la phrase qui le nomme n'est pas reprise et aucune question n'est posée à son sujet.",
-   "dce": "t[ée]l[ée]\\s?-?surveillance\\s*\\(\\s*hors\\s+(?:du\\s+)?(?:march[ée]|p[ée]rim[eè]tre|prestation)|t[ée]l[ée]\\s?-?surveillance\\s+(?:est\\s+|sont\\s+)?(?:assur[ée]e\\s+|g[ée]r[ée]e\\s+|r[ée]alis[ée]e\\s+)?hors\\s+(?:du\\s+)?(?:march[ée]|p[ée]rim[eè]tre)|t[ée]l[ée]\\s?-?surveillance\\s+(?:n.est|ne\\s+fait)\\s+pas\\s+(?:partie\\s+du|compris[e]?\\s+dans\\s+le|incluse?\\s+dans\\s+le)\\s+(?:march[ée]|p[ée]rim[eè]tre)"
+   "dce": "t[ée]l[ée]\\s?-?surveillance\\s*\\(\\s*hors\\s+(?:du\\s+)?(?:march[ée]|p[ée]rim[eè]tre|prestation)|t[ée]l[ée]\\s?-?surveillance\\s+(?:est\\s+|sont\\s+)?(?:assur[ée]e\\s+|g[ée]r[ée]e\\s+|r[ée]alis[ée]e\\s+)?hors\\s+(?:du\\s+)?(?:march[ée]|p[ée]rim[eè]tre)|t[ée]l[ée]\\s?-?surveillance\\s+(?:n.est|ne\\s+fait)\\s+pas\\s+(?:partie\\s+du|compris[e]?\\s+dans\\s+le|incluse?\\s+dans\\s+le)\\s+(?:march[ée]|p[ée]rim[eè]tre)|t[ée]l[ée]\\s?-?surveillance(?:\\s+du\\s+site|\\s+des\\s+(?:b[âa]timents|locaux|sites))?\\s+(?:est|sera|sont|seront|reste|restera)\\s+(?:directement\\s+)?(?:assur[ée]e|g[ée]r[ée]e|r[ée]alis[ée]e|effectu[ée]e|prise\\s+en\\s+charge)\\s+(?:directement\\s+)?par\\s+(?!le\\s+titulaire|le\\s+prestataire)(?:les?\\s+services?|la\\s+(?:ville|commune|collectivit[ée]|m[ée]tropole|r[ée]gion)|l['’](?:acheteur|[ée]tablissement|universit[ée]|administration)|le\\s+(?:pouvoir\\s+adjudicateur|ma[îi]tre\\s+d['’]ouvrage|client|d[ée]partement|PC\\s+s[ée]curit[ée])|un\\s+autre\\s+prestataire|le\\s+titulaire\\s+d['’]un\\s+autre\\s+march[ée]|une?\\s+(?:autre\\s+)?(?:soci[ée]t[ée]|entreprise|prestataire)(?![^.;]{0,80}titulaire))|t[ée]l[ée]\\s?-?surveillance[^.;]{0,80}?fait\\s+l['’]objet\\s+d['’]un\\s+(?:autre\\s+)?march[ée](?:\\s+(?:distinct|s[ée]par[ée]))?"
   },
   "REMISE_MOYENS_ACCES": {
    "description": "Des clés, badges ou autres moyens d'accès sont confiés à GSS.",

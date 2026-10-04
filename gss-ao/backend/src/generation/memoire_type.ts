@@ -66,6 +66,11 @@ export interface IndicateurMemoireType {
    */
   auteur?: 'titulaire';
   /**
+   * Motif d'une proposition où la mention « dce » ne prouve rien (T5G-11 : « Le bâtiment est fermé la nuit », « la nuit, le
+   * bâtiment est placé sous alarme » ne sont pas des vacations de nuit) : la mention est ignorée, la suivante est lue.
+   */
+  dce_ignorer?: string;
+  /**
    * Preuve exigée dans le texte du DCE (motif « dce ») : l'analyse, le secteur ou une rubrique de la matrice ne
    * suffisent pas à rendre l'indicateur vrai quand le DCE est lisible (caen : aucun SSIAP dans le DCE, indicateur
    * rendu vrai par l'analyse « aucun agent SSIAP exigé » ou par une exigence rattachée à une rubrique SSIAP).
@@ -632,15 +637,19 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
         // Une mention niée du DCE n'est jamais une preuve (T4N-3, T2-GEN-3 : « L'emploi d'agents cynophiles est interdit »,
         // « La télésurveillance du site n'est pas comprise ») ; l'exclusion « dce_exclure » reste lue sur le DCE brut.
         let m = rx.exec(dceAffirme);
-        // Indicateur d'une obligation du titulaire : la première mention dont l'auteur n'est pas l'acheteur (T2-GEN-6).
-        if (def.auteur === 'titulaire') {
+        const ignorer = def.dce_ignorer ? new RegExp(def.dce_ignorer, 'i') : null;
+        // Indicateur d'une obligation du titulaire : la première mention dont l'auteur n'est pas l'acheteur (T2-GEN-6) ; mention
+        // dans une proposition à ignorer (« fermé la nuit », T5G-11) : la suivante.
+        if (def.auteur === 'titulaire' || ignorer) {
           m = null;
           for (const x of dceAffirme.matchAll(new RegExp(def.dce, 'gi'))) {
-            if (propositionDuTitulaire(propositionAutour(dceAffirme, x.index || 0, (x.index || 0) + x[0].length), formesAcheteur)) { m = x as RegExpExecArray; break; }
+            const prop = propositionAutour(dceAffirme, x.index || 0, (x.index || 0) + x[0].length);
+            if (ignorer && ignorer.test(prop)) continue;
+            if (def.auteur !== 'titulaire' || propositionDuTitulaire(prop, formesAcheteur)) { m = x as RegExpExecArray; break; }
           }
         }
         if (m) raisons.push(`DCE : « ${extrait(dceAffirme, m.index, m[0].length)} »`);
-        const e = matrice.find((x) => rx.test(sansMentionsNiees(x.exigence)) && (def.auteur !== 'titulaire' || propositionDuTitulaire(x.exigence, formesAcheteur)));
+        const e = matrice.find((x) => rx.test(sansMentionsNiees(x.exigence)) && !(ignorer && ignorer.test(x.exigence)) && (def.auteur !== 'titulaire' || propositionDuTitulaire(x.exigence, formesAcheteur)));
         const sourceDce = !engageants.has(nom) || (def.motif_dce ? dceNorm.includes(normaliser(def.motif_dce)) : !!m);
         if (e && sourceDce) raisons.push(`exigence : « ${e.exigence.slice(0, 120)} »`);
         else if (e) journalIndicateur(`[MemoireType] Indicateur ${nom} : exigence de la matrice écartée, motif absent du DCE (« ${e.exigence.slice(0, 120)} »).`);
@@ -653,7 +662,8 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
       if (def.matrice?.length && (!engageants.has(nom) || (def.motif_dce ? dceNorm.includes(normaliser(def.motif_dce)) : raisons.some((r) => r.startsWith('DCE'))))) {
         const rxDce = def.dce ? new RegExp(def.dce, 'i') : null;
         const rattachees = matrice.filter((x) => x.rubrique && def.matrice!.includes(x.rubrique));
-        const e = rattachees.find((x) => (!rxDce || rxDce.test(x.exigence.replace(/[’`]/g, "'"))) && (def.auteur !== 'titulaire' || propositionDuTitulaire(x.exigence, formesAcheteur)));
+        const ign = def.dce_ignorer ? new RegExp(def.dce_ignorer, 'i') : null;
+        const e = rattachees.find((x) => (!rxDce || rxDce.test(x.exigence.replace(/[’`]/g, "'"))) && !(ign && ign.test(x.exigence)) && (def.auteur !== 'titulaire' || propositionDuTitulaire(x.exigence, formesAcheteur)));
         if (e) raisons.push(`exigence rattachée à ${e.rubrique} : « ${e.exigence.slice(0, 120)} »`);
         else if (rattachees.length && !raisons.length) journalIndicateur(`[MemoireType] Indicateur ${nom} : exigence rattachée à ${rattachees[0].rubrique} écartée, motif de l'indicateur absent de son texte (« ${rattachees[0].exigence.slice(0, 120)} »).`);
       }

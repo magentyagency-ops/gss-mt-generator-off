@@ -101,3 +101,21 @@ describe('contrôles inopinés écrits « libellé : valeur » (T5G-8)', () => {
     expect(v('Le titulaire réalise au moins quatre contrôles inopinés par mois.')).toBe('au moins quatre fois par mois');
   });
 });
+
+import { evaluerIndicateurs } from '../src/generation/memoire_type';
+
+describe('indicateurs : nuit sans vacation, télésurveillance de l\'acheteur (T5G-11, T5G-12)', () => {
+  const ind = (corps: string) => evaluerIndicateurs(chargerMemoireType(), { dce: `\n\n--- CCTP.pdf ---\nCAHIER DES CLAUSES TECHNIQUES PARTICULIÈRES\nLe titulaire assure l'accueil du public du lundi au vendredi de 8h00 à 18h00, 1 place de l'Hôtel de Ville, 76000 Rouen.\n${corps}\n`, analyse: {} } as any) as any;
+  it('« fermé la nuit » ou « placé sous alarme la nuit » : pas de vacation de nuit', () => {
+    expect(ind('Le bâtiment est fermé la nuit, les week-ends et les jours fériés.').VACATIONS_NUIT.valeur).toBe(false);
+    expect(ind('La nuit, le bâtiment est placé sous alarme.').VACATIONS_NUIT.valeur).toBe(false);
+    expect(ind('Un agent assure la surveillance de nuit de 20h00 à 6h00.').VACATIONS_NUIT.valeur).toBe(true);
+  });
+  it('télésurveillance assurée par les services de la Ville : hors du marché', () => {
+    const e = ind('La nuit, le bâtiment est placé sous alarme ; la télésurveillance est assurée par les services de la Ville.');
+    expect(e.TELESURVEILLANCE.valeur).toBe(false);
+    expect(e.TELESURVEILLANCE_HORS_MARCHE.valeur).toBe(true);
+    expect(ind('Le titulaire assure la télésurveillance du site et intervient sur alarme.').TELESURVEILLANCE.valeur).toBe(true);
+    expect(ind('La télésurveillance fait l\'objet d\'un marché distinct.').TELESURVEILLANCE_HORS_MARCHE.valeur).toBe(true);
+  });
+});
