@@ -5434,15 +5434,20 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     // Chunks Doc GSS pré-embeddés en base (si MEMOIRE_RAG_FROM_DB=true) : on évite de recalculer
     // leurs embeddings à chaque génération. Le DCE (propre au marché) reste embeddé à la volée.
     const dbGss = await this.loadGssChunksFromDb();
-    if (dbGss && dbGss.length) {
-      const dceChunks = retrievalChunks.filter(c => c.source === 'DCE');
-      await this.embedChunks(dceChunks);              // seul le DCE est embeddé en direct
-      retrievalChunks.length = 0;
-      retrievalChunks.push(...dbGss, ...dceChunks);    // GSS depuis la bdd + DCE frais
-      console.log(`[MemoireGenerator] Doc GSS chargée depuis la bdd (${dbGss.length} chunks pré-embeddés).`);
-    } else {
-      await this.embedChunks(retrievalChunks);         // comportement historique (repli)
-    }
+    // OpenAI indisponible dès l'indexation (T4N-7 : « Erreur: 503 Service Unavailable » affiché tel quel) : le même message
+    // clair que pour l'échec de la rédaction, à relancer ; l'erreur d'origine reste citée (crédit épuisé compris).
+    const indisponible = (e: any) => new Error(`Rédaction automatique indisponible (OpenAI) : l'indexation du DCE a échoué (${String(e?.message || e).slice(0, 160)}). Aucun document n'est remis ; relancez la génération.`);
+    try {
+      if (dbGss && dbGss.length) {
+        const dceChunks = retrievalChunks.filter(c => c.source === 'DCE');
+        await this.embedChunks(dceChunks);              // seul le DCE est embeddé en direct
+        retrievalChunks.length = 0;
+        retrievalChunks.push(...dbGss, ...dceChunks);    // GSS depuis la bdd + DCE frais
+        console.log(`[MemoireGenerator] Doc GSS chargée depuis la bdd (${dbGss.length} chunks pré-embeddés).`);
+      } else {
+        await this.embedChunks(retrievalChunks);         // comportement historique (repli)
+      }
+    } catch (e: any) { throw indisponible(e); }
     // Document complémentaire de la demande particulière : indexé avec les autres sources.
     const chunksComplement = this.chunksDocumentComplementaire();
     if (chunksComplement.length) {
@@ -5457,7 +5462,8 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     if (onProgress) onProgress(24, 'Indexation des sources (DCE + Doc GSS)…');
 
     // Embeddings de TOUTES les requêtes de champ en un lot → la récupération devient du calcul local.
-    const queryEmbs = await this.embedTexts(descriptors.map(d => this.buildFieldQuery(d)));
+    let queryEmbs: number[][];
+    try { queryEmbs = await this.embedTexts(descriptors.map(d => this.buildFieldQuery(d))); } catch (e: any) { throw indisponible(e); }
     const queryEmbById = new Map<number, number[]>();
     descriptors.forEach((d, i) => queryEmbById.set(d.id, queryEmbs[i]));
 
