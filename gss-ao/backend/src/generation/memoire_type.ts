@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 import { lignesEquipe, questionDimensionnement, questionRondes, PART_SUPPLEANTS, type Dimensionnement } from './dimensionnement';
-import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative, lotsDuMemoireDce, perimetreDuLot, normaliserSsiap, contracterArticlesNomsPropres, MONTANT_PENALITE } from './base_memoires';
+import { horairesImposes, jalonsDe, jalonsChronologiques, marcheHorsNormandie, lieuDuMarche, sitesDuMarche, communesParCodePostal, obligationsChiffrees, retirerCommentairesInternes, rolesOrganigramme, ZONE_GSS, recopieDuDce, motifCovidInterdit, graphieMinusculeGss, interditPhotosDce, normaliserExpressionsDelai, minutesDe, dureesEnMinutes, nombreFr, RX_NOMBRE_LETTRES, adresseAdministrative, lotsDuMemoireDce, perimetreDuLot, normaliserSsiap, contracterArticlesNomsPropres, MONTANT_PENALITE, textePreuvesIndicateurs } from './base_memoires';
 
 /**
  * MÉMOIRE TYPE DE RÉFÉRENCE GSS ET PUBLIPOSTAGE (refonte « mémoire type », consignes 2, 4 et 8 du dirigeant).
@@ -560,7 +560,8 @@ function propositionDuTitulaire(prop: string): boolean {
 /** Évalue chaque indicateur du mémoire type (vrai/faux, avec les raisons). */
 export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record<string, EtatIndicateur> {
   const dce = String(ctx.dce || '').replace(/[’`]/g, "'").replace(/\s+/g, ' ');
-  const dceAffirme = sansMentionsNiees(String(ctx.dce || '').replace(/[’`]/g, "'")).replace(/\s+/g, ' ');
+  // Preuves cherchées dans les seules pièces techniques, sans références réglementaires ni RIB (T3G-8).
+  const dceAffirme = sansMentionsNiees(textePreuvesIndicateurs(String(ctx.dce || '')).replace(/[’`]/g, "'")).replace(/\s+/g, ' ');
   const analyse = texteAnalyse(ctx.analyse);
   const secteur = valeurPropre(ctx.analyse?.clientSector);
   const matrice = (ctx.matrice || []).filter((e) => e && e.exigence);

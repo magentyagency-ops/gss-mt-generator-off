@@ -52,3 +52,20 @@ describe('cahier des charges sous un autre nom ou reconnu par son contenu (T3G-2
     expect(alerteCctpAbsent(dce)).toEqual([]);
   });
 });
+
+import { preparerMemoireType, chargerMemoireType } from '../src/generation/memoire_type';
+describe('indicateurs jamais déclenchés par les pièces administratives (T3G-8)', () => {
+  const CCTP = "\n\n--- CCTP.pdf ---\nCahier des clauses techniques particulières. Le site est un entrepôt. Le site n'est pas ouvert au public. L'agent effectue des rondes de nuit.";
+  const AE = "\n\n--- AE.pdf ---\nActe d'engagement. Code banque Code guichet N° de compte Clé RIB.";
+  const RC = "\n\n--- RC.pdf ---\nRèglement de la consultation. L'offre est remise sur support informatique, le BPU en version Excel. Rappel : décret n° 97-646 du 31 mai 1997 relatif à la mise en place de services d'ordre lors des manifestations sportives, récréatives ou culturelles.";
+  it('« Code guichet », « version Excel », décret sur les manifestations : aucune rubrique ajoutée', () => {
+    const i = (dce: string) => preparerMemoireType({ dce, analyse: {}, referents: '' } as any, { memoireType: chargerMemoireType() }).indicateurs;
+    const seul = i(CCTP), tout = i(CCTP + AE + RC);
+    for (const k of ['USAGERS', 'EVENEMENTIEL', 'INFORMATIQUE', 'FLUX_PUBLIC', 'ACCUEIL_PUBLIC']) expect([k, tout[k]]).toEqual([k, seul[k]]);
+    expect(tout.USAGERS || tout.EVENEMENTIEL || tout.INFORMATIQUE).toBeFalsy();
+  });
+  it('« concertation » n’est pas un concert', () => {
+    const i = preparerMemoireType({ dce: '\n\n--- CCTP.pdf ---\nCahier des clauses techniques particulières. La pause est organisée en concertation avec le chef du service sécurité.', analyse: {}, referents: '' } as any, { memoireType: chargerMemoireType() }).indicateurs;
+    expect(i.EVENEMENTIEL).toBeFalsy();
+  });
+});

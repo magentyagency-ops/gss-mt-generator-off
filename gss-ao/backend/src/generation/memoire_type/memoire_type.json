@@ -148,7 +148,7 @@
   "ACCUEIL_PUBLIC": {
    "description": "Le site accueille du public, des visiteurs ou des usagers.",
    "dce": "(?<![\\wÀ-ÿ])ERP(?![\\wÀ-ÿ])|recevant du public|accueil(?:lir|lant)? (?:du |le |des |de )?(?:public|visiteurs|usagers|patients|[ée]tudiants)|poste d.accueil|accueil et (?:d.)?orientation|orientation (?:du public|des visiteurs)|(?<![\\wÀ-ÿ])(?:usagers?|visiteurs?)(?![\\wÀ-ÿ])",
-   "dce_exclure": "(?:pendant|durant)\\s+(?:l'|les heures d')\\s*ouverture[^.]{0,80}n'est pas surveill[ée]",
+   "dce_exclure": "(?:pendant|durant)\\s+(?:l'|les heures d')\\s*ouverture[^.]{0,80}n'est pas surveill[ée]|(?:n'est pas|ne sont pas|n'est|non)\\s+(?:ouverts?|accessibles?)\\s+au public|ferm[ée]e?s?\\s+au public|(?:aucun|pas d')\\s*(?:accueil du\\s+)?public",
    "matrice": [
     "b4_accueil_filtrage",
     "b4_proc_perturbateur"
@@ -159,7 +159,8 @@
    "dce": "(?<![\\wÀ-ÿ])(?:usagers?|guichets?|allocataires?|incivilit[ée]s?)(?![\\wÀ-ÿ])|rendez-vous|accueil du public",
    "matrice": [
     "b4_proc_incivilite"
-   ]
+   ],
+   "dce_exclure": "(?:n'est pas|ne sont pas|n'est|non)\\s+(?:ouverts?|accessibles?)\\s+au public|ferm[ée]e?s?\\s+au public|(?:aucun|pas d')\\s*(?:accueil du\\s+)?public"
   },
   "FILTRAGE": {
    "description": "Filtrage, contrôle d'accès ou gestion des entrées.",
@@ -171,7 +172,8 @@
   },
   "FLUX_PUBLIC": {
    "description": "Gestion de flux de public (jauge, événements, filtrage des entrées) : détecteur de métaux et compteur à main.",
-   "dce": "flux (?:de |du |des )?(?:public|visiteurs|personnes|spectateurs)|(?<![\\wÀ-ÿ])jauges?(?![\\wÀ-ÿ])|d[ée]tecteurs? de m[ée]taux|magn[ée]tom[èe]tres?|palpation|manifestations?|[ée]v[ée]nements? (?:culturels?|sportifs?|ponctuels?)|spectacles?|concerts?"
+   "dce": "flux (?:de |du |des )?(?:public|visiteurs|personnes|spectateurs)|(?<![\\wÀ-ÿ])jauges?(?![\\wÀ-ÿ])|d[ée]tecteurs? de m[ée]taux|magn[ée]tom[èe]tres?|palpation|manifestations?|[ée]v[ée]nements? (?:culturels?|sportifs?|ponctuels?)|(?<![\\wÀ-ÿ])(?:spectacles?|concerts?)(?![\\wÀ-ÿ])",
+   "dce_exclure": "(?:n'est pas|ne sont pas|n'est|non)\\s+(?:ouverts?|accessibles?)\\s+au public|ferm[ée]e?s?\\s+au public|(?:aucun|pas d')\\s*(?:accueil du\\s+)?public"
   },
   "DETECTEURS_METAUX": {
    "description": "Le CCTP prévoit l'usage de détecteurs de métaux.",
@@ -204,7 +206,7 @@
   },
   "EVENEMENTIEL": {
    "description": "Le marché comporte de l'événementiel (manifestations, renforts pour des événements).",
-   "dce": "[ée]v[ée]nementiel|manifestations? (?:culturelles?|sportives?|professionnelles?|publiques?)|[ée]v[ée]nements? (?:culturels?|sportifs?|ponctuels?|festifs?)|concerts?|spectacles?|festivals?|colloques?|s[ée]minaires?|inaugurations?|portes ouvertes",
+   "dce": "[ée]v[ée]nementiel|manifestations? (?:culturelles?|sportives?|professionnelles?|publiques?)|[ée]v[ée]nements? (?:culturels?|sportifs?|ponctuels?|festifs?)|(?<![\\wÀ-ÿ])(?:concerts?|spectacles?|festivals?|colloques?|s[ée]minaires?|inaugurations?)(?![\\wÀ-ÿ])|portes ouvertes",
    "matrice": [
     "b5_evenementiel"
    ]

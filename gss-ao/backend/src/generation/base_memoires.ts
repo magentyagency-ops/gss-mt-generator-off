@@ -2066,6 +2066,38 @@ export function estPieceAdministrative(nomPiece: string): boolean {
   return /\bRC\b|r[èe]glement (?:de (?:la )?)?consultation|acte d.engagement|\bAE\b|DPGF|BPU|DQE|bordereau|\bDC\s?\d|attestation|cadre de r[ée]ponse|m[ée]moire|candidature|lettre|avis|ccap|clauses administratives/i.test(nom);
 }
 
+/**
+ * Texte des pièces techniques du DCE (CCTP, CCAP, annexes ; jamais le RC, l'AE, les bordereaux) sur lequel les indicateurs du
+ * mémoire type cherchent leurs preuves (T3G-8 : « Code guichet » du RIB de l'AE, « version Excel » du RC, « décret … relatif à la
+ * sécurité des manifestations sportives » ne font plus ajouter les rubriques des usagers, de l'événementiel ou de l'informatique),
+ * sans références réglementaires (« décret / loi / arrêté … relatif à … »), ni « Informatique et libertés » ou RGPD, ni « code
+ * guichet ».
+ */
+export function textePreuvesIndicateurs(dce: string): string {
+  // Pièces d'engagement et de candidature écartées (AE et son RIB, DC1-4, attestations, avis) ; le RC, le cadre de réponse et
+  // les bordereaux restent : les critères disent ce que le mémoire doit traiter (havre2 : « agents de sécurité cynophiles » dans
+  // les critères du RC) et les bordereaux les profils demandés (etampes1 : « AGENT DE SECURITE INCENDIE » du BPU).
+  const blocs = String(dce || '').split(/\n\n--- (.+?) ---\n|\n?===== PIÈCE : (.+?) =====\n/);
+  const pieces: string[] = [];
+  for (let i = 1; i < blocs.length; i += 3) {
+    const nom = String(blocs[i] || blocs[i + 1] || '').replace(/_/g, ' ');
+    if (/acte\s*d.engagement|(?<![A-Za-z])AE(?![A-Za-z])|(?<![A-Za-z])DC\s?\d|attestation|candidature|fiche contact|(?<![A-Za-z])(?:RIB|AAPC)(?![A-Za-z])|avis d.appel/i.test(nom)) continue;
+    pieces.push(blocs[i + 2] || '');
+  }
+  if (!pieces.length && !/--- .+? ---|===== PIÈCE/.test(dce || '')) pieces.push(String(dce || ''));
+  return pieces.join('\n\n')
+    // Formalités de remise de l'offre (« support informatique », « version Excel », « clé USB ») : pas un outil des agents.
+    .replace(/(?:supports?|versions?|formats?|fichiers?|tableurs?)\s+(?:de\s+type\s+)?(?:informatiques?|num[ée]riques?|[ée]lectroniques?|excel|word|pdf|modifiables?)|(?:excel|word)\s+(?:et|ou)\s+(?:pdf|word|excel)|cl[ée]s?\s+usb|cd-?rom|d[ée]mat[ée]rialis\p{L}*/giu, ' ')
+    .replace(/(?<![\p{L}])(?:d[ée]cret|loi|arr[êe]t[ée]|ordonnance|directive|r[èe]glement)\s+(?:n°\s*[\d-]+\s+)?(?:du\s+\d{1,2}(?:er)?\s+\p{L}+\s+\d{4}\s+)?(?:modifi[ée]e?\s+)?relati(?:f|ve)s?\s+(?:[àa]\s+la|[àa]\s+l['’]|au|aux|[àa])\s+[^.;]{0,140}/giu, ' ')
+    .replace(/informatique\s+et\s+(?:des\s+)?libert[ée]s|(?<![\p{L}])(?:rgpd|cnil)(?![\p{L}])|r[èe]glement\s+g[ée]n[ée]ral\s+(?:sur|de)\s+la\s+protection\s+des\s+donn[ée]es|virus\s+informatiques?/giu, ' ')
+    // Rappels de textes (« ses dispositions relatives aux manifestations … (articles L.211-11 et suivants) ») et nom d'un service
+    // de l'acheteur (« Département Proximité Relations Usagers ») : ni une mission ni un public du site.
+    .replace(/dispositions\s+relatives?\s+(?:[àa]u?x?|[àa]\s+la|[àa]\s+l['’])\s+[^;()]{0,140}\(\s*articles?[^)]*\)/giu, ' ')
+    .replace(/(?:D[ée]partement|Direction|Service|P[ôo]le|Mission)\s+(?:[A-ZÀ-Ý][\p{L}'’-]*\s+){0,4}Usagers/gu, ' ')
+    .replace(/(?:(?:pdf|word|excel)\s+(?:et|ou)\s+)+(?:pdf|word|excel)|sous\s+(?:format\s+)?(?:pdf|excel|word)/giu, ' ')
+    .replace(/code\s+guichet/gi, ' ');
+}
+
 function piecesTechniques(dce: string): string[] {
   const blocs = (dce || '').split(/\n\n--- (.+?) ---\n|\n?===== PIÈCE : (.+?) =====\n/);
   const pieces: string[] = [];
