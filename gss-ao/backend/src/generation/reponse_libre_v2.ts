@@ -650,6 +650,26 @@ export function grouperNouvelles(nouvelles: ExigenceMatrice[], max = 6): { group
  */
 export const FORMALITES_OFFRE = /visites? (?:obligatoires?|pr[ée]alables?)|visites? (?:des (?:lieux|sites)|de (?:site|reconnaissance))[^.]{0,60}(?:obligatoire|pr[ée]alable|avant (?:la remise|le d[ée]p[ôo]t)|candidats?|soumissionnaires?)|(?:attestation|certificat|bon)s? de visite|cadres? de r[ée]ponse (?:obligatoires?|par lot|du lot|joint|à (?:joindre|compl[ée]ter|remplir|renseigner|fournir|remettre))|(?:joindre|compl[ée]ter|remplir|renseigner|fournir|remettre)[^.]{0,30}cadres? de r[ée]ponse|offre[^.]{0,60}(?:irr[ée]guli[èe]re|irrecevable)|sous peine (?:de rejet|d.irr[ée]gularit[ée]|d.irrecevabilit[ée])/i;
 
+/**
+ * Puces « Vos attentes » et « Points de vigilance » du bloc 1 qui décrivent une formalité de l'offre (T6-CONS-12 : « **Visite
+ * obligatoire** : sans visite du site, l'offre est déclarée non recevable … → notre réponse : « L'intégration d'un nouveau
+ * marché » ») : retirées du texte (aucune rubrique du mémoire n'y répond), leur exigence est renvoyée pour la question à GSS
+ * (questionFormalite).
+ */
+export function formalitesDuBloc1(texte: string): { texte: string; formalites: string[] } {
+  const formalites: string[] = [];
+  let partie = '';
+  const lignes = String(texte || '').split('\n').filter((l) => {
+    if (/^##\s/.test(l)) { partie = l; return true; }
+    if (!/^##\s+(?:Vos attentes|Les points de vigilance)/i.test(partie) || !/^\s*[-*•]\s/.test(l)) return true;
+    const besoin = l.replace(/^\s*[-*•]\s+/, '').split('→')[0].replace(/\*\*/g, '').trim();
+    if (!FORMALITES_OFFRE.test(besoin)) return true;
+    formalites.push(besoin.replace(/^[^:]{2,60}:\s*/, '').replace(/[\s.;:]+$/, ''));
+    return false;
+  });
+  return { texte: lignes.join('\n'), formalites };
+}
+
 /** Question exacte posée à GSS pour une formalité de l'offre (hors mémoire technique). */
 export function questionFormalite(e: { sujet?: string; exigence: string }): string {
   const x = String(e.exigence || '').replace(/\s+/g, ' ').trim().replace(/[.;:\s]+$/, '');
@@ -1422,6 +1442,9 @@ export function completerBesoinMinimum(
       // Clause contractuelle ou de procédure (confidentialité, litige, forclusion…) : ni une attente ni un point de vigilance
       // de la prestation (cstb 551, T6N-5).
       && !CLAUSE_CONTRACTUELLE.test(e.exigence)
+      // Formalité de l'offre (visite obligatoire, cadre de réponse à joindre, T6-CONS-12) : une question à GSS, jamais une attente
+      // ni un point de vigilance de la prestation.
+      && !FORMALITES_OFFRE.test(`${(e as any).sujet || ''} ${e.exigence}`)
       // Exigence rattachée au bloc de la compréhension lui-même : jamais un renvoi du bloc 1 vers lui-même (T6N-5).
       && !(e.rubrique && plan?.rubriques.find((x) => x.id === e.rubrique)?.mode === 'besoin'))
     .sort((a, b) => rang(a) - rang(b));
@@ -1811,6 +1834,12 @@ export function titreExigence(x: string, max = 34): string {
   // Complément de tête qui ne porte pas l'exigence (T5-CONS-2 : « Pour les SSIAP, maintenir à jour le recyclage… », « Selon le
   // CCAP, justifier… », « Conformément à l'article 5, … ») : la proposition principale.
   { const r = /^(?:pour|concernant|s['’]agissant\s+d(?:e\s+la|e\s+l['’]|es|u|e)|selon|conform[ée]ment\s+(?:[àa]\s+la|[àa]\s+l['’]|aux?|[àa])|au\s+titre\s+d(?:e\s+la|e\s+l['’]|es|u|e)|en\s+application\s+d(?:e\s+la|e\s+l['’]|es|u|e)|comme\s+pr[ée]vu\s+(?:au|par|dans))\s+[^,]{2,90},\s*(.+)$/i.exec(e); if (r && r[1].length >= 12) e = r[1]; }
+  // Citation qui commence par une locution de délai ou de quantité (T6N-1 : « au plus tard 4 jours ouvrés avant leur prise
+  // d'effet », « a minima 5 jours ouvrés », « au moins 10 jours avant le début du mois », « dans un délai maximum de 30
+  // minutes ») : la locution est gardée entière, jamais amputée de son premier mot (« Plus tard… », « Minima… », « Moins
+  // 10 jours… », au sens inversé) ; trop longue, elle perd ses derniers compléments entiers (jamais « avant leur prise »).
+  const locution = titreLocution(e, max);
+  if (locution) return locution;
   const ct = COMPLEMENT_TETE.exec(e);
   if (ct && INCISE.test(ct[3])) e = `${ct[1]} ${ct[2]}, ${ct[3].replace(INCISE, '')}`;
   const cap = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
@@ -1851,6 +1880,69 @@ export function titreExigence(x: string, max = 34): string {
     if (s2 && !MAUVAIS_TITRE.test(s2)) return s2;
   }
   return '';
+}
+
+const RX_LOCUTION = /^(en\s+moins\s+de|au\s+plus\s+tard|au\s+plus\s+t[ôo]t|au\s+moins|au\s+minimum|au\s+maximum|[aà]\s+minima|dans\s+un\s+d[ée]lai(?:\s+(?:moyen|maximum|maximal|minimum|minimal))?\s+(?:de|d['’])|dans\s+les?|sous|d[èe]s)\s*(?=\(?\d|(?:une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|douze|quinze|vingt|trente|quarante|soixante)(?![\p{L}]))/iu;
+function titreLocution(e: string, max: number): string {
+  const m = RX_LOCUTION.exec(e);
+  if (!m) return '';
+  let t = e.replace(/^[aà]\s+minima/i, 'a minima').replace(/\s*\(\s*(?:\d+|[a-zà-ÿ-]+)\s*\)/gi, '').replace(/[\s.;:,]+$/, '');
+  // « avant le début de la prestation » → « avant la prestation » (le complément garde son objet).
+  if (t.length > max) t = t.replace(/(\s(?:avant|apr[èe]s|d[èe]s)\s+)(?:le\s+)?(?:d[ée]but|d[ée]marrage|commencement)\s+(?:(de\s+la|de\s+l['’]|du|des)\s*)/i, (_x, a: string, de: string) => `${a}${({ 'de la': 'la ', "de l'": "l'", 'de l’': 'l’', du: 'le ', des: 'les ' } as Record<string, string>)[de.toLowerCase().replace(/\s+/g, ' ')] || ''}`);
+  const debut = m[0].length;
+  const PREP = /\s(?:avant|apr[èe]s|de|du|des|d['’]|pour|sur|dans|[àa]|au|aux|par|entre|en|lors|suivant|[àa]\s+compter)\s/gi;
+  while (t.length > max) {
+    const coupes = [...t.matchAll(PREP)].map((x) => x.index!).filter((i) => i > debut + 3);
+    if (!coupes.length) return '';
+    t = t.slice(0, coupes[coupes.length - 1]).replace(/[\s,;:]+$/, '');
+  }
+  // Jamais un nombre séparé de son unité ni un mot-outil en fin de libellé.
+  if (/(?:\d|une?|deux|trois|quatre|cinq|six|dix|quinze|vingt|trente)$/i.test(t) || MOTS_OUTILS.has(t.split(' ').pop()!.toLowerCase())) return '';
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/**
+ * Libellé EXIGENCE d'une puce du bloc 1 (T6-CONS-12, planche Marine v3 feuille 28 : « Continuité de service », « Qualifications
+ * à jour ») : un groupe nominal court, jamais la phrase « besoin » du modèle (« L'intervention doit pouvoir être déclenchée
+ * après une alarme… », « Ce bilan doit couvrir… »). Dans l'ordre : la phrase « besoin » si elle est déjà un groupe nominal
+ * court ; la citation qui n'est qu'un délai (« en moins de 30 (trente) minutes ») jointe au sujet du besoin (« Intervention
+ * en moins de 30 minutes ») ; le groupe nominal de la citation, sans article ni démonstratif, sans sujet « le titulaire
+ * fournira » ni participe qui attend son complément (« Système d'astreinte », « Bilan concernant l'éco-mobilité ») ; sinon le
+ * sujet du besoin.
+ */
+export function libelleExigenceBloc1(besoin: string, citation: string, max = MAX_LIBELLE_EXIGENCE): string {
+  const VERBE = /(?<![\p{L}])(?:est|sont|sera|seront|doit|doivent|devra|devront|peut|peuvent|pourra|a|ont|fait|font|fournira|fournit|assure|assurent|organise|organisent|permet|permettent|couvre|couvrent|pr[ée]voit|pr[ée]voient)(?![\p{L}])/iu;
+  const DET = /^(?:(?:l['’]ensemble|la\s+totalit[ée]|l['’]int[ée]gralit[ée])\s+(?:du|de\s+la|de\s+l['’]|des)\s*|(?:le|la|les|l['’]|un|une|des|du|ce|cet|cette|ces|son|sa|ses|leur|leurs|notre|nos|votre|vos)\s*(?<=['’]|\s))/i;
+  const nominal = (t: string) => {
+    let x = String(t || '').replace(/\s*\(\s*(?:\d+|[a-zà-ÿ-]+)\s*\)/gi, '').replace(/\s+/g, ' ').trim();
+    for (let k = 0; k < 2; k++) x = x.replace(DET, '');
+    return x ? x.charAt(0).toUpperCase() + x.slice(1) : '';
+  };
+  const b = String(besoin || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').replace(/[\s.;:]+$/, '').trim();
+  const c = String(citation || '').replace(/\*\*/g, '').replace(/\s*\[…\]\s*/g, ' ').replace(/\s+/g, ' ').replace(/^[«"“\s]+|[»"”\s.;:]+$/g, '').trim();
+  // Besoin sans verbe d'état ou d'obligation ni démonstratif en tête (« Prévoir une astreinte pour le remplacement d'un absent »,
+  // « Continuité de service ») : gardé tel quel, comme validé.
+  if (b && !VERBE.test(b) && !/^(?:ce|cet|cette|ces|il|elle|ils|elles|nous|notre|nos)\b/i.test(b)) return b;
+  const sujet = (() => {
+    const m = /^(.{3,45}?)\s+(?:ne\s+|n['’])?(?:est|sont|sera|seront|doit|doivent|devra|devront|peut|peuvent|pourra|varie|varient|comprend|comprennent|couvre|couvrent)\b/i.exec(b);
+    const x = m ? nominal(m[1]) : '';
+    return x && !VERBE.test(x) && x.split(' ').length <= 5 ? x : '';
+  })();
+  // Citation réduite à un délai (« en moins de 30 (trente) minutes », « dans un délai de 2 heures ») : le sujet du besoin + le délai.
+  const delai = /^(?:en\s+moins\s+de|dans\s+un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?de|sous|dans\s+les?|en|au\s+plus\s+tard\s+(?:dans|en)?)\s*(.+)$/i.exec(c);
+  const duree = dureeDe(c.replace(/\s*\(\s*[a-zà-ÿ-]+\s*\)/gi, ''));
+  if (delai && duree && c.split(' ').length <= 8 && sujet) {
+    const t = `${sujet} ${/moins/i.test(c) ? 'en moins de' : 'en'} ${duree}`;
+    if (t.length <= max) return t;
+  }
+  // Groupe nominal de la citation, sans le sujet acteur ni son verbe (« le titulaire fournira chaque année un bilan … »).
+  const sansActeur = c.replace(ACTEUR_SUJET, '').replace(/^\s*(?:ne\s+)?(?:\S+(?:ra|ront|e|ent|it|ssent))\s+(?:(?:chaque|tous\s+les|toutes\s+les)\s+\S+\s+)?/i, (m) => (ACTEUR_SUJET.test(c) ? '' : m));
+  const base = nominal(ACTEUR_SUJET.test(c) ? sansActeur : c);
+  let tc = titreExigence(base, max);
+  tc = nominal(tc.replace(/\s+(?:permettant|pour|afin|visant|destin[ée]e?s?|charg[ée]e?s?)(?:\s.*)?$/i, ''));
+  if (tc && !VERBE.test(tc) && !/\s(?:de|du|des|d['’]|à|au|aux|en|par|pour|sur|dans|et|ou)$/i.test(tc) && tc.split(' ').length >= 2) return tc;
+  if (sujet) return sujet;
+  return nominal(titreExigence(b || c, max));
 }
 
 /** Titre refusé : commence par une préposition, un verbe conjugué ou « Quel(s) que » (« D'un délai de 2 heures », « Doivent
@@ -2364,7 +2456,8 @@ export function etapesDesPuces(texte: string, phraseDe?: (titreRubrique: string)
   // « On pense à ça, puis à ça, pour arriver à ça » (consigne 6, T5CP-12) : le besoin (attentes) avant les points de vigilance,
   // le pilotage (réunions, indicateurs, reporting) en dernier avant le résultat.
   const PILOTAGE = /r[ée]unions?|pilotage|indicateurs?|reporting|comit[ée]|bilan|tableau de bord/i;
-  const base = [...attentes, ...vigilance];
+  // Formalité de l'offre (visite obligatoire) : jamais une étape du process (T6-CONS-14).
+  const base = [...attentes, ...vigilance].filter((c) => !FORMALITES_OFFRE.test(c.x));
   const ordre = [...base.filter((c) => !PILOTAGE.test(`${c.x} ${c.y}`)), ...base.filter((c) => PILOTAGE.test(`${c.x} ${c.y}`))];
   // Exigence citée du DCE, courte et nominale (« Main courante tenue en temps réel », « Délai maximum de 20 minutes ») :
   // elle sert de titre telle quelle.
@@ -2387,7 +2480,14 @@ export function etapesDesPuces(texte: string, phraseDe?: (titreRubrique: string)
     const court = titreExigence(x, 34 - valeur.length - 4);
     return court ? `${court} en ${valeur}` : '';
   };
-  const titreDe = (c: { x: string; citation: boolean }) => citationTitre(c) || avecValeur(c.x, nominal(c.x)) || avecValeur(c.x, titreExigence(c.x));
+  // Titre coupé qui perd le complément de son nom (T6-CONS-14 : « L'ensemble du système » pour « L'ensemble du système de
+  // surveillance à distance ») : « L'ensemble du / La totalité des » retiré d'abord (« Système de surveillance à distance »).
+  const SANS_ENSEMBLE = /^(?:l['’]ensemble|la\s+totalit[ée]|l['’]int[ée]gralit[ée])\s+(?:du|de\s+la|de\s+l['’]|des)\s*/i;
+  const titreDe = (c: { x: string; citation: boolean }) => {
+    const x = c.x.replace(SANS_ENSEMBLE, (m) => (m ? '' : m)).replace(/^./, (ch) => ch.toUpperCase());
+    const cc = { ...c, x };
+    return citationTitre(cc) || avecValeur(x, nominal(x)) || avecValeur(x, titreExigence(x));
+  };
   for (const c of [...ordre.filter((x) => titreDe(x)), ...ordre.filter((x) => !titreDe(x))]) {
     if (etapes.length >= 3) break;
     let titre = titreDe(c);

@@ -19,7 +19,7 @@ import {
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
-  sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, phraseDeRubriqueGss, alignerSchemaSurTexte, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
+  sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, phraseDeRubriqueGss, alignerSchemaSurTexte, FORMALITES_OFFRE, questionFormalite, formalitesDuBloc1, consultationsDuDce,
   CLAUSE_CONTRACTUELLE, valeursImposeesValides, titreSansPointFinal, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, similariteQuestions, recouvrementTextes, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
@@ -2630,6 +2630,11 @@ export function alerteCadreAbsent(dce: string, cadreFourniAutreFormat = ''): str
 export function alerteLots(analyse: any, dce: string): string[] {
   const q = lotsDuMemoire(analyse, dce).question;
   return q ? [q] : [];
+}
+
+/** Nature d'une formalité de l'offre (visite, cadre de réponse, irrecevabilité) : une seule question par nature. */
+export function typeFormalite(t: string): string {
+  return /visite/i.test(t) ? 'visite' : /cadres? de r[ée]ponse/i.test(t) ? 'cadre' : /irr[ée]guli|irrecevab|rejet/i.test(t) ? 'rejet' : t;
 }
 
 export function alerteCctpAbsent(dce: string, illisibles: string[] = [], partielles: Array<{ nom: string; pages: string[] }> = []): string[] {
@@ -5470,7 +5475,7 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const placeSchemas = new Map<string, { resteEmu: number }>();
     let partiesAjustees: Array<{ titre: string; section: string; pages: number; ids: number[] }> = [];
     /** Texte « Notre compréhension de votre besoin » (rédigé une seule fois, d'après le DCE), pour les questions de compréhension. */
-    let comprehensionP: Promise<{ id: string; titre: string; texte: string; svg?: string } | null> | null = null;
+    let comprehensionP: Promise<{ id: string; titre: string; texte: string; svg?: string; formalites?: string[] } | null> | null = null;
     const comprehensionCadre = () => (comprehensionP ||= (async () => {
       if (!repriseMT) return null;
       try {
@@ -5481,7 +5486,7 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
         });
         // Renvoi à un titre absent du cadre (« → notre réponse : « La planification » … », T1-COH-4) : retiré, la phrase reste.
         const intitulesCadre = descriptors.map((d) => d.context).join(' ');
-        return { id: b1?.id || 'b1_comprehension', titre: b1?.titre || 'Notre compréhension de votre besoin', texte: renvoisHorsCadreRetires(texteBrut(c.texte), intitulesCadre), svg: c.svg };
+        return { id: b1?.id || 'b1_comprehension', titre: b1?.titre || 'Notre compréhension de votre besoin', texte: renvoisHorsCadreRetires(texteBrut(c.texte), intitulesCadre), svg: c.svg, formalites: c.formalites };
       } catch (e: any) {
         console.warn(`[MemoireGenerator] Compréhension du besoin (cadre) indisponible (${e?.message || e}) : réponse rédigée comme les autres.`);
         return null;
@@ -5836,6 +5841,8 @@ En cas de doute → "[À COMPLÉTER]".`;
       // la référence ; son schéma de process est inséré sous la réponse. Autres questions : rubriques attribuées à ce champ
       // (une rubrique reprise dans une seule réponse ; les autres champs y renvoient).
       const comprehension = reprise.comprehension ? await comprehensionCadre() : null;
+      // Formalités de l'offre retirées du bloc 1 (T6-CONS-12) : posées à GSS.
+      for (const x of comprehension?.formalites || []) alertesComprehension.add(questionFormalite({ exigence: x }));
       const candidats: CandidatReference[] = !developpee ? []
         : comprehension ? [{ cle: 'R1', id: comprehension.id, titre: comprehension.titre, texte: comprehension.texte, score: 1 }]
           : attribution?.candidats.get(f.id) ?? candidatsReference(repriseMT!.mt, repriseMT!.textes, questionMT, { scores: repriseMT!.scores.get(f.id), hors: reprise.hors, secondeLexicale: reprise.sujetReconstruit, questionSeule: reprise.questionSeule, evenementiel: lotEvenementiel });
@@ -8661,6 +8668,8 @@ RÈGLES DE FORME (rendu Marp) :
     const titresSchemas: Record<string, string> = {};
     const avisSecours: string[] = rubriquesExclues.map((x) => `Rubrique « ${x.titre} » retirée du mémoire : le cahier des charges exclut la mission qu'elle décrit (à la place de « ${phraseLisible(x.extrait, 160)} », le modèle proposait « ${phraseLisible(x.par, 160)} »). Si GSS assure bien cette mission sur ce marché, demandez via l'assistant de rétablir la rubrique.`);
     const b1 = plan.rubriques.find((r) => r.mode === 'besoin');
+    /** Formalités de l'offre retirées du bloc 1 (T6-CONS-12) : posées à GSS. */
+    const formalitesBloc1: string[] = [];
     if (b1) {
       progres(50, 'Notre compréhension de votre besoin : explication et schéma de process…');
       const c = await this.redigerComprehension(prep, ctxBase, besoin, {
@@ -8668,6 +8677,7 @@ RÈGLES DE FORME (rendu Marp) :
         analyse: analyseResumee, demande: await demandeMT.consigne(b1.id, b1.titre),
       });
       sections[b1.id] = remarques ? `${c.texte.trim()}\n\n${remarques}` : c.texte;
+      formalitesBloc1.push(...c.formalites);
       // 1 à 2 pages d'explication (consigne 3) : la rédaction qui dépasse sa limite de mots est ramenée à 2 pages, sans modèle.
       if (!estRetourArriere(themeActif())) {
         const r = reduireBesoinAPages(sections[b1.id], (t) => decouperPagesTexte(t, false, true).length);
@@ -8812,6 +8822,7 @@ RÈGLES DE FORME (rendu Marp) :
       ...questionsAjoutsRefuses,
       ...questionsRC,
       ...formalitesOffre.map(questionFormalite),
+      ...formalitesBloc1.filter((x) => !formalitesOffre.some((e) => typeFormalite(`${e.sujet || ''} ${e.exigence}`) === typeFormalite(x))).map((x) => questionFormalite({ exigence: x })),
       ...confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie),
       // Publipostage : valeurs du registre à confirmer, passages retirés faute de valeur (délai hors Normandie…).
       ...publiees.flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)]).flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
@@ -9126,8 +9137,9 @@ RÈGLES DE FORME (rendu Marp) :
     ctx: ContexteMarche,
     besoin: DonneesBesoin,
     o: { perimetre?: string; exigences?: ExigenceMatrice[]; remarques?: string; analyse?: string; demande?: string; format?: 'page' | 'paysage'; sansSommaire?: boolean },
-  ): Promise<{ texte: string; titre: string; svg?: string; secours: boolean }> {
+  ): Promise<{ texte: string; titre: string; svg?: string; secours: boolean; formalites: string[] }> {
     const titreDefaut = prep.mt.rubriques.find((r) => r.mode === 'besoin')?.schema?.titre || 'Votre besoin, notre réponse en un process';
+    let formalites: string[] = [];
     const messages = consigneComprehension(besoin, {
       // Cadre imposé (T1-COH-4) : jamais les rubriques du mémoire type comme renvois, elles ne sont pas des parties du cadre.
       perimetre: o.perimetre, exigences: o.exigences, remarques: o.remarques, sommaire: o.sansSommaire ? undefined : sommaireProcess(prep.plan), analyse: o.analyse,
@@ -9162,6 +9174,11 @@ RÈGLES DE FORME (rendu Marp) :
       const nb = nettoyerBloc1(texte, prep.plan, besoin.duree, Array.isArray(rep?.etapes) ? rep.etapes : []);
       if (nb.retirees.length || nb.renvois) console.log(`[MemoireGenerator] Compréhension du besoin : ${nb.retirees.length} redite(s) ou phrase(s) sans donnée retirée(s), ${nb.renvois} renvoi(s) de bloc corrigé(s).`);
       texte = nb.texte;
+      // Formalité de l'offre (« Visite obligatoire ») : jamais une attente ni un point de vigilance renvoyé à une rubrique qui
+      // n'en parle pas ; posée à GSS (T6-CONS-12). Retirée avant le minimum, qui complète depuis les exigences du DCE.
+      const fo = formalitesDuBloc1(texte);
+      texte = fo.texte;
+      formalites = fo.formalites;
       const m = completerBesoinMinimum(texte, sources, prep.plan, String(ctx.dce || ''));
       if (m.ajoutees) {
         texte = m.texte;
@@ -9245,7 +9262,7 @@ RÈGLES DE FORME (rendu Marp) :
       if (!schema.svg) schema = await dessiner(specSecoursObligations(texte));
     }
     if (!schema.svg) console.warn(`[MemoireGenerator] Compréhension du besoin : schéma de process non dessiné (${schema.erreurs.slice(0, 3).join(' | ')}) ${o.format === 'paysage' ? '' : ' ; en réponse libre, construit au rendu d\'après le texte'}.`);
-    return { texte, titre: titreFinal, svg: schema.svg, secours };
+    return { texte, titre: titreFinal, svg: schema.svg, secours, formalites };
   }
 
   /**
@@ -10346,6 +10363,8 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const avisSecours: string[] = [];
     // Consigne 3 : la compréhension du besoin a toujours son schéma de process, même au format court (dans le texte).
     let svgComprehension: string | undefined;
+    /** Formalités de l'offre retirées du bloc 1 (T6-CONS-12) : posées à GSS. */
+    const formalitesBloc1Court: string[] = [];
     if (b1 && partieB1) {
       progres(22, 'Notre compréhension de votre besoin…');
       const c = await this.redigerComprehension(prep, ctxBase, besoin, {
@@ -10355,6 +10374,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       });
       textes[b1.id] = c.texte;
       svgComprehension = c.svg;
+      formalitesBloc1Court.push(...c.formalites);
       // Consigne 3 : jamais de compréhension sans schéma ; le format court n'a pas de schéma construit au rendu.
       if (!c.svg) avisSecours.push(`Partie « ${partieB1.title} » : le schéma de process de la compréhension du besoin n'a pas pu être dessiné ; à demander via l'assistant avant la remise.`);
       if (c.secours) avisSecours.push(`Partie « ${partieB1.title} » : compréhension du besoin construite à partir des données du DCE (rédaction automatique indisponible), à relire.`);
@@ -10524,7 +10544,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     retirerQuestionsCouvertes(questionsCouverture, sourcesCouverture, suivi.exigencesNotees(), Object.values(sections).join('\n\n'));
     const confirmationsAvantSelection = confirmationsRegistreUtilisees(Object.values(sections).join('\n'), horsNormandie);
     const consultations = new Set<string>([
-      ...alerteCadreAbsent(dceContext, this.cadreNonRemplissable || ''), ...questionLieuInconnu(analysisData, dceContext), ...commentairesRetires, ...questionsCouverture, ...formalitesCourt.map(questionFormalite), ...confirmationsAvantSelection,
+      ...alerteCadreAbsent(dceContext, this.cadreNonRemplissable || ''), ...questionLieuInconnu(analysisData, dceContext), ...commentairesRetires, ...questionsCouverture, ...formalitesCourt.map(questionFormalite), ...formalitesBloc1Court.filter((x) => !formalitesCourt.some((e: any) => typeFormalite(`${e.sujet || ''} ${e.exigence}`) === typeFormalite(x))).map((x) => questionFormalite({ exigence: x })), ...confirmationsAvantSelection,
       ...publiees.filter((p) => toutesRetenues.includes(p.id)).flatMap((p) => [...p.aConfirmer.map((x) => x.question), ...p.manquantes.filter((m) => !m.repere).map((m) => m.question)])
         .flatMap((q) => q.split('\n')).map((q) => q.trim()).filter(Boolean),
     ]);

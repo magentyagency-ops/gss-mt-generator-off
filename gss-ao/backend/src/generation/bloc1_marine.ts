@@ -11,7 +11,7 @@
 // (relevés à la génération). Rien n'est ajouté pour les autres styles.
 
 import { normaliserExpressionsDelai, nombreFr, RX_NOMBRE_LETTRES, estCahierDesCharges, estPieceAdministrative } from './base_memoires';
-import { titreExigence, MAX_LIBELLE_EXIGENCE } from './reponse_libre_v2';
+import { titreExigence, MAX_LIBELLE_EXIGENCE, libelleExigenceBloc1 } from './reponse_libre_v2';
 
 const echapper = (t: string) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const norm = (t: string) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’`]/g, "'").toLowerCase();
@@ -399,13 +399,15 @@ function tableauAttentes(liste: string, blocsRubriques: Record<string, number> =
     }
     let exigence: string, demande: string;
     if (parenthese) {
-      exigence = GENERIQUE.test(gras) ? besoin : gras;
+      exigence = GENERIQUE.test(gras) ? libelleExigenceBloc1(besoin, parenthese) : gras;
       demande = GENERIQUE.test(gras) ? parenthese : (besoin ? `${parenthese} : ${besoin}` : parenthese);
     } else if (/^[«"“]/.test(gras)) {
       // Libellé de l'exigence tiré de la citation du CCTP (T3N-5 : jamais le titre d'une rubrique de GSS, « L'adéquation de nos
       // moyens humains avec votre besoin », ni une case vide).
       const citation = (/«\s*([^»]{3,300}?)\s*»/.exec(gras) || [])[1] || gras;
-      exigence = besoin || titreExigence(citation, MAX_LIBELLE_EXIGENCE);
+      // Phrase « besoin » du modèle (« L'intervention doit pouvoir être déclenchée… ») : jamais telle quelle ; groupe nominal
+      // court tiré du besoin et de la citation (T6-CONS-12).
+      exigence = libelleExigenceBloc1(besoin, citation) || titreExigence(citation, MAX_LIBELLE_EXIGENCE);
       demande = joindre(gras, suite);
     } else if (gras && suite && !besoin) {
       // Libellé en gras en tête de la phrase du CCTP (« **Réaliser une ronde de fermeture** du lundi au vendredi… → … »,
