@@ -322,7 +322,15 @@ export function posteOptionnel(citation: string, profil: string): boolean {
   const propositions = c.split(/\s*;\s*|\s*\([^()]*\)\s*|,\s+(?=avec\s)|(?<=[.!?])\s+|\s+(?=(?:ce|le) dispositif pourra|il pourra [êe]tre compl[ée]t[ée])/i).filter((x) => x.trim());
   const HORAIRE = /\d{1,2}\s*(?:h|:)\s*\d{0,2}|24\s*h|7\s*j|jours?|nuits?|semaine|permanent|en continu|vacations?/i;
   const principale = propositions.find((x) => HORAIRE.test(x)) || propositions[0] || c;
-  return OPTION_DU_POSTE.test(principale);
+  // Tête du poste mobilisée à la demande (« La mobilisation à la demande d'un second SSIAP1… », « mise en place sur demande d'un
+  // agent… ») : optionnel (citedia 1461, T5N-7).
+  if (/^\s*(?:la\s+|une\s+)?(?:mise\s+en\s+place|mobilisation|intervention|pr[ée]sence|affectation)\s+(?:[àa]\s+la\s+demande|sur\s+(?:simple\s+)?demande|ponctuelle|optionnelle|en\s+option)\b/i.test(principale)) return true;
+  // Poste « dédié » avec ses horaires : jamais optionnel ; le caractère optionnel ne se lit que dans la tête du poste, jamais dans
+  // un complément de mission (« … et mobilisable pour toutes interventions incluses et pour des interventions à la demande le
+  // reste du temps », citedia 1461, T5N-7).
+  if (/(?<![\p{L}])d[ée]di[ée]e?s?(?![\p{L}])/iu.test(principale) && HORAIRE.test(principale)) return false;
+  const tete = principale.split(/\s(?:et\s+)?mobilisables?\s+pour\b|\s(?:et\s+)?pour\s+(?:des|les|toutes?|d['’]autres)\s+interventions?\b|\s(?:et\s+)?(?:disponibles?|appelables?)\s+pour\b/i)[0];
+  return OPTION_DU_POSTE.test(tete);
 }
 
 /**
@@ -583,7 +591,7 @@ export function calculerDimensionnement(rep: any, dce: string): Dimensionnement 
     return { profils: [...profils.values()], titulaires: t, suppleants: t ? Math.max(2, Math.ceil(t * PART_SUPPLEANTS)) : 0, casPratique, ...(misesEnSituation.length ? { misesEnSituation } : {}) };
   }
   // Postes optionnels écartés et postes saisonniers sans période lisible : signalés à GSS, jamais en silence.
-  if (optionnels.length) alertes.push(`${optionnels.length > 1 ? `${optionnels.length} postes ont été écartés` : 'un poste a été écarté'} de l'équipe dédiée comme ${optionnels.length > 1 ? 'optionnels ou ponctuels' : 'optionnel ou ponctuel'} (${optionnels.slice(0, 3).map((c) => `« ${c.slice(0, 120)} »`).join(', ')}) : ${optionnels.length > 1 ? 'sont-ils' : 'est-il'} bien hors de l'équipe permanente ?`);
+  if (optionnels.length) alertes.push(`${optionnels.length > 1 ? `${optionnels.length} postes ont été écartés` : 'un poste a été écarté'} de l'équipe dédiée comme ${optionnels.length > 1 ? 'optionnels ou ponctuels' : 'optionnel ou ponctuel'} (${optionnels.slice(0, 3).map((c) => `« ${citationCourte(c, 120)} »`).join(', ')}) : ${optionnels.length > 1 ? 'sont-ils' : 'est-il'} bien hors de l'équipe permanente ?`);
   if (sansPeriode.length) alertes.push(`la période de l'année de ${sansPeriode.length > 1 ? 'ces postes saisonniers' : 'ce poste saisonnier'} n'a pas pu être lue (${sansPeriode.slice(0, 3).map((c) => `« ${citationCourte(c, 120)} »`).join(', ')}) : ${sansPeriode.length > 1 ? 'ils sont comptés' : 'il est compté'} sur toute l'année ; sur combien de semaines par an faut-il ${sansPeriode.length > 1 ? 'les' : 'le'} compter ?`);
   // Rondes ponctuelles écartées : posées à GSS (durée d'une ronde, nombre d'intervenants), jamais converties en heures.
   if (rondes.length) {
