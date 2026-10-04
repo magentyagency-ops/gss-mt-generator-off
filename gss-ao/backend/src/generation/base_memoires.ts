@@ -1256,6 +1256,16 @@ export function normaliserExpressionsDelai(t: string): string {
     })
     // « d'1 heure » (ou « d'une heure » devenu « d'1 heure ») : « de 1 heure ».
     .replace(/(?<![\p{L}])d['’]\s*(?=\d{1,4}\s*(?:\(\s*[^()]{1,25}\)\s*)?(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/giu, 'de ')
+    // « ½ heure », « 1/2 h », « demi heure » (T2-COH-7) : une demi-heure.
+    .replace(/(?<![\d\p{L}])(?:½|1\s*\/\s*2)\s*(?:h|heures?)(?![\p{L}\d])/giu, 'une demi-heure')
+    .replace(/(?<![\p{L}])demi\s+heure/giu, 'demi-heure')
+    // « dans la demi-heure », « sous la demi-heure » (T2-COH-7) : 30 minutes, comme « d'une demi-heure ».
+    .replace(/(?<![\p{L}])(dans|sous|en)\s+la\s+demi-heure(?![\p{L}])/giu, '$1 30 minutes')
+    .replace(/(\bd['’]\s*|\bde\s+)?(?<![a-zà-ÿ])une?\s+demi-heure/gi, (_m, de) => `${de ? 'de ' : ''}30 minutes`)
+    // Heures suivies de minutes en lettres (« une heure trente », « deux heures quinze », T2-GEN-2) : en minutes, comme
+    // « 1h30 » (« une heure » est déjà « 1 heure »). Jamais une plage horaire.
+    .replace(/(?<=(?:dans|sous|en|de|d['’]|moins de|plus de|maximum|maximal|tard|délai|delai)\s+(?:un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?(?:de\s+)?)?)(\d{1,2})\s*(?:h|heures?)\s+(?:et\s+)?(quarante-cinq|quarante|trente|quinze|vingt|dix|cinq)(?:\s+minutes?)?(?![\p{L}-])(?!\s*(?:à|-|–)\s*\d)/giu,
+      (_m, h: string, mm: string) => `${Number(h) * 60 + (nombreFr(mm) || 0)} minutes`)
     // Heures et minutes (« 1h30 », « 1 h 30 », « 1 heure 30 », « 1 heure et demie », « 1,5 heure ») : en minutes. Jamais
     // une plage horaire (« de 8h30 à 19h30 ») ni une heure sans contexte de délai.
     .replace(/(?<=(?:dans|sous|en|de|d['’]|moins de|plus de|maximum|maximal|tard|délai|delai)\s+(?:un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?(?:de\s+)?)?)(\d{1,2})\s*(?:h|heures?)\s*(?:(\d{2})(?:\s*(?:min(?:utes?)?|mn))?|et\s+demie)(?![\d\p{L}])(?!\s*(?:à|-|–)\s*\d)/giu,
@@ -1266,11 +1276,17 @@ export function normaliserExpressionsDelai(t: string): string {
     // Tournures d'attribut (« Le délai d'intervention sur alarme est fixé à 25 minutes », « … ne doit pas dépasser
     // 25 minutes », « Délai de remplacement d'un agent absent : 45 minutes », « au maximum 45 minutes après ») : « dans N ».
     .replace(/(d[ée]lais?(?:\s+maxim(?:al|um))?\b[^.;]{0,90}?)\s+(?:est|sera|doit [êe]tre)\s+(?:(?:fix[ée]e?|limit[ée]e?|port[ée]e?|ramen[ée]e?)\s+[àa]|de)\s+(?=\d)/giu, '$1 dans ')
-    .replace(/(?<![\p{L}])(?:ne\s+(?:doit|peut|pourra|devra|saurait)\s+(?:pas\s+|en aucun cas\s+|jamais\s+)?(?:d[ée]passer|exc[ée]der))\s+(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/giu, 'dans ')
+    .replace(/(?<![\p{L}])(?:ne\s+(?:doit|peut|pourra|devra|saurait)\s+(?:pas\s+|en aucun cas\s+|jamais\s+)?(?:d[ée]passer|exc[ée]der|[êe]tre\s+sup[ée]rieure?s?\s+[àa]))\s+(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/giu, 'dans ')
+    // Délai nommé par son action (« un délai d'intervention de 30 minutes », « délai d'arrivée sur site inférieur à 30 min »,
+    // « délai de remplacement d'un agent absent de 2 heures », T2-GEN-2) : « délai d'intervention dans 30 minutes ».
+    .replace(/(d[ée]lais?(?:\s+maxim(?:al|um))?\s+(?:d['’]\s*|de\s+)[^.;:|\d]{2,70}?)\s+(?:de|inf[ée]rieure?\s+(?:ou\s+[ée]gale?\s+)?[àa]|n['’]exc[ée]dant pas|ne d[ée]passant pas|maxim(?:um|al)(?:\s+de)?)\s+(?=\d{1,4}\s*(?:\(\s*[^()]{1,25}\)\s*)?(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/giu, '$1 dans ')
+    // « dispose de 2 heures pour assurer son remplacement » (T2-GEN-2) : « dispose dans 2 heures pour… ».
+    .replace(/(?<![\p{L}])(dispos\p{L}*)\s+(?:d['’]un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?de\s+|de\s+)(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}])\s+pour\s)/giu, '$1 dans ')
+    // Cellule de tableau qui ne porte que la durée (« Levée de doute sur alarme | 30 minutes », T2-GEN-2) : « | dans 30 minutes ».
+    .replace(/\|\s*(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}\/])\s*(?:\||$))/gimu, '| dans ')
     .replace(/(d[ée]lais?(?:\s+maxim(?:al|um))?\b[^.;:]{0,90}?)\s*:\s*(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/giu, '$1 dans ')
     .replace(/(?<![\p{L}])au\s+maximum\s+(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/giu, 'dans ')
     .replace(/\bdans l['’]heure(?![a-zà-ÿ])/gi, 'dans 1 heure')
-    .replace(/(\bd['’]\s*|\bde\s+)?(?<![a-zà-ÿ])une?\s+demi-heure/gi, (_m, de) => `${de ? 'de ' : ''}30 minutes`)
     .replace(/\bd['’]\s*une?\s+(?=(?:heures?|h)(?![a-zà-ÿ]))/gi, 'de 1 ')
     .replace(/(d[ée]lai(?:\s+maxim(?:al|um))?)\s+(?:n['’]exc[ée]dant pas|ne d[ée]passant pas|ne pouvant (?:pas )?exc[ée]der|inf[ée]rieure?\s+(?:ou\s+[ée]gale?\s+)?[àa]|maximum de)\s+/gi, '$1 de ')
     .replace(/\bau plus tard\s+(?=(?:\d|une?\s|deux|trois|quatre|cinq|six|dix|douze|quinze|vingt|trente)\S*\s*(?:\(\s*\d+\s*\)\s*)?(?:minutes?|mn|min|heures?|h)(?![a-zà-ÿ]))/gi, 'au plus tard dans ');

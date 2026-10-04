@@ -1401,7 +1401,48 @@ const NOMBRES_LETTRES: Record<string, number> = {
   vingt: 20, trente: 30, quarante: 40, 'quarante-cinq': 45, cinquante: 50, soixante: 60,
 };
 
-const RX_DELAI = /(?:dans|sous|en moins de|d[ée]lai(?:\s+maxim(?:al|um))?\s+de|au plus tard (?:dans|en))\s+(?:les\s+|un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?de\s+)?(\d{1,3}|une?|deux|trois|quatre|cinq|six|sept|huit|dix|douze|quinze|vingt|trente|quarante-cinq|quarante|soixante)\s*(?:\(\s*(\d{1,3}|[a-zà-ÿ]+(?:-[a-zà-ÿ]+)?)\s*\)\s*)?(minutes?|mn|min|heures?|h)(?![\wÀ-ÿ])/gi;
+// Durée d'un délai : « dans / sous / en / en moins de / moins de / délai de / au plus tard dans » N unité (T2-GEN-2 : « intervient
+// sur site en 30 minutes maximum », « moins de 30 minutes après l'appel »). Jamais une amplitude (« 24 heures sur 24 »).
+const RX_DELAI = /(?:dans|sous|en(?:\s+moins\s+de)?|moins\s+de|d[ée]lai(?:\s+maxim(?:al|um))?\s+de|au plus tard (?:dans|en))\s+(?:les\s+|un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?de\s+)?(\d{1,3}|une?|deux|trois|quatre|cinq|six|sept|huit|dix|douze|quinze|vingt|trente|quarante-cinq|quarante|soixante)\s*(?:\(\s*(\d{1,3}|[a-zà-ÿ]+(?:-[a-zà-ÿ]+)?)\s*\)\s*)?(minutes?|mn|min|heures?|h)(?![\wÀ-ÿ])(?!\s*(?:sur|\/)\s*\d)/gi;
+
+/**
+ * Action que mesure un délai (T2-GEN-1). Un délai d'arrivée, de remplacement, de mise en place ou d'exécution dépend d'un
+ * verbe ou d'un nom de PRÉSENCE ; un délai qui dépend d'un verbe de DOCUMENT ou de COMMUNICATION (transmettre un rapport,
+ * informer l'acheteur, traiter ou acquitter une alarme au PC, prendre en compte) n'est jamais un délai de présence, quel
+ * que soit le sujet nommé dans la phrase.
+ */
+const ACTION_PRESENCE = /interv(?:ien|en)\p{L}*|arriv\p{L}*|(?<![\p{L}])sur (?:site|place|les lieux)(?![\p{L}])|(?<![\p{L}])pr[ée]sen(?:t|te|ts|tes|ce)(?![\p{L}])|(?<![\p{L}])(?:se\s+)?rend(?:re|ra|ront|e|ent)?\s+sur|d[ée]plac\p{L}*|d[ée]p[êe]ch\p{L}*|rempla[cç]\p{L}*|pourv\p{L}*|(?<![\p{L}])relev[ée]e?s?(?![\p{L}])|(?<![\p{L}])rel[èe]ve(?![\p{L}])|mobilis\p{L}*|mise?s?\s+en\s+place|mett\p{L}*\s+en\s+place|met\s+en\s+place|lev[ée]es?\s+de\s+doute|ex[ée]cut\p{L}*|mise?s?\s+[àa]\s+disposition|mett\p{L}*\s+[àa]\s+disposition|renfor\p{L}*|compens\p{L}*|palli\p{L}*|suppl[ée][ée]\p{L}*|prise\s+de\s+(?:poste|service)/giu;
+const ACTION_DOCUMENT = /transm\p{L}*|adress[ée]\p{L}*|(?<![\p{L}])adresse(?:r|nt)?(?![\p{L}])|remet\p{L}*|remis\p{L}*|envo[iy]\p{L}*|communiqu\p{L}*|inform\p{L}*|signal\p{L}*|notifi\p{L}*|rapports?(?![\p{L}])|comptes?[- ]rendus?|trait(?:e|ent|er|era|eront|é|ée|és|ées|ement)(?![\p{L}])|acquitt\p{L}*|pri(?:se|s|ses)\s+en\s+compte|prendre\s+en\s+compte|enregistr\p{L}*|r[ée]pond\p{L}*|r[ée]ponse|bilans?(?![\p{L}])|rappel\p{L}*|contre[- ]appel|pr[ée]ven(?:ir|u|ue|us|ance)\p{L}*|avert\p{L}*|appliqu\p{L}*\s+(?:les\s+|des\s+)?consignes|factur\p{L}*/giu;
+/** Document dont le nom porte une action de présence (« rapport d'intervention », « compte rendu d'intervention ») : un document. */
+const DOCUMENT_DE_PRESENCE = /(?:rapports?|comptes?[- ]rendus?|fiches?|bons?|bilans?|relev[ée]s?|registres?|main courante)\s+(?:d['’]\s*|de\s+(?:l['’]\s*)?|des\s+)(?:interventions?|arriv[ée]es?|remplacements?|rondes?|lev[ée]es?\s+de\s+doute)/giu;
+/** Remplacement d'un objet (« remplacent les badges perdus »), jamais celui d'un agent. */
+const REMPLACEMENT_D_OBJET = /rempla[cç]\p{L}*\s+(?:(?:les?|la|l['’]|des|du|de|un|une|leurs?|ses?|son|sa)\s*)?(?:[\p{L}-]+\s+)?(?:v[ée]hicules?|t[ée]l[ée]phones?|mat[ée]riels?|cl[ée]s?|cylindres?|badges?|[ée]quipements?|batteries?|appareils?|terminaux|terminal|radios?|talkies?|uniformes?|tenues?|piles?|ampoules?)(?![\p{L}])/giu;
+
+/**
+ * Le délai trouvé à la position `debut` d'une proposition (déjà normalisée) mesure-t-il une action de présence ? L'action la
+ * plus proche AVANT le délai décide (« le rapport est transmis dans les 24 heures » : document ; « l'agent intervient sur site
+ * en 30 minutes » : présence) ; sans action avant, la première action APRÈS (« dispose de 2 heures pour assurer son
+ * remplacement ») ; aucune action : pas un délai de présence.
+ */
+export function delaiDePresence(prop: string, debut: number, fin: number, propositionsPrecedentes = ''): boolean {
+  const masque = (rx: RegExp, t: string, garde = '') => t.replace(rx, (m) => (garde && m.length >= garde.length ? garde + ' '.repeat(m.length - garde.length) : ' '.repeat(m.length)));
+  const actionsDe = (texte: string) => {
+    const t = masque(REMPLACEMENT_D_OBJET, masque(DOCUMENT_DE_PRESENCE, texte, 'rapport'));
+    const a: Array<{ pos: number; fin: number; presence: boolean }> = [];
+    for (const m of t.matchAll(ACTION_PRESENCE)) a.push({ pos: m.index || 0, fin: (m.index || 0) + m[0].length, presence: true });
+    for (const m of t.matchAll(ACTION_DOCUMENT)) a.push({ pos: m.index || 0, fin: (m.index || 0) + m[0].length, presence: false });
+    return a;
+  };
+  const actions = actionsDe(prop);
+  const avant = actions.filter((a) => a.fin <= debut).sort((a, b) => b.pos - a.pos)[0];
+  if (avant) return avant.presence;
+  const apres = actions.filter((a) => a.pos >= fin).sort((a, b) => a.pos - b.pos)[0];
+  if (apres) return apres.presence;
+  // Proposition sans action (« …, permettant d'assurer le remplacement des absents, dans un délai maximal de deux heures ») :
+  // l'action la plus proche des propositions qui la précèdent dans la même phrase.
+  const prec = actionsDe(propositionsPrecedentes).sort((a, b) => b.pos - a.pos)[0];
+  return !!prec?.presence;
+}
 
 /** Sujets des délais que le CCTP peut imposer. */
 const SUJETS_DELAI: Record<string, { sujet: RegExp; exclure?: RegExp; objet?: RegExp; personnel?: RegExp }> = {
@@ -1414,7 +1455,7 @@ const SUJETS_DELAI: Record<string, { sujet: RegExp; exclure?: RegExp; objet?: Re
   // et remplacement d'un agent récusé par l'acheteur pour sa tenue ou son comportement (T1-GEN-12 : « Tout agent faisant
   // preuve d'une tenue non conforme… devra être remplacé dans les deux (2) heures » n'est pas l'astreinte d'une absence).
   remplacement: {
-    sujet: /rempla[cç]|^(?=.*(?:absen|d[ée]faillan)).*(?<![\wÀ-ÿ])(?:relev[ée]e?s?|rel[èe]ve|suppl[ée][ée]e?s?|pourvue?s?)(?![\wÀ-ÿ])|postes? (?:vacants?|non (?:tenus?|pourvus?|occup[ée]s?))/i,
+    sujet: /rempla[cç]|^(?=.*(?:absen|d[ée]faillan)).*(?<![\wÀ-ÿ])(?:relev[ée]e?s?|rel[èe]ve|suppl[ée][ée]e?s?|pourvue?s?|compens[ée]e?s?|pallie[rz]?)(?![\wÀ-ÿ])|postes? (?:vacants?|non (?:tenus?|pourvus?|occup[ée]s?))/i,
     exclure: /absences? (?:pr[ée]vues?|pr[ée]visibles?|programm[ée]es?)|(?<![\wÀ-ÿ])pr[ée]visibles?(?![\wÀ-ÿ])|[àa] l.avance|modifications? (?:du|de|des) plannings?|plannings? pr[ée]visionnels?|changements? (?:du |de )?planning|faisant preuve|ne donnant pas satisfaction|dont le comportement|(?<![\wÀ-ÿ])(?:attitude|comportement)s?(?![\wÀ-ÿ])|tenue (?:non conforme|incorrecte|n[ée]glig)|(?<![\wÀ-ÿ])fautes?(?![\wÀ-ÿ])|r[ée]cus[ée]|insuffisance professionnelle|[àa] la (?:demande|requ[êe]te) (?:du|de la|de l['’]|des)|(?:demander|exiger|solliciter)[^.;]{0,60}(?:remplacement|changement|retrait|[ée]loignement)|[ée]loignement|changement d['’](?:un|l['’])\s*agent/i,
     objet: /v[ée]hicules?|t[ée]l[ée]phones?|mat[ée]riels?|(?<![\wÀ-ÿ])cl[ée]s?(?![\wÀ-ÿ])|cylindres?|badges?|[ée]quipements?|batteries?|(?<![\wÀ-ÿ])pannes?(?![\wÀ-ÿ])|appareils?|terminal|terminaux|radios?|talkies?|uniformes?|tenues?/i,
     personnel: /agents?|personnels?|effectifs?|postes?|absen|d[ée]faillan|salari[ée]s?|vacations?|rondiers?|gardiens?|SSIAP|chefs?|rempla[cç]ants?/i,
@@ -1470,13 +1511,15 @@ function propositionDuSujet(prop: string, ph: string, sujet: keyof typeof SUJETS
 export function delaisDePhrase(ph: string, sujet: keyof typeof SUJETS_DELAI): Array<{ valeur: string; minutes: number }> {
   const out: Array<{ valeur: string; minutes: number }> = [];
   if (sujet === 'ssi' && !/d[ée]faillan|hors service|d[ée]rangement/i.test(ph)) return out;
-  for (const prop of propositionsDe(ph)) {
+  const props = propositionsDe(ph);
+  for (const [iProp, prop] of props.entries()) {
     if (!propositionDuSujet(prop, ph, sujet)) continue;
     const lu = normaliserExpressionsDelai(prop);
+    const precedentes = normaliserExpressionsDelai(props.slice(0, iProp).join(' ; '));
     for (const m of lu.matchAll(RX_DELAI)) {
-      // Alarme : délai d'une action au PC (« appliquer les consignes… sous un délai de 3 minutes », « être informé… dans
-      // les 3 minutes ») écrite avant le délai, pas un délai d'arrivée sur site.
-      if (sujet === 'alarme' && /consignes|inform[ée]|informer|traitement|contre[- ]appel/i.test(lu.slice(Math.max(0, (m.index || 0) - 160), m.index || 0))) continue;
+      // Délai d'une autre action que la présence (transmettre un rapport, informer l'acheteur, traiter ou acquitter l'alarme
+      // au PC, appliquer les consignes) : jamais un délai d'arrivée, de remplacement ou de mise en place (T2-GEN-1, T10C-2).
+      if (!delaiDePresence(lu, m.index || 0, (m.index || 0) + m[0].length, precedentes)) continue;
       // « UNE (1) heure » : le chiffre entre parenthèses ; « 30 (trente) minutes » (ifits, T9CS-1) : le chiffre écrit avant.
       const n = m[2] && /^\d+$/.test(m[2]) ? Number(m[2]) : (/^\d+$/.test(m[1]) ? Number(m[1]) : NOMBRES_LETTRES[m[1].toLowerCase()]);
       if (!n) continue;
