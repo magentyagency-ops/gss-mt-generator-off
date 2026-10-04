@@ -1475,6 +1475,31 @@ export function piecesDemandeesParLeCadre(question: string, sousTitre: string): 
   return l.join(', ');
 }
 
+/**
+ * Motif de refus d'un alignement du texte de GSS sur le CCTP (étape « Cohérence avec le CCTP », D8, T2-CONS-9) ; '' s'il est
+ * admis : l'exigence citée doit figurer mot pour mot dans le DCE (à la ponctuation près) ; une exigence tirée d'une grille de
+ * pénalités ne fonde jamais une adaptation ; la phrase adaptée garde au moins la moitié des mots porteurs de la phrase de GSS
+ * (même sujet, même action : un délai ou un chiffre change, pas la procédure).
+ */
+export function refusAlignementCctp(extrait: string, remplacement: string, exigence: string, dce: string): string {
+  const plat = (t: string) => normaliser(String(t || '')).replace(/[^a-z0-9]+/g, ' ').trim();
+  const e = plat(String(exigence || '').replace(/^\s*horaire impos[ée]\s*:\s*/i, ''));
+  if (!e || e.split(' ').length < 4) return 'exigence non citée';
+  if (!plat(dce).includes(e)) {
+    // Citation d'un fragment de tableau ou avec une coupure : les mots porteurs de l'exigence (85 % au moins) dans une même
+    // phrase du DCE.
+    const motsE = [...new Set(e.split(' ').filter((w) => w.length >= 4))];
+    const phrase = String(dce || '').split(/(?<=[.;!?])\s+|\n{2,}/).find((ph) => { const p = ` ${plat(ph)} `; return motsE.length >= 3 && motsE.filter((w) => p.includes(` ${w} `)).length / motsE.length >= 0.85; });
+    if (!phrase) return 'exigence absente du DCE';
+  }
+  if (/p[ée]nalit|€|euros?\b|\bHT\b|retenue sur facture/i.test(exigence)) return 'grille de pénalités';
+  const mots = (t: string) => [...new Set(plat(t).split(' ').filter((w) => w.length >= 5))];
+  const avant = mots(extrait);
+  const garde = avant.filter((w) => mots(remplacement).includes(w)).length;
+  if (avant.length >= 4 && garde / avant.length < 0.5) return 'phrase de GSS réécrite (sujet ou action changés)';
+  return '';
+}
+
 export function questionOuverte(q: string): string {
   const t = String(q || '').trim();
   if (!t || LIGNE_DETERMINISTE.test(t) || /^À demander à l.acheteur/i.test(t)) return t;
@@ -8525,7 +8550,7 @@ RÈGLES DE FORME (rendu Marp) :
     ];
     const exigencesCoherence = [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))];
     const exigencesRefusees: string[] = [...ajoutsRefusesExigences];
-    await this.corrigerContradictions(sections, rubriquesDoc, exigencesCoherence, proteges, questionsCouverture, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, exigencesCoherence.map((x) => String(x.exigence || ''))), exigencesRefusees);
+    await this.corrigerContradictions(sections, rubriquesDoc, exigencesCoherence, proteges, questionsCouverture, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, exigencesCoherence.map((x) => String(x.exigence || ''))), exigencesRefusees, dceContext);
     // Exigence du CCTP que GSS n'a pas pu reprendre (jalon, délai ou fréquence de GSS gardés, question posée) : le bloc 1 ne la
     // présente plus comme un engagement, et son schéma de process ne la reprend plus (becquerel 591, T5N-5).
     if (b1 && sections[b1.id] && exigencesRefusees.length) {
@@ -9353,7 +9378,7 @@ Renvoie UNIQUEMENT un objet JSON : {"ajouts": [{"id": <id>, "apres": "…", "tex
    * inférieure au minimum imposé, délai plus long que le maximum…) est reformulée pour s'aligner sur
    * l'exigence. Seuls les remplacements retrouvés MOT POUR MOT sont appliqués. Étape non bloquante.
    */
-  private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>, proteges: string[] = [], questions?: Set<string>, adaptations?: AdaptationCctp[], noter?: (id: string, avant: string, apres: string, exigence: string) => void, refusees?: string[]): Promise<void> {
+  private async corrigerContradictions(sections: Record<string, string>, rubriques: Array<{ id: string; title: string }>, exigences: Array<{ exigence: string; rubrique?: string }>, proteges: string[] = [], questions?: Set<string>, adaptations?: AdaptationCctp[], noter?: (id: string, avant: string, apres: string, exigence: string) => void, refusees?: string[], dce?: string): Promise<void> {
     const ids = rubriques.map((r) => r.id).filter((id) => (sections[id] || '').trim());
     // Une rubrique à la fois, avec les exigences chiffrées qui lui sont attribuées (contexte court : résultat stable).
     // Chaque rubrique est confrontée à TOUTES les exigences (une contradiction se trouve souvent hors de la
@@ -9382,6 +9407,13 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": "rubrique", "extrait"
         // Pratique de GSS gardée quand le DCE n'exige rien (« une à trois fois par mois » : contrôles inopinés non exigés).
         if (proteges.some((x) => extrait.includes(x) && !remplacement.includes(x))) continue;
         const exigenceC = String(c?.exigence || '').replace(/\s+/g, ' ').trim();
+        // Mémoire type (D8, T2-CONS-9 : format court imm 1203, l'étape de mobilisation de l'astreinte remplacée par « Le marché
+        // pénalise toute absence… de plus de 60 minutes ») : seulement une contradiction avec une exigence citée mot pour mot
+        // dans le DCE, jamais tirée d'une grille de pénalités, et la phrase adaptée garde le sujet et l'action de la phrase de GSS.
+        if (dce !== undefined) {
+          const refus = refusAlignementCctp(extrait, remplacement, exigenceC, dce);
+          if (refus) { console.warn(`[MemoireGenerator] Cohérence ${id} avec le CCTP : remplacement refusé (${refus}) : « ${extrait.slice(0, 100)} ».`); continue; }
+        }
         // Réunion exigée par le CCTP : c'est l'obligation des réunions de suivi, que leur rubrique traite (becquerel 591, T5N-4 :
         // « au minimum une réunion par mois entre le Responsable sécurité et les représentants du prestataire » appliquée au
         // contrôle global du responsable qualité) ; jamais alignée dans une autre rubrique.
@@ -10177,7 +10209,7 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     }
     progres(70, 'Cohérence avec les exigences chiffrées et les horaires du CCTP…');
     const exigencesCoherence = [...obligationsChiffrees(dceContext).map((o) => ({ exigence: o.phrase })), ...matrice, ...horairesImposes(dceContext).map((h) => ({ exigence: `Horaire imposé : ${h}` }))];
-    await this.corrigerContradictions(sections, plan, exigencesCoherence, toutesRetenues.flatMap((id) => phrasesGeneralesProtegees(mtParId.get(id)?.texte || '', textes[id] || '')), questionsCouverture, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, exigencesCoherence.map((x) => String(x.exigence || ''))));
+    await this.corrigerContradictions(sections, plan, exigencesCoherence, toutesRetenues.flatMap((id) => phrasesGeneralesProtegees(mtParId.get(id)?.texte || '', textes[id] || '')), questionsCouverture, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, exigencesCoherence.map((x) => String(x.exigence || ''))), undefined, dceContext);
     await this.verifierHoraires(sections, plan, dceContext, undefined, (id, a, b, e) => suivi.noterCoherence(id, a, b, e, [], 'Horaires du CCTP'));
     await this.engagementsChiffresManquants(sections, plan, dceContext);
     const remarquesCourt = await this.remarquesCahierDesCharges(dceContext);

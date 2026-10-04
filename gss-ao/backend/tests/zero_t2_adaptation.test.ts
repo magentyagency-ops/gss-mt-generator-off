@@ -51,3 +51,18 @@ describe('même exigence ajoutée dans plusieurs rubriques (T2-CONS-13)', () => 
     expect(sections.b5_equipe_controle).toBe('VATTIER Marie, responsable qualité. Basée à Rouen.');
   });
 });
+
+import { refusAlignementCctp } from '../src/generation/memoire_generator';
+
+describe('alignement du texte de GSS sur le CCTP (T2-CONS-9, format court imm 1203)', () => {
+  const dce = "Aucun poste ne doit être laissé vacant. Remplacement sous 4h maximum.\nPénalités : Absence d'un agent ou retard supérieur à 60 min — 300 € HT.\nLes rondes de surveillance sont effectuées à pied, toutes les deux heures.";
+  const gss = "si le responsable de site n'a pas reçu de prise de service 10 minutes avant le début de la prestation, il appelle l'agent et mobilise automatiquement l'agent d'astreinte, qui est sur site en 4 heures maximum ;";
+  it('exigence absente du DCE, grille de pénalités ou phrase réécrite : refusé', () => {
+    expect(refusAlignementCctp(gss, "Le marché pénalise toute absence de plus de 60 minutes ;", "l'agent doit arriver au plus tard dans les 60 minutes", dce)).toBe('exigence absente du DCE');
+    expect(refusAlignementCctp(gss, "Le marché pénalise toute absence de plus de 60 minutes ;", "Absence d'un agent ou retard supérieur à 60 min — 300 € HT", dce)).toBe('grille de pénalités');
+    expect(refusAlignementCctp(gss, 'GSS organise ses remplacements en conséquence ;', 'Remplacement sous 4h maximum', dce)).toMatch(/réécrite/);
+  });
+  it('délai changé dans la phrase de GSS, exigence citée du DCE : admis', () => {
+    expect(refusAlignementCctp('Nos rondiers effectuent les rondes toutes les trois heures, de jour comme de nuit.', 'Nos rondiers effectuent les rondes toutes les deux heures, de jour comme de nuit.', 'Les rondes de surveillance sont effectuées à pied, toutes les deux heures.', dce)).toBe('');
+  });
+});
