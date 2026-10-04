@@ -90,3 +90,16 @@ describe('emplacement orphelin d’une proposition (T7N-3)', () => {
     expect(questionExacte('Information à fournir pour compléter : « [À COMPLÉTER] »')).toBe('');
   });
 });
+
+import { reperesDansTableaux } from '../src/generation/reponse_libre_v2';
+describe('format court : une question par case du tableau des effectifs (T7N-4)', () => {
+  it('chaque case reçoit son repère et sa question précisée par la ligne, la consultation partagée est retirée', () => {
+    const t = "| Catégorie de personnel | Qualification | Nombre | Observations |\n|---|---|---|---|\n| Chef d'équipe de sécurité incendie | SSIAP 2 | [À COMPLÉTER] | |\n| Agent de sécurité | CQP APS | [À COMPLÉTER] | |\n[CONSULTATION REQUISE : Combien d'agents de cette catégorie compte l'équipe dédiée au marché ?]\n\nTexte suivant.";
+    const r = reperesDansTableaux(t, 0);
+    expect(r.demandes.map((d) => d.n)).toEqual([1, 2]);
+    expect(r.demandes[0].question).toBe("Combien d'agents de cette catégorie compte l'équipe dédiée au marché — ligne « Chef d'équipe de sécurité incendie · SSIAP 2 » ?");
+    expect(r.texte).toMatch(/\| SSIAP 2 \| \[À COMPLÉTER\]⟦AC:1⟧ \|/);
+    expect(r.texte).not.toMatch(/CONSULTATION/);
+    expect(reperesDansTableaux('Une phrase avec [À COMPLÉTER].\n[CONSULTATION REQUISE : q]', 0).demandes).toEqual([]);
+  });
+});

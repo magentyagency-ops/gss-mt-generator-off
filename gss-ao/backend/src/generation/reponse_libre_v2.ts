@@ -303,6 +303,39 @@ export interface RepereEnPlace {
 }
 
 /** Libellé d'une ligne de tableau Markdown (« | Agent de sécurité | CQP APS | [À COMPLÉTER] | | » → « Agent de sécurité · CQP APS »). */
+/**
+ * Tableau dont plusieurs cases attendent une donnée (« | Chef d'équipe … | SSIAP 2 | [À COMPLÉTER] | | » …) suivi d'une seule
+ * ligne de consultation (format court, T7N-4) : chaque case reçoit son repère et sa question, précisée par sa ligne
+ * (« … — ligne « Chef d'équipe de sécurité incendie · SSIAP 2 » ? »), comme poserReperes en réponse libre ; la ligne de
+ * consultation partagée est retirée. Repères numérotés à partir de `depart` (⟦AC:n⟧).
+ */
+export function reperesDansTableaux(texte: string, depart: number): { texte: string; demandes: Array<{ n: number; question: string }>; dernier: number } {
+  let n = depart;
+  const demandes: Array<{ n: number; question: string }> = [];
+  const blocs = String(texte || '').split(/(\n{2,})/);
+  for (let b = 0; b < blocs.length; b++) {
+    const lignes = blocs[b].split('\n');
+    const iCons = lignes.findIndex((l) => LIGNE_CONSULTATION.test(l));
+    if (iCons < 0) continue;
+    const tableau = lignes.slice(0, iCons).filter((l) => /^\s*\|/.test(l));
+    const cases = tableau.reduce((a, l) => a + (l.match(RX_PLACEHOLDER) || []).length, 0);
+    const consultations = lignes.filter((l) => LIGNE_CONSULTATION.test(l));
+    if (cases < 2 || consultations.length !== 1 || lignes.slice(0, iCons).some((l) => l.trim() && !/^\s*\|/.test(l) && /\[À COMPLÉTER\](?!⟦AC:)/.test(l))) continue;
+    const q = (LIGNE_CONSULTATION.exec(consultations[0])?.[1] || '').trim();
+    blocs[b] = lignes.filter((l) => !LIGNE_CONSULTATION.test(l)).map((l) => {
+      if (!/^\s*\|/.test(l)) return l;
+      const libelle = libelleLigneTableau(l);
+      return l.replace(RX_PLACEHOLDER, () => {
+        n++;
+        demandes.push({ n, question: libelle ? (/\?\s*$/.test(q) ? `${q.replace(/\s*\?\s*$/, '')} — ligne « ${libelle} » ?` : `${q.replace(/[.\s]+$/, '')} — ligne « ${libelle} »`) : q });
+        return `${PLACEHOLDER_V2}⟦AC:${n}⟧`;
+      });
+    }).join('\n');
+    RX_PLACEHOLDER.lastIndex = 0;
+  }
+  return { texte: blocs.join(''), demandes, dernier: n };
+}
+
 function libelleLigneTableau(ligne: string): string {
   return ligne.split('|').map((c) => c.trim()).filter((c) => c && !c.includes(PLACEHOLDER_V2) && !/^-+$/.test(c)).slice(0, 2).join(' · ');
 }

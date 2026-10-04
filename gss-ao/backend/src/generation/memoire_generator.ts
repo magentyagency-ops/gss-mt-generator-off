@@ -23,7 +23,7 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
   sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, phraseDeRubriqueGss, alignerSchemaSurTexte, FORMALITES_OFFRE, questionFormalite, formalitesDuBloc1, sansClauseSanction, consultationsDuDce,
-  CLAUSE_CONTRACTUELLE, ORGANISATION_ACHETEUR, sansPropositionSurLAcheteur, engagementSansRedite, valeursImposeesValides, titreSansPointFinal, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
+  CLAUSE_CONTRACTUELLE, ORGANISATION_ACHETEUR, sansPropositionSurLAcheteur, engagementSansRedite, reperesDansTableaux, valeursImposeesValides, titreSansPointFinal, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, similariteQuestions, recouvrementTextes, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, questionRondes, casPratiqueRepris, type Dimensionnement } from './dimensionnement';
@@ -10814,6 +10814,13 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
     const markerRe = /\[CONSULTATION REQUISE\s*:\s*([^\]]+)\]/gi;
     const demandes: Array<{ texte: string; repere?: number }> = [...consultations].filter(Boolean).map((texte) => ({ texte }));
     let nRepere = 0;
+    // T7N-4 : tableau dont plusieurs cases attendent une donnée (effectifs de l'équipe dédiée) suivi d'une seule consultation :
+    // un repère et une question par case, précisée par sa ligne, comme en réponse libre (jamais un repère sous le tableau).
+    const casesTableaux: Array<{ n: number; question: string; id: string }> = [];
+    for (const id of Object.keys(sections)) {
+      const rt = reperesDansTableaux(sections[id], nRepere);
+      if (rt.demandes.length) { sections[id] = rt.texte; nRepere = rt.dernier; rt.demandes.forEach((d) => casesTableaux.push({ ...d, id })); }
+    }
     for (const id of Object.keys(sections)) {
       sections[id] = sections[id].replace(markerRe, (_m: string, q: string) => { nRepere++; demandes.push({ texte: String(q).trim(), repere: nRepere }); return REPERE(nRepere); });
     }
@@ -10957,6 +10964,13 @@ FORME : ne répète pas le titre de la partie ; sous-titres « ## » courts ; pa
       }
       return { cle: `Q${i + 1}`, question: q.question, contexte, statut: 'ouvert', reperes, pourAcheteur: /^À demander à l.acheteur/i.test(q.question) };
     });
+    // Cases de tableau (T7N-4) : un élément par case encore imprimée (sa réponse remplace cette seule case), en tête.
+    {
+      const cases: ElementACompleter[] = casesTableaux.filter((c) => (sections[c.id] || '').includes(REPERE(c.n)))
+        .map((c) => ({ cle: '', question: c.question, contexte: `${plan.find((x) => x.id === c.id)?.title || ''} — tableau`, statut: 'ouvert' as const, reperes: [c.n] }));
+      elements.unshift(...cases);
+      elements.forEach((e, i) => { e.cle = `Q${i + 1}`; });
+    }
     // Tout « [À COMPLÉTER] » du texte remis a sa question (D7), y compris un emplacement venu de l'adaptation au CCTP.
     elements.push(...questionsDesEmplacements(sections, elements, (id) => plan.find((x) => x.id === id)?.title || ''));
     await this.completerParLesMemoires(elements, sections, horsNormandie);
