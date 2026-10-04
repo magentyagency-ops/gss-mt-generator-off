@@ -33,3 +33,14 @@ describe('jalon d’envoi des plannings au client (T3-CONS-4)', () => {
     expect(String(r.p.variables.JALON_ENVOI_CLIENT.question)).toMatch(/au moins 7 jours avant le début du mois/);
   });
 });
+
+import { dateDebutMarche } from '../src/generation/memoire_type';
+describe('date de début du marché sous toutes ses tournures (T3G-11)', () => {
+  for (const ph of ['Le présent marché prendra effet le 1er janvier 2027.', "L'accord-cadre prendra effet à compter du 1er janvier 2027.", "L'accord-cadre débutera le 01/01/2027.", 'Le contrat démarrera le 1er janvier 2027.', 'Date de commencement des prestations : 01/01/2027', 'La durée du marché est de 12 mois à compter du 1er janvier 2027.', "Le marché est conclu pour une période initiale d'un an à compter du 1er janvier 2027."]) {
+    it(ph, () => { expect(dateDebutMarche(ph)).toBe('1er janvier 2027'); });
+  }
+  it('jamais une date de notification ou de remise des offres', () => {
+    expect(dateDebutMarche('Le marché est conclu pour un an à compter de sa notification.')).toBe('');
+    expect(dateDebutMarche('Les offres sont à remettre avant le 15 novembre 2026. Le marché est notifié le 1er décembre 2026.')).toBe('');
+  });
+});

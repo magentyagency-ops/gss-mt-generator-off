@@ -1503,9 +1503,13 @@ export function dateDebutMarche(dce: string): string {
   const d = String(dce || '').replace(/\s+/g, ' ');
   // Date en lettres (« 1er janvier 2027 ») ou en chiffres (« 01/01/2027 », réécrite « 1er janvier 2027 »), T1-GEN-15.
   const DATE = `((?:1er|\\d{1,2})\\s+(?:${MOIS})\\s+\\d{4}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{4})`;
-  const LIBELLE = `(?:date (?:pr[ée]visionnelle |effective )?(?:de d[ée]marrage|de d[ée]but)(?: (?:d.ex[ée]cution|des prestations|du march[ée]))?|d[ée]marrage (?:effectif )?(?:des prestations|du march[ée])|d[ée]but (?:d.ex[ée]cution|des prestations|du march[ée])|prise d.effet)`;
-  const VERBE = `(?:les prestations|le march[ée]|l.ex[ée]cution(?: du march[ée]| des prestations)?)\\s+(?:d[ée]but\\w*|commenc\\w*|d[ée]marr\\w*|pren\\w* effet|entr\\w* en vigueur)`;
-  const rx = new RegExp(`(?:${LIBELLE}[^.;]{0,160}?(?:fix[ée]e?|estim[ée]e?|pr[ée]vue?)?\\s*(?:au|le|à compter du|:)\\s*(?:le\\s+)?|${VERBE}\\s+(?:au|le|à compter du|à partir du)\\s+)${DATE}`, 'i');
+  // Tournures (T3G-11) : « date de commencement », « Le présent marché prendra effet le… », « L'accord-cadre débutera le… »,
+  // « Le contrat démarrera le… », et « à compter du <date> » dans une phrase de durée du marché.
+  const LIBELLE = `(?:date (?:pr[ée]visionnelle |effective )?(?:de d[ée]marrage|de d[ée]but|de commencement)(?: (?:d.ex[ée]cution|des prestations|du march[ée]|de l.accord-cadre))?|d[ée]marrage (?:effectif )?(?:des prestations|du march[ée])|d[ée]but (?:d.ex[ée]cution|des prestations|du march[ée])|commencement (?:des prestations|d.ex[ée]cution)|prise d.effet)`;
+  const SUJET = `(?:(?:le pr[ée]sent |l.|le |les )?(?:march[ée]|accord-cadre|contrat|prestations|ex[ée]cution(?: du march[ée]| des prestations)?))`;
+  const VERBE = `${SUJET}\\s+(?:(?:d[ée]but\\w*|commenc\\w*|d[ée]marr\\w*|pren\\w* effet|entr\\w* en vigueur)(?:\\s+[àa] compter)?)`;
+  const DUREE = `(?:dur[ée]e (?:du march[ée]|de l.accord-cadre|du contrat)|(?:march[ée]|accord-cadre|contrat) est conclu)[^.;]{0,120}?`;
+  const rx = new RegExp(`(?:${LIBELLE}[^.;]{0,160}?(?:fix[ée]e?|estim[ée]e?|pr[ée]vue?)?\\s*(?:au|le|à compter du|:)\\s*(?:le\\s+)?|${VERBE}\\s+(?:au|le|à compter du|à partir du|du)\\s+|${DUREE}[àa] compter du\\s+)${DATE}`, 'i');
   const m = rx.exec(d);
   if (!m) return '';
   const v = m[1].replace(/\s+/g, ' ');
