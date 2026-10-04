@@ -20,7 +20,8 @@ describe('attentes et points de vigilance toujours en tableau (T2-CONS-5, T2N-1)
     expect(r).toHaveLength(3);
     expect(pageBloc1Marine(t, {}, { sources: false, bandeau: false })).not.toMatch(/^\s*- \*\*/m);
     expect(r[0]).toContain('Nous organisons la ronde d’ouverture : « La planification » et « La mise en place d’une prestation » <span class="gss-bloc">→ BLOC 4 ET 5</span>');
-    expect(r[1]).toBe('| Le CCTP exige que ce délai soit indiqué pour les levées de doute | « délai moyen maximum pour intervenir sur site » |  |');
+    // T7-CONS-5 : le libellé est un groupe nominal ; le constat du modèle reste dans la colonne du CCTP.
+    expect(r[1]).toBe('| Délai moyen maximum | « délai moyen maximum pour intervenir sur site » : le CCTP exige que ce délai soit indiqué pour les levées de doute |  |');
     expect(r[2]).toBe('| Présence après 19h30 | Aucun collaborateur ne doit rester sur le site | « Le livre des missions et consignes (LMC) » et « La mise en place d’une prestation » <span class="gss-bloc">→ BLOC 4 ET 5</span> |');
   });
   it('formes sans flèche de ifsem 1001 et caen 706 : réponse et renvoi séparés du constat', () => {

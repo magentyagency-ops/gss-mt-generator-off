@@ -125,14 +125,44 @@ export function articlesBloc1(texteBloc1: string, dce: string): Record<string, s
       if (i >= 0) pos = i + ph.length;
     }
   }
+  // T7-CONS-6 : texte du cahier des charges mis à plat (forme normalisée, une espace entre les lignes) avec le début de chaque
+  // ligne, pour retrouver la ligne où commence une citation du CCTP.
+  const plat: string[] = [];
+  const debutsPlat: number[] = [];
+  { let n = 0; for (const l of lignes) { const x = norm(l.texte).replace(/\s+/g, ' ').trim(); debutsPlat.push(n); plat.push(x); n += x.length + 1; } }
+  const platTexte = plat.join(' ');
+  const ligneDeCitation = (citation: string): number => {
+    const c = norm(citation).replace(/\s*\[…\]\s*/g, ' ').replace(/\s+/g, ' ').trim();
+    if (c.length < 15) return -1;
+    for (const morceau of [c.slice(0, 80), c.slice(0, 40)]) {
+      const at = platTexte.indexOf(morceau);
+      if (at < 0) continue;
+      let i = 0;
+      while (i + 1 < debutsPlat.length && debutsPlat[i + 1] <= at) i++;
+      return i;
+    }
+    return -1;
+  };
   for (const { ph, partie: p } of phrases) {
     const mots = racinesPleines(ph);
+    // Citation du CCTP de la puce (« … ») : le chiffre qu'elle porte prend l'article de la ligne où elle est écrite, avant
+    // toute recherche par mots pleins (jamais « Cette ronde générale dure environ 2h » pour « dans un délai maximal de deux
+    // heures »).
+    const citations = [...ph.matchAll(/«\s*([^»]{15,400}?)\s*»/g)].map((m) => m[1]);
     for (const j of jetons(ph)) {
       const k0 = cleChiffre(j);
       const k = k0 ? `${p}|${k0}` : '';
       if (!k || out[k] !== undefined) continue;
       const rx = new RegExp(`(?<![\\d.,])${k0.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\d])`);
+      const cit = citations.find((c) => rx.test(cleChiffre(c)));
+      if (cit) {
+        const i = ligneDeCitation(cit);
+        if (i >= 0) { out[k] = articleAvant(brut, lignes[i].debut + 1) || ''; continue; }
+      }
+      // Délai : la ligne retenue porte une expression de délai, jamais une durée (« dure environ 2h »).
+      const estDelai = /(?:dans|sous|d[ée]lai|au plus tard|en moins de)\s+(?:les?\s+|un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?de\s+)?\d/i.test(normaliserExpressionsDelai(ph));
       for (let i = 0; i < lignes.length; i++) {
+        if (estDelai && /(?:min|h)$/.test(k0) && /\bdure(?:nt|ra|e)?\s+(?:environ|en\s+moyenne|approximativement)?/i.test(lignes[i].texte) && !/d[ée]lai|dans les|sous \d|au plus tard/i.test(lignes[i].texte)) continue;
         if (!rx.test(lignes[i].cle)) continue;
         // Mot plein de la phrase du mémoire sur la ligne du chiffre ou sur les deux lignes qui l'entourent.
         const voisinage = lignes.slice(Math.max(0, i - 2), i + 3).map((x) => x.texte).join(' ');
@@ -362,7 +392,11 @@ function titreRubriqueCitee(reponse: string): string {
  * tableau n'est jamais abandonné pour une seule puce d'une autre forme.
  */
 function tableauAttentes(liste: string, blocsRubriques: Record<string, number> = {}): string {
-  const lignes = liste.split('\n').filter((l) => l.trim());
+  // T7N-6 : ligne faite des seuls repères de consultation (« ⟦AC:1⟧ ») au milieu de la liste : placée après le tableau, jamais
+  // une coupure du tableau (la puce qui la suit reste dans le tableau, avec sa colonne « Notre réponse »).
+  const REPERE_SEUL = /^\s*(?:⟦AC:\d+⟧\s*)+$/;
+  const reperes = liste.split('\n').filter((l) => REPERE_SEUL.test(l)).map((l) => l.trim());
+  const lignes = liste.split('\n').filter((l) => l.trim() && !REPERE_SEUL.test(l));
   const rangs: string[] = [];
   const GENERIQUE = /^(?:ce que vous attendez|vos attentes|attente|exigence|point de vigilance|points de vigilance)$/i;
   const cellule = (c: string) => { const x = c.replace(/\|/g, '\\|').replace(/\s+/g, ' ').replace(/[.;:\s]+$/, '').trim(); return x.charAt(0).toUpperCase() + x.slice(1); };
@@ -393,13 +427,16 @@ function tableauAttentes(liste: string, blocsRubriques: Record<string, number> =
     }
     // Besoin écrit comme une action de GSS (« **« une ouverture effective à 07h20 »** : nous organisons la ronde d'ouverture →
     // notre réponse : « La planification »… ») : il fait partie de la réponse, jamais de l'exigence.
-    if (besoin && /^(?:nous|notre|nos|gss)\b/i.test(besoin) && /^[«"“]/.test(gras)) {
+    // T7-CONS-5 : de même une action à l'indicatif dont les agents sont le sujet (« les agents consignent les rondes… dans
+    // la main courante numérique ») : c'est ce que fait GSS, jamais le libellé de l'exigence.
+    const actionDesAgents = /^(?:les|nos|des|chaque|nos)\s+(?:agents?|[ée]quipes?|rondiers?|intervenants?|chefs?\s+de\s+poste|op[ée]rateurs?)\s+(?!(?:doivent|devront|doit|devra|sont|seront)\b)\p{L}+(?:ent|e|it|ient)\b/iu.test(besoin);
+    if (besoin && (/^(?:nous|notre|nos|gss)\b/i.test(besoin) || actionDesAgents) && /^[«"“]/.test(gras)) {
       reponse = reponse ? `${besoin.replace(/[.;:\s]+$/, '')} : ${reponse.charAt(0).toLowerCase() === reponse.charAt(0) ? reponse : reponse}` : besoin;
       besoin = '';
     }
     let exigence: string, demande: string;
     if (parenthese) {
-      exigence = GENERIQUE.test(gras) ? libelleExigenceBloc1(besoin, parenthese) : gras;
+      exigence = GENERIQUE.test(gras) ? libelleExigenceBloc1(besoin, parenthese, MAX_LIBELLE_EXIGENCE, reponse) : gras;
       demande = GENERIQUE.test(gras) ? parenthese : (besoin ? `${parenthese} : ${besoin}` : parenthese);
     } else if (/^[«"“]/.test(gras)) {
       // Libellé de l'exigence tiré de la citation du CCTP (T3N-5 : jamais le titre d'une rubrique de GSS, « L'adéquation de nos
@@ -407,8 +444,11 @@ function tableauAttentes(liste: string, blocsRubriques: Record<string, number> =
       const citation = (/«\s*([^»]{3,300}?)\s*»/.exec(gras) || [])[1] || gras;
       // Phrase « besoin » du modèle (« L'intervention doit pouvoir être déclenchée… ») : jamais telle quelle ; groupe nominal
       // court tiré du besoin et de la citation (T6-CONS-12).
-      exigence = libelleExigenceBloc1(besoin, citation) || titreExigence(citation, MAX_LIBELLE_EXIGENCE);
+      exigence = libelleExigenceBloc1(besoin, citation, MAX_LIBELLE_EXIGENCE, reponse) || titreExigence(citation, MAX_LIBELLE_EXIGENCE);
       demande = joindre(gras, suite);
+      // Constat du modèle qui n'est pas devenu le libellé (« le CCTP exige que ce délai soit indiqué pour les levées de
+      // doute ») : gardé dans la colonne du CCTP après la citation, jamais perdu (T7-CONS-5).
+      if (besoin && exigence !== besoin && !suite && !/^(?:nous|notre|nos|gss)\b/i.test(besoin)) demande = `${demande} : ${besoin}`;
     } else if (gras && suite && !besoin) {
       // Libellé en gras en tête de la phrase du CCTP (« **Réaliser une ronde de fermeture** du lundi au vendredi… → … »,
       // forme de libellesBloc1) : le libellé est l'exigence, la phrase entière ce que le CCTP demande (jamais la phrase dans
@@ -419,12 +459,15 @@ function tableauAttentes(liste: string, blocsRubriques: Record<string, number> =
       exigence = joindre(gras, suite);
       demande = besoin;
     } else {
-      exigence = titreExigence(besoin, MAX_LIBELLE_EXIGENCE);
+      // Puce faite de la seule citation (« « […] et Régulations (PCR) doit être informé … dans les 3 minutes […] » ») : le
+      // libellé tiré de la citation, contrôlé comme les autres (T7N-2 : jamais « Et Régulations (PCR) »).
+      const cit = /^\s*«\s*([^»]{3,400}?)\s*»\s*$/.exec(besoin);
+      exigence = cit ? (libelleExigenceBloc1('', cit[1], MAX_LIBELLE_EXIGENCE, reponse) || titreExigence(cit[1], MAX_LIBELLE_EXIGENCE)) : titreExigence(besoin, MAX_LIBELLE_EXIGENCE);
       demande = besoin;
     }
     rangs.push(`| ${cellule(exigence)} | ${cellule(demande)} | ${celluleReponse(reponse, blocsRubriques).replace(/\|/g, '\\|')} |`);
   }
-  return rangs.length ? ['| Exigence | Ce que le CCTP demande | Notre réponse |', '|---|---|---|', ...rangs].join('\n') : liste;
+  return rangs.length ? ['| Exigence | Ce que le CCTP demande | Notre réponse |', '|---|---|---|', ...rangs].join('\n') + (reperes.length ? `\n\n${reperes.join('\n')}` : '') : liste;
 }
 
 /**
@@ -435,7 +478,7 @@ export function pageBloc1Marine(texte: string, articles: Record<string, string> 
   let t = String(texte || '');
   const bandeau = o.bandeau === false ? '' : bandeauChiffres(chiffresCles(t, articles));
   // Listes des attentes et des points de vigilance : en tableaux.
-  t = t.replace(/(^##\s+(?:Vos attentes|Les points de vigilance)[^\n]*\n+)((?:[ \t]*[-*•]\s[^\n]*(?:\n|$))+)/gim, (_m, titre: string, liste: string) => `${titre}${tableauAttentes(liste.trimEnd(), o.blocsRubriques)}\n`);
+  t = t.replace(/(^##\s+(?:Vos attentes|Les points de vigilance)[^\n]*\n+)((?:[ \t]*[-*•]\s[^\n]*(?:\n|$))(?:[ \t]*(?:[-*•]\s[^\n]*|(?:⟦AC:\d+⟧[ \t]*)+)(?:\n|$))*)/gim, (_m, titre: string, liste: string) => `${titre}${tableauAttentes(liste.trimEnd(), o.blocsRubriques)}\n`);
   // Lignes de source sous le contexte et sous le périmètre.
   t = t.replace(/(^##\s+(?:Votre contexte|Le p[ée]rim[èe]tre)[^\n]*\n)([\s\S]*?)(?=^##\s|(?![\s\S]))/gim, (_m, titre: string, corps: string) => {
     const s = o.sources === false ? '' : ligneSource(corps, articles, /contexte/i.test(titre) ? 'contexte' : 'perimetre');

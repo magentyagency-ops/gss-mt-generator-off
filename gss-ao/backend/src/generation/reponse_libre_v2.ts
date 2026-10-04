@@ -1095,7 +1095,7 @@ export function abregerCitationAttente(c: string, max = 110): string | null {
   // Propositions (virgules, « ; », « : ») avec leur position dans la citation.
   const props: Array<{ debut: number; texte: string }> = [];
   let pos = 0;
-  for (const p of t.split(/(?<=[,;:])\s+|\s+(?=et\s)/)) { props.push({ debut: t.indexOf(p, pos), texte: p.replace(/^et\s+(?=(?:au|à|dans|sous|en|avant|apr[èe]s|le|la|les|l['’]|un|une)\b)/i, '') }); pos = t.indexOf(p, pos) + p.length; }
+  for (const p of t.split(/(?<=[,;:])\s+|\s+(?=et\s)/)) { props.push({ debut: t.indexOf(p, pos), texte: p.replace(/^et\s+(?=(?:au|à|dans|sous|en|avant|apr[èe]s|le|la|les|un|une)(?![\p{L}])|l['’])/iu, '') }); pos = t.indexOf(p, pos) + p.length; }
   const score = (p: string) => (DUREE.test(p) ? 2 : 0) + (OBLIGATION.test(p) ? 1 : 0);
   let meilleure = -1, best = 0;
   props.forEach((p, i) => { const s = score(p.texte); if (s > best) { best = s; meilleure = i; } });
@@ -1473,7 +1473,35 @@ export function completerBesoinMinimum(
       // Exigence rattachée au bloc de la compréhension lui-même : jamais un renvoi du bloc 1 vers lui-même (T6N-5).
       && !(e.rubrique && plan?.rubriques.find((x) => x.id === e.rubrique)?.mode === 'besoin'))
     .sort((a, b) => rang(a) - rang(b));
-  const renvoi = (id?: string) => {
+  // T7N-5 : la rubrique de rattachement de l'exigence n'est citée que si elle la traite (mot-clé de la rubrique écrit dans
+  // l'exigence et dans le texte ou le titre de la rubrique, comme renvoisManquantsBloc1) ; sinon la rubrique du plan qui la
+  // traite nettement ; sinon aucun renvoi (jamais « Le dispositif événementiel » pour des vacations de semaine).
+  let mtB: MemoireType | null = null;
+  try { mtB = chargerMemoireType(); } catch { mtB = null; }
+  const netT = (x: string) => ` ${normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').map((w) => (w.length > 3 ? w.replace(/(?<!s)[sx]$/, '') : w)).join(' ')} `;
+  const traitePar = (id: string, cles: string[]) => { const r = mtB?.rubriques.find((x) => x.id === id); if (!r) return false; const t = netT(`${r.titre} ${String(r.texte || '').replace(/\{\{[^}]*\}\}/g, ' ')}`); return cles.some((k) => t.includes(` ${k} `)); };
+  const rubriquePertinente = (exigence: string, id?: string): string | undefined => {
+    if (!plan || !mtB) return id;
+    const scores = scoresRenvoiBloc1(exigence, plan, mtB);
+    const s = id ? scores.get(id) : undefined;
+    if (id && s && traitePar(id, s.cles)) return id;
+    // Mot distinctif de l'exigence écrit dans la rubrique (« surveillance » dans « télésurveillance ») : la rubrique la traite.
+    if (id) {
+      const r = mtB.rubriques.find((x) => x.id === id);
+      const VIDES = /^(?:selon|jours?|annexes?|heures?|minutes?|prestations?|titulaires?|prestataires?|agents?|sites?|marches?|services?|conformement|ensemble|notamment|chaque|toutes?|cette|leurs?|entre|avant|apres|pendant|durant|compter|partir|minimum|maximum|delais?|effectuer|assurer|realiser|mettre|place|doivent|devra|devront|etre|avoir|indiques?|prevus?|fixes?|mentionnes?|comme|ainsi|toute|celle|celui)$/;
+      const motsE = normaliser(exigence).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 5 && !VIDES.test(w));
+      const texteR = r ? normaliser(`${r.titre} ${String(r.texte || '')} ${(r.mots_cles || []).join(' ')}`).replace(/[^a-z0-9 ]+/g, ' ') : '';
+      if (r && motsE.some((w) => texteR.includes(w.length > 6 ? w.slice(0, w.length - 1) : w))) return id;
+    }
+    const classes = [...scores.entries()].sort((a, b) => b[1].score - a[1].score || a[1].position - b[1].position);
+    if (!classes.length) return undefined;
+    const [bid, b] = classes[0];
+    // (un mot-clé suffit quand la rubrique devance nettement les autres, comme renvoisManquantsBloc1)
+    const nette = !classes[1] || b.score >= 1.5 * classes[1][1].score;
+    return nette && traitePar(bid, b.cles) ? bid : undefined;
+  };
+  const renvoi = (id?: string, exigence = '') => {
+    id = exigence ? rubriquePertinente(exigence, id) : id;
     const r = id && plan ? plan.rubriques.find((x) => x.id === id) : undefined;
     const b = r && plan ? plan.blocs.find((x) => x.id === r.bloc) : undefined;
     return r && b ? ` → notre réponse : « ${r.titre.replace(/\{\{[^}]*\}\}/g, '').replace(/\s*:\s*$/, '').trim()} », développée au bloc ${b.numero}` : '';
@@ -1501,8 +1529,8 @@ export function completerBesoinMinimum(
     return propre ? x : x.charAt(0).toLowerCase() + x.slice(1);
   };
   let ajoutees = 0;
-  const att = prendre(manqueAtt).map((e) => `- **Ce que vous attendez** : ${maj(e.exigence)}${renvoi(e.rubrique)}.`);
-  const vig = prendre(manqueVig).map((e) => `- **Point de vigilance** : ${maj(e.exigence)}${renvoi(e.rubrique)}.`);
+  const att = prendre(manqueAtt).map((e) => `- **Ce que vous attendez** : ${maj(e.exigence)}${renvoi(e.rubrique, e.exigence)}.`);
+  const vig = prendre(manqueVig).map((e) => `- **Point de vigilance** : ${maj(e.exigence)}${renvoi(e.rubrique, e.exigence)}.`);
   const ajouter = (i: number, titre: string, l: string[]) => {
     if (!l.length) return;
     ajoutees += l.length;
@@ -1746,6 +1774,11 @@ export function anomaliesSchemaBloc1(spec: { gabarit?: string; params?: any } | 
     if (!t) { if (spec?.gabarit !== 'chevrons' || i === etapes.length - 1) out.push(`${n} : étape vide (aucun texte)`); return; }
     const dernier = (t.replace(/[.;,:\s]+$/, '').split(/\s+/).pop() || '').toLowerCase().replace(/^(?:l|d)['’]/, '').replace(/['’]$/, '');
     if (MOTS_OUTILS.has(dernier)) out.push(`${n} : texte tronqué (« …${t.slice(-30)} »)`);
+    // T7-CONS-4 : citation coupée sur un verbe modal ou un auxiliaire (« …, le titulaire doit »), texte à la voix de l'acheteur
+    // (« le titulaire »), texte sans sujet qui commence par son verbe (« À distance doit être actif… ») : jamais une carte.
+    else if (/(?:^|\s)(?:doit|doivent|devra|devront|peut|peuvent|pourra|pourront|est\s+tenu(?:e|s|es)?\s+de|sont\s+tenu(?:e|s|es)?\s+de|s['’]engage\s+[àa])$/i.test(t.replace(/[.;,:\s]+$/, ''))) out.push(`${n} : texte coupé sur un verbe (« …${t.slice(-30)} »)`);
+    if (/(?:^|[\s,;])le\s+titulaire(?![\p{L}])/iu.test(`${e?.titre || ''} ${t}`)) out.push(`${n} : texte à la voix de l'acheteur (« le titulaire »)`);
+    if (/^(?:[àa]|au|aux|en|sur|dans)\s[^,]{0,40}?\s(?:doit|doivent|devra|devront|est|sont)\s/i.test(t)) out.push(`${n} : texte sans sujet (« ${t.slice(0, 30)}… »)`);
     // Verbe coupé de son complément (« … permettent de transmettre ») : infinitif final après « de », « à », « pour ».
     else if (/(?:^|\s)(?:de|d['’]|à|pour)\s*[a-zàâçéèêëîïôûù]{3,}(?<!i)(?:er|ir|tre|dre|oir)$/i.test(t.replace(/[.;,:\s]+$/, ''))) out.push(`${n} : texte coupé en plein groupe (« …${t.slice(-30)} »)`);
     const ti = norm(String(e?.titre || ''));
@@ -1813,6 +1846,9 @@ export function titreNegatif(x: string, max = 34): string {
 /** Complément de tête d'une exigence (temps, condition, demande) suivi de l'action : « Pendant toute absence du responsable, le
  *  remplacer… », « Lors de la ronde de fermeture, vérifier… », « Sur demande écrite de la Direction…, réaliser… ». */
 const COMPLEMENT_TETE = /^(pendant|durant|lors\s+d(?:e\s+la|e\s+l['’]|es|u|e)|en\s+cas\s+d(?:e\s+la|e\s+l['’]|es|u|e|['’])|sur\s+(?:simple\s+)?demande|[àa]\s+la\s+demande|avant|apr[èe]s|d[èe]s|au\s+cours\s+d(?:e\s+la|e\s+l['’]|es|u|e)|en\s+dehors\s+d(?:e\s+la|e\s+l['’]|es|u|e)|chaque\s+fois\s+que|lorsqu['’]?|quand|si)\s*([^,]{3,90}),\s*(.+)$/i;
+/** Seconde incise de tête suivie du sujet acteur (T7N-2, ifits : « …, à un moment sans présence du personnel, le titulaire
+ *  doit… ») : jamais le titre. */
+const INCISE_TETE = /^(?:[àa]|au|aux|en|pendant|durant|lors|hors|sans|avec|pour|dans|sur|par|de\s+jour|de\s+nuit|y\s+compris|notamment)\s[^,]{2,160},\s*(?=(?:le|la|les|l['’]|chaque|tout|tous|un|une|des)?\s*(?:titulaire|prestataire|agents?|personnels?|intervenants?|soci[ée]t[ée]|entreprise|candidat)(?![\p{L}]))/iu;
 /** Acteur générique en sujet (« Le titulaire transmet… », « Chaque agent doit être… », « Les agents en charge de … devront… ») :
  *  le titre se tire de ce que l'acteur doit faire ou avoir, jamais de l'acteur. */
 const ACTEUR_SUJET = /^(?:(?:le|la|les|l['’]|chaque|tout|tous|toute|toutes|ces|ce|cet|un|une|des)\s*)?(?:titulaire|prestataire|candidat|soumissionnaire|attributaire|agents?|personnels?|intervenants?|rondiers?|collaborateurs?|soci[ée]t[ée]|entreprise|[ée]quipes?|salari[ée]s?|gardiens?|op[ée]rateurs?|responsables?)\b/i;
@@ -1854,6 +1890,35 @@ function dureeDe(x: string): string {
  * Jamais un titre qui commence par une préposition, un verbe conjugué ou « Quel(s) que » ; la valeur chiffrée garde son unité.
  */
 export function titreExigence(x: string, max = 34): string {
+  const t = titreExigenceSansControle(x, max);
+  // T7N-2 : titre agrammatical ou tronqué (« Rédigera un compte-rendu qu'il transmettra », « Et Régulations (PCR) », « Les
+  // interventions seront effectuées », « 10 jours », « … du lundi ») : le titre tiré de la structure de l'exigence
+  // (libellesStructures) quand il y en a un de correct.
+  // T7N-5 : titre qui est le début de l'exigence coupé dans un groupe (« Assurer au centre de permanence un retour | des
+  // caméras », « Les jours de week-end et/ou fériés indiqués | à l'annexe 2 ») : traité comme un titre fautif.
+  const coupe = (() => {
+    if (!t) return false;
+    const a = normaliser(String(x || '').replace(/\*\*/g, '')).replace(/\s+/g, ' ').replace(/^[«"“\s]+/, '').trim();
+    const b = normaliser(t).replace(/\s+/g, ' ').trim();
+    if (!a.startsWith(b)) return false;
+    const reste = a.slice(b.length);
+    const mots = b.split(' ');
+    const dernier = mots[mots.length - 1] || '';
+    return (/^\s+(?:de|du|des|d')\s*\S/.test(reste) && /^(?:un|une)$/.test(mots[mots.length - 2] || ''))
+      || (/^\s+(?:a|au|aux|par|dans)\s/.test(reste) && /^[a-z]{3,}(?:e|ee|es|ees|is|ise|ises|it|ite|ites)$/.test(dernier) && /(?:indiqu|mentionn|pr[eé]vu|vis|fix|d[eé]fini|pr[eé]cis|list|annex|r[eé]f[eé]renc)/.test(dernier))
+      // « Le contrôle de surveillance | à distance » : complément sans article du dernier nom.
+      // (sujet coupé avant son verbe : « … à distance doit être actif »)
+      || /^\s+a\s+(?!(?:l'|la\s|le\s|les\s|un\s|une\s))[a-z]+(?:\s+[a-z]+)?\s+(?:doit|doivent|devra|devront|est|sont|sera|seront|peut|peuvent)\s/.test(reste);
+  })();
+  if (t && t.includes(' ') && (coupe || !libelleBloc1Valide(t, Math.max(max, t.length)))) {
+    for (const s of libellesStructures(x, max)) if (libelleBloc1Valide(s, max)) return s;
+    // Titre de carte (moins de 40 signes) : pas de titre plutôt qu'un titre fautif ; libellé de tableau : jamais une case vide.
+    if (max < 40) return '';
+  }
+  return t;
+}
+
+function titreExigenceSansControle(x: string, max = 34): string {
   const INCISE = /^(?:(?:quel(?:le)?s?\s+que\s+(?:soit|soient)|constat[ée]e?s?|y\s+compris|notamment|le\s+cas\s+[ée]ch[ée]ant|quelle\s+qu['’]en\s+soit)[^,]*,\s*)+/i;
   let e = String(x || '').replace(/\*\*/g, '').replace(/\s*\[…\]\s*/g, ' ').replace(/\s+/g, ' ').replace(/^[«"“\s]+|[»"”\s.;:]+$/g, '').trim();
   // Complément de tête qui ne porte pas l'exigence (T5-CONS-2 : « Pour les SSIAP, maintenir à jour le recyclage… », « Selon le
@@ -1915,9 +1980,12 @@ function titreLocution(e: string, max: number): string {
   // « avant le début de la prestation » → « avant la prestation » (le complément garde son objet).
   if (t.length > max) t = t.replace(/(\s(?:avant|apr[èe]s|d[èe]s)\s+)(?:le\s+)?(?:d[ée]but|d[ée]marrage|commencement)\s+(?:(de\s+la|de\s+l['’]|du|des)\s*)/i, (_x, a: string, de: string) => `${a}${({ 'de la': 'la ', "de l'": "l'", 'de l’': 'l’', du: 'le ', des: 'les ' } as Record<string, string>)[de.toLowerCase().replace(/\s+/g, ' ')] || ''}`);
   const debut = m[0].length;
-  const PREP = /\s(?:avant|apr[èe]s|de|du|des|d['’]|pour|sur|dans|[àa]|au|aux|par|entre|en|lors|suivant|[àa]\s+compter)\s/gi;
-  while (t.length > max) {
-    const coupes = [...t.matchAll(PREP)].map((x) => x.index!).filter((i) => i > debut + 3);
+  // T7-CONS-5 : coupe aussi devant « d'un » (« … avant la prise de service | d'un agent ») et à la fin de la proposition
+  // (« …, le titulaire doit ») ; jamais une fin qui attend son complément (« à compter », « avant la prise »).
+  t = t.replace(/\s*,\s*(?:le|la|les|l['’])\s*(?:titulaire|prestataire|candidat)\b.*$/i, '');
+  const PREP = /\s(?:avant|apr[èe]s|de|du|des|d['’](?=\S)|pour|sur|dans|[àa]|au|aux|par|entre|en|lors|suivant|[àa]\s+compter)(?:\s|(?<=['’]))/gi;
+  while (t.length > max || FIN_A_COMPLEMENT.test(t)) {
+    const coupes = [...t.matchAll(PREP)].map((x) => x.index!).filter((i) => i > debut + 3 && i < t.length - 1);
     if (!coupes.length) return '';
     t = t.slice(0, coupes[coupes.length - 1]).replace(/[\s,;:]+$/, '');
   }
@@ -1935,7 +2003,7 @@ function titreLocution(e: string, max: number): string {
  * fournira » ni participe qui attend son complément (« Système d'astreinte », « Bilan concernant l'éco-mobilité ») ; sinon le
  * sujet du besoin.
  */
-export function libelleExigenceBloc1(besoin: string, citation: string, max = MAX_LIBELLE_EXIGENCE): string {
+export function libelleExigenceBloc1(besoin: string, citation: string, max = MAX_LIBELLE_EXIGENCE, reponse = ''): string {
   const VERBE = /(?<![\p{L}])(?:est|sont|sera|seront|doit|doivent|devra|devront|peut|peuvent|pourra|a|ont|fait|font|fournira|fournit|assure|assurent|organise|organisent|permet|permettent|couvre|couvrent|pr[ée]voit|pr[ée]voient)(?![\p{L}])/iu;
   const DET = /^(?:(?:l['’]ensemble|la\s+totalit[ée]|l['’]int[ée]gralit[ée])\s+(?:du|de\s+la|de\s+l['’]|des)\s*|(?:le|la|les|l['’]|un|une|des|du|ce|cet|cette|ces|son|sa|ses|leur|leurs|notre|nos|votre|vos)\s*(?<=['’]|\s))/i;
   const nominal = (t: string) => {
@@ -1947,7 +2015,9 @@ export function libelleExigenceBloc1(besoin: string, citation: string, max = MAX
   const c = String(citation || '').replace(/\*\*/g, '').replace(/\s*\[…\]\s*/g, ' ').replace(/\s+/g, ' ').replace(/^[«"“\s]+|[»"”\s.;:]+$/g, '').trim();
   // Besoin sans verbe d'état ou d'obligation ni démonstratif en tête (« Prévoir une astreinte pour le remplacement d'un absent »,
   // « Continuité de service ») : gardé tel quel, comme validé.
-  if (b && !VERBE.test(b) && !/^(?:ce|cet|cette|ces|il|elle|ils|elles|nous|notre|nos)\b/i.test(b)) return b;
+  // T7-CONS-5 : jamais une phrase d'action à l'indicatif (« Les agents consignent les rondes… dans la main courante ») :
+  // un libellé commence sans article et passe le contrôle des libellés.
+  if (b && !VERBE.test(b) && !/^(?:ce|cet|cette|ces|il|elle|ils|elles|nous|notre|nos)\b/i.test(b) && (!/^(?:les?|la|l['’]|des|un|une|du)(?:\s|(?<=['’]))/i.test(b) || b.split(' ').length <= 4) && libelleBloc1Valide(b, Math.max(max, b.length))) return b;
   const sujet = (() => {
     const m = /^(.{3,45}?)\s+(?:ne\s+|n['’])?(?:est|sont|sera|seront|doit|doivent|devra|devront|peut|peuvent|pourra|varie|varient|comprend|comprennent|couvre|couvrent)\b/i.exec(b);
     const x = m ? nominal(m[1]) : '';
@@ -1958,16 +2028,183 @@ export function libelleExigenceBloc1(besoin: string, citation: string, max = MAX
   const duree = dureeDe(c.replace(/\s*\(\s*[a-zà-ÿ-]+\s*\)/gi, ''));
   if (delai && duree && c.split(' ').length <= 8 && sujet) {
     const t = `${sujet} ${/moins/i.test(c) ? 'en moins de' : 'en'} ${duree}`;
-    if (t.length <= max) return t;
+    if (t.length <= max && libelleBloc1Valide(t, max)) return t;
   }
   // Groupe nominal de la citation, sans le sujet acteur ni son verbe (« le titulaire fournira chaque année un bilan … »).
-  const sansActeur = c.replace(ACTEUR_SUJET, '').replace(/^\s*(?:ne\s+)?(?:\S+(?:ra|ront|e|ent|it|ssent))\s+(?:(?:chaque|tous\s+les|toutes\s+les)\s+\S+\s+)?/i, (m) => (ACTEUR_SUJET.test(c) ? '' : m));
-  const base = nominal(ACTEUR_SUJET.test(c) ? sansActeur : c);
+  // T7N-1, T7N-2, T7-CONS-5 : chaque libellé proposé passe le contrôle libelleBloc1Valide (jamais « les UNE heure », « Et
+  // Régulations », « Interventions seront effectuées », « 10 jours », « … du lundi », « … à compter ») ; sinon le libellé tiré
+  // de la structure de la citation (libellesStructures : sujet et délai, objet de l'action de l'acteur), puis le sujet du
+  // besoin, puis la rubrique de GSS qui y répond avec le délai.
+  const ok = (t: string) => libelleBloc1Valide(t, max);
+  // Le sujet acteur n'est retiré que s'il est en tête (jamais « le personnel » dans « … dans les 2 heures »), avec son
+  // complément (« Le Titulaire du marché met… »), et le verbe retiré n'est qu'un verbe (jamais l'article « de »).
+  const acteurTete = new RegExp(`^${ACTEUR_SUJET.source.slice(1)}(?:\\s+(?:du|de\\s+la|de\\s+l['’]|des)\\s*(?:march[ée]|contrat|prestation|lot|accord-cadre)(?=\\s|$))?`, 'i');
+  const sansActeur = c.replace(acteurTete, '').replace(/^\s*(?:ne\s+)?(?!(?:de|une?|le|la|les|des|du|dans|sous|en)\s)(?:\S+(?:ra|ront|e|ent|it|ssent))\s+(?:(?:chaque|tous\s+les|toutes\s+les)\s+\S+\s+)?/i, (m) => (acteurTete.test(c) ? '' : m));
+  const base = nominal(acteurTete.test(c) ? sansActeur : c);
+  // Rubrique de GSS citée dans la réponse (« Le remplacement d'un agent absent ») et délai de la citation.
+  const rub = nominal(String(reponse || '').match(/«\s*([^»:]{3,80}?)\s*(?::[^»]*)?»/)?.[1] || '');
+  const dureeC = dureeDe(normaliserExpressionsDelai(c));
+  // Citation qui n'est qu'un délai « dans / sous / en moins de N » (T7-CONS-5 : « dans un délai maximal de deux heures à compter
+  // du début de la vacation ») : l'action à laquelle GSS répond, avec son délai (« Remplacement d'un agent absent sous 2 heures »).
+  if (rub && dureeC && /^(?:dans\s+(?:les?|un\s+d[ée]lai)|sous|en\s+moins\s+de)\s/i.test(c)) { const s = `${rub} sous ${dureeC}`; if (ok(s)) return s; }
   let tc = titreExigence(base, max);
   tc = nominal(tc.replace(/\s+(?:permettant|pour|afin|visant|destin[ée]e?s?|charg[ée]e?s?)(?:\s.*)?$/i, ''));
-  if (tc && !VERBE.test(tc) && !/\s(?:de|du|des|d['’]|à|au|aux|en|par|pour|sur|dans|et|ou)$/i.test(tc) && tc.split(' ').length >= 2) return tc;
-  if (sujet) return sujet;
-  return nominal(titreExigence(b || c, max));
+  if (tc && !VERBE.test(tc) && !/\s(?:de|du|des|d['’]|à|au|aux|en|par|pour|sur|dans|et|ou)$/i.test(tc) && tc.split(' ').length >= 2 && ok(tc)) return tc;
+  for (const s of libellesStructures(c, max)) if (ok(s)) return s;
+  if (sujet && ok(sujet)) return sujet;
+  const dernier = nominal(titreExigence(b || c, max));
+  if (ok(dernier)) return dernier;
+  // Rubrique de GSS citée dans la réponse et délai de la citation : « Remplacement d'un agent absent sous 2 heures ».
+  // (jamais « sous N » pour un délai qui précède un événement : « au minimum 72 heures avant la prise de service »)
+  const dansLeDelai = !/(?:avant|apr[èe]s|au\s+moins|au\s+minimum|a\s+minima)/i.test(c);
+  for (const s of [rub && dureeC && dansLeDelai ? `${rub} sous ${dureeC}` : '', rub]) if (s && ok(s)) return s;
+  return '';
+}
+
+/** Nombre écrit en capitales (« les UNE (1) heure », « DEUX (2) heures ») : jamais dans un libellé. */
+const NOMBRE_CAPITALES = /(?<![\p{L}])(?:UNE?|DEUX|TROIS|QUATRE|CINQ|SIX|SEPT|HUIT|NEUF|DIX|ONZE|DOUZE|QUINZE|VINGT|TRENTE|QUARANTE|SOIXANTE)(?![\p{L}])/u;
+/** Fin de libellé qui attend son complément (« … à compter », « … avant la prise », « … au début », « … en cas »). */
+const FIN_A_COMPLEMENT = /(?:^|\s)(?:[àa]\s+compter|[àa]\s+partir|(?:la|une|sa|leur)\s+prise|(?:la|une|sa|leur)\s+mise|(?:au|le|du)\s+d[ée]but|(?:la|en|de)\s+fin|en\s+cas|lors|afin|au\s+cours|[àa]\s+l['’]issue|en\s+vue|en\s+raison|au\s+sein|au\s+titre|en\s+dehors|un\s+moment|suivant|compter|partir)$/i;
+/** Verbe conjugué, futur ou proposition relative : un libellé est un groupe nominal (« Compte-rendu qu'il transmettra »,
+ *  « Interventions seront effectuées », « Marché met en place… »). « A minima » n'est pas un verbe. */
+const VERBE_LIBELLE = /(?<![\p{L}'’])(?:est|sont|sera|seront|[ée]tait|doit|doivent|devra|devront|peut|peuvent|pourra|pourront|ont|fait|font|met|mettent|mettra|mettront|consignent|transmet|transmettent|r[ée]dige|r[ée]digent|intervient|interviennent|qui|que|dont)(?![\p{L}])|(?<![\p{L}])a(?![\p{L}])(?!\s+minima)|(?<![\p{L}])qu['’]|(?<![\p{L}])\p{L}{3,}(?:era|eront|ira|iront|dra|dront|tra|tront)(?![\p{L}])/iu;
+
+/**
+ * Libellé EXIGENCE acceptable (T7N-1, T7N-2, T7-CONS-5) : groupe nominal entier de 2 mots au moins, qui ne commence ni par une
+ * conjonction, ni par une préposition, ni par un verbe conjugué ; sans verbe conjugué, sans nombre en capitales (« les UNE
+ * heure »), jamais réduit à une durée (« 10 jours ») ; jamais coupé dans un intervalle (« du lundi » sans « au… »), ni sur
+ * un mot-outil ou une locution qui attend son complément (« à compter », « avant la prise »), parenthèses et guillemets
+ * appariés.
+ */
+export function libelleBloc1Valide(t: string, max = MAX_LIBELLE_EXIGENCE): boolean {
+  const x = String(t || '').replace(/\s+/g, ' ').trim();
+  if (!x || x.length > max || x.split(' ').length < 2) return false;
+  if (/^(?:et|ou|mais|donc|ni|car|or|puis|ainsi|alors)(?![\p{L}])/iu.test(x) || (MAUVAIS_TITRE.test(x) && !RX_LOCUTION.test(x))) return false;
+  if (NOMBRE_CAPITALES.test(x) || VERBE_LIBELLE.test(x)) return false;
+  if (/^(?:(?:au\s+(?:moins|minimum|maximum|plus)|sous|en|dans|a\s+minima)\s+)?\(?\d+(?:[,.]\d+)?\)?\s*(?:minutes?|min|heures?|h|jours?(?:\s+(?:ouvr[ée]s|ouvrables|calendaires))?|semaines?|mois|ans?)$/i.test(x)) return false;
+  const dernier = (x.split(' ').pop() || '').toLowerCase();
+  if (MOTS_OUTILS.has(dernier.replace(/['’]$/, '')) || /['’]$/.test(dernier) || FIN_A_COMPLEMENT.test(x)) return false;
+  // Intervalle coupé : « du lundi » sans « au … », « entre 6 h » sans « et … ».
+  if (/(?:^|\s)du\s+\S+(?:\s+\S+)?$/i.test(x) && /(?:^|\s)du\s+(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|\d{1,2}(?:er)?)(?:\s|$)/i.test(x) && !/\sau\s/i.test(x.slice(x.search(/(?:^|\s)du\s/i)))) return false;
+  if (/(?:^|\s)entre\s/i.test(x) && !/(?:^|\s)entre\s.+\set\s/i.test(x)) return false;
+  if ((x.match(/\(/g) || []).length !== (x.match(/\)/g) || []).length || (x.match(/«/g) || []).length !== (x.match(/»/g) || []).length) return false;
+  return true;
+}
+
+/** Nom d'action d'un verbe courant du CCTP (« intervenir » → « Intervention », « envoyer » → « Envoi ») ; '' si inconnu. */
+const NOMINALISATIONS: Array<[RegExp, string]> = [
+  [/^(?:envoy|d[ée]p[êe]ch)/i, 'Envoi'], [/^interv/i, 'Intervention'], [/^rempla[cç]/i, 'Remplacement'], [/^transm/i, 'Transmission'],
+  [/^inform|^pr[ée]v[ie]n|^avert/i, 'Information'], [/^alert/i, 'Alerte'], [/^signal/i, 'Signalement'], [/^fourni/i, 'Fourniture'],
+  [/^remet|^remis/i, 'Remise'], [/^r[ée]dig/i, 'Rédaction'], [/^r[ée]alis/i, 'Réalisation'], [/^organis/i, 'Organisation'],
+  [/^contr[ôo]l/i, 'Contrôle'], [/^v[ée]rifi/i, 'Vérification'], [/^consign/i, 'Consignation'], [/^communiqu/i, 'Communication'],
+  [/^pr[ée]sent/i, 'Présentation'], [/^d[ée]sign/i, 'Désignation'], [/^appliqu/i, 'Application'], [/^trait/i, 'Traitement'],
+  [/^arriv/i, 'Arrivée'], [/^ouvr/i, 'Ouverture'], [/^ferm/i, 'Fermeture'],
+];
+function nomDAction(verbe: string): string {
+  for (const [rx, nom] of NOMINALISATIONS) if (rx.test(verbe)) return nom;
+  return '';
+}
+
+/**
+ * Libellés tirés de la structure de la citation (T7N-1, T7N-2), du plus précis au plus court, chacun contrôlé ensuite :
+ *  - délais en chiffres (« dans les UNE (1) heure » → « sous 1 heure »), « […] » retiré, fragment qui commence par une
+ *    conjonction (« […] et Régulations (PCR) doit… ») sans son sujet coupé ;
+ *  - « <acteur> (du marché) <verbe> <objet> (qu'il …) <délai> » : l'objet sans la relative, avec le délai (« Compte-rendu sous
+ *    8 jours ») ; « met en place <objet> » → l'objet (« Système d'astreinte au début du service ») ; « a N jours pour faire
+ *    part de ses observations » → « Observations sous 10 jours » ; verbe d'action seul (« intervient sur site en 30 minutes »)
+ *    → « Intervention sur site en 30 minutes » ;
+ *  - « <sujet> (seront|doit être) <participe> … <délai> » → « Interventions sous 15 minutes » ; sujet coupé → nom de l'action
+ *    du participe (« Information des interventions sous 3 minutes ») ;
+ *  - « <groupe nominal> dans les N heures » → « Personnel de remplacement sous 1 heure » ;
+ *  - compléments de temps retirés (« du lundi au vendredi », « à 05h30 ») et énumération factorisée (« la ronde d'ouverture et
+ *    la ronde de fermeture » → « Rondes d'ouverture et de fermeture »).
+ */
+export function libellesStructures(citation: string, max = MAX_LIBELLE_EXIGENCE): string[] {
+  const out: string[] = [];
+  const cap = (v: string) => { const y = v.replace(/\s+/g, ' ').replace(/[\s,;:.]+$/, '').trim(); return y ? y.charAt(0).toUpperCase() + y.slice(1) : ''; };
+  const sansDet = (v: string) => { let y = String(v || '').trim(); for (let k = 0; k < 2; k++) y = y.replace(/^(?:(?:le|la|les|un|une|des|du|ce|cet|cette|ces|son|sa|ses|leur|leurs)\s+|(?:l|d)['’]\s*)/i, ''); return y; };
+  let c = normaliserExpressionsDelai(String(citation || '').replace(/\*\*/g, ''))
+    .replace(/\s*\(\s*(?:\d+|[a-zà-ÿ-]+)\s*\)/gi, '').replace(/\s+/g, ' ').replace(/^[«"“\s]+|[»"”\s.;:]+$/g, '').trim();
+  // Fragment après « […] » : sujet coupé quand il commence par une conjonction.
+  let sujetCoupe = /^\s*\[…\]\s*(?:et|ou|ainsi\s+que)\s/i.test(c);
+  c = c.replace(/\s*\[…\]\s*/g, ' ').trim();
+  if (sujetCoupe) c = c.replace(/^(?:et|ou|ainsi\s+que)\s+/i, '');
+  { const ct = COMPLEMENT_TETE.exec(c); if (ct) c = ct[3].replace(INCISE_TETE, '').trim(); }
+  // Durée retenue seulement quand elle est un délai (« dans les 2 heures », « sous 8 jours », « a 10 jours pour »), jamais une
+  // durée ou une amplitude (« actif 365 jours sur 365 », « ronde d'une heure »).
+  const duree = /(?:dans\s+(?:les?|un\s+d[ée]lai)|sous|en\s+moins\s+de|en\s+\d|au\s+plus\s+tard|d[ée]lai\s+(?:maxim\w+\s+|minim\w+\s+)?de|(?:^|\s)(?:a|aura|dispose\w*\s+de)\s+\d+\s+\S+(?:\s+\S+)?\s+pour)/i.test(c) ? dureeDe(c) : '';
+  const delai = duree ? ` sous ${duree}` : '';
+  const RX_DELAI = /\s+(?:dans\s+(?:les?|un\s+d[ée]lai(?:\s+(?:maxim(?:al|um)|minim(?:al|um)))?\s+de)|sous|en\s+moins\s+de|en|au\s+plus\s+tard\s+(?:dans|sous|en)?)\s*\d.*$/i;
+  const sansRelative = (v: string) => v.replace(/\s+(?:qu['’]\s*(?:il|elle|ils|elles|on)|qui|que|dont|lequel|laquelle)\s.*$/i, '').replace(RX_DELAI, '').replace(/\s+(?:pour|afin|en\s+vue)\s.*$/i, '').trim();
+  const acteur = new RegExp(`^${ACTEUR_SUJET.source.slice(1)}(?:\\s+(?:du|de\\s+la|de\\s+l['’]|des)\\s*(?:march[ée]|contrat|prestation|lot|accord-cadre)(?=\\s|$))?\\s+`, 'i');
+  const a = acteur.exec(c);
+  if (a && !sujetCoupe) {
+    const reste = c.slice(a[0].length);
+    // « a / aura / dispose de N jours pour <infinitif> <objet> » : l'objet sous N.
+    const pour = /^(?:a|aura|dispose(?:ra)?\s+de|dispose(?:ra)?\s+d['’]un\s+d[ée]lai\s+de)\s+\d+\s+\S+(?:\s+(?:ouvr[ée]s|ouvrables|calendaires))?\s+pour\s+(?:faire\s+part\s+(?:de\s+|d['’]\s*)|formuler|pr[ée]senter|transmettre|remettre|communiquer|fournir|produire|faire)?\s*(.+)$/i.exec(reste);
+    if (pour) out.push(cap(`${sansDet(sansRelative(pour[1]))}${delai}`));
+    // « met / mettra / doit mettre en place <objet> ».
+    const place = /^(?:(?:doit|devra|s['’]engage\s+[àa])\s+)?(?:met|mettra|mettre)\s+en\s+(?:place|œuvre|oeuvre)\s+(.+)$/i.exec(reste);
+    if (place) {
+      const o = sansDet(place[1].replace(/\s+(?:de\s+ses|de\s+son|de\s+sa|des)\s+agents?$/i, ''));
+      out.push(cap(o), cap(sansRelative(o)) + delai, cap(o.replace(/\s+(?:au|à|dès|pour|lors|avant|après)\s.*$/i, '')));
+    }
+    // Verbe conjugué (ou « doit » + infinitif) suivi de son objet.
+    const v = /^(?:(?:doit|doivent|devra|devront)\s+(?:[êe]tre\s+en\s+(?:capacit[ée]|mesure)\s+d['’]\s*|pouvoir\s+)?)?(\S+)\s+(.+)$/i.exec(reste);
+    if (v) {
+      const nom = nomDAction(v[1]);
+      let objet = v[2].replace(/^(?:sur|dans|au|à)\s+(?:le\s+|la\s+|les\s+|l['’])?(?:site|sites|lieux?|place)\s+(?=(?:le|la|les|l['’]|un|une|des|du)\b)/i, '');
+      const lieu = /^(?:sur\s+(?:le\s+)?site|sur\s+place)\b/i.exec(objet);
+      const objArt = sansRelative(objet);
+      const obj = sansDet(objArt);
+      // « de » + l'objet avec son article (« Envoi d'un agent », « Remise du rapport », « Transmission des plannings »).
+      const deObjet = (o: string) => o.replace(/^(?:de\s+)?(?:le\s+)/i, 'du ').replace(/^(?:de\s+)?les\s+/i, 'des ').replace(/^(?:de\s+)?(une?)\s+/i, "d'$1 ").replace(/^(?:de\s+)?(la\s+|l['’])/i, 'de $1').replace(/^(?!du |des |d'|de )([aeiouyhéèêàâîôû])/i, "d'$1").replace(/^(?!du |des |d'|de )/i, 'de ');
+      if (lieu && nom) out.push(cap(`${nom} ${lieu[0].replace(/^sur\s+le\s+site/i, 'sur site')}${delai}`));
+      // Délai porté par une relative (« un compte-rendu qu'il transmettra sous huit jours ») : l'objet et son délai d'abord.
+      if (obj && !lieu && dureeDe((/\s(?:qu['’]\s*(?:il|elle|ils|elles|on)|qui|que)\s.*$/i.exec(objet) || [''])[0])) out.push(cap(`${obj}${delai}`));
+      if (nom && obj && !lieu) out.push(cap(`${nom} ${deObjet(objArt)}${delai}`));
+      if (obj && !lieu && !/^(?:agents?|personnels?|personnes?|intervenants?)$/i.test(obj)) out.push(cap(`${obj}${delai}`));
+      if (nom && delai) out.push(cap(`${nom}${delai}`));
+    }
+  }
+  // « <sujet> (seront|sont|doit|doivent|devra|devront) (être) <participe> <compléments> » (voix passive).
+  const passif = /^(.{3,80}?)\s+(?:sont|seront|sera|est|doit|doivent|devra|devront)\s+(?:[êe]tre\s+)?(?:(?:syst[ée]matiquement|imm[ée]diatement|obligatoirement|imp[ée]rativement)\s+)?(\p{L}+(?:[ée]e?s?|is|ise?s?|ite?s?|ts?))(?:\s+(.*))?$/iu.exec(c);
+  if (passif) {
+    const sujet = sansDet(passif[1]);
+    const nom = nomDAction(passif[2]);
+    const compl = sansRelative((passif[3] || '').replace(/^(?:\p{L}+ment\s+)+/iu, ''));
+    if (!sujetCoupe && !ACTEUR_SUJET.test(passif[1]) && sujet) {
+      out.push(cap(`${sujet}${delai}`));
+      if (!delai) out.push(cap(`${sujet} ${passif[2]}`));
+      // Sujet trop long (« horaires précis de début et de fin de chaque ronde ») : sa tête et son dernier complément
+      // (« Horaires précis de chaque ronde consignés »), sinon sa tête seule.
+      const parts = sujet.split(/\s+(?=(?:de|du|des)\s|d['’])/i);
+      if (parts.length > 2) { const tl = `${parts[0]} ${parts[parts.length - 1]}`; if (!delai) out.push(cap(`${tl} ${passif[2]}`)); out.push(cap(`${tl}${delai}`)); }
+      const court = parts[0];
+      if (court !== sujet) out.push(cap(`${court}${delai}`));
+    }
+    if (nom && /^(?:des|du|de|d['’])/i.test(compl)) out.push(cap(`${nom} ${compl}${delai}`));
+    if (nom && delai) out.push(cap(`${nom}${delai}`));
+  }
+  // « <groupe nominal> dans les N heures / sous N jours … » (sans verbe).
+  const gnDelai = /^(.{3,60}?)\s+(?:dans\s+(?:les?|un\s+d[ée]lai(?:\s+(?:maxim(?:al|um)|minim(?:al|um)))?\s+de)|sous|en\s+moins\s+de|au\s+plus\s+tard\s+(?:dans|sous|en)?)\s*\d/i.exec(c);
+  if (gnDelai && delai && !sujetCoupe) out.push(cap(`${sansDet(gnDelai[1])}${delai}`));
+  // « <infinitif> <au lieu> <objet> » (« assurer au centre de permanence un retour des caméras 24 h/24, toute l'année, pour… ») :
+  // l'infinitif et son objet (« Assurer un retour des caméras 24 h/24 »).
+  { const il = /^(\p{L}+(?:er|ir|re))\s+(?:au|aux|[àa]\s+la|[àa]\s+l['’]|dans\s+(?:le|la|les|l['’])|sur\s+(?:le|la|les|l['’]))\s*[^,;]{2,50}?\s+((?:un|une|le|la|les|des|du)\s+[^,;]+|l['’][^,;]+)/iu.exec(c);
+    if (il) { const o = il[2].replace(/\s+(?:pour|afin|en\s+vue)\s.*$/i, '').trim(); out.push(cap(`${il[1]} ${o}`), cap(sansDet(o))); } }
+  // « <circonstance> : <action> » (« Les jours de week-end et/ou fériés indiqués à l'annexe 2 : une ronde de jour d'une heure, à
+  // effectuer entre 6 h et 21 h ») : l'action (« Ronde de jour d'une heure »).
+  { const dp = /^[^:]{3,120}?\s:\s+((?:une?|le|la|les|des|du|l['’])\s*[^,;:]+)/i.exec(String(citation || '').replace(/\*\*/g, '').replace(/\s*\[…\]\s*/g, ' ').replace(/\s+/g, ' ').trim()); if (dp) out.push(cap(sansDet(dp[1].replace(/\s+(?:[àa]\s+effectuer|pour|afin)\s.*$/i, '')))); }
+  // Compléments de temps retirés et énumération factorisée.
+  let t = c.replace(/\s+du\s+\S+\s+au\s+\S+/gi, '').replace(/\s+(?:de|entre)\s+\d{1,2}\s*h\s*\d{0,2}\s+(?:[àa]|et)\s+\d{1,2}\s*h\s*\d{0,2}/gi, '').replace(/\s+[àa]\s+\d{1,2}\s*h\s*\d{0,2}(?![\p{L}\d])/giu, '').replace(/\s+/g, ' ').trim();
+  t = t.replace(/(?:(?:le|la)\s+|l['’])(\p{L}+)\s+((?:de|d['’])\s*\S+)\s+et\s+(?:(?:le|la)\s+|l['’])\1\s+((?:de|d['’])\s*\S+)/iu, (_m, n: string, x: string, y: string) => `les ${n}s ${x} et ${y}`);
+  if (t !== c) {
+    out.push(cap(t));
+    const inf = /^\p{L}+(?:er|ir|re)\s+(.+)$/iu.exec(t);
+    if (inf) out.push(cap(sansDet(inf[1])));
+  }
+  return [...new Set(out.filter(Boolean))].filter((x) => x.length <= max);
 }
 
 /** Titre refusé : commence par une préposition, un verbe conjugué ou « Quel(s) que » (« D'un délai de 2 heures », « Doivent
@@ -1985,7 +2222,9 @@ function titreExigenceBase(x: string, max = 34): string {
   //    remplacement »), le complément sans sa préposition (« Absence du responsable », « Ronde de fermeture »).
   const ct = COMPLEMENT_TETE.exec(e);
   if (ct) {
-    const action = ct[3].trim();
+    // Seconde incise de tête (T7N-2, ifits : « En cas de déclenchement de l'alarme…, à un moment sans présence du personnel,
+    // le titulaire doit… ») : jamais le titre ; la proposition principale qui suit.
+    const action = ct[3].trim().replace(INCISE_TETE, '');
     // (jamais un sujet : « les agents doivent effectuer… » n'est pas une reprise du complément, T5-CONS-2)
     const reprise = !ACTEUR_SUJET.test(action) && (/^(?:le|la|les|l['’]|lui|leur|en|y)\s*\S/i.test(action) && !/^(?:le|la|les|l['’])\s*[a-zà-ÿ]+(?:ion|age|ment|ure|ance|ence|té|ée)s?\b/i.test(action) || /^\S+\s+(?:son|sa|ses|leur|leurs)\s/i.test(action));
     const t = reprise ? titreNominal(ct[2], max) : titreExigence(action, max);
@@ -2007,11 +2246,18 @@ function titreExigenceBase(x: string, max = 34): string {
     const k = mots.findIndex((m, i) => i > 0 && (VERBE_TITRE.test(m) || /^(?:ne|n['’]\S*|transmet(?:tent)?|remet(?:tent)?|fournit|fournissent|tient|tiennent|effectue(?:nt)?|r[ée]alise(?:nt)?|v[ée]rifie(?:nt)?|veille(?:nt)?|informe(?:nt)?|signale(?:nt)?|pr[ée]vient|pr[ée]viennent|met(?:tent)?|organise(?:nt)?)$/i.test(m)));
     if (k > 0) {
       let suite = mots.slice(k + 1).join(' ').replace(/^(?:pas\s+|jamais\s+)?(?:(?:[êe]tre|avoir|rester|faire)\s+)?/i, '')
-        .replace(/^(?:titulaires?|d[ée]tenteurs?|porteurs?|en\s+possession|munie?s?|[ée]quip[ée]e?s?|dot[ée]e?s?|tenue?s?|charg[ée]e?s?|capables?|en\s+mesure)\s+(?:de\s+la|de\s+l['’]|des|du|de|d['’])\s*/i, '');
+        .replace(/^(?:titulaires?|d[ée]tenteurs?|porteurs?|en\s+possession|munie?s?|[ée]quip[ée]e?s?|dot[ée]e?s?|tenue?s?|charg[ée]e?s?|capables?|en\s+mesure|en\s+capacit[ée])\s+(?:de\s+la|de\s+l['’]|des|du|de|d['’])\s*/i, '');
       // Ce qu'il doit faire : l'infinitif et son objet (« doit transmettre le planning » → « Transmettre le planning »).
       if (/^(?:[àa]\s+)?[a-zà-ÿ]+(?:er|ir|re)\b/i.test(suite) && /^(?:doit|doivent|devra|devront|peut|peuvent|pourra|pourront)$/i.test(mots[k])) {
         const t = titreExigenceBrut(suite.replace(/^[àa]\s+/, ''), max);
         if (t) return t;
+      }
+      // Verbe d'action suivi d'un lieu ou d'un délai (T7N-2 : « le prestataire intervient sur site en 30 minutes ») : le nom
+      // de l'action (« Intervention sur site en 30 minutes »), jamais le verbe conjugué en tête.
+      const nomA = nomDAction(mots[k]);
+      if (nomA && /^(?:sur|sous|en|dans|au|aux|à)\s/i.test(suite)) {
+        const tA = `${nomA} ${suite.replace(/^sur\s+le\s+site\b/i, 'sur site')}`;
+        if (tA.length <= max) return tA;
       }
       const objet = suite.split(/\s+(?:au\s+plus\s+tard|avant|apr[èe]s|d[èe]s|chaque|tous|toutes|dans\s+un|sous|entre|selon|afin|pour|par)\b|[,;:(]/i)[0].replace(/\s+(?:d[ée]livr[ée]e?s?|pr[ée]vue?s?|exig[ée]e?s?|vis[ée]e?s?|mentionn[ée]e?s?)$/i, '');
       const t = titreNominal(objet, max);
@@ -2353,7 +2599,7 @@ export function texteEtapeAvecVerbe(x: string): string {
   const cap = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
   const infinitif = (v: string) => { const w = (/^[a-zà-ÿ]+/i.exec(v) || [''])[0]; return w.length >= 4 && /(?:er|ir|oir|re)$/i.test(w) && !NOMS_EN_R.test(w); };
   const premier = texteEtapeCoordination(cap(t));
-  const fragment = (v: string) => /^(?:pour|par|dans|selon|lors|en cas|en|apr[èe]s|avant|d[èe]s|sur|sous|avec|sans|pendant|durant|jusqu['’]|hors|entre|au|aux|à|de|du|des|d['’])\b/i.test(v) && !VERBE_CONJUGUE.test(v) && !v.split(/\s+/).some((w, i) => i > 0 && infinitif(w) && /^(?:de|d['’]|à|pour)$/i.test(v.split(/\s+/)[i - 1] || ''));
+  const fragment = (v: string) => /^(?:(?:pour|par|dans|selon|lors|en cas|en|apr[èe]s|avant|d[èe]s|sur|sous|avec|sans|pendant|durant|hors|entre|au|aux|à|de|du|des)(?![\p{L}])|jusqu['’]|d['’])/iu.test(v) && !VERBE_CONJUGUE.test(v) && !v.split(/\s+/).some((w, i) => i > 0 && infinitif(w) && /^(?:de|d['’]|à|pour)$/i.test(v.split(/\s+/)[i - 1] || ''));
   if (premier && !fragment(premier)) return premier;
   for (const m of t.matchAll(/[,;]\s+/g)) {
     const suite = t.slice((m.index || 0) + m[0].length).split(/\s*;\s*/)[0];
@@ -2393,6 +2639,9 @@ export function etapesDesPuces(texte: string, phraseDe?: (titreRubrique: string)
       if (g) {
         const gras = g[1].trim();
         const q = /^«\s*([^»]{3,160}?)\s*»$/.exec(gras);
+        // Citation coupée suivie de sa fin hors du gras (« **« Au minimum 72 heures …, le titulaire doit »** transmettre les
+        // informations… », T7-CONS-4) : la proposition entière, jamais la citation coupée sur son verbe.
+        if (q && g[2].trim() && /^[a-zà-ÿ]/.test(g[2].trim())) return { brut: g[0], x: `${q[1].replace(/[\s,;]+$/, '')} ${g[2].trim()}`, y: g[4], citation: false };
         if (q) return { brut: g[0], x: q[1], y: g[4], citation: true };
         const x = g[3].trim() || (/^(?:points? de vigilance|ce que vous attendez|vos attentes|notre réponse)$/i.test(gras) ? '' : gras);
         return x ? { brut: g[0], x, y: g[4], citation: false } : null;
@@ -2462,7 +2711,7 @@ export function etapesDesPuces(texte: string, phraseDe?: (titreRubrique: string)
     // Suite : un groupe autonome (« … et la mise en place des prestations », « … et adaptation du dispositif »), jamais
     // un complément orphelin (« …, du PTI et des obligations », « … et d'intégration des nouveaux agents ») ni un sujet
     // dont le verbe s'accordait avec les deux (« le livre des consignes et l'intégration des intervenants permettent… »).
-    if (/^(?:de|du|des|d['’]|à|au|aux|en|selon|par|pour|avec|dans)\b/i.test(m[3]) || m[3].split(/\s+/).some((w, i) => i > 0 && VERBE.test(w)) || /\bpermett?e?n?t\b/i.test(m[3])) return { titre: '', reste: '' };
+    if (/^(?:(?:de|du|des|à|au|aux|en|selon|par|pour|avec|dans)(?![\p{L}])|d['’])/iu.test(m[3]) || m[3].split(/\s+/).some((w, i) => i > 0 && VERBE.test(w)) || /\bpermett?e?n?t\b/i.test(m[3])) return { titre: '', reste: '' };
     // Titre qui contient un verbe (« la mobilisation est préparée ») ; suite sans sujet (« coordonnée par… ») ; suite dont
     // le verbe au pluriel s'accordait avec les deux groupes (« la planification et le contrôleur de rondes organisent… ») :
     // jamais un couple titre / texte (caen 471).
@@ -2569,7 +2818,7 @@ export function etapesDesPuces(texte: string, phraseDe?: (titreRubrique: string)
       if (sansArt(corps).startsWith(sansArt(titre))) {
         const reste = corps.replace(/^\s*(?:le|la|les|l['’]|un|une|des|du)?\s*/i, '').slice(titre.replace(/^\s*(?:le|la|les|l['’]|un|une|des|du)?\s*/i, '').length).replace(/^[\s,;:]+/, '').trim();
         corps = reste.split(/\s+/).length < 3 ? '' : texteEtapeAvecVerbe(reste.charAt(0).toUpperCase() + reste.slice(1)) || '';
-        if (!corps || /^(?:de|du|des|d['’]|à|au|aux|en|et)\b/i.test(corps)) { if (!carteVousProcess()) carteNous(); continue; }
+        if (!corps || /^(?:(?:de|du|des|à|au|aux|en|et)(?![\p{L}])|d['’])/iu.test(corps)) { if (!carteVousProcess()) carteNous(); continue; }
       }
     }
     // Sans titre tiré de l'exigence, ou réponse trop longue pour la carte : tête de la réponse comme titre, sa suite
@@ -2595,7 +2844,7 @@ export function etapesDesPuces(texte: string, phraseDe?: (titreRubrique: string)
     if (nc.startsWith(nt)) {
       const reste = corps.slice(titre.length).replace(/^[\s,;:]+(?:et\s+)?/, '').trim();
       // Suite qui n'est qu'un complément du titre (« … du PTI et des obligations ») : l'étape n'apporte rien de lisible.
-      if (reste.split(/\s+/).length < 3 || /^(?:de|du|des|d['’]|à|au|aux|en|selon|par|pour|avec|dans)\b/i.test(reste)) continue;
+      if (reste.split(/\s+/).length < 3 || /^(?:(?:de|du|des|à|au|aux|en|selon|par|pour|avec|dans)(?![\p{L}])|d['’])/iu.test(reste)) continue;
       corps = reste.charAt(0).toUpperCase() + reste.slice(1);
     }
     if (etapes.some((d) => procheDe(d.titre, titre) || normaliser(String(d.texte || '')) === normaliser(corps))) continue;
@@ -2759,7 +3008,7 @@ export function etapesDuPerimetre(partie: string): Array<{ titre: string; texte:
         const nl = normaliser(libelle).replace(/[^a-z0-9 ]+/g, ' ').trim();
         if (nl && normaliser(suite).replace(/[^a-z0-9 ]+/g, ' ').trim().startsWith(`${nl} `)) {
           const reste = suite.replace(/^\s*\S+(?:\s+\S+)*?/, (x) => x).slice(libelle.length).replace(/^[\s,;:]+/, '');
-          if (reste.split(/\s+/).length >= 3 && !/^(?:de|du|des|d['’]|à|au|aux|et)\b/i.test(reste)) suite = reste;
+          if (reste.split(/\s+/).length >= 3 && !/^(?:(?:de|du|des|à|au|aux|et)(?![\p{L}])|d['’])/iu.test(reste)) suite = reste;
         }
         const texte = suite ? texteEtapeEntier(cap(suite)) || texteEtapeCoordination(cap(suite)) : '';
         if (texte && texte.split(/\s+/).length >= 3) out.push({ titre: cap(libelle), texte });
