@@ -94,7 +94,21 @@ describe('articles du bloc 1 lus dans le cahier des charges et sur le bon fait (
   });
   it('le même nombre sur un autre fait n’est pas pris (caen : remplacement dans l’heure, art. 3.6 ; présence au-delà d’une heure, art. 3.9)', () => {
     const dce = "\n\n--- LOT 5 - CCTP - CAEN ---\n3.6 DELAIS D'INTERVENTION\nEn cas d'absence, le titulaire assure le\nremplacement dans les UNE (1) heure suivant la constatation.\n3.7 OBLIGATIONS DU TITULAIRE\nLe titulaire est responsable.\n3.9 DISPOSITION SPECIFIQUE AU SITE DE CAEN\nPrestations ponctuelles :\n  Présence d’un agent au-delà d’une heure ;\n";
-    expect(articlesBloc1('## Le périmètre de la prestation demandée\nLes prestations ponctuelles peuvent également prévoir une présence d’agent au-delà d’une heure.\n', dce)).toEqual({ '1h': '3.9' });
+    // Tour 4 (T4N-2) : clés « partie|chiffre ».
+    expect(articlesBloc1('## Le périmètre de la prestation demandée\nLes prestations ponctuelles peuvent également prévoir une présence d’agent au-delà d’une heure.\n', dce)).toEqual({ 'perimetre|1h': '3.9' });
+  });
+  it('durée du marché lue hors article puis validité d’un diplôme « moins de 3 ans » : jamais l’article du diplôme sous le contexte (T4N-2, becquerel 1401)', () => {
+    const dce = "\n\n--- CCTP ---\nL'essentiel du contrat\nDurée / Délai 3 ans\nARTICLE 3 – PERSONNEL\n3.4 Formation – Diplômes\nLes agents sont titulaires du SSIAP1 à jour (moins de 3 ans).\n";
+    const b1 = "## Votre contexte et votre site\nLe centre hospitalier lance le marché « Sécurité incendie », d'une durée de 3 ans.\n\n## Les points de vigilance identifiés et nos réponses\n- **Qualifications incendie** : SSIAP 1 et SSIAP 2 à jour de moins de 3 ans → notre réponse : « Formations », développée au bloc 3.\n";
+    const a = articlesBloc1(b1, dce);
+    expect(a['contexte|3 ans']).toBe('');
+    // (les points de vigilance n'ont pas de ligne de source ; leur clé est propre à leur partie)
+    expect(Object.keys(a).every((k) => k.includes('|'))).toBe(true);
+    const p = pageBloc1Marine(b1, a);
+    expect(p).not.toMatch(/Source : CCTP, article 3\.4/);
+    expect(chiffresCles(b1, a).find((c) => c.valeur === '3 ans')?.source || '').toBe('');
+    // État enregistré avant la correction (clés « chiffre » seules) : lu tel quel.
+    expect(pageBloc1Marine("## Votre contexte et votre site\nLe marché dure 2 ans, sur 20 000 m².\n", { '20000 m2': '2.3' })).toMatch(/Source : CCTP, article 2\.3/);
   });
 });
 

@@ -72,6 +72,24 @@ function racinesPleines(t: string): Set<string> {
  * pièces), et la ligne retenue doit partager, à quelques lignes près, un mot plein avec la phrase du mémoire qui cite le
  * chiffre : jamais l'article du règlement de la consultation, ni celui d'un autre fait qui porte le même nombre.
  */
+/** Partie du bloc 1 d'une position du texte (intertitre « ## » qui la précède) : contexte, perimetre, attentes, vigilance, autre. */
+export function partieBloc1(texte: string, index: number): string {
+  const avant = String(texte || '').slice(0, Math.max(0, index));
+  const titres = [...avant.matchAll(/^##\s+(.+)$/gm)];
+  const t = norm(titres.length ? titres[titres.length - 1][1] : '');
+  return /contexte/.test(t) ? 'contexte' : /perimetre/.test(t) ? 'perimetre' : /attentes/.test(t) ? 'attentes' : /vigilance/.test(t) ? 'vigilance' : titres.length ? 'autre' : 'contexte';
+}
+
+/**
+ * Article d'un chiffre du bloc 1 dans une partie (T4N-2, becquerel 1401 : la durée « 3 ans » de « Votre contexte » recevait
+ * l'article 3.4 « Formation – Diplômes » de la validité « moins de 3 ans » des points de vigilance) : clés « partie|chiffre » ;
+ * un état enregistré avant cette correction (clés « chiffre » seules) reste lu tel quel.
+ */
+export function articleDuChiffre(articles: Record<string, string>, cle: string, partie: string): string {
+  const parPartie = Object.keys(articles || {}).some((k) => k.includes('|'));
+  return parPartie ? articles[`${partie}|${cle}`] || '' : (articles || {})[cle] || '';
+}
+
 export function articlesBloc1(texteBloc1: string, dce: string): Record<string, string> {
   const out: Record<string, string> = {};
   const brut = String(dce || '');
@@ -95,22 +113,34 @@ export function articlesBloc1(texteBloc1: string, dce: string): Record<string, s
     if (zones.some((z) => debut >= z.debut && debut < z.fin)) lignes.push({ debut, cle: cleChiffre(l), texte: l });
     debut += l.length + 1;
   }
-  // Phrases du mémoire : chaque chiffre est rattaché aux mots pleins de sa phrase.
-  const phrases = String(texteBloc1 || '').replace(/\*\*/g, '').split(/\n+|(?<=[.;!?])\s+(?=[A-ZÀ-Ý«])/);
-  for (const ph of phrases) {
+  // Phrases du mémoire : chaque chiffre est rattaché aux mots pleins de sa phrase, dans sa partie du bloc 1 (clé
+  // « partie|chiffre » : jamais l'article d'un autre fait de même nombre écrit dans une autre partie, T4N-2).
+  const source = String(texteBloc1 || '').replace(/\*\*/g, '');
+  const phrases: Array<{ ph: string; partie: string }> = [];
+  {
+    let pos = 0;
+    for (const ph of source.split(/\n+|(?<=[.;!?])\s+(?=[A-ZÀ-Ý«])/)) {
+      const i = source.indexOf(ph, pos);
+      phrases.push({ ph, partie: partieBloc1(source, i >= 0 ? i : pos) });
+      if (i >= 0) pos = i + ph.length;
+    }
+  }
+  for (const { ph, partie: p } of phrases) {
     const mots = racinesPleines(ph);
     for (const j of jetons(ph)) {
-      const k = cleChiffre(j);
+      const k0 = cleChiffre(j);
+      const k = k0 ? `${p}|${k0}` : '';
       if (!k || out[k] !== undefined) continue;
-      const rx = new RegExp(`(?<![\\d.,])${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\d])`);
+      const rx = new RegExp(`(?<![\\d.,])${k0.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\d])`);
       for (let i = 0; i < lignes.length; i++) {
         if (!rx.test(lignes[i].cle)) continue;
         // Mot plein de la phrase du mémoire sur la ligne du chiffre ou sur les deux lignes qui l'entourent.
         const voisinage = lignes.slice(Math.max(0, i - 2), i + 3).map((x) => x.texte).join(' ');
         const r = racinesPleines(voisinage);
         if (mots.size && ![...mots].some((w) => r.has(w))) continue;
-        const art = articleAvant(brut, lignes[i].debut + 1);
-        if (art) out[k] = art;
+        // Chiffre trouvé sans article avant lui (« Durée / Délai 3 ans » du tableau « L'essentiel du contrat ») : noté sans
+        // article, jamais rattaché ensuite à l'article d'un autre fait de même nombre.
+        out[k] = articleAvant(brut, lignes[i].debut + 1) || '';
         break;
       }
     }
@@ -136,7 +166,8 @@ const VERBE_CONJUGUE = /(?<![\p{L}])(?:est|sont|était|sera|seront|doit|doivent|
 export function chiffresCles(texte: string, articles: Record<string, string> = {}): ChiffreCle[] {
   const t = String(texte || '').replace(/\*\*/g, '');
   const out: ChiffreCle[] = [];
-  const source = (v: string) => { const a = articles[cleChiffre(v)]; return a ? `art. ${a}` : ''; };
+  // Article du chiffre dans la partie où sa valeur est écrite (T4N-2).
+  const source = (v: string) => { const i = t.indexOf(v.trim()); const a = articleDuChiffre(articles, cleChiffre(v), partieBloc1(t, i >= 0 ? i : 0)); return a ? `art. ${a}` : ''; };
   const ajouter = (valeur: string, legende: string) => {
     const v = valeur.replace(/\s+/g, ' ').trim();
     if (!v || out.some((c) => cleChiffre(c.valeur) === cleChiffre(v)) || out.length >= 4) return;
@@ -238,8 +269,8 @@ export function bandeauChiffres(chiffres: ChiffreCle[]): string {
 }
 
 /** Ligne « Source : CCTP, articles a et b » (articles des chiffres d'une partie) ; '' si aucun article connu. */
-function ligneSource(texte: string, articles: Record<string, string>): string {
-  const arts = [...new Set(jetons(texte).map((j) => articles[cleChiffre(j)]).filter(Boolean))]
+function ligneSource(texte: string, articles: Record<string, string>, partie = ''): string {
+  const arts = [...new Set(jetons(texte).map((j) => articleDuChiffre(articles, cleChiffre(j), partie)).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
   if (!arts.length) return '';
   const liste = arts.length > 1 ? `${arts.slice(0, -1).join(', ')} et ${arts[arts.length - 1]}` : arts[0];
@@ -393,7 +424,7 @@ export function pageBloc1Marine(texte: string, articles: Record<string, string> 
   t = t.replace(/(^##\s+(?:Vos attentes|Les points de vigilance)[^\n]*\n+)((?:[ \t]*[-*•]\s[^\n]*(?:\n|$))+)/gim, (_m, titre: string, liste: string) => `${titre}${tableauAttentes(liste.trimEnd(), o.blocsRubriques)}\n`);
   // Lignes de source sous le contexte et sous le périmètre.
   t = t.replace(/(^##\s+(?:Votre contexte|Le p[ée]rim[èe]tre)[^\n]*\n)([\s\S]*?)(?=^##\s|(?![\s\S]))/gim, (_m, titre: string, corps: string) => {
-    const s = o.sources === false ? '' : ligneSource(corps, articles);
+    const s = o.sources === false ? '' : ligneSource(corps, articles, /contexte/i.test(titre) ? 'contexte' : 'perimetre');
     return s ? `${titre}${corps.trimEnd()}\n\n${s}\n\n` : `${titre}${corps}`;
   });
   if (!bandeau) return t;
