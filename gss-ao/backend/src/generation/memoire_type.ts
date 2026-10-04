@@ -567,9 +567,28 @@ function propositionAutour(t: string, debut: number, fin: number): string {
   return t.slice(i + 1, j < 0 ? t.length : fin + j);
 }
 
+/**
+ * Sujet grammatical ACHETEUR en tête de proposition (T4G-6 : « La Ville effectuera des contrôles inopinés… », « Le représentant de
+ * la collectivité effectue… ») : une collectivité ou un établissement nommé sans le titulaire, ou son représentant / ses services ;
+ * ou l'acheteur nommé par l'une de ses formes (nom, forme courte, sigle).
+ */
+const SUJET_ACHETEUR = /^\s*(?:[-•▪*]\s*)?(?:(?:en outre|par ailleurs|de plus|enfin),?\s+)?(?:(?:le|la|les|l['’])\s*)?(?:(?:repr[ée]sentants?|services?(?:\s+techniques)?|agents?|responsables?|r[ée]f[ée]rents?|direction)\s+(?:de\s+(?:la|l['’]|le)\s*|du\s+|des\s+))?(?:ville|commune|collectivit[ée]|d[ée]partement|r[ée]gion|m[ée]tropole|[ée]tablissement|universit[ée]|chu|centre hospitalier|h[ôo]pital|mairie|administration|ma[îi]tre d['’]ouvrage|pouvoir adjudicateur|acheteur|client|institut|office|agence|syndicat)(?![\p{L}])/iu;
+
 /** La proposition est-elle une obligation du titulaire (et non une action ou une faculté de l'acheteur) ? */
-function propositionDuTitulaire(prop: string): boolean {
+function propositionDuTitulaire(prop: string, formesAcheteur: string[] = []): boolean {
   if (AUTEUR_TITULAIRE.test(prop) && !/(?:par|de la part d[eu']?)\s*(?:l['’]|le |la )?(?:pouvoir adjudicateur|acheteur)/i.test(prop)) return true;
+  if (SUJET_ACHETEUR.test(prop)) return false;
+  // Sujet juste avant le premier verbe d'action (proposition précédée d'un intitulé d'article sans point : « Article 9 -
+  // Contrôles La Ville effectuera… »).
+  {
+    const avantVerbe = prop.split(/\s(?:effectu|r[ée]alis|organis|proc[èe]d|pourr?a(?:ient)?\b|peu[tv]|contr[ôo]l(?:e|era|ent)\b|v[ée]rifi|se r[ée]serv|diligent|assur)/i)[0];
+    // Groupe nominal de l'acheteur qui finit juste avant le verbe (« … La Ville | effectuera »).
+    const SUJET_AVANT_VERBE = /(?<![\p{L}])(?:le|la|les|l['’])\s*(?:(?:repr[ée]sentants?|services?(?:\s+techniques)?|agents?|responsables?|r[ée]f[ée]rents?|direction)\s+(?:de\s+(?:la|l['’]|le)\s*|du\s+|des\s+))?(?:ville|commune|collectivit[ée]|d[ée]partement|r[ée]gion|m[ée]tropole|[ée]tablissement|universit[ée]|chu|centre hospitalier|h[ôo]pital|mairie|administration|ma[îi]tre d['’]ouvrage|pouvoir adjudicateur|acheteur|client|institut|office|agence|syndicat)(?:\s+[A-ZÀ-Ý][\p{L}'’-]*){0,3}\s*$/iu;
+    if (avantVerbe.length < prop.length && SUJET_AVANT_VERBE.test(avantVerbe)) return false;
+  }
+  // Acheteur nommé en sujet (« Rouen Habitat effectuera… », « Le SDIS 76 réalise… »).
+  const tete = normaliser(prop.replace(/^\s*(?:[-•▪*]\s*)?/, '')).replace(/^(?:le|la|les|l')\s*/, '');
+  if (formesAcheteur.some((f) => { const k = normaliser(f).replace(/^(?:le|la|les|l')\s*/, '').trim(); return k.length >= 3 && tete.startsWith(`${k} `); })) return false;
   return !AUTEUR_ACHETEUR.test(prop);
 }
 
@@ -586,6 +605,12 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
   // exigence de la matrice, reformulée par le modèle, ne compte que si le DCE contient lui-même le motif.
   const engageants = new Set(Object.values(mt.variables).filter((v) => v.valeur_si_exige && v.indicateur_exige).map((v) => v.indicateur_exige!));
   const dceNorm = normaliser(dce);
+  // Formes du nom de l'acheteur (nom, forme courte, sigle), pour reconnaître l'acheteur en sujet (T4G-6).
+  const formesAcheteur = (() => {
+    const nom = textePropre(ctx.cover?.client) || textePropre(ctx.analyse?.clientName);
+    if (!nom) return [] as string[];
+    try { const f = formesClient(nom, ctx.dce || ''); return [f.long, f.court?.nom || '', nom].filter(Boolean); } catch { return [nom]; }
+  })();
   for (const [nom, def] of Object.entries(mt.indicateurs)) {
     const raisons: string[] = [];
     let valeur = false;
@@ -611,11 +636,11 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
         if (def.auteur === 'titulaire') {
           m = null;
           for (const x of dceAffirme.matchAll(new RegExp(def.dce, 'gi'))) {
-            if (propositionDuTitulaire(propositionAutour(dceAffirme, x.index || 0, (x.index || 0) + x[0].length))) { m = x as RegExpExecArray; break; }
+            if (propositionDuTitulaire(propositionAutour(dceAffirme, x.index || 0, (x.index || 0) + x[0].length), formesAcheteur)) { m = x as RegExpExecArray; break; }
           }
         }
         if (m) raisons.push(`DCE : « ${extrait(dceAffirme, m.index, m[0].length)} »`);
-        const e = matrice.find((x) => rx.test(sansMentionsNiees(x.exigence)) && (def.auteur !== 'titulaire' || propositionDuTitulaire(x.exigence)));
+        const e = matrice.find((x) => rx.test(sansMentionsNiees(x.exigence)) && (def.auteur !== 'titulaire' || propositionDuTitulaire(x.exigence, formesAcheteur)));
         const sourceDce = !engageants.has(nom) || (def.motif_dce ? dceNorm.includes(normaliser(def.motif_dce)) : !!m);
         if (e && sourceDce) raisons.push(`exigence : « ${e.exigence.slice(0, 120)} »`);
         else if (e) journalIndicateur(`[MemoireType] Indicateur ${nom} : exigence de la matrice écartée, motif absent du DCE (« ${e.exigence.slice(0, 120)} »).`);
@@ -628,7 +653,7 @@ export function evaluerIndicateurs(mt: MemoireType, ctx: ContexteMarche): Record
       if (def.matrice?.length && (!engageants.has(nom) || (def.motif_dce ? dceNorm.includes(normaliser(def.motif_dce)) : raisons.some((r) => r.startsWith('DCE'))))) {
         const rxDce = def.dce ? new RegExp(def.dce, 'i') : null;
         const rattachees = matrice.filter((x) => x.rubrique && def.matrice!.includes(x.rubrique));
-        const e = rattachees.find((x) => (!rxDce || rxDce.test(x.exigence.replace(/[’`]/g, "'"))) && (def.auteur !== 'titulaire' || propositionDuTitulaire(x.exigence)));
+        const e = rattachees.find((x) => (!rxDce || rxDce.test(x.exigence.replace(/[’`]/g, "'"))) && (def.auteur !== 'titulaire' || propositionDuTitulaire(x.exigence, formesAcheteur)));
         if (e) raisons.push(`exigence rattachée à ${e.rubrique} : « ${e.exigence.slice(0, 120)} »`);
         else if (rattachees.length && !raisons.length) journalIndicateur(`[MemoireType] Indicateur ${nom} : exigence rattachée à ${rattachees[0].rubrique} écartée, motif de l'indicateur absent de son texte (« ${rattachees[0].exigence.slice(0, 120)} »).`);
       }
