@@ -12,7 +12,8 @@ describe('contrôles inopinés (T5N-4)', () => {
     expect(controlesInopinesDe('au moins une fois par mois de nuit et au moins une fois par mois le week-end de jour')).toBe('au moins deux contrôles inopinés');
     expect(controlesInopinesDe('au moins trois fois par mois')).toBe('au moins trois contrôles inopinés');
     expect(controlesInopinesDe('tous les mois')).toBe('un contrôle inopiné');
-    expect(controlesInopinesDe('une fois par semaine')).toBe('');
+    // T7G-2 : une fréquence hebdomadaire donne au moins quatre contrôles par mois (un mois compte au moins quatre semaines).
+    expect(controlesInopinesDe('une fois par semaine')).toBe('au moins quatre contrôles inopinés');
     const ctx: any = { analyse: {}, dce: 'Le titulaire réalise des contrôles inopinés au moins une fois par mois de nuit et au moins une fois par mois le week-end de jour.', cover: {}, referents: '',
       imposees: { FREQ_CONTROLE_2: { valeur: 'au moins une fois par mois de nuit et au moins une fois par mois le week-end de jour', citation: 'x' } } };
     const prep = preparerMemoireType(ctx, { memoireType: mt });
@@ -21,8 +22,10 @@ describe('contrôles inopinés (T5N-4)', () => {
     expect(t).toContain('au moins deux contrôles inopinés de nos contrôleurs');
     expect(t).not.toMatch(/un à trois/);
     const autre = preparerMemoireType({ ...ctx, imposees: { FREQ_CONTROLE_2: { valeur: 'une fois par semaine', citation: 'x' } } }, { memoireType: mt });
-    expect(autre.variables.CONTROLES_INOPINES_MENSUELS.valeur).toBeNull();
-    expect(autre.variables.CONTROLES_INOPINES_MENSUELS.question).toMatch(/combien de contrôles inopinés par mois/);
+    expect(autre.variables.CONTROLES_INOPINES_MENSUELS.valeur).toBe('au moins quatre contrôles inopinés');
+    // Fréquence qui ne se ramène pas au mois sans choix (de nuit le week-end) : la question reste posée.
+    const nuit = preparerMemoireType({ ...ctx, imposees: { FREQ_CONTROLE_2: { valeur: 'une fois par semaine de nuit', citation: 'x' } } }, { memoireType: mt });
+    expect(nuit.variables.CONTROLES_INOPINES_MENSUELS.question).toMatch(/combien de contrôles inopinés par mois/);
   });
 });
 

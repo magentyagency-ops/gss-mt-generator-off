@@ -1843,6 +1843,12 @@ export function normaliserExpressionsDelai(t: string): string {
     .replace(/(\bd['’]\s*|\bde\s+)?(?<![\p{L}])trois[\s-]+quarts?\s+d['’]\s*heure(?![\p{L}])/giu, (_m, de) => `${de ? 'de ' : ''}45 minutes`)
     .replace(/(?<![\p{L}])(dans|sous|en)\s+le\s+quart\s+d['’]\s*heure(?![\p{L}])/giu, '$1 15 minutes')
     .replace(/(\bd['’]\s*|\bde\s+)?(?<![\p{L}\d])(?:une?\s+(?:quart|1\s*\/\s*4|¼)|1\s*\/\s*4|¼)\s+d['’]\s*heure(?![\p{L}])/giu, (_m, de) => `${de ? 'de ' : ''}15 minutes`)
+    // T7G-3, T7G-10 : « une heure et quart » (75), « deux heures et trois quarts », « H+2 » (dans 2 heures), « d'un jour »
+    // (24 heures), « = 30 minutes » après un libellé de délai (« … déclenchement d'alarme = 30 minutes »).
+    .replace(/(?<![\d\p{L}])(\d{1,2})\s*(?:h|heures?)\s+et\s+(quart|trois[\s-]+quarts)(?![\p{L}])/giu, (_m, h: string, q: string) => `${Number(h) * 60 + (/trois/i.test(q) ? 45 : 15)} minutes`)
+    .replace(/(?<![\p{L}\d])[àa]?\s*H\s*\+\s*(\d{1,2})(?![\d\p{L}])/gu, (_m, n: string) => ` dans ${n} heures`)
+    .replace(/(?<![\p{L}])(dans|sous|en|de|d['’])\s*(?:un\s+d[ée]lai\s+(?:maxim(?:al|um)\s+)?(?:de\s+|d['’]\s*))?(?:un|1)\s+jour(?![\p{L}])/giu, (_m, p: string) => `${/^(?:de|d['’])$/i.test(p) ? 'de' : p} 24 heures`)
+    .replace(/\s*=\s*(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/gu, ' dans ')
     // « ≤ 2 heures », « < 30 min » : un délai maximal (« dans »).
     .replace(/(?:≤|<|&lt;)\s*(?=\d{1,4}\s*(?:minutes?|mn|min|heures?|h)(?![\p{L}]))/gu, 'dans ')
     // Heures suivies de minutes en lettres (« une heure trente », « deux heures quinze », T2-GEN-2) : en minutes, comme

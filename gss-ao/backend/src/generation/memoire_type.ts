@@ -221,7 +221,7 @@ export const VARIABLES_CALCULEES = new Set<string>([
 /** Variables qu'un CCTP peut imposer (délais, fréquences) : la valeur du CCTP remplace celle de GSS. */
 export const VARIABLES_IMPOSABLES = [
   'DELAI_ASTREINTE', 'DELAI_PTI', 'DELAI_INTERVENTION_ALARME', 'DELAI_COMMANDE_SUPPLEMENTAIRE', 'DELAI_DEFAILLANCE_SSI',
-  'FREQ_CONTROLE_1', 'FREQ_CONTROLE_2', 'FREQ_CONTROLE_3', 'CONTROLES_INOPINES_MENSUELS', 'FREQ_REUNIONS',
+  'FREQ_CONTROLE_1', 'FREQ_CONTROLE_2', 'FREQ_CONTROLE_3', 'CONTROLES_INOPINES_MENSUELS', 'FREQ_REUNIONS', 'JALON_ENVOI_CLIENT',
 ];
 
 const RX_VARIABLE = /\{\{\s*([A-Z0-9_]+)\s*\}\}/g;
@@ -1856,7 +1856,12 @@ const MOIS = 'janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre
 
 /** Date de début d'exécution écrite dans le DCE (« date prévisionnelle de démarrage … fixée au 1er janvier 2027 »). */
 export function dateDebutMarche(dce: string): string {
-  const d = String(dce || '').replace(/\s+/g, ' ');
+  // T7G-10 : mois abrégés (« 1er janv. 2027 »), « premier » pour « 1er », date ISO (« 2027-01-01 ») ramenés aux formes lues.
+  const ABREGES: Record<string, string> = { janv: 'janvier', fevr: 'février', fev: 'février', avr: 'avril', juil: 'juillet', sept: 'septembre', oct: 'octobre', nov: 'novembre', dec: 'décembre' };
+  const d = String(dce || '').replace(/\s+/g, ' ')
+    .replace(/(?<![\p{L}])(janv|f[ée]vr?|avr|juil|sept|oct|nov|d[ée]c)\.?(?=\s+\d{4})/giu, (m, a: string) => ABREGES[normaliser(a)] || m)
+    .replace(/(?<![\p{L}])premier\s+(?=(?:janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre)\s+\d{4})/giu, '1er ')
+    .replace(/(?<![\d-])(\d{4})-(\d{2})-(\d{2})(?![\d-])/g, (_m, a: string, mo: string, j: string) => `${Number(j)}/${Number(mo)}/${a}`);
   // Date en lettres (« 1er janvier 2027 ») ou en chiffres (« 01/01/2027 », réécrite « 1er janvier 2027 »), T1-GEN-15.
   const DATE = `((?:1er|\\d{1,2})\\s+(?:${MOIS})\\s+\\d{4}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{4})`;
   // Tournures (T3G-11) : « date de commencement », « Le présent marché prendra effet le… », « L'accord-cadre débutera le… »,
@@ -1909,10 +1914,11 @@ const RX_DELAI = /(?:dans|sous|en(?:\s+moins\s+de)?|moins\s+de|d[ée]lai(?:\s+ma
  * informer l'acheteur, traiter ou acquitter une alarme au PC, prendre en compte) n'est jamais un délai de présence, quel
  * que soit le sujet nommé dans la phrase.
  */
-const ACTION_PRESENCE = /interv(?:ien|en)\p{L}*|arriv\p{L}*|(?<![\p{L}])sur (?:site|place|les lieux)(?![\p{L}])|(?<![\p{L}])pr[ée]sen(?:t|te|ts|tes|ce)(?![\p{L}])|(?<![\p{L}])(?:se\s+)?rend(?:re|ra|ront|e|ent)?\s+sur|d[ée]plac\p{L}*|d[ée]p[êe]ch\p{L}*|rempla[cç]\p{L}*|pourv\p{L}*|(?<![\p{L}])relev[ée]e?s?(?![\p{L}])|(?<![\p{L}])rel[èe]ve(?![\p{L}])|mobilis\p{L}*|mise?s?\s+en\s+place|mett\p{L}*\s+en\s+place|met\s+en\s+place|lev[ée]es?\s+de\s+doute|ex[ée]cut\p{L}*|mise?s?\s+[àa]\s+disposition|mett\p{L}*\s+[àa]\s+disposition|renfor\p{L}*|compens\p{L}*|palli\p{L}*|suppl[ée][ée]\p{L}*|prise\s+de\s+(?:poste|service)/giu;
+const ACTION_PRESENCE = /interv(?:ien|en)\p{L}*|arriv\p{L}*|(?<![\p{L}])sur (?:site|place|les lieux)(?![\p{L}])|(?<![\p{L}])pr[ée]sen(?:t|te|ts|tes|ce)(?![\p{L}])|(?<![\p{L}])(?:se\s+)?rend(?:re|ra|ront|e|ent)?\s+sur|d[ée]plac\p{L}*|d[ée]p[êe]ch\p{L}*|rempla[cç]\p{L}*|pourv\p{L}*|(?<![\p{L}])relev[ée]e?s?(?![\p{L}])|(?<![\p{L}])rel[èe]ve(?![\p{L}])|mobilis\p{L}*|mise?s?\s+en\s+place|mett\p{L}*\s+en\s+place|met\s+en\s+place|lev[ée]es?\s+de\s+doute|ex[ée]cut\p{L}*|mise?s?\s+[àa]\s+disposition|mett\p{L}*\s+[àa]\s+disposition|met\s+[àa]\s+disposition|honor\p{L}*|renfor\p{L}*|compens\p{L}*|palli\p{L}*|suppl[ée][ée]\p{L}*|prise\s+de\s+(?:poste|service)/giu;
 const ACTION_DOCUMENT = /transm\p{L}*|adress[ée]\p{L}*|(?<![\p{L}])adresse(?:r|nt)?(?![\p{L}])|remet\p{L}*|remis\p{L}*|envo[iy]\p{L}*|communiqu\p{L}*|inform\p{L}*|signal\p{L}*|notifi\p{L}*|rapports?(?![\p{L}])|comptes?[- ]rendus?|trait(?:e|ent|er|era|eront|é|ée|és|ées|ement)(?![\p{L}])|acquitt\p{L}*|pri(?:se|s|ses)\s+en\s+compte|prendre\s+en\s+compte|enregistr\p{L}*|r[ée]pond\p{L}*|r[ée]ponse|bilans?(?![\p{L}])|rappel\p{L}*|contre[- ]appel|pr[ée]ven(?:ir|u|ue|us|ance)\p{L}*|avert\p{L}*|appliqu\p{L}*\s+(?:les\s+|des\s+)?consignes|factur\p{L}*/giu;
 /** Document dont le nom porte une action de présence (« rapport d'intervention », « compte rendu d'intervention ») : un document. */
-const DOCUMENT_DE_PRESENCE = /(?:rapports?|comptes?[- ]rendus?|fiches?|bons?|bilans?|relev[ée]s?|registres?|main courante)\s+(?:d['’]\s*|de\s+(?:l['’]\s*)?|des\s+)(?:interventions?|arriv[ée]es?|remplacements?|rondes?|lev[ée]es?\s+de\s+doute)/giu;
+// (T7G-3 : aussi l'objet d'une information, « doit être informé systématiquement des interventions dans les 3 minutes »)
+const DOCUMENT_DE_PRESENCE = /(?:rapports?|comptes?[- ]rendus?|fiches?|bons?|bilans?|relev[ée]s?|registres?|main courante|inform[ée]e?s?|avis[ée]e?s?|pr[ée]venue?s?)\s+(?:\p{L}+ment\s+)?(?:d['’]\s*|de\s+(?:l['’]\s*)?|des\s+)(?:interventions?|arriv[ée]es?|remplacements?|rondes?|lev[ée]es?\s+de\s+doute)/giu;
 /** Remplacement d'un objet (« remplacent les badges perdus »), jamais celui d'un agent. */
 const REMPLACEMENT_D_OBJET = /rempla[cç]\p{L}*\s+(?:(?:les?|la|l['’]|des|du|de|un|une|leurs?|ses?|son|sa)\s*)?(?:[\p{L}-]+\s+)?(?:v[ée]hicules?|t[ée]l[ée]phones?|mat[ée]riels?|cl[ée]s?|cylindres?|badges?|[ée]quipements?|batteries?|appareils?|terminaux|terminal|radios?|talkies?|uniformes?|tenues?|piles?|ampoules?)(?![\p{L}])/giu;
 
@@ -1958,10 +1964,12 @@ const SUJETS_DELAI: Record<string, { sujet: RegExp; exclure?: RegExp; objet?: Re
     objet: /v[ée]hicules?|t[ée]l[ée]phones?|mat[ée]riels?|(?<![\wÀ-ÿ])cl[ée]s?(?![\wÀ-ÿ])|cylindres?|badges?|[ée]quipements?|batteries?|(?<![\wÀ-ÿ])pannes?(?![\wÀ-ÿ])|appareils?|terminal|terminaux|radios?|talkies?|uniformes?|tenues?/i,
     personnel: /agents?|personnels?|effectifs?|postes?|absen|d[ée]faillan|salari[ée]s?|vacations?|rondiers?|gardiens?|SSIAP|chefs?|rempla[cç]ants?/i,
   },
-  alarme: { sujet: /alarme|t[ée]l[ée]\s?-?surveillance|lev[ée]e de doute|d[ée]clenchement/i, exclure: /(?<![\wÀ-ÿ])(?:PTI|DATI)(?![\wÀ-ÿ])|travailleur isol/i },
+  // T7G-3 : vocabulaire de l'alarme (intrusion, effraction, détection, alerte, télésurveilleur, station ou centrale de
+  // surveillance, PC sécurité).
+  alarme: { sujet: /alarme|t[ée]l[ée]\s?-?surveill|lev[ée]e de doute|d[ée]clenchement|intrusion|effraction|(?<![\p{L}])d[ée]tect[ée]e?s?(?![\p{L}])|d[ée]tection|(?<![\p{L}])alertes?(?![\p{L}])|station\s+(?:de\s+)?(?:t[ée]l[ée])?surveillance|centrale\s+(?:de\s+)?(?:t[ée]l[ée])?surveillance|PC\s+s[ée]curit[ée]/iu, exclure: /(?<![\wÀ-ÿ])(?:PTI|DATI)(?![\wÀ-ÿ])|travailleur isol/i },
   pti: { sujet: /(?<![\wÀ-ÿ])(?:PTI|DATI)(?![\wÀ-ÿ])|travailleur isol/i },
   // « mise à disposition urgente attendue dans un délai de 2 heures » (citedia2, pénalités du CCAP) : délai d'une commande.
-  commande: { sujet: /bons? de commande|commandes? (?:compl[ée]mentaires?|suppl[ée]mentaires?)|prestations? (?:ponctuelles?|exceptionnelles?|suppl[ée]mentaires?)|mises? [àa] disposition (?:urgentes? )?(?:attendue|d.agents?|de personnel)/i, exclure: /pr[ée]venance/i },
+  commande: { sujet: /bons? de commande|commandes? (?:compl[ée]mentaires?|suppl[ée]mentaires?)|prestations? (?:ponctuelles?|exceptionnelles?|suppl[ée]mentaires?)|besoins? (?:ponctuels?|suppl[ée]mentaires?|exceptionnels?)|mises? [àa] disposition (?:urgentes? )?(?:attendue|d.agents?|de personnel)|met(?:tre|tra|tent)?\s+[àa]\s+disposition\s+(?:le|du|des|un|une)?\s*(?:personnel|agents?)/i, exclure: /pr[ée]venance/i },
   ssi: { sujet: /(?<![\wÀ-ÿ])SSI(?![\wÀ-ÿ])|s[ée]curit[ée] incendie/i },
 };
 
@@ -2275,7 +2283,7 @@ const FREQUENCES: Array<[RegExp, string | ((m: RegExpMatchArray) => string)]> = 
   [/toutes les (?:deux|2) semaines|tous les quinze jours|tous les 15 jours/i, 'toutes les deux semaines'],
   [/toutes les (?:quatre|4) semaines/i, 'toutes les quatre semaines'],
   // « bi-hebdomadaire » (deux fois par semaine, ou toutes les deux semaines selon les rédacteurs) : jamais « chaque semaine ».
-  [/(?<!bi-?)hebdomadaires?|chaque semaine|toutes les semaines|une fois par semaine/i, 'chaque semaine'],
+  [/(?<!bi-?)hebdomadaires?|chaque semaine|toutes les semaines|une fois par semaine|chaque (?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?![\wÀ-ÿ])|tous les (?:lundis|mardis|mercredis|jeudis|vendredis|samedis|dimanches)/i, 'chaque semaine'],
   [/(?<![\wÀ-ÿ])annuel(?:le)?s?|chaque ann[ée]e|une fois par an(?![\wÀ-ÿ])/i, 'chaque année'],
 ];
 
@@ -2308,7 +2316,8 @@ function frequenceDeLaReunion(prop: string, debut: number, fin: number): boolean
  * Réunion de suivi nommée (T6G-14) : « réunion(s) », « se réunit / se réuniront », « comité de suivi / de pilotage », « point
  * (de suivi) mensuel ». Les bilans et rapports restent exclus (frequenceDeLaReunion).
  */
-const RX_REUNION = /r[ée]unions?|(?<![\p{L}])se\s+r[ée]uni(?:t|ra|ront|ssent|r)(?![\p{L}])|comit[ée]s?\s+(?:de\s+)?(?:suivi|pilotage)|(?<![\p{L}])points?\s+(?:de\s+suivi|(?:bi|tri|se)?mensuels?|hebdomadaires?|trimestriels?|semestriels?|annuels?)(?![\p{L}])/iu;
+// (T7G-10 : « rencontre », « revue de contrat / de suivi / trimestrielle » nomment aussi la réunion de suivi)
+const RX_REUNION = /r[ée]unions?|(?<![\p{L}])rencontres?(?![\p{L}])|(?<![\p{L}])revues?\s+(?:de\s+)?(?:contrat|suivi|performance|qualit[ée]|direction|service|mensuelles?|trimestrielles?|semestrielles?|annuelles?)(?![\p{L}])|(?<![\p{L}])se\s+r[ée]uni(?:t|ra|ront|ssent|r)(?![\p{L}])|comit[ée]s?\s+(?:de\s+)?(?:suivi|pilotage)|(?<![\p{L}])points?\s+(?:de\s+suivi|(?:bi|tri|se)?mensuels?|hebdomadaires?|trimestriels?|semestriels?|annuels?)(?![\p{L}])/iu;
 /**
  * DCE lu pour les fréquences (T6G-4, T6G-9) : tableaux de PDF réécrits en lignes « a | b », chaque ligne de tableau (ou ligne
  * étiquetée « … — En-tête: valeur ») est une phrase à part, et un intitulé (« ARTICLE 10 – CONTRÔLES ET SUIVI ») n'est jamais
@@ -2318,7 +2327,7 @@ function dcePourFrequences(dce: string): string {
   return tableauxEnColonnes(dce).split('\n').map((l) => {
     const t = l.trim();
     if (/\|/.test(t) || /\s[—–]\s[^:|]{2,60}:\s*\S/.test(t)) return `\n\n${t.replace(/[.;]?\s*$/, '')}.\n\n`;
-    if (/^(?:ARTICLE|Article|CHAPITRE|Chapitre|TITRE|PARTIE)\b|^\d{1,2}(?:[.\-–]\s?\d{1,2})*[.\-–]?\s+[A-ZÉÈ]/.test(t) && t.length <= 120 && !/[.;:!?]$/.test(t)) return `\n\n${t}.\n\n`;
+    if (/^(?:ARTICLE|Article|CHAPITRE|Chapitre|TITRE|PARTIE)\b|^\d{1,2}(?:[.\-–]\s?\d{1,2})*[.\-–]?\s+[A-ZÉÈ]|^[a-z][.)]\s+[A-ZÉÈ]/.test(t) && t.length <= 120 && !/[.;:!?]$/.test(t)) return `\n\n${t}.\n\n`;
     return l;
   }).join('\n');
 }
@@ -2375,9 +2384,14 @@ export function phraseFrequenceReunionsDce(dce: string): string {
   }
   // Phrase du corps de l'article (avec son verbe) avant un intitulé d'article sans verbe (« a. Réunions de suivi mensuelles »,
   // imm, T4N-4) : c'est elle qui fixe la fréquence.
-  const phrase = (x: string) => /[.!?]$/.test(x) || /\b(?:est|sont|sera|seront|doit|doivent|devra|devront|participe\w*|organis\w*|tien(?:t|nent|dra|dront)|a lieu|ont lieu|aura lieu|auront lieu|se r[ée]uni\w*|r[ée]unit|pr[ée]voi\w*)\b/i.test(x);
+  const VERBE = /\b(?:est|sont|sera|seront|doit|doivent|devra|devront|participe\w*|organis\w*|tien(?:t|nent|dra|dront)|a lieu|ont lieu|aura lieu|auront lieu|se r[ée]uni\w*|r[ée]unit|pr[ée]voi\w*)\b/i;
+  // T7-REG-2 : un intitulé (« ARTICLE 7 – RÉUNIONS MENSUELLES DE SUIVI », « 7.2 Réunions mensuelles de suivi ») reçoit un point
+  // dans dcePourFrequences pour être lu à part : ce n'est jamais une phrase ; cité en dernier recours, sans ce point.
+  const intitule = (x: string) => (/^(?:ARTICLE|Article|CHAPITRE|Chapitre|TITRE|PARTIE)\b|^\d{1,2}(?:[.\-–]\s?\d{1,2})*[.\-–]?\s+[A-ZÉÈ]|^[a-z][.)]\s+[A-ZÉÈ]/.test(x.trim()) || x.replace(/[^A-Za-zÀ-ÿ]/g, '').replace(/[^A-ZÀ-Ý]/g, '').length / Math.max(1, x.replace(/[^A-Za-zÀ-ÿ]/g, '').length) > 0.8) && x.length <= 121 && !VERBE.test(x);
+  const phrase = (x: string) => !intitule(x) && (/[.!?]$/.test(x) || VERBE.test(x));
   const suivi = (x: string) => /(?:r[ée]unions?|comit[ée]s?|points?)\s+(?:\S+\s+){0,2}?de\s+suivi/i.test(x) && !/pilotage|bilan|coordination/i.test(x);
-  return trouvees.find((x) => phrase(x) && suivi(x)) || trouvees.find(phrase) || trouvees[0] || '';
+  const r = trouvees.find((x) => phrase(x) && suivi(x) && VERBE.test(x)) || trouvees.find((x) => phrase(x) && VERBE.test(x)) || trouvees.find((x) => phrase(x) && suivi(x)) || trouvees.find(phrase) || trouvees[0] || '';
+  return intitule(r) ? r.replace(/\.\s*$/, '') : r;
 }
 
 /** Fondement juridique de la reprise CITÉ PAR LE DCE (jamais d'article L. 1224-1 si le DCE ne le cite pas). */
@@ -2420,7 +2434,11 @@ export function qualificationsDuDce(dce: string, analyse?: any): string[] {
   if (/C\.?\s?Q\.?\s?P\.?\s?-?\s?A\.?\s?[PD]\.?\s?S(?![\wÀ-ÿ])|CQPAPS|certificat de qualification professionnelle (?:d.|des\s+)agents?\s+de\s+(?:pr[ée]vention|s[ée]curit[ée])|(?<![\wÀ-ÿ])TFP\s*-?\s*APS(?![\wÀ-ÿ])|titre [àa] finalit[ée] professionnelle d.agent de pr[ée]vention|(?<![\wÀ-ÿ])(?:CQP|TFP|titre\s+[àa]\s+finalit[ée]\s+professionnelle|certificat\s+de\s+qualification\s+professionnelle)\s*[«"“]?\s*(?:d['’]\s*|de\s+l['’]\s*)?agents?\s+de\s+pr[ée]vention\s+et\s+de\s+s[ée]curit[ée]|certificat\s+de\s+qualification\s+professionnelle\s*[«"“(]?\s*A\.?\s?[PD]\.?\s?S\.?(?![\wÀ-ÿ])/i.test(t)) out.push('CQP APS');
   // Sigles à points ramenés à leur forme (T6G-13) : « S.S.T. » = SST, « P.S.C.1 » = PSC1.
   if (/(?<![\wÀ-ÿ])(?:SST|S\.\s?S\.\s?T\.?)(?![\wÀ-ÿ])|sauveteurs?[\s-]+secouristes?\s+du\s+travail/i.test(t)) out.push('SST');
-  if (/(?<![\wÀ-ÿ])P\.?\s?S\.?\s?C\.?\s*-?\s*1(?!\d)/i.test(t)) out.push('PSC1');
+  // (T7G-10 : « AFPS », attestation de formation aux premiers secours, devenue le PSC1 ; « prévention et secours civiques de
+  // niveau 1 »)
+  if (/(?<![\wÀ-ÿ])P\.?\s?S\.?\s?C\.?\s*-?\s*1(?!\d)|(?<![\wÀ-ÿ])A\.?F\.?P\.?S\.?(?![\wÀ-ÿ])|attestation\s+de\s+formation\s+aux\s+premiers\s+secours|pr[ée]vention\s+et\s+secours\s+civiques\s+de\s+niveau\s+1/i.test(t)) out.push('PSC1');
+  // CQP d'agent de sécurité cynophile (T7G-10).
+  if (/C\.?\s?Q\.?\s?P\.?\s?-?\s?A\.?\s?S\.?\s?C(?![\wÀ-ÿ])|(?:CQP|certificat\s+de\s+qualification\s+professionnelle)[^.;]{0,20}agents?\s+de\s+s[ée]curit[ée]\s+cynophiles?/i.test(t)) out.push('CQP ASC');
   // Habilitation électrique : le niveau écrit par le DCE (T4G-5 : « BS-BE manœuvre », « HO/BE Manœuvre », « H0B0V/BE », « B1V »,
   // « BR »), jamais ramené à H0B0 ; H0B0 (ou H0V) quand c'est le niveau demandé ou qu'aucun niveau n'est écrit.
   const niveaux = niveauxHabilitation(t);
@@ -2916,12 +2934,23 @@ const CALCULS: Record<string, Calculateur> = {
   JALON_ENVOI_CLIENT: (c) => {
     const gss = c.mt.variables.JALON_ENVOI_CLIENT?.valeur_gss || 'J-3';
     const k = Number((/J-(\d+)/.exec(gss) || [])[1] || 3);
-    const dce = c.ctx.delaisDuDce !== false ? envoiPlanningsClientDce(c.ctx.dce || '') : null;
+    let dce = c.ctx.delaisDuDce !== false ? envoiPlanningsClientDce(c.ctx.dce || '') : null;
+    // Jalon imposé lu par le modèle (T7G-4 : variable imposable, vérifiée comme les autres) : même règle que la lecture sans modèle.
+    const imp = c.ctx.imposees?.JALON_ENVOI_CLIENT;
+    if (!dce && imp && valeurPropre(imp.valeur)) {
+      const v = String(imp.valeur);
+      const jm = /J\s*[-–—−]\s*(\d{1,2})/.exec(v) || /(\d{1,2})\s+jours?/.exec(v);
+      const ouvres = /ouvr/i.test(v);
+      if (jm) dce = { jours: ouvres ? Math.ceil(Number(jm[1]) * 7 / 5) : Number(jm[1]), phrase: imp.citation, libelle: v, ouvres };
+    }
     if (!dce || dce.jours <= k) return { valeur: gss, source: 'pratique GSS (calendrier de planification)' };
-    // Strictement entre la validation par les agents (J-7) et J-3 : le calendrier reste dans l'ordre, chaque jalon à sa date.
-    if (dce.jours < 7) return { valeur: `J-${dce.jours}`, source: `imposé par le DCE : « ${dce.phrase.slice(0, 200)} »` };
+    // Strictement entre la validation par les agents (J-7) et J-3 : le calendrier reste dans l'ordre, chaque jalon à sa date. Un
+    // délai en jours ouvrés n'est jamais publié en jours calendaires (T7N-8) : la question est posée.
+    if (dce.jours < 7 && !dce.ouvres) return { valeur: `J-${dce.jours}`, source: `imposé par le DCE : « ${dce.phrase.slice(0, 200)} »` };
     const exigence = (dce.phrase.split(/(?<=\.)\s+(?=\S)/).pop() || dce.phrase).trim();
-    return { valeur: null, question: `Le cahier des charges impose d'envoyer les plannings au client au moins ${dce.jours} jours avant le début du mois (« ${exigence.length > 220 ? `${exigence.slice(0, 220).replace(/\s+\S*$/, '')}…` : exigence} ») ; votre calendrier prévoit J-10 l'envoi aux agents, J-7 leur validation et J-3 l'envoi au client. Quel jalon faut-il indiquer pour l'envoi des plannings au client ?` };
+    // (unité du DCE reprise telle quelle, T7N-8 : « au moins 10 jours ouvrés avant le début du mois », jamais « 14 jours »)
+    const delaiEcrit = /^J-/.test(dce.libelle) ? `à ${dce.libelle}` : dce.libelle;
+    return { valeur: null, question: `Le cahier des charges impose d'envoyer les plannings au client ${delaiEcrit} (« ${exigence.length > 220 ? `${exigence.slice(0, 220).replace(/\s+\S*$/, '')}…` : exigence} ») ; votre calendrier prévoit J-10 l'envoi aux agents, J-7 leur validation et J-3 l'envoi au client. Quel jalon faut-il indiquer pour l'envoi des plannings au client ?` };
   },
   DELAI_COMMANDE_SUPPLEMENTAIRE: (c) => delai(c, 'DELAI_COMMANDE_SUPPLEMENTAIRE', 'commande'),
   DELAI_DEFAILLANCE_SSI: (c) => delai(c, 'DELAI_DEFAILLANCE_SSI', 'ssi'),
@@ -2974,7 +3003,7 @@ export function variablesDuMarche(mt: MemoireType, ctx: ContexteMarche, indicate
     // T3N-2, imm : « La fréquence des contrôles sera de plusieurs fois par mois ») : l'engagement de GSS quand le cahier des
     // charges l'exige (au moins trois fois par mois, réponse de GSS du 1er octobre 2026) remplit l'exigence ; il reste, sans
     // question ni phrase adaptée. Seule une fréquence chiffrée plus élevée, ou précisée (de nuit, le week-end), la remplace.
-    if ((nom === 'FREQ_CONTROLE_2' || nom === 'CONTROLES_INOPINES_MENSUELS') && imp && valeurPropre(imp.valeur) && frequenceRempliePourGss(String(imp.valeur))) {
+    if ((nom === 'FREQ_CONTROLE_2' || nom === 'CONTROLES_INOPINES_MENSUELS') && imp && valeurPropre(imp.valeur) && frequenceRempliePourGss(String(imp.valeur), nom === 'CONTROLES_INOPINES_MENSUELS')) {
       const def = mt.variables[nom];
       out[nom] = def?.valeur_si_exige ? { valeur: def.valeur_si_exige, source: `engagement GSS quand le cahier des charges l'exige (exigence du DCE : « ${imp.citation.slice(0, 200)} »)` } : (CALCULS[nom]?.(c) || { valeur: null });
       continue;
@@ -2986,7 +3015,7 @@ export function variablesDuMarche(mt: MemoireType, ctx: ContexteMarche, indicate
     const sujetImp = SUJET_VARIABLE_DELAI[nom];
     const delaisMultiples = !!imp && !!sujetImp && ctx.delaisDuDce !== false
       && new Set(delaisDuDce(ctx.dce || '', sujetImp as keyof typeof SUJETS_DELAI).map((d) => d.minutes)).size > 1;
-    if (imp && valeurPropre(imp.valeur) && !delaisMultiples) {
+    if (imp && valeurPropre(imp.valeur) && !delaisMultiples && nom !== 'JALON_ENVOI_CLIENT') {
       out[nom] = { valeur: imp.valeur, source: `imposé par le DCE : « ${imp.citation.slice(0, 200)} »` };
       continue;
     }
@@ -2996,6 +3025,17 @@ export function variablesDuMarche(mt: MemoireType, ctx: ContexteMarche, indicate
     if (!variableRenseignee(out[nom]) && def?.question && !out[nom].question) {
       // Lecture du DCE faite sans modèle (rédaction indisponible, T6N-2) : la vraie cause, jamais « Le DCE ne permet pas de le trouver ».
       out[nom].question = nom === 'CLIENT' && ctx.analyse?.lectureSansModele ? "La lecture automatique du DCE a échoué : quel est le nom exact de l'acheteur ?" : def.question;
+    }
+  }
+  // T7G-2 : les deux variables disent la même fréquence imposée. Un nombre mensuel de contrôles inopinés imposé qui ne
+  // correspond pas à la fréquence imposée (FREQ_CONTROLE_2, non remplie par GSS) est recalculé d'après elle.
+  {
+    const f2 = ctx.imposees?.FREQ_CONTROLE_2 && !ctx.choix?.variables?.CONTROLES_INOPINES_MENSUELS ? String(ctx.imposees.FREQ_CONTROLE_2.valeur || '') : '';
+    const n2 = f2 && !frequenceRempliePourGss(f2) ? frequenceMensuelle(f2) : null;
+    const cim = ctx.imposees?.CONTROLES_INOPINES_MENSUELS ? frequenceMensuelle(String(ctx.imposees.CONTROLES_INOPINES_MENSUELS.valeur || ''), true) : null;
+    if (n2 !== null && cim !== null && Math.abs(Math.ceil(n2 - 0.34) - cim) > 0.05) {
+      const k = /semaine/.test(normaliserFrequence(f2)) ? Math.floor(n2) : Math.ceil(n2);
+      out.CONTROLES_INOPINES_MENSUELS = { valeur: `au moins ${LETTRES_FOIS[k] || k} contrôle${k > 1 ? 's' : ''} inopiné${k > 1 ? 's' : ''}`, source: `déduit de la fréquence imposée par le DCE (« ${f2} »)` };
     }
   }
   // Fréquence des contrôles inopinés imposée par le CCTP (becquerel 591, T5N-4 : « au moins une fois par mois de nuit et au
@@ -3017,38 +3057,50 @@ export function variablesDuMarche(mt: MemoireType, ctx: ContexteMarche, indicate
  * est transmis … au moins sept (7) jours avant le début du mois concerné » → 7 ; becquerel : « au moins 10 jours avant le début
  * du mois considéré » → 10 ; « au plus tard le 20 du mois précédent » → 10 ; « 10 jours ouvrés » → 14). null sinon.
  */
-export function envoiPlanningsClientDce(dce: string): { jours: number; phrase: string } | null {
-  const t = String(dce || '').replace(/\s+/g, ' ');
+export function envoiPlanningsClientDce(dce: string): { jours: number; phrase: string; libelle: string; ouvres: boolean } | null {
+  // Lignes de tableau (« Délai de transmission des plannings | 15 jours avant le mois concerné ») lues comme des phrases.
+  const t = String(dce || '').replace(/\r/g, '').split('\n').map((l) => (/\|/.test(l) ? `${l.replace(/\s*\|\s*/g, ' : ').replace(/[.;]?\s*$/, '')}.` : l)).join('\n').replace(/\s+/g, ' ');
   const phrases = t.split(/(?<=[.;])\s+(?=[A-ZÀ-Ý])/);
-  const LETTRES: Record<string, number> = { trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, neuf: 9, dix: 10, quinze: 15, vingt: 20 };
+  // Nombre en chiffres ou en lettres (T7G-4 : grammaire générale des nombres).
+  const NB = `(\\d{1,2}|${RX_NOMBRE_LETTRES})`;
+  const nb = (x: string): number => (/^\d+$/.test(x) ? Number(x) : nombreFr(x));
   // Phrase citée, avec la dernière phrase précédente quand elle seule ne nomme pas le planning (« Cette transmission se fait… »),
   // sans le titre numéroté collé (« 6.5 TRANSMISSION DU PLANNING MENSUEL »).
+  // (intitulé collé en tête retiré : « 6.5 TRANSMISSION DU PLANNING MENSUEL », « ARTICLE 6 – PLANNING »)
+  const sansIntitule = (x: string) => x.replace(/^(?:(?:ARTICLE|Article|CHAPITRE|Chapitre)\s+)?\d+(?:\.\d+)*\s*[–—:.-]?\s*[A-ZÀ-Ý'’ –-]+?\s+(?=[A-ZÀ-Ý][a-zà-ÿ])/, '').trim();
   const citer = (i: number): string => {
-    if (/plannings?/i.test(phrases[i])) return phrases[i].trim();
-    const prec = (String(phrases[i - 1] || '').split(/(?<=\.)\s+(?=\S)/).pop() || '').replace(/^\d+(?:\.\d+)*\s+[A-ZÀ-Ý'’ ]+?\s+(?=[A-ZÀ-Ý][a-zà-ÿ])/, '');
-    return `${prec} ${phrases[i]}`.trim();
+    if (/plannings?/i.test(phrases[i])) return sansIntitule(phrases[i]);
+    const prec = sansIntitule(String(phrases[i - 1] || '').split(/(?<=\.)\s+(?=\S)/).pop() || '');
+    return `${prec} ${sansIntitule(phrases[i])}`.trim();
   };
+  // Échéance : début du mois (de chaque mois, du mois concerné, du mois suivant), période, mise en œuvre ou place, prestation.
+  const ECHEANCE = String.raw`(?:le\s+d[ée]but\s+(?:d[ue]\s+|de\s+(?:chaque|la)\s+|de\s+l['’]\s*)?|la\s+fin\s+d[ue]\s+|le\s+|chaque\s+|sa\s+|leur\s+|la\s+)?(?:mois(?:\s+(?:suivant|concern[ée]|consid[ée]r[ée]|[àa]\s+venir|M\s*\+\s*1))?|p[ée]riode|mise\s+en\s+(?:œuvre|oeuvre|place|application)|prestations?|ex[ée]cution|application)`;
+  const resultat = (i: number, jours: number, libelle: string, ouvres = false) => ({ jours, phrase: citer(i), libelle: sansNombreDouble(libelle).replace(/\s+/g, ' ').trim(), ouvres });
   for (let i = 0; i < phrases.length; i++) {
     const ph = phrases[i];
     // La phrase du délai ou la précédente nomment le planning et son envoi au client.
     const avec = `${phrases[i - 1] || ''} ${ph}`;
-    if (!/plannings?/i.test(avec) || !/transm[ie]|envo[yi]|communiqu|remi[st]|remet|adress|fourni/i.test(avec) || /modification|changement/i.test(ph.split(/\d|jours/)[0] || '')) continue;
-    const m = /(?:au moins|au minimum|minimum|au plus tard)?\s*(\d{1,2}|trois|quatre|cinq|six|sept|huit|neuf|dix|quinze|vingt)(?:\s*\(\s*[\da-zé]{1,8}\s*\))?\s+jours?\s*(ouvr[ée]s|ouvrables|calendaires)?\s+avant\s+(?:le\s+d[ée]but\s+d[ue]\s+|la\s+fin\s+d[ue]\s+)?(?:mois|p[ée]riode)/i.exec(ph);
+    if (!/plannings?/i.test(avec) || !/transm[ie]|envo[yi]|communiqu|remi[st]|remet|adress|fourni|transmission|d[ée]lai/i.test(avec) || /modification|changement/i.test(ph.split(/\d|jours/)[0] || '')) continue;
+    const m = new RegExp(String.raw`(?:au\s+moins|au\s+minimum|minimum|au\s+plus\s+tard)?\s*${NB}(?:\s*\(\s*[\da-zé]{1,8}\s*\))?\s+jours?\s*(ouvr[ée]s|ouvrables|calendaires|francs)?\s+(?:avant|pr[ée]c[ée]dant)\s+${ECHEANCE}`, 'iu').exec(ph);
     if (m) {
-      let n = /^\d+$/.test(m[1]) ? Number(m[1]) : LETTRES[m[1].toLowerCase()];
-      if (m[2] && /ouvr/i.test(m[2])) n = Math.ceil(n * 7 / 5);
-      if (/la\s+fin\s+d/i.test(m[0])) n = Math.max(0, n);
-      // Phrase citée avec la précédente quand elle seule ne nomme pas le planning (« Cette transmission se fait … »).
-      if (n) return { jours: n, phrase: citer(i) };
+      const n0 = nb(m[1]);
+      const ouvres = !!m[2] && /ouvr/i.test(m[2]);
+      // (« 10 jours ouvrés » : 14 jours calendaires au moins pour la comparaison interne, jamais publié ainsi, T7N-8)
+      const n = ouvres ? Math.ceil(n0 * 7 / 5) : n0;
+      // (libellé : les mots du DCE, jamais une échéance reformulée)
+      if (n) return resultat(i, n, m[0].trim(), ouvres);
     }
-    // « une semaine avant », « deux semaines avant le début du mois » (T5G-7) : en jours.
-    const sem = /(?:au moins|au minimum|minimum|au plus tard)?\s*(une?|deux|trois|quatre|\d{1,2})\s+semaines?\s+avant\s+(?:le\s+d[ée]but\s+d[ue]\s+|la\s+fin\s+d[ue]\s+)?(?:mois|p[ée]riode|prestation|mise en (?:œuvre|oeuvre|place))/i.exec(ph);
-    if (sem) { const k = /^\d+$/.test(sem[1]) ? Number(sem[1]) : ({ un: 1, une: 1, deux: 2, trois: 3, quatre: 4 } as Record<string, number>)[sem[1].toLowerCase()]; if (k) return { jours: 7 * k, phrase: citer(i) }; }
+    // « une semaine avant », « deux semaines avant le début du mois », « deux semaines à l'avance » (T5G-7, T7G-4) : en jours.
+    const sem = new RegExp(String.raw`(?:au\s+moins|au\s+minimum|minimum|au\s+plus\s+tard)?\s*${NB}\s+semaines?\s+(?:avant\s+${ECHEANCE}|[àa]\s+l['’]avance)`, 'iu').exec(ph);
+    if (sem) { const k = nb(sem[1]); if (k) return resultat(i, 7 * k, sem[0].trim()); }
     // « à J-7 », « J – 10 » dans la phrase du planning (T5G-7).
     const j = /(?<![\p{L}\d])J\s*[-–—−]\s*(\d{1,2})(?!\d)/u.exec(ph);
-    if (j && Number(j[1]) > 0) return { jours: Number(j[1]), phrase: citer(i) };
-    const d = /au plus tard le (\d{1,2})(?:er)? du mois (?:pr[ée]c[ée]dent|en cours)/i.exec(ph);
-    if (d) return { jours: Math.max(1, 30 - Number(d[1])), phrase: citer(i) };
+    if (j && Number(j[1]) > 0) return resultat(i, Number(j[1]), `J-${j[1]}`);
+    // « (au plus tard) le 15 du mois précédent / M-1 », « avant le 15 de chaque mois pour le mois suivant », « à la mi-mois » (T7G-4).
+    const d = new RegExp(String.raw`(?:au\s+plus\s+tard\s+|avant\s+)?le\s+(\d{1,2})(?:er)?\s+(?:du\s+mois\s+(?:pr[ée]c[ée]dent|en\s+cours|M\s*-\s*1)|de\s+chaque\s+mois\s+pour\s+le\s+mois\s+suivant)`, 'iu').exec(ph);
+    if (d) return resultat(i, Math.max(1, 30 - Number(d[1])), d[0].trim());
+    const mi = /(?:au\s+plus\s+tard\s+)?(?:[àa]\s+la\s+)?mi-mois(?:\s+du\s+mois\s+(?:M|pr[ée]c[ée]dent))?/iu.exec(ph);
+    if (mi && /mois\s+(?:M\s*\+\s*1|suivant)|du\s+mois\s+M(?![\p{L}])|pr[ée]c[ée]dent/iu.test(ph)) return resultat(i, 15, mi[0].trim());
   }
   return null;
 }
@@ -3060,16 +3112,54 @@ const NOMBRES_FOIS: Record<string, number> = { une: 1, un: 1, deux: 2, trois: 3,
  * semaine » → 4,3, « deux contrôles inopinés par mois » → 2) ; null si elle n'est pas chiffrée (« plusieurs fois par mois »,
  * « régulièrement ») ou ne se ramène pas au mois.
  */
-export function frequenceMensuelle(frequence: string): number | null {
-  const f = normaliser(frequence);
-  const PAR: Record<string, number> = { jour: 30, nuit: 30, semaine: 4.33, mois: 1, trimestre: 1 / 3, semestre: 1 / 6, an: 1 / 12, annee: 1 / 12 };
+/**
+ * Fréquence ramenée à une forme unique « N fois par <période> » (T7G-2, T7G-10), appliquée à la valeur du modèle comme à la
+ * citation et à la lecture sans modèle : « N contrôles (inopinés) mensuels / hebdomadaires / quotidiens » et, sans nombre,
+ * « contrôles inopinés hebdomadaires » (1 par semaine) ; « à raison de N par mois », « au nombre de N par mois », « N/mois »,
+ * « N fois/semaine » ; « bimensuel », « tous les quinze jours », « par quinzaine » ; « un contrôle de jour et un de nuit chaque
+ * semaine » (2 par semaine) ; « quotidien », « tous les jours », « chaque jour ». Texte normalisé (minuscules, sans accents).
+ */
+export function normaliserFrequence(frequence: string): string {
+  const NB = '(\\d+|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix)';
+  const val = (x: string) => (/^\d+$/.test(x) ? Number(x) : (NOMBRES_FOIS[x] ?? ({ sept: 7, huit: 8, neuf: 9, dix: 10 } as Record<string, number>)[x] ?? 1));
+  const per = (p: string) => (/^m/.test(p) || /^bimensuel/.test(p) ? 'mois' : /^h/.test(p) ? 'semaine' : 'jour');
+  let f = normaliser(frequence).replace(/[’`]/g, "'").replace(/\s+/g, ' ');
+  f = f
+    // « quatre (4) » : le chiffre entre parenthèses fait foi.
+    .replace(/(?<![a-z])(?:une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix)\s*\(\s*(\d{1,2})\s*\)/g, '$1')
+    // « un contrôle (inopiné) de jour et un de nuit chaque semaine » : la somme.
+    .replace(new RegExp(`${NB}\\s+(controles?|visites?|passages?)((?:\\s+inopine?e?s?)?)\\s+de\\s+(?:jour|nuit)\\s+et\\s+${NB}\\s+(?:(?:controles?|visites?|passages?)(?:\\s+inopine?e?s?)?\\s+)?(?:de\\s+)?(?:jour|nuit)\\s+(?:chaque|par|toutes les|tous les)\\s+(semaine|mois|jour)`, 'g'),
+      (_m, a: string, c: string, i: string, b: string, p: string) => `${val(a) + val(b)} ${c}${i} par ${p}`)
+    // « N contrôles (inopinés) mensuels / hebdomadaires / quotidiens / journaliers » et, sans nombre, « contrôles inopinés hebdomadaires ».
+    .replace(new RegExp(`(?:${NB}\\s+)?(controles?|visites?|passages?)((?:\\s+inopine?e?s?)?)\\s+(mensuel(?:le)?s?|hebdomadaires?|quotidien(?:ne)?s?|journaliere?s?)(?![a-z])`, 'g'),
+      (_m, n: string | undefined, c: string, i: string, p: string) => `${n ? val(n) : 1} ${c}${i} par ${per(p)}`)
+    .replace(/\bbimensuel(?:le)?s?\b/g, '2 fois par mois')
+    .replace(/(?<![a-z0-9] )(?<!fois )\btous les (?:15|quinze) jours\b/g, '1 fois par quinzaine')
+    .replace(/\btous les (?:15|quinze) jours\b/g, 'par quinzaine')
+    .replace(new RegExp(`(?:a raison de|au nombre de)\\s+${NB}\\s+par\\s+(mois|semaine|jour|quinzaine)`, 'g'), (_m, n: string, p: string) => `${val(n)} fois par ${p}`)
+    .replace(new RegExp(`${NB}\\s*(?:fois\\s*)?\\/\\s*(mois|semaine|jour|an)\\b`, 'g'), (_m, n: string, p: string) => `${val(n)} fois par ${p}`)
+    .replace(/\b(?:tous les jours|chaque jour|quotidiennement)\b/g, '1 fois par jour')
+    .replace(/(?:^|\s)(?:quotidien(?:ne)?s?|journaliere?s?)(?=\s|$)/g, ' 1 fois par jour')
+    .replace(/\btous les deux mois\b/g, '1 fois par bimestre');
+  return f.replace(/\s+/g, ' ').trim();
+}
+
+export function frequenceMensuelle(frequence: string, mensuelParDefaut = false): number | null {
+  const f = normaliserFrequence(frequence);
+  const PAR: Record<string, number> = { jour: 30, nuit: 30, semaine: 4.33, quinzaine: 2.17, mois: 1, bimestre: 0.5, trimestre: 1 / 3, semestre: 1 / 6, an: 1 / 12, annee: 1 / 12 };
   let max: number | null = null;
-  for (const m of f.matchAll(/(une|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+(?:fois|controles?|visites?|passages?)(?:\s+inopines?)?\s+(?:par|chaque|tous les|toutes les)\s+(jour|nuit|semaine|mois|trimestre|semestre|an|annee)s?/g)) {
+  // (jusqu'à deux précisions entre le nombre et la période : « un contrôle de nuit par semaine », « 4 contrôles inopinés de nuit par mois »)
+  for (const m of f.matchAll(/(une|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+(?:(?:fois|controles?|visites?|passages?)(?:\s+(?:inopine?e?s?|de nuit|de jour|nocturnes?|diurnes?|le week-end|sur site)){0,2}\s+)?(?:par|chaque|tous les|toutes les)\s+(jour|nuit|semaine|quinzaine|mois|bimestre|trimestre|semestre|an|annee)s?/g)) {
     const n = (NOMBRES_FOIS[m[1]] ?? (({ sept: 7, huit: 8, neuf: 9, dix: 10 } as Record<string, number>)[m[1]] ?? Number(m[1]))) * PAR[m[2]];
     if (Number.isFinite(n)) max = Math.max(max ?? 0, n);
   }
-  if (max === null && /(?:^|\s)(?:mensuel(?:le)?s?|tous les mois|chaque mois)(?:\s|$)/.test(f)) max = 1;
-  if (max === null && /(?:^|\s)(?:hebdomadaires?|toutes les semaines|chaque semaine)(?:\s|$)/.test(f)) max = 4.33;
+  if (max === null && /(?:^|[^a-z])(?:mensuel(?:le)?s?|tous les mois|chaque mois)(?![a-z])/.test(f)) max = 1;
+  if (max === null && /(?:^|[^a-z])(?:hebdomadaires?|toutes les semaines|chaque semaine)(?![a-z])/.test(f)) max = 4.33;
+  // Nombre de contrôles d'une variable mensuelle (« au moins cinq contrôles inopinés », CONTROLES_INOPINES_MENSUELS) : par mois.
+  if (max === null && mensuelParDefaut) {
+    const b = /(?:^|\s)(une|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+(?:controles?|visites?|passages?)(?:\s+inopine?e?s?)?(?:\s|$)/.exec(f);
+    if (b) max = NOMBRES_FOIS[b[1]] ?? (({ sept: 7, huit: 8, neuf: 9, dix: 10 } as Record<string, number>)[b[1]] ?? Number(b[1]));
+  }
   return max;
 }
 const LETTRES_FOIS = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix'];
@@ -3095,20 +3185,18 @@ export function frequenceInopinesDce(dce: string): { valeur: string; mensuels: s
   for (const brute of lignes.replace(/\s+/g, ' ').split(/(?<=[.;])\s+/)) {
     if (!/inopin/i.test(brute) || /p[ée]nalit|€/i.test(brute)) continue;
     // Groupes « N contrôles (inopinés) mensuels / hebdomadaires » et « au nombre de N par mois » (T6G-6) : « N contrôles par mois ».
-    const ph = sansNombreDouble(brute)
-      .replace(/(?<![\p{L}\d])(\d+|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix)\s+(contr[ôo]les?|visites?|passages?)((?:\s+inopin[ée]e?s?)?)\s+(mensuel(?:le)?s?|hebdomadaires?|quotidien(?:ne)?s?|journali[eè]re?s?)(?![\p{L}])/giu,
-        (_m, n: string, c: string, i: string, p: string) => `${n} ${c}${i} par ${/^m/i.test(p) ? 'mois' : /^h/i.test(p) ? 'semaine' : 'jour'}`)
-      .replace(/au\s+nombre\s+de\s+(\d+|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix)\s+par\s+(mois|semaine|jour)/giu, '$1 contrôles par $2');
+    // (même réécriture que la valeur du modèle, T7G-2 : « contrôles inopinés hebdomadaires », « à raison de cinq par mois »…)
+    const ph = normaliserFrequence(sansNombreDouble(brute));
     const prop = propositions(ph).find((x) => /inopin/i.test(x) && frequenceMensuelle(x) !== null);
     if (!prop) continue;
     // Un autre objet (ronde, réunion, rapport…) entre la mention des contrôles inopinés et la fréquence : pas leur fréquence.
     const iInop = prop.search(/inopin/i);
-    const iFreq = prop.search(/(?:une|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+(?:fois|contr[ôo]les?|visites?|passages?)/i);
+    const iFreq = prop.search(/(?:une|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+(?:fois|contr[ôo]les?|visites?|passages?|par)/i);
     if (iFreq >= 0 && AUTRE_OBJET.test(prop.slice(Math.min(iInop, iFreq), Math.max(iInop, iFreq)))) continue;
     const n = frequenceMensuelle(prop);
     if (n === null || n <= 3) continue;
     const f = normaliser(prop);
-    const m = /(au moins|au minimum|minimum)?\s*(une|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+(?:fois|controles?|visites?|passages?)(?:\s+inopines?)?\s+(?:par|chaque|tous les|toutes les)\s+(jour|nuit|semaine|mois)/.exec(f);
+    const m = /(au moins|au minimum|minimum)?\s*(une|un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|\d+)\s+(?:(?:fois|controles?|visites?|passages?)(?:\s+(?:inopine?e?s?|de nuit|de jour|nocturnes?|diurnes?|le week-end|sur site)){0,2}\s+)?(?:par|chaque|tous les|toutes les)\s+(jour|nuit|semaine|quinzaine|mois)/.exec(f);
     const nb = m ? (NOMBRES_FOIS[m[2]] ?? (Number(m[2]) || ({ sept: 7, huit: 8, neuf: 9, dix: 10 } as Record<string, number>)[m[2]] || 1)) : 1;
     const per = m ? m[3] : /hebdomadaire|semaine/.test(f) ? 'semaine' : 'mois';
     // Minimum écrit avant ou après le nombre (« au moins quatre … », « 4 par mois minimum »).
@@ -3127,11 +3215,14 @@ export function frequenceInopinesDce(dce: string): { valeur: string; mensuels: s
  * (« plusieurs fois par mois », « régulièrement », « fréquemment ») ou chiffrée à 3 par mois au plus, sans précision de
  * moment (« de nuit », « le week-end », « de jour ») que le texte de GSS ne dirait pas.
  */
-export function frequenceRempliePourGss(frequence: string): boolean {
+export function frequenceRempliePourGss(frequence: string, mensuelParDefaut = false): boolean {
   const f = normaliser(frequence);
   if (!f.trim() || /nuit|week|samedi|dimanche|ferie|de jour|jour et|matin|soir/.test(f)) return false;
-  const n = frequenceMensuelle(f);
+  const n = frequenceMensuelle(f, mensuelParDefaut);
   if (n !== null) return n <= 3;
+  // T7G-2 : un nombre écrit (« au moins cinq contrôles inopinés », « contrôles inopinés quotidiens ») n'est jamais « rempli »
+  // par le seul mot « inopiné ».
+  if (/(?:^|\s)(?:\d+|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix)(?:\s|$)|quotidien|journali|hebdomadaire|semaine|jour/.test(normaliserFrequence(f))) return false;
   return /plusieurs|regulier|regulierement|frequent|frequemment|periodique|inopine|ponctuel/.test(f);
 }
 
@@ -3139,6 +3230,15 @@ export function frequenceRempliePourGss(frequence: string): boolean {
  *  fois par mois le week-end » → « au moins deux contrôles inopinés ») ; '' si la fréquence ne se ramène pas au mois. */
 export function controlesInopinesDe(frequence: string): string {
   const f = normaliser(frequence);
+  // Fréquence hebdomadaire, quotidienne ou par quinzaine (T7G-2 : « une fois par semaine » → au moins quatre par mois).
+  {
+    const nf = normaliserFrequence(frequence);
+    if (!/par mois/.test(nf) && /par (?:semaine|jour|quinzaine)/.test(nf) && !/nuit|week|samedi|dimanche|de jour/.test(nf)) {
+      const n = frequenceMensuelle(frequence);
+      const k = n === null ? 0 : /semaine/.test(nf) ? Math.floor(n) : Math.ceil(n);
+      if (k >= 1 && k <= 31) return `au moins ${LETTRES_FOIS[k] || k} contrôle${k > 1 ? 's' : ''} inopiné${k > 1 ? 's' : ''}`;
+    }
+  }
   const parties = [...f.matchAll(/(?:(au moins|au minimum|minimum)\s+)?(une|un|deux|trois|quatre|cinq|six|\d+)\s+(?:fois|controles?|visites?|passages?)\s+(?:inopines?\s+)?par mois/g)];
   if (!parties.length && /^(?:au moins |au minimum )?(?:tous les mois|chaque mois|mensuel(?:le)?s?)$/.test(f.trim())) return `${/au (?:moins|minimum)/.test(f) ? 'au moins ' : ''}un contrôle inopiné`;
   if (!parties.length || /semaine|jour|trimestre|an\b|annee/.test(f.replace(/par mois[^,;]*/g, ''))) return '';
@@ -5001,9 +5101,14 @@ Réponds UNIQUEMENT par un objet JSON : {"valeurs":[{"variable":"NOM","valeur":"
       const lus = sujetV ? delaisDePhrase(phrase, sujetV as keyof typeof SUJETS_DELAI) : [];
       const minutesValeur = dureesEnMinutes(valeur)[0];
       const tousDelais = (Object.keys(SUJETS_DELAI) as Array<keyof typeof SUJETS_DELAI>).flatMap((s2) => delaisDePhrase(phrase, s2));
+      // T7G-3 : citation retrouvée dans le DCE, durée du modèle écrite dans la phrase et lue par la même grammaire des durées,
+      // aucun délai d'un AUTRE sujet de cette durée dans la phrase : la lecture du modèle est acceptée, même sans mot-clé du
+      // sujet (« Sur appel du télésurveilleur, l'intervenant se rend sur site dans un délai de 20 min »).
+      const autreSujet = minutesValeur !== undefined && (Object.keys(SUJETS_DELAI) as Array<keyof typeof SUJETS_DELAI>).filter((s2) => s2 !== sujetV).some((s2) => delaisDePhrase(phrase, s2).some((d) => d.minutes === minutesValeur));
       const accepte = !def ? false
         : lus.length ? (minutesValeur === undefined || lus.some((d) => d.minutes === minutesValeur))
-          : !tousDelais.length && propositionsDe(phrase).some((p2) => propositionDuSujet(p2, phrase, sujetV as keyof typeof SUJETS_DELAI));
+          : (!tousDelais.length && propositionsDe(phrase).some((p2) => propositionDuSujet(p2, phrase, sujetV as keyof typeof SUJETS_DELAI)))
+            || (minutesValeur !== undefined && dureesEnMinutes(phrase).includes(minutesValeur) && !autreSujet);
       if (!accepte) {
         refusees.push({ variable: nom, raison: 'citation d\'un autre sujet que celui du délai' }); continue;
       }
@@ -5015,6 +5120,12 @@ Réponds UNIQUEMENT par un objet JSON : {"valeurs":[{"variable":"NOM","valeur":"
       const dureesCitation = new Set(dureesEnMinutes(citation));
       const absentes = dureeValeur.filter((d) => !dureesCitation.has(d));
       if (absentes.length) { refusees.push({ variable: nom, raison: `durée absente de la citation (${absentes.join(', ')} minutes)` }); continue; }
+    } else if (/^(?:FREQ_|CONTROLES_INOPINES)/.test(nom) && frequenceMensuelle(valeur, nom === 'CONTROLES_INOPINES_MENSUELS') !== null) {
+      // Fréquence (T7G-2) : comparée en nombre par mois (valeur et citation ramenées à la même forme), jamais chiffre à chiffre
+      // (« une fois par semaine » = « hebdomadaire », « au moins cinq contrôles inopinés » = « cinq contrôles inopinés par mois »).
+      const nv = frequenceMensuelle(valeur, nom === 'CONTROLES_INOPINES_MENSUELS')!;
+      const nc = frequenceMensuelle(citation);
+      if (nc === null || Math.abs(nc - nv) > 0.05) { refusees.push({ variable: nom, raison: `fréquence absente de la citation (${Math.round(nv * 100) / 100} par mois)` }); continue; }
     } else {
       const nombresCitation = new Set(nombresDe(citation));
       const etrangers = nombresDe(valeur).filter((n) => !nombresCitation.has(n));

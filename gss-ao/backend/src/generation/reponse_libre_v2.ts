@@ -4061,8 +4061,11 @@ export function jalonEnvoiClient(planification: string): string | null {
  * le calendrier de GSS imprime « J-3 : envoi des plannings à l'ACOSS ») : le jalon de « La planification » est repris.
  * Seulement une phrase qui parle de planning, d'un envoi et du client (son nom ou « au client »).
  */
-export function harmoniserJalonPlanning(texte: string, jalon: string, client: string): { texte: string; corriges: string[] } {
+export function harmoniserJalonPlanning(texte: string, jalon: string, client: string, joursDce = 0): { texte: string; corriges: string[]; ecarts: string[] } {
   const corriges: string[] = [];
+  // T7G-4 : jalon d'une phrase qui cite le cahier des charges (« … à J-15, comme l'exige le CCTP ») ou qui vaut le délai lu dans
+  // le DCE : jamais remplacé ; l'écart avec le jalon de « La planification » est signalé à GSS.
+  const ecarts: string[] = [];
   const nomClient = normaliser(String(client || '')).replace(/^(?:l|la|le|les)\s*['’]?\s*/, '').trim();
   const sortie = String(texte || '').split('\n').map((l) => l.split(/(?<=[.!?])\s+/).map((ph) => {
     const n = normaliser(ph);
@@ -4070,11 +4073,16 @@ export function harmoniserJalonPlanning(texte: string, jalon: string, client: st
     if (!(nomClient && n.includes(nomClient)) && !/\bau client\b/.test(n)) return ph;
     // Un seul jalon dans la phrase (jamais « J-10 aux agents, J-3 au client » ramené à un seul jalon).
     if ((ph.match(/\bJ\s*-\s*\d+\b/g) || []).length !== 1) return ph;
+    const ecrit = Number((/\bJ\s*-\s*(\d+)\b/.exec(ph) || [])[1] || 0);
+    if (`J-${ecrit}` !== jalon && (/\b(?:cctp|ccap|cahier des charges|dce|exige|exigee|impose|imposee|conformement)\b/.test(n) || (joursDce > 0 && ecrit === joursDce))) {
+      ecarts.push(ph.trim());
+      return ph;
+    }
     const nouvelle = ph.replace(/\bJ\s*-\s*(\d+)\b/g, (m) => (m.replace(/\s+/g, '') === jalon ? m : jalon));
     if (nouvelle !== ph) corriges.push(ph.trim());
     return nouvelle;
   }).join(' ')).join('\n');
-  return { texte: sortie, corriges };
+  return { texte: sortie, corriges, ecarts };
 }
 
 /**

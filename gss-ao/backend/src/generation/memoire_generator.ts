@@ -17,7 +17,7 @@ import {
   intituleSansRedite,
   motsDePhrase, similarite, lireRegistre,
   acheteurDuDce, objetDuDce,
-  variableRenseignee,
+  variableRenseignee, envoiPlanningsClientDce,
 } from './memoire_type';
 import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
@@ -8981,14 +8981,18 @@ RÈGLES DE FORME (rendu Marp) :
       if (retires.length) console.log(`[MemoireGenerator] ${retires.length} exigence(s) du CCTP déjà ajoutée(s) dans la rubrique de leur sujet retirée(s) d'une autre rubrique : ${retires.map((x) => `${x.id} « ${x.phrase.slice(0, 70)} »`).join(' ; ')}.`);
     }
 
+    const questionsJalon: string[] = [];
     // Jalon d'envoi des plannings au client : celui de « La planification », jamais un autre dans un texte rédigé par l'IA
     // (génération réelle caen 701 : proposition « … transmis à l'ACOSS à J-10 » face à « J-3 : envoi des plannings à l'ACOSS »).
     {
       const jalon = jalonEnvoiClient(sections['b4_planification'] || '');
+      const joursDce = envoiPlanningsClientDce(dceContext)?.jours || 0;
       if (jalon) for (const id of Object.keys(sections)) {
         if (id === 'b4_planification') continue;
-        const h = harmoniserJalonPlanning(sections[id], jalon, besoin.client);
+        const h = harmoniserJalonPlanning(sections[id], jalon, besoin.client, joursDce);
         if (h.corriges.length) { sections[id] = h.texte; console.log(`[MemoireGenerator] Rubrique ${id} : jalon d'envoi des plannings au client ramené à ${jalon} (${h.corriges.length} phrase(s)).`); }
+        // (T7G-4 : jalon qui cite le CCTP ou vaut le délai du DCE, gardé : l'écart est signalé à GSS)
+        for (const ph of h.ecarts) questionsJalon.push(`Le jalon d'envoi des plannings au client diffère entre « La planification » (${jalon}) et cette phrase, qui cite le cahier des charges : « ${ph.slice(0, 240)} ». Quel jalon faut-il garder dans tout le mémoire ?`);
       }
     }
 
@@ -9057,6 +9061,7 @@ RÈGLES DE FORME (rendu Marp) :
       ...questionsCouverture,
       ...questionsAjoutsRefuses,
       ...questionsRC,
+      ...questionsJalon,
       // Objet du marché inconnu (lecture du DCE sans modèle, T6N-2) : jamais « Mémoire technique » en objet, la question est posée.
       ...(!variableRenseignee(prep.variables.OBJET_MARCHE) && mt.variables.OBJET_MARCHE?.question ? [mt.variables.OBJET_MARCHE.question] : []),
       ...formalitesOffre.map(questionFormalite),

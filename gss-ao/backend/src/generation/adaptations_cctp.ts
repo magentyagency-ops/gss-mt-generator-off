@@ -680,7 +680,7 @@ export function adaptationsDesValeursImposees(mt: MemoireType, ctx: ContexteMarc
   const out: Array<{ rubrique: string; avant: string; apres: string; exigence: string; etape: string; reference: string }> = [];
   const texte = (v: unknown) => (Array.isArray(v) ? v.join(' ; ') : String(v ?? ''));
   // Jalon d'envoi des plannings au client : lu sans modèle dans le DCE (T3-CONS-4), signalé comme les valeurs imposées.
-  for (const nom of [...VARIABLES_IMPOSABLES, 'JALON_ENVOI_CLIENT']) {
+  for (const nom of [...new Set([...VARIABLES_IMPOSABLES, 'JALON_ENVOI_CLIENT'])]) {
     const r = reel.variables[nom];
     const source = String(r?.source || '');
     // Plusieurs délais imposés par le CCTP (T10C-2) : la phrase de GSS est imprimée sans son délai, signalée avec les
