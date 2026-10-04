@@ -189,7 +189,7 @@ describe('Publipostage', () => {
     expect(articleEtNom('ACOSS', 'les sites de l’ACOSS et du siège')).toEqual({ article: "l'", nom: 'ACOSS' });
     expect(articleEtNom('Centre Henri Becquerel', 'Le Centre Henri Becquerel a décidé')).toEqual({ article: 'le', nom: 'Centre Henri Becquerel' });
     expect(articleEtNom('Région Normandie')).toEqual({ article: 'la', nom: 'Région Normandie' });
-    expect(articleEtNom('La Poste')).toEqual({ article: 'la', nom: 'Poste' });
+    expect(articleEtNom('La Poste')).toEqual({ article: '', nom: 'La Poste' }); // article du nom propre gardé (T3-COH-3)
     expect(articleEtNom('Carrefour')).toEqual({ article: '', nom: 'Carrefour' });
     expect(articleEtNom('Hôtel de Ville de Caen')).toEqual({ article: "l'", nom: 'Hôtel de Ville de Caen' });
     expect(articleEtNom('Régie du tabac', 'les sites de la Régie du tabac')).toEqual({ article: 'la', nom: 'Régie du tabac' });

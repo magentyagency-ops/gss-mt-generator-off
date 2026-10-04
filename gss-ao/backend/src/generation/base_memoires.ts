@@ -1780,7 +1780,7 @@ export function nettoyerChampCadre(texte: string): string {
     if (!phrases.length && l.trim()) continue;
     out.push(`${puce}${phrases.join(' ')}`);
   }
-  return out.join('\n').replace(/\n{3,}/g, '\n\n');
+  return contracterArticlesNomsPropres(out.join('\n').replace(/\n{3,}/g, '\n\n'));
 }
 
 /**
@@ -2350,6 +2350,19 @@ export function reparerTableaux(texte: string): string {
 }
 
 /**
+ * Préposition devant un nom propre qui commence par un article (T3N-8 : « à Le Grand-Quevilly » ; T3-COH-3 : « à Le Havre
+ * Seine Métropole ») : contractée comme le veut la langue (« au Grand-Quevilly », « aux Docks Vauban », « du Havre »,
+ * « des Andelys »). « La » et « L' » ne se contractent pas (« à La Poste »).
+ */
+export function contracterArticlesNomsPropres(texte: string): string {
+  return String(texte || '').replace(/(?<![\p{L}\p{N}'’])(à|À|de|De) (Le|Les) (?=[A-ZÀ-Ý])/gu, (_m, prep: string, art: string) => {
+    const pluriel = art === 'Les';
+    const r = /^[àÀ]$/.test(prep) ? (pluriel ? 'aux' : 'au') : (pluriel ? 'des' : 'du');
+    return `${/^[ÀD]/.test(prep) ? r.charAt(0).toUpperCase() + r.slice(1) : r} `;
+  });
+}
+
+/**
  * Nettoyage de structure après les passes de suppression (répétitions, références, délais) : une phrase
  * d'introduction « … : » qui n'est plus suivie de rien, un tableau réduit à son en-tête, un sous-titre
  * vide, des caractères invisibles.
@@ -2371,7 +2384,7 @@ export function nettoyerStructure(texte: string): string {
     out.push(l);
   }
   t = out.join('\n').replace(/^#{2,4}\s+.+\n+(?=#{2,4}\s|$(?![\s\S]))/gm, '').replace(/\n{3,}/g, '\n\n').trim();
-  return t;
+  return contracterArticlesNomsPropres(t);
 }
 
 /** Extrait les demandes de confirmation [CONSULTATION REQUISE : …] d'un texte et les retire. */

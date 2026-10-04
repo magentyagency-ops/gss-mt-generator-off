@@ -18,6 +18,7 @@ import {
   faitsDePhrase, faitsCompatibles, nombresAutorisesDe, nombresDceCompatibles, elisionDevantNom,
   type MemoireType, type RubriqueMemoireType, type PlanMemoireType, type SousPartie,
 } from './memoire_type';
+import { contracterArticlesNomsPropres } from './base_memoires';
 
 export interface PartieRC { id: string; title: string; attendu?: string }
 
@@ -771,7 +772,7 @@ export function nettoyerReponseCadre(texte: string): string {
     if (n) vues.add(n);
     out.push(l);
   }
-  return out.join('\n').replace(/\n{3,}/g, '\n\n');
+  return contracterArticlesNomsPropres(out.join('\n').replace(/\n{3,}/g, '\n\n'));
 }
 
 /** Phrase du mémoire type de GSS (publipostée) qui répond à un sujet précis du cadre, reconnu à son libellé. */
