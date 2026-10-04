@@ -1139,6 +1139,8 @@ function graphieUsuelle(mot: string): string {
  */
 function sigleProbable(mot: string, dce: string): boolean {
   if (!/[AEIOUYÀ-Ý]/.test(mot)) return true;
+  // Nom de lieu connu (« RHÔNE », « HAVRE », « FÉCAMP ») : jamais un sigle, même écrit après « du » (T8-COH-8, T8-CONS-13).
+  if (mot.length >= 4 && estNomDeLieu(mot.charAt(0) + mot.slice(1).toLowerCase())) return false;
   // 3 lettres : sigle, sauf mot courant des textes de GSS (« PAR », « SUR », « LES »).
   if (mot.length <= 3) return !graphieMinusculeGss(mot);
   // Mot écrit en capitales par le DCE au milieu d'un texte en casse mêlée, après un article ou devant « de … » (T4G-8 :
@@ -1149,7 +1151,7 @@ function sigleProbable(mot: string, dce: string): boolean {
   // Mot court hors dictionnaire suivi de « DE <Lieu> » (« ESID DE RENNES », T4G-8) : un sigle d'établissement, jamais un nom de lieu.
   if (!estNomDeLieu(mot) && new RegExp(`(?<![A-Za-zÀ-ÿ])${echapper(mot)}\\s+(?:DE|DU|DES|D['’]|de|du|des|d['’])\\s*[A-ZÀ-Ý]`).test(dce)) return true;
   if (/[^AEIOUYÀ-Ý]{3}/.test(mot)) return true;
-  return /^[^AEIOUYÀ-Ý]{2}/.test(mot) && !/^(?:BL|BR|CH|CL|CR|DR|FL|FR|GL|GR|PH|PL|PR|TR|VR|ST|SC|SP|TH|GN)/.test(mot);
+  return /^[^AEIOUYÀ-Ý]{2}/.test(mot) && !/^(?:BL|BR|CH|CL|CR|DR|FL|FR|GL|GR|PH|PL|PR|TR|VR|ST|SC|SP|TH|GN|RH)/.test(mot);
 }
 
 /**
@@ -1188,6 +1190,42 @@ function sigleParArticle(mot: string, dce: string): boolean {
   return new RegExp(`(?:^|[^A-Za-zÀ-ÿ])(?:[Ll]['’]|[Ll]e |[Ll]a |[Ll]es |[Dd]u |[Dd]es |[Aa]u |[Aa]ux )${echapper(mot)}(?![A-Za-zÀ-ÿ])`).test(dce);
 }
 
+/**
+ * Nom en casse mêlée qui contient un mot écrit en capitales (« Ville du HAVRE », « Commune de FÉCAMP », « Département de la
+ * SEINE-MARITIME », T8-CONS-13, T8-COH-2) : la graphie en casse mêlée du nom entier la plus fréquente du DCE ; sinon chaque mot
+ * en capitales qui n'est pas un sigle prend la graphie du DCE ou celle d'un lieu connu ; un mot sans graphie connue reste tel
+ * quel et est soumis à GSS (incertain). Les vrais sigles restent (« l'ESID de Rennes », « CHU »). '' si rien à faire.
+ */
+function casseMeleeDetail(nom: string, dce: string): { forme: string; incertains: string[] } {
+  const enCapitales = [...nom.matchAll(/(?<![A-Za-zÀ-ÿ])[A-ZÀ-Ý]{2,}(?:-[A-ZÀ-Ý]{2,})*(?![A-Za-zÀ-ÿ])/g)];
+  if (!enCapitales.length) return { forme: '', incertains: [] };
+  const entier = graphieEntiereDuDce(nom, dce);
+  const nbCap = (t: string) => (t.match(/(?<![A-Za-zÀ-ÿ])[A-ZÀ-Ý]{2,}(?![A-Za-zÀ-ÿ])/g) || []).length;
+  if (entier && entier !== nom && nbCap(entier) < nbCap(nom)) return { forme: entier, incertains: [] };
+  const incertains: string[] = [];
+  let sortie = nom;
+  for (const m of enCapitales.reverse()) {
+    const mot = m[0];
+    const parts = mot.split('-');
+    if (parts.length === 1 && (mot.length <= 3 || sigleProbable(mot, dce)) && !estNomDeLieu(mot.charAt(0) + mot.slice(1).toLowerCase())) continue;
+    const forme = parts.map((w) => {
+      const vus = new Map<string, number>();
+      for (const x of dce.matchAll(new RegExp(`(?<![A-Za-zÀ-ÿ])${echapper(w)}(?![A-Za-zÀ-ÿ])`, 'gi'))) if (x[0] !== x[0].toUpperCase()) vus.set(x[0], (vus.get(x[0]) || 0) + 1);
+      const capitalisee = [...vus].filter(([x]) => /^[A-ZÀ-Ý]/.test(x)).sort((a, b) => b[1] - a[1])[0]?.[0];
+      if (capitalisee) return capitalisee;
+      const lieu = w.charAt(0) + w.slice(1).toLowerCase();
+      if (estNomDeLieu(lieu) || estNomDeLieu(mot.charAt(0) + mot.slice(1).toLowerCase())) return lieu;
+      return '';
+    });
+    if (forme.some((x) => !x)) { incertains.push(mot); continue; }
+    let r = forme.join('-');
+    const lieux = lieuxEnGraphieUsuelle(r);
+    r = lieux.texte || r;
+    sortie = sortie.slice(0, m.index!) + r + sortie.slice(m.index! + mot.length);
+  }
+  return sortie !== nom || incertains.length ? { forme: sortie !== nom ? sortie : '', incertains } : { forme: '', incertains: [] };
+}
+
 export function casseDuDce(nom: string, dceBrut: string, intitule = false): string {
   return casseDuDceDetail(nom, dceBrut, intitule).forme;
 }
@@ -1206,7 +1244,8 @@ export function casseDuDceDetail(nom: string, dceBrut: string, intitule = false)
     return tete.forme ? { forme: `${tete.forme}${par[2]}`, incertains: tete.incertains } : { forme: '', incertains: [] };
   }
   const lettres = nom.replace(/[^A-Za-zÀ-ÿ]/g, '');
-  if (!lettres || lettres.replace(/[^A-ZÀ-Ý]/g, '').length / lettres.length <= 0.7 || !dce) return { forme: '', incertains: [] };
+  if (!lettres || !dce) return { forme: '', incertains: [] };
+  if (lettres.replace(/[^A-ZÀ-Ý]/g, '').length / lettres.length <= 0.7) return casseMeleeDetail(nom, dce);
   // 1. Le nom entier écrit en casse mêlée dans le DCE (comparaison sans casse ni accents, mots consécutifs) : graphie reprise
   //    telle quelle (parc_expo 202 : « Rouen Normandie Evènements », jamais « Rouen Normandie événements », nom commun).
   const entier = graphieEntiereDuDce(nom, dce);

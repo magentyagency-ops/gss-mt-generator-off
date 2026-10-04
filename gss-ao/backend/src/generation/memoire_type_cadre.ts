@@ -553,7 +553,9 @@ export function cosinus(a: number[], b: number[]): number {
  * `evenementiel` : seulement quand l'objet du lot est l'événementiel (sécurisation de manifestations).
  */
 export const THEMES_CADRE: Array<{ sujet: RegExp; rubriques: string[]; situation?: boolean; evenementiel?: boolean }> = [
-  { sujet: /interlocut(?:eur|rice) unique|r[ée]f[ée]rent unique|contact unique|num[ée]ro unique/i, rubriques: ['b3_interlocuteur_unique'] },
+  // « Centre de permanence téléphonique et personne référente joignable 24h/24 » (havre1 1882, T8-CONS-1) : le numéro unique et
+  // l'interlocuteur unique de GSS.
+  { sujet: /interlocut(?:eur|rice) unique|r[ée]f[ée]rent(?:e)? unique|contact unique|num[ée]ro unique|personne r[ée]f[ée]rente|(?:centre|service) de permanence|permanence t[ée]l[ée]phonique/i, rubriques: ['b3_interlocuteur_unique'] },
   { sujet: /(?<![\p{L}])agr[ée]ments?(?![\p{L}])|autorisations? (?:d['’]exercer|cnaps|administrative|pr[ée]fectorale)/iu, rubriques: ['b2_identite'] },
   { sujet: /(?<![\p{L}])absen(?:ces?|ts?|tes?)(?![\p{L}])|rempla(?:cement|cer) (?:d['’]un |des |du |un |les )?(?:agents?|personnels?|salari)|mode de remplacement|agents? indisponibles?/iu, rubriques: ['b5_remplacement_prevu', 'b5_remplacement_imprevu'], situation: true },
   { sujet: /intrusions?|effractions?/i, rubriques: ['b4_proc_intrusion'], situation: true },
@@ -1089,10 +1091,28 @@ export function completerFamilles(retenus: CandidatReference[], candidats: Candi
  * dans l'ordre de la question : les rubriques les plus proches de la question d'abord (score), puis celles des composantes
  * dans l'ordre où la question les nomme, les familles inséparables côte à côte.
  */
-export function referencesDeSecours(candidats: CandidatReference[], question: string): CandidatReference[] {
-  const retenus = completerFamilles(candidats, candidats);
-  if (retenus.length <= 1) return retenus;
+export function referencesDeSecours(candidats: CandidatReference[], question: string, o: { themesSeuls?: boolean } = {}): CandidatReference[] {
   const q = String(question || '');
+  // Choix sans modèle (T8-CONS-1, T8N-1) : seulement une rubrique d'une composante que la question nomme (THEMES_CADRE), même
+  // candidate unique ; jamais une rubrique voisine par le seul sens ou les mots (havre1 1882 : « personne référente joignable
+  // 24h/24 » → « Référence — les établissements bancaires » ; etampes2 : « Délais d'interventions proposés » → rétroplanning
+  // d'un nouveau marché). `themesSeuls` : toujours. Sinon (rédaction indisponible, T10C-3 : tous les textes attribués à la
+  // réponse) : aucun texte quand la question nomme une composante et qu'aucune candidate n'en relève (candidates hors sujet).
+  const nommees = THEMES_CADRE.filter((t) => t.sujet.test(q));
+  const duTheme = (c: CandidatReference) => !!c.theme || nommees.some((t) => t.rubriques.includes(c.id));
+  // Sans thème : une rubrique dont l'intitulé partage au moins deux mots pleins non génériques avec la question (« Moyens
+  // humains affectés au marché » → « L'adéquation de nos moyens humains », T7-CONS-1) ; jamais une référence client
+  // (b2_ref_*) hors d'une question sur les références (« référente » n'est pas « Référence »).
+  const GENERIQUES = new Set(['agent', 'site', 'marche', 'client', 'service', 'prestation', 'securite', 'notre', 'votre', 'pour', 'dans', 'avec', 'leur', 'cette', 'candidat', 'titulaire', 'present', 'presente', 'accord', 'cadre', 'reference', 'mise', 'place']);
+  const pleins = (t: string) => new Set(normaliser(t).replace(/[^a-z ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 4).map((w) => w.replace(/(?:es|s|x)$/, '')).filter((w) => w.length >= 4 && !GENERIQUES.has(w)));
+  const motsQ = pleins(q);
+  const referenceHorsSujet = (c: CandidatReference) => /^b2_ref_/.test(c.id) && !/r[ée]f[ée]rences?(?![\p{L}])/iu.test(q);
+  const parTitre = (c: CandidatReference) => [...pleins(String(c.titre || ''))].filter((w) => motsQ.has(w)).length >= 2;
+  const utiles = candidats.filter((c) => !referenceHorsSujet(c));
+  const base = o.themesSeuls ? utiles.filter((c) => duTheme(c) || parTitre(c))
+    : nommees.length && !utiles.some(duTheme) ? [] : utiles;
+  const retenus = completerFamilles(base, candidats);
+  if (retenus.length <= 1) return retenus;
   const position = (c: CandidatReference): number => {
     if (!c.theme) return -2 + (1 - c.score) / 10;
     let min = Infinity;
@@ -1580,7 +1600,9 @@ function recalerParAttendus(reference: string, reponse: string, o: { limite?: bo
 
 /** Phrase d'enrobage ajoutée par le modèle (évaluation sans donnée propre : « Cette organisation renforce… », « Le dispositif est
  *  adapté aux enjeux de ce marché… », « Ces partenariats soutiennent… », « Cette combinaison … renforce… »), T5-CONS-6. */
-const ENROBAGE = /^(?:[•\-*]\s*)?(?:ainsi,?\s+)?(?:ce|cet|cette|ces|le|la|les|notre|nos)\s+(?:dispositif|organisation|d[ée]marche|approche|combinaison|ensemble|moyens?|mesures?|partenariats?|solutions?|outils?|syst[èe]mes?|engagements?|m[ée]thodes?|fonctionnement|articulation|pr[ée]sence|choix)\b[^.!?]{0,200}?\b(?:renfor\w*|garanti\w*|permet\w*|assure\w*|contribue\w*|s['’]inscri\w*|(?:est|sont) (?:ainsi )?adapt[ée]e?s?|r[ée]pond\w*|soutien\w*|favoris\w*|optimis\w*|s[ée]curis\w*|facilit\w*|offr\w*)(?![\p{L}])/iu;
+// (T8-CONS-12, havre1 1882 : « Cette traçabilité permet à la Ville… », « Cette sélection sécurise… », « Cette organisation
+// associe… », « … apporte une continuité opérationnelle vérifiable et limite le risque… » restaient imprimées)
+const ENROBAGE = /^(?:[•\-*]\s*)?(?:ainsi,?\s+)?(?:ce|cet|cette|ces|le|la|les|notre|nos)\s+(?:dispositif|organisation|d[ée]marche|approche|combinaison|ensemble|moyens?|mesures?|partenariats?|solutions?|outils?|syst[èe]mes?|engagements?|m[ée]thodes?|fonctionnement|articulation|pr[ée]sence|choix|tra[çc]abilit[ée]|s[ée]lection|pr[ée]paration|cha[îi]ne|coordination|m[ée]thodologie|vigilance|r[ée]activit[ée]|continuit[ée])(?![\p{L}])[^.!?]{0,200}?(?<![\p{L}])(?:renfor\w*|garanti\w*|permet\w*|assure\w*|contribue\w*|s['’]inscri\w*|(?:est|sont) (?:ainsi )?adapt[ée]e?s?|r[ée]pond\w*|soutien\w*|favoris\w*|optimis\w*|s[ée]curis\w*|facilit\w*|offr\w*|associ\w*|apport\w*|limit\w*|concour\w*|am[ée]lior\w*|valoris\w*|consolid\w*|fluidifi\w*|simplifi\w*)(?![\p{L}])/iu;
 
 const ENROBAGE_EXPLICITE = /(?<![\p{L}])(?:est|sont) (?:ainsi |parfaitement |pleinement )?adapt[ée]e?s? (?:aux|[àa]) (?:enjeux|attentes|besoins|exigences|sp[ée]cificit[ée]s)|(?<![\p{L}])r[ée]pond(?:ent)? (?:pleinement |ainsi |parfaitement )?aux? (?:enjeux|attentes|besoins)(?![\p{L}])|(?<![\p{L}])renforce(?:nt)? (?:ainsi )?(?:la|le|les) (?:fiabilit[ée]|tra[çc]abilit[ée]|qualit[ée]|efficacit[ée]|s[ée]r[ée]nit[ée])(?![\p{L}])/iu;
 
@@ -1593,7 +1615,31 @@ const ENROBAGE_EXPLICITE = /(?<![\p{L}])(?:est|sont) (?:ainsi |parfaitement |ple
 /** Verbe conjugué dans une ligne (une ligne qui n'en a pas est un intitulé : « Recours à la sous-traitance et à l'intérim »). */
 const VERBE_CONJUGUE_INTITULE = /(?<![\p{L}])(?:est|sont|sera|seront|a|ont|peut|peuvent|doit|doivent|fait|font|assure|assurent|met|mettent|dispose|disposent|garantit|garantissent|permet|permettent|prévoit|prévoient|intervient|interviennent|organise|organisent|réalise|réalisent|effectue|effectuent|applique|appliquent|reste|restent|suit|suivent|veille|veillent|s['’]\p{L}+|nous\s+\p{L}+ons|vous\s+\p{L}+ez|(?:il|elle|ils|elles|GSS|qui)\s+\p{L}+(?:e|ent|it|issent|ra|ront))(?![\p{L}])/iu;
 
-export function ajoutsAuTexteDeGss(texte: string, reference: string, dce = '', autresTextesGss: string[] = []): { texte: string; retirees: string[]; signalees: string[] } {
+/** Phrase sans donnée propre : ni chiffre, ni nom propre autre que ceux de l'acheteur et du lieu du marché (« Ville », « Havre »). */
+function enrobageSansDonnee(ph: string, nomsDuMarche: string[]): boolean {
+  if (/\d/.test(ph)) return false;
+  const admis = new Set(['ville', 'commune', 'mairie', 'departement', 'region', 'metropole', 'gss', ...nomsDuMarche.flatMap((n) => normaliser(String(n || '')).split(/[^a-z]+/)).filter((w) => w.length >= 2)]);
+  const propres = [...ph.trim().slice(1).matchAll(/(?<=[\s'’(])([A-ZÀ-Ý][\p{L}-]*)/gu)].map((m) => normaliser(m[1]).replace(/[^a-z]+/g, ''));
+  return propres.every((w) => admis.has(w));
+}
+
+/** Phrases d'enrobage seules retirées d'une proposition rédigée par l'IA (cadre : réponse sans texte de GSS ou autour d'un renvoi). */
+export function retirerEnrobage(texte: string, nomsDuMarche: string[] = []): { texte: string; retirees: string[] } {
+  const retirees: string[] = [];
+  const lignes = String(texte || '').split('\n').map((l) => {
+    if (!l.trim() || /\[À COMPLÉTER\]|⟦AC:\d+⟧|\[CONSULTATION REQUISE/i.test(l)) return l;
+    const puce = (/^\s*(?:[•\-*]|\d+[.)])\s+/.exec(l) || [''])[0];
+    const phrases = l.slice(puce.length).split(/(?<=[.!?])\s+(?=[A-ZÀ-Ý«])/);
+    const gardees = phrases.filter((ph) => {
+      if (ENROBAGE_EXPLICITE.test(ph) || (ENROBAGE.test(ph.trim()) && enrobageSansDonnee(ph, nomsDuMarche))) { retirees.push(ph.trim()); return false; }
+      return true;
+    });
+    return gardees.length ? `${puce}${gardees.join(' ')}` : null;
+  }).filter((l): l is string => l !== null);
+  return { texte: lignes.join('\n').replace(/\n{3,}/g, '\n\n').trim(), retirees };
+}
+
+export function ajoutsAuTexteDeGss(texte: string, reference: string, dce = '', autresTextesGss: string[] = [], nomsDuMarche: string[] = []): { texte: string; retirees: string[]; signalees: string[] } {
   const PUCE = /^\s*(?:[•\-*]|\d+[.)])\s+/;
   // Texte de GSS : la référence du champ et les autres textes du mémoire type (une rubrique reprise ailleurs reste le texte de GSS).
   const refs = [String(reference || ''), ...autresTextesGss.map((x) => texteBrut(String(x || '')))].join('\n').replace(/\r/g, '').split('\n').flatMap((l) => l.replace(PUCE, '').split(/(?<=[.!?;])\s+/)).map((x) => motsDePhrase(x)).filter((m) => m.length >= 3);
@@ -1618,7 +1664,8 @@ export function ajoutsAuTexteDeGss(texte: string, reference: string, dce = '', a
       if (!/[.!?;:]\s*$/.test(ph.trim()) && !VERBE_CONJUGUE_INTITULE.test(ph)) return true;
       // Enrobage : évaluation explicite (« … est adapté aux enjeux de ce marché », « … renforce la fiabilité / la traçabilité »), ou
       // cadre évaluatif sans donnée propre (ni chiffre ni nom propre) ; sinon la phrase reste, signalée à GSS.
-      const sansDonnee = !/\d/.test(ph) && !/\s[A-ZÀ-Ý][\p{L}]/u.test(ph.trim().slice(1));
+      // (le nom de l'acheteur ou du lieu n'est pas une donnée propre : « … de la plage du Havre », « … à la Ville », T8-CONS-12)
+      const sansDonnee = enrobageSansDonnee(ph, nomsDuMarche);
       if (ENROBAGE_EXPLICITE.test(ph) || (ENROBAGE.test(ph.trim()) && sansDonnee)) { retirees.push(ph.trim()); return false; }
       signalees.push(ph.trim());
       return true;
@@ -1628,7 +1675,7 @@ export function ajoutsAuTexteDeGss(texte: string, reference: string, dce = '', a
   return { texte: lignes.join('\n').replace(/\n{3,}/g, '\n\n').trim(), retirees, signalees };
 }
 
-export function recalerSurReference(reference: string, reponse: string, o: { limite?: boolean; maxMots?: number; seuil?: number; exclure?: (phrase: string) => boolean; dce?: string; attendus?: string[]; parAttendus?: boolean } = {}): ResultatRecalage {
+export function recalerSurReference(reference: string, reponse: string, o: { limite?: boolean; maxMots?: number; seuil?: number; exclure?: (phrase: string) => boolean; dce?: string; attendus?: string[]; parAttendus?: boolean; question?: string } = {}): ResultatRecalage {
   // Réponse rédigée sous les intitulés des éléments attendus du cadre : recalée partie par partie, dans l'ordre du cadre.
   if (o.parAttendus !== false && (o.attendus?.length || 0) >= 2) {
     const r = recalerParAttendus(reference, reponse, o);
@@ -1659,8 +1706,9 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
   const exclus = ref.map((p) => !!o.exclure?.(p.brut));
   for (let k = ref.length - 2; k >= 0; k--) if (!exclus[k] && exclus[k + 1] && ref[k + 1].ligne === ref[k].ligne && /:\s*$/.test(ref[k].brut)) exclus[k] = true;
   // Texte de GSS applicable au marché (mesure de la fidélité) : sans ces phrases.
-  const applicable = exclus.some(Boolean)
-    ? lignesRef.map((_, i) => ref.filter((p, k) => p.ligne === i && !exclus[k]).map((p) => p.brut).join(' ')).join('\n') : reference;
+  const calculerApplicable = () => (exclus.some(Boolean)
+    ? lignesRef.map((_, i) => ref.filter((p, k) => p.ligne === i && !exclus[k]).map((p) => p.brut).join(' ')).join('\n') : reference);
+  let applicable = calculerApplicable();
   const mesure = (t: string) => fideliteReponse(applicable, t, !!o.limite, o.dce || '');
   const fideliteAvant = mesure(reponse);
   // Réponse du modèle.
@@ -1746,6 +1794,28 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
     reformulees++;
   }
   for (const it of items) if (it.ref === undefined && it.mots.length >= 3) it.ajout = true;
+  // Fiche de GSS (« • Libellé : valeur », trois lignes au moins de suite : identité, assurance, effectif…) dont la réponse ne
+  // garde que certaines lignes : les lignes omises dont le libellé n'est pas demandé par la question ne sont pas remises
+  // (havre1 1882, T8-CONS-10 : « Les formations suivies par les agents… ainsi que leurs agréments » recevait l'assurance
+  // Hiscox, l'ISO 9001, l'effectif et la sous-traitance de la fiche d'identité ; seule l'identité CNAPS y répond).
+  if (o.question) {
+    const FICHE = /^\s*[•\-*]\s+([^:]{2,60}?)\s:\s\S/;
+    const estFiche = (i: number) => (lignesRef[i] || []).length >= 1 && FICHE.test(lignesRef[i][0]);
+    const motsQ = new Set(normaliser(o.question).replace(/[^a-z ]+/g, ' ').split(/\s+/).filter((w) => w.length >= 4).map((w) => w.replace(/(?:es|s|x)$/, '')));
+    const demande = (i: number) => normaliser((FICHE.exec(lignesRef[i][0]) || [])[1] || '').replace(/[^a-z ]+/g, ' ').split(/\s+/)
+      .filter((w) => w.length >= 4).map((w) => w.replace(/(?:es|s|x)$/, '')).some((w) => motsQ.has(w) && !['marche', 'accord', 'cadre', 'site', 'agent', 'agence', 'service', 'prestation', 'client', 'execute', 'execution', 'pour', 'dans', 'avec'].includes(w));
+    for (let i = 0; i < lignesRef.length; i++) {
+      if (!estFiche(i) || (i > 0 && estFiche(i - 1))) continue;
+      let j = i;
+      while (j + 1 < lignesRef.length && estFiche(j + 1)) j++;
+      if (j - i < 2) continue;
+      const ks = (l: number) => ref.map((_, k) => k).filter((k) => ref[k].ligne === l);
+      const gardees = Array.from({ length: j - i + 1 }, (_, n) => i + n).filter((l) => ks(l).some((k) => position.has(k)));
+      if (!gardees.length || gardees.length === j - i + 1) continue;
+      for (let l = i; l <= j; l++) if (!gardees.includes(l) && !demande(l)) ks(l).forEach((k) => { exclus[k] = true; });
+    }
+    applicable = calculerApplicable();
+  }
   // Tableau de GSS (lignes « Catégorie : Qualification : Nombre : Observations » issues d'un tableau Markdown, deux au
   // moins de suite) : toutes ses lignes ou aucune, quelle que soit la limite de mots (ca_normandie 221 : tableau de
   // l'équipe dédiée réduit à ses 2 lignes SSIAP, 41 agents, sous la phrase « une équipe de 83 agents titulaires »).
@@ -1981,6 +2051,14 @@ export function recalerSurReference(reference: string, reponse: string, o: { lim
         if (!m.dansLaLigne && estPuce(i) && nouvelle.length && nouvelle[nouvelle.length - 1].items.length) nouvelle.push({ items: [] });
         poser(m, ligne);
         vide = false;
+      }
+      // Sous-titre du cadre à placer devant une ligne de GSS omise par la réponse (havre1 1882, T8-CONS-10 : « Autorisation
+      // CNAPS » devant la « Dénomination » non reprise, renvoyé en fin de réponse) : devant la ligne suivante de GSS, où les
+      // lignes omises sont ensuite remises à leur place.
+      if (avantLigne.has(i) && i + 1 < lignesRef.length) {
+        const reste = avantLigne.get(i)!;
+        avantLigne.delete(i);
+        avantLigne.set(i + 1, [...reste, ...(avantLigne.get(i + 1) || [])]);
       }
     }
     // Morceau à placer devant une ligne qui n'a pas été imprimée : jamais perdu, à la fin.
@@ -2390,6 +2468,48 @@ export function colonneCase(contexte: string): string {
  * et les pseudo-lignes de tableau qui recopient ses colonnes (« NOM : [À COMPLÉTER] ; Prénom : [À COMPLÉTER] ; Date :
  * [À COMPLÉTER]. ») sont retirés : le tableau porte déjà ces cases, chacune avec sa question.
  */
+/**
+ * Ligne « • Date de fin de validité : [À COMPLÉTER]. » sans sujet (havre1 1882, T8-COH-7 : restée seule après le bloc
+ * d'identité de GSS, qui a remplacé la puce d'autorisation qu'elle complétait) : retirée quand le cadre demande déjà cette
+ * date (colonne ou ligne « Date de fin de validité » du formulaire, emplacement à part) ; sinon rattachée à la puce de GSS
+ * qui la précède (« … — date de fin de validité : [À COMPLÉTER]. »). Jamais une date sans objet.
+ */
+/**
+ * Champ du cadre qui demande d'insérer des fiches techniques (havre1 1882, 4.2, 4.4 et 4.5 : « Fiches techniques des moyens
+ * de communication (insérer ici les fiches techniques) », T8-CONS-11) : leur objet (« moyens de communication »), sinon ''.
+ * Ces champs reçoivent un emplacement explicite, jamais une prose de l'IA qui renvoie à des fiches absentes.
+ */
+export function objetFicheTechnique(question: string): string {
+  const q = String(question || '').replace(/\[CHAMP_\d+\]/gi, '').replace(/\s+/g, ' ').trim();
+  if (!/fiches?\s+(?:techniques?|produits?)|notices?\s+techniques?|documentations?\s+techniques?/i.test(q) || !/ins[ée]rer|joindre|annexer|fournir|ins[ée]rez|joignez/i.test(q)) return '';
+  const m = /(?:fiches?\s+(?:techniques?|produits?)|notices?\s+techniques?|documentations?\s+techniques?)\s+(?:de\s+la\s+|de\s+l['’]|des\s+|du\s+|de\s+)?([^()\n;:.]{3,80}?)\s*(?:\(|$|[;:.])/i.exec(q.replace(/^\s*\d+(?:\.\d+)*\.?\s*/, ''));
+  const objet = (m ? m[1] : '').replace(/[\s,]+$/, '').trim();
+  return objet && !/^(?:ici|les?|des)$/i.test(objet) ? objet : 'équipements proposés';
+}
+
+export function sansDateOrpheline(texte: string, cadre = ''): { texte: string; retirees: number } {
+  const DATE_SEULE = /^\s*(?:[•\-*]\s*)?((?:date\s+(?:de\s+(?:fin\s+de\s+)?validit[ée]|d['’]obtention|de\s+d[ée]livrance|d['’]expiration|de\s+fin))|(?:fin\s+de\s+)?validit[ée])\s*:\s*(\[À COMPLÉTER\])\.?\s*$/i;
+  const cadreN = normaliser(cadre);
+  const lignes = String(texte || '').split('\n');
+  let retirees = 0;
+  const out: string[] = [];
+  for (let i = 0; i < lignes.length; i++) {
+    const m = DATE_SEULE.exec(lignes[i]);
+    if (!m) { out.push(lignes[i]); continue; }
+    if (cadreN.includes(normaliser(m[1]).replace(/\s+/g, ' '))) { retirees++; continue; }
+    let k = out.length - 1;
+    while (k >= 0 && !out[k].trim()) k--;
+    if (k >= 0 && /^\s*[•\-*]\s/.test(out[k]) && !/\[À COMPLÉTER\]/.test(out[k])) {
+      out[k] = `${out[k].replace(/[.;\s]+$/, '')} — ${m[1].charAt(0).toLowerCase()}${m[1].slice(1)} : [À COMPLÉTER].`;
+      out.splice(k + 1);
+      retirees++;
+      continue;
+    }
+    out.push(lignes[i]);
+  }
+  return { texte: out.join('\n').replace(/\n{3,}/g, '\n\n'), retirees };
+}
+
 export function sansPseudoTableau(texte: string): { texte: string; retires: number } {
   let retires = 0;
   const VIDE = /^\s*[^:;\n]{1,60}?\s*:\s*\[À COMPLÉTER\]\s*[.;]?\s*$/;

@@ -27,8 +27,8 @@ import {
   sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, similariteQuestions, recouvrementTextes, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, questionRondes, casPratiqueRepris, type Dimensionnement } from './dimensionnement';
-import { ajoutsAuTexteDeGss,
-  type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, phrasesThematiques, completerParThematiques, completerMailUnique, COLONNE_VALEUR, colonneCase, sansPseudoTableau, textesSchemaSvg, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
+import { ajoutsAuTexteDeGss, retirerEnrobage,
+  type PartieRC, candidatsReference, blocReference, referencesRetenues, referencesPrincipales, nettoyerReponseCadre, signatureRubrique, cosinus, SEUIL_FIDELITE_CADRE, recalerSurReference, motsMaxChamp, libelleQuestionCadre, phrasesThematiques, completerParThematiques, completerMailUnique, COLONNE_VALEUR, colonneCase, sansPseudoTableau, sansDateOrpheline, objetFicheTechnique, textesSchemaSvg, ajusterPartiesLimitees, hauteurSchemaPt, geometrieCadre, paragraphesCadre, partiesDuDocument, hauteurPartie,
   consigneRepartition, lireRepartition, placeElementRC, selectionnerParPriorite, selectionnerDansPartie, repartirBudget, assemblerPartie, motsPartie,
   partiePourTexte, poidsPartie, rubriquesEssentielles, plafonnerEngagements, PIECES_ADMINISTRATIVES, reponseSousTraitance,
   attribuerRubriques, blocRenvois, completerDelaisCadre, ordonnerSelonReponse, questionHorsMemoireType, questionUtileChamp, questionComprehension, champValeur, intitulePrincipal, texteBrut,
@@ -5672,6 +5672,8 @@ FORMAT DE RÉPONSE : JSON valide uniquement → {"replacements": [ {"id": 1, "va
     const ajoutsParChamp = new Map<number, { libelle: string; phrases: string[] }>();
     // Texte de GSS au sens large (T6-COH-5) : toutes les rubriques du mémoire type, même celles que le marché n'a pas
     // publiées (b2_identite), et les valeurs retenues du registre ; une phrase qui les reprend n'est jamais « ajoutée par l'IA ».
+    // Nom de l'acheteur et communes du marché : jamais une « donnée propre » qui sauve une phrase d'enrobage (T8-CONS-12).
+    const nomsMarcheCadre: string[] = [String(repriseMT?.prep.variables.CLIENT?.valeur || analysisData?.clientName || ''), String(repriseMT?.prep.variables.CLIENT?.court || ''), ...([] as any[]).concat(repriseMT?.prep.variables.VILLE?.valeur || []).map((x: any) => String(x || ''))];
     const textesGssComplets = (() => {
       const mtx = this.memoireTypeV2();
       return [...(mtx?.rubriques || []).map((r: any) => String(r.texte || '').replace(/\{\{[^}]*\}\}/g, ' ')), ...lireRegistre().map((e) => String(e.valeur_retenue || ''))].filter((x) => x.trim());
@@ -6154,7 +6156,7 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
           // proposition de l'IA annoncée comme « question que le mémoire type ne traite pas ».
           let references = referencesRetenues(candidats, data.reference);
           if (!references.length && candidats.length && !reprise.hors && !comprehension) {
-            references = referencesDeSecours(candidats, `${questionMT || ''}\n${f.context}`);
+            references = referencesDeSecours(candidats, `${questionMT || ''}\n${f.context}`, { themesSeuls: true });
             if (references.length) console.log(`[MemoireGenerator] ${label} : aucun texte de GSS cité par le modèle, rubriques du mémoire type choisies sans modèle (${references.map((c) => c.id).join(', ')}).`);
           }
           const retenus = ordonnerSelonReponse(completerFamilles(referencesPrincipales(references), candidats), String(value));
@@ -6182,7 +6184,7 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
             // Éléments attendus du cadre (« Éléments de réponse attendus : … ») : jamais laissés sans réponse au recalage (T4N-4).
             const attendus = attendusDuChamp(f.context).length ? attendusDuChamp(f.context) : attendusDuChamp(String(questionMT || ''));
             const rec = recalerSurReference(retenus.map((c) => c.texte).join('\n\n'), String(value), {
-              limite: limiteChamp, maxMots: motsMaxChamp(f.context), exclure: (ph) => phraseContraireAuDce(ph, dceContext), dce: dceContext, attendus,
+              limite: limiteChamp, maxMots: motsMaxChamp(f.context), exclure: (ph) => phraseContraireAuDce(ph, dceContext), dce: dceContext, attendus, question: `${questionMT || ''}`,
             });
             if (rec.fideliteAvant < SEUIL_FIDELITE_CADRE && !strict) {
               console.log(`[MemoireGenerator] ${label} : fidélité ${rec.fideliteAvant.toFixed(2)} au mémoire type (${retenus.map((c) => c.id).join(', ')}) < ${SEUIL_FIDELITE_CADRE} → nouvel essai strict.`);
@@ -6199,7 +6201,7 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
                   // Première réponse gardée : ses phrases ajoutées au texte de GSS sont retirées (enrobage) ou signalées, et le
                   // signalement de l'essai écarté est remplacé (T6-CONS-2, T6-COH-1).
                   if (k >= 0) {
-                    const aj1 = ajoutsAuTexteDeGss(String(replacements[k].value ?? ''), retenus.map((c) => c.texte).join('\n\n'), dceContext, [...Object.values(repriseMT!.textes || {}), ...textesGssComplets]);
+                    const aj1 = ajoutsAuTexteDeGss(String(replacements[k].value ?? ''), retenus.map((c) => c.texte).join('\n\n'), dceContext, [...Object.values(repriseMT!.textes || {}), ...textesGssComplets], nomsMarcheCadre);
                     if (aj1.texte.trim()) replacements[k].value = aj1.texte;
                     if (aj1.signalees.length) ajoutsParChamp.set(f.id, { libelle, phrases: aj1.signalees }); else ajoutsParChamp.delete(f.id);
                   }
@@ -6221,7 +6223,7 @@ ${f.grille ? CONSIGNE_GRILLE + '\n' + autresCriteres(f) + '\n' : ''}${tableGuida
             // plus. », T5-CONS-6) : l'enrobage sans donnée propre retiré ; toute autre phrase absente du texte de GSS et du DCE
             // signalée à GSS (rubrique, phrase), comme en réponse libre ; rien de ce signalement n'est imprimé.
             {
-              const aj = ajoutsAuTexteDeGss(rec.texte, retenus.map((c) => c.texte).join('\n\n'), dceContext, [...Object.values(repriseMT!.textes || {}), ...textesGssComplets]);
+              const aj = ajoutsAuTexteDeGss(rec.texte, retenus.map((c) => c.texte).join('\n\n'), dceContext, [...Object.values(repriseMT!.textes || {}), ...textesGssComplets], nomsMarcheCadre);
               if (aj.retirees.length) console.log(`[MemoireGenerator] ${label} : ${aj.retirees.length} phrase(s) d'enrobage ajoutée(s) par l'IA retirée(s) (${aj.retirees.map((x) => x.slice(0, 60)).join(' ; ')}).`);
               if (aj.texte.trim()) rec.texte = aj.texte;
               // Signalement rapproché du texte final plus bas (une ligne par réponse, jamais une consultation par phrase).
@@ -6534,9 +6536,29 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
     } catch (e: any) {
       console.warn(`[MemoireGenerator] Couverture du CCTP (cadre) indisponible : ${e?.message || e}`);
     }
+    // Champs qui demandent d'insérer des fiches techniques (T8-CONS-11) : un emplacement explicite, jamais une prose de l'IA
+    // qui renvoie à des fiches absentes ; une seule question à GSS liste les fiches à joindre.
+    const fichesCadre: Array<{ objet: string; libelle: string }> = [];
     for (const r of replacements) {
       const d = descriptors.find((x) => x.id === r.id);
       if (!d || d.kind === 'checkbox') continue;
+      {
+        const qF = (d.context.match(/Question:\s*"([^"]*)"/) || [])[1] || '';
+        const objet = d.kind !== 'table' ? objetFicheTechnique(qF) : '';
+        if (objet) {
+          r.value = `[Fiche technique à insérer : ${objet}]`;
+          propositionsCadre.delete(r.id);
+          repriseParChamp.delete(r.id);
+          fichesCadre.push({ objet, libelle: libelleQuestionCadre(qF) });
+          console.log(`[MemoireGenerator] Champ ${r.id} : fiche technique demandée par le cadre (${objet}), emplacement à insérer et question à GSS.`);
+          continue;
+        }
+      }
+      // Proposition rédigée par l'IA (sans texte de GSS, ou autour d'un renvoi) : ses phrases d'enrobage retirées aussi (T8-CONS-12).
+      if (propositionsCadre.has(r.id) && !repriseParChamp.has(r.id)) {
+        const en = retirerEnrobage(String(r.value ?? ''), nomsMarcheCadre);
+        if (en.retirees.length && en.texte.trim()) { r.value = en.texte; console.log(`[MemoireGenerator] Champ ${r.id} : ${en.retirees.length} phrase(s) d'enrobage retirée(s) de la proposition (${en.retirees.map((x) => x.slice(0, 60)).join(' ; ')}).`); }
+      }
       const { texte, retires } = retirerCommentairesInternes(completerIdentiteCnaps(String(r.value ?? '')));
       // Exigence du CCTP recopiée à la voix de l'acheteur (« Le Titulaire doit… », « Elle ne devra pas… ») : retirée ;
       // le reste à la voix de GSS (« le titulaire » → « GSS »).
@@ -6555,6 +6577,9 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       if (d.kind !== 'table' && String(r.value).length > 120) {
         const pt = sansPseudoTableau(String(r.value));
         if (pt.retires) { r.value = pt.texte; console.log(`[MemoireGenerator] Champ ${r.id} : ${pt.retires} pseudo-ligne(s) de tableau ou repère seul retiré(s).`); }
+        // Date sans objet (« • Date de fin de validité : [À COMPLÉTER]. ») : retirée si le cadre la demande déjà, sinon rattachée (T8-COH-7).
+        const dt = sansDateOrpheline(String(r.value), texteDuCadre);
+        if (dt.retirees) { r.value = dt.texte; console.log(`[MemoireGenerator] Champ ${r.id} : ${dt.retirees} date(s) sans objet retirée(s) ou rattachée(s).`); }
       }
       // Cas pratique : cases « en service : [À COMPLÉTER] | rotation : [À COMPLÉTER] » remplies avec le dispositif proposé.
       if (dimensionnementCadre) r.value = remplirCasPratique(String(r.value), dimensionnementCadre).texte;
@@ -6608,6 +6633,10 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       if (recopie.retires.length) console.log(`[MemoireGenerator] Champ ${r.id} : ${recopie.retires.length} phrase(s) du CCTP recopiée(s) à la voix de l'acheteur retirée(s).`);
       retires.forEach((x) => confirmationsGss.add(`À confirmer : ${x}`));
       delais.retires.forEach((x) => confirmationsGss.add(`${libelleDelaiRetire(analysisData, dceContext)}${x}`));
+    }
+    if (fichesCadre.length) {
+      const objets = [...new Set(fichesCadre.map((x) => x.objet))];
+      confirmationsGss.add(`Fiches techniques demandées par le cadre de réponse (${fichesCadre.map((x) => `« ${x.libelle} »`).join(', ')}) : pouvez-vous fournir les fiches techniques de vos équipements (${objets.join(' ; ')}) ? Elles sont à insérer aux emplacements « [Fiche technique à insérer : …] » avant la remise.`);
     }
     // Forme longue de l'acheteur à la première mention, forme courte ensuite (ca_normandie 221 : « Ministère de la Justice –
     // Service administratif régional de Rouen / BOP Normand (…) » 11 fois → « le SAR de Rouen » après la première).
@@ -7177,6 +7206,16 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
         rep.value = faits.texte;
       }
       let value = dedupeClientName(guardPlaceholders(guardNames(guardInventedClaims(guardServiceCert(guardFactual(String(rep.value), desc.context), desc.context), desc.context)), desc.context));
+      // Réponse développée réduite à des intitulés après les nettoyages (havre1 1882, T8-CONS-1 : « Les établissements bancaires : »
+      // seul sous la question 2.3) : échec de rédaction, jamais imprimé seul ; emplacement et alerte à GSS.
+      if ((repriseParChamp.has(rep.id) || propositionsCadre.has(rep.id)) && value.trim() && !/\[À COMPLÉTER\]/.test(value)
+        && !value.split('\n').some((l) => l.replace(/^\s*[•\-*]\s*/, '').trim().split(/\s+/).length >= 6)) {
+        const lib = libelleQuestionCadre((desc.context.match(/Question:\s*"([^"]*)"/) || [])[1] || `Réponse ${rep.id}`);
+        console.warn(`[MemoireGenerator] CHAMP_${rep.id} : réponse réduite à des intitulés (${value.replace(/\s+/g, ' ').slice(0, 80)}) → [À COMPLÉTER].`);
+        value = '[À COMPLÉTER]';
+        propositionsCadre.delete(rep.id);
+        confirmationsGss.add(`Réponse « ${lib} » : la réponse n'a pas pu être rédigée (texte réduit à un intitulé) ; elle est laissée « [À COMPLÉTER] » : rédigez-la ou demandez-la via l'assistant avant la remise.`);
+      }
       // Ligne de continuation « : …… » vidée par un garde-fou : pointillés effacés plutôt qu'un « [À COMPLÉTER] » sans objet.
       if (/^\[À COMPLÉTER\]\.?$/.test(value.trim()) && continuationAvecPrincipale(desc)) value = '';
       // Sous-traitance d'une prestation (« … est-elle sous-traitée ? Si oui à quelle(s) entreprise(s) ») : réponse connue de
@@ -7205,9 +7244,11 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
           .replace(/['’]/g, ' ');
         const askOne = /\b(la personne|l ?interlocuteur|le contact|de la personne|du contact)\b/.test(q)
           && !/\b(personnes|interlocuteurs|liste|organigramme)\b/.test(q);
+        // Seulement une liste de contacts (lignes courtes), jamais une réponse rédigée : « la personne référente joignable 24h/24 »
+        // (havre1, T8-CONS-1) réduite au premier paragraphe du texte de GSS, sans l'interlocuteur, le numéro ni le courriel.
         if (askOne) {
           const lines = value.split(/\n+/).map((s) => s.trim()).filter(Boolean);
-          if (lines.length > 1) { value = lines[0]; console.log(`[MemoireGenerator] Contact singulier: liste réduite à 1 personne (CHAMP_${rep.id}).`); }
+          if (lines.length > 1 && lines.every((l) => l.split(/\s+/).length <= 12)) { value = lines[0]; console.log(`[MemoireGenerator] Contact singulier: liste réduite à 1 personne (CHAMP_${rep.id}).`); }
         }
       }
       // Lignes de tableau écrites avec des « | » (dispositif du cas pratique, générations réelles etampes2 701 et 702 : « Dimanche
@@ -7582,7 +7623,16 @@ Renvoie UNIQUEMENT un objet JSON : {"corrections": [{"id": <id>, "extrait": "…
       adaptationsCadre.forEach((a, i) => { a.n = i + 1; });
       // Phrases ajoutées par l'IA au texte de GSS (T6N-5) : annoncées dans le premier message, comme en réponse libre.
       const texteAjoutsCadre = messageAjoutsCadre(ajoutsFinaux);
-      const texteAdaptations = [messageAdaptations(adaptationsCadre), texteAjoutsCadre].filter(Boolean).join('\n\n');
+      // Propositions de l'IA imprimées dans une réponse du cadre (D5, T8N-9 : relais cynophile d'une mise en situation) : annoncées
+      // dans le premier message aussi, à valider, modifier ou supprimer, comme en réponse libre.
+      const propositionsD5 = [...confirmationsGss].filter((c) => /^Proposition à valider \(champ « /.test(c));
+      const textePropositionsD5 = propositionsD5.length ? [
+        `J'ai proposé ${propositionsD5.length === 1 ? 'une réponse' : `${propositionsD5.length} réponses`} à des points que le mémoire type de GSS ne couvre pas, imprimée${propositionsD5.length > 1 ? 's' : ''} dans le cadre (à valider avant la remise) :`,
+        ...propositionsD5.map((c) => `- ${c.replace(/^Proposition à valider \(champ /, '').replace(/\)\s*:\s*/, ' : ')}`),
+        '',
+        'Pour chacune, vous pouvez la valider telle quelle, la modifier (« Dans la réponse sur …, remplace … par … ») ou la supprimer (« Dans la réponse sur …, supprime la phrase … »).',
+      ].join('\n') : '';
+      const texteAdaptations = [textePropositionsD5, messageAdaptations(adaptationsCadre), texteAjoutsCadre].filter(Boolean).join('\n\n');
       let conversationFinale = texteAdaptations
         ? (conversation?.length ? [{ ...conversation[0], texte: `${conversation[0].texte}\n\n${texteAdaptations}` }] : [{ role: 'assistant' as const, date: new Date().toISOString(), texte: texteAdaptations }])
         : conversation;
