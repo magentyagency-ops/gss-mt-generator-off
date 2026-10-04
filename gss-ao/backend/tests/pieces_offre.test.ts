@@ -63,3 +63,15 @@ describe('motifRefusEngagement — infinitif et « s’engage à »', () => {
     expect(motifRefusEngagement('GSS transmet le planning mensuel au plus tard 10 jours avant le début du mois.')).toBe('');
   });
 });
+
+// Tour 4, correcteur (T4-COH-5, ign) : question tirée d'un engagement refusé, toujours avec son verbe à l'infinitif.
+describe('questionDEngagement : verbe à l\'infinitif (T4-COH-5)', () => {
+  it('verbe gardé quel que soit le début de l\'objet, verbes coordonnés au futur mis à l\'infinitif', () => {
+    expect(questionDEngagement('GSS fournira dès la notification les scénarios servant à l’exercice trimestriel organisé par le SAIMG et se coordonnera avec l’intervenant ascenseurs pour la formation à la désincarcération.'))
+      .toBe('Que prévoyez-vous pour fournir dès la notification les scénarios servant à l’exercice trimestriel organisé par le SAIMG et vous coordonner avec l’intervenant ascenseurs pour la formation à la désincarcération ?');
+    expect(questionDEngagement('GSS transmettra au SAIMG un rapport pour chaque évaluation et mettra en place un plan d’action sous 15 jours si les connaissances sont insuffisantes.'))
+      .toBe('Que prévoyez-vous pour transmettre au SAIMG un rapport pour chaque évaluation et mettre en place un plan d’action sous 15 jours si les connaissances sont insuffisantes ?');
+    expect(questionDEngagement('GSS fournira chaque mois au client le planning nominatif des agents.')).toBe('Que prévoyez-vous pour fournir chaque mois au client le planning nominatif des agents ?');
+    expect(questionDEngagement('GSS organisera une visite du site avant la prise de service.')).toBe('Que prévoyez-vous pour organiser une visite du site avant la prise de service ?');
+  });
+});

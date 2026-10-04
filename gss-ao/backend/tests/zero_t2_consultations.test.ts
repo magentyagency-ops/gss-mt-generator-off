@@ -61,3 +61,17 @@ describe('même question posée deux fois (T2N-7, ifsem 1001)', () => {
     expect(r[0].sources).toEqual([1, 4]);
   });
 });
+
+// Tour 4, correcteur (T4-COH-6, rejeu cstb) : consolidation indisponible, demande brute sans citation : la clause d'assurance
+// n'est pas redemandée quand la question de l'attestation Hiscox la couvre.
+describe('clause d\'assurance non redemandée en mode dégradé (T4-COH-6)', () => {
+  it('demande brute « Souscrire une assurance… » retirée près de la question Hiscox', () => {
+    const qs = [
+      { question: "Votre attestation d'assurance (Hiscox, contrat HA RCP0242762) couvre-t-elle ce que demande le CCTP : « souscrira une assurance couvrant la responsabilité du titulaire en cas d'accident, d'incendie ou d'explosion, ainsi que la perte de clés » ? Si oui, quelle garantie et quel montant faut-il indiquer ; sinon, faut-il le signaler à l'acheteur ?" },
+      { question: "Souscrire une assurance couvrant la responsabilité du titulaire en cas d'accident, d'incendie ou d'explosion, ainsi que la perte de clés" },
+    ];
+    const r = sansQuestionsRedites(qs);
+    expect(r).toHaveLength(1);
+    expect(r[0].question).toMatch(/Hiscox/);
+  });
+});

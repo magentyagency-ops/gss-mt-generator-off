@@ -1634,8 +1634,11 @@ export function sansQuestionsRedites<T extends { question: string; sources?: num
     }
     // Même phrase du DCE citée deux fois (T3N-6, mode dégradé : « … sur ce point : « Ne facturer qu'après… » » et « … que le
     // mémoire ne traite pas : « Ne facturer qu'après… » ») : une seule question, la forme « que le mémoire ne traite pas ».
-    const cq = citationDe(q.question);
-    const memeCitation = (x: T) => { const cx = citationDe(x.question); return !!cq && !!cx && (normaliser(cx) === normaliser(cq) || recouvrementTextes(cx, cq) >= 0.6); };
+    // Demande brute sans citation (consolidation indisponible, T4-COH-6 : « Souscrire une assurance couvrant… » avant sa mise en
+    // forme) : son texte entier sert de citation.
+    const citationOuTexte = (x: string) => citationDe(x) || (/«/.test(x) ? '' : x);
+    const cq = citationOuTexte(q.question);
+    const memeCitation = (x: T) => { const cx = citationOuTexte(x.question); return !!cq && !!cx && (normaliser(cx) === normaliser(cq) || recouvrementTextes(cx, cq) >= 0.6); };
     const double = LIGNE_DETERMINISTE.test(q.question) ? undefined : out.find((x) => !LIGNE_DETERMINISTE.test(x.question) && (memeDemande(x.question, q.question)
       || (cleDonnee(x.question).length > 0 && cleDonnee(x.question).join() === cleDonnee(q.question).join()) || memeCitation(x)));
     // Deux clauses du DCE sur le même sujet, chacune citée (T3N-6 : réversibilité au CCTP et au CCAP, confidentialité et données)
@@ -1657,7 +1660,7 @@ export function sansQuestionsRedites<T extends { question: string; sources?: num
     out.push(q);
   }
   // Assurance : la question de l'attestation Hiscox la couvre ; une exigence d'assurance citée du DCE n'est pas redemandée (T3N-6).
-  if (out.some((x) => /Hiscox/i.test(x.question))) return out.filter((x) => !(/\bassuranc/i.test(citationDe(x.question)) && !/Hiscox/i.test(x.question) && !LIGNE_DETERMINISTE.test(x.question) && !o.garder?.(x) && !prioritaires.includes(x.question)));
+  if (out.some((x) => /Hiscox/i.test(x.question))) return out.filter((x) => !(/\bassuranc/i.test(citationDe(x.question) || (/«/.test(x.question) ? '' : x.question)) && !/Hiscox/i.test(x.question) && !LIGNE_DETERMINISTE.test(x.question) && !o.garder?.(x) && !prioritaires.includes(x.question)));
   return out;
 }
 
@@ -2017,14 +2020,47 @@ export function questionDEngagement(x: string): string {
   // attendue est demandée telle que le DCE la formule.
   const o = /\b(?:s.engage(?:ra)? [àa] (?:lui )?)?(pr[ée]cis|indiqu|d[ée]taill|communiqu|fourni|transmet|mentionn|pr[ée]sent|renseign|d[ée]termin|d[ée]fini)[a-zé]*\s+(.+)$/i.exec(t);
   const objet = sansMemoire(o ? o[2] : t).replace(/\s+ult[ée]rieurement\b/i, '');
-  // Objet qui commence par une préposition (« GSS fournira aux agents des tenues propres… », cstb 551, T7CS-7) : le verbe reste
-  // dans la question (« Que prévoyez-vous pour fournir aux agents des tenues propres… ? »), jamais une phrase sans verbe.
-  if (o && /^(?:aux?|à|en|par|dans|pour|sur)\s/i.test(objet)) {
+  // Le verbe reste dans la question, à l'infinitif, quel que soit le début de l'objet (cstb 551, T7CS-7 ; ign, T4-COH-5 : « GSS
+  // fournira dès la notification les scénarios… » donnait « … exigence du CCTP : dès la notification les scénarios… ? », sans
+  // verbe) ; les verbes coordonnés au futur aussi (« et mettra en place » → « et mettre en place », « et se coordonnera » →
+  // « et vous coordonner »).
+  const coordonnes = (s: string) => s.replace(/\bet\s+(se\s+|s['’])?([a-zà-ÿ]{3,}(?:era|ira|tra|dra|ra))\b/gi, (m, se: string | undefined, v: string) => {
+    const inf = infinitifDuFutur(v);
+    return inf ? `et ${se ? 'vous ' : ''}${inf}` : m;
+  });
+  if (o) {
     const INFINITIFS: Record<string, string> = { precis: 'préciser', 'précis': 'préciser', indiqu: 'indiquer', detaill: 'détailler', 'détaill': 'détailler', communiqu: 'communiquer', fourni: 'fournir', transmet: 'transmettre', mentionn: 'mentionner', present: 'présenter', 'présent': 'présenter', renseign: 'renseigner', determin: 'déterminer', 'détermin': 'déterminer', defini: 'définir', 'défini': 'définir' };
     const verbe = INFINITIFS[o[1].toLowerCase()];
-    if (verbe) return `Que prévoyez-vous pour ${verbe} ${objet} ?`;
+    // Verbe d'action (fournir, transmettre) : toujours gardé ; verbe d'information (préciser, indiquer…) devant un objet nominal :
+    // la question porte sur l'objet lui-même (« … exigence du CCTP : les modalités de transmission des rapports ? »).
+    if (verbe && (/^(?:fournir|transmettre)$/.test(verbe) || /^(?:aux?|à|en|par|dans|pour|sur)\s/i.test(objet))) return `Que prévoyez-vous pour ${verbe} ${coordonnes(objet)} ?`;
+    if (verbe) return `Que prévoyez-vous pour répondre à cette exigence du CCTP : ${coordonnes(objet)} ?`;
   }
-  return `Que prévoyez-vous pour répondre à cette exigence du CCTP : ${objet} ?`;
+  // Phrase dont GSS est le sujet, verbe au futur ou au présent (« GSS organisera… ») : le verbe à l'infinitif.
+  const sujet = /^(?:GSS|le titulaire|nous)\s+(?:s['’]engage(?:ra)?\s+[àa]\s+)?(se\s+|s['’])?([a-zà-ÿ]{3,})\s+(.+)$/i.exec(t);
+  const inf = sujet ? infinitifDuFutur(sujet[2]) || infinitifDuPresent(sujet[2]) : '';
+  if (sujet && inf) return `Que prévoyez-vous pour ${sujet[1] ? 'vous ' : ''}${inf} ${coordonnes(sansMemoire(sujet[3]))} ?`;
+  return `Que prévoyez-vous pour répondre à cette exigence du CCTP : ${coordonnes(objet)} ?`;
+}
+
+/** Infinitif d'un verbe au futur (3e personne) : « fournira » → « fournir », « mettra » → « mettre », « coordonnera » →
+ *  « coordonner » ; '' si la forme n'est pas un futur. */
+export function infinitifDuFutur(v: string): string {
+  const w = String(v || '').toLowerCase();
+  const IRR: Record<string, string> = { sera: 'être', aura: 'avoir', fera: 'faire', ira: 'aller', devra: 'devoir', pourra: 'pouvoir', verra: 'voir', saura: 'savoir', viendra: 'venir', tiendra: 'tenir', prendra: 'prendre', voudra: 'vouloir', faudra: '', recevra: 'recevoir', enverra: 'envoyer', maintiendra: 'maintenir', interviendra: 'intervenir', obtiendra: 'obtenir', mettra: 'mettre', transmettra: 'transmettre', remettra: 'remettre', permettra: 'permettre' };
+  if (w in IRR) return IRR[w];
+  if (/[a-zà-ÿ]{2,}tra$/.test(w)) return w.replace(/tra$/, 'tre');
+  if (/[a-zà-ÿ]{2,}dra$/.test(w)) return w.replace(/dra$/, 'dre');
+  if (/[a-zà-ÿ]{2,}[^i]era$/.test(w) || /[a-zà-ÿ]{2,}iera$/.test(w)) return w.replace(/era$/, 'er');
+  if (/[a-zà-ÿ]{2,}ira$/.test(w)) return w.replace(/ira$/, 'ir');
+  return '';
+}
+
+/** Infinitif d'un verbe courant au présent (3e personne) : « transmet » → « transmettre », « organise » → « organiser ». */
+function infinitifDuPresent(v: string): string {
+  const w = String(v || '').toLowerCase();
+  const IRR: Record<string, string> = { met: 'mettre', transmet: 'transmettre', remet: 'remettre', fournit: 'fournir', tient: 'tenir', maintient: 'maintenir', prend: 'prendre', fait: 'faire', assure: 'assurer', organise: 'organiser', réalise: 'réaliser', realise: 'réaliser', effectue: 'effectuer', désigne: 'désigner', informe: 'informer', établit: 'établir', etablit: 'établir', garantit: 'garantir', veille: 'veiller', applique: 'appliquer', affecte: 'affecter', mobilise: 'mobiliser', respecte: 'respecter', procède: 'procéder', intervient: 'intervenir', dispose: 'disposer', utilise: 'utiliser', remplace: 'remplacer', contrôle: 'contrôler', forme: 'former', prévoit: 'prévoir', participe: 'participer' };
+  return IRR[w] || '';
 }
 /**
  * Questions du contrôle de couverture dont l'exigence est déjà traitée (T7CS-7, cstb 551 : « GSS fournira aux agents des tenues
