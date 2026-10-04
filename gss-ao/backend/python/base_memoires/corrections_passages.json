@@ -63,6 +63,27 @@
    "ancien": "J-15 DES PLANNINGS DU MOIS SUIVANT",
    "nouveau": "J-10 DES PLANNINGS DU MOIS SUIVANT",
    "source": "Réponse de GSS du 1er octobre 2026 (reponses_gss_2026-10-01.md, point 8)"
+  },
+  {
+   "document": "GSS - Region Normandie - lot 1.pdf",
+   "page": 45,
+   "ancien": "Les agents GSS sont présents sur tout le quart nord-ouest et plus",
+   "nouveau": "Les équipes et l’astreinte de GSS sont présentes sur toute la moitié nord de la France, de Nantes à Lille et jusqu’à Reims, et plus",
+   "source": "Réponse de GSS du 1er octobre 2026 (reponses_gss_2026-10-01.md, point 3 : moitié nord, de Nantes à Lille et jusqu'à Reims) ; registre (effectif_departement_76 = 215, effectif_departement_27 = 65, confirmés)"
+  },
+  {
+   "document": "GSS - Region Normandie - lot 1.pdf",
+   "page": 45,
+   "ancien": "précisément sur l’ensemble de la région Normandie. Avec près de 200",
+   "nouveau": "précisément sur l’ensemble de la région Normandie. Avec 215 salariés en Seine-Maritime et",
+   "source": "Réponse de GSS du 1er octobre 2026 (reponses_gss_2026-10-01.md, point 3 : moitié nord, de Nantes à Lille et jusqu'à Reims) ; registre (effectif_departement_76 = 215, effectif_departement_27 = 65, confirmés)"
+  },
+  {
+   "document": "GSS - Region Normandie - lot 1.pdf",
+   "page": 45,
+   "ancien": "agents sur la zone, nous couvrons l’ensemble du territoire normand. Nos",
+   "nouveau": "65 dans l’Eure, nous couvrons l’ensemble du territoire normand. Nos",
+   "source": "Réponse de GSS du 1er octobre 2026 (reponses_gss_2026-10-01.md, point 3 : moitié nord, de Nantes à Lille et jusqu'à Reims) ; registre (effectif_departement_76 = 215, effectif_departement_27 = 65, confirmés)"
   }
  ]
 }

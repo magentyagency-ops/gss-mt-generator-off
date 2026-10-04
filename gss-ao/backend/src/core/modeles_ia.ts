@@ -7,7 +7,9 @@
 //   GSS_IA_MODELE            modèle de tous les usages                                (défaut : gpt-6-luna)
 //   GSS_IA_EFFORT            effort de tous les usages                                (défaut : effort par usage)
 //   GSS_IA_EFFORT_REDACTION  rédaction, adaptation, contrôles, cadre, schémas, assistant (défaut : low)
-//   GSS_IA_EFFORT_ANALYSE    analyse du DCE, exigences, format imposé, propositions    (défaut : medium)
+//   GSS_IA_EFFORT_ANALYSE    analyse du DCE, exigences, format imposé, propositions,   (défaut : medium)
+//                            et aussi rédaction de la compréhension du besoin (bloc 1), dimensionnement
+//                            (lecture du DCE) et couverture du CCTP par le cadre imposé
 //   GSS_IA_EFFORT_MECANIQUE  description des photos de l'assistant, seul usage « mecanique » (défaut : none)
 //   GSS_IA_CACHE             « implicite » : cache de prompt implicite d'OpenAI, sans point d'arrêt
 //                            (défaut : explicite sur GPT-5.6 et suivants)
