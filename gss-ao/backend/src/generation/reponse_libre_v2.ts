@@ -663,6 +663,12 @@ export function blocProposition(mt: MemoireType, plan: PlanMemoireType, groupe: 
 const ROLES = ['bleu', 'orange', 'rouge', 'vert', 'sable', 'creme', 'or'];
 
 /** Texte court (titre de carte, titre de schéma) : coupé sur un mot, sans ponctuation finale pendante. */
+/**
+ * Titre de page de schéma sans ponctuation finale (D11, planche Marine v3 : « Notre réponse à votre besoin, en un process » ;
+ * citedia 1461, T4-CONS-11 : « Des alarmes traitées, des prestations suivies. » repris tel quel du modèle).
+ */
+export const titreSansPointFinal = (t: unknown): string => String(t ?? '').replace(/(?<!\.\.)\s*[.;:,]+\s*$/, '').trim();
+
 export const court = (t: unknown, max: number): string => {
   // Guillemets retirés seulement quand ils encadrent tout le texte (imm 473 : le guillemet ouvrant d'un titre cité en tête
   // était retiré seul, « Le livre … (LMC) » structure… » sans guillemet ouvrant, et le moteur refusait le schéma).
@@ -2629,6 +2635,71 @@ export function sansBribesApresRenvoi(texte: string, etapes: Array<{ titre?: str
   return { texte: sortie, retirees };
 }
 
+/**
+ * Rubrique du plan qui traite le mieux une exigence citée au bloc 1 (T4-CONS-9, citedia 1461 : « … dans un délai de 15 minutes
+ * maximum » → « La planification », « La télésurveillance… 24h/24 » → « L'intégration d'un nouveau marché ») : mots-clés et
+ * titre de la rubrique écrits dans l'exigence (mots entiers), pondérés par leur rareté parmi les rubriques ; les
+ * qualifications des agents (SSIAP, CQP APS, SST…) sont des attributs, jamais l'objet de l'exigence. Calcul sans modèle.
+ */
+export function scoresRenvoiBloc1(exigence: string, plan: PlanMemoireType, mt: MemoireType): Map<string, { score: number; position: number; cles: string[] }> {
+  const net = (x: string) => normaliser(x).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const QUALIF = /\b(?:ssiap\s*\d?|cqp(?:\s*aps)?|aps|sst|psc\s*1|h0b0v?|hobo|carte professionnelle(?:\s+cnaps)?|cnaps|cap agent de securite|qualification)\b/g;
+  const objet = ` ${net(exigence).replace(QUALIF, ' ').replace(/\s+/g, ' ')} `;
+  const ids = new Set(plan.rubriques.filter((r) => r.mode !== 'besoin' && !/^b2_ref|^b2_references/.test(r.id)).map((r) => r.id));
+  const rubs = mt.rubriques.filter((r) => ids.has(r.id));
+  const cles = new Map(rubs.map((r) => [r.id, [...new Set([...r.mots_cles.map(net), ...net(r.titre).split(' ').filter((w) => w.length >= 6)])].filter((k) => k && !new RegExp(`^(?:${QUALIF.source})$`).test(k))]));
+  const df = new Map<string, number>();
+  for (const l of cles.values()) for (const k of l) df.set(k, (df.get(k) || 0) + 1);
+  const out = new Map<string, { score: number; position: number; cles: string[] }>();
+  for (const [id, l] of cles) {
+    let score = 0, position = Infinity;
+    const trouvees: string[] = [];
+    for (const k of l) {
+      const m = new RegExp(`\\s${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:s|x)?(?=\\s)`).exec(objet);
+      if (!m) continue;
+      score += Math.log((rubs.length + 1) / (df.get(k) || 1)) * (k.includes(' ') ? 1.5 : 1);
+      position = Math.min(position, m.index);
+      trouvees.push(k);
+    }
+    if (score > 0) out.set(id, { score, position, cles: trouvees });
+  }
+  return out;
+}
+
+/**
+ * Renvois du bloc 1 (« → notre réponse : « Titre », développée au bloc n ») à une rubrique qui ne traite pas l'exigence : une
+ * rubrique citée dont aucun mot-clé ni mot du titre n'est dans l'exigence est remplacée par la rubrique du plan qui la traite
+ * nettement (deux mots-clés au moins, ou un mot-clé de plusieurs mots, et un score au moins une fois et demie celui de la
+ * suivante), avec son bloc. Sans rubrique qui traite nettement l'exigence, le renvoi du modèle reste (jamais un renvoi
+ * déplacé sur un seul mot commun).
+ */
+export function renvoisBloc1Pertinents(texte: string, plan: PlanMemoireType, mt: MemoireType = chargerMemoireType()): { texte: string; corriges: number } {
+  let corriges = 0;
+  let partie = '';
+  const titreNet = (x: string) => normaliser(x).replace(/\{\{[^}]*\}\}/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const lignes = String(texte || '').split('\n').map((l) => {
+    if (/^##\s/.test(l)) { partie = l; return l; }
+    if (!/^##\s+(?:Vos attentes|Les points de vigilance)/i.test(partie)) return l;
+    const m = /^(.*?)\s*→\s*(notre r[ée]ponse\s*:\s*)«\s*([^»]+?)\s*»(\s*,\s*d[ée]velopp[ée]e?s?\s+au\s+bloc\s+)(\d)(.*)$/.exec(l);
+    if (!m) return l;
+    const cite = plan.rubriques.find((r) => titreNet(r.titre) === titreNet(m[3]));
+    if (!cite) return l;
+    const scores = scoresRenvoiBloc1(m[1].replace(/\*\*/g, ''), plan, mt);
+    if (!scores.size) return l;
+    const classes = [...scores.entries()].sort((a, b) => b[1].score - a[1].score || a[1].position - b[1].position);
+    const [meilleurId, meilleur] = classes[0];
+    if (scores.has(cite.id) || meilleurId === cite.id) return l;
+    const net = meilleur.cles.length >= 2 || meilleur.cles.some((k) => k.includes(' '));
+    if (!net || (classes[1] && meilleur.score < 1.5 * classes[1][1].score)) return l;
+    const r = plan.rubriques.find((x) => x.id === meilleurId)!;
+    const b = plan.blocs.find((x) => x.id === r.bloc || x.rubriques.includes(r.id));
+    if (!b) return l;
+    corriges++;
+    return `${m[1]} → ${m[2]}« ${r.titre.replace(/\{\{[^}]*\}\}/g, '').replace(/\s*:\s*$/, '').trim()} »${m[4]}${b.numero}${m[6]}`;
+  });
+  return { texte: lignes.join('\n'), corriges };
+}
+
 export function nettoyerBloc1(texte: string, plan: PlanMemoireType | undefined, duree: string, etapes: Array<{ titre?: string; texte?: string }> = []): { texte: string; retirees: string[]; renvois: number } {
   const retirees: string[] = [];
   let t = String(texte || '');
@@ -2669,8 +2740,13 @@ export function nettoyerBloc1(texte: string, plan: PlanMemoireType | undefined, 
       return true;
     }).join(' ');
   }).join('\n').replace(/\n{3,}/g, '\n\n');
-  // 3. Numéros de bloc des renvois.
+  // 3. Numéros de bloc des renvois ; rubrique citée qui ne traite pas l'exigence remplacée par celle qui la traite (T4-CONS-9).
   let renvois = 0;
+  if (plan) {
+    const rp = renvoisBloc1Pertinents(t, plan);
+    t = rp.texte;
+    renvois += rp.corriges;
+  }
   if (plan) {
     const blocDe = new Map<string, number>();
     for (const r of plan.rubriques) {

@@ -19,7 +19,7 @@ import {
   memoireTypeActif, rubriquesV2, sectionsV2, blocPagesReferences, titreSchemaMemoireType, CLE_SCHEMA, poserReperes, trierNouvelles, vocabulaireMemoireType,
   grouperNouvelles, idProposition, blocProposition, specProcessBesoin, specSecoursBesoin, texteSecoursBesoin, obligationsLisibles, analyseCompacte,
   sommaireProcess, renvoisHorsCadreRetires, consigneComprehension, consigneProposition, messagePropositions, enParallele, court, protegerGras, retablirGras, retirerAffirmationsQuestionnees, defautsEtapesBesoin, completerResultatBesoin, anomaliesSchemaBloc1, sansRediteDuPerimetre, plafonnerEngagementsPages, reduireBesoinAPages, exigenceTraitee, specSecoursPuces, specSecoursObligations, phraseDeRubriqueGss, alignerSchemaSurTexte, FORMALITES_OFFRE, questionFormalite, consultationsDuDce,
-  valeursImposeesValides, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
+  valeursImposeesValides, titreSansPointFinal, completerBesoinMinimum, citationsCoherentes, nettoyerBloc1, libellesBloc1, messageEngagements, messageAjoutsAdaptation, retirerEngagementsRefuses, phraseAutour, planSelonRC, passagesPlanImpose, controlerProposition, resultatBesoin, retirerParagrapheEtapes,
   sansEngagementsEnDouble, sansEngagementsDejaDits, sansAjoutsRepetesEntreRubriques, similariteQuestions, recouvrementTextes, phraseAjouteeConjuguee, jalonEnvoiClient, harmoniserJalonPlanning, type AjoutLibre, type GroupeNouveau, type AdaptationCctp,
 } from './reponse_libre_v2';
 import { CONSIGNE_DIMENSIONNEMENT, exigenceDePosteDimensionne, reprendreMisesEnSituation, etapesSchemaDemande, calculerDimensionnement, extraitDimensionnement, texteDimensionnement, remplirCasPratique, questionDimensionnement, messageDimensionnement, completerMisesEnSituation, questionsMisesEnSituation, questionCouvertureCasPratique, questionRondes, casPratiqueRepris, type Dimensionnement } from './dimensionnement';
@@ -9096,7 +9096,8 @@ RÈGLES DE FORME (rendu Marp) :
       // milieu d'une phrase écrits entre guillemets (T4N-8, T4C-1).
       texte = libellesBloc1(texte);
     }
-    const titre = court(rep?.titre_schema, 70) || titreDefaut;
+    // Titre du schéma écrit par le modèle : sans point final (D11, T4-CONS-11).
+    const titre = titreSansPointFinal(court(rep?.titre_schema, 70)) || titreDefaut;
     let titreFinal = titre;
     // Schéma de process : étapes de la réponse, puis correction des seules étapes, puis sous-titres du texte en phases.
     const dessiner = async (spec: { gabarit: string; params: any } | null): Promise<{ svg?: string; erreurs: string[] }> => {
@@ -9381,8 +9382,9 @@ RÈGLES DE FORME (rendu Marp) :
       }
     }
 
+    // Titre de page de schéma : jamais de point final, même pour un état enregistré avant la correction (D11, T4-CONS-11).
     const titreSchema = (r: { id: string; title: string; ajout?: AjoutLibre }) =>
-      opts.titresSchemas?.[r.id] || (r.ajout ? r.title : titreSchemaMemoireType(r.id)) || r.title;
+      titreSansPointFinal(opts.titresSchemas?.[r.id] || (r.ajout ? r.title : titreSchemaMemoireType(r.id)) || r.title);
     const blocReferences = blocPagesReferences(plan);
     const chapters: AssembleChapter[] = blocs.map((b) => ({
       key: b.cle,
