@@ -8,6 +8,7 @@ import { apiFetch, apiBase } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Anneau } from "@/components/visuel/anneau";
 import { IndicateurGlissant } from "@/components/visuel/indicateur-glissant";
+import { MessageRepliable } from "@/components/visuel/message-repliable";
 
 const DocxPreviewViewer = dynamic(
   () => import("@/components/docx-preview-viewer").then((mod) => mod.DocxPreviewViewer),
@@ -609,9 +610,15 @@ export function CompletionPanel({
                 </div>
               )}
               <div className="space-y-2">
-                {(etat.conversation || []).map((m, i) => (
+                {(etat.conversation || []).map((m, i, conv) => (
                   <div key={i} className={cn("animate-monter rounded-xl px-3 py-2 text-sm shadow-o1", m.role === "utilisateur" ? "ml-6 rounded-br-sm bg-primary text-primary-foreground" : "mr-6 rounded-bl-sm border border-border bg-card text-foreground")}>
-                    <p className="whitespace-pre-line">{m.texte}</p>
+                    {/* Message d'information long (ex. récapitulatif des phrases adaptées au CCTP), qui ne répond
+                        pas à une demande : replié sur ses premières lignes, déroulable. Les réponses restent entières. */}
+                    {m.role === "assistant" && conv[i - 1]?.role !== "utilisateur" && (m.texte.length > 280 || m.texte.split("\n").length > 4) ? (
+                      <MessageRepliable texte={m.texte} />
+                    ) : (
+                      <p className="whitespace-pre-line">{m.texte}</p>
+                    )}
                     {!!m.pieces?.length && (
                       <p className="mt-1 flex flex-wrap items-center gap-1 text-xs opacity-90">
                         <Paperclip className="h-3 w-3" /> {m.pieces.join(", ")}
