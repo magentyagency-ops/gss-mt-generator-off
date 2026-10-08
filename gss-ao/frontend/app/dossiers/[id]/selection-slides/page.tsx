@@ -25,6 +25,9 @@ import {
 } from "@/lib/ai/mode";
 import { CHAPTER_TITLES_B } from "@/lib/ai/sections-b";
 import { cn } from "@/lib/utils";
+import { BandeauDossier } from "@/components/visuel/bandeau-dossier";
+import { EntreeEtape } from "@/components/visuel/entree-etape";
+import { IndicateurGlissant } from "@/components/visuel/indicateur-glissant";
 
 const CHAPTERS = ["all", "I", "II", "III", "IV"] as const;
 type ChapFilter = (typeof CHAPTERS)[number];
@@ -119,36 +122,39 @@ export default function SelectionSlidesPage({ params }: { params: { id: string }
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
+      <BandeauDossier className="flex flex-wrap items-end justify-between gap-4 pb-5 pt-5 md:pb-5 md:pt-5 animate-apparaitre">
         <div>
-          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="font-mono text-[12.5px] font-medium uppercase tracking-wide text-muted-foreground">
             {dossierInfo.acheteur}{dossierInfo.reference ? ` · ${dossierInfo.reference}` : ""} · Mode réponse libre
           </div>
-          <h1 className="text-xl font-semibold">Sélection des slides GSS</h1>
+          <h1 className="mt-1.5 font-display text-[24px] font-bold leading-[1.15] md:text-[28px]">Sélection des slides GSS</h1>
         </div>
         <Link href={`/dossiers/${id}/memoire`}>
           <Button disabled={selected.length === 0}>
             Valider la sélection ({selected.length}) <ArrowRight className="h-4 w-4" />
           </Button>
         </Link>
-      </header>
+      </BandeauDossier>
 
       <DossierNav id={id} />
 
+      <EntreeEtape className="flex min-h-0 flex-1 flex-col">
       {slides.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-          <FileStack className="h-12 w-12 text-primary" />
+        <div className="apparait flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+          <span className="grid h-20 w-20 place-items-center rounded-full bg-secondary ring-8 ring-secondary/50">
+            <FileStack className="h-10 w-10 text-primary motion-safe:animate-flotte" strokeWidth={1.6} />
+          </span>
           <div>
-            <div className="text-base font-semibold">Analyser les {TOTAL_SLIDES} slides GSS</div>
+            <div className="font-display text-[22px] font-bold">Analyser les {TOTAL_SLIDES} slides GSS</div>
             <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
               L'IA recommande, pour ce marché, quelles slides de la base SLIDE REP AO conserver,
               personnaliser ou exclure (par lots de 15 pour économiser les tokens).
             </p>
           </div>
           {!hasKey && (
-            <div className="flex items-center gap-2 text-sm text-amber-700">
+            <div className="flex items-center gap-2 rounded-full bg-warning-soft px-3.5 py-1.5 text-sm font-medium text-warning">
               <AlertTriangle className="h-4 w-4" /> Clé OpenAI requise —{" "}
-              <Link href="/parametres" className="underline">
+              <Link href="/parametres" className="font-semibold underline underline-offset-2">
                 Paramètres
               </Link>
             </div>
@@ -157,21 +163,24 @@ export default function SelectionSlidesPage({ params }: { params: { id: string }
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             Lancer l'analyse IA des slides
           </Button>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="animate-monter rounded-lg bg-destructive-soft px-3 py-2 text-sm font-medium text-destructive">{error}</p>}
         </div>
       ) : (
         <>
           {/* Stats + filtres */}
-          <div className="flex items-center justify-between gap-4 border-b border-border bg-card px-6 py-3">
-            <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-3 md:px-9">
+            <div className="relative isolate flex max-w-full items-center gap-0.5 overflow-x-auto rounded-[10px] bg-[#E9EDF3] p-1 [scrollbar-width:none]">
+              {/* Fond blanc du filtre actif, qui glisse d'un filtre à l'autre (purement visuel). */}
+              <IndicateurGlissant groupe="filtres-slides" />
               {CHAPTERS.map((c) => (
                 <button
                   key={c}
                   onClick={() => setChap(c)}
+                  data-actif={chap === c}
                   className={cn(
-                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    "shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
                     chap === c
-                      ? "bg-primary text-primary-foreground"
+                      ? "font-semibold text-foreground"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -179,18 +188,18 @@ export default function SelectionSlidesPage({ params }: { params: { id: string }
                 </button>
               ))}
             </div>
-            <div className="relative w-64">
+            <div className="relative w-full sm:w-72">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Rechercher (mot-clé, catégorie)…"
-                className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="h-10 w-full rounded-[9px] border border-input bg-card pl-9 pr-3 text-sm shadow-o1 outline-none"
               />
             </div>
           </div>
 
-          <div className="flex items-center justify-between border-b border-border bg-muted/30 px-6 py-2 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border bg-[#FAFBFD] px-4 py-2.5 text-sm md:px-9">
             <span className="text-muted-foreground">
               <span className="font-semibold text-foreground">{recommended}</span> slides
               recommandées sur {TOTAL_SLIDES} ·{" "}
@@ -198,11 +207,22 @@ export default function SelectionSlidesPage({ params }: { params: { id: string }
                 ? "tous chapitres"
                 : CHAPTER_TITLES_B[chap as keyof typeof CHAPTER_TITLES_B]}
             </span>
-            <span className="font-medium">{selected.length} sélectionnées</span>
+            {/* Répartition des recommandations (mêmes slides que la grille), barre décorative. */}
+            <span aria-hidden="true" className="order-last flex w-full items-center gap-3 text-[11.5px] text-muted-foreground md:order-none md:w-auto">
+              <span className="flex h-1.5 w-full overflow-hidden rounded-full bg-secondary md:w-48">
+                <span className="h-full origin-left animate-remplir bg-success" style={{ flexGrow: slides.filter((x) => x.recommendation === "keep").length }} />
+                <span className="h-full origin-left animate-remplir bg-[#E08A1E] [animation-delay:120ms]" style={{ flexGrow: slides.filter((x) => x.recommendation === "modify").length }} />
+                <span className="h-full origin-left animate-remplir bg-[#9AA7B8] [animation-delay:240ms]" style={{ flexGrow: slides.filter((x) => x.recommendation === "discard").length }} />
+              </span>
+              <span className="flex shrink-0 items-center gap-1"><span className="h-2 w-2 rounded-full bg-success" />{RECO_BADGE.keep.label}</span>
+              <span className="flex shrink-0 items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#E08A1E]" />{RECO_BADGE.modify.label}</span>
+              <span className="flex shrink-0 items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#9AA7B8]" />{RECO_BADGE.discard.label}</span>
+            </span>
+            <span className="rounded-full bg-info-soft px-3 py-0.5 font-mono text-[12.5px] font-semibold tabular-nums text-info">{selected.length} sélectionnées</span>
           </div>
 
           {/* Grille */}
-          <div className="grid flex-1 grid-cols-3 content-start gap-3 overflow-y-auto p-6">
+          <div className="apparait grid flex-1 grid-cols-1 content-start gap-3 overflow-y-auto px-4 py-5 sm:grid-cols-2 md:px-9 lg:grid-cols-3">
             {visible.map((s) => {
               const isSel = selected.includes(s.index);
               const reco = RECO_BADGE[s.recommendation];
@@ -211,8 +231,8 @@ export default function SelectionSlidesPage({ params }: { params: { id: string }
                   key={s.index}
                   onClick={() => toggle(s.index)}
                   className={cn(
-                    "cursor-pointer p-3 transition-colors",
-                    isSel ? "border-primary ring-1 ring-primary" : "hover:border-muted-foreground/40",
+                    "vive cursor-pointer select-none p-3.5",
+                    isSel ? "border-primary bg-[#F6F9FD] ring-1 ring-primary" : "hover:border-[#C9D3DF]",
                   )}
                 >
                   <div className="mb-2 flex items-center justify-between gap-2">
@@ -220,22 +240,22 @@ export default function SelectionSlidesPage({ params }: { params: { id: string }
                       {s.category}
                     </Badge>
                     {isSel ? (
-                      <SquareCheck className="h-4 w-4 text-primary" />
+                      <SquareCheck className="h-[18px] w-[18px] animate-zoom-doux text-primary" />
                     ) : (
-                      <Square className="h-4 w-4 text-muted-foreground" />
+                      <Square className="h-[18px] w-[18px] text-[#B9C5D4]" />
                     )}
                   </div>
-                  <div className="truncate text-xs font-medium" title={s.file_name}>
+                  <div className="truncate text-[13px] font-semibold" title={s.file_name}>
                     {s.file_name}
                   </div>
                   <div className="mt-1.5 flex items-center justify-between gap-2">
                     <Badge variant={reco.variant} className="font-normal">
                       {reco.label}
                     </Badge>
-                    <span className="text-[10px] text-muted-foreground">Ch. {s.chapter}</span>
+                    <span className="rounded-md bg-secondary px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-muted-foreground">Ch. {s.chapter}</span>
                   </div>
                   {s.justification && (
-                    <p className="mt-1.5 line-clamp-2 text-[11px] text-muted-foreground" title={s.justification}>
+                    <p className="mt-2 line-clamp-2 border-t border-border pt-2 text-[11.5px] leading-relaxed text-muted-foreground" title={s.justification}>
                       💡 {s.justification}
                     </p>
                   )}
@@ -245,6 +265,7 @@ export default function SelectionSlidesPage({ params }: { params: { id: string }
           </div>
         </>
       )}
+      </EntreeEtape>
     </div>
   );
 }
