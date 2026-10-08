@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { MailCheck } from "lucide-react";
+import { MailCheck, FileText, ListChecks, PenLine } from "lucide-react";
 
 type Mode = "login" | "signup";
 
@@ -72,31 +72,97 @@ export function AuthCard({ initialMode = "login" }: { initialMode?: Mode }) {
   }
 
   const inputCls =
-    "h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring";
+    "h-10 w-full rounded-[9px] border border-input bg-card px-[13px] text-sm text-foreground outline-none transition-[border-color,box-shadow] duration-150 ease-doux hover:border-[#B9C5D4]";
+  const labelCls = "mb-1.5 block text-[13px] font-semibold text-muted-foreground";
+  const erreurCls =
+    "animate-monter rounded-[9px] border border-destructive/25 bg-destructive-soft px-3 py-2 text-[13px] leading-snug text-destructive";
 
   return (
-    <div className="w-full max-w-sm">
-      {/* Logo + titre */}
-      <div className="mb-6 flex flex-col items-center gap-3">
-        <img
-          src="/gssAO.png"
-          alt="GSS-AO"
-          className="h-16 w-16 rounded-2xl object-contain shadow-sm ring-1 ring-border"
+    <div className="grid min-h-screen w-full grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr] bg-background lg:grid-cols-2 lg:grid-rows-1">
+      {/* Panneau de présentation GSS (planche, écran 5) : bandeau compact sur mobile. */}
+      <aside className="relative flex flex-col overflow-hidden bg-[linear-gradient(150deg,#0B2545_0%,#123A66_65%,#1B4F86_100%)] px-5 py-5 text-white sm:px-8 lg:px-[72px] lg:py-16">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-36 -right-36 h-[480px] w-[480px] rounded-full bg-[radial-gradient(circle,rgba(241,90,34,0.28),transparent_65%)]"
         />
-        <div className="text-center">
-          <h1 className="text-lg font-semibold">GSS-AO</h1>
-          <p className="text-xs text-muted-foreground">Appels d&apos;offres</p>
+        {/* Logo + titre */}
+        <div className="relative z-[1] flex animate-apparaitre items-center gap-3.5">
+          <img
+            src="/gssAO.png"
+            alt="GSS-AO"
+            className="h-11 w-11 rounded-xl bg-white object-contain p-1 shadow-o2 lg:h-[54px] lg:w-[54px] lg:rounded-[14px]"
+          />
+          <div>
+            <h1 className="text-[18px] font-bold leading-tight text-white lg:text-[20px]">GSS-AO</h1>
+            <p className="text-[13px] text-[#AFC0D6]">Appels d&apos;offres</p>
+          </div>
         </div>
-      </div>
+        <div className="relative z-[1] hidden lg:block">
+          <h2 className="mb-3 mt-9 max-w-[13ch] animate-monter font-display text-[44px] font-bold leading-[1.05] [animation-delay:80ms]">
+            Vos appels d&apos;offres, de l&apos;analyse du DCE à l&apos;envoi.
+          </h2>
+          <p className="max-w-[42ch] animate-monter text-base text-[#C8D4E4] [animation-delay:140ms]">
+            La plateforme de Global Security Services pour préparer chaque réponse.
+          </p>
+          <ul className="apparait mt-[30px] grid gap-3.5 [&>*:nth-child(1)]:[animation-delay:220ms] [&>*:nth-child(2)]:[animation-delay:290ms] [&>*:nth-child(3)]:[animation-delay:360ms]">
+            <li className="flex items-center gap-3.5">
+              <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-[11px] bg-white/10">
+                <FileText className="h-[19px] w-[19px] text-white" />
+              </span>
+              <div>
+                <b className="block text-[15px] font-semibold">Synthèse</b>
+                <span className="text-[13.5px] text-[#AFC0D6]">Les informations clés et les risques du dossier.</span>
+              </div>
+            </li>
+            <li className="flex items-center gap-3.5">
+              <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-[11px] bg-white/10">
+                <ListChecks className="h-[19px] w-[19px] text-white" />
+              </span>
+              <div>
+                <b className="block text-[15px] font-semibold">Conformité</b>
+                <span className="text-[13.5px] text-[#AFC0D6]">La check-list des pièces à fournir.</span>
+              </div>
+            </li>
+            <li className="flex items-center gap-3.5">
+              <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-[11px] bg-white/10">
+                <PenLine className="h-[19px] w-[19px] text-white" />
+              </span>
+              <div>
+                <b className="block text-[15px] font-semibold">Mémoire technique</b>
+                <span className="text-[13.5px] text-[#AFC0D6]">Le mémoire GSS, adapté à chaque marché.</span>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <div className="relative z-[1] mt-auto hidden pt-10 text-[13px] text-[#8FA3BF] lg:block">
+          Global Security Services · Rouen
+        </div>
+      </aside>
 
-      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
+      <div className="flex min-w-0 items-start justify-center px-4 py-8 sm:items-center sm:p-10">
+      <div className="w-full min-w-0 max-w-[420px] animate-monter [animation-delay:120ms]">
+      <div
+        data-mode={mode}
+        className="group/auth overflow-hidden rounded-2xl border border-border bg-card shadow-o2"
+      >
+        {/* Accroche (texte d'accueil, suit l'onglet actif en CSS seul) */}
+        <div className="px-6 pt-6 sm:px-[30px] sm:pt-[30px]">
+          <div className="group-data-[mode=signup]/auth:hidden">
+            <div className="font-display text-[26px] font-bold leading-[1.1] text-foreground">Bon retour</div>
+            <p className="mt-1 text-[13.5px] text-muted-foreground">Connectez-vous pour accéder à vos dossiers.</p>
+          </div>
+          <div className="hidden group-data-[mode=signup]/auth:block">
+            <div className="font-display text-[26px] font-bold leading-[1.1] text-foreground">Bienvenue</div>
+            <p className="mt-1 text-[13.5px] text-muted-foreground">Créez votre compte pour accéder à vos dossiers.</p>
+          </div>
+        </div>
         {/* Sélecteur glissant */}
-        <div className="p-3">
-          <div className="relative flex rounded-xl bg-muted p-1">
+        <div className="px-6 pb-1 pt-5 sm:px-[30px]">
+          <div className="relative flex rounded-[10px] bg-[#E9EDF3] p-1">
             <span
               aria-hidden
               className={cn(
-                "absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-lg bg-card shadow-sm transition-transform duration-300 ease-out",
+                "absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-lg bg-card shadow-o1 transition-transform duration-300 ease-doux motion-reduce:transition-none",
                 mode === "signup" && "translate-x-[100%]",
               )}
             />
@@ -104,8 +170,8 @@ export function AuthCard({ initialMode = "login" }: { initialMode?: Mode }) {
               type="button"
               onClick={() => switchMode("login")}
               className={cn(
-                "relative z-10 flex-1 rounded-lg py-2 text-sm font-medium transition-colors",
-                mode === "login" ? "text-foreground" : "text-muted-foreground",
+                "relative z-10 flex-1 rounded-lg py-2 text-sm font-semibold transition-[color,scale] duration-150 active:scale-[.97]",
+                mode === "login" ? "text-foreground" : "text-muted-foreground hover:text-foreground",
               )}
             >
               Connexion
@@ -114,8 +180,8 @@ export function AuthCard({ initialMode = "login" }: { initialMode?: Mode }) {
               type="button"
               onClick={() => switchMode("signup")}
               className={cn(
-                "relative z-10 flex-1 rounded-lg py-2 text-sm font-medium transition-colors",
-                mode === "signup" ? "text-foreground" : "text-muted-foreground",
+                "relative z-10 flex-1 rounded-lg py-2 text-sm font-semibold transition-[color,scale] duration-150 active:scale-[.97]",
+                mode === "signup" ? "text-foreground" : "text-muted-foreground hover:text-foreground",
               )}
             >
               Inscription
@@ -126,14 +192,14 @@ export function AuthCard({ initialMode = "login" }: { initialMode?: Mode }) {
         {/* Piste coulissante : connexion | inscription */}
         <div className="overflow-hidden">
           <div
-            className="flex w-[200%] transition-transform duration-300 ease-out"
+            className="flex w-[200%] transition-transform duration-300 ease-doux motion-reduce:transition-none"
             style={{ transform: mode === "signup" ? "translateX(-50%)" : "translateX(0)" }}
           >
             {/* Panneau CONNEXION */}
-            <div className="w-1/2 shrink-0 px-6 pb-6 pt-2">
+            <div className="w-1/2 shrink-0 px-6 pb-7 pt-1 sm:px-[30px] sm:pb-[30px]">
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Email</label>
+                  <label className={labelCls}>Email</label>
                   <input
                     type="email"
                     required={mode === "login"}
@@ -144,7 +210,7 @@ export function AuthCard({ initialMode = "login" }: { initialMode?: Mode }) {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Mot de passe</label>
+                  <label className={labelCls}>Mot de passe</label>
                   <input
                     type="password"
                     required={mode === "login"}
@@ -155,19 +221,19 @@ export function AuthCard({ initialMode = "login" }: { initialMode?: Mode }) {
                   />
                 </div>
                 {mode === "login" && error && (
-                  <p className="text-sm text-destructive">{error}</p>
+                  <p className={erreurCls}>{error}</p>
                 )}
-                <Button type="submit" className="w-full" disabled={loading && mode === "login"}>
+                <Button type="submit" size="lg" className="mt-2 w-full" disabled={loading && mode === "login"}>
                   {loading && mode === "login" ? "Connexion…" : "Se connecter"}
                 </Button>
               </form>
             </div>
 
             {/* Panneau INSCRIPTION */}
-            <div className="w-1/2 shrink-0 px-6 pb-6 pt-2">
+            <div className="w-1/2 shrink-0 px-6 pb-7 pt-1 sm:px-[30px] sm:pb-[30px]">
               {signupDone ? (
-                <div className="flex flex-col items-center gap-3 py-4 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
+                <div className="flex animate-monter flex-col items-center gap-3 py-4 text-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-success-soft ring-4 ring-success-soft/60">
                     <MailCheck className="h-6 w-6 text-success" />
                   </div>
                   <p className="text-sm text-muted-foreground">
@@ -190,7 +256,7 @@ export function AuthCard({ initialMode = "login" }: { initialMode?: Mode }) {
               ) : (
                 <form onSubmit={handleSignup} className="space-y-4">
                   <div>
-                    <label className="mb-1 block text-sm font-medium">Email</label>
+                    <label className={labelCls}>Email</label>
                     <input
                       type="email"
                       required={mode === "signup"}
@@ -201,7 +267,7 @@ export function AuthCard({ initialMode = "login" }: { initialMode?: Mode }) {
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm font-medium">Mot de passe</label>
+                    <label className={labelCls}>Mot de passe</label>
                     <input
                       type="password"
                       required={mode === "signup"}
@@ -212,9 +278,9 @@ export function AuthCard({ initialMode = "login" }: { initialMode?: Mode }) {
                     />
                   </div>
                   {mode === "signup" && error && (
-                    <p className="text-sm text-destructive">{error}</p>
+                    <p className={erreurCls}>{error}</p>
                   )}
-                  <Button type="submit" className="w-full" disabled={loading && mode === "signup"}>
+                  <Button type="submit" size="lg" className="mt-2 w-full" disabled={loading && mode === "signup"}>
                     {loading && mode === "signup" ? "Création…" : "Créer mon compte"}
                   </Button>
                 </form>
@@ -224,14 +290,14 @@ export function AuthCard({ initialMode = "login" }: { initialMode?: Mode }) {
         </div>
       </div>
 
-      <p className="mt-4 text-center text-xs text-muted-foreground">
+      <p className="mt-5 text-center text-[13.5px] text-muted-foreground">
         {mode === "login" ? (
           <>
             Pas encore de compte ?{" "}
             <button
               type="button"
               onClick={() => switchMode("signup")}
-              className="font-medium text-primary hover:underline"
+              className="font-semibold text-primary underline-offset-4 hover:underline"
             >
               Créer un compte
             </button>
@@ -242,13 +308,15 @@ export function AuthCard({ initialMode = "login" }: { initialMode?: Mode }) {
             <button
               type="button"
               onClick={() => switchMode("login")}
-              className="font-medium text-primary hover:underline"
+              className="font-semibold text-primary underline-offset-4 hover:underline"
             >
               Se connecter
             </button>
           </>
         )}
       </p>
+      </div>
+      </div>
     </div>
   );
 }
