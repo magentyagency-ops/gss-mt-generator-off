@@ -50,16 +50,20 @@ export function AppSidebar() {
   const items = isAdmin ? [...NAV, ADMIN_NAV] : NAV;
 
   return (
-    <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-border bg-card">
-      <div className="flex h-14 items-center gap-2 border-b border-border px-4">
-        <img src="/gssAO.png" alt="GSS-AO" className="h-8 w-8 rounded-md object-contain" />
-        <div className="leading-tight">
-          <div className="text-sm font-semibold">GSS-AO</div>
-          <div className="text-[11px] text-muted-foreground">Appels d'offres</div>
+    <aside className="relative z-20 flex h-screen w-16 shrink-0 flex-col bg-sidebar px-2 py-5 text-sidebar-foreground md:w-[248px] md:px-3.5">
+      <div className="mb-3 flex items-center justify-center gap-3 border-b border-white/[0.08] px-0 pb-5 pt-1 md:justify-start md:px-2.5">
+        <img
+          src="/gssAO.png"
+          alt="GSS-AO"
+          className="h-[38px] w-[38px] shrink-0 rounded-[10px] bg-white object-contain p-1 shadow-[0_2px_8px_rgba(0,0,0,0.2)]"
+        />
+        <div className="sr-only leading-tight md:not-sr-only">
+          <div className="font-display text-[17px] font-bold tracking-[0.02em] text-white">GSS-AO</div>
+          <div className="text-xs text-sidebar-muted">Appels d'offres</div>
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 p-2">
+      <nav className="gss-nav-laterale relative flex-1 space-y-1">
         {items.map((item) => {
           const active = item.match(pathname);
           const Icon = item.icon;
@@ -67,19 +71,26 @@ export function AppSidebar() {
             <Link
               key={item.href}
               href={item.href}
+              data-actif={active}
+              title={item.label}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "group flex h-11 items-center justify-center gap-3 rounded-[9px] px-3 text-[14.5px] font-medium transition-[background-color,color,scale] duration-150 ease-doux focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal/70 md:justify-start",
                 active
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                  ? "bg-white/[0.12] text-white"
+                  : "text-sidebar-foreground hover:bg-white/[0.07] hover:text-white active:bg-white/[0.1]",
               )}
             >
-              <Icon className="h-4 w-4 shrink-0" />
-              {item.label}
+              <Icon className="h-[18px] w-[18px] shrink-0 opacity-90 transition-transform duration-200 ease-doux group-hover:scale-105" />
+              <span className="sr-only md:not-sr-only">{item.label}</span>
             </Link>
           );
         })}
+        <span aria-hidden="true" className="gss-nav-indicateur" />
       </nav>
+
+      <div className="mt-auto hidden px-2.5 pt-4 text-[11.5px] leading-snug text-sidebar-muted/80 md:block">
+        Global Security Services
+      </div>
     </aside>
   );
 }
