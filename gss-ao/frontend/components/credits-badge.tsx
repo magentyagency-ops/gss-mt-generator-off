@@ -52,7 +52,7 @@ export function CreditsBadge({ className }: { className?: string }) {
         </span>
         <span aria-hidden="true" className="block h-1 w-full overflow-hidden rounded-full bg-white/15">
           <span
-            className="block h-full origin-left animate-remplir rounded-full bg-[linear-gradient(90deg,#FFB08A,hsl(var(--signal)))] transition-[width] duration-[400ms] ease-doux"
+            className="block h-full origin-left animate-remplir rounded-full bg-[linear-gradient(90deg,#FFB08A,hsl(var(--signal)))] transition-[width] [transition-duration:400ms] ease-doux"
             style={{ width: `${Math.min(100, (remaining / Math.max(data.limit, 1)) * 100)}%` }}
           />
         </span>

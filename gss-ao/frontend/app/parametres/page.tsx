@@ -120,8 +120,8 @@ export default function ParametresPage() {
                     <div
                       className={
                         remaining === 0
-                          ? "h-full origin-left animate-remplir rounded-full bg-destructive transition-[width] duration-[400ms] ease-doux"
-                          : "h-full origin-left animate-remplir rounded-full bg-[linear-gradient(90deg,hsl(var(--primary)),hsl(var(--info)))] transition-[width] duration-[400ms] ease-doux"
+                          ? "h-full origin-left animate-remplir rounded-full bg-destructive transition-[width] [transition-duration:400ms] ease-doux"
+                          : "h-full origin-left animate-remplir rounded-full bg-[linear-gradient(90deg,hsl(var(--primary)),hsl(var(--info)))] transition-[width] [transition-duration:400ms] ease-doux"
                       }
                       style={{ width: `${100 - pct}%` }}
                     />

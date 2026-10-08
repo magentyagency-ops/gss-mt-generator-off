@@ -354,7 +354,7 @@ export default function VeillePage() {
                   <div aria-hidden="true" className="flex items-center gap-3 px-1">
                     <span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-full font-mono text-xs font-semibold transition-colors duration-300", simulatedDceStatus === "ready" ? "bg-success-soft text-success" : "bg-primary text-primary-foreground")}>1</span>
                     <span className="relative h-[3px] flex-1 overflow-hidden rounded-full bg-secondary">
-                      <span className={cn("absolute inset-y-0 left-0 rounded-full bg-[linear-gradient(90deg,hsl(var(--success)),hsl(var(--signal)))] transition-[width] duration-[400ms] ease-doux", simulatedDceStatus === "ready" ? "w-full" : simulatedDceStatus === "uploading" ? "w-1/2 reflet-actif" : "w-0")} />
+                      <span className={cn("absolute inset-y-0 left-0 rounded-full bg-[linear-gradient(90deg,hsl(var(--success)),hsl(var(--signal)))] transition-[width] [transition-duration:400ms] ease-doux", simulatedDceStatus === "ready" ? "w-full" : simulatedDceStatus === "uploading" ? "w-1/2 reflet-actif" : "w-0")} />
                     </span>
                     <span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-full font-mono text-xs font-semibold transition-colors duration-300", simulatedDceStatus === "ready" ? "bg-signal text-primary" : "bg-secondary text-muted-foreground")}>2</span>
                   </div>
