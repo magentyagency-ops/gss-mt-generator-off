@@ -24,7 +24,6 @@ import { DB } from '../core/db';
 export interface GateField {
   id: string;
   label: string;
-  context?: string;
   criticite?: string;
   demande?: string;
 }
@@ -87,7 +86,6 @@ export async function getGenerationGate(dossierId: string): Promise<GateStatus> 
     .map((f: any) => ({
       id: String(f.id),
       label: String(f.label ?? ''),
-      context: f.context ? String(f.context) : undefined,
       criticite: f.criticite,
       demande: f.demande,
     }));

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, Clock, AlertTriangle, Trash2, X, Hourglass, Mail, CheckCircle2 } from "lucide-react";
+import { Plus, Search, Clock, AlertTriangle, Trash2, X, Hourglass, Mail, Send } from "lucide-react";
 import {
   Badge,
   Button,
@@ -30,7 +30,7 @@ import { Jauge } from "@/components/visuel/jauge";
 import { IndicateurGlissant } from "@/components/visuel/indicateur-glissant";
 import { PointActif } from "@/components/visuel/pastille-statut";
 
-const STATUTS: (Statut | "Tous")[] = ["Tous", "En cours", "En attente", "À valider"];
+const STATUTS: (Statut | "Tous")[] = ["Tous", "Brouillon", "En cours", "À valider", "Envoyé"];
 
 export default function DossiersPage() {
   const { introFinished } = useIntro();
@@ -148,10 +148,11 @@ export default function DossiersPage() {
   const nbDossiersEnAttente = attenteParDossier.filter((n) => n > 0).length;
   const nbSollicitationsEnAttente = attenteParDossier.reduce((t, n) => t + n, 0);
   const prochaineEcheance = dossiers
-    .filter((d) => !!d.dateLimite && !isNaN(new Date(d.dateLimite).getTime()))
+    .filter((d) => d.statut !== "Envoyé" && !!d.dateLimite && !isNaN(new Date(d.dateLimite).getTime()))
     .map((d) => ({ d, jours: joursRestants(d.dateLimite) }))
     .filter((x) => x.jours >= 0)
     .sort((a, b) => a.jours - b.jours)[0];
+  const nbEnvoyes = dossiers.filter((d) => d.statut === "Envoyé").length;
   // « Terminé » : même règle que la pastille de la table (À valider, sans sollicitation en attente).
   const nbTermines = dossiers.filter((d) => d.statut === "À valider" && !(enAttenteByDossier.get(d.id) ?? 0)).length;
   const kpiDelay = (rang: number) => filterDelay + rang * 60;
@@ -224,10 +225,10 @@ export default function DossiersPage() {
           <Indicateur
             className={kpiClass}
             style={{ animationDelay: `${kpiDelay(3)}ms` }}
-            icone={CheckCircle2}
-            libelle="Terminés"
-            valeur={<Compteur valeur={nbTermines} />}
-            detail={`sur ${dossiers.length} dossier${dossiers.length > 1 ? "s" : ""}`}
+            icone={Send}
+            libelle="Envoyés"
+            valeur={<Compteur valeur={nbEnvoyes} />}
+            detail={`et ${nbTermines} terminé${nbTermines > 1 ? "s" : ""}`}
           />
         </div>
 
@@ -299,7 +300,7 @@ export default function DossiersPage() {
             <TableBody>
               {lignes.map((d, index) => {
                 const jours = joursRestants(d.dateLimite);
-                const urgent = jours <= 14;
+                const urgent = jours <= 14 && d.statut !== "Envoyé";
                 const isSelected = selectedIds.has(d.id);
                 return (
                   <TableRow
@@ -353,7 +354,7 @@ export default function DossiersPage() {
                     <TableCell className="whitespace-nowrap py-[13px]">
                       <div className="flex flex-col">
                         <span className="font-semibold text-foreground">{formatDate(d.dateLimite)}</span>
-                        {true && (
+                        {d.statut !== "Envoyé" && (
                           <span
                             className={cn(
                               "mt-1 flex items-center gap-1.5 font-mono text-[11.5px] font-medium tabular-nums",

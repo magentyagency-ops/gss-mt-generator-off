@@ -104,7 +104,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   // La résolution est calculée CHAMP PAR CHAMP par le backend (/generation-gate) : c'est la même
   // source de vérité que le refus serveur (409) sur la génération — l'ancien calcul local
   // (nbManques − nbRéponses) pouvait ouvrir le bouton alors que des champs restaient sans réponse.
-  const [gate, setGate] = useState<{ canGenerate: boolean; total: number; resolved: number; unresolved: Array<{ id: string; label: string; context?: string }> } | null>(null);
+  const [gate, setGate] = useState<{ canGenerate: boolean; total: number; resolved: number; unresolved: Array<{ id: string; label: string }> } | null>(null);
 
   const loadGate = async () => {
     try {
@@ -511,11 +511,16 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 <div className="mx-auto mt-4 max-w-2xl animate-monter rounded-xl border border-[#F0D3A8] bg-gradient-to-r from-warning-soft to-[#FFFBF3] px-4 py-3.5 text-left text-[13px] text-warning">
                   <p className="font-semibold leading-relaxed">
                     Génération bloquée : {questionsRestantes} information{questionsRestantes > 1 ? "s" : ""} manquante{questionsRestantes > 1 ? "s" : ""} sans réponse
-                    {" "}(sur {nbManques} détectée{nbManques > 1 ? "s" : ""}).
+                    {" "}(sur {nbManques} détectée{nbManques > 1 ? "s" : ""}). Obtenez les réponses (équipe / recherche web) avant de générer.
                   </p>
-                  <p className="mt-1 leading-relaxed text-muted-foreground">
-                    Obtenez les réponses (équipe / recherche web) avant de générer.
-                  </p>
+                  {gate && gate.unresolved.length > 0 && (
+                    <ul className="apparait mt-2.5 grid gap-1.5 text-left text-foreground sm:grid-cols-2">
+                      {gate.unresolved.slice(0, 8).map((f) => (
+                        <li key={f.id} className="flex min-w-0 items-center gap-2 truncate rounded-lg bg-card/80 px-2.5 py-1.5 before:h-1.5 before:w-1.5 before:shrink-0 before:rounded-full before:bg-[#E08A1E]">{f.label}</li>
+                      ))}
+                      {gate.unresolved.length > 8 && <li>… et {gate.unresolved.length - 8} autre(s)</li>}
+                    </ul>
+                  )}
                   {!bypassActive && (
                     <div className="mt-3.5">
                       <Button variant="outline" size="sm" onClick={() => setShowBypassModal(true)} className="border-[#F0D3A8] text-warning hover:border-warning/60 hover:bg-warning-soft">
@@ -525,60 +530,6 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   )}
                 </div>
               )}
-
-              {/* Listing complet des infos manquantes détectées (toujours visible si des missingFields existent) */}
-              {(() => {
-                const allMissing: Array<{ id: string; label: string; context?: string; criticite?: string; demande?: string }> = Array.isArray(dossierInfo?.memoire_cadre_state?.missingFields) ? dossierInfo.memoire_cadre_state.missingFields : [];
-                const unresolvedIds = new Set((gate?.unresolved ?? []).map((u: { id: string }) => u.id));
-                if (allMissing.length === 0) return null;
-                return (
-                  <div className="mx-auto mt-5 w-full max-w-2xl text-left">
-                    <h3 className="mb-2 text-[13.5px] font-semibold text-foreground">
-                      Exigences détectées ({allMissing.length})
-                    </h3>
-                    <ul className="apparait grid gap-2">
-                      {allMissing.map((m) => {
-                        const resolved = !unresolvedIds.has(m.id);
-                        return (
-                          <li
-                            key={m.id}
-                            className={cn(
-                              "rounded-[9px] border px-3.5 py-2.5 text-sm transition-colors duration-150 hover:border-[#C9D3DF]",
-                              resolved
-                                ? "border-[#CDE7D9] bg-success-soft opacity-80"
-                                : m.criticite === "bloquant"
-                                  ? "border-[#F2C3C8] border-l-4 border-l-destructive bg-[#FFF9F9]"
-                                  : "border-[#F0D3A8] bg-[#FFFBF3]",
-                            )}
-                          >
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div className="flex min-w-0 items-start gap-2">
-                                {resolved && <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />}
-                                <span className={cn("min-w-0 font-semibold", resolved && "line-through")}>{m.label}</span>
-                              </div>
-                              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                                {m.criticite === "bloquant" && !resolved && <Badge variant="destructive">Bloquant</Badge>}
-                                {m.criticite === "facultatif" && <Badge variant="outline">Facultatif</Badge>}
-                                {m.demande === "web" ? (
-                                  <Badge variant="secondary" className="gap-1"><Globe className="h-3 w-3" /> Web</Badge>
-                                ) : m.demande === "equipe" ? (
-                                  <Badge variant="outline" className="gap-1"><Users className="h-3 w-3" /> Équipe</Badge>
-                                ) : null}
-                              </div>
-                            </div>
-                            {m.context && (
-                              <div className="mt-1 flex items-start gap-1.5 text-[12.5px] italic text-muted-foreground">
-                                <FileText aria-hidden="true" className="mt-[3px] h-3 w-3 shrink-0" />
-                                <span className="min-w-0">{m.context}</span>
-                              </div>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                );
-              })()}
 
               <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
                 <Button variant="outline" className="gap-2" disabled={isSearching} onClick={handleFindOnInternet}>

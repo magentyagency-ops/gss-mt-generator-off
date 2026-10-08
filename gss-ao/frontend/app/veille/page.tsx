@@ -178,7 +178,7 @@ export default function VeillePage() {
         objet: preview.objet,
         dateLimite: preview.dateLimite,
         departement: preview.departement,
-        statut: "En cours",
+        statut: "Brouillon",
         responsable: "Sacha",
         emailSummary: preview.emailSummary,
         suggestionSections: preview.suggestionSections,
@@ -479,7 +479,7 @@ export default function VeillePage() {
                         size="lg"
                         className="w-full sm:w-auto"
                       >
-                        {simulatedDceStatus === "ready" ? "Lancer la génération du mémoire technique" : "Créer le dossier"}
+                        {simulatedDceStatus === "ready" ? "Lancer la génération du mémoire technique" : "Créer le brouillon de dossier"}
                         <ArrowRight className="h-4 w-4" />
                       </Button>
                     </CardFooter>
