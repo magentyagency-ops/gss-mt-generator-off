@@ -19,6 +19,9 @@ import { DossierNav } from "@/components/dossier-nav";
 import { type Piece, type DceFile } from "@/lib/gss-config";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
+import { BandeauDossier } from "@/components/visuel/bandeau-dossier";
+import { EntreeEtape } from "@/components/visuel/entree-etape";
+import { Jauge } from "@/components/visuel/jauge";
 
 type Etat = Piece["etat"];
 const ETATS: { key: Etat; label: string; icon: React.ElementType; cls: string }[] = [
@@ -56,16 +59,21 @@ function PieceRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-4 rounded-md border px-4 py-3",
-        bloquant ? "border-destructive/40 bg-destructive/5" : "border-border",
+        "flex flex-wrap items-center gap-x-3.5 gap-y-2.5 rounded-[10px] border px-3.5 py-3 transition-[border-color,box-shadow,translate] duration-200 ease-doux hover:border-[#C9D3DF] hover:shadow-o1 motion-safe:hover:-translate-y-px sm:flex-nowrap",
+        bloquant ? "border-[#F2C3C8] bg-[#FFF9F9] hover:border-[#EBA9B0]" : "border-border bg-card",
       )}
     >
-      <div className="flex shrink-0 items-center justify-center">
-        <Icon className={cn("h-5 w-5", meta.cls)} />
+      <div
+        className={cn(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px]",
+          piece.etat === "obtenu" ? "bg-success-soft" : piece.etat === "manquant" ? "bg-destructive-soft" : piece.etat === "attente" ? "bg-warning-soft" : "bg-secondary",
+        )}
+      >
+        <Icon className={cn("h-[17px] w-[17px]", meta.cls)} />
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-semibold">{piece.nom}</span>
+      <div className="min-w-0 flex-1 max-sm:basis-[calc(100%-50px)]">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="min-w-0 truncate text-sm font-semibold">{piece.nom}</span>
           {piece.alternative && (
             <Badge variant="outline" className="font-normal text-xs">
               ou {piece.alternative}
@@ -79,24 +87,24 @@ function PieceRow({
         </div>
         <button
           onClick={onRef}
-          className="mt-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+          className="mt-0.5 flex items-center gap-1 rounded text-[12px] text-subtle-foreground underline-offset-2 hover:text-primary hover:underline transition-colors"
         >
           <FileSearch className="h-3 w-3" /> Source RC ({piece.ref})
         </button>
       </div>
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="ml-auto flex items-center gap-2.5 shrink-0">
         <Badge variant={meta.key === "obtenu" ? "success" : meta.key === "manquant" ? "destructive" : meta.key === "attente" ? "warning" : "secondary"}>
           {meta.label}
         </Badge>
         
         {/* Upload Button */}
-        <label className="cursor-pointer">
+        <label className="cursor-pointer rounded-lg transition-[scale] duration-150 active:scale-[.97] has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring">
           <input type="file" className="hidden" onChange={onUpload} accept=".pdf,.doc,.docx,.zip" />
           <div className={cn(
-            "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors border",
+            "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-semibold shadow-o1 transition-[background-color,border-color,box-shadow] duration-150",
             piece.etat === "obtenu" 
-              ? "border-border bg-muted/50 text-muted-foreground hover:bg-muted" 
-              : "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+              ? "border-border bg-card text-foreground hover:border-[#C7D0DC] hover:bg-[#FBFCFD]" 
+              : "border-primary bg-primary text-primary-foreground hover:bg-primary-hover hover:shadow-o2"
           )}>
             {piece.etat === "obtenu" ? (
               <><FileCheck className="h-3.5 w-3.5" /> Remplacer</>
@@ -196,53 +204,68 @@ export default function ConformitePage({ params }: { params: { id: string } }) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
-        <div>
-          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <BandeauDossier
+        className="animate-apparaitre pb-5 pt-5 md:pb-[18px] md:pt-5"
+        meta={
+          <div className="text-[12.5px] font-medium uppercase tracking-wide text-muted-foreground">
             {dossierInfo.acheteur}{dossierInfo.reference ? ` · ${dossierInfo.reference}` : ""}
           </div>
-          <h1 className="text-xl font-semibold">Check-list de conformité administrative</h1>
+        }
+      >
+        <div className="mt-1.5 flex flex-wrap items-end justify-between gap-4">
+          <h1 className="font-display text-[24px] font-bold leading-[1.15] md:text-[28px]">Check-list de conformité administrative</h1>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="min-w-[180px] md:min-w-[220px] md:text-right">
+              <span className="font-mono text-[12.5px] tabular-nums text-muted-foreground">
+                {obtenus}/{total} pièces obtenues
+              </span>
+              {/* Jauge : reprend le compteur « n/m pièces obtenues » déjà affiché. */}
+              <Jauge
+                valeur={(obtenus / Math.max(total, 1)) * 100}
+                epaisseur={8}
+                couleur="linear-gradient(90deg, hsl(var(--success)), #39A673)"
+                className="mt-1.5 bg-white/15"
+              />
+            </div>
+            <Link href={`/dossiers/${id}/memoire`}>
+              <Button>
+                Étape suivante <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">
-            {obtenus}/{total} pièces obtenues
-          </span>
-          <Link href={`/dossiers/${id}/memoire`}>
-            <Button>
-              Étape suivante <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-        </div>
-      </header>
+      </BandeauDossier>
 
       <DossierNav id={id} />
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <EntreeEtape className="flex-1 overflow-y-auto px-4 py-5 md:px-9 md:py-6">
         {/* Alerte */}
         {manquants.length > 0 && (
-          <div className="mb-4 flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-4">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+          <div className="mx-auto mb-5 flex max-w-4xl animate-monter items-center gap-3.5 rounded-xl border border-[#F2C3C8] bg-gradient-to-r from-[#FDECEE] to-[#FFF8F8] px-4 py-3.5">
+            <span className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[10px] bg-card shadow-o1">
+              <AlertTriangle className="h-[19px] w-[19px] text-destructive" />
+            </span>
             <div>
               <div className="text-sm font-semibold text-destructive">
                 {manquants.length} pièce(s) obligatoire(s) manquante(s) — offre éliminée si non
                 fournie
               </div>
-              <div className="mt-1 text-sm text-muted-foreground">
+              <div className="mt-0.5 text-[13.5px] text-muted-foreground">
                 {manquants.map((p) => p.nom).join(" · ")}
               </div>
             </div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-6 max-w-4xl mx-auto">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 max-w-4xl mx-auto animate-monter [animation-delay:80ms]">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between text-base">
-                Pièces Requises
-                <Badge variant="secondary">{pieces.length} pièces</Badge>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between gap-[9px] text-[15px]">
+                <span className="flex items-center gap-[9px]"><CheckCircle2 aria-hidden="true" className="h-[18px] w-[18px] text-primary" />Pièces Requises</span>
+                <Badge variant="secondary" className="font-mono tabular-nums">{pieces.length} pièces</Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="apparait grid grid-cols-[minmax(0,1fr)] gap-2">
               {pieces.map((p) => (
                 <PieceRow
                   key={p.nom}
@@ -254,26 +277,26 @@ export default function ConformitePage({ params }: { params: { id: string } }) {
             </CardContent>
           </Card>
         </div>
-      </div>
+      </EntreeEtape>
 
       {/* Panneau latéral : référence RC */}
       {refPiece && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-foreground/20" onClick={() => setRefPiece(null)}>
+        <div className="fixed inset-0 z-50 flex justify-end bg-[rgba(11,37,69,.45)] backdrop-blur-[4px] animate-in fade-in duration-200" onClick={() => setRefPiece(null)}>
           <div
-            className="h-full w-[420px] overflow-y-auto border-l border-border bg-card p-5 shadow-xl"
+            className="h-full w-full max-w-[420px] overflow-y-auto border-l border-border bg-card p-6 shadow-o3 animate-in slide-in-from-right-8 fade-in duration-300"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Référence dans le RC</h3>
-              <button onClick={() => setRefPiece(null)} className="text-muted-foreground hover:text-foreground">
+              <h3 className="flex items-center gap-2 text-[15px] font-semibold"><FileSearch aria-hidden="true" className="h-[18px] w-[18px] text-primary" />Référence dans le RC</h3>
+              <button onClick={() => setRefPiece(null)} className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground">
                 <X className="h-4 w-4" />
               </button>
             </div>
             <Badge variant="outline" className="mb-3">
               {refPiece.ref}
             </Badge>
-            <div className="text-sm font-medium">{refPiece.nom}</div>
-            <div className="mt-3 rounded-md bg-muted/40 p-3 text-sm leading-6 text-muted-foreground">
+            <div className="text-[15px] font-semibold">{refPiece.nom}</div>
+            <div className="mt-3 rounded-xl border border-border border-l-4 border-l-primary bg-secondary/60 p-4 text-sm leading-6 text-muted-foreground">
               Extrait du Règlement de Consultation (RC) : la pièce «&nbsp;{refPiece.nom}
               &nbsp;» figure parmi les éléments à produire ({refPiece.ref}). Document exigé
               {refPiece.obligatoire ? " à peine d'irrecevabilité." : " (facultatif)."}
