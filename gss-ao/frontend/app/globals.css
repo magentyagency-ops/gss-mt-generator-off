@@ -1,66 +1,137 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+/* ─────────────────────────────────────────────────────────────────────────────
+   Polices IBM Plex (licence SIL OFL 1.1, fichiers locaux dans public/fonts/ibm-plex,
+   licences jointes) : la police des mémoires « Marine & signal ». Aucune requête externe.
+   ───────────────────────────────────────────────────────────────────────────── */
+@font-face { font-family: "IBM Plex Sans"; src: url("/fonts/ibm-plex/IBMPlexSans-400.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "IBM Plex Sans"; src: url("/fonts/ibm-plex/IBMPlexSans-500.ttf") format("truetype"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "IBM Plex Sans"; src: url("/fonts/ibm-plex/IBMPlexSans-600.ttf") format("truetype"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "IBM Plex Sans"; src: url("/fonts/ibm-plex/IBMPlexSans-700.ttf") format("truetype"); font-weight: 700 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "IBM Plex Sans Condensed"; src: url("/fonts/ibm-plex/IBMPlexSansCondensed-500.ttf") format("truetype"); font-weight: 400 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "IBM Plex Sans Condensed"; src: url("/fonts/ibm-plex/IBMPlexSansCondensed-600.ttf") format("truetype"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "IBM Plex Sans Condensed"; src: url("/fonts/ibm-plex/IBMPlexSansCondensed-700.ttf") format("truetype"); font-weight: 700 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "IBM Plex Mono"; src: url("/fonts/ibm-plex/IBMPlexMono-500.ttf") format("truetype"); font-weight: 400 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "IBM Plex Mono"; src: url("/fonts/ibm-plex/IBMPlexMono-600.ttf") format("truetype"); font-weight: 600 900; font-style: normal; font-display: swap; }
+
+/* Propriétés animables (anneaux qui se remplissent, compteurs qui défilent). */
+@property --gss-p {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --gss-n {
+  syntax: "<integer>";
+  inherits: false;
+  initial-value: 0;
+}
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   Jetons « Marine & signal » (planche validée du 8 octobre 2026).
+   Base neutre et claire ; marine pour la structure ; orange signal réservé à ce qui
+   doit attirer l'œil (jamais en texte courant). Toutes les paires texte / fond sont AA.
+   ───────────────────────────────────────────────────────────────────────────── */
 @layer base {
   :root {
-    /* Thème GSS-AO : Noir / Blanc / Rouge */
-    --background: 0 0% 100%; /* blanc */
-    --foreground: 0 0% 9%; /* presque noir */
+    --background: 220 20% 97%; /* #F6F7F9 fond des pages */
+    --foreground: 217 47% 15%; /* #142238 texte principal */
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 9%;
+    --card-foreground: 217 47% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 217 47% 15%;
 
-    --primary: 0 0% 0%; /* noir — boutons principaux, fort contraste */
-    --primary-foreground: 0 0% 100%; /* blanc */
+    --primary: 213 72% 16%; /* #0B2545 marine : boutons principaux, étape active */
+    --primary-hover: 214 62% 23%; /* #16365F survol */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 96%; /* gris très clair */
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 40%; /* gris */
-    --accent: 0 86% 97%; /* rouge très clair (accentuation) */
-    --accent-foreground: 0 72% 45%; /* rouge */
+    --signal: 16 88% 54%; /* #F15A22 orange signal : indicateurs, points, liserés (non-texte) */
+    --signal-texte: 16 74% 41%; /* #B8461B texte orange quand il en faut */
+    --signal-soft: 20 100% 95%; /* #FFF0E8 */
 
-    --destructive: 0 72% 51%; /* rouge-600 */
+    --secondary: 213 36% 95%; /* #EEF2F7 voile */
+    --secondary-foreground: 217 47% 15%;
+    --muted: 213 36% 95%;
+    --muted-foreground: 216 19% 36%; /* #4A586D texte secondaire */
+    --subtle-foreground: 218 15% 47%; /* #67748A petites capitales (AA) */
+    --accent: 213 36% 95%;
+    --accent-foreground: 213 72% 16%;
+
+    --destructive: 354 70% 41%; /* #B3202E urgent, manquant */
     --destructive-foreground: 0 0% 100%;
-    --success: 142 71% 45%; /* vert */
+    --destructive-soft: 354 70% 95%; /* #FBE8EA */
+    --success: 152 59% 30%; /* #1F7A50 validé, obtenu, envoyé */
     --success-foreground: 0 0% 100%;
-    --warning: 0 72% 51%; /* rouge */
+    --success-soft: 146 39% 93%; /* #E6F4EC */
+    --warning: 33 100% 32%; /* #A35A00 à surveiller, en attente */
     --warning-foreground: 0 0% 100%;
+    --warning-soft: 38 83% 93%; /* #FCF1DE */
+    --info: 215 54% 40%; /* #2F5E9E en cours */
+    --info-foreground: 0 0% 100%;
+    --info-soft: 215 66% 94%; /* #E7EFFA */
 
-    --border: 0 0% 90%; /* gris clair */
-    --input: 0 0% 90%;
-    --ring: 0 0% 9%; /* noir */
-    --radius: 0.5rem;
+    --sidebar: 213 72% 16%; /* #0B2545 */
+    --sidebar-foreground: 215 37% 85%; /* #C9D5E6 */
+    --sidebar-muted: 215 31% 71%; /* #9FB2CC */
+
+    --border: 216 22% 91%; /* #E3E7ED filet */
+    --input: 215 22% 83%; /* #CBD3DE bord des champs */
+    --ring: 213 72% 16%; /* focus marine */
+    --radius: 0.625rem; /* 10 px */
+
+    --ombre-1: 0 1px 2px rgba(16, 32, 58, 0.06), 0 1px 1px rgba(16, 32, 58, 0.04);
+    --ombre-2: 0 10px 28px -10px rgba(16, 32, 58, 0.22), 0 2px 5px rgba(16, 32, 58, 0.05);
+    --ombre-3: 0 24px 60px -20px rgba(10, 20, 40, 0.35);
+    --halo-focus: 0 0 0 3px rgba(11, 37, 69, 0.14);
+    --courbe-douce: cubic-bezier(0.2, 0.7, 0.2, 1);
   }
 
+  /* Thème sombre préparé (non activé : les écrans restent en clair). */
   .dark {
-    --background: 222 47% 11%; /* slate-900 */
-    --foreground: 210 40% 98%;
-    --card: 222 44% 14%;
-    --card-foreground: 210 40% 98%;
+    --background: 216 45% 8%;
+    --foreground: 214 39% 93%;
+    --card: 217 43% 13%;
+    --card-foreground: 214 39% 93%;
+    --popover: 217 43% 13%;
+    --popover-foreground: 214 39% 93%;
 
-    --primary: 243 75% 66%;
-    --primary-foreground: 222 47% 11%;
+    --primary: 214 60% 62%;
+    --primary-hover: 214 60% 70%;
+    --primary-foreground: 216 45% 8%;
 
-    --secondary: 217 33% 18%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 18%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 20%;
-    --accent-foreground: 210 40% 98%;
+    --signal: 17 100% 63%;
+    --signal-texte: 17 100% 70%;
+    --signal-soft: 17 40% 18%;
 
-    --destructive: 0 63% 50%;
-    --destructive-foreground: 210 40% 98%;
-    --success: 160 70% 40%;
-    --success-foreground: 0 0% 100%;
-    --warning: 38 92% 55%;
-    --warning-foreground: 28 80% 12%;
+    --secondary: 216 34% 18%;
+    --secondary-foreground: 214 39% 93%;
+    --muted: 216 34% 18%;
+    --muted-foreground: 215 20% 66%;
+    --subtle-foreground: 215 16% 58%;
+    --accent: 216 34% 20%;
+    --accent-foreground: 214 39% 93%;
 
-    --border: 217 33% 24%;
-    --input: 217 33% 24%;
-    --ring: 243 75% 66%;
+    --destructive: 354 70% 60%;
+    --destructive-foreground: 216 45% 8%;
+    --destructive-soft: 354 40% 18%;
+    --success: 152 45% 50%;
+    --success-foreground: 216 45% 8%;
+    --success-soft: 152 30% 16%;
+    --warning: 36 90% 58%;
+    --warning-foreground: 216 45% 8%;
+    --warning-soft: 36 40% 16%;
+    --info: 214 70% 68%;
+    --info-foreground: 216 45% 8%;
+    --info-soft: 214 40% 18%;
+
+    --sidebar: 216 45% 10%;
+    --sidebar-foreground: 215 37% 85%;
+    --sidebar-muted: 215 31% 71%;
+
+    --border: 215 32% 22%;
+    --input: 215 32% 26%;
+    --ring: 214 60% 62%;
   }
 }
 
@@ -68,56 +139,414 @@
   * {
     @apply border-border;
   }
-  /* Fond noir derrière la page (effet de "bounce"/overscroll) */
+  /* Rebond (overscroll) cohérent avec la barre latérale marine. */
   html {
-    background-color: #000000;
+    background-color: #0b2545;
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "cv11", "ss01";
+    font-feature-settings: "kern", "liga";
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  /* Titres de page en IBM Plex Sans Condensed (taille donnée par les classes existantes). */
+  h1 {
+    font-family: theme("fontFamily.display");
+    letter-spacing: -0.005em;
+  }
+  ::selection {
+    background-color: hsl(213 60% 85%);
+    color: hsl(var(--foreground));
+  }
+  /* Focus clavier toujours visible (les composants qui ont leur propre anneau le gardent). */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+  /* Cases à cocher, boutons radio, curseurs : couleur marine. */
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="range"],
+  progress {
+    accent-color: hsl(var(--primary));
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    transition: box-shadow 0.15s var(--courbe-douce);
+  }
+  input[type="checkbox"]:focus-visible,
+  input[type="radio"]:focus-visible {
+    box-shadow: var(--halo-focus);
+  }
+  /* Champs : halo marine au focus (le bord des champs vient des classes existantes). */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: none;
+    border-color: hsl(var(--primary));
+    box-shadow: var(--halo-focus);
+  }
+  ::placeholder {
+    color: hsl(var(--subtle-foreground));
+    opacity: 1;
   }
 }
 
 @layer components {
-  /* ── Bandeaux supérieurs (headers) : fond noir, texte blanc ── */
-  header {
-    background-color: #000000 !important;
-    border-color: #1f1f23 !important; /* bordure sombre */
+  /* ── En-tête de dossier : bandeau marine (Synthèse, Conformité, Sélection slides,
+     Mémoire, Recherches, Export). Appliqué automatiquement à l'en-tête suivi du fil des
+     étapes, ou explicitement avec la classe .bandeau-dossier. ── */
+  .bandeau-dossier,
+  header:has(~ nav a[href^="/inbox?ao="]) {
+    background-color: #0b2545 !important;
+    background-image:
+      radial-gradient(circle at 96% -30%, rgba(241, 90, 34, 0.24), transparent 34%),
+      linear-gradient(120deg, #0b2545 0%, #123a66 70%, #17487c 100%) !important;
+    border-color: transparent !important;
     color: #ffffff;
   }
-  header h1,
-  header h2,
-  header .text-foreground {
+  :is(.bandeau-dossier, header:has(~ nav a[href^="/inbox?ao="])) :is(h1, h2, h3, .text-foreground, .text-primary) {
     color: #ffffff !important;
   }
-  header p,
-  header .text-muted-foreground {
-    color: #a1a1aa !important; /* gris clair */
+  :is(.bandeau-dossier, header:has(~ nav a[href^="/inbox?ao="])) :is(p, .text-muted-foreground) {
+    color: #c8d4e4 !important;
   }
-  /* Champs (inputs) dans un header noir : rester lisibles */
-  header input,
-  header textarea,
-  header select {
-    background-color: #18181b !important;
-    border-color: #3f3f46 !important;
+  :is(.bandeau-dossier, header:has(~ nav a[href^="/inbox?ao="])) .uppercase.text-muted-foreground {
+    color: #afc0d6 !important;
+    font-family: theme("fontFamily.mono");
+    letter-spacing: 0.02em;
+  }
+  /* Bouton principal dans le bandeau : bouton clair (fond blanc, texte marine). */
+  :is(.bandeau-dossier, header:has(~ nav a[href^="/inbox?ao="])) :is(button, a).bg-primary {
+    background-color: #ffffff !important;
+    color: #0b2545 !important;
+  }
+  :is(.bandeau-dossier, header:has(~ nav a[href^="/inbox?ao="])) :is(button, a).bg-primary:not(:disabled):hover {
+    background-color: #ffffff !important;
+    box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.4) !important;
+  }
+  /* Boutons secondaires / contour dans le bandeau : translucides, toujours lisibles. */
+  :is(.bandeau-dossier, header:has(~ nav a[href^="/inbox?ao="])) :is(button, a):is(.bg-background, .bg-card, .bg-secondary, .border-input) {
+    background-color: rgba(255, 255, 255, 0.09) !important;
+    border-color: rgba(255, 255, 255, 0.22) !important;
     color: #ffffff !important;
   }
-  header input::placeholder {
-    color: #a1a1aa !important;
+  :is(.bandeau-dossier, header:has(~ nav a[href^="/inbox?ao="])) :is(button, a):is(.bg-background, .bg-card, .bg-secondary, .border-input):not(:disabled):hover {
+    background-color: rgba(255, 255, 255, 0.16) !important;
+  }
+  /* Champs dans le bandeau (renommage de l'objet) : lisibles sur marine. */
+  :is(.bandeau-dossier, header:has(~ nav a[href^="/inbox?ao="])) :is(input, textarea, select) {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    color: #ffffff !important;
+  }
+  :is(.bandeau-dossier, header:has(~ nav a[href^="/inbox?ao="])) input::placeholder {
+    color: #afc0d6 !important;
   }
 
-  /* ── Contraste des boutons standards dans un header noir ──
-     Les boutons principaux (bg-primary = noir) deviennent
-     blanc/texte noir pour rester visibles. Les boutons
-     destructifs (rouge) ne sont pas inversés. */
-  header button.bg-primary,
-  header a.bg-primary {
-    background-color: #ffffff !important;
-    color: #000000 !important;
+  /* ── Barre latérale : liseré orange de l'élément actif, qui glisse d'un lien à l'autre
+     (liens de 44 px espacés de 4 px ; aucun calcul en JavaScript). ── */
+  .gss-nav-indicateur {
+    position: absolute;
+    left: -8px;
+    top: 0;
+    width: 3px;
+    height: 26px;
+    border-radius: 0 3px 3px 0;
+    background-color: hsl(var(--signal));
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(calc(var(--gss-rang, 0) * 48px + 9px));
+    transition: transform 0.3s var(--courbe-douce), opacity 0.2s var(--courbe-douce);
   }
-  header button.bg-primary:hover,
-  header a.bg-primary:hover {
-    background-color: #e4e4e7 !important;
+  @media (min-width: 768px) {
+    .gss-nav-indicateur {
+      left: -14px;
+    }
+  }
+  .gss-nav-laterale:has(> a[data-actif="true"]) .gss-nav-indicateur { opacity: 1; }
+  .gss-nav-laterale:has(> a:nth-of-type(2)[data-actif="true"]) .gss-nav-indicateur { --gss-rang: 1; }
+  .gss-nav-laterale:has(> a:nth-of-type(3)[data-actif="true"]) .gss-nav-indicateur { --gss-rang: 2; }
+  .gss-nav-laterale:has(> a:nth-of-type(4)[data-actif="true"]) .gss-nav-indicateur { --gss-rang: 3; }
+  .gss-nav-laterale:has(> a:nth-of-type(5)[data-actif="true"]) .gss-nav-indicateur { --gss-rang: 4; }
+  .gss-nav-laterale:has(> a:nth-of-type(6)[data-actif="true"]) .gss-nav-indicateur { --gss-rang: 5; }
+  .gss-nav-laterale:has(> a:nth-of-type(7)[data-actif="true"]) .gss-nav-indicateur { --gss-rang: 6; }
+
+  /* Pastille translucide pour les repères du bandeau (remise, visite, procédure). */
+  .chip-bandeau {
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background-color: rgba(255, 255, 255, 0.09);
+    padding: 8px 13px;
+    font-size: 12px;
+    color: #b9c8dc;
+  }
+  .chip-bandeau-urgent {
+    border-color: rgba(241, 90, 34, 0.65);
+    background-color: rgba(241, 90, 34, 0.16);
+  }
+
+  /* Badge (components/ui.tsx) : styles de forme à priorité nulle (:where), de sorte que les
+     classes passées par les écrans (couleurs, rayon) gardent toujours la main. */
+  :where(.badge-gss) {
+    border-radius: 9999px;
+  }
+  :where(.badge-gss[data-variante="outline"]) {
+    border-radius: 6px;
+    border-color: hsl(var(--border));
+    background-color: hsl(var(--card));
+    font-weight: 500;
+  }
+  :where(.badge-gss:not([data-variante="outline"]):not(:has(svg)))::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    flex: none;
+    border-radius: 9999px;
+    background-color: currentColor;
+  }
+
+  /* Libellé en petites capitales. */
+  .petites-capitales {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--subtle-foreground));
+  }
+  /* Chiffre clé : Condensed, chiffres tabulaires. */
+  .chiffre-cle {
+    font-family: theme("fontFamily.display");
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.05;
+  }
+
+  /* ── Effets de clic, survol (Clarence, point 1) ── */
+  /* Élément cliquable (carte, ligne, pastille) : enfoncement à l'appui. */
+  .presse {
+    transition-property: transform, translate, scale, box-shadow, background-color, border-color, color;
+    transition-duration: 0.15s;
+    transition-timing-function: var(--courbe-douce);
+  }
+  .presse:active {
+    scale: 0.98;
+  }
+  /* Carte « vive » : léger soulèvement au survol, enfoncement à l'appui. */
+  .vive {
+    transition-property: transform, translate, scale, box-shadow, border-color, background-color;
+    transition-duration: 0.2s;
+    transition-timing-function: var(--courbe-douce);
+  }
+  .vive:hover {
+    translate: 0 -2px;
+    box-shadow: var(--ombre-2);
+  }
+  .vive:active {
+    translate: 0 0;
+    scale: 0.99;
+    box-shadow: var(--ombre-1);
+  }
+  /* Ligne de tableau cliquable : liseré orange au survol, fond qui fonce à l'appui. */
+  .ligne-vive {
+    transition: background-color 0.15s var(--courbe-douce), box-shadow 0.15s var(--courbe-douce);
+  }
+  .ligne-vive:hover {
+    background-color: #f8fafd;
+    box-shadow: inset 3px 0 0 hsl(var(--signal));
+  }
+  .ligne-vive:active {
+    background-color: hsl(var(--secondary));
+    box-shadow: inset 4px 0 0 hsl(var(--signal));
+  }
+
+  /* ── Apparitions échelonnées (point 2) : enfants directs, pas de 60 ms, plafond 8. ── */
+  .apparait > * {
+    animation: gss-monter 0.45s var(--courbe-douce) both;
+  }
+  .apparait > *:nth-child(2) { animation-delay: 60ms; }
+  .apparait > *:nth-child(3) { animation-delay: 120ms; }
+  .apparait > *:nth-child(4) { animation-delay: 180ms; }
+  .apparait > *:nth-child(5) { animation-delay: 240ms; }
+  .apparait > *:nth-child(6) { animation-delay: 300ms; }
+  .apparait > *:nth-child(7) { animation-delay: 360ms; }
+  .apparait > *:nth-child(n + 8) { animation-delay: 420ms; }
+
+  /* ── Glissement directionnel entre étapes / onglets (point 4). ── */
+  .entree-avance {
+    animation: gss-glisser-gauche 0.28s var(--courbe-douce) both;
+  }
+  .entree-recule {
+    animation: gss-glisser-droite 0.28s var(--courbe-douce) both;
+  }
+  .entree-fondu {
+    animation: gss-apparaitre 0.3s var(--courbe-douce) both;
+  }
+
+  /* ── Retours d'état (point 5) ── */
+  /* Squelette : bloc voile avec reflet qui glisse. */
+  .squelette {
+    position: relative;
+    overflow: hidden;
+    border-radius: 6px;
+    background-color: hsl(var(--secondary));
+  }
+  .squelette::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+    animation: gss-miroiter 1.4s ease-in-out infinite;
+  }
+  /* Pastille orange qui pulse (« en cours »). */
+  .pastille-live {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    flex: none;
+    border-radius: 9999px;
+    background-color: hsl(var(--signal));
+    animation: gss-pulse-signal 1.8s infinite;
+  }
+  /* Reflet animé sur une barre de progression tant qu'un traitement est en cours. */
+  .reflet-actif {
+    position: relative;
+    overflow: hidden;
+  }
+  .reflet-actif::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+    animation: gss-miroiter 1.6s ease-in-out infinite;
+  }
+
+  /* ── Remplissages et tracés progressifs (point 3) ── */
+  /* Trait SVG qui se dessine (coches, liaisons) : poser pathLength="1" sur le tracé. */
+  .trace {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: gss-tracer 0.6s var(--courbe-douce) forwards;
+  }
+  /* Anneau conique : --gss-p = pourcentage (0 à 100), couleur via --anneau-couleur. */
+  .anneau-gss {
+    border-radius: 9999px;
+    background: conic-gradient(var(--anneau-couleur, hsl(var(--success))) calc(var(--gss-p) * 1%), hsl(var(--secondary)) 0);
+    animation: gss-anneau 1s var(--courbe-douce) backwards;
+    transition: --gss-p 0.8s var(--courbe-douce);
+  }
+  /* Compteur CSS qui défile de 0 à --gss-cible. */
+  .compteur-gss {
+    font-variant-numeric: tabular-nums;
+    counter-reset: gss-n var(--gss-n);
+    --gss-n: var(--gss-cible, 0);
+    animation: gss-compter 0.8s var(--courbe-douce) backwards;
+    transition: --gss-n 0.6s var(--courbe-douce);
+  }
+  .compteur-gss::after {
+    content: counter(gss-n);
+  }
+}
+
+@layer utilities {
+  /* Effet d'enfoncement universel (point 1) : tous les boutons et liens-blocs.
+     Propriété « scale » indépendante : se cumule aux transformations existantes
+     (translate des icônes, etc.) sans les remplacer. Rien n'est retardé ni bloqué. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"],
+  summary,
+  a[href] {
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, translate, scale, filter;
+    transition-timing-function: var(--courbe-douce);
+  }
+  button:not(:disabled):not([class*="duration-"]),
+  [role="button"]:not([class*="duration-"]),
+  [role="tab"]:not([class*="duration-"]),
+  summary:not([class*="duration-"]),
+  a[href]:not([class*="duration-"]) {
+    transition-duration: 0.15s;
+  }
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active,
+  [role="tab"]:active,
+  summary:active {
+    scale: 0.97;
+  }
+  a[href]:not(:has(button)):active {
+    scale: 0.98;
+  }
+}
+
+/* ── Images clés ── */
+@keyframes gss-monter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes gss-apparaitre {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes gss-glisser-gauche {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes gss-glisser-droite {
+  from { opacity: 0; transform: translateX(-24px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes gss-miroiter {
+  to { transform: translateX(100%); }
+}
+@keyframes gss-pulse-signal {
+  0% { box-shadow: 0 0 0 0 rgba(241, 90, 34, 0.5); }
+  70% { box-shadow: 0 0 0 8px rgba(241, 90, 34, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(241, 90, 34, 0); }
+}
+@keyframes gss-tracer {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes gss-compter {
+  from { --gss-n: 0; }
+}
+@keyframes gss-anneau {
+  from { --gss-p: 0; }
+}
+@keyframes gss-remplir {
+  from { transform: scaleX(0); }
+}
+@keyframes gss-flotte {
+  50% { transform: translateY(-4px); }
+}
+
+/* ── Mouvement réduit (point 6) : tout est coupé, les éléments restent visibles
+   (aucun « animation: none » qui laisserait des éléments à opacité 0). ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+  .squelette::after,
+  .reflet-actif::after {
+    display: none;
+  }
+  .vive:hover,
+  .vive:active,
+  .presse:active,
+  button:active,
+  a[href]:active,
+  [role="button"]:active,
+  [role="tab"]:active {
+    translate: none !important;
+    scale: none !important;
   }
 }

@@ -20,7 +20,7 @@ export default function RootLayout({
   return (
     <html lang="fr">
       {/* Pour activer le mode sombre plus tard : ajouter className="dark" sur <html>. */}
-      <body className="font-sans antialiased">
+      <body className="bg-background font-sans text-foreground antialiased">
         <IntroProvider>
           <AppChrome>{children}</AppChrome>
         </IntroProvider>
