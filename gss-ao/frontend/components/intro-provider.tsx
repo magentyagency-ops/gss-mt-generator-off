@@ -42,7 +42,7 @@ export function IntroProvider({ children }: { children: React.ReactNode }) {
       {!introFinished && (
         <div
           className={cn(
-            "fixed inset-0 z-50 flex flex-col items-center justify-center bg-white transition-all duration-700 ease-out",
+            "fixed inset-0 z-50 flex flex-col items-center justify-center bg-white bg-[radial-gradient(circle_at_50%_42%,#F1F5FB_0%,#FFFFFF_55%)] transition-all duration-700 ease-out",
             revealed && "scale-105 opacity-0",
           )}
         >
@@ -50,13 +50,17 @@ export function IntroProvider({ children }: { children: React.ReactNode }) {
           <img
             src="/gssAO.png"
             alt="GSS-AO"
-            className="h-44 w-44 animate-pulse object-contain"
+            className="h-44 w-44 animate-pulse object-contain drop-shadow-[0_18px_30px_rgba(11,37,69,0.18)]"
           />
           {/* Titre : texte en dégradé, animation slide-up */}
           <div className="mt-6 overflow-hidden">
-            <h1 className="animate-slide-up bg-gradient-to-r from-black via-red-600 to-black bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl">
+            <h1 className="animate-slide-up bg-gradient-to-r from-primary via-signal to-primary bg-clip-text pb-1 text-3xl font-bold tracking-tight text-transparent sm:text-4xl">
               Générateur de Mémoire
             </h1>
+          </div>
+          {/* Fil de chargement décoratif (se remplit pendant l'intro, durées inchangées). */}
+          <div aria-hidden="true" className="mt-7 h-[3px] w-40 overflow-hidden rounded-full bg-secondary">
+            <div className="h-full origin-left animate-[remplir_2.3s_cubic-bezier(.2,.7,.2,1)_both] rounded-full bg-gradient-to-r from-primary to-signal" />
           </div>
         </div>
       )}
