@@ -16,7 +16,8 @@ import {
   AlertCircle,
   FileSpreadsheet,
   Download,
-  Clock
+  Clock,
+  Building2
 } from "lucide-react";
 import { 
   Button, 
@@ -30,6 +31,9 @@ import {
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
+import { Initiales } from "@/components/visuel/carte";
+import { PointActif } from "@/components/visuel/pastille-statut";
+import { Squelette } from "@/components/visuel/squelette";
 
 interface ParsedOpportunity {
   id: string;
@@ -204,49 +208,78 @@ export default function VeillePage() {
   };
 
   return (
-    <div className="flex h-full flex-col bg-background/30">
+    <div className="flex h-full flex-col bg-background">
       {/* Header */}
-      <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white">
-              <Radar className="h-4 w-4 shrink-0" />
+      <header className="flex animate-monter flex-wrap items-end justify-between gap-4 px-4 pb-5 pt-6 md:px-9 md:pt-[30px]">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-primary text-primary-foreground shadow-o1">
+              <Radar className="h-[18px] w-[18px] shrink-0" />
             </div>
-            <h1 className="text-xl font-semibold">Boîte de Réception Veille</h1>
+            <h1 className="font-display text-[26px] font-bold leading-[1.1] md:text-[28px]">Boîte de Réception Veille</h1>
           </div>
-          <p className="text-sm text-muted-foreground">
+          <p className="mt-1.5 text-sm text-muted-foreground">
             Alertes reçues automatiquement. Sélectionnez un e-mail pour extraire le DCE et initier le mémoire.
           </p>
         </div>
         <div>
-          <Badge variant="outline" className="bg-white/10 text-white border-white/20 font-medium">
+          <Badge variant="outline" className="gap-2 rounded-full border-border bg-card px-3 py-1 text-[12.5px] font-semibold text-foreground shadow-o1">
+            <Mail aria-hidden="true" className="h-3.5 w-3.5 text-primary" />
             {alertes.length} alerte{alertes.length > 1 ? "s" : ""} reçue{alertes.length > 1 ? "s" : ""}
           </Badge>
         </div>
       </header>
 
       {/* Main Mailbox Layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-4 pb-6 md:flex-row md:overflow-hidden md:px-9 md:pb-8">
         
         {/* Left Column: Email List Inbox */}
-        <div className="w-80 border-r border-border bg-card/40 flex flex-col shrink-0 overflow-y-auto">
-          <div className="p-3 border-b border-border/60 bg-muted/20">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Inbox className="h-3.5 w-3.5" />
+        <div className="flex w-full shrink-0 animate-monter flex-col overflow-hidden rounded-xl border border-border bg-card shadow-o1 [animation-delay:60ms] md:w-80 md:overflow-y-auto">
+          <div className="sticky top-0 z-[1] border-b border-border bg-[#FAFBFC] px-4 py-3">
+            <div className="petites-capitales flex items-center gap-1.5">
+              <Inbox className="h-3.5 w-3.5 text-primary" />
               Courriers entrants ({alertes.length})
             </div>
           </div>
-          <div className="divide-y divide-border/40">
+          <div className="divide-y divide-border">
             {chargementListe && (
-              <p className="p-4 text-xs text-muted-foreground">Chargement des alertes…</p>
+              <div className="space-y-4 p-4">
+                  <div aria-hidden="true" className="flex gap-3">
+                    <Squelette className="h-[34px] w-[34px] shrink-0 rounded-[9px]" />
+                    <div className="flex-1 space-y-2">
+                      <Squelette className="h-3 w-3/5" />
+                      <Squelette className="h-3 w-4/5" />
+                    </div>
+                  </div>
+                  <div aria-hidden="true" className="flex gap-3">
+                    <Squelette className="h-[34px] w-[34px] shrink-0 rounded-[9px]" />
+                    <div className="flex-1 space-y-2">
+                      <Squelette className="h-3 w-3/5" />
+                      <Squelette className="h-3 w-4/5" />
+                    </div>
+                  </div>
+                  <div aria-hidden="true" className="flex gap-3">
+                    <Squelette className="h-[34px] w-[34px] shrink-0 rounded-[9px]" />
+                    <div className="flex-1 space-y-2">
+                      <Squelette className="h-3 w-3/5" />
+                      <Squelette className="h-3 w-4/5" />
+                    </div>
+                  </div>
+              <p className="text-xs text-muted-foreground">Chargement des alertes…</p>
+              </div>
             )}
             {!chargementListe && erreurListe && (
-              <p className="p-4 text-xs text-destructive">{erreurListe}</p>
+              <p className="m-3 flex items-center gap-2 rounded-[9px] bg-destructive-soft p-3 text-xs text-destructive"><AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0" />{erreurListe}</p>
             )}
             {!chargementListe && !erreurListe && alertes.length === 0 && (
-              <p className="p-4 text-xs text-muted-foreground">
+              <div className="flex animate-monter flex-col items-center gap-3 px-6 py-10 text-center [animation-delay:160ms]">
+                <span aria-hidden="true" className="grid h-14 w-14 place-items-center rounded-full bg-secondary text-primary ring-8 ring-secondary/50">
+                  <Mail className="h-7 w-7 motion-safe:animate-flotte" strokeWidth={1.6} />
+                </span>
+              <p className="text-[13px] leading-relaxed text-muted-foreground">
                 Aucune alerte reçue pour le moment. Les alertes arrivent par e-mail et s'affichent ici automatiquement.
               </p>
+              </div>
             )}
             {alertes.map((email) => {
               const active = selectedEmailId === email.id;
@@ -255,35 +288,36 @@ export default function VeillePage() {
                   key={email.id}
                   onClick={() => setSelectedEmailId(email.id)}
                   className={cn(
-                    "p-4 cursor-pointer transition-all border-l-2 flex flex-col gap-1.5 text-left",
+                    "presse animate-monter cursor-pointer border-l-[3px] flex flex-col gap-1.5 px-4 py-3.5 text-left",
                     active
-                      ? "bg-accent/60 border-l-primary"
-                      : "hover:bg-accent/30 border-l-transparent"
+                      ? "bg-secondary border-l-signal"
+                      : "hover:bg-[#F8FAFD] border-l-transparent"
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-xs text-foreground truncate">
+                    <span className={cn("h-2 w-2 shrink-0 rounded-full bg-signal", email.dossier_id && "bg-transparent")} aria-hidden="true" />
+                    <span className="mr-auto font-semibold text-[13px] text-foreground truncate">
                       {email.parsed?.acheteur || email.expediteur_nom || email.expediteur}
                     </span>
-                    <span className="text-[10px] text-muted-foreground shrink-0 flex items-center gap-0.5">
-                      <Clock className="h-2.5 w-2.5" />
+                    <span className="font-mono text-[11px] text-subtle-foreground shrink-0 flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
                       {heureCourte(email.recu_at)}
                     </span>
                   </div>
-                  <div className="text-xs font-medium text-foreground/90 truncate">
+                  <div className="text-[13px] font-medium text-foreground/90 truncate">
                     {email.sujet}
                   </div>
-                  <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                  <p className="text-[12px] text-muted-foreground line-clamp-2 leading-relaxed">
                     {email.corps.trim()}
                   </p>
                   <div className="flex items-center gap-1.5 mt-1">
                     {email.parsed?.departement && (
-                      <Badge variant="outline" className="text-[9px] py-0.5 px-1 bg-background font-normal border-border/80">
+                      <Badge variant="outline" className="text-[10.5px] py-px px-1.5 font-mono font-medium">
                         Dpt {email.parsed.departement}
                       </Badge>
                     )}
                     {email.dossier_id && (
-                      <Badge variant="outline" className="text-[9px] py-0.5 px-1 bg-success/10 text-success border-success/20 font-normal">
+                      <Badge variant="success" className="text-[10.5px] py-px px-2">
                         Dossier créé
                       </Badge>
                     )}
@@ -295,29 +329,32 @@ export default function VeillePage() {
         </div>
 
         {/* Right/Main Column: Email Reader & Actions */}
-        <div className="flex-1 flex flex-col overflow-y-auto bg-background/20 p-6">
+        <div className="flex min-h-[320px] flex-1 animate-monter flex-col overflow-y-auto rounded-xl border border-border bg-card/60 p-4 shadow-o1 [animation-delay:120ms] md:p-6">
           
           {loading ? (
             <div className="flex-1 flex flex-col items-center justify-center">
-              <Loader2 className="h-8 w-8 text-primary animate-spin mb-3" />
-              <p className="text-sm text-muted-foreground">Chargement de l'alerte email...</p>
+              <span className="mb-3 grid h-14 w-14 place-items-center rounded-full bg-secondary"><Loader2 className="h-7 w-7 text-primary animate-spin" /></span>
+              <p className="flex items-center gap-2 text-sm text-muted-foreground"><PointActif />Chargement de l'alerte email...</p>
             </div>
           ) : !activeEmail ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center">
-              <Inbox className="h-8 w-8 text-muted-foreground mb-3" />
-              <p className="text-sm text-muted-foreground">
+            <div className="flex-1 flex animate-monter flex-col items-center justify-center gap-3 px-4 py-10 text-center [animation-delay:220ms]">
+              <span aria-hidden="true" className="mb-1 grid h-16 w-16 place-items-center rounded-full bg-secondary text-primary ring-8 ring-secondary/50">
+                <Inbox className="h-8 w-8" strokeWidth={1.6} />
+              </span>
+              <p className="max-w-sm text-[13.5px] leading-relaxed text-muted-foreground">
                 Aucune alerte sélectionnée. Les alertes reçues par e-mail apparaissent dans la colonne de gauche.
               </p>
             </div>
           ) : (
-            <div className="space-y-6 max-w-4xl mx-auto w-full">
+            <div className="apparait space-y-5 max-w-4xl mx-auto w-full">
               
               {/* Email Reader View */}
-              <Card className="border-border/60 shadow-sm bg-card/80 backdrop-blur-md">
-                <CardHeader className="pb-4 border-b border-border/40 bg-muted/10">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <CardTitle className="text-base font-bold text-foreground mb-1.5">
+              <Card>
+                <CardHeader className="pb-4 border-b border-border">
+                  <div className="flex items-start gap-3.5">
+                    <Initiales texte={activeEmail.expediteur_nom || activeEmail.expediteur} />
+                    <div className="min-w-0">
+                      <CardTitle className="text-base font-semibold text-foreground mb-1.5">
                         {activeEmail.sujet}
                       </CardTitle>
                       <div className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -328,7 +365,7 @@ export default function VeillePage() {
                   </div>
                 </CardHeader>
                 <CardContent className="pt-5 pb-5">
-                  <div className="whitespace-pre-line text-xs font-mono leading-relaxed text-foreground/90 bg-background/40 rounded-lg p-4 border border-border/30">
+                  <div className="whitespace-pre-line text-xs font-mono leading-relaxed text-foreground/90 bg-[#FAFBFC] rounded-[10px] p-4 border border-border">
                     {activeEmail.corps}
                   </div>
                 </CardContent>
@@ -336,19 +373,27 @@ export default function VeillePage() {
 
               {/* Extraction & Integration flow */}
               {preview && (
-                <div className="space-y-6 animate-in fade-in duration-300">
+                <div className="space-y-5 animate-in fade-in duration-300">
+                  {/* Frise Étape 1 → Étape 2 (suit l'état d'extraction déjà affiché) */}
+                  <div aria-hidden="true" className="flex items-center gap-3 px-1">
+                    <span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-full font-mono text-xs font-semibold transition-colors duration-300", simulatedDceStatus === "ready" ? "bg-success-soft text-success" : "bg-primary text-primary-foreground")}>1</span>
+                    <span className="relative h-[3px] flex-1 overflow-hidden rounded-full bg-secondary">
+                      <span className={cn("absolute inset-y-0 left-0 rounded-full bg-[linear-gradient(90deg,hsl(var(--success)),hsl(var(--signal)))] transition-[width] duration-700 ease-doux", simulatedDceStatus === "ready" ? "w-full" : simulatedDceStatus === "uploading" ? "w-1/2 reflet-actif" : "w-0")} />
+                    </span>
+                    <span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-full font-mono text-xs font-semibold transition-colors duration-300", simulatedDceStatus === "ready" ? "bg-signal text-primary" : "bg-secondary text-muted-foreground")}>2</span>
+                  </div>
                   
                   {/* Step 1: DCE Extraction */}
-                  <Card className="border-border/60 shadow-sm bg-card/60">
-                    <CardHeader className="pb-3 border-b border-border/35 bg-muted/20">
+                  <Card className="animate-monter">
+                    <CardHeader className="pb-3 border-b border-border bg-[#FAFBFC] rounded-t-xl">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <FileSpreadsheet className="h-4 w-4 text-primary" />
-                          <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Étape 1 : Pièces jointes & Extraction DCE</CardTitle>
+                          <CardTitle className="petites-capitales">Étape 1 : Pièces jointes & Extraction DCE</CardTitle>
                         </div>
                         <Badge 
                           variant={simulatedDceStatus === "ready" ? "success" : simulatedDceStatus === "uploading" ? "warning" : "secondary"}
-                          className="font-normal text-[10px]"
+                          className="text-[11px]"
                         >
                           {simulatedDceStatus === "ready" ? "✓ Analyse Complétée" : simulatedDceStatus === "uploading" ? "Extraction en cours..." : "En attente"}
                         </Badge>
@@ -356,8 +401,8 @@ export default function VeillePage() {
                     </CardHeader>
                     <CardContent className="pt-4">
                       {simulatedDceStatus === "none" && (
-                        <div className="flex flex-col items-center justify-center p-6 border border-dashed border-border rounded-lg bg-background/25 hover:bg-background/40 transition-colors">
-                          <Download className="h-7 w-7 text-muted-foreground/60 mb-2" />
+                        <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-[#B9C5D4] rounded-xl bg-gradient-to-b from-card to-[#F8FAFC] transition-colors hover:border-primary/40">
+                          <span aria-hidden="true" className="mb-2.5 grid h-12 w-12 place-items-center rounded-full bg-secondary text-primary"><Download className="h-6 w-6" /></span>
                           <p className="text-xs text-muted-foreground mb-3 text-center">
                             Extraire le DCE (CCTP, Règlement) directement depuis le lien contenu dans ce mail.
                           </p>
@@ -369,25 +414,25 @@ export default function VeillePage() {
                       )}
 
                       {simulatedDceStatus === "uploading" && (
-                        <div className="flex flex-col items-center justify-center p-8 border border-border/40 rounded-lg bg-background/20">
+                        <div className="flex flex-col items-center justify-center p-8 border border-border rounded-xl bg-[#FAFBFC]">
                           <Loader2 className="h-6 w-6 text-primary animate-spin mb-3" />
-                          <p className="text-xs font-semibold text-foreground">Lecture intelligente du CCTP & Règlement...</p>
+                          <p className="flex items-center gap-2 text-xs font-semibold text-foreground"><PointActif />Lecture intelligente du CCTP & Règlement...</p>
                           <p className="text-[10px] text-muted-foreground mt-0.5">Extraction des exigences et critères</p>
                         </div>
                       )}
 
                       {simulatedDceStatus === "ready" && (
-                        <div className="p-3.5 border border-success/30 bg-success/5 rounded-lg space-y-2 animate-in zoom-in-95">
+                        <div className="p-3.5 border border-success/25 bg-gradient-to-r from-success-soft to-card rounded-xl space-y-2.5 animate-in zoom-in-95">
                           <div className="text-xs font-semibold text-success flex items-center gap-1.5">
                             <CheckCircle2 className="h-4 w-4" />
                             Fichiers DCE extraits et indexés avec succès !
                           </div>
                           <div className="grid gap-2 sm:grid-cols-2 text-xs text-muted-foreground">
-                            <div className="flex items-center gap-2 p-2 bg-background/60 rounded border border-border/40">
+                            <div className="flex items-center gap-2 p-2.5 bg-card rounded-[9px] border border-border shadow-o1">
                               <span>📄 CCTP_{preview.acheteur.replace(/\s+/g, "_")}.pdf</span>
                               <Badge variant="outline" className="text-[9px] ml-auto">Indexé</Badge>
                             </div>
-                            <div className="flex items-center gap-2 p-2 bg-background/60 rounded border border-border/40">
+                            <div className="flex items-center gap-2 p-2.5 bg-card rounded-[9px] border border-border shadow-o1">
                               <span>📄 RC_{preview.acheteur.replace(/\s+/g, "_")}.pdf</span>
                               <Badge variant="outline" className="text-[9px] ml-auto">Indexé</Badge>
                             </div>
@@ -399,30 +444,30 @@ export default function VeillePage() {
 
                   {/* Step 2: Synthesis & Launch MT */}
                   <Card className={cn(
-                    "border-border/60 shadow-lg transition-all",
-                    simulatedDceStatus === "ready" ? "border-primary/40 shadow-primary/5 bg-gradient-to-br from-card to-primary/5" : "opacity-80"
+                    "animate-monter transition-[opacity,box-shadow,border-color] duration-300 [animation-delay:80ms]",
+                    simulatedDceStatus === "ready" ? "border-primary/30 shadow-o2 bg-gradient-to-br from-card to-[#F1F5FB]" : "opacity-80"
                   )}>
-                    <CardHeader className="pb-3 border-b border-border/30">
+                    <CardHeader className="pb-3 border-b border-border bg-[#FAFBFC] rounded-t-xl">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <Sparkles className="h-4 w-4 text-primary" />
-                          <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Étape 2 : Synthèse d'appel d'offres</CardTitle>
+                          <CardTitle className="petites-capitales">Étape 2 : Synthèse d'appel d'offres</CardTitle>
                         </div>
                       </div>
                     </CardHeader>
                     <CardContent className="pt-4 space-y-4">
                       {/* Grid attributes */}
                       <div className="grid gap-3 sm:grid-cols-3">
-                        <div className="bg-background/40 p-2.5 rounded-lg border border-border/40">
-                          <div className="text-[10px] uppercase text-muted-foreground font-semibold">Acheteur</div>
+                        <div className="bg-card p-3 rounded-[10px] border border-border">
+                          <div className="petites-capitales flex items-center gap-1.5 text-[10.5px]"><Building2 aria-hidden="true" className="h-3.5 w-3.5 text-primary" />Acheteur</div>
                           <div className="text-xs font-semibold text-foreground truncate">{preview.acheteur}</div>
                         </div>
-                        <div className="bg-background/40 p-2.5 rounded-lg border border-border/40">
-                          <div className="text-[10px] uppercase text-muted-foreground font-semibold">Département</div>
+                        <div className="bg-card p-3 rounded-[10px] border border-border">
+                          <div className="petites-capitales flex items-center gap-1.5 text-[10.5px]"><MapPin aria-hidden="true" className="h-3.5 w-3.5 text-primary" />Département</div>
                           <div className="text-xs font-semibold text-foreground">Dpt {preview.departement}</div>
                         </div>
-                        <div className="bg-background/40 p-2.5 rounded-lg border border-border/40">
-                          <div className="text-[10px] uppercase text-muted-foreground font-semibold">Date de remise</div>
+                        <div className="bg-card p-3 rounded-[10px] border border-border">
+                          <div className="petites-capitales flex items-center gap-1.5 text-[10.5px]"><Calendar aria-hidden="true" className="h-3.5 w-3.5 text-primary" />Date de remise</div>
                           <div className="text-xs font-semibold text-foreground">
                             {preview.dateLimite ? new Date(preview.dateLimite).toLocaleDateString("fr-FR") : "Non définie"}
                           </div>
@@ -431,8 +476,8 @@ export default function VeillePage() {
 
                       {/* Summary */}
                       <div>
-                        <div className="text-xs font-semibold uppercase text-muted-foreground mb-1">Résumé du marché</div>
-                        <p className="text-xs leading-relaxed text-muted-foreground bg-background/30 rounded-lg p-3 border border-border/40">
+                        <div className="petites-capitales mb-1.5">Résumé du marché</div>
+                        <p className="text-[13px] leading-relaxed text-muted-foreground bg-card rounded-[10px] p-3.5 border border-border">
                           {preview.emailSummary}
                         </p>
                       </div>
@@ -440,11 +485,11 @@ export default function VeillePage() {
                       {/* Sections list */}
                       {preview.suggestionSections && preview.suggestionSections.length > 0 && (
                         <div>
-                          <div className="text-xs font-semibold uppercase text-muted-foreground mb-2">Sections recommandées pour le mémoire</div>
-                          <div className="grid gap-2 sm:grid-cols-2">
+                          <div className="petites-capitales mb-2">Sections recommandées pour le mémoire</div>
+                          <div className="apparait grid gap-2 sm:grid-cols-2">
                             {preview.suggestionSections.map((sec, idx) => (
-                              <div key={idx} className="flex items-center gap-2 p-2 bg-background/35 rounded border border-border/30 text-xs text-muted-foreground">
-                                <span className="h-4 w-4 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center font-bold shrink-0">{idx + 1}</span>
+                              <div key={idx} className="flex items-center gap-2.5 p-2.5 bg-card rounded-[9px] border border-border text-[13px] text-muted-foreground">
+                                <span className="h-6 w-6 rounded-full bg-primary text-primary-foreground font-mono text-[11px] flex items-center justify-center font-semibold shrink-0">{idx + 1}</span>
                                 <span className="truncate">{sec.replace(/^Section\s[IVX]+\s:\s/, "")}</span>
                               </div>
                             ))}
@@ -452,10 +497,11 @@ export default function VeillePage() {
                         </div>
                       )}
                     </CardContent>
-                    <CardFooter className="flex justify-end border-t border-border/40 pt-4 bg-muted/10">
+                    <CardFooter className="flex justify-end border-t border-border pt-4 bg-[#FAFBFC] rounded-b-xl">
                       <Button 
                         onClick={handleConfirmDossier}
-                        className="gap-2 w-full sm:w-auto bg-primary hover:bg-primary/95 text-primary-foreground font-medium shadow"
+                        size="lg"
+                        className="w-full sm:w-auto"
                       >
                         {simulatedDceStatus === "ready" ? "Lancer la génération du mémoire technique" : "Créer le brouillon de dossier"}
                         <ArrowRight className="h-4 w-4" />
