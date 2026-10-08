@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserCircle, LogOut, Sparkles } from "lucide-react";
+import { UserCircle, LogOut, Sparkles, ShieldCheck } from "lucide-react";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
+import { EnTetePage } from "@/components/visuel/en-tete-page";
+import { Compteur } from "@/components/visuel/compteur";
+import { Squelette } from "@/components/visuel/squelette";
 
 interface Quota {
   role: string;
@@ -48,37 +51,43 @@ export default function ParametresPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="border-b border-border bg-card px-6 py-4">
-        <h1 className="text-xl font-semibold">Paramètres</h1>
-        <p className="text-sm text-muted-foreground">
-          Configuration générale de l'application GSS-AO.
-        </p>
-      </header>
+      <EnTetePage
+        className="animate-monter"
+        titre="Paramètres"
+        sousTitre="Configuration générale de l'application GSS-AO."
+      />
 
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="mx-auto max-w-2xl space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 pb-10 pt-5 md:px-9">
+        <div className="apparait grid max-w-[960px] grid-cols-[minmax(0,1fr)] items-start gap-5 [&>*:nth-child(1)]:[animation-delay:60ms] [&>*:nth-child(2)]:[animation-delay:130ms] lg:grid-cols-2">
           {/* Compte */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <UserCircle className="h-5 w-5 text-primary" /> Compte
+              <CardTitle className="flex items-center gap-[9px] text-[15px]">
+                <UserCircle className="h-[18px] w-[18px] text-primary" /> Compte
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <div className="text-sm font-medium">
+              <div className="flex flex-col gap-4">
+                <div className="flex min-w-0 items-center gap-3.5 rounded-xl border border-border bg-[#FAFBFC] px-4 py-3.5">
+                  <span aria-hidden="true" className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[11px] bg-primary text-primary-foreground shadow-o1">
+                    <UserCircle className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold">
                     {email ?? "Chargement…"}
                   </div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="mt-0.5 flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+                    <span aria-hidden="true" className="h-[7px] w-[7px] shrink-0 rounded-full bg-success" />
                     Connecté à GSS-AO
                   </div>
+                  </div>
+                  <ShieldCheck aria-hidden="true" className="ml-auto hidden h-5 w-5 shrink-0 text-success sm:block" />
                 </div>
                 <Button
                   variant="outline"
                   onClick={handleSignOut}
                   disabled={signingOut}
-                  className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                  className="self-start text-destructive hover:border-destructive hover:bg-destructive hover:text-destructive-foreground"
                 >
                   <LogOut className="h-4 w-4" />
                   {signingOut ? "Déconnexion…" : "Se déconnecter"}
@@ -90,35 +99,40 @@ export default function ParametresPage() {
           {/* Quota de génération */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Sparkles className="h-5 w-5 text-primary" /> Générations de mémoires
+              <CardTitle className="flex items-center gap-[9px] text-[15px]">
+                <Sparkles className="h-[18px] w-[18px] text-primary" /> Générations de mémoires
               </CardTitle>
             </CardHeader>
             <CardContent>
               {!quota ? (
-                <p className="text-sm text-muted-foreground">Chargement…</p>
-              ) : (
                 <div className="space-y-3">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-sm text-muted-foreground">Crédits restants</span>
-                    <span className="text-2xl font-semibold">
-                      {remaining}
-                      <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">Chargement…</p>
+                  <Squelette className="h-7 w-24" />
+                  <Squelette className="h-2.5 w-full rounded-full" />
+                  <Squelette className="h-3 w-2/3" />
+                </div>
+              ) : (
+                <div className="space-y-3.5">
+                  <div className="flex items-end justify-between gap-3">
+                    <span className="petites-capitales pb-1">Crédits restants</span>
+                    <span className="chiffre-cle text-[34px] text-foreground">
+                      <Compteur valeur={remaining} />
+                      <span className="ml-1 font-sans text-sm font-normal text-muted-foreground">
                         / {quota.limit}
                       </span>
                     </span>
                   </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-secondary">
                     <div
                       className={
                         remaining === 0
-                          ? "h-full rounded-full bg-destructive transition-all"
-                          : "h-full rounded-full bg-primary transition-all"
+                          ? "h-full origin-left animate-remplir rounded-full bg-destructive transition-[width] duration-700 ease-doux"
+                          : "h-full origin-left animate-remplir rounded-full bg-[linear-gradient(90deg,hsl(var(--primary)),hsl(var(--info)))] transition-[width] duration-700 ease-doux"
                       }
                       style={{ width: `${100 - pct}%` }}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-[12.5px] leading-relaxed text-muted-foreground">
                     {quota.used} génération{quota.used > 1 ? "s" : ""} utilisée
                     {quota.used > 1 ? "s" : ""} sur {quota.limit}.
                     {remaining === 0 &&
