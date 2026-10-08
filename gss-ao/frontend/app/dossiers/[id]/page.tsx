@@ -42,8 +42,6 @@ import { useDossier } from "./context";
 import { BandeauDossier, ChipBandeau } from "@/components/visuel/bandeau-dossier";
 import { EntreeEtape } from "@/components/visuel/entree-etape";
 import { Jauge } from "@/components/visuel/jauge";
-import { PointActif } from "@/components/visuel/pastille-statut";
-import { Squelette, SqueletteCartes } from "@/components/visuel/squelette";
 
 function StatPill({
   icon: Icon,
@@ -250,22 +248,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
   }
 
   if (!dossierInfo) {
-    return (
-      <div className="flex h-full flex-col">
-        <div aria-hidden="true" className="bandeau-dossier space-y-3 px-4 pb-6 pt-7 md:px-9">
-          <div className="h-3 w-56 rounded bg-white/15" />
-          <div className="h-7 w-3/5 rounded bg-white/20" />
-          <div className="h-4 w-48 rounded bg-white/15" />
-        </div>
-        <div className="space-y-4 p-4 md:px-9 md:py-6">
-          <div className="p-8 text-center text-sm text-muted-foreground">
-            <PointActif className="mr-2 align-middle" />
-            Chargement du dossier...
-          </div>
-          <SqueletteCartes nombre={3} />
-        </div>
-      </div>
-    );
+    return <div className="p-8 text-center">Chargement du dossier...</div>;
   }
 
   const jours = joursRestants(dossierInfo.dateLimite);
@@ -459,7 +442,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
                     </div>
                   ))
                 ) : (
-                  <p className="flex items-center gap-2 text-muted-foreground italic"><PointActif />En attente de l'analyse du CCTP par l'IA...</p>
+                  <p className="text-muted-foreground italic">En attente de l'analyse du CCTP par l'IA...</p>
                 )}
               </div>
             </CardContent>
@@ -555,11 +538,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
             </CardHeader>
             <CardContent className="space-y-2">
               {detectingMissing ? (
-                <div className="space-y-3">
-                  <p className="flex items-center gap-2 text-sm text-muted-foreground"><PointActif />Analyse des exigences du DCE en cours…</p>
-                  <Squelette className="h-12 w-full rounded-[9px]" />
-                  <Squelette className="h-12 w-full rounded-[9px]" />
-                </div>
+                <p className="text-sm text-muted-foreground">Analyse des exigences du DCE en cours…</p>
               ) : !missingFields ? (
                 <p className="text-sm text-muted-foreground">En attente de l'analyse du DCE.</p>
               ) : missingFields.length === 0 ? (
@@ -652,10 +631,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
               </CardHeader>
               <CardContent className="apparait space-y-3">
                 {!sollicitationsLoaded ? (
-                  <div className="space-y-3">
-                    <p className="flex items-center gap-2 text-sm text-muted-foreground"><PointActif />Chargement des sollicitations…</p>
-                    <Squelette className="h-24 w-full rounded-xl" />
-                  </div>
+                  <p className="text-sm text-muted-foreground">Chargement des sollicitations…</p>
                 ) : sollicitations.length === 0 ? (
                   <p className="flex items-center gap-2 rounded-xl border border-dashed border-[#B9C5D4] px-4 py-6 text-sm text-muted-foreground"><Mail className="h-4 w-4 text-primary" />Aucune sollicitation pour ce dossier.</p>
                 ) : (

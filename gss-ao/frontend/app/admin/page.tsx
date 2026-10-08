@@ -22,7 +22,6 @@ import { Indicateur, Initiales } from "@/components/visuel/carte";
 import { Compteur } from "@/components/visuel/compteur";
 import { Jauge } from "@/components/visuel/jauge";
 import { PastilleStatut } from "@/components/visuel/pastille-statut";
-import { Squelette } from "@/components/visuel/squelette";
 
 interface AdminUser {
   id: string;
@@ -246,12 +245,7 @@ export default function AdminPage() {
               <TableBody>
                 {loading && users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-6 text-center text-muted-foreground">
-                      <div aria-hidden="true" className="mb-4 space-y-3">
-                        <Squelette className="h-4 w-full" />
-                        <Squelette className="h-4 w-11/12" />
-                        <Squelette className="h-4 w-4/5" />
-                      </div>
+                    <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                       Chargement…
                     </TableCell>
                   </TableRow>

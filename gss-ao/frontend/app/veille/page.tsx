@@ -33,7 +33,6 @@ import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
 import { Initiales } from "@/components/visuel/carte";
 import { PointActif } from "@/components/visuel/pastille-statut";
-import { Squelette } from "@/components/visuel/squelette";
 
 interface ParsedOpportunity {
   id: string;
@@ -243,30 +242,7 @@ export default function VeillePage() {
           </div>
           <div className="divide-y divide-border">
             {chargementListe && (
-              <div className="space-y-4 p-4">
-                  <div aria-hidden="true" className="flex gap-3">
-                    <Squelette className="h-[34px] w-[34px] shrink-0 rounded-[9px]" />
-                    <div className="flex-1 space-y-2">
-                      <Squelette className="h-3 w-3/5" />
-                      <Squelette className="h-3 w-4/5" />
-                    </div>
-                  </div>
-                  <div aria-hidden="true" className="flex gap-3">
-                    <Squelette className="h-[34px] w-[34px] shrink-0 rounded-[9px]" />
-                    <div className="flex-1 space-y-2">
-                      <Squelette className="h-3 w-3/5" />
-                      <Squelette className="h-3 w-4/5" />
-                    </div>
-                  </div>
-                  <div aria-hidden="true" className="flex gap-3">
-                    <Squelette className="h-[34px] w-[34px] shrink-0 rounded-[9px]" />
-                    <div className="flex-1 space-y-2">
-                      <Squelette className="h-3 w-3/5" />
-                      <Squelette className="h-3 w-4/5" />
-                    </div>
-                  </div>
-              <p className="text-xs text-muted-foreground">Chargement des alertes…</p>
-              </div>
+              <p className="p-4 text-xs text-muted-foreground">Chargement des alertes…</p>
             )}
             {!chargementListe && erreurListe && (
               <p className="m-3 flex items-center gap-2 rounded-[9px] bg-destructive-soft p-3 text-xs text-destructive"><AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0" />{erreurListe}</p>
@@ -333,8 +309,8 @@ export default function VeillePage() {
           
           {loading ? (
             <div className="flex-1 flex flex-col items-center justify-center">
-              <span className="mb-3 grid h-14 w-14 place-items-center rounded-full bg-secondary"><Loader2 className="h-7 w-7 text-primary animate-spin" /></span>
-              <p className="flex items-center gap-2 text-sm text-muted-foreground"><PointActif />Chargement de l'alerte email...</p>
+              <Loader2 className="h-8 w-8 text-primary animate-spin mb-3" />
+              <p className="text-sm text-muted-foreground">Chargement de l'alerte email...</p>
             </div>
           ) : !activeEmail ? (
             <div className="flex-1 flex animate-monter flex-col items-center justify-center gap-3 px-4 py-10 text-center [animation-delay:220ms]">
@@ -416,7 +392,7 @@ export default function VeillePage() {
                       {simulatedDceStatus === "uploading" && (
                         <div className="flex flex-col items-center justify-center p-8 border border-border rounded-xl bg-[#FAFBFC]">
                           <Loader2 className="h-6 w-6 text-primary animate-spin mb-3" />
-                          <p className="flex items-center gap-2 text-xs font-semibold text-foreground"><PointActif />Lecture intelligente du CCTP & Règlement...</p>
+                          <p className="text-xs font-semibold text-foreground">Lecture intelligente du CCTP & Règlement...</p>
                           <p className="text-[10px] text-muted-foreground mt-0.5">Extraction des exigences et critères</p>
                         </div>
                       )}

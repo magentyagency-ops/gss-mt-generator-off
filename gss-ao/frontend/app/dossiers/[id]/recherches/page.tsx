@@ -22,7 +22,6 @@ import { cn } from "@/lib/utils";
 import { BandeauDossier } from "@/components/visuel/bandeau-dossier";
 import { EntreeEtape } from "@/components/visuel/entree-etape";
 import { Jauge } from "@/components/visuel/jauge";
-import { SqueletteCartes } from "@/components/visuel/squelette";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Ticket #4 phase 2b — Recherches web (Perplexity) en attente de validation humaine.
@@ -319,11 +318,8 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
           )}
 
           {loading && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" /> Chargement…
-              </div>
-              <SqueletteCartes nombre={2} />
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Chargement…
             </div>
           )}
 

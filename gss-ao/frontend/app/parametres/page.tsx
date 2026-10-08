@@ -7,7 +7,6 @@ import { Button, Card, CardContent, CardHeader, CardTitle } from "@/components/u
 import { createClient } from "@/lib/supabase/client";
 import { EnTetePage } from "@/components/visuel/en-tete-page";
 import { Compteur } from "@/components/visuel/compteur";
-import { Squelette } from "@/components/visuel/squelette";
 
 interface Quota {
   role: string;
@@ -105,12 +104,7 @@ export default function ParametresPage() {
             </CardHeader>
             <CardContent>
               {!quota ? (
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">Chargement…</p>
-                  <Squelette className="h-7 w-24" />
-                  <Squelette className="h-2.5 w-full rounded-full" />
-                  <Squelette className="h-3 w-2/3" />
-                </div>
+                <p className="text-sm text-muted-foreground">Chargement…</p>
               ) : (
                 <div className="space-y-3.5">
                   <div className="flex items-end justify-between gap-3">

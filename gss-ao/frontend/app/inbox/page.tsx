@@ -20,7 +20,6 @@ import { Indicateur } from "@/components/visuel/carte";
 import { Compteur } from "@/components/visuel/compteur";
 import { Jauge } from "@/components/visuel/jauge";
 import { EtatVide } from "@/components/visuel/etat-vide";
-import { SqueletteCartes } from "@/components/visuel/squelette";
 
 export default function InboxPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -130,7 +129,7 @@ export default function InboxPage() {
   }, [supabase, userEmail, loadQuestions]);
 
   // ── Rendu ────────────────────────────────────────────────────────────────────
-  if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p><SqueletteCartes nombre={3} className="mt-4" /></Shell>;
+  if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p></Shell>;
 
   if (!userEmail) {
     return (

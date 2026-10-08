@@ -23,7 +23,6 @@ import {
 } from "@/lib/sollicitations";
 import { apiFetch } from "@/lib/api";
 import { EtatVide } from "@/components/visuel/etat-vide";
-import { SqueletteCartes } from "@/components/visuel/squelette";
 
 export default function SollicitationsPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -159,7 +158,7 @@ export default function SollicitationsPage() {
   }
 
   // ── Rendu ────────────────────────────────────────────────────────────────────
-  if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p><SqueletteCartes nombre={2} className="mt-4" /></Shell>;
+  if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p></Shell>;
 
   if (!userEmail) {
     return (

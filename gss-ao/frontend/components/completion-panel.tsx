@@ -8,7 +8,6 @@ import { apiFetch, apiBase } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Anneau } from "@/components/visuel/anneau";
 import { IndicateurGlissant } from "@/components/visuel/indicateur-glissant";
-import { Squelette } from "@/components/visuel/squelette";
 
 const DocxPreviewViewer = dynamic(
   () => import("@/components/docx-preview-viewer").then((mod) => mod.DocxPreviewViewer),
@@ -418,18 +417,8 @@ export function CompletionPanel({
 
   if (chargement && !etat) {
     return (
-      <div className="space-y-4 rounded-xl border border-border bg-card p-5 shadow-o1">
-        <div className="flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin text-primary" /> Chargement du document…
-        </div>
-        <div aria-hidden="true" className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-          <Squelette className="h-[420px] rounded-xl" />
-          <div className="space-y-3">
-            <Squelette className="h-9 rounded-lg" />
-            <Squelette className="h-20 rounded-xl" />
-            <Squelette className="h-20 rounded-xl" />
-          </div>
-        </div>
+      <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Chargement du document…
       </div>
     );
   }

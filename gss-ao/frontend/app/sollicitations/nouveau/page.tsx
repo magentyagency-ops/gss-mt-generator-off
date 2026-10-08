@@ -17,7 +17,6 @@ import { createClient } from "@/lib/supabase/client";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { type Dossier, parseDestinataires } from "@/lib/sollicitations";
 import { Jauge } from "@/components/visuel/jauge";
-import { SqueletteCartes } from "@/components/visuel/squelette";
 
 // Une ligne de question saisie dans le formulaire (avant envoi).
 interface QuestionLine {
@@ -203,7 +202,7 @@ export default function NouvelleSollicitationPage() {
   }
 
   // ── Rendu ────────────────────────────────────────────────────────────────────
-  if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p><SqueletteCartes nombre={2} className="mt-4" /></Shell>;
+  if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p></Shell>;
 
   if (!userEmail) {
     return (
