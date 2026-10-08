@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, Clock, AlertTriangle, Trash2, X } from "lucide-react";
+import { Plus, Search, Clock, AlertTriangle, Trash2, X, Hourglass, Mail, Send } from "lucide-react";
 import {
   Badge,
   Button,
@@ -24,6 +24,11 @@ import { cn } from "@/lib/utils";
 import { useIntro } from "@/components/intro-provider";
 import { apiFetch } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
+import { Indicateur, Initiales } from "@/components/visuel/carte";
+import { Compteur } from "@/components/visuel/compteur";
+import { Jauge } from "@/components/visuel/jauge";
+import { IndicateurGlissant } from "@/components/visuel/indicateur-glissant";
+import { PointActif } from "@/components/visuel/pastille-statut";
 
 const STATUTS: (Statut | "Tous")[] = ["Tous", "Brouillon", "En cours", "À valider", "Envoyé"];
 
@@ -136,15 +141,32 @@ export default function DossiersPage() {
   const rowDelay = (index: number) =>
     isInitialLoad ? 3100 + index * 100 : 300 + index * 50;
 
+  /* ── Infos utiles (purement informatives) : calculées sur la liste déjà chargée
+     (`dossiers`, `enAttenteByDossier`), aucune requête, aucune incidence sur la table. ── */
+  const nbEnCours = dossiers.filter((d) => d.statut === "En cours").length;
+  const attenteParDossier = dossiers.map((d) => enAttenteByDossier.get(d.id) ?? 0);
+  const nbDossiersEnAttente = attenteParDossier.filter((n) => n > 0).length;
+  const nbSollicitationsEnAttente = attenteParDossier.reduce((t, n) => t + n, 0);
+  const prochaineEcheance = dossiers
+    .filter((d) => d.statut !== "Envoyé" && !!d.dateLimite && !isNaN(new Date(d.dateLimite).getTime()))
+    .map((d) => ({ d, jours: joursRestants(d.dateLimite) }))
+    .filter((x) => x.jours >= 0)
+    .sort((a, b) => a.jours - b.jours)[0];
+  const nbEnvoyes = dossiers.filter((d) => d.statut === "Envoyé").length;
+  // « Terminé » : même règle que la pastille de la table (À valider, sans sollicitation en attente).
+  const nbTermines = dossiers.filter((d) => d.statut === "À valider" && !(enAttenteByDossier.get(d.id) ?? 0)).length;
+  const kpiDelay = (rang: number) => filterDelay + rang * 60;
+  const kpiClass = "opacity-0 animate-fade-in-up max-sm:gap-0 max-sm:px-3.5 max-sm:py-3 max-sm:[&>span:first-child]:hidden";
+
   return (
     <div className="flex h-full flex-col">
       <header
-        className="opacity-0 animate-fade-in-up flex items-center justify-between border-b border-border bg-card px-6 py-4"
+        className="opacity-0 animate-fade-in-up flex flex-wrap items-end justify-between gap-4 px-4 pb-2 pt-6 md:px-9 md:pt-[30px]"
         style={{ animationDelay: `${headerDelay}ms` }}
       >
-        <div>
-          <h1 className="text-xl font-semibold">Dossiers d&apos;appels d&apos;offres</h1>
-          <p className="text-sm text-muted-foreground">
+        <div className="min-w-0">
+          <h1 className="font-display text-[26px] font-bold leading-[1.1] text-foreground md:text-[28px]">Dossiers d&apos;appels d&apos;offres</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             {dossiers.length} dossiers · {dossiers.filter((d) => d.statut === "En cours").length} en
             cours de traitement
           </p>
@@ -168,48 +190,94 @@ export default function DossiersPage() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto px-4 pb-10 pt-5 md:px-9">
+        {/* Indicateurs (infos utiles calculées sur la liste affichée) */}
+        <div className="mb-5 grid grid-cols-2 gap-2.5 sm:gap-3.5 xl:grid-cols-4">
+          <Indicateur
+            className={kpiClass}
+            style={{ animationDelay: `${kpiDelay(0)}ms` }}
+            icone={Hourglass}
+            libelle="En cours"
+            valeur={<Compteur valeur={nbEnCours} />}
+            detail={`sur ${dossiers.length} dossier${dossiers.length > 1 ? "s" : ""}`}
+          />
+          <Indicateur
+            className={kpiClass}
+            style={{ animationDelay: `${kpiDelay(1)}ms` }}
+            icone={Mail}
+            libelle="En attente de réponses"
+            valeur={<Compteur valeur={nbDossiersEnAttente} />}
+            detail={`${nbSollicitationsEnAttente} sollicitation${nbSollicitationsEnAttente > 1 ? "s" : ""} en attente`}
+          />
+          <Indicateur
+            className={kpiClass}
+            style={{ animationDelay: `${kpiDelay(2)}ms` }}
+            icone={Clock}
+            libelle="Prochaine échéance"
+            alerte={!!prochaineEcheance && prochaineEcheance.jours <= 14}
+            valeur={prochaineEcheance ? <Compteur valeur={prochaineEcheance.jours} prefixe="J−" /> : "—"}
+            detail={
+              prochaineEcheance
+                ? prochaineEcheance.d.acheteur || prochaineEcheance.d.objet || "Dossier en cours de traitement…"
+                : "Aucune échéance à venir"
+            }
+          />
+          <Indicateur
+            className={kpiClass}
+            style={{ animationDelay: `${kpiDelay(3)}ms` }}
+            icone={Send}
+            libelle="Envoyés"
+            valeur={<Compteur valeur={nbEnvoyes} />}
+            detail={`et ${nbTermines} terminé${nbTermines > 1 ? "s" : ""}`}
+          />
+        </div>
+
         {/* Filtres */}
         <div
-          className="opacity-0 animate-fade-in-up mb-4 flex items-center justify-between gap-4"
+          className="opacity-0 animate-fade-in-up mb-4 flex flex-wrap items-center justify-between gap-3"
           style={{ animationDelay: `${filterDelay}ms` }}
         >
-          <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
+          <div className="relative isolate flex max-w-full items-center gap-0.5 overflow-x-auto rounded-[10px] bg-[#E9EDF3] p-1">
+            <IndicateurGlissant groupe="filtres-dossiers" />
             {STATUTS.map((s) => (
               <button
                 key={s}
                 onClick={() => setFiltre(s)}
+                data-actif={filtre === s}
                 className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13.5px] transition-colors",
                   filtre === s
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground",
+                    ? "font-semibold text-foreground"
+                    : "font-medium text-muted-foreground hover:bg-white/50 hover:text-foreground",
                 )}
               >
                 {s}
+                <small className="font-mono text-[11px] font-medium tabular-nums text-subtle-foreground">
+                  {s === "Tous" ? dossiers.length : dossiers.filter((d) => d.statut === s).length}
+                </small>
               </button>
             ))}
           </div>
-          <div className="relative w-72">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="relative w-full sm:w-72">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle-foreground" />
             <input
               value={recherche}
               onChange={(e) => setRecherche(e.target.value)}
               placeholder="Rechercher un acheteur…"
-              className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-10 w-full rounded-[9px] border border-input bg-card pl-9 pr-3 text-sm shadow-o1 outline-none transition-[border-color,box-shadow] duration-150 hover:border-[#B9C5D4]"
             />
           </div>
         </div>
 
         {/* Tableau */}
         <div
-          className="opacity-0 animate-fade-in-up rounded-lg border border-border bg-card"
+          className="opacity-0 animate-fade-in-up overflow-hidden rounded-xl border border-border bg-card shadow-o1"
           style={{ animationDelay: `${tableDelay}ms` }}
         >
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[40px]">
+                <TableHead className="w-[40px] pl-5">
                   <input
                     type="checkbox"
                     className="h-4 w-4 rounded border-input bg-background text-primary accent-primary"
@@ -238,16 +306,16 @@ export default function DossiersPage() {
                   <TableRow
                     key={d.id}
                     className={cn(
-                      "opacity-0 animate-fade-in-up group cursor-pointer",
-                      isSelected && "bg-muted/50"
+                      "opacity-0 animate-fade-in-up ligne-vive group cursor-pointer",
+                      isSelected && "bg-secondary"
                     )}
                     style={{ animationDelay: `${rowDelay(index)}ms` }}
                     onClick={() => window.location.href = `/dossiers/${d.id}`}
                   >
-                    <TableCell onClick={(e) => e.stopPropagation()}>
+                    <TableCell onClick={(e) => e.stopPropagation()} className="py-[13px] pl-5">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-input bg-background text-primary accent-primary"
+                        className="h-4 w-4 cursor-pointer rounded border-input bg-background text-primary accent-primary"
                         checked={isSelected}
                         onChange={() => {
                           const next = new Set(selectedIds);
@@ -257,42 +325,59 @@ export default function DossiersPage() {
                         }}
                       />
                     </TableCell>
-                    <TableCell className="font-medium">
-                      {d.acheteur || d.objet || "Dossier en cours de traitement…"}
+                    <TableCell className="min-w-[200px] py-[13px] font-semibold text-foreground">
+                      <div className="flex items-center gap-3">
+                        {d.acheteur || d.objet ? (
+                          <Initiales texte={d.acheteur || d.objet} />
+                        ) : (
+                          <span aria-hidden="true" className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[9px] bg-signal-soft">
+                            <PointActif />
+                          </span>
+                        )}
+                        <span className="min-w-0 leading-snug">
+                          {d.acheteur || d.objet || "Dossier en cours de traitement…"}
+                        </span>
+                      </div>
                     </TableCell>
-                    <TableCell className="max-w-[260px] truncate text-muted-foreground">
+                    <TableCell className="max-w-[260px] truncate py-[13px] text-muted-foreground">
                       {d.objet || "—"}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-[13px]">
                       <div className="flex gap-1 flex-wrap">
                         {d.lots?.map((l: any, i: number) => (
-                          <Badge key={i} variant="outline" className="font-normal">
+                          <Badge key={i} variant="outline" className="whitespace-nowrap font-normal text-muted-foreground">
                             {l?.intitule || l}
                           </Badge>
                         ))}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-nowrap py-[13px]">
                       <div className="flex flex-col">
-                        <span>{formatDate(d.dateLimite)}</span>
+                        <span className="font-semibold text-foreground">{formatDate(d.dateLimite)}</span>
                         {d.statut !== "Envoyé" && (
                           <span
                             className={cn(
-                              "flex items-center gap-1 text-xs",
-                              urgent ? "text-destructive" : "text-muted-foreground",
+                              "mt-1 flex items-center gap-1.5 font-mono text-[11.5px] font-medium tabular-nums",
+                              urgent ? (jours <= 7 ? "text-destructive" : "text-warning") : "text-subtle-foreground",
                             )}
                           >
+                            <Jauge
+                              valeur={Math.min(100, Math.max(6, (1 - jours / 35) * 100))}
+                              ton={jours <= 7 ? "danger" : urgent ? "attente" : "neutre"}
+                              epaisseur={4}
+                              className="w-14"
+                            />
                             {urgent ? (
-                              <AlertTriangle className="h-3 w-3" />
+                              <AlertTriangle className="h-3 w-3 shrink-0" />
                             ) : (
-                              <Clock className="h-3 w-3" />
+                              <Clock className="h-3 w-3 shrink-0" />
                             )}
                             J−{jours}
                           </span>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-[13px]">
                       <div className="flex flex-col items-start gap-1">
                         {(() => {
                           const n = enAttenteByDossier.get(d.id) ?? 0;
@@ -318,7 +403,7 @@ export default function DossiersPage() {
                           e.stopPropagation();
                           setSupprimerDossier(d);
                         }}
-                        className="rounded-md p-1.5 text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                        className="rounded-lg p-1.5 text-muted-foreground opacity-40 transition-all hover:bg-destructive-soft hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
                         title="Supprimer le dossier"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -337,31 +422,31 @@ export default function DossiersPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           {/* Overlay */}
           <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+            className="absolute inset-0 animate-apparaitre bg-[rgba(11,37,69,.45)] backdrop-blur-[4px] transition-opacity"
             onClick={() => setSupprimerDossier(null)}
           />
           {/* Contenu */}
-          <div className="relative z-10 w-full max-w-md animate-in fade-in zoom-in-95 rounded-xl border border-border bg-card p-6 shadow-2xl">
+          <div className="relative z-10 mx-4 w-full max-w-md animate-zoom-doux rounded-2xl border border-border bg-card p-6 shadow-o3">
             {/* Bouton fermer */}
             <button
               onClick={() => setSupprimerDossier(null)}
-              className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="absolute right-3 top-3 rounded-lg p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
             >
               <X className="h-4 w-4" />
             </button>
 
             {/* Icône d'alerte */}
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-destructive-soft ring-8 ring-destructive-soft">
               <Trash2 className="h-6 w-6 text-destructive" />
             </div>
 
-            <h2 className="mb-1 text-center text-lg font-semibold">
+            <h2 className="mb-1 text-center font-display text-xl font-bold">
               Supprimer ce dossier ?
             </h2>
             <p className="mb-2 text-center text-sm text-muted-foreground">
               Vous êtes sur le point de supprimer le dossier suivant :
             </p>
-            <div className="mb-5 rounded-lg border border-border bg-muted/50 px-4 py-3">
+            <div className="mb-5 rounded-xl border border-border bg-secondary/60 px-4 py-3">
               <p className="text-sm font-medium">{supprimerDossier.acheteur}</p>
               <p className="text-xs text-muted-foreground">{supprimerDossier.objet}</p>
             </div>
@@ -397,22 +482,22 @@ export default function DossiersPage() {
       {supprimerMultiple && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+            className="absolute inset-0 animate-apparaitre bg-[rgba(11,37,69,.45)] backdrop-blur-[4px] transition-opacity"
             onClick={() => setSupprimerMultiple(false)}
           />
-          <div className="relative z-10 w-full max-w-md animate-in fade-in zoom-in-95 rounded-xl border border-border bg-card p-6 shadow-2xl">
+          <div className="relative z-10 mx-4 w-full max-w-md animate-zoom-doux rounded-2xl border border-border bg-card p-6 shadow-o3">
             <button
               onClick={() => setSupprimerMultiple(false)}
-              className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="absolute right-3 top-3 rounded-lg p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
             >
               <X className="h-4 w-4" />
             </button>
 
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-destructive-soft ring-8 ring-destructive-soft">
               <Trash2 className="h-6 w-6 text-destructive" />
             </div>
 
-            <h2 className="mb-1 text-center text-lg font-semibold">
+            <h2 className="mb-1 text-center font-display text-xl font-bold">
               Supprimer {selectedIds.size} dossiers ?
             </h2>
             <p className="mb-5 text-center text-sm text-muted-foreground">
