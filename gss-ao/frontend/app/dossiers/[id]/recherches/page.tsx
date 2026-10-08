@@ -19,6 +19,10 @@ import { DossierNav } from "@/components/dossier-nav";
 import { createClient } from "@/lib/supabase/client";
 import { apiFetch, apiBase } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { BandeauDossier } from "@/components/visuel/bandeau-dossier";
+import { EntreeEtape } from "@/components/visuel/entree-etape";
+import { Jauge } from "@/components/visuel/jauge";
+import { SqueletteCartes } from "@/components/visuel/squelette";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Ticket #4 phase 2b — Recherches web (Perplexity) en attente de validation humaine.
@@ -55,11 +59,11 @@ const STATUT_BADGE: Record<Statut, { label: string; variant: "success" | "destru
 function SourceLinks({ urls }: { urls: string[] }) {
   if (!urls.length) return null;
   return (
-    <div className="mt-3">
-      <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+    <div className="mt-3.5">
+      <div className="petites-capitales mb-1.5 text-[11px]">
         Sources ({urls.length})
       </div>
-      <ul className="space-y-1">
+      <ul className="flex flex-wrap gap-1.5">
         {urls.map((u, i) => {
           let host = u;
           try { host = new URL(u).host.replace(/^www\./, ""); } catch { /* garde l'URL brute */ }
@@ -69,10 +73,11 @@ function SourceLinks({ urls }: { urls: string[] }) {
                 href={u}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline break-all"
+                className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[12.5px] font-medium text-primary shadow-o1 transition-[border-color,background-color,translate] duration-150 hover:border-primary/40 hover:bg-info-soft motion-safe:hover:-translate-y-px break-all"
               >
-                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                <Globe aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-subtle-foreground" />
                 <span>{host}</span>
+                <ExternalLink className="h-3 w-3 shrink-0 opacity-70" />
               </a>
             </li>
           );
@@ -237,14 +242,14 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
+      <BandeauDossier className="flex flex-wrap items-end justify-between gap-4 pb-5 pt-5 md:pb-5 md:pt-5 animate-apparaitre">
         <div>
-          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="font-mono text-[12.5px] font-medium uppercase tracking-wide text-muted-foreground">
             Informations publiques manquantes
           </div>
-          <h1 className="text-xl font-semibold">Recherches web à valider</h1>
+          <h1 className="mt-1.5 font-display text-[24px] font-bold leading-[1.15] md:text-[28px]">Recherches web à valider</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {validatedCount > 0 && (
             <Button size="sm" onClick={runInject} disabled={injecting}>
               {injecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
@@ -256,16 +261,18 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
             Rafraîchir
           </Button>
         </div>
-      </header>
+      </BandeauDossier>
 
       <DossierNav id={id} />
 
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="mx-auto max-w-4xl space-y-6">
+      <EntreeEtape className="flex-1 overflow-y-auto px-4 py-5 md:px-9 md:py-6">
+        <div className="apparait mx-auto max-w-4xl space-y-5">
           {/* Rappel : aucune injection automatique */}
-          <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-4">
-            <Info className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
-            <div className="text-sm text-muted-foreground">
+          <div className="flex items-start gap-3.5 rounded-xl border border-[#C9DAF0] bg-gradient-to-r from-info-soft to-[#F7FAFE] px-4 py-3.5">
+            <span className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[10px] bg-card shadow-o1">
+              <Info className="h-[19px] w-[19px] text-info" />
+            </span>
+            <div className="text-[13.5px] leading-relaxed text-muted-foreground [&_strong]:text-foreground">
               Ces réponses proviennent d'une recherche web sourcée (Perplexity) pour des informations
               <strong> publiques manquantes</strong>. Rien n'est inséré automatiquement : vous <strong>saisissez vous-même
               la valeur retenue</strong> (c'est elle, jamais le texte brut, qui sera injectée), puis vous validez.
@@ -275,13 +282,13 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
           </div>
 
           {error && (
-            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+            <div className="animate-monter rounded-xl border border-[#F2C3C8] bg-gradient-to-r from-destructive-soft to-[#FFF8F8] p-4 text-sm font-medium text-destructive">
               {error}
             </div>
           )}
 
           {injectResult && injectResult.injected > 0 && injectResult.url && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-success/40 bg-success/10 p-4 text-sm">
+            <div className="flex animate-monter flex-wrap items-center justify-between gap-3 rounded-xl border border-[#BFE0CC] bg-gradient-to-r from-success-soft to-card p-4 text-sm">
               <span className="flex items-center gap-2 text-foreground">
                 <CheckCircle2 className="h-5 w-5 text-success" />
                 {injectResult.injected} recherche(s) injectée(s) dans un nouveau mémoire.
@@ -289,7 +296,7 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
               <a
                 href={injectResult.url}
                 download
-                className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2 font-medium hover:bg-accent hover:text-accent-foreground"
+                className="inline-flex items-center gap-2 rounded-[9px] bg-primary px-4 py-2 font-semibold text-primary-foreground shadow-o1 transition-[background-color,box-shadow,translate] duration-150 hover:bg-primary-hover hover:shadow-o2 motion-safe:hover:-translate-y-px"
               >
                 <Download className="h-4 w-4" /> Télécharger le mémoire
               </a>
@@ -297,7 +304,7 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
           )}
 
           {injectResult && injectResult.injected > 0 && !injectResult.url && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-success/40 bg-success/10 p-4 text-sm">
+            <div className="flex animate-monter flex-wrap items-center justify-between gap-3 rounded-xl border border-[#BFE0CC] bg-gradient-to-r from-success-soft to-card p-4 text-sm">
               <span className="flex items-center gap-2 text-foreground">
                 <CheckCircle2 className="h-5 w-5 text-success" />
                 {injectResult.message || `${injectResult.injected} recherche(s) enregistrée(s) en base (statut injectée) et indexée(s) dans la mémoire RAG avec succès !`}
@@ -306,29 +313,33 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
           )}
 
           {injectResult && injectResult.injected === 0 && (
-            <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+            <div className="animate-monter rounded-xl border border-border bg-secondary/60 p-4 text-sm text-muted-foreground">
               {injectResult.message}
             </div>
           )}
 
           {loading && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Chargement…
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" /> Chargement…
+              </div>
+              <SqueletteCartes nombre={2} />
             </div>
           )}
 
           {!loading && items.length === 0 && (
-            <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+            <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-[#B9C5D4] bg-gradient-to-b from-card to-[#F8FAFC] p-10 text-center text-[15px] font-semibold text-foreground">
+              <span aria-hidden="true" className="grid h-16 w-16 place-items-center rounded-full bg-secondary text-primary"><Globe className="h-8 w-8" strokeWidth={1.6} /></span>
               Aucune recherche web pour ce dossier.
             </div>
           )}
 
           {/* À valider */}
           {enAttente.length > 0 && (
-            <section className="space-y-3">
+            <section className="apparait space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  <Clock className="h-4 w-4 text-warning" /> À valider ({enAttente.length})
+                <div className="flex items-center gap-2 text-[15px] font-semibold">
+                  <span className="grid h-7 w-7 place-items-center rounded-lg bg-warning-soft"><Clock className="h-4 w-4 text-warning" /></span> À valider ({enAttente.length})
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
@@ -355,37 +366,43 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
                 </div>
               </div>
               {enAttente.map((r) => (
-                <Card key={r.id} className={cn("transition-colors", selectedIds[r.id] && "border-primary/50 bg-primary/5")}>
-                  <CardHeader>
-                    <CardTitle className="flex items-start justify-between gap-3 text-base">
+                <Card key={r.id} className={cn("vive border-l-[3px] border-l-[#E08A1E]", selectedIds[r.id] && "border-primary/50 border-l-primary bg-[#F6F9FD] shadow-o2")}>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex flex-wrap items-start justify-between gap-3 text-[15px]">
                       <div className="flex items-center gap-3 min-w-0">
                         <input
                           type="checkbox"
                           checked={!!selectedIds[r.id]}
                           onChange={(e) => setSelectedIds((prev) => ({ ...prev, [r.id]: e.target.checked }))}
-                          className="h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-ring cursor-pointer"
+                          className="h-[18px] w-[18px] shrink-0 rounded border-border text-primary focus:ring-ring cursor-pointer"
                         />
                         <span className="min-w-0">{r.query}</span>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
                         <Badge variant={STATUT_BADGE[r.statut].variant}>{STATUT_BADGE[r.statut].label}</Badge>
                         {typeof r.niveau_confiance === "number" && (
+                          <span className="flex items-center gap-2">
+                          {/* Jauge de confiance : même pourcentage que la pastille, même couleur (seuils de la pastille). */}
+                          <span className={cn("hidden w-16 sm:block", r.niveau_confiance >= 0.66 ? "text-success" : r.niveau_confiance >= 0.33 ? "text-[#E08A1E]" : "text-[#9AA7B8]")}>
+                            <Jauge valeur={r.niveau_confiance * 100} couleur="currentColor" epaisseur={5} />
+                          </span>
                           <Badge variant={r.niveau_confiance >= 0.66 ? "success" : r.niveau_confiance >= 0.33 ? "warning" : "secondary"}>
                             Confiance {Math.round(r.niveau_confiance * 100)}%
                           </Badge>
+                          </span>
                         )}
                       </div>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     {r.answer && (
-                      <p className="whitespace-pre-wrap text-sm leading-6 text-foreground/90">{r.answer}</p>
+                      <p className="whitespace-pre-wrap rounded-lg bg-secondary/50 px-3.5 py-2.5 text-sm leading-6 text-foreground/90">{r.answer}</p>
                     )}
                     <SourceLinks urls={r.citations ?? []} />
 
                     {/* Valeur retenue : saisie/confirmation HUMAINE — c'est CE texte qui sera injecté. */}
                     <div className="mt-4">
-                      <label className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <label className="petites-capitales mb-1.5 flex items-center gap-1.5 text-[11px] text-warning">
                         <AlertTriangle className="h-3.5 w-3.5" /> Valeur retenue (saisie obligatoire, injectée telle quelle)
                       </label>
                       <textarea
@@ -393,12 +410,12 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
                         value={valOf(r)}
                         onChange={(e) => setValues((prev) => ({ ...prev, [r.id]: e.target.value }))}
                         placeholder="Saisir la valeur exacte à insérer dans le mémoire (à partir des sources ci-dessus)…"
-                        className="w-full resize-y rounded-md border border-border bg-background p-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                        className="w-full resize-y rounded-[9px] border border-input bg-card px-3 py-2 text-sm outline-none"
                       />
                     </div>
 
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <span className="text-[11px] text-muted-foreground">
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                      <span className="font-mono text-[11px] text-subtle-foreground">
                         {r.model ?? "—"}
                         {typeof r.cost_usd === "number" ? ` · ${r.cost_usd.toFixed(5)} $` : ""}
                       </span>
@@ -430,13 +447,13 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
 
           {/* Déjà traitées */}
           {traitees.length > 0 && (
-            <section className="space-y-3">
-              <div className="text-sm font-semibold text-muted-foreground">Traitées ({traitees.length})</div>
+            <section className="apparait space-y-2.5">
+              <div className="petites-capitales flex items-center gap-2 pt-1"><CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 text-success" />Traitées ({traitees.length})</div>
               {traitees.map((r) => (
-                <Card key={r.id} className="opacity-80">
-                  <CardHeader>
-                    <CardTitle className="flex items-start justify-between gap-3 text-sm">
-                      <span className="min-w-0 font-medium">{r.query}</span>
+                <Card key={r.id} className="bg-[#FBFCFD] shadow-none transition-[opacity,box-shadow] hover:shadow-o1">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex flex-wrap items-start justify-between gap-3 text-sm">
+                      <span className="min-w-0 flex-1 font-medium">{r.query}</span>
                       <Badge variant={STATUT_BADGE[r.statut].variant}>{STATUT_BADGE[r.statut].label}</Badge>
                       {typeof r.niveau_confiance === "number" && (
                         <Badge variant={r.niveau_confiance >= 0.66 ? "success" : r.niveau_confiance >= 0.33 ? "warning" : "secondary"}>
@@ -456,7 +473,7 @@ export default function RecherchesPage({ params }: { params: { id: string } }) {
             </section>
           )}
         </div>
-      </div>
+      </EntreeEtape>
     </div>
   );
 }
