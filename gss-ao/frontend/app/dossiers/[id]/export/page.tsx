@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, AlertTriangle, Send } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Send, FileText, ShieldCheck } from "lucide-react";
 import {
   Badge,
   Button,
@@ -35,6 +35,9 @@ import { cn } from "@/lib/utils";
 import { apiFetch, apiBase } from "@/lib/api";
 import { use, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { BandeauDossier } from "@/components/visuel/bandeau-dossier";
+import { EntreeEtape } from "@/components/visuel/entree-etape";
+import { Jauge } from "@/components/visuel/jauge";
 
 const DocxPreviewViewer = dynamic(
   () => import("@/components/docx-preview-viewer").then((mod) => mod.DocxPreviewViewer),
@@ -77,40 +80,40 @@ export default function ExportPage({ params }: { params: { id: string } }) {
   return (
     <div className="flex h-full flex-col">
       {/* En-tête + boutons export — CONSERVÉS */}
-      <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
+      <BandeauDossier className="flex flex-wrap items-end justify-between gap-4 pb-5 pt-5 md:pb-5 md:pt-5 animate-apparaitre">
         <div>
-          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="font-mono text-[12.5px] font-medium uppercase tracking-wide text-muted-foreground">
             {dossierInfo.acheteur}{dossierInfo.reference ? ` · ${dossierInfo.reference}` : ""}
           </div>
-          <h1 className="text-xl font-semibold">Export & dépôt</h1>
+          <h1 className="mt-1.5 font-display text-[24px] font-bold leading-[1.15] md:text-[28px]">Export & dépôt</h1>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-start gap-3 md:gap-4">
           {generatedDocxUrl && (
             <a
               href={`${generatedDocxUrl}&download=1`}
               download={isPdf ? "Mémoire technique GSS.pdf" : "Mémoire technique GSS.docx"}
-              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors h-9 px-4 py-2 bg-primary text-primary-foreground"
+              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[9px] text-sm font-semibold shadow-o1 transition-[background-color,box-shadow,translate] duration-150 motion-safe:hover:-translate-y-px h-[38px] px-4 py-2 bg-primary text-primary-foreground"
             >
               {isPdf ? "Télécharger le document généré (.pdf)" : "Télécharger le document généré (.docx)"}
             </a>
           )}
           <ExportButtons />
         </div>
-      </header>
+      </BandeauDossier>
 
       <DossierNav id={id} />
 
-      <div className="grid flex-1 grid-cols-[1fr_320px] gap-6 overflow-hidden p-6">
+      <EntreeEtape className="grid flex-1 grid-cols-[minmax(0,1fr)] content-start gap-5 overflow-y-auto px-4 py-5 md:px-9 md:py-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:content-stretch lg:overflow-hidden">
         {/* ============ Document central : template imposé ou DOCX généré ============ */}
-        <div className="overflow-y-auto rounded-lg bg-muted/40 p-6">
+        <div className="min-w-0 animate-monter overflow-y-auto rounded-xl border border-border bg-[#EEF2F7]/70 p-3 md:p-6">
           {generatedDocxUrl ? (
             <div className="mx-auto max-w-4xl space-y-4">
-              <div className="rounded-md border border-success/30 bg-success/5 px-4 py-3 text-sm text-success flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4" />
+              <div className="rounded-xl border border-[#BFE0CC] bg-gradient-to-r from-success-soft to-card px-4 py-3 text-sm font-semibold text-success flex items-center gap-2.5 shadow-o1">
+                <CheckCircle2 className="h-5 w-5 motion-safe:animate-zoom-doux" />
                 Voici le document final généré, prêt pour l'export.
               </div>
               {isPdf ? (
-                <div className="relative h-[800px] w-full rounded-md border border-border bg-muted shadow-inner">
+                <div className="relative h-[800px] w-full overflow-hidden rounded-xl border border-border bg-secondary shadow-inner">
                   <iframe
                     src={generatedDocxUrl}
                     className="h-full w-full rounded-md"
@@ -122,14 +125,15 @@ export default function ExportPage({ params }: { params: { id: string } }) {
               )}
             </div>
           ) : id !== "rouen-2026-08" ? (
-            <div className="mx-auto max-w-3xl rounded-md border border-border bg-card p-12 shadow-sm text-center">
-              <h2 className="text-xl font-semibold mb-2">Aucun document final généré</h2>
-              <p className="text-muted-foreground">
+            <div className="mx-auto flex max-w-3xl flex-col items-center rounded-xl border-2 border-dashed border-[#B9C5D4] bg-gradient-to-b from-card to-[#F8FAFC] px-6 py-12 text-center md:p-12">
+              <span aria-hidden="true" className="mb-4 grid h-16 w-16 place-items-center rounded-full bg-secondary text-primary"><FileText className="h-8 w-8 motion-safe:animate-flotte" strokeWidth={1.6} /></span>
+              <h2 className="font-display text-[22px] font-bold mb-2">Aucun document final généré</h2>
+              <p className="max-w-md text-[14.5px] leading-relaxed text-muted-foreground">
                 Veuillez retourner à l'étape "Mémoire technique" pour lancer la génération de votre document.
               </p>
             </div>
           ) : (
-            <div className="mx-auto max-w-3xl rounded-md border border-border bg-card p-12 shadow-sm">
+            <div className="mx-auto max-w-3xl rounded-xl border border-border bg-card px-5 py-8 shadow-o2 md:p-12">
             {/* En-tête du document */}
             <div className="mb-8 border-b border-border pb-6 text-center">
               <div className="text-xs uppercase tracking-widest text-muted-foreground">
@@ -145,7 +149,7 @@ export default function ExportPage({ params }: { params: { id: string } }) {
             </div>
 
             {/* Bloc identité du candidat */}
-            <div className="mb-8 rounded-md border border-border p-4">
+            <div className="mb-8 rounded-xl border border-border bg-[#FAFBFD] p-4">
               <div className="grid gap-1 text-sm">
                 <div className="flex gap-2">
                   <span className="text-muted-foreground">Dénomination du candidat :</span>
@@ -202,7 +206,7 @@ export default function ExportPage({ params }: { params: { id: string } }) {
                   {DEFAULT_SECTION_IV.num}. {DEFAULT_SECTION_IV.titre} ({DEFAULT_SECTION_IV.points} pts — lot 3 uniquement)
                 </SectionTitre>
 
-                <div className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-sm text-warning">
+                <div className="rounded-lg border border-[#F0D3A8] bg-warning-soft px-3 py-2 text-sm text-warning">
                   {DEFAULT_SECTION_IV.lotNote}
                 </div>
 
@@ -245,7 +249,7 @@ export default function ExportPage({ params }: { params: { id: string } }) {
                 {/* 6. Délais — tableau */}
                 <div className="space-y-2">
                   <SousQuestion numero={6}>{DEFAULT_SECTION_IV.delaisLabel}</SousQuestion>
-                  <div className="rounded-md border border-border">
+                  <div className="overflow-hidden rounded-xl border border-border">
                     <Table>
                       <TableHeader>
                         <TableRow className="hover:bg-transparent">
@@ -268,8 +272,8 @@ export default function ExportPage({ params }: { params: { id: string } }) {
                 {/* 7. Nombre d'intervenants */}
                 <div className="space-y-1.5">
                   <SousQuestion numero={7}>{DEFAULT_SECTION_IV.intervenantsLabel}</SousQuestion>
-                  <div className="inline-flex items-baseline gap-2 rounded-md border border-border bg-muted/30 px-4 py-2">
-                    <span className="text-2xl font-bold text-primary">
+                  <div className="inline-flex items-baseline gap-2 rounded-xl border border-border bg-secondary/60 px-4 py-2">
+                    <span className="chiffre-cle text-[28px] text-primary">
                       3
                     </span>
                     <span className="text-sm text-muted-foreground">intervenants véhiculés</span>
@@ -290,22 +294,27 @@ export default function ExportPage({ params }: { params: { id: string } }) {
         </div>
 
         {/* ============ Sidebar : vérifications — CONSERVÉE ============ */}
-        <aside className="space-y-4 overflow-y-auto">
+        <aside className="space-y-4 overflow-y-auto animate-monter [animation-delay:100ms]">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Vérifications avant envoi</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-[9px] text-[15px]"><ShieldCheck aria-hidden="true" className="h-[18px] w-[18px] text-primary" />Vérifications avant envoi</CardTitle>
+              {/* Jauge : contrôles déjà satisfaits sur le total de la liste ci-dessous. */}
+              <div aria-hidden="true" className="flex items-center gap-3 pt-1">
+                <Jauge valeur={(CHECKS.filter((c) => c.ok).length / CHECKS.length) * 100} ton="succes" epaisseur={7} />
+                <span className="shrink-0 font-mono text-[12.5px] font-semibold tabular-nums text-muted-foreground">{CHECKS.filter((c) => c.ok).length}/{CHECKS.length}</span>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="apparait grid gap-2">
               {CHECKS.map((c) => (
                 <div
                   key={c.label}
                   className={cn(
-                    "flex items-start gap-2 rounded-md border px-3 py-2 text-sm",
-                    c.ok ? "border-border" : "border-warning/40 bg-warning/5",
+                    "flex items-start gap-2.5 rounded-[10px] border px-3 py-2.5 text-sm transition-colors",
+                    c.ok ? "border-border bg-card" : "border-[#F0D3A8] bg-warning-soft/70",
                   )}
                 >
                   {c.ok ? (
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success motion-safe:animate-zoom-doux" />
                   ) : (
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                   )}
@@ -316,7 +325,7 @@ export default function ExportPage({ params }: { params: { id: string } }) {
           </Card>
 
           {!pret && (
-            <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-muted-foreground">
+            <div className="rounded-xl border border-[#F0D3A8] bg-gradient-to-r from-warning-soft to-[#FFFBF3] p-3.5 text-[12.5px] leading-relaxed text-muted-foreground">
               Certaines vérifications ne sont pas satisfaites. Complétez la check-list de conformité
               et la validation du mémoire avant de marquer le dossier prêt.
             </div>
@@ -324,14 +333,14 @@ export default function ExportPage({ params }: { params: { id: string } }) {
 
           <Separator />
 
-          <Button className="w-full" disabled={!pret}>
+          <Button className="h-11 w-full" disabled={!pret}>
             <Send className="h-4 w-4" /> Marquer comme prêt à envoyer
           </Button>
-          <p className="text-center text-[11px] text-muted-foreground">
+          <p className="text-center text-[12px] text-subtle-foreground">
             Le dépôt s'effectue sur {dossierInfo.plateforme || "la plateforme de l'acheteur"} (hors application).
           </p>
         </aside>
-      </div>
+      </EntreeEtape>
     </div>
   );
 }

@@ -10,7 +10,7 @@ import type { Contact, OptionCochee } from "@/lib/gss-config";
 /** Titre de section : text-lg, semibold, trait slate-200 dessous. */
 export function SectionTitre({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="mb-4 border-b border-slate-200 pb-2 text-lg font-semibold text-slate-900">
+    <h2 className="mb-4 border-b-2 border-border pb-2 font-display text-[19px] font-bold text-primary">
       {children}
     </h2>
   );
@@ -25,8 +25,8 @@ export function SousQuestion({
   children: React.ReactNode;
 }) {
   return (
-    <div className="text-sm font-medium text-slate-700">
-      {numero != null && <span className="mr-1 text-slate-500">{numero}.</span>}
+    <div className="text-sm font-semibold text-foreground">
+      {numero != null && <span className="mr-1.5 font-mono text-subtle-foreground">{numero}.</span>}
       {children}
     </div>
   );
@@ -34,16 +34,16 @@ export function SousQuestion({
 
 /** Bloc de réponse rédigée. */
 export function Reponse({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm leading-relaxed text-slate-700">{children}</p>;
+  return <p className="text-sm leading-relaxed text-muted-foreground">{children}</p>;
 }
 
 /** Case à cocher visuelle (non interactive). */
 export function CaseACocher({ option }: { option: OptionCochee }) {
   const Icon = option.checked ? SquareCheck : Square;
   return (
-    <span className="inline-flex items-center gap-1.5 text-sm text-slate-700">
+    <span className="inline-flex items-center gap-1.5 text-sm text-foreground">
       <Icon
-        className={option.checked ? "h-4 w-4 text-indigo-600" : "h-4 w-4 text-slate-400"}
+        className={option.checked ? "h-4 w-4 text-primary" : "h-4 w-4 text-[#9AA7B8]"}
       />
       {option.label}
     </span>
@@ -70,11 +70,11 @@ export function BlocContact({ contact }: { contact: Contact }) {
     ["Email", contact.email],
   ];
   return (
-    <div className="grid grid-cols-2 gap-x-8 gap-y-1 rounded-md border border-slate-200 bg-slate-50 p-3">
+    <div className="grid gap-x-8 gap-y-1 rounded-lg border border-border bg-[#FAFBFD] p-3 sm:grid-cols-2">
       {lignes.map(([k, v]) => (
         <div key={k} className="flex gap-2 text-sm">
-          <span className="w-20 shrink-0 text-slate-500">{k} :</span>
-          <span className="font-medium text-slate-800">{v}</span>
+          <span className="w-20 shrink-0 text-subtle-foreground">{k} :</span>
+          <span className="min-w-0 break-words font-medium text-foreground">{v}</span>
         </div>
       ))}
     </div>

@@ -96,7 +96,7 @@ export function ExportButtons() {
           Exporter PDF (Marp)
         </Button>
       </div>
-      {error && <span className="max-w-xs text-right text-xs text-destructive">{error}</span>}
+      {error && <span className="max-w-xs animate-monter rounded-lg bg-destructive-soft px-2.5 py-1 text-right text-xs font-medium text-destructive">{error}</span>}
     </div>
   );
 }
