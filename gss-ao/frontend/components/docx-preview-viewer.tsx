@@ -56,18 +56,28 @@ export function DocxPreviewViewer({
   }, [fileUrl]);
 
   return (
-    <div className="relative w-full rounded-md border border-slate-200 bg-slate-100 mt-6 shadow-inner">
+    <div className="relative w-full overflow-hidden rounded-xl border border-border bg-secondary mt-6 shadow-inner">
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/90 z-10 rounded-md">
-          <div className="flex flex-col items-center text-slate-500">
-            <Loader2 className="h-8 w-8 animate-spin mb-4" />
-            <p>Rendu du document Word en cours...</p>
+        <div className="absolute inset-0 flex items-center justify-center bg-secondary/95 z-10 rounded-xl">
+          {/* Page fantôme (décorative) pendant le rendu ; le texte existant reste affiché. */}
+          <div aria-hidden="true" className="absolute inset-x-0 top-8 mx-auto h-[600px] w-[min(520px,85%)] space-y-3 rounded-md bg-card p-8 shadow-o2">
+            <div className="squelette h-5 w-1/2" />
+            <div className="squelette h-3 w-full" />
+            <div className="squelette h-3 w-11/12" />
+            <div className="squelette h-3 w-4/5" />
+            <div className="squelette mt-6 h-24 w-full rounded-lg" />
+            <div className="squelette h-3 w-full" />
+            <div className="squelette h-3 w-3/4" />
+          </div>
+          <div className="relative flex flex-col items-center rounded-xl bg-card/95 px-6 py-4 text-muted-foreground shadow-o1">
+            <Loader2 className="h-7 w-7 animate-spin mb-3 text-primary" />
+            <p className="text-sm font-medium">Rendu du document Word en cours...</p>
           </div>
         </div>
       )}
       
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-red-50 text-red-600 p-6 z-10 text-center rounded-md border border-red-200">
+        <div className="absolute inset-0 flex animate-apparaitre items-center justify-center bg-destructive-soft text-destructive p-6 z-10 text-center rounded-xl border border-[#F2C3C8]">
           <p><strong>Erreur de prévisualisation :</strong> {error}</p>
         </div>
       )}

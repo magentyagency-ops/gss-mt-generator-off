@@ -6,6 +6,9 @@ import { CheckCircle2, Download, FileText, Loader2, Mail, MessagesSquare, Paperc
 import { Badge, Button, Card } from "@/components/ui";
 import { apiFetch, apiBase } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { Anneau } from "@/components/visuel/anneau";
+import { IndicateurGlissant } from "@/components/visuel/indicateur-glissant";
+import { Squelette } from "@/components/visuel/squelette";
 
 const DocxPreviewViewer = dynamic(
   () => import("@/components/docx-preview-viewer").then((mod) => mod.DocxPreviewViewer),
@@ -98,7 +101,7 @@ function Phrase({ texte }: { texte: string }) {
         <span key={i}>
           {m}
           {i < morceaux.length - 1 && (
-            <span className="rounded bg-warning/20 px-1 font-semibold text-foreground">{PLACEHOLDER}</span>
+            <span className="rounded bg-warning-soft px-1 font-mono text-[11px] font-semibold text-warning">{PLACEHOLDER}</span>
           )}
         </span>
       ))} »
@@ -415,8 +418,18 @@ export function CompletionPanel({
 
   if (chargement && !etat) {
     return (
-      <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Chargement du document…
+      <div className="space-y-4 rounded-xl border border-border bg-card p-5 shadow-o1">
+        <div className="flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" /> Chargement du document…
+        </div>
+        <div aria-hidden="true" className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+          <Squelette className="h-[420px] rounded-xl" />
+          <div className="space-y-3">
+            <Squelette className="h-9 rounded-lg" />
+            <Squelette className="h-20 rounded-xl" />
+            <Squelette className="h-20 rounded-xl" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -429,7 +442,7 @@ export function CompletionPanel({
   const url = `${apiBase}/api/download?file=${encodeURIComponent(etat.fichier)}`;
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden shadow-o2">
       <style>{`
         @keyframes gssCompleteFlash {
           0%, 30% { background: #86EFAC; box-shadow: 0 0 0 4px #86EFAC; }
@@ -442,14 +455,20 @@ export function CompletionPanel({
         }
         .gss-modif-flash { animation: gssModifFlash 3s ease-out 1; border-radius: 2px; }
       `}</style>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-4">
-        <div>
-          <h3 className="font-semibold text-foreground">Document généré</h3>
-          <p className="text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-gradient-to-r from-[#F6F9FD] to-card px-4 py-4 md:px-6">
+        <div className="flex min-w-0 items-center gap-4">
+          {/* Anneau : emplacements complétés sur le total (mêmes listes que « À compléter » / « Complété »). */}
+          <Anneau valeur={(faits.length / Math.max(etat.elements.length, 1)) * 100} taille={54} epaisseur={6} className="hidden sm:grid">
+            <span className="text-[13px]">{faits.length}/{etat.elements.length}</span>
+          </Anneau>
+          <div className="min-w-0">
+          <h3 className="font-display text-[19px] font-bold text-foreground">Document généré</h3>
+          <p className="text-[13.5px] text-muted-foreground">
             {ouverts.length
               ? `${groupesOuverts.length} information(s) à compléter (${ouverts.length} emplacement(s)) — cliquez sur un « ${PLACEHOLDER} » pour la saisir.`
               : "Toutes les informations sont complétées."}
           </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {ouverts.some((e) => !e.pourAcheteur) && (
@@ -465,21 +484,21 @@ export function CompletionPanel({
           </a>
         </div>
       </div>
-      {notice && <p className="whitespace-pre-line border-b border-border bg-muted/30 px-6 py-3 text-xs text-muted-foreground">{notice}</p>}
+      {notice && <p className="animate-monter whitespace-pre-line border-b border-border bg-info-soft/60 px-4 py-3 text-[12.5px] text-info md:px-6">{notice}</p>}
 
       {preparation && (
-        <div className="space-y-3 border-b border-border bg-muted/10 px-6 py-4">
-          <p className="text-sm font-medium text-foreground">Questions à envoyer — personnes proposées (décochez ou ajoutez selon le besoin)</p>
+        <div className="apparait space-y-3 border-b border-border bg-[#FAFBFD] px-4 py-4 md:px-6">
+          <p className="text-sm font-semibold text-foreground">Questions à envoyer — personnes proposées (décochez ou ajoutez selon le besoin)</p>
           {preparation.questions.map((q) => {
             const coches = choix[q.id] || [];
             const proposes = preparation.annuaire.filter((p) => q.proposes.includes(p.id) || coches.includes(p.id));
             const autres = preparation.annuaire.filter((p) => !proposes.some((x) => x.id === p.id));
             return (
-              <div key={q.id} className="space-y-2 rounded-lg border border-border bg-card p-3 text-sm">
-                <p className="font-medium text-foreground">{q.question}</p>
+              <div key={q.id} className="space-y-2 rounded-xl border border-border bg-card p-3.5 text-sm shadow-o1">
+                <p className="font-semibold text-foreground">{q.question}</p>
                 <div className="flex flex-wrap gap-2">
                   {proposes.map((p) => (
-                    <label key={p.id} className={cn("flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1 text-xs", coches.includes(p.id) ? "border-primary bg-primary/5" : "border-border")}>
+                    <label key={p.id} className={cn("flex cursor-pointer items-center gap-2 rounded-full border px-2.5 py-1 text-xs transition-[background-color,border-color,scale] duration-150 active:scale-[.97]", coches.includes(p.id) ? "border-primary/60 bg-info-soft" : "border-border hover:border-[#C7D0DC]")}>
                       <input id={`dest-${q.id}-${p.id}`} type="checkbox" checked={coches.includes(p.id)} onChange={() => basculer(q.id, p.id)} />
                       <span className="font-medium">{p.nom}</span>
                       <span className="text-muted-foreground">{p.fonction}</span>
@@ -490,7 +509,7 @@ export function CompletionPanel({
                       id={`ajout-${q.id}`}
                       value=""
                       onChange={(ev) => ev.target.value && basculer(q.id, ev.target.value)}
-                      className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+                      className="rounded-full border border-input bg-card px-2.5 py-1 text-xs"
                     >
                       <option value="">+ Ajouter une personne…</option>
                       {autres.map((p) => <option key={p.id} value={p.id}>{p.nom} — {p.fonction}</option>)}
@@ -517,12 +536,12 @@ export function CompletionPanel({
       )}
 
       {envois && envois.length > 0 && (
-        <div className="grid gap-3 border-b border-border bg-muted/10 px-6 py-4 md:grid-cols-2">
+        <div className="apparait grid gap-3 border-b border-border bg-[#FAFBFD] px-4 py-4 md:grid-cols-2 md:px-6">
           {envois.map((env) => (
-            <div key={env.email} className="space-y-2 rounded-lg border border-border bg-card p-3 text-sm">
+            <div key={env.email} className="space-y-2 rounded-xl border border-border bg-card p-3.5 text-sm shadow-o1">
               <div className="flex items-center gap-2 text-foreground">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">{env.personne}</span>
+                <Mail className="h-4 w-4 text-primary" />
+                <span className="font-semibold">{env.personne}</span>
                 <span className="text-xs text-muted-foreground">{env.fonction ? `${env.fonction} · ` : ""}{env.email}</span>
               </div>
               <ul className="list-disc space-y-1 pl-5 text-xs text-foreground">
@@ -534,7 +553,7 @@ export function CompletionPanel({
                 onChange={(ev) => setReponses((r) => ({ ...r, [env.email]: ev.target.value }))}
                 rows={3}
                 placeholder={`Répondre comme ${env.personne}, comme on répondrait à l'e-mail…`}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs"
+                className="w-full rounded-[9px] border border-input bg-card px-3 py-2 text-xs"
               />
               <div className="flex justify-end">
                 <Button size="sm" variant="outline" className="gap-1" disabled={reponseEnCours === env.email || !(reponses[env.email] || "").trim()} onClick={() => repondreEnvoi(env)}>
@@ -552,18 +571,21 @@ export function CompletionPanel({
           {etat.mode === "cadre" ? (
             <DocxPreviewViewer fileUrl={url} onRendered={onRendered} />
           ) : (
-            <iframe key={`${etat.fichier}#${pageLibre || ""}`} src={pageLibre ? `${url}#page=${pageLibre}` : url} className="h-[760px] w-full rounded-md border border-border" title="Aperçu du mémoire" />
+            <iframe key={`${etat.fichier}#${pageLibre || ""}`} src={pageLibre ? `${url}#page=${pageLibre}` : url} className="h-[760px] w-full rounded-xl border border-border bg-secondary shadow-inner" title="Aperçu du mémoire" />
           )}
         </div>
 
-        <aside className="max-h-[820px] space-y-3 overflow-y-auto border-t border-border bg-muted/10 p-4 lg:border-l lg:border-t-0">
-          <div className="flex gap-1 rounded-lg bg-muted p-1 text-xs font-medium">
+        <aside className="max-h-[820px] space-y-3 overflow-y-auto border-t border-border bg-[#FAFBFD] p-4 lg:border-l lg:border-t-0">
+          <div className="relative isolate flex gap-1 rounded-[10px] bg-[#E9EDF3] p-1 text-[13px] font-medium">
+            {/* Fond blanc de l'onglet actif qui glisse d'un onglet à l'autre (purement visuel). */}
+            <IndicateurGlissant groupe="onglets-completion" />
             {([["completer", `À compléter (${groupesOuverts.length})`], ["assistant", "Assistant"]] as const).map(([k, l]) => (
               <button
                 key={k}
                 type="button"
                 onClick={() => setOnglet(k)}
-                className={cn("flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 transition-colors", onglet === k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                data-actif={onglet === k}
+                className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors", onglet === k ? "font-semibold text-foreground" : "text-muted-foreground hover:text-foreground")}
               >
                 {k === "assistant" && <MessagesSquare className="h-3.5 w-3.5" />}
                 {l}
@@ -573,13 +595,13 @@ export function CompletionPanel({
 
           {onglet === "assistant" && (
             <div
-              className="relative space-y-3"
+              className="relative animate-glisser-gauche space-y-3"
               onDragOver={(ev) => { if (ev.dataTransfer.types.includes("Files")) { ev.preventDefault(); setSurvolDepot(true); } }}
               onDragLeave={(ev) => { if (!ev.currentTarget.contains(ev.relatedTarget as Node)) setSurvolDepot(false); }}
               onDrop={(ev) => { ev.preventDefault(); setSurvolDepot(false); if (ev.dataTransfer.files?.length) ajouterPieces(ev.dataTransfer.files); }}
             >
               {survolDepot && (
-                <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-primary bg-primary/5 text-sm font-medium text-primary">
+                <div className="pointer-events-none absolute inset-0 z-10 flex animate-apparaitre flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-signal bg-[#FFFAF7]/95 text-sm font-semibold text-primary">
                   <Upload className="h-6 w-6" />
                   Déposez vos photos ou documents ici
                 </div>
@@ -589,9 +611,9 @@ export function CompletionPanel({
                 {etat.mode === "cadre" ? " Le texte du cadre de l'acheteur n'est jamais modifié ; les pages ajoutées vont en annexe." : ""}
               </p>
               {!(etat.conversation || []).length && !enAttenteAssistant && (
-                <div className="space-y-1.5">
+                <div className="apparait space-y-1.5">
                   {EXEMPLES_ASSISTANT[etat.court ? "court" : etat.mode].map((ex) => (
-                    <button key={ex} type="button" onClick={() => setMessage(ex)} className="w-full rounded-md border border-dashed border-border bg-card px-3 py-2 text-left text-xs text-muted-foreground hover:border-primary/50 hover:text-foreground">
+                    <button key={ex} type="button" onClick={() => setMessage(ex)} className="w-full rounded-lg border border-dashed border-[#B9C5D4] bg-card px-3 py-2 text-left text-xs text-muted-foreground transition-[border-color,color,translate] duration-150 hover:border-primary/50 hover:text-foreground motion-safe:hover:-translate-y-px">
                       {ex}
                     </button>
                   ))}
@@ -599,7 +621,7 @@ export function CompletionPanel({
               )}
               <div className="space-y-2">
                 {(etat.conversation || []).map((m, i) => (
-                  <div key={i} className={cn("rounded-lg px-3 py-2 text-sm", m.role === "utilisateur" ? "ml-6 bg-primary text-primary-foreground" : "mr-6 border border-border bg-card text-foreground")}>
+                  <div key={i} className={cn("animate-monter rounded-xl px-3 py-2 text-sm shadow-o1", m.role === "utilisateur" ? "ml-6 rounded-br-sm bg-primary text-primary-foreground" : "mr-6 rounded-bl-sm border border-border bg-card text-foreground")}>
                     <p className="whitespace-pre-line">{m.texte}</p>
                     {!!m.pieces?.length && (
                       <p className="mt-1 flex flex-wrap items-center gap-1 text-xs opacity-90">
@@ -613,8 +635,8 @@ export function CompletionPanel({
                 ))}
                 {enAttenteAssistant && (
                   <>
-                    <div className="ml-6 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground"><p className="whitespace-pre-line">{enAttenteAssistant}</p></div>
-                    <div className="mr-6 flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+                    <div className="ml-6 animate-monter rounded-xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground shadow-o1"><p className="whitespace-pre-line">{enAttenteAssistant}</p></div>
+                    <div className="mr-6 flex animate-monter items-center gap-2 rounded-xl rounded-bl-sm border border-border bg-card px-3 py-2 text-xs text-muted-foreground [animation-delay:120ms]">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       {etat.mode === "libre" ? "Modification en cours, puis mise à jour du PDF…" : "Modification en cours…"}
                     </div>
@@ -622,12 +644,12 @@ export function CompletionPanel({
                 )}
                 <div ref={finConversationRef} />
               </div>
-              {erreurAssistant && <p className="text-xs text-destructive">{erreurAssistant}</p>}
+              {erreurAssistant && <p className="animate-monter rounded-lg bg-destructive-soft px-3 py-2 text-xs font-medium text-destructive">{erreurAssistant}</p>}
               <div className="space-y-2">
                 {pieces.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {pieces.map((f, i) => (
-                      <span key={`${f.name}-${i}`} className="flex max-w-full items-center gap-1.5 rounded-md border border-border bg-card py-1 pl-1 pr-2 text-xs">
+                      <span key={`${f.name}-${i}`} className="flex max-w-full animate-zoom-doux items-center gap-1.5 rounded-lg border border-border bg-card py-1 pl-1 pr-2 text-xs shadow-o1">
                         {estImage(f) ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={URL.createObjectURL(f)} alt="" className="h-7 w-7 rounded object-cover" />
@@ -650,7 +672,7 @@ export function CompletionPanel({
                   onPaste={(ev) => { if (ev.clipboardData.files?.length) { ev.preventDefault(); ajouterPieces(ev.clipboardData.files); } }}
                   rows={3}
                   placeholder="Ex. : Refais la partie sur les rondes en insistant sur la traçabilité…"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full rounded-[9px] border border-input bg-card px-3 py-2 text-sm focus:outline-none"
                 />
                 <div className="flex items-center justify-between gap-2">
                   <input
@@ -683,7 +705,7 @@ export function CompletionPanel({
             </div>
           )}
 
-          {onglet === "completer" && (<>
+          {onglet === "completer" && (<div className="animate-glisser-droite space-y-3">
           {groupesOuverts.map((membres) => {
             const e = membres[0];
             const actif = membres.some((m) => m.cle === selection);
@@ -692,8 +714,8 @@ export function CompletionPanel({
                 key={e.cle}
                 ref={(n) => { membres.forEach((m) => { itemsRef.current[m.cle] = n; }); }}
                 className={cn(
-                  "rounded-lg border bg-card p-3 text-sm transition-colors",
-                  actif ? "border-warning ring-2 ring-warning/30" : "border-border hover:border-warning/60",
+                  "animate-monter rounded-xl border bg-card p-3 text-sm transition-[border-color,box-shadow,translate] duration-200 ease-doux",
+                  actif ? "border-[#E08A1E] shadow-o2 ring-[3px] ring-warning/15" : "border-border border-l-[3px] border-l-[#E08A1E] hover:border-[#E0C59A] hover:shadow-o1 motion-safe:hover:-translate-y-px",
                 )}
               >
                 <button type="button" className="w-full text-left" onClick={() => choisir(e.cle)}>
@@ -707,7 +729,7 @@ export function CompletionPanel({
                   {membres.map((m) => m.contexte && <Phrase key={m.cle} texte={m.contexte} />)}
                 </button>
                 {actif && (
-                  <div className="mt-3 space-y-2">
+                  <div className="mt-3 animate-monter space-y-2">
                     <textarea
                       id={`completion-${e.cle}`}
                       autoFocus
@@ -715,9 +737,9 @@ export function CompletionPanel({
                       onChange={(ev) => setValeur(ev.target.value)}
                       rows={2}
                       placeholder="Information à insérer à la place de « [À COMPLÉTER] »…"
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      className="w-full rounded-[9px] border border-input bg-card px-3 py-2 text-sm focus:outline-none"
                     />
-                    {erreur && <p className="text-xs text-destructive">{erreur}</p>}
+                    {erreur && <p className="animate-monter text-xs font-medium text-destructive">{erreur}</p>}
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="sm" onClick={() => setSelection(null)}>Annuler</Button>
                       <Button size="sm" className="gap-1" disabled={enregistrement || !valeur.trim()} onClick={enregistrer}>
@@ -733,9 +755,9 @@ export function CompletionPanel({
 
           {faits.length > 0 && (
             <>
-              <h4 className="pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Complété ({groupesFaits.length})</h4>
+              <h4 className="petites-capitales flex items-center gap-2 pt-2 text-success"><CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" />Complété ({groupesFaits.length})</h4>
               {groupesFaits.map((membres) => membres[0]).map((e) => (
-                <div key={e.cle} className="rounded-lg border border-success/30 bg-success/5 p-3 text-sm">
+                <div key={e.cle} className="animate-monter rounded-xl border border-[#CFE8D9] bg-success-soft/60 p-3 text-sm">
                   <div className="flex items-start gap-2">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
                     <div className="min-w-0">
@@ -754,7 +776,7 @@ export function CompletionPanel({
               ))}
             </>
           )}
-          </>)}
+          </div>)}
         </aside>
       </div>
     </Card>

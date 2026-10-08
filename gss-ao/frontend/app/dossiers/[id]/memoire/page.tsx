@@ -46,6 +46,9 @@ import { CreditsBadge } from "@/components/credits-badge";
 import { CompletionPanel } from "@/components/completion-panel";
 import { use } from "react";
 import { useDossier } from "../context";
+import { BandeauDossier } from "@/components/visuel/bandeau-dossier";
+import { EntreeEtape } from "@/components/visuel/entree-etape";
+import { PointActif } from "@/components/visuel/pastille-statut";
 
 interface GenEntry {
   text: string;
@@ -312,27 +315,27 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
   if (isLocked) {
     return (
       <div className="flex h-full flex-col">
-        <header className="border-b border-border bg-card px-6 py-3">
-          <div className="flex items-center justify-between">
+        <BandeauDossier className="animate-apparaitre pb-5 pt-5 md:pb-5 md:pt-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="font-mono text-[12.5px] font-medium uppercase tracking-wide text-muted-foreground">
                 {dossierInfo.acheteur}{dossierInfo.reference ? ` · ${dossierInfo.reference}` : ""}
               </div>
-              <h1 className="flex items-center gap-2 text-lg font-semibold">
+              <h1 className="mt-1.5 flex flex-wrap items-center gap-2.5 font-display text-[24px] font-bold leading-[1.15] md:text-[28px]">
                 Mémoire technique — génération IA
               </h1>
             </div>
             <CreditsBadge key={creditKey} />
           </div>
-        </header>
+        </BandeauDossier>
         <DossierNav id={id} />
-        <div className="flex flex-1 flex-col items-center justify-center bg-muted/10 p-8">
-          <div className="w-full max-w-lg text-center space-y-6">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-warning/10">
-              <Lock className="h-10 w-10 text-warning" />
+        <EntreeEtape className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-8 md:p-8">
+          <div className="apparait w-full max-w-lg space-y-5 rounded-2xl border border-border bg-card px-6 py-8 text-center shadow-o2 md:px-10">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-warning-soft ring-8 ring-warning-soft/40">
+              <Lock className="h-9 w-9 text-warning motion-safe:animate-flotte" />
             </div>
-            <h2 className="text-xl font-bold text-foreground">Accès verrouillé</h2>
-            <p className="text-muted-foreground leading-relaxed">
+            <h2 className="font-display text-[24px] font-bold text-foreground">Accès verrouillé</h2>
+            <p className="text-[14.5px] text-muted-foreground leading-relaxed">
               {!hasDce
                 ? "Aucun DCE n'a été uploadé pour ce dossier. Uploadez les pièces du DCE depuis la fiche de synthèse avant de pouvoir générer le mémoire technique."
                 : "L'analyse des informations manquantes du DCE est en cours ou n'a pas encore été lancée. Retournez à la fiche de synthèse pour que l'analyse se termine avant de générer le mémoire technique."}
@@ -345,21 +348,21 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
             </Link>
 
             <div className="mt-8 pt-6 border-t border-border w-full flex flex-col items-center">
-              <p className="text-xs text-muted-foreground mb-3">Besoin du document immédiatement ?</p>
-              <Button variant="outline" size="sm" onClick={() => setShowBypassModal(true)} className="border-warning/50 text-warning hover:bg-warning/10">
+              <p className="text-[12.5px] text-muted-foreground mb-3">Besoin du document immédiatement ?</p>
+              <Button variant="outline" size="sm" onClick={() => setShowBypassModal(true)} className="border-[#F0D3A8] text-warning hover:border-warning/60 hover:bg-warning-soft">
                 Ignorer l'attente et forcer l'accès
               </Button>
             </div>
           </div>
-        </div>
+        </EntreeEtape>
 
         {showBypassModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="bg-card w-full max-w-md rounded-xl shadow-lg border border-warning/30 overflow-hidden m-auto">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(11,37,69,.45)] backdrop-blur-[4px] p-4 animate-in fade-in duration-200">
+            <div className="bg-card w-full max-w-md rounded-2xl shadow-o3 border border-border overflow-hidden m-auto animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-300">
               <div className="p-6">
-                <div className="flex items-center gap-3 text-warning mb-4">
+                <div className="flex items-center gap-3 text-warning mb-4 [&>svg]:box-content [&>svg]:h-5 [&>svg]:w-5 [&>svg]:shrink-0 [&>svg]:rounded-full [&>svg]:bg-warning-soft [&>svg]:p-2.5">
                   <AlertTriangle className="h-6 w-6" />
-                  <h3 className="text-lg font-bold">Attention : Informations manquantes</h3>
+                  <h3 className="font-display text-[20px] font-bold leading-tight">Attention : Informations manquantes</h3>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
                   Vous êtes sur le point de forcer la génération du mémoire alors que l'analyse n'est pas terminée ou qu'il manque des informations requises.
@@ -373,7 +376,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                     Annuler
                   </Button>
                   <Button 
-                    className="bg-warning hover:bg-warning/90 text-warning-foreground"
+                    className="bg-warning hover:bg-warning/90 hover:shadow-o2 text-warning-foreground"
                     onClick={() => {
                       setShowBypassModal(false);
                       setBypassActive(true);
@@ -392,24 +395,24 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="border-b border-border bg-card px-6 py-3">
-        <div className="flex items-center justify-between">
+      <BandeauDossier className="animate-apparaitre pb-5 pt-5 md:pb-5 md:pt-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <div className="font-mono text-[12.5px] font-medium uppercase tracking-wide text-muted-foreground">
               {dossierInfo.acheteur}{dossierInfo.reference ? ` · ${dossierInfo.reference}` : ""}
             </div>
-            <h1 className="flex items-center gap-2 text-lg font-semibold">
+            <h1 className="mt-1.5 flex flex-wrap items-center gap-2.5 font-display text-[24px] font-bold leading-[1.15] md:text-[28px]">
               Mémoire technique — génération IA
               {hasTemplate ? (
-                <Badge variant="default">Cadre imposé</Badge>
+                <Badge variant="default" className="border-white/20 bg-white/15 font-sans text-[12px] text-white">Cadre imposé</Badge>
               ) : (
-                <Badge variant="warning">Réponse libre (AO RNE)</Badge>
+                <Badge variant="warning" className="border-[#F1B98A]/50 bg-signal/20 font-sans text-[12px] text-white">Réponse libre (AO RNE)</Badge>
               )}
             </h1>
           </div>
           <CreditsBadge key={creditKey} />
         </div>
-      </header>
+      </BandeauDossier>
 
       {!isPrerequisOk && (
         <div className="bg-warning/10 border-b border-warning/30 px-6 py-4">
@@ -437,25 +440,25 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
 
       <DossierNav id={id} />
 
-      <div className="flex flex-1 flex-col items-center justify-start overflow-y-auto bg-muted/10 p-8">
+      <EntreeEtape className="flex flex-1 flex-col items-center justify-start overflow-y-auto px-4 py-6 md:px-9 md:py-8">
         <div className="w-full max-w-4xl space-y-6">
-          <div className="text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+          <div className="animate-monter rounded-2xl border border-border bg-card px-5 py-7 text-center shadow-o1 md:px-10">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-secondary to-[#DCE6F2] shadow-o1">
               <FileText className="h-8 w-8 text-primary" />
             </div>
-            <h1 className="text-2xl font-bold">
+            <h1 className="font-display text-[26px] font-bold leading-tight">
               {hasTemplate ? "Génération par Template" : "Génération Automatique (AO RNE)"}
             </h1>
-            <p className="mt-2 text-muted-foreground">
+            <p className="mx-auto mt-2 max-w-2xl text-[14.5px] leading-relaxed text-muted-foreground">
               {hasTemplate 
                 ? "Ce dossier contient un cadre de réponse imposé par le marché. L'IA lit le document complet pour y insérer directement les éléments adaptés (cocher des cases, remplir des champs spécifiques)."
                 : `Aucun cadre de réponse n'est imposé. Le système va assembler un mémoire sur-mesure à partir des ${selectedSlidesCount > 0 ? selectedSlidesCount : "plusieurs"} slides pré-sélectionnées et y intégrer une synthèse personnalisée basée sur l'analyse du DCE, en gardant la charte graphique GSS intacte.`}
             </p>
 
-            <div className="mx-auto mt-6 max-w-2xl space-y-3 rounded-xl border border-border bg-card p-4 text-left">
+            <div className="mx-auto mt-6 max-w-2xl space-y-3 rounded-xl border border-border bg-[#FAFBFD] p-4 text-left transition-[border-color,box-shadow] duration-200 focus-within:border-primary/40 focus-within:shadow-halo">
               <div>
                 <label htmlFor="demande-particuliere" className="text-sm font-semibold text-foreground">Demande particulière <span className="font-normal text-muted-foreground">(facultatif)</span></label>
-                <p className="text-xs text-muted-foreground">Une consigne ou un document à prendre en compte pendant la génération de ce mémoire.</p>
+                <p className="text-[12.5px] text-muted-foreground">Une consigne ou un document à prendre en compte pendant la génération de ce mémoire.</p>
               </div>
               <textarea
                 id="demande-particuliere"
@@ -464,10 +467,10 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 disabled={isGeneratingDocx}
                 rows={3}
                 placeholder="Ex. : Mettre en avant notre présence cynophile de nuit ; insister sur la réactivité de l'encadrement le week-end…"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-[9px] border border-input bg-card px-3 py-2.5 text-sm leading-relaxed focus:outline-none"
               />
               <div className="flex flex-wrap items-center gap-2">
-                <label htmlFor="document-complementaire" className={cn("inline-flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent", isGeneratingDocx && "pointer-events-none opacity-50")}>
+                <label htmlFor="document-complementaire" className={cn("inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-[13px] font-semibold shadow-o1 transition-[background-color,border-color,scale] duration-150 hover:border-[#C7D0DC] hover:bg-[#FBFCFD] active:scale-[.97]", isGeneratingDocx && "pointer-events-none opacity-50")}>
                   <FileText className="h-4 w-4" />
                   {documentComplementaire ? "Changer de document" : "Joindre un document"}
                 </label>
@@ -480,12 +483,12 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   onChange={(e) => { setDocumentComplementaire(e.target.files?.[0] || null); e.target.value = ""; }}
                 />
                 {documentComplementaire ? (
-                  <span className="flex items-center gap-2 text-xs text-foreground">
+                  <span className="flex animate-monter items-center gap-2 rounded-full bg-info-soft px-3 py-1 text-[12.5px] font-medium text-info">
                     {documentComplementaire.name}
-                    <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => setDocumentComplementaire(null)} disabled={isGeneratingDocx}>Retirer</button>
+                    <button type="button" className="font-semibold text-muted-foreground underline-offset-2 hover:text-destructive hover:underline" onClick={() => setDocumentComplementaire(null)} disabled={isGeneratingDocx}>Retirer</button>
                   </span>
                 ) : (
-                  <span className="text-xs text-muted-foreground">PDF, Word ou texte</span>
+                  <span className="font-mono text-[11.5px] text-subtle-foreground">PDF, Word ou texte</span>
                 )}
               </div>
             </div>
@@ -496,8 +499,8 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 onClick={handleGenerateFullDocx}
                 disabled={isGeneratingDocx || !canGenerate}
                 className={cn(
-                  "w-full max-w-md transition-all",
-                  canGenerate ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-muted text-muted-foreground cursor-not-allowed"
+                  "h-12 w-full max-w-md text-[15px]",
+                  canGenerate ? "bg-primary text-primary-foreground hover:bg-primary-hover" : "bg-secondary text-muted-foreground shadow-none cursor-not-allowed"
                 )}
               >
                 {isGeneratingDocx ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <FileStack className="mr-2 h-5 w-5" />}
@@ -505,22 +508,22 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
               </Button>
               {!isPrerequisOk && <p className="mt-2 text-xs text-warning">Prérequis manquants (CR Visite)</p>}
               {isPrerequisOk && questionsRestantes > 0 && (
-                <div className="mt-2 text-xs text-warning">
-                  <p>
+                <div className="mx-auto mt-4 max-w-2xl animate-monter rounded-xl border border-[#F0D3A8] bg-gradient-to-r from-warning-soft to-[#FFFBF3] px-4 py-3.5 text-left text-[13px] text-warning">
+                  <p className="font-semibold leading-relaxed">
                     Génération bloquée : {questionsRestantes} information{questionsRestantes > 1 ? "s" : ""} manquante{questionsRestantes > 1 ? "s" : ""} sans réponse
                     {" "}(sur {nbManques} détectée{nbManques > 1 ? "s" : ""}). Obtenez les réponses (équipe / recherche web) avant de générer.
                   </p>
                   {gate && gate.unresolved.length > 0 && (
-                    <ul className="mx-auto mt-2 max-w-md list-disc space-y-0.5 text-left">
+                    <ul className="apparait mt-2.5 grid gap-1.5 text-left text-foreground sm:grid-cols-2">
                       {gate.unresolved.slice(0, 8).map((f) => (
-                        <li key={f.id} className="truncate">{f.label}</li>
+                        <li key={f.id} className="flex min-w-0 items-center gap-2 truncate rounded-lg bg-card/80 px-2.5 py-1.5 before:h-1.5 before:w-1.5 before:shrink-0 before:rounded-full before:bg-[#E08A1E]">{f.label}</li>
                       ))}
                       {gate.unresolved.length > 8 && <li>… et {gate.unresolved.length - 8} autre(s)</li>}
                     </ul>
                   )}
                   {!bypassActive && (
-                    <div className="mt-4">
-                      <Button variant="outline" size="sm" onClick={() => setShowBypassModal(true)} className="border-warning/50 text-warning hover:bg-warning/10">
+                    <div className="mt-3.5">
+                      <Button variant="outline" size="sm" onClick={() => setShowBypassModal(true)} className="border-[#F0D3A8] text-warning hover:border-warning/60 hover:bg-warning-soft">
                         Ignorer et forcer la génération
                       </Button>
                     </div>
@@ -528,7 +531,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 </div>
               )}
 
-              <div className="mt-4 flex items-center justify-center gap-3">
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
                 <Button variant="outline" className="gap-2" disabled={isSearching} onClick={handleFindOnInternet}>
                   {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
                   {isSearching ? "Recherche en cours..." : "Trouver l'info sur internet"}
@@ -538,32 +541,33 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   {isAskingTeam ? "Envoi en cours..." : "Demander \u00e0 l'\u00e9quipe"}
                 </Button>
               </div>
-              {searchError && <p className="mt-2 text-xs text-destructive">{searchError}</p>}
-              {searchNotice && <p className="mt-2 text-xs text-muted-foreground">{searchNotice}</p>}
-              {askTeamError && <p className="mt-2 text-xs text-destructive">{askTeamError}</p>}
-              {askTeamNotice && <p className="mt-2 whitespace-pre-line text-left text-xs text-muted-foreground">{askTeamNotice}</p>}
+              {searchError && <p className="mx-auto mt-3 max-w-2xl animate-monter rounded-lg bg-destructive-soft px-3 py-2 text-[12.5px] font-medium text-destructive">{searchError}</p>}
+              {searchNotice && <p className="mx-auto mt-3 max-w-2xl animate-monter rounded-lg bg-info-soft px-3 py-2 text-[12.5px] text-info">{searchNotice}</p>}
+              {askTeamError && <p className="mx-auto mt-3 max-w-2xl animate-monter rounded-lg bg-destructive-soft px-3 py-2 text-[12.5px] font-medium text-destructive">{askTeamError}</p>}
+              {askTeamNotice && <p className="mx-auto mt-3 max-w-2xl animate-monter whitespace-pre-line rounded-lg border border-border bg-secondary/60 px-3.5 py-2.5 text-left font-mono text-[12px] leading-relaxed text-muted-foreground">{askTeamNotice}</p>}
             </div>
 
             {isGeneratingDocx && progressInfo && (
-              <div className="mt-8 mx-auto w-full max-w-md text-left space-y-4 rounded-xl border border-border bg-card p-6 shadow-sm">
-                <div className="flex items-center justify-between text-sm font-semibold">
-                  <span className="text-primary flex items-center gap-1.5">
+              <div className="mt-8 mx-auto w-full max-w-md animate-monter text-left space-y-3.5 rounded-xl border border-border bg-[#FAFBFD] p-5 shadow-o1">
+                <div className="flex items-center justify-between gap-3 text-sm font-semibold">
+                  <span className="text-primary flex min-w-0 items-center gap-2">
+                    <PointActif />
                     {progressInfo.progress < 100 && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
                     {progressInfo.message}
                   </span>
-                  <span className="tabular-nums">{progressInfo.progress}%</span>
+                  <span className="chiffre-cle text-[22px] text-foreground">{progressInfo.progress}%</span>
                 </div>
-                <Progress value={progressInfo.progress} className="h-2 w-full" />
+                <Progress value={progressInfo.progress} className="h-2 w-full" indicatorClassName="reflet-actif bg-gradient-to-r from-primary to-[#2F5E9E]" />
 
               </div>
             )}
           </div>
 
           {docxResult && docxResult.type === "success" && (
-            <Card className="mt-8 overflow-hidden border-success/30">
-              <div className="bg-success/5 px-6 py-4 border-b border-success/20 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-success font-semibold">
-                  <CheckCircle2 className="h-5 w-5" />
+            <Card className="mt-8 animate-monter overflow-hidden border-[#BFE0CC]">
+              <div className="bg-gradient-to-r from-success-soft to-card px-4 py-4 border-b border-[#CFE8D9] flex flex-wrap items-center justify-between gap-3 md:px-6">
+                <div className="flex items-center gap-2.5 text-success font-semibold">
+                  <CheckCircle2 className="h-6 w-6 motion-safe:animate-zoom-doux" />
                   <span>Document généré avec succès !</span>
                 </div>
                 <Link href={`/dossiers/${id}/export`}>
@@ -576,14 +580,14 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
               {/* Listing des infos manquantes retiré ici : il est fait APRÈS l'analyse de l'upload
                   (fiche dossier), pour les DEUX cas (cadre imposé basé template, sans cadre basé exigences). */}
 
-              <div className="p-6">
+              <div className="p-4 md:p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-medium text-foreground">Aperçu :</h3>
                 </div>
                 {hasTemplate ? (
                   <div className="space-y-4">
                     {JSON.parse(docxResult.data.data_generee_par_ia?.details || "[]").map((mod: any, idx: number) => (
-                      <div key={idx} className="grid grid-cols-2 gap-4 rounded-lg border border-border p-4 bg-card">
+                      <div key={idx} className="grid gap-4 rounded-xl border border-border p-4 bg-card md:grid-cols-2">
                         <div>
                           <div className="text-[11px] font-semibold uppercase text-muted-foreground mb-1">Texte original (Recherche)</div>
                           <div className="bg-destructive/5 text-destructive px-3 py-2 rounded text-sm font-mono border border-destructive/20 whitespace-pre-wrap break-all line-through opacity-70">
@@ -611,7 +615,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                 <div className="mt-12 pt-8 border-t border-border">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-medium text-lg text-foreground">Aperçu du document final (De A à Z)</h3>
-                    <a href={`${apiBase}/api/download?file=${encodeURIComponent(docxResult.data.file_path)}&download=1`} download className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-border bg-card hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
+                    <a href={`${apiBase}/api/download?file=${encodeURIComponent(docxResult.data.file_path)}&download=1`} download className="inline-flex items-center justify-center rounded-[9px] text-sm font-semibold shadow-o1 transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 border border-border bg-card hover:border-[#C7D0DC] hover:bg-[#FBFCFD] h-9 px-4 py-2">
                       <Download className="mr-2 h-4 w-4" />
                       Télécharger
                     </a>
@@ -619,7 +623,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   <p className="text-sm text-muted-foreground mb-4">Voici le rendu interactif du fichier tel qu'il a été généré, avec le formatage d'origine conservé.</p>
                   
                   {docxResult.data?.file_path?.toLowerCase()?.endsWith('.pdf') ? (
-                    <div className="relative w-full rounded-md border border-border bg-muted mt-6 shadow-inner h-[800px]">
+                    <div className="relative w-full rounded-xl border border-border bg-secondary mt-6 shadow-inner h-[800px] overflow-hidden">
                       <iframe 
                         src={`${apiBase}/api/download?file=${encodeURIComponent(docxResult.data?.file_path || '')}`}
                         className="w-full h-full rounded-md"
@@ -636,7 +640,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
           )}
 
           {completionDispo && !isGeneratingDocx && (
-            <div className="relative left-1/2 w-[min(1280px,calc(100vw-4rem))] -translate-x-1/2">
+            <div className="relative left-1/2 w-[min(1280px,calc(100vw-64px-2.5rem))] -translate-x-1/2 md:w-[min(1280px,calc(100vw-248px-5rem))]">
               <CompletionPanel
                 key={docxResult?.data?.file_path || "dernier"}
                 dossierId={id}
@@ -646,20 +650,20 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
           )}
 
           {docxResult && docxResult.type === "error" && (
-            <div className="mt-8 p-4 bg-destructive/10 text-destructive rounded-md border border-destructive/30">
+            <div className="mt-8 animate-monter p-4 bg-gradient-to-r from-destructive-soft to-[#FFF8F8] text-destructive rounded-xl border border-[#F2C3C8]">
               <strong>Erreur lors de la génération :</strong> {docxResult.message}
             </div>
           )}
         </div>
-      </div>
+      </EntreeEtape>
 
       {showBypassModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-card w-full max-w-md rounded-xl shadow-lg border border-warning/30 overflow-hidden m-auto">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(11,37,69,.45)] backdrop-blur-[4px] p-4 animate-in fade-in duration-200">
+          <div className="bg-card w-full max-w-md rounded-2xl shadow-o3 border border-border overflow-hidden m-auto animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-300">
             <div className="p-6">
-              <div className="flex items-center gap-3 text-warning mb-4">
+              <div className="flex items-center gap-3 text-warning mb-4 [&>svg]:box-content [&>svg]:h-5 [&>svg]:w-5 [&>svg]:shrink-0 [&>svg]:rounded-full [&>svg]:bg-warning-soft [&>svg]:p-2.5">
                 <AlertTriangle className="h-6 w-6" />
-                <h3 className="text-lg font-bold">Attention : Informations manquantes</h3>
+                <h3 className="font-display text-[20px] font-bold leading-tight">Attention : Informations manquantes</h3>
               </div>
               <p className="text-sm text-muted-foreground mb-4">
                 Vous êtes sur le point de forcer la génération du mémoire alors qu'il manque encore <strong className="text-foreground">{questionsRestantes} information(s) requise(s)</strong>.
@@ -673,7 +677,7 @@ export default function MemoirePage({ params }: { params: { id: string } }) {
                   Annuler
                 </Button>
                 <Button 
-                  className="bg-warning hover:bg-warning/90 text-warning-foreground"
+                  className="bg-warning hover:bg-warning/90 hover:shadow-o2 text-warning-foreground"
                   onClick={() => {
                     setShowBypassModal(false);
                     setBypassActive(true);
