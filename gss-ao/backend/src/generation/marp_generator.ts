@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
+import { PDFDocument } from 'pdf-lib';
 import type { PooledIllustration, SlideContext } from './image_service';
 import { D2Service } from './d2_service';
 import { organigrammeSvg } from './organigramme';
@@ -126,6 +127,108 @@ export function lanceurChromeConteneur(chromePath: string | undefined, plateform
   }
   console.log(`[MarpGenerator] Chrome lancé par ${LANCEUR_CHROME_CONTENEUR} (--disable-dev-shm-usage).`);
   return LANCEUR_CHROME_CONTENEUR;
+}
+
+/**
+ * Rendu par lots (production Railway, b66422b → c594dab : Chrome tué faute de mémoire sur un long mémoire) : le Markdown est
+ * rendu par lots de N pages, puis les PDF partiels sont réunis (pdf-lib). Adapté à la refonte pour un PDF identique au rendu
+ * en une passe : chaque lot reprend l'en-tête YAML, les feuilles de style globales du document (polices embarquées, parcours
+ * des blocs, pied v3) et les directives héritées des pages précédentes (en-tête de bloc), et la numérotation des pages reste
+ * celle du document entier (moteur Marp ci-dessous) ; le style « Marine & signal » v3 et le retour arrière gardent ainsi leur
+ * propre numéro de page (aucun numéro ajouté après coup). GSS_PAGES_PAR_LOT : pages par lot (10 par défaut, comme en
+ * production) ; 0 ou « non » : rendu en une seule passe (comportement de la refonte avant la fusion).
+ */
+export const PAGES_PAR_LOT_DEFAUT = 10;
+export function pagesParLot(valeur: string | undefined = process.env.GSS_PAGES_PAR_LOT): number {
+  const v = String(valeur ?? '').trim().toLowerCase();
+  if (v === '') return PAGES_PAR_LOT_DEFAUT;
+  const n = Number.parseInt(v, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** Directives locales de Marpit héritées par les pages suivantes (sans « _ ») ; la forme « _x » ne vaut que pour sa page. */
+const RX_DIRECTIVE_HERITEE = /<!--\s*(header|footer|class|paginate|color|backgroundColor|backgroundImage|backgroundPosition|backgroundRepeat|backgroundSize)\s*:\s*([\s\S]*?)\s*-->/g;
+/** Feuille de style globale écrite dans le Markdown (bloc HTML en début de ligne, hors « scoped ») : elle vaut pour tout le document. */
+const RX_STYLE_GLOBAL = /^<style(?![^>]*\bscoped\b)[^>]*>[\s\S]*?<\/style>/gm;
+
+export interface LotMarp { markdown: string; debut: number; pages: number }
+
+/**
+ * Découpe un Markdown Marp en lots de `taille` pages (null : une seule passe, document trop court, en-tête YAML illisible ou
+ * pagination « skip » / « hold », dont le numéro ne suit plus le rang de la page). `debut` : pages des lots précédents.
+ */
+export function decouperEnLots(markdown: string, taille: number): { lots: LotMarp[]; total: number } | null {
+  if (!(taille > 0) || !/^---\n/.test(markdown)) return null;
+  if (/<!--\s*_?paginate\s*:\s*["']?(?:skip|hold)\b/.test(markdown) || /^paginate\s*:\s*["']?(?:skip|hold)\b/m.test(markdown)) return null;
+  const parties = markdown.split('\n---\n');
+  const tete = parties[0];
+  const pages = parties.slice(1);
+  if (pages.length <= taille) return null;
+  const styles = pages.map((p) => p.match(RX_STYLE_GLOBAL) || []);
+  const lots: LotMarp[] = [];
+  for (let debut = 0; debut < pages.length; debut += taille) {
+    const fin = Math.min(pages.length, debut + taille);
+    const lot = pages.slice(debut, fin);
+    // Directives héritées des pages précédentes : dernière valeur de chaque directive, réécrite en tête du lot (la page
+    // qui la redéfinit l'écrit après, sa valeur l'emporte).
+    const herite = new Map<string, string>();
+    for (const p of pages.slice(0, debut)) for (const m of p.matchAll(RX_DIRECTIVE_HERITEE)) herite.set(m[1], m[2]);
+    const avant = [...styles.slice(0, debut).flat(), ...[...herite].map(([k, v]) => `<!-- ${k}: ${v} -->`)];
+    const apres = styles.slice(fin).flat();
+    if (avant.length) lot[0] = `\n${avant.join('\n\n')}\n${lot[0]}`;
+    if (apres.length) lot[lot.length - 1] = `${lot[lot.length - 1]}\n\n${apres.join('\n\n')}\n`;
+    lots.push({ markdown: `${tete}\n---\n${lot.join('\n---\n')}`, debut, pages: lot.length });
+  }
+  return { lots, total: pages.length };
+}
+
+/**
+ * Moteur Marp d'un lot (option --engine) : le moteur de Marp CLI, dont le numéro de page est décalé du nombre de pages des lots
+ * précédents (GSS_PAGINATION_DECALAGE) et le total porté au document entier (GSS_PAGINATION_TOTAL). Les attributs
+ * data-marpit-pagination(-total) sont ceux qu'affichent les feuilles du thème (« 12 » en v3, « Page 12 / 143 » au retour arrière).
+ */
+export const MOTEUR_PAGINATION_GLOBALE = `'use strict';
+module.exports = ({ marp }) => marp.use((md) => {
+  const decalage = Number.parseInt(process.env.GSS_PAGINATION_DECALAGE || '0', 10) || 0;
+  const total = Number.parseInt(process.env.GSS_PAGINATION_TOTAL || '0', 10) || 0;
+  md.core.ruler.push('gss_pagination_globale', (state) => {
+    if (state.inlineMode) return;
+    for (const t of state.tokens) {
+      if (typeof t.attrGet !== 'function') continue;
+      const n = t.attrGet('data-marpit-pagination');
+      if (n !== null && n !== undefined && n !== '') t.attrSet('data-marpit-pagination', Number(n) + decalage);
+      if (total && t.attrGet('data-marpit-pagination-total') !== null) t.attrSet('data-marpit-pagination-total', total);
+    }
+  });
+});
+`;
+
+/** Réunit les PDF partiels des lots (pdf-lib) dans `sortie` ; false (rien d'écrit) si un lot n'a pas exactement une page par page Markdown. */
+export async function fusionnerPdfLots(partiels: Array<{ fichier: string; pages: number }>, sortie: string): Promise<boolean> {
+  const fusion = await PDFDocument.create({ updateMetadata: false });
+  let premier: PDFDocument | null = null;
+  for (const p of partiels) {
+    const doc = await PDFDocument.load(fs.readFileSync(p.fichier), { updateMetadata: false });
+    if (doc.getPageCount() !== p.pages) {
+      console.warn(`[MarpGenerator] Lot ${path.basename(p.fichier)} : ${doc.getPageCount()} page(s) rendue(s) pour ${p.pages} attendue(s).`);
+      return false;
+    }
+    if (!premier) premier = doc;
+    for (const page of await fusion.copyPages(doc, doc.getPageIndices())) fusion.addPage(page);
+  }
+  // Métadonnées du rendu Marp (titre, créateur…) reprises du premier lot.
+  if (premier) {
+    const t = premier.getTitle(); if (t) fusion.setTitle(t);
+    const a = premier.getAuthor(); if (a) fusion.setAuthor(a);
+    const su = premier.getSubject(); if (su) fusion.setSubject(su);
+    const k = premier.getKeywords(); if (k) fusion.setKeywords(k.split(/\s*,\s*|\s+/).filter(Boolean));
+    const c = premier.getCreator(); if (c) fusion.setCreator(c);
+    const pr = premier.getProducer(); if (pr) fusion.setProducer(pr);
+    const d = premier.getCreationDate(); if (d) fusion.setCreationDate(d);
+    const m = premier.getModificationDate(); if (m) fusion.setModificationDate(m);
+  }
+  fs.writeFileSync(sortie, await fusion.save());
+  return true;
 }
 
 // ─── Helpers ───
@@ -751,7 +854,7 @@ export class MarpGenerator {
       }
       // Réduit les images « db_ » à leur taille d'affichage : les images pleine
       // résolution ralentissent énormément (voire bloquent) le rendu Chromium.
-      this.downscaleDbImages(mediaDst);
+      await this.downscaleDbImages(mediaDst);
     }
 
     // Render to PDF via marp-cli
@@ -794,17 +897,24 @@ export class MarpGenerator {
     const cmd = useMarpBin ? marpBin : 'npx';
     // Options de Chrome : Marp CLI 4.4 n'a aucune option pour en transmettre (l'ancienne « --puppeteer-launch-args »
     // n'existe pas et était ignorée). Il ajoute lui-même --no-sandbox en conteneur ou en administrateur. Pour
-    // --disable-dev-shm-usage (conteneur Linux, /dev/shm limité), CHROME_PATH désigne un lanceur qui l'ajoute.
+    // --disable-dev-shm-usage (conteneur Linux, /dev/shm limité), CHROME_PATH désigne un lanceur qui l'ajoute. La production
+    // (5c04aa5) ajoute aussi ces options dans Marp CLI à l'installation (scripts/patch-marp.js, postinstall) : les deux
+    // mécanismes coexistent, l'option en double est sans effet.
     const lanceur = lanceurChromeConteneur(chromePath);
-    const baseArgs = [
-      q(mdPath), '--theme', q(cssPath), '--pdf', '-o', q(pdfPath),
-      '--allow-local-files', '--html', '--no-stdin',
-    ];
-    const args = useMarpBin
-      ? baseArgs
-      : ['-y', '@marp-team/marp-cli@latest', ...baseArgs];
-
-    const rendre = () => {
+    // Production (5c04aa5) : aucune limite de durée par opération du navigateur (« --browser-timeout 0 ») ; la limite du
+    // processus (15 min par rendu ou par lot) reste. Conteneur Linux : bac à sable et GPU de Chrome désactivés par les variables
+    // lues par Marp CLI (CHROME_NO_SANDBOX, CHROME_DISABLE_GPU) ; Mac et Windows : lancement inchangé.
+    const conteneurLinux = process.platform === 'linux';
+    const rendreFichier = (source: string, cible: string, options: { moteur?: string; env?: Record<string, string> } = {}) => {
+      const baseArgs = [
+        q(source), '--theme', q(cssPath), '--pdf', '-o', q(cible),
+        '--allow-local-files', '--html', '--no-stdin',
+        '--browser-timeout', '0',
+        ...(options.moteur ? ['--engine', q(options.moteur)] : []),
+      ];
+      const args = useMarpBin
+        ? baseArgs
+        : ['-y', '@marp-team/marp-cli@latest', ...baseArgs];
       const result = spawnSync(
         cmd,
         args,
@@ -825,6 +935,8 @@ export class MarpGenerator {
             PUPPETEER_PROTOCOL_TIMEOUT: '900000',
             CHROME_PATH: lanceur || chromePath || '',
             ...(lanceur ? { GSS_CHROME_REEL: chromePath } : {}),
+            ...(conteneurLinux ? { CHROME_NO_SANDBOX: '1', CHROME_DISABLE_GPU: '1' } : {}),
+            ...(options.env || {}),
           },
         }
       );
@@ -839,7 +951,34 @@ export class MarpGenerator {
         throw new Error(`Marp CLI exited with code ${result.status}: ${result.stderr?.slice(0, 500)}`);
       }
     };
-    rendre();
+    // Rendu par lots (production : mémoire de Chrome limitée sur Railway), numérotation et mise en page du document entier ;
+    // document court, lots désactivés (GSS_PAGES_PAR_LOT=0) ou lot incohérent : rendu en une passe, comme avant la fusion.
+    const rendre = async () => {
+      const decoupe = decouperEnLots(markdown, pagesParLot());
+      if (!decoupe) { rendreFichier(mdPath, pdfPath); return; }
+      const moteur = path.join(workDir, 'gss_pagination_globale.cjs');
+      fs.writeFileSync(moteur, MOTEUR_PAGINATION_GLOBALE, 'utf-8');
+      const partiels: Array<{ fichier: string; pages: number }> = [];
+      try {
+        console.log(`[MarpGenerator] Rendu par lots : ${decoupe.total} pages, ${decoupe.lots.length} lot(s).`);
+        decoupe.lots.forEach((lot, b) => {
+          const md = path.join(workDir, `lot_${b}.md`);
+          const pdf = path.join(workDir, `lot_${b}.pdf`);
+          fs.writeFileSync(md, lot.markdown, 'utf-8');
+          rendreFichier(md, pdf, { moteur, env: { GSS_PAGINATION_DECALAGE: String(lot.debut), GSS_PAGINATION_TOTAL: String(decoupe.total) } });
+          partiels.push({ fichier: pdf, pages: lot.pages });
+        });
+        if (!(await fusionnerPdfLots(partiels, pdfPath))) {
+          console.warn('[MarpGenerator] Rendu par lots incohérent : rendu du mémoire en une passe.');
+          rendreFichier(mdPath, pdfPath);
+        }
+      } finally {
+        for (let b = 0; b < decoupe.lots.length; b++) {
+          for (const f of [`lot_${b}.md`, `lot_${b}.pdf`]) { try { fs.rmSync(path.join(workDir, f), { force: true }); } catch { /* ignore */ } }
+        }
+      }
+    };
+    await rendre();
     let rubriquesLongues: string[] = [];
     // Style « marine » v3 : contrôle mesuré du PDF rendu (T2-CONS-2) : une page de texte dont un mot passe sous le haut du pied
     // de page fait raccourcir les pages de sa rubrique, puis le mémoire est rendu de nouveau (deux reprises au plus).
@@ -867,7 +1006,7 @@ export class MarpGenerator {
         console.log(`[MarpGenerator] Page(s) ${debords.join(', ')} : texte sous le pied de page ; ${n} rubrique(s) repaginée(s), nouveau rendu (reprise ${reprise}).`);
         markdown = this.buildMarkdown(chapters, cover, assignments, schemas, theme);
         fs.writeFileSync(mdPath, markdown, 'utf-8');
-        rendre();
+        await rendre();
       }
       const restent = pagesQuiDebordent(pdfPath);
       if (restent.length) console.warn(`[MarpGenerator] Page(s) ${restent.join(', ')} : texte encore sous le pied de page après repagination.`);
@@ -927,11 +1066,49 @@ export class MarpGenerator {
   }
 
   /**
-   * Réduit (in place) les images « db_ » du dossier media à leur taille
-   * d'affichage via Pillow. Étape best-effort : si Python/Pillow est absent ou
-   * échoue, on conserve les images d'origine (le rendu reste possible).
+   * Réduit (in place) les images « db_ » du dossier media à leur taille d'affichage (1000 px au plus grand côté, format
+   * conservé) : les images pleine résolution ralentissent énormément (voire bloquent) le rendu Chromium. Production
+   * (664b5c4, c594dab) : sharp (Node), sans dépendance à Python sur Railway ; Python/Pillow seulement si sharp est
+   * indisponible. Étape best-effort : en cas d'échec, les images d'origine sont conservées (le rendu reste possible).
    */
-  private downscaleDbImages(mediaDir: string): void {
+  private async downscaleDbImages(mediaDir: string): Promise<void> {
+    const MAX_DIM = 1000;
+    let sharp: any;
+    try {
+      sharp = require('sharp');
+    } catch (e: any) {
+      console.warn(`[MarpGenerator] sharp indisponible (${e?.message || e}) : redimensionnement par Python.`);
+      this.downscaleDbImagesPython(mediaDir);
+      return;
+    }
+    try {
+      let processed = 0;
+      let resized = 0;
+      for (const name of fs.readdirSync(mediaDir)) {
+        if (!name.startsWith('db_')) continue;
+        const filePath = path.join(mediaDir, name);
+        if (!fs.statSync(filePath).isFile()) continue;
+        try {
+          const meta = await sharp(filePath).metadata();
+          processed++;
+          if (Math.max(meta.width || 0, meta.height || 0) <= MAX_DIM) continue;
+          const buf = await sharp(filePath)
+            .resize({ width: MAX_DIM, height: MAX_DIM, fit: 'inside', withoutEnlargement: true })
+            .toBuffer();
+          fs.writeFileSync(filePath, buf);
+          resized++;
+        } catch (e: any) {
+          console.warn(`[MarpGenerator] downscale ${name}: ${e?.message || e}`);
+        }
+      }
+      console.log(`[MarpGenerator] Redimensionnement images: {"processed": ${processed}, "resized": ${resized}}`);
+    } catch (err: any) {
+      console.warn(`[MarpGenerator] Redimensionnement images ignoré: ${err.message || err}`);
+    }
+  }
+
+  /** Repli du redimensionnement sur Python/Pillow (python/downscale_images.py), quand sharp ne peut pas être chargé. */
+  private downscaleDbImagesPython(mediaDir: string): void {
 
     try {
       const script = path.resolve(__dirname, '../../python/downscale_images.py');

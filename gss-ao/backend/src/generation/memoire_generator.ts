@@ -3316,19 +3316,21 @@ export class MemoireGenerator {
    * Matérialise les pièces DCE du dossier depuis Supabase Storage dans un dossier temporaire.
    * L'extraction (LibreOffice pour .doc, tableaux .docx) exige des fichiers réels sur disque :
    * on télécharge donc les octets le temps du traitement, puis l'appelant supprime le dossier.
-   * Renvoie le chemin temporaire, ou null si aucune pièce en base → l'appelant retombe alors sur
-   * l'ancien emplacement disque (data/output/dce_<id>), pour les dossiers créés avant la migration.
+   * Renvoie le chemin temporaire. Plus aucun repli sur l'ancien emplacement disque (data/output/dce_<id>) : table
+   * fichiers illisible, aucune pièce DCE en base ou aucun téléchargement réussi → erreur explicite (production, d0e5e5a),
+   * au lieu d'une génération lancée en silence sur un DCE vide.
    */
-  private async materializeDceFromStorage(dossierId: string): Promise<string | null> {
+  private async materializeDceFromStorage(dossierId: string): Promise<string> {
     let fichiers;
     try {
       fichiers = await FichiersDB.listByDossier(dossierId);
     } catch (e: any) {
-      console.warn(`[MemoireGenerator] Table fichiers illisible (${e?.message || e}) — repli sur le disque.`);
-      return null;
+      throw new Error(`[MemoireGenerator] Impossible de lire la table fichiers : ${e?.message || e}`);
     }
     const dce = fichiers.filter((f) => f.storage_path && /\/dce\//.test(f.storage_path));
-    if (!dce.length) return null;
+    if (!dce.length) {
+      throw new Error(`[MemoireGenerator] Aucun fichier DCE trouvé en base pour le dossier ${dossierId}.`);
+    }
 
     const supabase = getScopedClient();
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `dce_${dossierId}_`));
@@ -3351,7 +3353,10 @@ export class MemoireGenerator {
         console.warn(`[MemoireGenerator] DCE Storage: échec téléchargement ${f.nom} — ${e?.message || e}`);
       }
     }
-    if (!got) { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ } return null; }
+    if (!got) {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      throw new Error(`[MemoireGenerator] Échec du téléchargement de tous les fichiers DCE depuis le Storage pour le dossier ${dossierId}.`);
+    }
     console.log(`[MemoireGenerator] ${got} pièce(s) DCE téléchargée(s) depuis Storage (dossier temporaire, nettoyé après).`);
     return tmpDir;
   }
@@ -3370,7 +3375,7 @@ export class MemoireGenerator {
     this.lastDceSiteCols = [];
 
     // Source des pièces DCE : Supabase Storage (via table fichiers) matérialisé en /tmp transitoire.
-    // Repli sur l'ancien emplacement disque pour les dossiers antérieurs à la migration Storage.
+    // Plus de repli sur l'ancien emplacement disque.
     const materializedDir = await this.materializeDceFromStorage(dossierId);
 
     // Budget global et plafond par fichier (en caractères ; ~4 car/token)
@@ -3405,9 +3410,8 @@ export class MemoireGenerator {
     // On ne scanne QUE le dossier réellement uploadé pour CE dossier : scanner en plus des corpus
     // de référence (Rouen…) ralentissait fortement le démarrage (chaque .doc = conversion LibreOffice)
     // ET polluait le contexte avec les données d'un autre client → faux pour « n'importe quel client ».
-    const dceDirs = [
-      materializedDir || path.resolve(baseDir, `../data/output/dce_${dossierId}`),
-    ];
+    // On ne scanne QUE le dossier téléchargé depuis la base.
+    const dceDirs = [materializedDir];
     // Nettoyage du dossier temporaire (rien ne reste sur le disque de l'app après la génération).
     const cleanupTmp = () => {
       if (materializedDir) { try { fs.rmSync(materializedDir, { recursive: true, force: true }); } catch { /* ignore */ } }
@@ -3802,8 +3806,17 @@ ${rubriques.map((x) => `- ${x.id} : ${x.title}`).join('\n')}` },
     const raw = process.env.RAG_DATABASE_URL || getSettings().databaseUrl || '';
     const url = raw.replace(/^postgresql\+psycopg:\/\//, 'postgresql://');
     if (!url) return null;
+    // Log masqué pour diagnostiquer les erreurs de connexion
+    try {
+      const parsed = new URL(url);
+      console.log(`[MemoireGenerator] RAG DB: ${parsed.hostname}:${parsed.port || 5432}/${parsed.pathname.slice(1)} (SSL: ${/supabase\.(co|com)/.test(url) || process.env.RAG_DB_SSL === 'true'})`);
+    } catch { console.log('[MemoireGenerator] RAG DB: URL non parsable'); }
     const needsSsl = /supabase\.(co|com)/.test(url) || process.env.RAG_DB_SSL === 'true';
-    return new PgClient({ connectionString: url, ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}) });
+    return new PgClient({
+      connectionString: url,
+      connectionTimeoutMillis: 10_000,
+      ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+    });
   }
 
   /**
@@ -4317,7 +4330,8 @@ RÈGLES :
     • "couvert"  = GSS a le moyen/la capacité ET c'est présent dans la Doc GSS.
     • "partiel"  = GSS a bien un moyen approchant, mais un DÉTAIL précis manque. NE PAS classer "écart" dans ce cas.
     • "écart"    = GSS N'A PAS ce moyen / ne fournit PAS cette prestation / RIEN dans la Doc GSS ne s'en approche.
-  Dans le doute entre "partiel" et "écart", choisis "partiel". Réserve "écart" aux manques FRANCS.`;
+  Dans le doute entre "partiel" et "écart", choisis "partiel". Réserve "écart" aux manques FRANCS.
+- RÈGLE ABSOLUE : GSS est une entreprise de sécurité certifiée. Toutes les exigences portant sur les qualifications standards, habilitations, cartes professionnelles (CNAPS), diplômes (SSIAP, CQP APS, SST), expérience, maintien à jour des compétences, recrutement, remplacements, et tenues/EPI DOIVENT ÊTRE MARQUÉES COMME "couvert" D'OFFICE. C'est le cœur de métier de GSS. Ne marque "écart" que si la demande est très spécifique, technique ou inhabituelle et totalement absente de la documentation.`;
 
     // DCE long : analysé par fenêtres successives (auparavant tronqué à 120 000 caractères, ce qui
     // perdait la fin du CCTP : matériel exigé, états périodiques, échéances des rapports…).
@@ -4390,7 +4404,7 @@ Renvoie un JSON valide :
   private async extractRequirementsList(
     templateText: string | null,
     dceContext: string,
-  ): Promise<Array<{ label: string; theme?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal' }>> {
+  ): Promise<Array<{ label: string; theme?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal'; context?: string }>> {
     const parse = (content: string | null) => {
       if (content === null) console.warn('[MemoireGenerator] extractRequirements DIAG : callOpenAI a renvoyé NULL (échec IA/rate-limit).');
       try {
@@ -4437,22 +4451,22 @@ Renvoie un JSON valide :
     // identique à l'appel d'origine. Les parties suivantes ne renvoient que les grandes exigences qui
     // ne relèvent d'aucun thème déjà relevé (vue d'ensemble conservée, sans doublon).
     const segments = splitOnPieceBoundaries(dceContext, 120_000);
-    const toutes: Array<{ label: string; theme?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal' }> = [];
+    const toutes: Array<{ label: string; theme?: string; kind?: 'champ' | 'case' | 'tableau'; criticite: 'bloquant' | 'facultatif' | 'normal'; context?: string }> = [];
     const cle = (l: string) => l.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
     const vues = new Set<string>();
     for (const [n, segment] of segments.entries()) {
       const dejaReleves = toutes.map((x) => `- ${x.label}`).join('\n');
       const content = await this.callOpenAI(
         [
-          { role: 'system', content: "Tu extrais la CHECK-LIST des GRANDES EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. ATTENTION: Reste UNIQUEMENT au niveau des grandes thématiques (ex: Dispositif humain global, Matériel et technologies, Astreinte, Politique RSE, Démarche qualité) et ne liste SURTOUT PAS les sous-détails précis (ne liste pas les modèles de radio, les types d'EPI, les plannings précis, etc.). Limite-toi à une quinzaine d'exigences globales maximum. Le but est d'avoir une vue d'ensemble, sois très général et concis. N'invente rien." },
+          { role: 'system', content: "Tu extrais la CHECK-LIST des GRANDES EXIGENCES d'un DCE (CCTP en priorité) pour un marché de sécurité privée. ATTENTION: Reste UNIQUEMENT au niveau des grandes thématiques (ex: Dispositif humain global, Matériel et technologies, Astreinte, Politique RSE, Démarche qualité) et ne liste SURTOUT PAS les sous-détails précis (ne liste pas les modèles de radio, les types d'EPI, les plannings précis, etc.). Limite-toi à une quinzaine d'exigences globales maximum.\nFORMULATION : chaque exigence DOIT être formulée sous forme de QUESTION claire et contextualisée. Exemples :\n- Au lieu de 'Dispositif palliatif d'absence' → 'Quel dispositif de remplacement est prévu en cas d'absence imprévue d'un agent ?'\n- Au lieu de 'Matériel de communication' → 'Quels équipements de communication (radio, PTI) sont fournis aux agents ?'\n- Au lieu de 'Politique RSE' → 'Quelle démarche RSE et environnementale le prestataire met-il en œuvre ?'\nLa question doit être concrète, inclure le contexte, et se comprendre SANS avoir lu le DCE. N'invente rien.\nSOURCE CCTP : pour chaque exigence, fournis dans `context` la RÉFÉRENCE PRÉCISE dans le CCTP ou le document du DCE d'où elle est tirée. Cite l'article, la section ou le paragraphe exact (ex. 'CCTP art. 4.2.1 — Dispositif humain', 'CCTP §5.3 Matériels', 'RC article 3.5'). Cela permet de retrouver l'information dans le document source." },
           {
             role: 'user',
             content: n === 0
-              ? `=== DCE ===\n${segment}\n\nRenvoie un JSON : {"items":[{"label":"...","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}`
+              ? `=== DCE ===\n${segment}\n\nRenvoie un JSON : {"items":[{"label":"La question contextualisée","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal","context":"Réf. CCTP exacte (ex: CCTP art. 5.3 — Titre de la section)"}]}`
               : `=== DCE (suite, partie ${n + 1}/${segments.length}) ===\n${segment}\n\n` +
                 `=== GRANDES EXIGENCES DÉJÀ RELEVÉES SUR LES PARTIES PRÉCÉDENTES DU DCE (ne les répète pas) ===\n${dejaReleves || '(aucune)'}\n\n` +
                 'Renvoie UNIQUEMENT les grandes exigences de cette partie qui ne relèvent d\'AUCUNE des exigences déjà relevées (liste vide si toutes sont déjà couvertes). ' +
-                'Renvoie un JSON : {"items":[{"label":"...","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}',
+                'Renvoie un JSON : {"items":[{"label":"La question contextualisée","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal","context":"Réf. CCTP exacte (ex: CCTP art. 5.3 — Titre de la section)"}]}',
           },
         ],
         0.2, segments.length > 1 ? `Extraction exigences CCTP (${n + 1}/${segments.length})` : 'Extraction exigences CCTP', true, 'analyse',
@@ -4497,7 +4511,7 @@ Renvoie un JSON valide :
       const payload = batch.map((x) => ({ index: x.i, exigence: x.label, passages_gss: x.ctx || '(aucun passage proche)' }));
       const content = await this.callOpenAI(
         [
-          { role: 'system', content: "Pour CHAQUE exigence, on te donne les passages de la Documentation GSS les PLUS PROCHES (recherche sémantique dans la base de connaissance). Décide si GSS COUVRE l'exigence (le moyen/l'information est réellement présent dans ces passages) ou si elle MANQUE (rien de pertinent → à demander en interne ou à rechercher). N'invente RIEN : si les passages ne le prouvent pas, c'est MANQUANT." },
+          { role: 'system', content: "Pour CHAQUE exigence (souvent formulée en question), on te donne les passages de la Documentation GSS les PLUS PROCHES. Décide si GSS COUVRE l'exigence (les passages abordent le sujet) ou si elle MANQUE.\nRÈGLE ABSOLUE : GSS est une entreprise de sécurité certifiée. Toutes les exigences portant sur les **qualifications standards, habilitations, cartes professionnelles (CNAPS), diplômes (SSIAP, CQP APS, SST), expérience, maintien à jour des compétences, recrutement, remplacements, et tenues/EPI** DOIVENT ÊTRE MARQUÉES COMME 'couvert' D'OFFICE. C'est le cœur de métier de GSS, même si les passages remontés ne le détaillent pas parfaitement. Ne marque 'manquant' que pour des demandes très spécifiques, techniques ou inhabituelles totalement absentes des passages." },
           { role: 'user', content: `Exigences + passages GSS (JSON) :\n${JSON.stringify(payload)}\n\nRenvoie un JSON : {"resultats":[{"index":<n>,"statut":"couvert|manquant"}]}` },
         ],
         0.1, 'Jugement couverture RAG', true,
@@ -4515,8 +4529,7 @@ Renvoie un JSON valide :
         const kindLabel = x.kind === 'case' ? 'Case à cocher' : x.kind === 'tableau' ? 'Tableau' : x.kind === 'champ' ? 'Champ' : null;
         exigences.push({ id: `ex-${x.i}`, theme: x.theme || '', exigence: x.label, couverture: manquant ? 'écart' : 'couvert', criticite: x.criticite, ...(x.kind ? { kind: x.kind } : {}) });
         if (manquant) {
-          const suffix = "(Absent de la base de connaissance GSS)";
-          const ctxText = x.reqContext ? `${x.reqContext} ${suffix}` : `${kindLabel ? kindLabel + ' du cadre. ' : ''}${suffix}`;
+          const ctxText = x.reqContext ? x.reqContext : (kindLabel ? `${kindLabel} du cadre.` : '');
           missing.push({
             id: `req-${x.i}`,
             label: x.label,
@@ -4685,23 +4698,11 @@ Renvoie un JSON valide :
   /**
    * Texte du CADRE IMPOSÉ (« Mémoire (cadre) ») uploadé avec le DCE, ou null si le dossier n'a pas
    * de cadre client. Sert à détecter les champs du formulaire non renseignables, sans lancer la
-   * génération. Matérialise le DCE depuis Storage (ou repli disque), extrait le texte, nettoie.
+   * génération. Matérialise le DCE depuis Storage (sans repli disque), extrait le texte, nettoie.
    */
   private async getClientTemplateText(dossierId: string): Promise<string | null> {
-    // Détection ALIGNÉE sur la génération (cf. generate(), plus bas) : on ne se fie PAS au champ
-    // `dce_files[].type === 'Mémoire (cadre)'` — il n'est jamais peuplé à l'upload, donc s'y fier
-    // rendait CE chemin toujours « sans cadre » (bug : les champs du template ne ressortaient jamais).
-    // On scanne DIRECTEMENT les pièces réellement uploadées du dossier via findDceTemplate (nom du
-    // fichier « …mémoire… .docx »), exactement comme le fait la génération.
-    const baseDir = path.resolve(__dirname, '../../');
-    const uploadedDceDir = path.resolve(baseDir, `../data/output/dce_${dossierId}`);
-    // Priorité au dossier disque s'il existe (moins coûteux) ; sinon on matérialise depuis Storage.
-    let searchDir = uploadedDceDir;
-    let tmpDir: string | null = null;
-    if (!fs.existsSync(uploadedDceDir)) {
-      tmpDir = await this.materializeDceFromStorage(dossierId);
-      if (tmpDir) searchDir = tmpDir;
-    }
+    const searchDir = await this.materializeDceFromStorage(dossierId);
+    let tmpDir: string | null = searchDir;
     try {
       const tpl = this.findDceTemplate(searchDir);
       if (!tpl) return null;
@@ -4839,7 +4840,6 @@ Renvoie un JSON valide :
   }> {
     const settings = getSettings();
     const baseDir = path.resolve(__dirname, '../../');
-    const uploadedDceDir = path.resolve(baseDir, `../data/output/dce_${dossierId}`);
     this.appelsEchoues = [];
     reinitialiserJournalIndicateurs();
     const dp = demandeParticuliere || {};
@@ -4860,14 +4860,10 @@ Renvoie un JSON valide :
     // jamais dans les corpus de référence (Cas-Univ-Rouen, corpusDce…), sinon chaque dossier
     // hériterait à tort du mémoire de référence comme « cadre client » → faux « cas template ».
     const dossier = await DB.getDossier(dossierId);
-    // Nouveaux dossiers : les pièces vivent dans Storage, pas dans uploadedDceDir. On matérialise
+    // Nouveaux dossiers : les pièces vivent dans Storage. On matérialise
     // pour y chercher un éventuel cadre imposé, puis on nettoie dès le template chargé en mémoire.
-    let templateSearchDir = uploadedDceDir;
-    let templateTmpDir: string | null = null;
-    if (!fs.existsSync(uploadedDceDir)) {
-      templateTmpDir = await this.materializeDceFromStorage(dossierId);
-      if (templateTmpDir) templateSearchDir = templateTmpDir;
-    }
+    let templateTmpDir: string | null = await this.materializeDceFromStorage(dossierId);
+    let templateSearchDir = templateTmpDir;
     if (dossier && dossier.dce_files) {
       const templateFile = dossier.dce_files.find((f: any) => f.type === 'Mémoire (cadre)');
       if (templateFile && templateFile.nom) {

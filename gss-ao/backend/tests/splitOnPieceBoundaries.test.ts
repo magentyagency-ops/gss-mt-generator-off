@@ -72,7 +72,8 @@ describe('extractRequirementsList (sans cadre) : DCE lu en entier', () => {
     const { gen, appels } = simuler([json(['Dispositif humain global', 'Astreinte'])]);
     const items = await gen.extractRequirementsList(null, dce);
     expect(appels).toHaveLength(1);
-    expect(appels[0][1].content).toBe(`=== DCE ===\n${dce}\n\nRenvoie un JSON : {"items":[{"label":"...","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal"}]}`);
+    // Consigne de la production (9de164c, b3a5360) : exigences formulées en questions, avec leur source exacte dans le CCTP.
+    expect(appels[0][1].content).toBe(`=== DCE ===\n${dce}\n\nRenvoie un JSON : {"items":[{"label":"La question contextualisée","theme":"I|II|III|IV","criticite":"bloquant|facultatif|normal","context":"Réf. CCTP exacte (ex: CCTP art. 5.3 — Titre de la section)"}]}`);
     expect(items.map((x: any) => x.label)).toEqual(['Dispositif humain global', 'Astreinte']);
   });
 
