@@ -12,10 +12,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Send, Plus, Trash2, ArrowLeft, Mail, CheckCircle2, XCircle, Download } from "lucide-react";
+import { Send, Plus, Trash2, ArrowLeft, Mail, CheckCircle2, XCircle, Download, Users, ListChecks, LockKeyhole, ClipboardCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { type Dossier, parseDestinataires } from "@/lib/sollicitations";
+import { Jauge } from "@/components/visuel/jauge";
+import { SqueletteCartes } from "@/components/visuel/squelette";
 
 // Une ligne de question saisie dans le formulaire (avant envoi).
 interface QuestionLine {
@@ -201,13 +203,13 @@ export default function NouvelleSollicitationPage() {
   }
 
   // ── Rendu ────────────────────────────────────────────────────────────────────
-  if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p></Shell>;
+  if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p><SqueletteCartes nombre={2} className="mt-4" /></Shell>;
 
   if (!userEmail) {
     return (
       <Shell>
-        <Card>
-          <CardHeader><CardTitle>Connexion requise</CardTitle></CardHeader>
+        <Card className="animate-monter">
+          <CardHeader><CardTitle className="flex items-center gap-2"><LockKeyhole aria-hidden="true" className="h-[18px] w-[18px] text-primary" />Connexion requise</CardTitle></CardHeader>
           <CardContent className="text-sm text-muted-foreground">
             Connectez-vous pour rédiger une sollicitation.
           </CardContent>
@@ -218,14 +220,14 @@ export default function NouvelleSollicitationPage() {
 
   return (
     <Shell>
-      {err && <div className="mb-3 rounded-md border border-destructive bg-destructive/10 p-3 text-sm">{err}</div>}
+      {err && <div className="mb-3 animate-monter rounded-xl border border-destructive/30 bg-destructive-soft p-3 text-sm text-destructive">{err}</div>}
 
       {/* Dossier + destinataire */}
-      <Card className="mb-4">
-        <CardHeader><CardTitle className="text-base">Destinataire & dossier</CardTitle></CardHeader>
+      <Card className="mb-5 animate-monter">
+        <CardHeader><CardTitle className="flex items-center gap-2 text-[15px]"><Users aria-hidden="true" className="h-[18px] w-[18px] text-primary" />Destinataire & dossier</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs text-muted-foreground">Dossier (appel d'offres) *</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-muted-foreground">Dossier (appel d'offres) *</label>
             {dossiers.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Aucun dossier. Créez-en un depuis la page <Link href="/sollicitations" className="underline">Sollicitations</Link>.
@@ -237,11 +239,11 @@ export default function NouvelleSollicitationPage() {
             )}
           </div>
           <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Destinataires — emails *</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-muted-foreground">Destinataires — emails *</label>
             <input className="input" placeholder="prenom.nom@exemple.fr, autre@exemple.fr" value={destinataireEmail} onChange={(e) => setDestinataireEmail(e.target.value)} />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Destinataire — nom</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-muted-foreground">Destinataire — nom</label>
             <input className="input" placeholder="(optionnel)" value={destinataireNom} onChange={(e) => setDestinataireNom(e.target.value)} />
           </div>
           {destinataires.length > 0 && (
@@ -250,13 +252,13 @@ export default function NouvelleSollicitationPage() {
                 {destinataires.map((d) => (
                   <span
                     key={d}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-input bg-background px-2.5 py-1 text-xs"
+                    className="inline-flex animate-zoom-doux items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-primary"
                   >
                     {d}
                     <button
                       type="button"
                       aria-label={`Retirer ${d}`}
-                      className="leading-none text-muted-foreground transition-colors hover:text-destructive"
+                      className="grid h-4 w-4 place-items-center rounded-full leading-none text-muted-foreground transition-colors hover:bg-destructive-soft hover:text-destructive"
                       onClick={() => retirerDestinataire(d)}
                     >
                       ✕
@@ -275,10 +277,10 @@ export default function NouvelleSollicitationPage() {
       </Card>
 
       {/* Questions (liste dynamique) */}
-      <Card className="mb-4">
-        <CardHeader className="flex-row items-center justify-between gap-2">
-          <CardTitle className="text-base">Questions ({lines.length})</CardTitle>
-          <div className="flex items-center gap-2">
+      <Card className="mb-5 animate-monter" style={{ animationDelay: "60ms" }}>
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+          <CardTitle className="flex items-center gap-2 text-[15px]"><ListChecks aria-hidden="true" className="h-[18px] w-[18px] text-primary" />Questions ({lines.length})</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -292,12 +294,12 @@ export default function NouvelleSollicitationPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {missingNotice && (
-            <p className="rounded-md border border-input bg-muted/40 p-2 text-xs text-muted-foreground">{missingNotice}</p>
+            <p className="animate-monter rounded-xl border border-info/20 bg-info-soft px-3 py-2.5 text-xs text-info">{missingNotice}</p>
           )}
           {lines.map((l, i) => (
-            <div key={i} className="rounded-md border border-input p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold text-muted-foreground">Question {i + 1}</span>
+            <div key={i} className="animate-monter rounded-xl border border-border bg-[#FAFBFC] p-3.5 shadow-[inset_3px_0_0_hsl(var(--primary))]">
+              <div className="mb-2.5 flex items-center justify-between">
+                <span className="petites-capitales">Question {i + 1}</span>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -330,11 +332,17 @@ export default function NouvelleSollicitationPage() {
 
       {/* Résultats par ligne */}
       {results && (
-        <Card className="mb-4">
-          <CardHeader><CardTitle className="text-base">Résultat de l'envoi</CardTitle></CardHeader>
+        <Card className="mb-5 animate-monter">
+          <CardHeader><CardTitle className="flex items-center gap-2 text-[15px]"><ClipboardCheck aria-hidden="true" className="h-[18px] w-[18px] text-primary" />Résultat de l'envoi</CardTitle></CardHeader>
           <CardContent className="space-y-2">
+            <Jauge
+              valeur={(results.length / Math.max(1, nbEnvois)) * 100}
+              ton={results.some((r) => !r.ok) ? "attente" : "succes"}
+              actif={sending}
+              className="mb-3"
+            />
             {results.map((r) => (
-              <div key={`${r.index}-${r.destinataire}`} className="flex items-start gap-2 text-sm">
+              <div key={`${r.index}-${r.destinataire}`} className="flex animate-monter items-start gap-2 rounded-lg px-1 py-1 text-sm">
                 {r.ok
                   ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
                   : <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />}
@@ -353,8 +361,8 @@ export default function NouvelleSollicitationPage() {
         </Card>
       )}
 
-      <div className="flex items-center gap-2">
-        <Button disabled={!canSend} onClick={handleSend}>
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-4 py-3 shadow-o1">
+        <Button disabled={!canSend} onClick={handleSend} className="h-10 px-5">
           <Send />{" "}
           {sending
             ? "Envoi en cours…"
@@ -372,8 +380,11 @@ export default function NouvelleSollicitationPage() {
       </div>
 
       <style jsx>{`
-        .input { width: 100%; border-radius: 0.375rem; border: 1px solid hsl(var(--input));
-          background: hsl(var(--background)); padding: 0.5rem 0.75rem; font-size: 0.875rem; }
+        .input { width: 100%; min-height: 40px; border-radius: 9px; border: 1px solid hsl(var(--input));
+          background: hsl(var(--card)); padding: 0.5rem 0.8rem; font-size: 0.875rem;
+          box-shadow: 0 1px 2px rgba(16,32,58,.06), 0 1px 1px rgba(16,32,58,.04);
+          transition: border-color .15s cubic-bezier(.2,.7,.2,1), box-shadow .15s cubic-bezier(.2,.7,.2,1); }
+        .input:hover { border-color: #B9C5D4; }
       `}</style>
     </Shell>
   );
@@ -381,14 +392,17 @@ export default function NouvelleSollicitationPage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto max-w-3xl p-6">
-      <Link href="/inbox" className="mb-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-3.5" /> Retour à la boîte de réception
+    <div className="mx-auto max-w-[960px] px-4 pb-10 pt-6 md:px-9 md:pt-[30px]">
+      <Link href="/inbox" className="group mb-3 inline-flex items-center gap-1.5 rounded-md text-[12.5px] text-subtle-foreground hover:text-foreground">
+        <ArrowLeft className="size-3.5 transition-transform group-hover:-translate-x-0.5" /> Retour à la boîte de réception
       </Link>
-      <h1 className="mb-1 flex items-center gap-2 text-xl font-bold">
-        <Mail className="size-5" /> Rédiger une sollicitation
+      <h1 className="mb-1 flex animate-monter items-center gap-3 font-display text-[26px] font-bold leading-[1.1] text-foreground md:text-[28px]">
+        <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-o1">
+          <Mail className="size-5" />
+        </span>
+        Rédiger une sollicitation
       </h1>
-      <p className="mb-6 text-sm text-muted-foreground">
+      <p className="mb-6 animate-monter text-sm text-muted-foreground md:pl-[52px]">
         Une ou plusieurs questions à un même destinataire. Chaque question crée une ligne de suivi indépendante et part par e-mail.
       </p>
       {children}
