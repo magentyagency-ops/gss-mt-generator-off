@@ -87,11 +87,13 @@ export function AuthCard({ initialMode = "login" }: { initialMode?: Mode }) {
         />
         {/* Logo + titre */}
         <div className="relative z-[1] flex animate-apparaitre items-center gap-3.5">
-          <img
-            src="/gssAO.png"
-            alt="GSS-AO"
-            className="h-11 w-11 rounded-xl bg-white object-contain p-1 shadow-o2 lg:h-[54px] lg:w-[54px] lg:rounded-[14px]"
-          />
+          <span className="block h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-white shadow-o2 lg:h-[54px] lg:w-[54px] lg:rounded-[14px]">
+            <img
+              src="/gssAO.png"
+              alt="GSS-AO"
+              className="h-full w-full origin-[50%_37.5%] scale-[1.9] object-contain"
+            />
+          </span>
           <div>
             <h1 className="text-[18px] font-bold leading-tight text-white lg:text-[20px]">GSS-AO</h1>
             <p className="text-[13px] text-[#AFC0D6]">Appels d&apos;offres</p>

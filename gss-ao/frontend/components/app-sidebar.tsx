@@ -52,11 +52,13 @@ export function AppSidebar() {
   return (
     <aside className="relative z-20 flex h-screen w-16 shrink-0 flex-col bg-sidebar px-2 py-5 text-sidebar-foreground md:w-[248px] md:px-3.5">
       <div className="mb-3 flex items-center justify-center gap-3 border-b border-white/[0.08] px-0 pb-5 pt-1 md:justify-start md:px-2.5">
-        <img
-          src="/gssAO.png"
-          alt="GSS-AO"
-          className="h-[38px] w-[38px] shrink-0 rounded-[10px] bg-white object-contain p-1 shadow-[0_2px_8px_rgba(0,0,0,0.2)]"
-        />
+        <span className="block h-[38px] w-[38px] shrink-0 overflow-hidden rounded-[10px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.2)]">
+          <img
+            src="/gssAO.png"
+            alt="GSS-AO"
+            className="h-full w-full origin-[50%_37.5%] scale-[1.9] object-contain"
+          />
+        </span>
         <div className="sr-only leading-tight md:not-sr-only">
           <div className="font-display text-[17px] font-bold tracking-[0.02em] text-white">GSS-AO</div>
           <div className="text-xs text-sidebar-muted">Appels d'offres</div>
