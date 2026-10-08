@@ -39,6 +39,11 @@ import { createClient } from "@/lib/supabase/client";
 import { QuestionCard } from "@/components/question-card";
 import { type QuestionInterne } from "@/lib/sollicitations";
 import { useDossier } from "./context";
+import { BandeauDossier, ChipBandeau } from "@/components/visuel/bandeau-dossier";
+import { EntreeEtape } from "@/components/visuel/entree-etape";
+import { Jauge } from "@/components/visuel/jauge";
+import { PointActif } from "@/components/visuel/pastille-statut";
+import { Squelette, SqueletteCartes } from "@/components/visuel/squelette";
 
 function StatPill({
   icon: Icon,
@@ -52,18 +57,18 @@ function StatPill({
   accent?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-white/20 bg-white/5 px-4 py-3">
+    <div className="chip-bandeau flex items-center gap-2.5">
       <div
         className={cn(
-          "flex h-9 w-9 items-center justify-center rounded-md",
-          accent ? "bg-destructive/20 text-destructive-foreground" : "bg-white/10 text-white",
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+          accent ? "bg-signal/25 text-white" : "bg-white/10 text-white",
         )}
       >
-        <Icon className="h-5 w-5" />
+        <Icon className="h-4 w-4" />
       </div>
       <div className="leading-tight">
-        <div className="text-[11px] uppercase tracking-wide text-white/70">{label}</div>
-        <div className="text-sm font-semibold text-white">{value}</div>
+        <div className="text-[12px] text-[#B9C8DC]">{label}</div>
+        <div className="mt-px text-sm font-semibold text-white">{value}</div>
       </div>
     </div>
   );
@@ -86,22 +91,22 @@ function InfoCle({
   urgent?: boolean;
 }) {
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex items-start gap-3 rounded-[10px] py-1.5 transition-colors">
       <div
         className={cn(
-          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
-          urgent ? "bg-destructive/10 text-destructive" : "bg-accent text-primary",
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]",
+          urgent ? "bg-destructive-soft text-destructive" : "bg-secondary text-primary",
         )}
       >
-        <Icon className="h-4 w-4" />
+        <Icon className="h-[17px] w-[17px]" />
       </div>
       <div className="min-w-0">
-        <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
-        <div className={cn("text-sm font-medium", value ? "text-foreground" : "text-muted-foreground")}>
+        <div className="petites-capitales text-[11px]">{label}</div>
+        <div className={cn("mt-0.5 text-sm font-semibold leading-snug", value ? "text-foreground" : "font-normal italic text-muted-foreground")}>
           {value || "Non précisé"}
         </div>
         {precision && (
-          <p className={cn("mt-0.5 text-xs", urgent ? "text-destructive" : "text-muted-foreground")}>
+          <p className={cn("mt-0.5 text-[12.5px]", urgent ? "font-semibold text-destructive" : "text-muted-foreground")}>
             {precision}
           </p>
         )}
@@ -245,7 +250,22 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
   }
 
   if (!dossierInfo) {
-    return <div className="p-8 text-center">Chargement du dossier...</div>;
+    return (
+      <div className="flex h-full flex-col">
+        <div aria-hidden="true" className="bandeau-dossier space-y-3 px-4 pb-6 pt-7 md:px-9">
+          <div className="h-3 w-56 rounded bg-white/15" />
+          <div className="h-7 w-3/5 rounded bg-white/20" />
+          <div className="h-4 w-48 rounded bg-white/15" />
+        </div>
+        <div className="space-y-4 p-4 md:px-9 md:py-6">
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            <PointActif className="mr-2 align-middle" />
+            Chargement du dossier...
+          </div>
+          <SqueletteCartes nombre={3} />
+        </div>
+      </div>
+    );
   }
 
   const jours = joursRestants(dossierInfo.dateLimite);
@@ -288,21 +308,23 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
 
   return (
     <div className="flex h-full flex-col">
-      {/* En-tête identité */}
-      <header className="border-b border-border bg-card px-6 py-4">
-        <div className="mb-3 flex items-start justify-between gap-4">
-          <div>
-            <div className="mb-1 flex items-center gap-2">
-              <Badge variant="default">{dossierInfo.statut}</Badge>
-              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                {dossierInfo.reference} · CCAG {dossierInfo.ccag} · CPV {dossierInfo.cpv}
-              </span>
-            </div>
-            {isEditingObjet ? (
+      {/* En-tête identité : bandeau marine (repères déjà présents sur la page, en pastilles). */}
+      <BandeauDossier
+        className="animate-apparaitre"
+        meta={
+          <>
+            <Badge variant="default" className="border-white/20 bg-white/15 text-white">{dossierInfo.statut}</Badge>
+            <span className="text-[12.5px] font-medium uppercase tracking-wide text-muted-foreground">
+              {dossierInfo.reference} · CCAG {dossierInfo.ccag} · CPV {dossierInfo.cpv}
+            </span>
+          </>
+        }
+        titre={
+          isEditingObjet ? (
               <div className="flex items-center gap-2 mb-1">
                 <input
                   type="text"
-                  className="text-xl font-semibold bg-background border border-input rounded px-2 py-1 flex-1 min-w-[300px] text-foreground"
+                  className="font-display text-[22px] font-bold bg-background border border-input rounded-[9px] px-3 py-1.5 flex-1 min-w-0 md:min-w-[300px] text-foreground"
                   value={objetValue}
                   onChange={(e) => setObjetValue(e.target.value)}
                   onKeyDown={async (e) => {
@@ -328,47 +350,62 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
               </div>
             ) : (
               <h1 
-                className="text-xl font-semibold cursor-pointer hover:bg-white/10 rounded px-1 -ml-1 transition-colors group flex items-center gap-2"
+                className="font-display text-[24px] font-bold leading-[1.15] md:text-[28px] cursor-pointer hover:bg-white/10 rounded-lg px-1.5 -ml-1.5 transition-colors group flex items-center gap-2"
                 onClick={() => { setIsEditingObjet(true); setObjetValue(dossierInfo.objet); }}
                 title="Cliquez pour renommer le dossier"
               >
                 {dossierInfo.objet}
-                <svg className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-4 h-4 shrink-0 opacity-0 group-hover:opacity-70 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
               </h1>
-            )}
+            )
+        }
+        sousTitre={
             <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <Building2 className="h-4 w-4" /> {dossierInfo.acheteur}
             </p>
+        }
+        reperes={
+          <div className="apparait flex flex-wrap gap-2.5">
+            {/* Repères repris des informations clés déjà affichées plus bas (aucune donnée nouvelle). */}
+            <ChipBandeau
+              className="hidden sm:block"
+              libelle="Remise des offres"
+              valeur={`${formatDate(dossierInfo.dateLimite) || "Non précisé"}${dossierInfo.dateLimite && jours >= 0 ? ` · J−${jours}` : ""}`}
+              urgent={!!dossierInfo.dateLimite && jours <= 14}
+            />
+            <ChipBandeau className="hidden sm:block" libelle="Visite des lieux" valeur={visiteValeur || "Non précisé"} />
+            <div className="grid grid-cols-1 gap-3">
+              <StatPill icon={FileText} label="Procédure" value={dossierInfo.procedure} />
+            </div>
           </div>
+        }
+        actions={
           <Link href={`/dossiers/${id}/conformite`}>
             <Button>
               Étape suivante <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
-        </div>
-        <div className="grid grid-cols-1 gap-3 w-64 ml-auto">
-          <StatPill icon={FileText} label="Procédure" value={dossierInfo.procedure} />
-        </div>
-      </header>
+        }
+      />
 
       <DossierNav id={id} />
 
       {/* Corps */}
-      <div className="grid flex-1 grid-cols-1 gap-6 overflow-y-auto p-6">
-        <div className="space-y-6">
+      <EntreeEtape className="grid flex-1 grid-cols-1 gap-6 overflow-y-auto px-4 py-5 md:px-9 md:py-6">
+        <div className="apparait mx-auto grid w-full max-w-[1180px] content-start gap-5">
           {/* Informations clés (point 6 des retours GSS) : les repères que l'équipe cherche en
               premier — échéance, visite, lieu — sans rouvrir les pièces du DCE. La visite provient
               du RC via `visite` ; les champs à plat (dateVisite / lieuVisite) servent de repli. */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <CalendarClock className="h-5 w-5 text-primary" /> Informations clés
+          <Card className="vive">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-[9px] text-[15px]">
+                <CalendarClock className="h-[18px] w-[18px] text-primary" /> Informations clés
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+              <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
                 <InfoCle
                   icon={Clock}
                   label="Remise des offres"
@@ -399,57 +436,62 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
             </CardContent>
           </Card>
 
+          {/* Synthèse IA et risques côte à côte sur grand écran (même ordre de lecture). */}
+          <div className="grid gap-5 xl:grid-cols-[1.05fr_1fr]">
           {/* Résumé Exécutif IA */}
-          <Card className="border-primary/20 bg-primary/5 shadow-sm">
+          <Card className="vive bg-gradient-to-b from-[#F6F9FD] to-card to-60%">
             <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-              <CardTitle className="flex items-center gap-2 text-base text-primary">
-                <Sparkles className="h-5 w-5" /> 
+              <CardTitle className="flex items-center gap-[9px] text-[15px] text-foreground">
+                <Sparkles className="h-[18px] w-[18px] text-signal" /> 
                 Synthèse du projet (Générée par l'IA)
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-sm leading-relaxed text-foreground/90 space-y-4">
+              <div className="apparait grid gap-3.5 text-sm leading-relaxed text-foreground/90">
                 {dossierInfo.synthese_projet && dossierInfo.synthese_projet.length > 0 ? (
                   dossierInfo.synthese_projet.map((item: any, i: number) => (
-                    <div key={i}>
-                      <strong className="text-primary">{i + 1}. {item.titre}</strong>
-                      <p className="mt-1">{item.description}</p>
+                    <div key={i} className="grid grid-cols-[30px_1fr] gap-2.5">
+                      <span aria-hidden="true" className="grid h-[26px] w-[26px] place-items-center rounded-lg bg-primary font-mono text-[12px] font-semibold text-primary-foreground">{i + 1}</span>
+                      <div className="min-w-0">
+                      <strong className="block font-semibold text-foreground"><span className="sr-only">{i + 1}. </span>{item.titre}</strong>
+                      <p className="mt-0.5 text-muted-foreground">{item.description}</p>
+                      </div>
                     </div>
                   ))
                 ) : (
-                  <p className="text-muted-foreground italic">En attente de l'analyse du CCTP par l'IA...</p>
+                  <p className="flex items-center gap-2 text-muted-foreground italic"><PointActif />En attente de l'analyse du CCTP par l'IA...</p>
                 )}
               </div>
             </CardContent>
           </Card>
 
           {/* Analyse des risques IA */}
-          <Card className="border-destructive/30 bg-destructive/5 shadow-sm">
+          <Card className="vive">
             <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-              <CardTitle className="flex items-center gap-2 text-base text-destructive">
-                <AlertTriangle className="h-5 w-5" /> 
+              <CardTitle className="flex items-center gap-[9px] text-[15px] text-foreground">
+                <AlertTriangle className="h-[18px] w-[18px] text-destructive" /> 
                 Analyse des risques & Points d'attention
               </CardTitle>
-              <Badge variant="destructive" className="bg-destructive/10 text-destructive hover:bg-destructive/20 border-destructive/20">
+              <Badge variant="destructive" className="shrink-0 bg-destructive-soft text-destructive border-transparent">
                 Aide au Go / No-Go
               </Badge>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="apparait grid gap-2.5 sm:grid-cols-2 xl:grid-cols-1">
                 {dossierInfo.analyse_risques && dossierInfo.analyse_risques.length > 0 ? (
                   dossierInfo.analyse_risques.map((risque: any, i: number) => {
                     const type = risque.type || "warning";
                     const isDestructive = type === "destructive";
                     const isPrimary = type === "primary";
                     return (
-                      <div key={i} className={cn("rounded-lg border bg-background/50 px-4 py-3", 
-                        isDestructive ? "border-destructive/20" : isPrimary ? "border-border" : "border-warning/30")}>
-                        <div className={cn("mb-1 flex items-center gap-2 font-semibold", 
-                          isDestructive ? "text-destructive" : isPrimary ? "text-primary" : "text-warning")}>
+                      <div key={i} className={cn("rounded-[9px] border border-l-4 px-3.5 py-3 transition-transform duration-200 ease-doux motion-safe:hover:translate-x-0.5", 
+                        isDestructive ? "border-border border-l-destructive bg-[#FFFCFC]" : isPrimary ? "border-border border-l-primary bg-[#FAFCFE]" : "border-border border-l-[#E08A1E] bg-[#FFFDF8]")}>
+                        <div className={cn("mb-0.5 flex items-center gap-2 text-sm font-semibold text-foreground [&>svg]:h-[15px] [&>svg]:w-[15px] [&>svg]:shrink-0", 
+                          isDestructive ? "[&>svg]:text-destructive" : isPrimary ? "[&>svg]:text-primary" : "[&>svg]:text-[#E08A1E]")}>
                           {isDestructive ? <Scale className="h-4 w-4" /> : isPrimary ? <Banknote className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />}
                           {risque.titre}
                         </div>
-                        <p className="text-sm text-muted-foreground">{risque.detail}</p>
+                        <p className="text-[13px] leading-relaxed text-muted-foreground">{risque.detail}</p>
                       </div>
                     );
                   })
@@ -462,22 +504,24 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
             </CardContent>
           </Card>
 
+          </div>
+
           {/* Contradictions / ambiguïtés relevées dans le DCE */}
           {contradictions.length > 0 && (
-            <Card className="shadow-sm border-destructive/40">
+            <Card className="vive border-[#F2C3C8]">
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base text-destructive">
-                  <AlertTriangle className="h-5 w-5" /> Contradictions / ambiguïtés du DCE
-                  <span className="text-sm font-normal text-muted-foreground">({contradictions.length})</span>
+                <CardTitle className="flex items-center gap-[9px] text-[15px] text-foreground">
+                  <AlertTriangle className="h-[18px] w-[18px] text-destructive" /> Contradictions / ambiguïtés du DCE
+                  <span className="rounded-full bg-destructive-soft px-2 py-px font-mono text-[12px] font-semibold text-destructive">({contradictions.length})</span>
                 </CardTitle>
-                <p className="text-xs text-muted-foreground">Incohérences relevées dans le dossier — à lever avant de répondre.</p>
+                <p className="text-[13px] text-muted-foreground">Incohérences relevées dans le dossier — à lever avant de répondre.</p>
               </CardHeader>
               <CardContent className="space-y-2">
-                <ul className="space-y-1.5">
+                <ul className="apparait grid gap-2">
                   {contradictions.map((c, i) => (
-                    <li key={i} className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-sm">
-                      <div className="font-medium">{c.sujet}</div>
-                      {c.detail && <div className="mt-0.5 text-xs text-muted-foreground">{c.detail}</div>}
+                    <li key={i} className="rounded-[9px] border border-border border-l-4 border-l-destructive bg-[#FFFAFA] px-3.5 py-2.5 text-sm">
+                      <div className="font-semibold">{c.sujet}</div>
+                      {c.detail && <div className="mt-0.5 text-[13px] text-muted-foreground">{c.detail}</div>}
                     </li>
                   ))}
                 </ul>
@@ -486,45 +530,53 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
           )}
 
           {/* Infos manquantes détectées après l'analyse du DCE (avant génération), pour les deux cas. */}
-          <Card className="shadow-sm">
+          <Card className="vive">
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <AlertTriangle className="h-5 w-5" /> Informations manquantes
+              <CardTitle className="flex flex-wrap items-center gap-[9px] text-[15px]">
+                <AlertTriangle className="h-[18px] w-[18px] text-[#E08A1E]" /> Informations manquantes
                 {missingFields && (
-                  <span className="text-sm font-normal text-muted-foreground">({missingFields.length})</span>
+                  <span className="rounded-full bg-secondary px-2 py-px font-mono text-[12px] font-semibold text-muted-foreground">({missingFields.length})</span>
                 )}
-                <div className="ml-auto flex items-center gap-2">
+                <div className="ml-auto flex items-center gap-2.5">
                   {typeof completude === "number" && (
-                    <Badge variant={completude >= 80 ? "default" : completude >= 50 ? "secondary" : "outline"}>
+                    <>
+                    {/* Jauge de complétude : reprend le pourcentage déjà affiché dans la pastille. */}
+                    <Jauge valeur={completude} ton="succes" epaisseur={6} className="hidden w-28 sm:block" />
+                    <Badge variant={completude >= 80 ? "default" : completude >= 50 ? "secondary" : "outline"} className="font-mono tabular-nums">
                       Complétude {completude}%
                     </Badge>
+                    </>
                   )}
                 </div>
               </CardTitle>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[13px] text-muted-foreground">
                 Exigences du DCE non couvertes par la documentation GSS — à obtenir avant la génération.
               </p>
             </CardHeader>
             <CardContent className="space-y-2">
               {detectingMissing ? (
-                <p className="text-sm text-muted-foreground">Analyse des exigences du DCE en cours…</p>
+                <div className="space-y-3">
+                  <p className="flex items-center gap-2 text-sm text-muted-foreground"><PointActif />Analyse des exigences du DCE en cours…</p>
+                  <Squelette className="h-12 w-full rounded-[9px]" />
+                  <Squelette className="h-12 w-full rounded-[9px]" />
+                </div>
               ) : !missingFields ? (
                 <p className="text-sm text-muted-foreground">En attente de l'analyse du DCE.</p>
               ) : missingFields.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Aucune information manquante détectée.</p>
               ) : (
-                <ul className="space-y-1.5">
+                <ul className="apparait grid gap-2">
                   {missingFields.map((m) => (
                     <li
                       key={m.id}
                       className={cn(
-                        "rounded-md border p-2 text-sm",
-                        m.criticite === "bloquant" ? "border-destructive/40 bg-destructive/5" : "border-border",
+                        "rounded-[9px] border px-3.5 py-2.5 text-sm transition-colors duration-150 hover:border-[#C9D3DF]",
+                        m.criticite === "bloquant" ? "border-[#F2C3C8] border-l-4 border-l-destructive bg-[#FFF9F9]" : "border-border bg-card",
                       )}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="font-medium">{m.label}</div>
-                        <div className="flex shrink-0 items-center gap-1.5">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0 font-semibold">{m.label}</div>
+                        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                           {m.criticite === "bloquant" && <Badge variant="destructive">Bloquant</Badge>}
                           {m.criticite === "facultatif" && <Badge variant="outline">Facultatif</Badge>}
                           {m.demande === "web" ? (
@@ -538,7 +590,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
                           )}
                         </div>
                       </div>
-                      {m.context && <div className="mt-0.5 text-xs text-muted-foreground">{m.context}</div>}
+                      {m.context && <div className="mt-0.5 text-[12.5px] text-muted-foreground">{m.context}</div>}
                     </li>
                   ))}
                 </ul>
@@ -550,12 +602,12 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
 
           {/* Sollicitations du dossier (mails internes en attente / répondus) */}
           {!sollicitationsError && (
-            <Card className="shadow-sm">
+            <Card className="vive">
               <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Mail className="h-5 w-5" /> Sollicitations
+                <CardTitle className="flex flex-wrap items-center gap-[9px] text-[15px]">
+                  <Mail className="h-[18px] w-[18px] text-primary" /> Sollicitations
                   {sollicitationsLoaded && (
-                    <span className="text-sm font-normal text-muted-foreground">
+                    <span className="text-[13px] font-normal text-muted-foreground">
                       ({sollicitations.length} sollicitation{sollicitations.length > 1 ? "s" : ""})
                     </span>
                   )}
@@ -588,20 +640,24 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
                     </Button>
                   )}
                 </CardTitle>
-                {relanceMsg && <p className="text-xs text-muted-foreground">{relanceMsg}</p>}
+                {relanceMsg && <p className="animate-monter rounded-lg bg-info-soft px-3 py-1.5 text-[12.5px] font-medium text-info">{relanceMsg}</p>}
                 {sollicitationsLoaded && sollicitations.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className={cn("inline-flex w-fit items-center gap-2 rounded-full px-2.5 py-0.5 text-[12.5px] font-semibold", enAttente > 0 ? "bg-warning-soft text-warning" : "bg-success-soft text-success")}>
+                    <span aria-hidden="true" className="h-[7px] w-[7px] rounded-full bg-current" />
                     {enAttente > 0
                       ? `${enAttente} en attente de réponse${enAttente > 1 ? "s" : ""}`
                       : "Aucune en attente de réponse"}
                   </p>
                 )}
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="apparait space-y-3">
                 {!sollicitationsLoaded ? (
-                  <p className="text-sm text-muted-foreground">Chargement des sollicitations…</p>
+                  <div className="space-y-3">
+                    <p className="flex items-center gap-2 text-sm text-muted-foreground"><PointActif />Chargement des sollicitations…</p>
+                    <Squelette className="h-24 w-full rounded-xl" />
+                  </div>
                 ) : sollicitations.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Aucune sollicitation pour ce dossier.</p>
+                  <p className="flex items-center gap-2 rounded-xl border border-dashed border-[#B9C5D4] px-4 py-6 text-sm text-muted-foreground"><Mail className="h-4 w-4 text-primary" />Aucune sollicitation pour ce dossier.</p>
                 ) : (
                   sollicitations.map((q) => (
                     <QuestionCard key={q.id} q={q} />
@@ -611,7 +667,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
             </Card>
           )}
         </div>
-      </div>
+      </EntreeEtape>
     </div>
   );
 }
