@@ -10,7 +10,7 @@
 // de l'AO = responsable §11.8, la RLS réserve la mise à jour au propriétaire/admin).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Send, RefreshCw, Mail, Inbox, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
+import { Send, RefreshCw, Mail, Inbox, Sparkles, ChevronDown, ChevronUp, FolderOpen, LockKeyhole, UserRound, MessageSquareText } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -22,6 +22,8 @@ import {
   type QuestionInterne, type Dossier,
 } from "@/lib/sollicitations";
 import { apiFetch } from "@/lib/api";
+import { EtatVide } from "@/components/visuel/etat-vide";
+import { SqueletteCartes } from "@/components/visuel/squelette";
 
 export default function SollicitationsPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -157,13 +159,13 @@ export default function SollicitationsPage() {
   }
 
   // ── Rendu ────────────────────────────────────────────────────────────────────
-  if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p></Shell>;
+  if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p><SqueletteCartes nombre={2} className="mt-4" /></Shell>;
 
   if (!userEmail) {
     return (
       <Shell>
-        <Card>
-          <CardHeader><CardTitle>Connexion requise</CardTitle></CardHeader>
+        <Card className="animate-monter">
+          <CardHeader><CardTitle className="flex items-center gap-2"><LockKeyhole aria-hidden="true" className="h-[18px] w-[18px] text-primary" />Connexion requise</CardTitle></CardHeader>
           <CardContent className="text-sm text-muted-foreground">
             Connectez-vous pour accéder aux sollicitations.
           </CardContent>
@@ -174,14 +176,17 @@ export default function SollicitationsPage() {
 
   return (
     <Shell>
-      <div className="mb-4 text-sm text-muted-foreground">
-        Connecté : <span className="font-medium text-foreground">{userEmail}</span>
+      <div className="mb-5 flex animate-monter items-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-o1">
+        <span aria-hidden="true" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-secondary text-primary">
+          <UserRound className="h-4 w-4" />
+        </span>
+        <span className="min-w-0 truncate">Connecté : <span className="font-medium text-foreground">{userEmail}</span></span>
       </div>
 
       {/* Sélecteur de dossier (AO) */}
-      <Card className="mb-4">
-        <CardHeader className="flex-row items-center justify-between gap-2">
-          <CardTitle className="text-base">Dossier (appel d'offres)</CardTitle>
+      <Card className="mb-5 animate-monter">
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
+          <CardTitle className="flex items-center gap-2 text-[15px]"><FolderOpen aria-hidden="true" className="h-[18px] w-[18px] text-primary" />Dossier (appel d'offres)</CardTitle>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={loadQuestions}><RefreshCw /> Rafraîchir</Button>
             {/* Accès à l'historique complet, filtré sur le dossier courant. */}
@@ -192,10 +197,10 @@ export default function SollicitationsPage() {
         </CardHeader>
         <CardContent>
           {dossiers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Aucun dossier. Créez-en un depuis l'onglet Dossiers.</p>
+            <p className="rounded-xl border border-dashed border-[#B9C5D4] bg-[#FAFBFC] px-4 py-3 text-sm text-muted-foreground">Aucun dossier. Créez-en un depuis l'onglet Dossiers.</p>
           ) : (
             <select
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              className="h-10 w-full rounded-[9px] border border-input bg-card px-3 text-sm shadow-o1 transition-[border-color,box-shadow] hover:border-[#B9C5D4]"
               value={aoId}
               onChange={(e) => setAoId(e.target.value)}
             >
@@ -220,16 +225,20 @@ export default function SollicitationsPage() {
       )}
 
       {/* Liste des questions */}
-      <div className="mt-6 space-y-3">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-          <Inbox className="size-4" /> Questions internes ({questions.length})
+      <div className="mt-7 space-y-3">
+        <h2 className="flex items-center gap-2 border-b border-border pb-2.5 text-[15px] font-semibold text-foreground">
+          <Inbox className="size-[18px] text-primary" /> Questions internes ({questions.length})
         </h2>
         {questions.length === 0 && (
-          <p className="text-sm text-muted-foreground">Aucune question pour ce dossier.</p>
+          <EtatVide icone={MessageSquareText} pointilles>
+            <p className="text-[15px] font-semibold text-foreground">Aucune question pour ce dossier.</p>
+          </EtatVide>
         )}
-        {questions.map((q) => (
-          <QuestionCard key={q.id} q={q} />
-        ))}
+        <div className="apparait space-y-3">
+          {questions.map((q) => (
+            <QuestionCard key={q.id} q={q} />
+          ))}
+        </div>
       </div>
     </Shell>
   );
@@ -238,11 +247,14 @@ export default function SollicitationsPage() {
 // ── Sous-composants ──────────────────────────────────────────────────────────────
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto max-w-3xl p-6">
-      <h1 className="mb-1 flex items-center gap-2 text-xl font-bold">
-        <Mail className="size-5" /> Sollicitation interne
+    <div className="mx-auto max-w-[960px] px-4 pb-10 pt-6 md:px-9 md:pt-[30px]">
+      <h1 className="mb-1 flex animate-monter items-center gap-3 font-display text-[26px] font-bold leading-[1.1] text-foreground md:text-[28px]">
+        <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-o1">
+          <Mail className="size-5" />
+        </span>
+        Sollicitation interne
       </h1>
-      <p className="mb-6 text-sm text-muted-foreground">
+      <p className="mb-6 animate-monter text-sm text-muted-foreground md:pl-[52px]">
         Posez une question à vos collègues par e-mail. Leur réponse est automatiquement rattachée au dossier.
       </p>
       {children}
@@ -252,8 +264,8 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 function Banner({ kind, text }: { kind: "ok" | "err"; text: string }) {
   return (
-    <div className={`mt-3 rounded-md border p-3 text-sm ${
-      kind === "ok" ? "border-success bg-success/10" : "border-destructive bg-destructive/10"
+    <div className={`mt-3 mb-4 animate-monter rounded-xl border p-3 text-sm ${
+      kind === "ok" ? "border-success/30 bg-success-soft text-success" : "border-destructive/30 bg-destructive-soft text-destructive"
     }`}>{text}</div>
   );
 }
@@ -350,8 +362,8 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
     }
   }
   return (
-    <Card>
-      <CardHeader><CardTitle className="text-base">Envoyer une question à l'équipe</CardTitle></CardHeader>
+    <Card className="animate-monter">
+      <CardHeader><CardTitle className="flex items-center gap-2 text-[15px]"><Send aria-hidden="true" className="h-[18px] w-[18px] text-primary" />Envoyer une question à l'équipe</CardTitle></CardHeader>
       <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <input className="input" placeholder="Destinataires (emails séparés par une virgule) *" value={f.destinataire_email} onChange={set("destinataire_email")} />
         <input className="input" placeholder="Destinataire (nom)" value={f.destinataire_nom} onChange={set("destinataire_nom")} />
@@ -361,13 +373,13 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
               {destinataires.map((d) => (
                 <span
                   key={d}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-input bg-background px-2.5 py-1 text-xs"
+                  className="inline-flex animate-zoom-doux items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-primary"
                 >
                   {d}
                   <button
                     type="button"
                     aria-label={`Retirer ${d}`}
-                    className="leading-none text-muted-foreground transition-colors hover:text-destructive"
+                    className="grid h-4 w-4 place-items-center rounded-full leading-none text-muted-foreground transition-colors hover:bg-destructive-soft hover:text-destructive"
                     onClick={() => retirerDestinataire(d)}
                   >
                     ✕
@@ -412,12 +424,12 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
           )}
 
           {suggOuvert && suggestions && suggestions.length > 0 && (
-            <ul className="mt-3 space-y-2">
+            <ul className="apparait mt-3 space-y-2">
               {(voirPlus ? suggestions : suggestions.slice(0, 3)).map((sug) => {
                 const coche = destinataires.some((d) => d.toLowerCase() === sug.email.toLowerCase());
                 return (
                   <li key={sug.id}>
-                    <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-input p-2.5 transition-colors hover:bg-accent/40">
+                    <label className={`vive flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 ${coche ? "border-primary/40 bg-secondary" : "border-border bg-card"}`}>
                       <input
                         type="checkbox"
                         className="mt-1"
@@ -428,7 +440,7 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
                         <span className="text-sm font-medium">{sug.nom}</span>
                         <span className="text-sm text-muted-foreground"> — {sug.fonction}</span>
                         {sug.recommande && (
-                          <span className="ml-2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+                          <span className="ml-2 rounded-full bg-signal-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-signal-texte">
                             Recommandé
                           </span>
                         )}
@@ -479,8 +491,11 @@ function SendFormCard({ onSubmit, initial }: { onSubmit: (f: SendForm) => void; 
         </div>
       </CardContent>
       <style jsx>{`
-        .input { width: 100%; border-radius: 0.375rem; border: 1px solid hsl(var(--input));
-          background: hsl(var(--background)); padding: 0.5rem 0.75rem; font-size: 0.875rem; }
+        .input { width: 100%; min-height: 40px; border-radius: 9px; border: 1px solid hsl(var(--input));
+          background: hsl(var(--card)); padding: 0.5rem 0.8rem; font-size: 0.875rem;
+          box-shadow: 0 1px 2px rgba(16,32,58,.06), 0 1px 1px rgba(16,32,58,.04);
+          transition: border-color .15s cubic-bezier(.2,.7,.2,1), box-shadow .15s cubic-bezier(.2,.7,.2,1); }
+        .input:hover { border-color: #B9C5D4; }
       `}</style>
     </Card>
   );
