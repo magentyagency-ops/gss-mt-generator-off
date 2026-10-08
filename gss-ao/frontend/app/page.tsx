@@ -288,13 +288,13 @@ export default function DossiersPage() {
                     onChange={handleSelectAll}
                   />
                 </TableHead>
-                <TableHead>Acheteur</TableHead>
+                <TableHead className="min-w-[250px]">Acheteur</TableHead>
                 <TableHead>Objet</TableHead>
                 <TableHead>Lots</TableHead>
                 <TableHead>Date limite</TableHead>
                 <TableHead>Statut</TableHead>
 
-                <TableHead className="w-[60px]"></TableHead>
+                <TableHead className="w-[48px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -325,7 +325,7 @@ export default function DossiersPage() {
                         }}
                       />
                     </TableCell>
-                    <TableCell className="min-w-[200px] py-[13px] font-semibold text-foreground">
+                    <TableCell className="min-w-[250px] py-[13px] font-semibold text-foreground">
                       <div className="flex items-center gap-3">
                         {d.acheteur || d.objet ? (
                           <Initiales texte={d.acheteur || d.objet} />
@@ -339,7 +339,7 @@ export default function DossiersPage() {
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="max-w-[260px] truncate py-[13px] text-muted-foreground">
+                    <TableCell className="max-w-[230px] truncate py-[13px] text-muted-foreground">
                       {d.objet || "—"}
                     </TableCell>
                     <TableCell className="py-[13px]">
