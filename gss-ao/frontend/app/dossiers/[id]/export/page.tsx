@@ -105,7 +105,7 @@ export default function ExportPage({ params }: { params: { id: string } }) {
 
       <EntreeEtape className="grid flex-1 grid-cols-[minmax(0,1fr)] content-start gap-5 overflow-y-auto px-4 py-5 md:px-9 md:py-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:content-stretch lg:overflow-hidden">
         {/* ============ Document central : template imposé ou DOCX généré ============ */}
-        <div className="min-w-0 animate-monter overflow-y-auto rounded-xl border border-border bg-[#EEF2F7]/70 p-3 md:p-6">
+        <div className="min-w-0 animate-monter lg:overflow-y-auto rounded-xl border border-border bg-[#EEF2F7]/70 p-3 md:p-6">
           {generatedDocxUrl ? (
             <div className="mx-auto max-w-4xl space-y-4">
               <div className="rounded-xl border border-[#BFE0CC] bg-gradient-to-r from-success-soft to-card px-4 py-3 text-sm font-semibold text-success flex items-center gap-2.5 shadow-o1">
@@ -294,7 +294,7 @@ export default function ExportPage({ params }: { params: { id: string } }) {
         </div>
 
         {/* ============ Sidebar : vérifications — CONSERVÉE ============ */}
-        <aside className="space-y-4 overflow-y-auto animate-monter [animation-delay:100ms]">
+        <aside className="space-y-4 lg:overflow-y-auto animate-monter [animation-delay:100ms]">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-[9px] text-[15px]"><ShieldCheck aria-hidden="true" className="h-[18px] w-[18px] text-primary" />Vérifications avant envoi</CardTitle>
