@@ -54,7 +54,7 @@
     --secondary-foreground: 217 47% 15%;
     --muted: 213 36% 95%;
     --muted-foreground: 216 19% 36%; /* #4A586D texte secondaire */
-    --subtle-foreground: 218 15% 47%; /* #67748A petites capitales (AA) */
+    --subtle-foreground: 218 16% 41%; /* #586479 petites capitales (AA : 5,0:1 sur #E9EDF3, 5,5:1 sur #F6F7F9) */
     --accent: 213 36% 95%;
     --accent-foreground: 213 72% 16%;
 
@@ -226,6 +226,12 @@
     background-color: #ffffff !important;
     box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.4) !important;
   }
+  /* Focus clavier visible sur le marine : contour et halo blancs (point 6). */
+  :is(.bandeau-dossier, header:has(~ nav a[href^="/inbox?ao="])) :focus-visible {
+    outline-color: #ffffff !important;
+    --tw-ring-color: #ffffff !important;
+    --tw-ring-offset-color: #0b2545 !important;
+  }
   /* Boutons secondaires / contour dans le bandeau : translucides, toujours lisibles. */
   :is(.bandeau-dossier, header:has(~ nav a[href^="/inbox?ao="])) :is(button, a):is(.bg-background, .bg-card, .bg-secondary, .border-input) {
     background-color: rgba(255, 255, 255, 0.09) !important;
@@ -358,20 +364,28 @@
   }
   .ligne-vive:active {
     background-color: hsl(var(--secondary));
-    box-shadow: inset 4px 0 0 hsl(var(--signal));
+    box-shadow: inset 4px 0 0 hsl(var(--signal)), inset 0 2px 5px rgba(16, 32, 58, 0.12);
+  }
+  /* Enfoncement de la ligne à l'appui : les cellules descendent d'1 px (le tr n'est pas
+     transformé, la structure du tableau reste intacte). */
+  .ligne-vive > td {
+    transition: translate 0.12s var(--courbe-douce);
+  }
+  .ligne-vive:active > td {
+    translate: 0 1px;
   }
 
   /* ── Apparitions échelonnées (point 2) : enfants directs, pas de 60 ms, plafond 8. ── */
   .apparait > * {
-    animation: gss-monter 0.45s var(--courbe-douce) both;
+    animation: gss-monter 0.4s var(--courbe-douce) both;
   }
-  .apparait > *:nth-child(2) { animation-delay: 60ms; }
-  .apparait > *:nth-child(3) { animation-delay: 120ms; }
-  .apparait > *:nth-child(4) { animation-delay: 180ms; }
-  .apparait > *:nth-child(5) { animation-delay: 240ms; }
-  .apparait > *:nth-child(6) { animation-delay: 300ms; }
-  .apparait > *:nth-child(7) { animation-delay: 360ms; }
-  .apparait > *:nth-child(n + 8) { animation-delay: 420ms; }
+  .apparait > *:nth-child(2) { animation-delay: 40ms; }
+  .apparait > *:nth-child(3) { animation-delay: 80ms; }
+  .apparait > *:nth-child(4) { animation-delay: 120ms; }
+  .apparait > *:nth-child(5) { animation-delay: 160ms; }
+  .apparait > *:nth-child(6) { animation-delay: 200ms; }
+  .apparait > *:nth-child(7) { animation-delay: 200ms; }
+  .apparait > *:nth-child(n + 8) { animation-delay: 200ms; }
 
   /* ── Glissement directionnel entre étapes / onglets (point 4). ── */
   .entree-avance {
@@ -429,22 +443,22 @@
   .trace {
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
-    animation: gss-tracer 0.6s var(--courbe-douce) forwards;
+    animation: gss-tracer 0.4s var(--courbe-douce) forwards;
   }
   /* Anneau conique : --gss-p = pourcentage (0 à 100), couleur via --anneau-couleur. */
   .anneau-gss {
     border-radius: 9999px;
     background: conic-gradient(var(--anneau-couleur, hsl(var(--success))) calc(var(--gss-p) * 1%), hsl(var(--secondary)) 0);
-    animation: gss-anneau 1s var(--courbe-douce) backwards;
-    transition: --gss-p 0.8s var(--courbe-douce);
+    animation: gss-anneau 0.4s var(--courbe-douce) backwards;
+    transition: --gss-p 0.4s var(--courbe-douce);
   }
   /* Compteur CSS qui défile de 0 à --gss-cible. */
   .compteur-gss {
     font-variant-numeric: tabular-nums;
     counter-reset: gss-n var(--gss-n);
     --gss-n: var(--gss-cible, 0);
-    animation: gss-compter 0.8s var(--courbe-douce) backwards;
-    transition: --gss-n 0.6s var(--courbe-douce);
+    animation: gss-compter 0.4s var(--courbe-douce) backwards;
+    transition: --gss-n 0.4s var(--courbe-douce);
   }
   .compteur-gss::after {
     content: counter(gss-n);
@@ -545,7 +559,8 @@
   button:active,
   a[href]:active,
   [role="button"]:active,
-  [role="tab"]:active {
+  [role="tab"]:active,
+  .ligne-vive:active > td {
     translate: none !important;
     scale: none !important;
   }

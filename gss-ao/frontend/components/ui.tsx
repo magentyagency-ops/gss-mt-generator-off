@@ -155,7 +155,7 @@ export const Progress = ({
   >
     <div
       className={cn(
-        "h-full origin-left animate-remplir rounded-full bg-primary transition-[width,background-color] duration-700 ease-doux",
+        "h-full origin-left animate-remplir rounded-full bg-primary transition-[width,background-color] duration-[400ms] ease-doux",
         indicatorClassName,
       )}
       style={{ width: `${Math.min(100, Math.max(0, value))}%` }}

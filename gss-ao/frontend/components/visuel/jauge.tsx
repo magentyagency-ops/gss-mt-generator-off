@@ -40,7 +40,7 @@ export function Jauge({
     >
       <div
         className={cn(
-          "h-full origin-left animate-remplir rounded-full transition-[width,background-color] duration-700 ease-doux",
+          "h-full origin-left animate-remplir rounded-full transition-[width,background-color] duration-[400ms] ease-doux",
           actif && "reflet-actif",
         )}
         style={{ width: `${p}%`, background: couleur ?? TON_PLEIN[ton] }}
