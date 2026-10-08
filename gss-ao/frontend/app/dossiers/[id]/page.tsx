@@ -393,8 +393,8 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
       <DossierNav id={id} />
 
       {/* Corps */}
-      <EntreeEtape className="grid flex-1 grid-cols-1 gap-6 overflow-y-auto px-4 py-5 md:px-9 md:py-6">
-        <div className="apparait mx-auto grid w-full max-w-[1180px] content-start gap-5">
+      <EntreeEtape className="grid flex-1 grid-cols-[minmax(0,1fr)] gap-6 overflow-y-auto px-4 py-5 md:px-9 md:py-6">
+        <div className="apparait mx-auto grid w-full min-w-0 max-w-[1180px] grid-cols-[minmax(0,1fr)] content-start gap-5">
           {/* Informations clés (point 6 des retours GSS) : les repères que l'équipe cherche en
               premier — échéance, visite, lieu — sans rouvrir les pièces du DCE. La visite provient
               du RC via `visite` ; les champs à plat (dateVisite / lieuVisite) servent de repli. */}
@@ -437,7 +437,7 @@ export default function SynthesePage({ params }: { params: { id: string } }) {
           </Card>
 
           {/* Synthèse IA et risques côte à côte sur grand écran (même ordre de lecture). */}
-          <div className="grid gap-5 xl:grid-cols-[1.05fr_1fr]">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
           {/* Résumé Exécutif IA */}
           <Card className="vive bg-gradient-to-b from-[#F6F9FD] to-card to-60%">
             <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
