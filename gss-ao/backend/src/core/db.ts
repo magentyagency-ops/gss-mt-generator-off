@@ -1,5 +1,14 @@
 import { getScopedClient, getCurrentUserId, getAdminClient } from './supabase';
 
+/**
+ * JWT de l'utilisateur expiré pendant une longue génération (production, d230e40) : la requête est rejouée avec le client
+ * Admin. La production ne le faisait que pour les écritures ; or saveDossier et MemoiresDB.save LISENT d'abord (dossier
+ * existant, mémoire existant, titre) : sans repli sur ces lectures, l'erreur « JWT expired » survenait avant l'écriture.
+ */
+function jwtExpire(error: { message?: string } | null | undefined): boolean {
+  return !!error && /JWT expired/i.test(error.message || '');
+}
+
 // Champs portés par des colonnes dédiées de public.dossiers.
 // Tout le reste du dossier "riche" est stocké dans la colonne jsonb `contenu`.
 const COLUMN_FIELDS = ['id', 'user_id', 'created_at', 'updated_at', 'nom'] as const;
@@ -75,11 +84,15 @@ export class DB {
 
   static async getDossier(id: string): Promise<DossierRecord | null> {
     const supabase = getScopedClient();
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('dossiers')
       .select('*')
       .eq('id', id)
       .maybeSingle();
+    if (jwtExpire(error)) {
+      console.warn('[DB] JWT expiré lors de getDossier, repli sur le client Admin.');
+      ({ data, error } = await getAdminClient().from('dossiers').select('*').eq('id', id).maybeSingle());
+    }
     if (error) throw new Error(error.message);
     return data ? rowToRecord(data as DossierRow) : null;
   }
@@ -307,21 +320,35 @@ export class MemoiresDB {
     // Titre lisible : celui fourni, sinon le nom du dossier.
     let titre = meta.titre;
     if (!titre) {
-      const { data: dossier } = await supabase
+      let { data: dossier, error: titreErr } = await supabase
         .from('dossiers')
         .select('nom')
         .eq('id', dossierId)
         .maybeSingle();
+      if (jwtExpire(titreErr)) {
+        console.warn('[MemoiresDB] JWT expiré lors de save (titre), repli sur le client Admin.');
+        ({ data: dossier, error: titreErr } = await getAdminClient().from('dossiers').select('nom').eq('id', dossierId).maybeSingle());
+      }
       titre = dossier?.nom || 'Mémoire technique';
     }
 
-    const { data: existing, error: selErr } = await supabase
+    let { data: existing, error: selErr } = await supabase
       .from('memoires_techniques')
       .select('id')
       .eq('dossier_id', dossierId)
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (jwtExpire(selErr)) {
+      console.warn('[MemoiresDB] JWT expiré lors de save (lecture), repli sur le client Admin.');
+      ({ data: existing, error: selErr } = await getAdminClient()
+        .from('memoires_techniques')
+        .select('id')
+        .eq('dossier_id', dossierId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle());
+    }
     if (selErr) throw new Error(selErr.message);
 
     // Régénération : on met à jour (pas de nouveau crédit consommé — le trigger
