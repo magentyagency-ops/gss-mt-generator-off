@@ -1,14 +1,7 @@
 "use client";
 
-import { CheckCircle2, AlertTriangle, Send, FileText, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Download, FileText } from "lucide-react";
 import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Separator,
   Table,
   TableBody,
   TableCell,
@@ -17,7 +10,6 @@ import {
   TableRow,
 } from "@/components/ui";
 import { DossierNav } from "@/components/dossier-nav";
-import { ExportButtons } from "@/components/export/export-buttons";
 import {
   BlocContact,
   GroupeCases,
@@ -31,30 +23,19 @@ import {
   DEFAULT_SECTION_IV,
   formatDate,
 } from "@/lib/gss-config";
-import { cn } from "@/lib/utils";
 import { apiFetch, apiBase } from "@/lib/api";
 import { use, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { BandeauDossier } from "@/components/visuel/bandeau-dossier";
 import { EntreeEtape } from "@/components/visuel/entree-etape";
-import { Jauge } from "@/components/visuel/jauge";
 
 const DocxPreviewViewer = dynamic(
   () => import("@/components/docx-preview-viewer").then((mod) => mod.DocxPreviewViewer),
   { ssr: false }
 );
 
-const CHECKS = [
-  { label: "Toutes les pièces administratives présentes", ok: false },
-  { label: "Mémoire technique validé (4/4 sections)", ok: false },
-  { label: "BPU / DPGF joints et complétés", ok: true },
-  { label: "Acte d'Engagement signé électroniquement", ok: true },
-  { label: "Certificat de visite joint", ok: true },
-];
-
 export default function ExportPage({ params }: { params: { id: string } }) {
   const id = params.id;
-  const pret = CHECKS.every((c) => c.ok);
   const [generatedDocxUrl, setGeneratedDocxUrl] = useState<string | null>(null);
   const [generatedPath, setGeneratedPath] = useState<string | null>(null);
   // Cas sans template → PDF (Marp) ; cas template → DOCX. On adapte libellé, nom de fichier et aperçu.
@@ -87,23 +68,26 @@ export default function ExportPage({ params }: { params: { id: string } }) {
           </div>
           <h1 className="mt-1.5 font-display text-[24px] font-bold leading-[1.15] md:text-[28px]">Export & dépôt</h1>
         </div>
-        <div className="flex flex-wrap items-start gap-3 md:gap-4">
+        <div className="flex flex-col items-end gap-1.5">
           {generatedDocxUrl && (
             <a
               href={`${generatedDocxUrl}&download=1`}
               download={isPdf ? "Mémoire technique GSS.pdf" : "Mémoire technique GSS.docx"}
-              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[9px] text-sm font-semibold shadow-o1 transition-[background-color,box-shadow,translate] duration-150 motion-safe:hover:-translate-y-px h-[38px] px-4 py-2 bg-primary text-primary-foreground"
+              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[9px] text-sm font-semibold shadow-o1 transition-[background-color,box-shadow,translate,scale] duration-150 motion-safe:hover:-translate-y-px motion-safe:active:translate-y-0 motion-safe:active:scale-[0.97] h-[40px] px-4 py-2 bg-primary text-primary-foreground"
             >
+              <Download aria-hidden="true" className="h-4 w-4" />
               {isPdf ? "Télécharger le document généré (.pdf)" : "Télécharger le document généré (.docx)"}
             </a>
           )}
-          <ExportButtons />
+          <p className="text-right text-[12px] text-white/70">
+            Le dépôt s'effectue sur {dossierInfo.plateforme || "la plateforme de l'acheteur"} (hors application).
+          </p>
         </div>
       </BandeauDossier>
 
       <DossierNav id={id} />
 
-      <EntreeEtape className="grid flex-1 grid-cols-[minmax(0,1fr)] content-start gap-5 overflow-y-auto px-4 py-5 md:px-9 md:py-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:content-stretch lg:overflow-hidden">
+      <EntreeEtape className="grid flex-1 grid-cols-[minmax(0,1fr)] content-start gap-5 overflow-y-auto px-4 py-5 md:px-9 md:py-6 lg:content-stretch lg:overflow-hidden">
         {/* ============ Document central : template imposé ou DOCX généré ============ */}
         <div className="min-w-0 animate-monter lg:overflow-y-auto rounded-xl border border-border bg-[#EEF2F7]/70 p-3 md:p-6">
           {generatedDocxUrl ? (
@@ -293,53 +277,6 @@ export default function ExportPage({ params }: { params: { id: string } }) {
           )}
         </div>
 
-        {/* ============ Sidebar : vérifications — CONSERVÉE ============ */}
-        <aside className="space-y-4 lg:overflow-y-auto animate-monter [animation-delay:100ms]">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-[9px] text-[15px]"><ShieldCheck aria-hidden="true" className="h-[18px] w-[18px] text-primary" />Vérifications avant envoi</CardTitle>
-              {/* Jauge : contrôles déjà satisfaits sur le total de la liste ci-dessous. */}
-              <div aria-hidden="true" className="flex items-center gap-3 pt-1">
-                <Jauge valeur={(CHECKS.filter((c) => c.ok).length / CHECKS.length) * 100} ton="succes" epaisseur={7} />
-                <span className="shrink-0 font-mono text-[12.5px] font-semibold tabular-nums text-muted-foreground">{CHECKS.filter((c) => c.ok).length}/{CHECKS.length}</span>
-              </div>
-            </CardHeader>
-            <CardContent className="apparait grid gap-2">
-              {CHECKS.map((c) => (
-                <div
-                  key={c.label}
-                  className={cn(
-                    "flex items-start gap-2.5 rounded-[10px] border px-3 py-2.5 text-sm transition-colors",
-                    c.ok ? "border-border bg-card" : "border-[#F0D3A8] bg-warning-soft/70",
-                  )}
-                >
-                  {c.ok ? (
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success motion-safe:animate-zoom-doux" />
-                  ) : (
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                  )}
-                  <span>{c.label}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {!pret && (
-            <div className="rounded-xl border border-[#F0D3A8] bg-gradient-to-r from-warning-soft to-[#FFFBF3] p-3.5 text-[12.5px] leading-relaxed text-muted-foreground">
-              Certaines vérifications ne sont pas satisfaites. Complétez la check-list de conformité
-              et la validation du mémoire avant de marquer le dossier prêt.
-            </div>
-          )}
-
-          <Separator />
-
-          <Button className="h-11 w-full" disabled={!pret}>
-            <Send className="h-4 w-4" /> Marquer comme prêt à envoyer
-          </Button>
-          <p className="text-center text-[12px] text-subtle-foreground">
-            Le dépôt s'effectue sur {dossierInfo.plateforme || "la plateforme de l'acheteur"} (hors application).
-          </p>
-        </aside>
       </EntreeEtape>
     </div>
   );
