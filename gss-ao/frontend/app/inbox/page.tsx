@@ -10,12 +10,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { RefreshCw, Inbox, PenLine } from "lucide-react";
+import { RefreshCw, Inbox, PenLine, Send, MailCheck, Hourglass, FolderOpen, LockKeyhole, UserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { apiFetch } from "@/lib/api";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { QuestionCard } from "@/components/question-card";
 import { type QuestionInterne, type Dossier, learnReponsesRecues } from "@/lib/sollicitations";
+import { Indicateur } from "@/components/visuel/carte";
+import { Compteur } from "@/components/visuel/compteur";
+import { Jauge } from "@/components/visuel/jauge";
+import { EtatVide } from "@/components/visuel/etat-vide";
+import { SqueletteCartes } from "@/components/visuel/squelette";
 
 export default function InboxPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -125,13 +130,13 @@ export default function InboxPage() {
   }, [supabase, userEmail, loadQuestions]);
 
   // ── Rendu ────────────────────────────────────────────────────────────────────
-  if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p></Shell>;
+  if (!ready) return <Shell><p className="text-sm text-muted-foreground">Chargement…</p><SqueletteCartes nombre={3} className="mt-4" /></Shell>;
 
   if (!userEmail) {
     return (
       <Shell>
-        <Card>
-          <CardHeader><CardTitle>Connexion requise</CardTitle></CardHeader>
+        <Card className="animate-monter">
+          <CardHeader><CardTitle className="flex items-center gap-2"><LockKeyhole aria-hidden="true" className="h-[18px] w-[18px] text-primary" />Connexion requise</CardTitle></CardHeader>
           <CardContent className="text-sm text-muted-foreground">
             Connectez-vous pour accéder à votre boîte de réception.
           </CardContent>
@@ -140,13 +145,23 @@ export default function InboxPage() {
     );
   }
 
+  // Infos utiles (purement informatives) : calculées sur la liste déjà chargée, aucune requête.
+  // « En attente » : même règle que la liste des dossiers (envoyée, sans réponse reçue).
+  const nbReponsesRecues = questions.filter((q) => q.statut === "reponse_recue" || q.statut === "validee").length;
+  const nbEnAttente = questions.filter(
+    (q) => q.reponse_recue_at == null && (q.statut === "envoyee" || q.statut === "reponse_en_attente"),
+  ).length;
+
   return (
     <Shell>
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <div className="text-sm text-muted-foreground">
-          Connecté : <span className="font-medium text-foreground">{userEmail}</span>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-o1">
+        <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+          <span aria-hidden="true" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-secondary text-primary">
+            <UserRound className="h-4 w-4" />
+          </span>
+          <span className="min-w-0 truncate">Connecté : <span className="font-medium text-foreground">{userEmail}</span></span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" onClick={loadQuestions}><RefreshCw /> Rafraîchir</Button>
           <Link href="/sollicitations/nouveau">
             <Button size="sm"><PenLine /> Rédiger une sollicitation</Button>
@@ -154,16 +169,23 @@ export default function InboxPage() {
         </div>
       </div>
 
+      {/* Indicateurs (infos utiles calculées sur les sollicitations déjà chargées) */}
+      <div className="apparait mb-5 grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3.5">
+        <Indicateur className={indicateurClass} icone={Send} libelle="Sollicitations" valeur={<Compteur valeur={questions.length} />} />
+        <Indicateur className={indicateurClass} icone={MailCheck} libelle="Réponses reçues" valeur={<Compteur valeur={nbReponsesRecues} />} />
+        <Indicateur className={indicateurClass} icone={Hourglass} libelle="En attente" valeur={<Compteur valeur={nbEnAttente} />} alerte={nbEnAttente > 0} />
+      </div>
+
       {/* Filtre par dossier : consulter les échanges d'un seul appel d'offres sans perdre
           la vue globale. Alimenté par ?ao= depuis l'onglet « Sollicitations » d'un dossier. */}
       {groupes.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <label htmlFor="filtre-dossier" className="text-sm text-muted-foreground">
+        <div className="mb-5 flex animate-monter flex-wrap items-center gap-2.5 rounded-xl border border-border bg-[#FAFBFC] px-4 py-3">
+          <label htmlFor="filtre-dossier" className="text-[13px] font-semibold text-muted-foreground">
             Filtrer par dossier
           </label>
           <select
             id="filtre-dossier"
-            className="min-w-[16rem] flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+            className="h-10 min-w-[12rem] flex-1 rounded-[9px] border border-input bg-card px-3 text-sm shadow-o1 transition-[border-color,box-shadow] hover:border-[#B9C5D4]"
             value={filtreAo}
             onChange={(e) => setFiltreAo(e.target.value)}
           >
@@ -183,35 +205,53 @@ export default function InboxPage() {
       )}
 
       {err && (
-        <div className="mb-3 rounded-md border border-destructive bg-destructive/10 p-3 text-sm">{err}</div>
+        <div className="mb-3 animate-monter rounded-xl border border-destructive/30 bg-destructive-soft p-3 text-sm text-destructive">{err}</div>
       )}
 
       <div className="space-y-6">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-          <Inbox className="size-4" />
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-foreground">
+          <Inbox className="size-[18px] text-primary" />
           {filtreAo
             ? `${dossierNomById.get(filtreAo) ?? "Dossier"} — ${nbAffichees} sollicitation${nbAffichees > 1 ? "s" : ""}`
             : `Toutes mes sollicitations (${questions.length})`}
         </h2>
         {questions.length === 0 && (
-          <p className="text-sm text-muted-foreground">Aucune sollicitation pour le moment.</p>
+          <EtatVide icone={Inbox} pointilles>
+            <p className="text-[15px] font-semibold text-foreground">Aucune sollicitation pour le moment.</p>
+          </EtatVide>
         )}
         {questions.length > 0 && groupesAffiches.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            Aucune sollicitation pour ce dossier.{" "}
-            <button type="button" className="underline" onClick={() => setFiltreAo("")}>
-              Voir tous les dossiers
-            </button>
-          </p>
+          <EtatVide icone={FolderOpen} pointilles>
+            <p className="text-[15px] font-semibold text-foreground">
+              Aucune sollicitation pour ce dossier.{" "}
+              <button type="button" className="font-semibold text-primary underline underline-offset-4 hover:text-primary-hover" onClick={() => setFiltreAo("")}>
+                Voir tous les dossiers
+              </button>
+            </p>
+          </EtatVide>
         )}
         {groupesAffiches.map((g) => {
           const nom = dossierNomById.get(g.aoId) ?? "Dossier inconnu";
           return (
-            <section key={g.aoId} className="space-y-3">
-              <h3 className="flex items-baseline gap-2 border-b border-input pb-1">
-                <span className="text-sm font-semibold text-foreground">{nom}</span>
-                <span className="text-xs font-normal text-muted-foreground">
+            <section key={g.aoId} className="animate-monter space-y-3">
+              <h3 className="flex items-start gap-2.5 border-b border-border pb-2.5">
+                <span aria-hidden="true" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-secondary text-primary">
+                  <FolderOpen className="h-4 w-4" />
+                </span>
+                <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1.5 pt-1">
+                <span className="min-w-0 text-[15px] font-semibold leading-snug text-foreground">{nom}</span>
+                <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
                   {g.items.length} sollicitation{g.items.length > 1 ? "s" : ""}
+                </span>
+                <span aria-hidden="true" className="ml-auto flex items-center gap-2 font-mono text-[11.5px] font-medium text-subtle-foreground">
+                  <Jauge
+                    valeur={(g.items.filter((q) => q.statut === "reponse_recue" || q.statut === "validee").length / g.items.length) * 100}
+                    ton="succes"
+                    epaisseur={5}
+                    className="w-16"
+                  />
+                  {g.items.filter((q) => q.statut === "reponse_recue" || q.statut === "validee").length}/{g.items.length} réponse{g.items.length > 1 ? "s" : ""}
+                </span>
                 </span>
               </h3>
               {g.items.map((q) => (
@@ -229,13 +269,18 @@ export default function InboxPage() {
   );
 }
 
+const indicateurClass = "max-sm:py-3";
+
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto max-w-3xl p-6">
-      <h1 className="mb-1 flex items-center gap-2 text-xl font-bold">
-        <Inbox className="size-5" /> Boîte de réception
+    <div className="mx-auto max-w-[960px] px-4 pb-10 pt-6 md:px-9 md:pt-[30px]">
+      <h1 className="mb-1 flex animate-monter items-center gap-3 font-display text-[26px] font-bold leading-[1.1] text-foreground md:text-[28px]">
+        <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-o1">
+          <Inbox className="size-5" />
+        </span>
+        Boîte de réception
       </h1>
-      <p className="mb-6 text-sm text-muted-foreground">
+      <p className="mb-6 animate-monter text-sm text-muted-foreground md:pl-[52px]">
         Toutes vos sollicitations internes, tous dossiers confondus, avec leur statut et la réponse reçue.
       </p>
       {children}
