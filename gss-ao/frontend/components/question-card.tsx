@@ -6,7 +6,7 @@
 // Composant partagé, utilisé par la vue mono-dossier (app/sollicitations) et la boîte de
 // réception globale (app/inbox). `dossierNom` optionnel : affiché seulement hors vue mono-dossier.
 
-import { FolderKanban, CheckCircle2 } from "lucide-react";
+import { FolderKanban, CheckCircle2, Check, MailCheck } from "lucide-react";
 import { Badge, Card, CardContent } from "@/components/ui";
 import { STATUT_LABEL, STATUT_BADGE, type QuestionInterne } from "@/lib/sollicitations";
 
@@ -34,7 +34,11 @@ export function QuestionCard(
           </div>
         )}
         <div className="flex items-center justify-between gap-2">
-          <Badge variant={STATUT_BADGE[q.statut]}>{STATUT_LABEL[q.statut]}</Badge>
+          <Badge variant={q.statut === "envoyee" ? "success" : STATUT_BADGE[q.statut]} className="gap-1">
+            {q.statut === "envoyee" && <Check aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2.5} />}
+            {q.statut === "reponse_recue" && <MailCheck aria-hidden="true" className="h-3.5 w-3.5" />}
+            {STATUT_LABEL[q.statut]}
+          </Badge>
           <code className="rounded-md bg-secondary px-2 py-0.5 font-mono text-[11.5px] font-semibold text-muted-foreground">{q.question_id}</code>
         </div>
         <div className="grid gap-1.5 text-sm [&>div>span:first-child]:inline-block [&>div>span:first-child]:min-w-[96px] [&>div>span:first-child]:text-[12.5px] [&>div>span:first-child]:font-medium">
