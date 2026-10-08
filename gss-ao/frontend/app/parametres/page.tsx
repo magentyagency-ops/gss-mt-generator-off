@@ -73,7 +73,7 @@ export default function ParametresPage() {
                     <UserCircle className="h-5 w-5" />
                   </span>
                   <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold">
+                  <div className="break-all text-sm font-semibold sm:truncate">
                     {email ?? "Chargement…"}
                   </div>
                   <div className="mt-0.5 flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
