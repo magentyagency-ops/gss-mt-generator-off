@@ -73,7 +73,7 @@ function PieceRow({
       </div>
       <div className="min-w-0 flex-1 max-sm:basis-[calc(100%-50px)]">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="min-w-0 truncate text-sm font-semibold">{piece.nom}</span>
+          <span className="min-w-0 text-sm font-semibold max-md:line-clamp-2 max-md:[overflow-wrap:anywhere] md:truncate">{piece.nom}</span>
           {piece.alternative && (
             <Badge variant="outline" className="font-normal text-xs">
               ou {piece.alternative}
