@@ -16,12 +16,15 @@ import {
   Table,
   Layers,
   X,
+  ChevronRight,
 } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { type DceFile, type DossierRow } from "@/lib/gss-config";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
 import { classifyDceFile, TYPE_LABELS } from "@/lib/dce-detect";
+import { Anneau } from "@/components/visuel/anneau";
+import { PointActif } from "@/components/visuel/pastille-statut";
 
 // Ordre de la liste déroulante « type détecté » (l'utilisateur peut toujours corriger).
 const TYPES = ["RC", "CCAP", "CCTP", "BPU / DPGF", "Mémoire (cadre)", "Acte d'Engagement", "Compte Rendu", "Annexe", "Inconnu"];
@@ -230,6 +233,11 @@ export default function NouveauDossierPage() {
   const hasCCAP = files.some(f => f.type === "CCAP");
   const hasBPU = files.some(f => f.type === "BPU / DPGF");
   const isPrerequisOk = hasRC && hasCCTP && hasCCAP && hasBPU;
+  // Info utile (anneau « n/6 ») : nombre de prérequis déjà marqués présents dans la liste
+  // ci-dessous (mêmes 6 types, même règle que bestFor). Purement informatif.
+  const nbPrerequisPresents = ["CCTP", "RC", "CCAP", "Compte Rendu", "BPU / DPGF", "Mémoire (cadre)"].filter((t) =>
+    files.some((f) => f.type === t),
+  ).length;
 
   let missingReason = "";
   if (!tousParses) {
@@ -378,10 +386,13 @@ export default function NouveauDossierPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
-        <div>
-          <h1 className="text-xl font-semibold">Nouveau dossier — dépôt du DCE</h1>
-          <p className="text-sm text-muted-foreground">
+      <header className="mx-auto flex w-full max-w-[1008px] animate-monter flex-wrap items-end justify-between gap-4 px-4 pb-2 pt-6 md:px-6 md:pt-[30px]">
+        <div className="min-w-0 max-w-2xl">
+          <div aria-hidden="true" className="mb-1 flex items-center gap-1 text-[12.5px] text-subtle-foreground">
+            Dossiers <ChevronRight className="h-3.5 w-3.5" /> Nouveau dossier
+          </div>
+          <h1 className="font-display text-[26px] font-bold leading-[1.1] text-foreground md:text-[28px]">Nouveau dossier — dépôt du DCE</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Déposez l'ensemble des pièces du Dossier de Consultation (PDF, DOCX, DOC). Le type de
             chaque pièce est détecté automatiquement.
           </p>
@@ -391,8 +402,8 @@ export default function NouveauDossierPage() {
         </Button>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="mx-auto max-w-4xl space-y-6">
+      <div className="flex-1 overflow-y-auto px-4 pb-10 pt-4 md:px-6">
+        <div className="apparait mx-auto max-w-[960px] space-y-5">
           {/* Dropzone */}
           <div
             onDragOver={(e) => {
@@ -402,16 +413,30 @@ export default function NouveauDossierPage() {
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
             className={cn(
-              "flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-12 text-center transition-colors",
-              dragOver ? "border-primary bg-accent" : "border-border bg-card",
+              "group/depot flex flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-[border-color,background-color,box-shadow,transform] duration-200 ease-doux md:py-12",
+              dragOver
+                ? "scale-[1.01] border-primary bg-secondary shadow-o2"
+                : "border-[#B9C5D4] bg-gradient-to-b from-card to-[#F8FAFC] hover:border-primary/50 hover:shadow-o2",
             )}
           >
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-primary">
+            <div
+              className={cn(
+                "mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-[#FFE8DC] text-signal ring-8 ring-[#FFF4EE] transition-transform duration-300 ease-doux",
+                dragOver ? "-translate-y-1 scale-110" : "group-hover/depot:-translate-y-0.5",
+              )}
+            >
               <UploadCloud className="h-6 w-6" />
             </div>
-            <div className="text-sm font-medium">Glissez-déposez le dossier DCE complet, des fichiers ou une archive ZIP</div>
-            <div className="mt-1 text-xs text-muted-foreground">
+            <div className="text-[15px] font-semibold text-foreground">Glissez-déposez le dossier DCE complet, des fichiers ou une archive ZIP</div>
+            <div className="mt-1 text-[13px] text-muted-foreground">
               ou utilisez les boutons ci-dessous — les archives ZIP sont ouvertes automatiquement
+            </div>
+            <div aria-hidden="true" className="mt-3 flex flex-wrap justify-center gap-1.5">
+              {["PDF", "DOCX", "DOC", "ZIP"].map((format) => (
+                <span key={format} className="rounded-md border border-border bg-card px-2 py-0.5 font-mono text-[11px] font-semibold text-muted-foreground">
+                  {format}
+                </span>
+              ))}
             </div>
             <input 
               type="file" 
@@ -431,7 +456,7 @@ export default function NouveauDossierPage() {
               ref={folderInputRef} 
               onChange={handleFileChange} 
             />
-            <div className="flex gap-3 mt-4">
+            <div className="mt-5 flex flex-wrap justify-center gap-3">
               <Button variant="outline" size="sm" onClick={() => { isAppendingRef.current = true; fileInputRef.current?.click(); }}>
                 Fichier
               </Button>
@@ -442,9 +467,22 @@ export default function NouveauDossierPage() {
           </div>
 
           {/* Required Slots */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold">Prérequis de l'IA</h2>
-            <div className="grid gap-3">
+          <div className="rounded-xl border border-border bg-card px-4 py-5 shadow-o1 md:px-6">
+            <div className="mb-4 flex items-center gap-4">
+              <Anneau
+                valeur={(nbPrerequisPresents / 6) * 100}
+                ton={nbPrerequisPresents >= 5 ? "succes" : nbPrerequisPresents >= 3 ? "info" : "attente"}
+              >
+                {nbPrerequisPresents}/6
+              </Anneau>
+              <div className="min-w-0">
+                <h2 className="font-display text-[19px] font-bold leading-tight text-foreground">Prérequis de l'IA</h2>
+                <p className="mt-0.5 text-[13px] text-muted-foreground">
+                  {nbPrerequisPresents} pièce{nbPrerequisPresents > 1 ? "s" : ""} sur 6 détectée{nbPrerequisPresents > 1 ? "s" : ""}
+                </p>
+              </div>
+            </div>
+            <div className="apparait grid gap-2.5 md:grid-cols-2">
               {[
                 { type: "CCTP", label: "CCTP / CCP (Exigences techniques)", icon: Shield, missingBadge: "REQUIS", missingColor: "destructive" },
                 { type: "RC", label: "Règlement de Consultation (RC)", icon: FileText, missingBadge: "REQUIS", missingColor: "destructive" },
@@ -458,24 +496,26 @@ export default function NouveauDossierPage() {
                 
                 if (foundFile) {
                   return (
-                    <div key={slot.type} className="flex items-center gap-4 rounded-md border border-border bg-card/60 px-5 py-4 shadow-sm relative overflow-hidden">
-                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-success"></div>
-                      <Icon className="h-5 w-5 text-success" />
+                    <div key={slot.type} className="vive relative flex items-center gap-3 overflow-hidden rounded-xl border border-border bg-card px-3.5 py-3">
+                      <span aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-success-soft">
+                        <Icon className="h-[18px] w-[18px] text-success" />
+                      </span>
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium text-foreground">{slot.label}</div>
+                        <div className="text-[13.5px] font-semibold leading-snug text-foreground">{slot.label}</div>
                         {slot.type === "Mémoire (cadre)" && (
-                          <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                             <FileText className="h-3.5 w-3.5" />
                             <span className="truncate">{foundFile.nom}</span>
                           </div>
                         )}
                       </div>
                       {slot.type === "Mémoire (cadre)" ? (
-                        <div className="rounded bg-success/20 px-2.5 py-1 text-xs font-semibold text-success border border-success/30">
+                        <div className="inline-flex shrink-0 animate-zoom-doux items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-[11.5px] font-semibold text-success">
                           ✓ DÉTECTÉ – MODE WORD A-Z
                         </div>
                       ) : (
-                        <div className="rounded bg-success/10 px-2.5 py-1 text-xs font-semibold text-success border border-success/20">
+                        <div className="inline-flex shrink-0 animate-zoom-doux items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-[11.5px] font-semibold text-success">
+                          <span aria-hidden="true" className="h-[7px] w-[7px] rounded-full bg-current" />
                           PRÉSENT
                         </div>
                       )}
@@ -484,16 +524,18 @@ export default function NouveauDossierPage() {
                 } else {
                   const isWarning = slot.missingColor === "warning";
                   return (
-                    <div key={slot.type} className="flex items-center gap-4 rounded-md border border-border bg-card/40 px-5 py-4 shadow-sm relative overflow-hidden opacity-90">
-                      <div className={cn("absolute left-0 top-0 bottom-0 w-1.5", isWarning ? "bg-amber-500" : "bg-destructive")}></div>
-                      <Icon className={cn("h-5 w-5", isWarning ? "text-amber-500" : "text-destructive/70")} />
+                    <div key={slot.type} className={cn("vive relative flex items-center gap-3 overflow-hidden rounded-xl border border-dashed px-3.5 py-3", isWarning ? "border-[#EBC88F] bg-warning-soft/40" : "border-[#E9B7BD] bg-destructive-soft/40")}>
+                      <span aria-hidden="true" className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-[10px]", isWarning ? "bg-warning-soft" : "bg-destructive-soft")}>
+                        <Icon className={cn("h-[18px] w-[18px]", isWarning ? "text-warning" : "text-destructive")} />
+                      </span>
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium text-foreground">{slot.label}</div>
+                        <div className="text-[13.5px] font-semibold leading-snug text-foreground">{slot.label}</div>
                       </div>
                       <div className={cn(
-                        "rounded px-2.5 py-1 text-xs font-semibold border",
-                        isWarning ? "bg-amber-500/10 text-amber-600 border-amber-500/20" : "bg-destructive/10 text-destructive border-destructive/20"
+                        "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold",
+                        isWarning ? "bg-warning-soft text-warning" : "bg-destructive-soft text-destructive"
                       )}>
+                        <span aria-hidden="true" className="h-[7px] w-[7px] rounded-full bg-current" />
                         {slot.missingBadge}
                       </div>
                     </div>
@@ -505,21 +547,29 @@ export default function NouveauDossierPage() {
 
           {/* Fichiers scannés */}
           {files.length > 0 && (
-            <div className="mt-8">
-              <h2 className="mb-4 text-lg font-semibold">Fichiers scannés dans le dossier</h2>
-              <Card>
-              <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-muted/30">
-                <div className="text-sm font-semibold">Tous les fichiers ({files.length})</div>
+            <div>
+              <h2 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-foreground">
+                <FileText aria-hidden="true" className="h-[18px] w-[18px] text-primary" />
+                Fichiers scannés dans le dossier
+              </h2>
+              <Card className="overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-[#FAFBFC] px-4 py-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  {enCours > 0 && <PointActif />}
+                  Tous les fichiers ({files.length})
+                </div>
                 {enCours > 0 && (
-                  <Button size="sm" variant="outline" className="h-7 text-xs bg-white" onClick={terminerParsing}>
+                  <Button size="sm" variant="outline" className="h-8 bg-card text-xs" onClick={terminerParsing}>
                     <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Forcer la fin du parsing
                   </Button>
                 )}
               </div>
               <div className="divide-y divide-border max-h-60 overflow-y-auto">
                 {files.map((f) => (
-                  <div key={f.nom} className="flex items-center gap-3 px-4 py-2.5">
-                    <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+                  <div key={f.nom} className="flex animate-monter flex-wrap items-center gap-3 px-4 py-2.5 transition-colors hover:bg-[#F8FAFD] sm:flex-nowrap">
+                    <span aria-hidden="true" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-secondary">
+                      <FileText className="h-4 w-4 text-primary" />
+                    </span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium">{f.nom}</div>
                       <div className="text-xs text-muted-foreground">{f.taille}</div>
@@ -529,7 +579,7 @@ export default function NouveauDossierPage() {
                     <select
                       value={f.type}
                       onChange={(e) => setType(f.nom, e.target.value)}
-                      className="h-8 rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="h-8 rounded-lg border border-input bg-card px-2 text-xs outline-none transition-[border-color,box-shadow] hover:border-[#B9C5D4]"
                     >
                       {TYPES.map((t) => (
                         <option key={t} value={t}>
@@ -539,27 +589,27 @@ export default function NouveauDossierPage() {
                     </select>
 
                     {/* Statut parsing */}
-                    <div className="w-24 text-right">
+                    <div className="w-28 text-right">
                       {f.statut === "ok" && (
-                        <span className="inline-flex items-center gap-1 text-xs text-success">
-                          <CheckCircle2 className="h-4 w-4" /> Analysé
+                        <span className="inline-flex animate-zoom-doux items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs font-semibold text-success">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Analysé
                         </span>
                       )}
                       {f.statut === "parsing" && (
-                        <span className="inline-flex items-center gap-1 text-xs text-warning">
-                          <Loader2 className="h-4 w-4 animate-spin" /> Parsing…
+                        <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-semibold text-warning">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Parsing…
                         </span>
                       )}
                       {f.statut === "erreur" && (
-                        <span className="inline-flex items-center gap-1 text-xs text-destructive">
-                          <AlertCircle className="h-4 w-4" /> Erreur
+                        <span className="inline-flex items-center gap-1 rounded-full bg-destructive-soft px-2 py-0.5 text-xs font-semibold text-destructive">
+                          <AlertCircle className="h-3.5 w-3.5" /> Erreur
                         </span>
                       )}
                     </div>
 
                     <button
                       onClick={() => remove(f.nom)}
-                      className="text-muted-foreground hover:text-destructive"
+                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive-soft hover:text-destructive"
                       title="Retirer"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -572,8 +622,9 @@ export default function NouveauDossierPage() {
           )}
 
           {/* Action */}
-          <div className="flex items-center justify-between mt-6">
-            <p className="text-sm text-muted-foreground">
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-card px-4 py-4 shadow-o1 sm:flex-row sm:items-center sm:justify-between md:px-5">
+            <p className="flex items-start gap-2 text-sm text-muted-foreground">
+              <Sparkles aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-signal" />
               {tousParses
                 ? isPrerequisOk
                   ? "Tous les prérequis sont validés — vous pouvez lancer l'analyse complète."
@@ -581,7 +632,7 @@ export default function NouveauDossierPage() {
                 : "Les fichiers doivent être parsés avant de pouvoir lancer l'analyse."}
             </p>
             {files.length > 0 && tousParses ? (
-              <Button onClick={handleLaunch} disabled={isLaunching}>
+              <Button onClick={handleLaunch} disabled={isLaunching} className="h-11 shrink-0 px-5">
                 {isLaunching ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
@@ -590,8 +641,8 @@ export default function NouveauDossierPage() {
                 {isLaunching ? "Lancement en cours..." : "Lancer l'analyse"}
               </Button>
             ) : (
-              <div title={files.length === 0 ? "Ajoutez au moins un fichier" : `Bloqué — ${missingReason}`} className="cursor-help">
-                <Button disabled className="pointer-events-none">
+              <div title={files.length === 0 ? "Ajoutez au moins un fichier" : `Bloqué — ${missingReason}`} className="shrink-0 cursor-help">
+                <Button disabled className="pointer-events-none h-11 px-5">
                   <Sparkles className="h-4 w-4 mr-2" /> Lancer l'analyse
                 </Button>
               </div>
@@ -603,9 +654,12 @@ export default function NouveauDossierPage() {
       {/* Modal de confirmation pour quitter */}
       {showQuitModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowQuitModal(false)} />
-          <div className="relative z-10 w-full max-w-md animate-in fade-in zoom-in-95 rounded-xl border border-border bg-card p-6 shadow-2xl">
-            <h2 className="mb-2 text-center text-lg font-semibold">
+          <div className="absolute inset-0 animate-apparaitre bg-[rgba(11,37,69,.45)] backdrop-blur-[4px]" onClick={() => setShowQuitModal(false)} />
+          <div className="relative z-10 mx-4 w-full max-w-md animate-zoom-doux rounded-2xl border border-border bg-card p-6 shadow-o3">
+            <div aria-hidden="true" className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-secondary text-primary ring-8 ring-secondary/50">
+              <Layers className="h-6 w-6" />
+            </div>
+            <h2 className="mb-2 text-center font-display text-xl font-bold">
               Sauvegarder en brouillon ?
             </h2>
             <p className="mb-6 text-center text-sm text-muted-foreground">
